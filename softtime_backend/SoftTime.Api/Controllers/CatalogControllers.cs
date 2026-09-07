@@ -141,7 +141,7 @@ public class CardPaieController : ControllerBase
     {
         using var reader = new StreamReader(file.OpenReadStream());
         var text = await reader.ReadToEndAsync(ct);
-        var lines = text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+        var lines = text.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
             .Select(l =>
             {
                 var sep = l.Contains(';') ? ';' : ',';
