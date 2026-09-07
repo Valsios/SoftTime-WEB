@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="SoftTime.Api/SoftTime.Api.csproj" />
+  <Project Path="SoftTime.Application/SoftTime.Application.csproj" />
+  <Project Path="SoftTime.Domain/SoftTime.Domain.csproj" />
+  <Project Path="SoftTime.Infrastructure/SoftTime.Infrastructure.csproj" />
+  <Project Path="SoftTime.Tests/SoftTime.Tests.csproj" />
+</Solution>
