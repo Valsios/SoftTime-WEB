@@ -36,6 +36,14 @@ builder.Services.AddSwaggerGen(c =>
         {
             new OpenApiSecurityScheme { Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" } },
             Array.Empty<string>()
+        },
+        {
+            new OpenApiSecurityScheme { Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "SageDb" } },
+            Array.Empty<string>()
+        },
+        {
+            new OpenApiSecurityScheme { Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "PointeuseDb" } },
+            Array.Empty<string>()
         }
     });
     c.AddSecurityDefinition("SageDb", new OpenApiSecurityScheme
