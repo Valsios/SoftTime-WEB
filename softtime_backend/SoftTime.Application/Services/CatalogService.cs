@@ -298,6 +298,18 @@ public class CatalogService
     public async Task<CategoryDto> SaveCategoryAsync(CategoryDto dto, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
+
+        var cardRepo = _uow.Repository<T_CARDPAIE>();
+        var supervisorCard = await cardRepo.GetByIdAsync(dto.SupervisorCardId, ct);
+        if (supervisorCard == null)
+            throw new KeyNotFoundException($"Carte superviseur introuvable (ID={dto.SupervisorCardId}).");
+
+        if (string.IsNullOrWhiteSpace(dto.Intitule))
+            throw new InvalidOperationException("L'intitulé de la catégorie est obligatoire.");
+
+        if (dto.HeuresSemaine <= 0)
+            throw new InvalidOperationException("Le nombre d'heures par semaine doit être supérieur à 0.");
+
         var repo = _uow.Repository<T_CATEGORIE>();
         T_CATEGORIE entity;
         if (dto.Id == 0)
@@ -346,18 +358,38 @@ public class CatalogService
     public async Task<AffectationDto> SaveAffectationAsync(AffectationDto dto, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
+
+        var cardExists = await _uow.Repository<T_CARDPAIE>().GetByIdAsync(dto.CardPaieId, ct);
+        if (cardExists == null)
+            throw new KeyNotFoundException($"Carte salarié introuvable (ID={dto.CardPaieId}).");
+
+        var categoryExists = await _uow.Repository<T_CATEGORIE>().GetByIdAsync(dto.CategoryId, ct);
+        if (categoryExists == null)
+            throw new KeyNotFoundException($"Catégorie introuvable (ID={dto.CategoryId}).");
+
         var repo = _uow.Repository<T_CAT_SAL>();
         T_CAT_SAL entity;
+
         if (dto.Id == 0)
         {
-            entity = new T_CAT_SAL
+            var existingForCard = (await repo.ListAsync(a => a.MATRICULE_SAGE == dto.CardPaieId, ct)).FirstOrDefault();
+            if (existingForCard != null)
             {
-                MATRICULE_SAGE = dto.CardPaieId,
-                ID_CATEG = dto.CategoryId,
-                BDD_SAGE = _tenant.SageDb,
-                BDD_POINTEUSE = _tenant.PointeuseDb
-            };
-            await repo.AddAsync(entity, ct);
+                existingForCard.ID_CATEG = dto.CategoryId;
+                repo.Update(existingForCard);
+                entity = existingForCard;
+            }
+            else
+            {
+                entity = new T_CAT_SAL
+                {
+                    MATRICULE_SAGE = dto.CardPaieId,
+                    ID_CATEG = dto.CategoryId,
+                    BDD_SAGE = _tenant.SageDb,
+                    BDD_POINTEUSE = _tenant.PointeuseDb
+                };
+                await repo.AddAsync(entity, ct);
+            }
         }
         else
         {
@@ -382,16 +414,16 @@ public class CatalogService
         foreach (var row in rows)
         {
             var catName = ExcelCells.Get(row, "Categorie", "CATEGORIE", "Intitule", "Intitulé")
-                          ?? row.Values.FirstOrDefault();
+                        ?? row.Values.FirstOrDefault();
             var mat = ExcelCells.Get(row, "Matricule", "MATRICULE", "Matricule SAGE")
-                      ?? (row.Count > 1 ? row.Values.Skip(1).FirstOrDefault() : null);
+                    ?? (row.Count > 1 ? row.Values.Skip(1).FirstOrDefault() : null);
             if (string.IsNullOrWhiteSpace(catName) || string.IsNullOrWhiteSpace(mat))
             {
                 skipped++;
                 continue;
             }
-            var cat = cats.FirstOrDefault(c => string.Equals(c.INTITULE, catName, StringComparison.OrdinalIgnoreCase));
-            var card = cards.FirstOrDefault(c => string.Equals(c.SAGE_MATRICULE, mat, StringComparison.OrdinalIgnoreCase));
+            var cat = cats.FirstOrDefault(c => string.Equals(c.INTITULE?.Trim(), catName.Trim(), StringComparison.OrdinalIgnoreCase));
+            var card = cards.FirstOrDefault(c => string.Equals(c.SAGE_MATRICULE?.Trim(), mat.Trim(), StringComparison.OrdinalIgnoreCase));
             if (cat == null || card == null)
             {
                 skipped++;
@@ -438,6 +470,16 @@ public class CatalogService
 
     public async Task<ToleranceDto> SaveToleranceAsync(ToleranceDto dto, CancellationToken ct = default)
     {
+        var categoryExists = await _uow.Repository<T_CATEGORIE>().GetByIdAsync(dto.CategoryId, ct);
+        if (categoryExists == null)
+            throw new KeyNotFoundException($"Catégorie introuvable (ID={dto.CategoryId}).");
+
+        if (dto.Tolerance < 0)
+            throw new InvalidOperationException("La tolérance d'entrée ne peut pas être négative.");
+
+        if (dto.Sortie < 0)
+            throw new InvalidOperationException("La tolérance de sortie ne peut pas être négative.");
+
         var repo = _uow.Repository<T_TOLERANCE>();
         T_TOLERANCE entity;
         if (dto.Id == 0)
