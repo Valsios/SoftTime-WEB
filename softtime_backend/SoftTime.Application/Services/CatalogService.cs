@@ -516,13 +516,24 @@ public class CatalogService
 
     public async Task<HolidayDto> SaveHolidayAsync(HolidayDto dto, CancellationToken ct = default)
     {
-        await _tenant.EnsureAuthorizedAsync(ct);
         var repo = _uow.Repository<T_FERIE>();
         T_FERIE entity;
         if (dto.Id == 0)
         {
-            entity = new T_FERIE { INTITULE = dto.Intitule, DATE = dto.Date, BDD_SAGE = _tenant.SageDb };
-            await repo.AddAsync(entity, ct);
+            var duplicate = dto.Date.HasValue
+                ? (await repo.ListAsync(f => f.DATE.HasValue && f.DATE.Value.Date == dto.Date.Value.Date, ct)).FirstOrDefault()
+                : null;
+            if (duplicate != null)
+            {
+                duplicate.INTITULE = dto.Intitule;
+                repo.Update(duplicate);
+                entity = duplicate;
+            }
+            else
+            {
+                entity = new T_FERIE { INTITULE = dto.Intitule, DATE = dto.Date };
+                await repo.AddAsync(entity, ct);
+            }
         }
         else
         {
@@ -708,7 +719,9 @@ public class CatalogService
         {
             if (existing.Any(e => e.INTITULE_ABSENCE == ev.Intitule || e.INTITULE_ABSENCE == ev.CodeNE))
                 continue;
-            await repo.AddAsync(new T_CODEABSENCE { INTITULE_ABSENCE = ev.Intitule ?? ev.CodeNE, NOT_PAY = false }, ct);
+            var newCode = new T_CODEABSENCE { INTITULE_ABSENCE = ev.Intitule ?? ev.CodeNE, NOT_PAY = false };
+            await repo.AddAsync(newCode, ct);
+            existing.Add(newCode);
         }
         await _uow.SaveChangesAsync(ct);
     }
