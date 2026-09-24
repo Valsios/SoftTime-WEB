@@ -101,6 +101,48 @@ public class CorrespondenceModeController : ControllerBase
 
 [ApiController]
 [Authorize]
+[RequireDroit(Droit.Parameters)]
+[Route("api/source-config")]
+[Tags("SourceConfig")]
+public class SourceConfigController : ControllerBase
+{
+    private readonly CatalogService _svc;
+    public SourceConfigController(CatalogService svc) => _svc = svc;
+
+    [HttpGet]
+    public async Task<IActionResult> Get(CancellationToken ct) => Ok(await _svc.GetSourceConfigAsync(ct));
+
+    [HttpPut]
+    public async Task<IActionResult> Update([FromBody] SourceConfigDto dto, CancellationToken ct)
+        => Ok(await _svc.SaveSourceConfigAsync(dto, ct));
+    
+    [HttpGet("lookup/{matricule}")]
+    public async Task<IActionResult> Lookup(string matricule, CancellationToken ct)
+        => Ok(await _svc.GetDepartementServiceAsync(matricule, ct));
+    
+    [HttpPost("lookup-batch")]
+    public async Task<IActionResult> LookupBatch([FromBody] string[] matricules, CancellationToken ct)
+        => Ok(await _svc.GetDepartementServiceBatchAsync(matricules ?? Array.Empty<string>(), ct));
+    
+    [HttpGet("discover/servers")]
+    public async Task<IActionResult> DiscoverServers(CancellationToken ct)
+        => Ok(await _svc.DiscoverServersAsync(ct));
+
+    [HttpPost("discover/databases")]
+    public async Task<IActionResult> DiscoverDatabases([FromBody] DiscoverDatabasesDto dto, CancellationToken ct)
+        => Ok(await _svc.DiscoverDatabasesAsync(dto, ct));
+
+    [HttpPost("discover/tables")]
+    public async Task<IActionResult> DiscoverTables([FromBody] DiscoverTablesDto dto, CancellationToken ct)
+        => Ok(await _svc.DiscoverTablesAsync(dto, ct));
+
+    [HttpPost("discover/columns")]
+    public async Task<IActionResult> DiscoverColumns([FromBody] DiscoverColumnsDto dto, CancellationToken ct)
+        => Ok(await _svc.DiscoverColumnsAsync(dto, ct));
+}
+
+[ApiController]
+[Authorize]
 [Route("api/cardpaie")]
 [Tags("CardPaie")]
 public class CardPaieController : ControllerBase
