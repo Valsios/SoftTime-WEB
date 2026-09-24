@@ -46,6 +46,7 @@ public class SoftTimeDbContext : DbContext
     public DbSet<T_CARDPAIE> T_CARDPAIE => Set<T_CARDPAIE>();
     public DbSet<T_HSSAL> T_HSSAL => Set<T_HSSAL>();
     public DbSet<T_CODE_CONSTANTE> T_CODE_CONSTANTE => Set<T_CODE_CONSTANTE>();
+    public DbSet<T_SOURCE_CONFIG> T_SOURCE_CONFIG => Set<T_SOURCE_CONFIG>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

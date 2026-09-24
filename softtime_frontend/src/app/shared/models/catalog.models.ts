@@ -88,3 +88,24 @@ export interface SageConstantOption {
   code: string;
   intitule?: string | null;
 }
+
+export interface SourceConfig {
+  id: number;
+  mode: string;
+  tableName?: string | null;
+  colMatricule?: string | null;
+  colDepartement?: string | null;
+  colService?: string | null;
+  colCodeDepartement?: string | null;
+  extServeur?: string | null;
+  extBase?: string | null;
+  extLogin?: string | null;
+  extPassword?: string | null;
+  extSqlAuth?: boolean | null;
+}
+
+export interface DepartementService {
+  matricule: string;
+  departement?: string | null;
+  service?: string | null;
+}

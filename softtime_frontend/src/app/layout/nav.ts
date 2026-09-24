@@ -46,6 +46,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Majorations', path: '/majorations', icon: 'percent', droit: Droit.Parameters },
       { label: 'Code Constante', path: '/code-constantes', icon: 'tag', droit: Droit.Parameters },
       { label: "Codes absence", path: '/absence-codes', icon: 'tag', droit: Droit.Parameters },
+      { label: 'Source de données', path: '/source-config', icon: 'server', droit: Droit.Parameters },
     ],
   },
   {

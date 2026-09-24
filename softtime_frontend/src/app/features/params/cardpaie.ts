@@ -2,8 +2,8 @@ import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@ang
 import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
-import { CardPaie } from '../../shared/models';
-import { CardPaieService } from '../../shared/services/catalog.service';
+import { CardPaie, DepartementService } from '../../shared/models';
+import { CardPaieService, SourceConfigService } from '../../shared/services/catalog.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal } from '../../shared/components';
 import { asRow, fmtDate } from '../../shared/utils/date';
@@ -51,6 +51,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
 })
 export class CardPaiePage implements OnInit {
   private readonly svc = inject(CardPaieService);
+  private readonly sourceConfig = inject(SourceConfigService);
   private readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
@@ -66,16 +67,46 @@ export class CardPaiePage implements OnInit {
     { key: 'sageMatricule', label: 'Matricule' },
     { key: 'sageNom', label: 'Nom' },
     { key: 'sagePrenom', label: 'Prénom' },
+    { key: 'departement', label: 'Département' },
+    { key: 'service', label: 'Service' },
     { key: 'pointeuseNumero', label: 'Badge' },
     { key: 'branche', label: 'Branche' },
     { key: 'date', label: 'Date', format: fmtDate },
   ];
 
   ngOnInit(): void { this.load(); }
+
   load(): void {
     this.loading.set(true);
-    this.svc.list().subscribe({ next: (items) => { this.rows.set(items.map(asRow)); this.loading.set(false); }, error: () => this.loading.set(false) });
+    this.svc.list().subscribe({
+      next: (items) => {
+        this.rows.set(items.map(asRow));
+        this.loading.set(false);
+        this.loadDepartements(items);
+      },
+      error: () => this.loading.set(false),
+    });
   }
+
+  private loadDepartements(items: CardPaie[]): void {
+    const matricules = items
+      .map((i) => i.sageMatricule?.trim())
+      .filter((m): m is string => !!m);
+    if (matricules.length === 0) return;
+
+    this.sourceConfig.lookupBatch(matricules).subscribe({
+      next: (results) => {
+        const byMat = new Map<string, DepartementService>(results.map((r) => [r.matricule.trim(), r]));
+        const merged = this.rows().map((row) => {
+          const mat = (row['sageMatricule'] as string | null)?.trim();
+          const info = mat ? byMat.get(mat) : undefined;
+          return { ...row, departement: info?.departement ?? null, service: info?.service ?? null };
+        });
+        this.rows.set(merged);
+      },
+    });
+  }
+
   openCreate(): void { this.editId.set(null); this.form = {}; this.modal.set(true); }
   openEdit(row: Record<string, unknown>): void { this.editId.set(row['id'] as number); this.form = { ...(row as unknown as CardPaie) }; this.modal.set(true); }
   save(): void {

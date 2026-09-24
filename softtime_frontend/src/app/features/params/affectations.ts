@@ -2,11 +2,19 @@ import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@ang
 import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
-import { Affectation, Category } from '../../shared/models';
-import { AffectationsService, CategoriesService } from '../../shared/services/catalog.service';
+import { Affectation, CardPaie, Category, DepartementService } from '../../shared/models';
+import { AffectationsService, CardPaieService, CategoriesService, SourceConfigService } from '../../shared/services/catalog.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, SoftSelect } from '../../shared/components';
 import { asRow } from '../../shared/utils/date';
+
+interface AffectationRow extends Affectation {
+  matricule?: string | null;
+  nom?: string | null;
+  prenom?: string | null;
+  departement?: string | null;
+  service?: string | null;
+}
 
 @Component({
   selector: 'app-affectations',
@@ -30,6 +38,22 @@ import { asRow } from '../../shared/utils/date';
         placeholder="Toutes"
         [options]="categoryOptions()"
         (ngModelChange)="load()"
+      ></soft-select>
+
+      <soft-select
+        label="Département"
+        [(ngModel)]="filterDept"
+        name="filterDept"
+        [options]="deptOptions()"
+        (ngModelChange)="applyFilters()"
+      ></soft-select>
+
+      <soft-select
+        label="Service"
+        [(ngModel)]="filterService"
+        name="filterServ"
+        [options]="servOptions()"
+        (ngModelChange)="applyFilters()"
       ></soft-select>
     </div>
 
@@ -60,6 +84,8 @@ import { asRow } from '../../shared/utils/date';
 export class AffectationsPage implements OnInit {
   private readonly svc = inject(AffectationsService);
   private readonly catSvc = inject(CategoriesService);
+  private readonly cardSvc = inject(CardPaieService);
+  private readonly sourceConfig = inject(SourceConfigService);
   private readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
@@ -70,12 +96,23 @@ export class AffectationsPage implements OnInit {
   readonly editId = signal<number | null>(null);
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly categoryOptions = signal<{ value: number; label: string }[]>([]);
+  readonly deptOptions = signal<{ value: string; label: string }[]>([{ value: 'ALL', label: 'Tous' }]);
+  readonly servOptions = signal<{ value: string; label: string }[]>([{ value: 'ALL', label: 'Tous' }]);
+
   filterCategoryId: number | null = null;
+  filterDept = 'ALL';
+  filterService = 'ALL';
   form: Partial<Affectation> = {};
 
+  private cardsById = new Map<number, CardPaie>();
+  private enrichedRows: AffectationRow[] = [];
+
   readonly columns: Column[] = [
-    { key: 'id', label: 'ID' },
-    { key: 'cardPaieId', label: 'Card paie' },
+    { key: 'matricule', label: 'Matricule' },
+    { key: 'nom', label: 'Nom' },
+    { key: 'prenom', label: 'Prénom' },
+    { key: 'departement', label: 'Département' },
+    { key: 'service', label: 'Service' },
     { key: 'categoryId', label: 'Catégorie' },
   ];
 
@@ -83,19 +120,71 @@ export class AffectationsPage implements OnInit {
     this.catSvc.list().subscribe((cats) =>
       this.categoryOptions.set(cats.map((c) => ({ value: c.id, label: c.intitule ?? `Cat. ${c.id}` }))),
     );
-    this.load();
+    this.cardSvc.list().subscribe((cards) => {
+      this.cardsById = new Map(cards.map((c) => [c.id, c]));
+      this.load();
+    });
   }
 
   load(): void {
     this.loading.set(true);
     this.svc.list(this.filterCategoryId ?? undefined).subscribe({
-      next: (items) => { this.rows.set(items.map(asRow)); this.loading.set(false); },
+      next: (items) => {
+        const enriched: AffectationRow[] = items.map((a) => {
+          const card = this.cardsById.get(a.cardPaieId);
+          return {
+            ...a,
+            matricule: card?.sageMatricule?.trim() ?? null,
+            nom: card?.sageNom ?? null,
+            prenom: card?.sagePrenom ?? null,
+          };
+        });
+        this.loadDepartements(enriched);
+      },
       error: () => this.loading.set(false),
     });
   }
 
+  private loadDepartements(items: AffectationRow[]): void {
+    const matricules = items.map((r) => r.matricule).filter((m): m is string => !!m);
+    if (matricules.length === 0) {
+      this.finish(items);
+      return;
+    }
+    this.sourceConfig.lookupBatch(matricules).subscribe({
+      next: (results: DepartementService[]) => {
+        const map = new Map(results.map((r) => [r.matricule.trim(), r]));
+        const withDept = items.map((r) => {
+          const ds = r.matricule ? map.get(r.matricule) : undefined;
+          return { ...r, departement: ds?.departement ?? null, service: ds?.service ?? null };
+        });
+        this.finish(withDept);
+      },
+      error: () => this.finish(items),
+    });
+  }
+
+  private finish(items: AffectationRow[]): void {
+    this.enrichedRows = items;
+    const depts = Array.from(new Set(items.map((r) => r.departement).filter((d): d is string => !!d))).sort();
+    const servs = Array.from(new Set(items.map((r) => r.service).filter((s): s is string => !!s))).sort();
+    this.deptOptions.set([{ value: 'ALL', label: 'Tous' }, ...depts.map((d) => ({ value: d, label: d }))]);
+    this.servOptions.set([{ value: 'ALL', label: 'Tous' }, ...servs.map((s) => ({ value: s, label: s }))]);
+    this.applyFilters();
+    this.loading.set(false);
+  }
+
+  applyFilters(): void {
+    const filtered = this.enrichedRows.filter(
+      (r) =>
+        (this.filterDept === 'ALL' || r.departement === this.filterDept) &&
+        (this.filterService === 'ALL' || r.service === this.filterService),
+    );
+    this.rows.set(filtered.map(asRow));
+  }
+
   openCreate(): void { this.editId.set(null); this.form = { cardPaieId: 0, categoryId: this.categoryOptions()[0]?.value ?? 0 }; this.modal.set(true); }
-  openEdit(row: Record<string, unknown>): void { this.editId.set(row['id'] as number); this.form = { ...(row as unknown as Affectation) }; this.modal.set(true); }
+  openEdit(row: Record<string, unknown>): void { this.editId.set(row['id'] as number); this.form = { cardPaieId: row['cardPaieId'] as number, categoryId: row['categoryId'] as number, id: row['id'] as number }; this.modal.set(true); }
   save(): void {
     this.saving.set(true);
     const id = this.editId();

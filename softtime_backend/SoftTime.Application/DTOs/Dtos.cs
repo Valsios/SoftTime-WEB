@@ -85,6 +85,28 @@ public record MajorationDto(int Id, string? Mojoration, decimal? Cotation)
     public MajorationDto() : this(default, default, default) { }
 }
 
+public record SourceConfigDto(
+    int Id,
+    string Mode,
+    string? TableName,
+    string? ColMatricule,
+    string? ColDepartement,
+    string? ColService,
+    string? ColCodeDepartement,
+    string? ExtServeur = null,
+    string? ExtBase = null,
+    string? ExtLogin = null,
+    string? ExtPassword = null,
+    bool ExtSqlAuth = true)
+{
+    public SourceConfigDto() : this(default, "SAGE", default, default, default, default, default) { }
+}
+
+public record DepartementServiceDto(string Matricule, string? Departement, string? Service);
+public record DiscoverDatabasesDto(string Serveur, bool SqlAuth, string? Login, string? Password);
+public record DiscoverTablesDto(string Serveur, string Base, bool SqlAuth, string? Login, string? Password);
+public record DiscoverColumnsDto(string Serveur, string Base, string Table, bool SqlAuth, string? Login, string? Password);
+
 public record CodeConstanteDto(int Id, string Categorie, string? Intitule, string CodeConstante)
 {
     public CodeConstanteDto() : this(default, default!, default, default!) { }

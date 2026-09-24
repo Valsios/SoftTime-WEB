@@ -22,6 +22,8 @@ public static class DependencyInjection
         services.AddSingleton<ISageContextFactory, SageContextFactory>();
         services.AddSingleton<IPointeuseContextFactory, PointeuseContextFactory>();
         services.AddScoped<ISagePayrollWriter, SagePayrollWriter>();
+        services.AddScoped<IExternalSourceReader, ExternalSourceReader>();
+        services.AddScoped<IExternalDiscoveryService, ExternalDiscoveryService>();
         services.AddScoped<IPunchAggregate, PunchAggregate>();
         return services;
     }

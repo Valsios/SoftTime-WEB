@@ -4,6 +4,7 @@ using SoftTime.Domain.Entities.Sage;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
+using SoftTime.Application.Abstractions;
 
 namespace SoftTime.Application.Services;
 
@@ -14,14 +15,18 @@ public class CatalogService
     private readonly TenantConnectionService _tenant;
     private readonly ISageContextFactory _sageFactory;
     private readonly IPointeuseContextFactory _pointeuseFactory;
+    private readonly IExternalSourceReader _externalReader;
+    private readonly IExternalDiscoveryService _discovery;
 
-    public CatalogService(IUnitOfWork uow, IMapper mapper, TenantConnectionService tenant, ISageContextFactory sageFactory, IPointeuseContextFactory pointeuseFactory)
+    public CatalogService(IUnitOfWork uow, IMapper mapper, TenantConnectionService tenant, ISageContextFactory sageFactory, IPointeuseContextFactory pointeuseFactory, IExternalSourceReader externalReader, IExternalDiscoveryService discovery)
     {
         _uow = uow;
         _mapper = mapper;
         _tenant = tenant;
         _sageFactory = sageFactory;
         _pointeuseFactory = pointeuseFactory;
+        _externalReader = externalReader;
+        _discovery = discovery;
     }
 
     public Task<IReadOnlyList<SageDbDto>> ListSageAsync(CancellationToken ct = default)
@@ -125,6 +130,205 @@ public class CatalogService
         }
         await _uow.SaveChangesAsync(ct);
         return new ClockParamDto(row.IDPOINT, row.MULTIPOINT);
+    }
+
+    public async Task<SourceConfigDto> GetSourceConfigAsync(CancellationToken ct = default)
+    {
+        await EnsureSourceConfigAsync(ct);
+        var row = (await _uow.Repository<T_SOURCE_CONFIG>().ListAsync(_ => true, ct)).FirstOrDefault();
+        return row == null
+            ? new SourceConfigDto(0, "SAGE", null, null, null, null, null)
+            : new SourceConfigDto(row.Id, row.Mode, row.TableName, row.ColMatricule, row.ColDepartement, row.ColService, row.ColCodeDepartement,
+                row.ExtServeur, row.ExtBase, row.ExtLogin, row.ExtPassword, row.ExtSqlAuth);
+    }
+
+    public async Task<SourceConfigDto> SaveSourceConfigAsync(SourceConfigDto dto, CancellationToken ct = default)
+    {
+        await EnsureSourceConfigAsync(ct);
+        if (dto.Mode != "SAGE" && dto.Mode != "AUTRE")
+            throw new InvalidOperationException("Le mode doit être 'SAGE' ou 'AUTRE'.");
+        if (dto.Mode == "AUTRE" && string.IsNullOrWhiteSpace(dto.TableName))
+            throw new InvalidOperationException("Le nom de la table est requis en mode 'AUTRE'.");
+        if (dto.Mode == "AUTRE" && !string.IsNullOrWhiteSpace(dto.ExtServeur) && string.IsNullOrWhiteSpace(dto.ExtBase))
+            throw new InvalidOperationException("Le nom de la base est requis si un serveur externe est renseigné.");
+        if (dto.Mode == "AUTRE" && !string.IsNullOrWhiteSpace(dto.ExtServeur) && dto.ExtSqlAuth && string.IsNullOrWhiteSpace(dto.ExtLogin))
+            throw new InvalidOperationException("Le login est requis en authentification SQL.");
+
+        var repo = _uow.Repository<T_SOURCE_CONFIG>();
+        var row = (await repo.ListAsync(_ => true, ct)).FirstOrDefault();
+        if (row == null)
+        {
+            row = new T_SOURCE_CONFIG
+            {
+                Mode = dto.Mode,
+                TableName = dto.Mode == "AUTRE" ? dto.TableName : null,
+                ColMatricule = dto.Mode == "AUTRE" ? dto.ColMatricule : null,
+                ColDepartement = dto.Mode == "AUTRE" ? dto.ColDepartement : null,
+                ColService = dto.Mode == "AUTRE" ? dto.ColService : null,
+                ColCodeDepartement = dto.Mode == "AUTRE" ? dto.ColCodeDepartement : null,
+                ExtServeur = dto.Mode == "AUTRE" ? dto.ExtServeur : null,
+                ExtBase = dto.Mode == "AUTRE" ? dto.ExtBase : null,
+                ExtLogin = dto.Mode == "AUTRE" ? dto.ExtLogin : null,
+                ExtPassword = dto.Mode == "AUTRE" ? dto.ExtPassword : null,
+                ExtSqlAuth = dto.Mode == "AUTRE" ? dto.ExtSqlAuth : true
+            };
+            await repo.AddAsync(row, ct);
+        }
+        else
+        {
+            row.Mode = dto.Mode;
+            row.TableName = dto.Mode == "AUTRE" ? dto.TableName : null;
+            row.ColMatricule = dto.Mode == "AUTRE" ? dto.ColMatricule : null;
+            row.ColDepartement = dto.Mode == "AUTRE" ? dto.ColDepartement : null;
+            row.ColService = dto.Mode == "AUTRE" ? dto.ColService : null;
+            row.ColCodeDepartement = dto.Mode == "AUTRE" ? dto.ColCodeDepartement : null;
+            row.ExtServeur = dto.Mode == "AUTRE" ? dto.ExtServeur : null;
+            row.ExtBase = dto.Mode == "AUTRE" ? dto.ExtBase : null;
+            row.ExtLogin = dto.Mode == "AUTRE" ? dto.ExtLogin : null;
+            row.ExtPassword = dto.Mode == "AUTRE"
+                ? (string.IsNullOrEmpty(dto.ExtPassword) ? row.ExtPassword : dto.ExtPassword)
+                : null;
+            row.ExtSqlAuth = dto.Mode == "AUTRE" ? dto.ExtSqlAuth : true;
+            repo.Update(row);
+        }
+        await _uow.SaveChangesAsync(ct);
+        return new SourceConfigDto(row.Id, row.Mode, row.TableName, row.ColMatricule, row.ColDepartement, row.ColService, row.ColCodeDepartement,
+            row.ExtServeur, row.ExtBase, row.ExtLogin, row.ExtPassword, row.ExtSqlAuth);
+    }
+
+    public async Task<DepartementServiceDto> GetDepartementServiceAsync(string matricule, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(matricule))
+            throw new InvalidOperationException("Le matricule est requis.");
+
+        var config = await GetSourceConfigAsync(ct);
+        return config.Mode == "AUTRE"
+            ? await _externalReader.GetDepartementServiceAsync(await ResolveExternalConnectionAsync(config, ct), config, matricule, ct)
+            : await LookupFromSageAsync(matricule, ct);
+    }
+
+    private async Task<string> ResolveExternalConnectionAsync(SourceConfigDto config, CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(config.ExtServeur))
+            return ExternalConnectionFactory.Build(config.ExtServeur, config.ExtBase, config.ExtSqlAuth, config.ExtLogin, config.ExtPassword);
+
+        return await _tenant.GetSageConnectionAsync(ct);
+    }
+
+    private async Task<DepartementServiceDto> LookupFromSageAsync(string matricule, CancellationToken ct)
+    {
+        var mat = matricule.Trim();
+        using var sage = _sageFactory.Create(await _tenant.GetSageConnectionAsync(ct));
+
+        var emp = sage.Employees.FirstOrDefault(e => e.MatriculeSalarie == mat);
+        if (emp == null)
+            return new DepartementServiceDto(matricule, null, null);
+
+        var current = PickCurrentAffectation(sage.Affectations.Where(a => a.NumSalarie == emp.SA_CompteurNumero).ToList());
+
+        return new DepartementServiceDto(matricule, current?.Departement?.Trim(), current?.Service?.Trim());
+    }
+
+    private static T_HST_AFFECTATION? PickCurrentAffectation(IEnumerable<T_HST_AFFECTATION> rows)
+    {
+        var list = rows.ToList();
+        return list.Where(a => a.DateSortiePoste == null).OrderByDescending(a => a.DateDebut).FirstOrDefault()
+               ?? list.OrderByDescending(a => a.DateDebut).FirstOrDefault();
+    }
+
+    public async Task<IReadOnlyList<DepartementServiceDto>> GetDepartementServiceBatchAsync(
+    IEnumerable<string> matricules, CancellationToken ct = default)
+    {
+        var list = matricules
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .Select(m => m.Trim())
+            .Distinct()
+            .Take(2000)
+            .ToList();
+        if (list.Count == 0)
+            return Array.Empty<DepartementServiceDto>();
+
+        var config = await GetSourceConfigAsync(ct);
+
+        if (config.Mode == "AUTRE")
+        {
+            var extConn = await ResolveExternalConnectionAsync(config, ct);
+            var result = new List<DepartementServiceDto>();
+            foreach (var m in list)
+                result.Add(await _externalReader.GetDepartementServiceAsync(extConn, config, m, ct));
+            return result;
+        }
+
+        var sageConn = await _tenant.GetSageConnectionAsync(ct);
+        using var sage = _sageFactory.Create(sageConn);
+        var matSet = list.ToHashSet();
+        var emps = sage.Employees
+            .ToList()
+            .Where(e => matSet.Contains(e.MatriculeSalarie.Trim()))
+            .Select(e => new { MatriculeSalarie = e.MatriculeSalarie.Trim(), e.SA_CompteurNumero })
+            .ToList();
+        var idSet = emps.Select(e => e.SA_CompteurNumero).ToHashSet();
+        var byNum = sage.Affectations
+            .ToList()
+            .Where(a => idSet.Contains(a.NumSalarie))
+            .GroupBy(a => a.NumSalarie)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var numByMat = emps.ToDictionary(e => e.MatriculeSalarie.Trim(), e => e.SA_CompteurNumero);
+        return list.Select(m =>
+        {
+            var cur = numByMat.TryGetValue(m, out var num) && byNum.TryGetValue(num, out var rows)
+                ? PickCurrentAffectation(rows) : null;
+            return new DepartementServiceDto(m, cur?.Departement?.Trim(), cur?.Service?.Trim());
+        }).ToList();
+    }
+
+    public Task<IReadOnlyList<string>> DiscoverServersAsync(CancellationToken ct = default)
+        => _discovery.ListServersAsync(ct);
+
+    public Task<IReadOnlyList<string>> DiscoverDatabasesAsync(DiscoverDatabasesDto dto, CancellationToken ct = default)
+        => _discovery.ListDatabasesAsync(dto.Serveur, dto.SqlAuth, dto.Login, dto.Password, ct);
+
+    public Task<IReadOnlyList<string>> DiscoverTablesAsync(DiscoverTablesDto dto, CancellationToken ct = default)
+        => _discovery.ListTablesAsync(dto.Serveur, dto.Base, dto.SqlAuth, dto.Login, dto.Password, ct);
+
+    public Task<IReadOnlyList<string>> DiscoverColumnsAsync(DiscoverColumnsDto dto, CancellationToken ct = default)
+        => _discovery.ListColumnsAsync(dto.Serveur, dto.Base, dto.Table, dto.SqlAuth, dto.Login, dto.Password, ct);
+
+    private async Task EnsureSourceConfigAsync(CancellationToken ct)
+    {
+        await _uow.ExecuteSqlAsync("""
+            IF OBJECT_ID(N'dbo.T_SOURCE_CONFIG', N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.T_SOURCE_CONFIG (
+                    Id int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    Mode nvarchar(10) NOT NULL DEFAULT 'SAGE',
+                    TableName nvarchar(128) NULL,
+                    ColMatricule nvarchar(128) NULL,
+                    ColDepartement nvarchar(128) NULL,
+                    ColService nvarchar(128) NULL,
+                    ColCodeDepartement nvarchar(128) NULL,
+                    ExtServeur nvarchar(256) NULL,
+                    ExtBase nvarchar(128) NULL,
+                    ExtLogin nvarchar(128) NULL,
+                    ExtPassword nvarchar(max) NULL,
+                    ExtSqlAuth bit NOT NULL DEFAULT 1
+                );
+            END
+            ELSE
+            BEGIN
+                IF COL_LENGTH(N'dbo.T_SOURCE_CONFIG', N'ExtServeur') IS NULL
+                    ALTER TABLE dbo.T_SOURCE_CONFIG ADD ExtServeur nvarchar(256) NULL;
+                IF COL_LENGTH(N'dbo.T_SOURCE_CONFIG', N'ExtBase') IS NULL
+                    ALTER TABLE dbo.T_SOURCE_CONFIG ADD ExtBase nvarchar(128) NULL;
+                IF COL_LENGTH(N'dbo.T_SOURCE_CONFIG', N'ExtLogin') IS NULL
+                    ALTER TABLE dbo.T_SOURCE_CONFIG ADD ExtLogin nvarchar(128) NULL;
+                IF COL_LENGTH(N'dbo.T_SOURCE_CONFIG', N'ExtPassword') IS NULL
+                    ALTER TABLE dbo.T_SOURCE_CONFIG ADD ExtPassword nvarchar(max) NULL;
+                IF COL_LENGTH(N'dbo.T_SOURCE_CONFIG', N'ExtSqlAuth') IS NULL
+                    ALTER TABLE dbo.T_SOURCE_CONFIG ADD ExtSqlAuth bit NOT NULL CONSTRAINT DF_T_SOURCE_CONFIG_ExtSqlAuth DEFAULT 1;
+            END
+            """, ct);
     }
 
     public async Task<CorrespondenceModeDto> GetCorrespondenceAsync(CancellationToken ct = default)
