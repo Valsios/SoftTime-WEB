@@ -2,10 +2,11 @@ import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } 
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { SessionStore } from '../core/session.store';
 import { AuthService } from '../shared/services/auth.service';
-import { PointeuseDatabasesService } from '../shared/services/catalog.service';
+import { PointeuseDatabasesService, SageDatabasesService } from '../shared/services/catalog.service';
 import { NAV_SECTIONS, NavSection } from './nav';
 import { Icon } from '../shared/components/icon';
 import { PointeuseDb } from '../shared/models';
+import { ToastService } from '../core/toast.service';
 
 @Component({
   selector: 'app-shell',
@@ -68,26 +69,23 @@ import { PointeuseDb } from '../shared/models';
             <div class="topbar__company">
               <app-icon name="server" [size]="16"></app-icon>
               <select
-                [value]="session.activeSageDb() ?? ''"
                 (change)="onCompanyChange($event)"
                 aria-label="Société / base SAGE"
               >
                 @for (db of databases(); track db.id) {
-                  <option [value]="db.nomBd">{{ db.nomBd }}</option>
+                  <option [value]="db.nomBd" [selected]="db.nomBd === session.activeSageDb()">{{ db.nomBd }}</option>
                 }
               </select>
             </div>
           }
-
           @if (pointeuseDbs().length) {
             <div class="topbar__company">
               <select
-                [value]="session.activePointeuseDb() ?? ''"
                 (change)="onPointeuseChange($event)"
                 aria-label="Base pointeuse"
               >
                 @for (db of pointeuseDbs(); track db.id) {
-                  <option [value]="db.nomBd">{{ db.nomBd }}</option>
+                  <option [value]="db.nomBd" [selected]="db.nomBd === session.activePointeuseDb()">{{ db.nomBd }}</option>
                 }
               </select>
             </div>
@@ -315,6 +313,9 @@ export class Shell implements OnInit {
   private readonly router = inject(Router);
   private readonly pointeuseApi = inject(PointeuseDatabasesService);
 
+  private readonly sageApi = inject(SageDatabasesService);
+  private readonly toast = inject(ToastService);
+
   readonly collapsed = signal(false);
   readonly databases = computed(() => this.session.databases());
   readonly pointeuseDbs = signal<PointeuseDb[]>([]);
@@ -348,12 +349,28 @@ export class Shell implements OnInit {
 
   onCompanyChange(event: Event): void {
     this.session.setActiveSageDb((event.target as HTMLSelectElement).value || null);
-    window.location.reload();
+    this.activateThenReload();
   }
 
   onPointeuseChange(event: Event): void {
     this.session.setActivePointeuseDb((event.target as HTMLSelectElement).value || null);
-    window.location.reload();
+    this.activateThenReload();
+  }
+
+  private activateThenReload(): void {
+    if (!this.session.activeSageDb()) {
+      window.location.reload();
+      return;
+    }
+    this.sageApi.activate().subscribe({
+      next: (r) => {
+        if (r.cardsAdded > 0 || r.cardsDeactivated > 0) {
+          this.toast.success(r.message);
+        }
+        window.location.reload();
+      },
+      error: () => window.location.reload(),
+    });
   }
 
   logout(): void {

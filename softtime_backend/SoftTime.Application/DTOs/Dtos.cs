@@ -35,15 +35,51 @@ public record DbAccessDto(int Id, decimal UserId, int SageDbId)
     public DbAccessDto() : this(default, default, default) { }
 }
 
-public record SageDbDto(int Id, string? Serveur, string? Login, string? Password, bool? SqlAuth, string? NomBd)
+public record SageDbDto(
+    int Id,
+    string? Serveur,
+    string? Login,
+    string? Password,
+    bool? SqlAuth,
+    string? NomBd,
+    string TypeBase = "STANDARD",
+    string? MapTable = null,
+    string? MapColMatricule = null,
+    string? MapColNom = null,
+    string? MapColPrenom = null,
+    string? MapColBadge = null,
+    string? MapColDepartement = null,
+    string? MapColService = null,
+    string? MapColCodeDepartement = null)
 {
     public SageDbDto() : this(default, default, default, default, default, default) { }
 }
-
-public record PointeuseDbDto(int Id, string? Serveur, string? Login, string? Password, bool? SqlAuth, string? NomBd, string? TypePointage, bool? Active)
+public record PointeuseDbDto(
+    int Id,
+    string? Serveur,
+    string? Login,
+    string? Password,
+    bool? SqlAuth,
+    string? NomBd,
+    string? TypePointage,
+    bool? Active,
+    string TypeBase = "STANDARD",
+    string? MapUserTable = null,
+    string? MapUserColId = null,
+    string? MapUserColBadge = null,
+    string? MapUserColSsn = null,
+    string? MapUserColNom = null,
+    string? MapPunchTable = null,
+    string? MapPunchColUserId = null,
+    string? MapPunchColDateTime = null,
+    string? MapPunchColType = null)
 {
     public PointeuseDbDto() : this(default, default, default, default, default, default, default, default) { }
 }
+
+public record TestSageConnectionDto(string? Serveur, bool? SqlAuth, string? Login, string? Password, string? NomBd, string TypeBase, string? MapTable);
+public record TestPointeuseConnectionDto(string? Serveur, bool? SqlAuth, string? Login, string? Password, string? NomBd, string TypeBase, string? MapUserTable, string? MapPunchTable);
+public record ConnectionTestResultDto(bool Success, string Message, IReadOnlyList<string>? MissingTables = null);
 
 public record ClockParamDto(int Id, bool? MultiPoint)
 {
@@ -55,10 +91,17 @@ public record CorrespondenceModeDto(bool Active)
     public CorrespondenceModeDto() : this(Active:default) { }
 }
 
-public record CardPaieDto(int Id, string? SageMatricule, string? Branche, string? SageNom, string? SagePrenom, string? PointeuseNumero, string? PointeuseNom, string? SageServeur, string? PointeuseServeur, string? SageBdd, string? PointeuseBdd, DateTime? Date)
+public record CardPaieDto(
+    int Id, string? SageMatricule, string? Branche, string? SageNom, string? SagePrenom,
+    string? PointeuseNumero, string? PointeuseNom, string? SageServeur, string? PointeuseServeur,
+    string? SageBdd, string? PointeuseBdd, DateTime? Date,
+    string Origine = "AUTO", bool Actif = true, string? Departement = null)
 {
     public CardPaieDto() : this(default, default, default, default, default, default, default, default, default, default, default, default) { }
 }
+public record SyncResultDto(int Added, int Deactivated, string Message);
+
+public record ActivationResultDto(bool HolidaysImported, int CardsAdded, int CardsDeactivated, string Message);
 
 public record CategoryDto(int Id, string? Intitule, int SupervisorCardId, TimeSpan? Pause, decimal? HeuresSemaine)
 {

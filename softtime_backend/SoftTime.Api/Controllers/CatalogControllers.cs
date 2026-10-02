@@ -33,6 +33,13 @@ public class SageDatabasesController : ControllerBase
         await _svc.DeleteSageAsync(id, ct);
         return NoContent();
     }
+    [HttpPost("test-connection")]
+    public async Task<IActionResult> TestConnection([FromBody] TestSageConnectionDto dto, CancellationToken ct)
+        => Ok(await _svc.TestSageConnectionAsync(dto, ct));
+
+    [HttpPost("activate")]
+    public async Task<IActionResult> Activate(CancellationToken ct)
+        => Ok(await _svc.ActivateSagePairAsync(ct));
 }
 
 [ApiController]
@@ -61,6 +68,9 @@ public class PointeuseDatabasesController : ControllerBase
         await _svc.DeletePointeuseAsync(id, ct);
         return NoContent();
     }
+    [HttpPost("test-connection")]
+    public async Task<IActionResult> TestConnection([FromBody] TestPointeuseConnectionDto dto, CancellationToken ct)
+        => Ok(await _svc.TestPointeuseConnectionAsync(dto, ct));
 }
 
 [ApiController]
@@ -174,7 +184,7 @@ public class CardPaieController : ControllerBase
     [HttpPost("auto-map")]
     [RequireDroit(Droit.Parameters)]
     public async Task<IActionResult> AutoMap(CancellationToken ct)
-        => Ok(new { added = await _svc.AutoMapCardsAsync(ct) });
+        => Ok(await _svc.AutoMapCardsAsync(ct));
 
     [HttpPost("import-csv")]
     [RequireDroit(Droit.Parameters)]

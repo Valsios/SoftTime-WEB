@@ -11,6 +11,16 @@ export interface PointeuseDb {
   nomBd?: string | null;
   typePointage?: string | null;
   active?: boolean | null;
+  typeBase?: string; // 'STANDARD' | 'AUTRE'
+  mapUserTable?: string | null;
+  mapUserColId?: string | null;
+  mapUserColBadge?: string | null;
+  mapUserColSsn?: string | null;
+  mapUserColNom?: string | null;
+  mapPunchTable?: string | null;
+  mapPunchColUserId?: string | null;
+  mapPunchColDateTime?: string | null;
+  mapPunchColType?: string | null;
 }
 
 export interface ClockParam {
@@ -108,4 +118,10 @@ export interface DepartementService {
   matricule: string;
   departement?: string | null;
   service?: string | null;
+}
+
+export interface ConnectionTestResult {
+  success: boolean;
+  message: string;
+  missingTables?: string[] | null;
 }

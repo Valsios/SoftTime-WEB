@@ -19,7 +19,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         <input #csvFile type="file" accept=".csv,.txt" hidden (change)="onCsv($event)" />
         <soft-button variant="secondary" (click)="csvFile.click()">Import CSV</soft-button>
       </label>
-      <soft-button variant="secondary" (click)="autoMap()">Auto-mapping</soft-button>
+      <soft-button variant="secondary" [loading]="autoMapping()" [disabled]="autoMapping()" (click)="autoMap()">Auto-mapping</soft-button>
       <soft-button (click)="openCreate()">Ajouter</soft-button>
     </page-header>
     <soft-card>
@@ -61,6 +61,7 @@ export class CardPaiePage implements OnInit {
   readonly modal = signal(false);
   readonly editId = signal<number | null>(null);
   readonly rows = signal<Record<string, unknown>[]>([]);
+  readonly autoMapping = signal(false);
   form: Partial<CardPaie> = {};
 
   readonly columns: Column[] = [
@@ -121,7 +122,12 @@ export class CardPaiePage implements OnInit {
     this.svc.remove(row['id'] as number).subscribe({ next: () => { this.toast.success('Supprimé.'); this.load(); } });
   }
   autoMap(): void {
-    this.svc.autoMap().subscribe({ next: (r) => this.toast.success(`${r.added} correspondance(s) ajoutée(s).`), complete: () => this.load() });
+    this.autoMapping.set(true);
+    this.svc.autoMap().subscribe({
+      next: (r) => this.toast.success(r.message ?? `${r.added} correspondance(s) ajoutée(s).`),
+      error: (e) => { this.autoMapping.set(false); this.toast.error(e?.error?.error || 'Synchronisation impossible.'); },
+      complete: () => { this.autoMapping.set(false); this.load(); },
+    });
   }
   exportExcel(): void {
     this.excel.download('correspondances-paie', this.columns, this.rows());

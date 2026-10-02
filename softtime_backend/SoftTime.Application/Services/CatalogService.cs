@@ -34,7 +34,17 @@ public class CatalogService
 
     public async Task<SageDbDto> SaveSageAsync(SageDbDto dto, CancellationToken ct = default)
     {
+        if (dto.TypeBase != "STANDARD" && dto.TypeBase != "AUTRE")
+            throw new InvalidOperationException("TypeBase doit valoir 'STANDARD' ou 'AUTRE'.");
+        if (dto.TypeBase == "AUTRE" && string.IsNullOrWhiteSpace(dto.MapTable))
+            throw new InvalidOperationException("Une base 'Autre' nécessite au minimum une table et une colonne matricule.");
         var repo = _uow.Repository<T_BDD_SAGE>();
+        var doublon = (await repo.ListAsync(
+            s => s.ID != dto.Id
+                 && s.SERVEUR == dto.Serveur
+                 && s.NOM_BD == dto.NomBd, ct)).Any();
+        if (doublon)
+            throw new InvalidOperationException("Cette base (serveur + nom) est déjà enregistrée.");
         T_BDD_SAGE entity;
         if (dto.Id == 0)
         {
@@ -49,10 +59,47 @@ public class CatalogService
             entity.TMDP = dto.Password;
             entity.TYPE_AUTH = dto.SqlAuth;
             entity.NOM_BD = dto.NomBd;
+            entity.TYPE_BASE = dto.TypeBase;
+            entity.MAP_TABLE = dto.MapTable;
+            entity.MAP_COL_MATRICULE = dto.MapColMatricule;
+            entity.MAP_COL_NOM = dto.MapColNom;
+            entity.MAP_COL_PRENOM = dto.MapColPrenom;
+            entity.MAP_COL_BADGE = dto.MapColBadge;
+            entity.MAP_COL_DEPARTEMENT = dto.MapColDepartement;
+            entity.MAP_COL_SERVICE = dto.MapColService;
+            entity.MAP_COL_CODE_DEPARTEMENT = dto.MapColCodeDepartement;
             repo.Update(entity);
         }
         await _uow.SaveChangesAsync(ct);
         return _mapper.Map<SageDbDto>(entity);
+    }
+    // Verifie la connexion et, en mode STANDARD, la presence des tables attendues par le reste de l'application.
+    private static readonly string[] SageStandardTables = { "T_SAL", "T_HST_AFFECTATION", "T_DEPARTEMENT", "T_GHRCAL_SOCIETE", "T_CST" };
+    public async Task<ConnectionTestResultDto> TestSageConnectionAsync(TestSageConnectionDto dto, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(dto.Serveur) || string.IsNullOrWhiteSpace(dto.NomBd))
+            return new ConnectionTestResultDto(false, "Serveur et nom de base requis.");
+        IReadOnlyList<string> tables;
+        try
+        {
+            tables = await _discovery.ListTablesAsync(dto.Serveur, dto.NomBd, dto.SqlAuth ?? true, dto.Login, dto.Password, ct);
+        }
+        catch (Exception ex)
+        {
+            return new ConnectionTestResultDto(false, $"Connexion impossible : {ex.Message}");
+        }
+        if (dto.TypeBase == "AUTRE")
+        {
+            if (string.IsNullOrWhiteSpace(dto.MapTable))
+                return new ConnectionTestResultDto(true, "Connexion réussie. Choisissez une table.");
+            return tables.Contains(dto.MapTable, StringComparer.OrdinalIgnoreCase)
+                ? new ConnectionTestResultDto(true, "Connexion réussie, table trouvée.")
+                : new ConnectionTestResultDto(false, $"Connexion réussie mais la table '{dto.MapTable}' est introuvable.");
+        }
+        var missing = SageStandardTables.Where(t => !tables.Contains(t, StringComparer.OrdinalIgnoreCase)).ToList();
+        return missing.Count == 0
+            ? new ConnectionTestResultDto(true, "Connexion réussie, structure Sage standard reconnue.")
+            : new ConnectionTestResultDto(false, "Connexion réussie mais certaines tables Sage attendues sont introuvables.", missing);
     }
 
     public async Task DeleteSageAsync(int id, CancellationToken ct = default)
@@ -68,7 +115,17 @@ public class CatalogService
 
     public async Task<PointeuseDbDto> SavePointeuseAsync(PointeuseDbDto dto, CancellationToken ct = default)
     {
+        if (dto.TypeBase != "STANDARD" && dto.TypeBase != "AUTRE")
+            throw new InvalidOperationException("TypeBase doit valoir 'STANDARD' ou 'AUTRE'.");
+        if (dto.TypeBase == "AUTRE" && (string.IsNullOrWhiteSpace(dto.MapUserTable) || string.IsNullOrWhiteSpace(dto.MapPunchTable)))
+            throw new InvalidOperationException("Une base 'Autre' nécessite au minimum une table utilisateurs et une table pointages.");
         var repo = _uow.Repository<T_BDD_POINTEUSE>();
+        var doublon = (await repo.ListAsync(
+            p => p.ID != dto.Id
+                 && p.SERVEUR == dto.Serveur
+                 && p.NOM_BD == dto.NomBd, ct)).Any();
+        if (doublon)
+            throw new InvalidOperationException("Cette base (serveur + nom) est déjà enregistrée.");
         if (dto.Active == true)
         {
             var all = await repo.ListAsync(_ => true, ct);
@@ -94,10 +151,50 @@ public class CatalogService
             entity.NOM_BD = dto.NomBd;
             entity.TYPE_POINTAGE = dto.TypePointage;
             entity.ACTIVE = dto.Active;
+            entity.TYPE_BASE = dto.TypeBase;
+            entity.MAP_USER_TABLE = dto.MapUserTable;
+            entity.MAP_USER_COL_ID = dto.MapUserColId;
+            entity.MAP_USER_COL_BADGE = dto.MapUserColBadge;
+            entity.MAP_USER_COL_SSN = dto.MapUserColSsn;
+            entity.MAP_USER_COL_NOM = dto.MapUserColNom;
+            entity.MAP_PUNCH_TABLE = dto.MapPunchTable;
+            entity.MAP_PUNCH_COL_USER_ID = dto.MapPunchColUserId;
+            entity.MAP_PUNCH_COL_DATETIME = dto.MapPunchColDateTime;
+            entity.MAP_PUNCH_COL_TYPE = dto.MapPunchColType;
             repo.Update(entity);
         }
         await _uow.SaveChangesAsync(ct);
         return _mapper.Map<PointeuseDbDto>(entity);
+    }
+    private static readonly string[] PointeuseStandardTables = { "USERINFO", "CHECKINOUT" };
+    public async Task<ConnectionTestResultDto> TestPointeuseConnectionAsync(TestPointeuseConnectionDto dto, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(dto.Serveur) || string.IsNullOrWhiteSpace(dto.NomBd))
+            return new ConnectionTestResultDto(false, "Serveur et nom de base requis.");
+        IReadOnlyList<string> tables;
+        try
+        {
+            tables = await _discovery.ListTablesAsync(dto.Serveur, dto.NomBd, dto.SqlAuth ?? true, dto.Login, dto.Password, ct);
+        }
+        catch (Exception ex)
+        {
+            return new ConnectionTestResultDto(false, $"Connexion impossible : {ex.Message}");
+        }
+        if (dto.TypeBase == "AUTRE")
+        {
+            var missingCustom = new List<string>();
+            if (!string.IsNullOrWhiteSpace(dto.MapUserTable) && !tables.Contains(dto.MapUserTable, StringComparer.OrdinalIgnoreCase))
+                missingCustom.Add(dto.MapUserTable);
+            if (!string.IsNullOrWhiteSpace(dto.MapPunchTable) && !tables.Contains(dto.MapPunchTable, StringComparer.OrdinalIgnoreCase))
+                missingCustom.Add(dto.MapPunchTable);
+            return missingCustom.Count == 0
+                ? new ConnectionTestResultDto(true, "Connexion réussie.")
+                : new ConnectionTestResultDto(false, "Connexion réussie mais certaines tables choisies sont introuvables.", missingCustom);
+        }
+        var missing = PointeuseStandardTables.Where(t => !tables.Contains(t, StringComparer.OrdinalIgnoreCase)).ToList();
+        return missing.Count == 0
+            ? new ConnectionTestResultDto(true, "Connexion réussie, structure pointeuse standard reconnue.")
+            : new ConnectionTestResultDto(false, "Connexion réussie mais les tables USERINFO/CHECKINOUT sont introuvables.", missing);
     }
 
     public async Task DeletePointeuseAsync(int id, CancellationToken ct = default)
@@ -331,27 +428,55 @@ public class CatalogService
             """, ct);
     }
 
+    // Le mode correspondance est rattache a la paire
+    // selectionnee par l'utilisateur
     public async Task<CorrespondenceModeDto> GetCorrespondenceAsync(CancellationToken ct = default)
     {
-        var row = (await _uow.Repository<T_ACTIVECORRESP>().ListAsync(_ => true, ct)).FirstOrDefault();
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var sageRow = await _tenant.GetSageRowAsync(ct);
+        var pteRow = await _tenant.GetPointeuseRowAsync(ct);
+        var row = (await _uow.Repository<T_ACTIVECORRESP>().ListAsync(a =>
+            a.SAGE_SERVEUR == sageRow.SERVEUR && a.SAGE_BDD == sageRow.NOM_BD &&
+            a.POINTEUSE_SERVEUR == pteRow.SERVEUR && a.POINTEUSE_BDD == pteRow.NOM_BD, ct)).FirstOrDefault();
         return new CorrespondenceModeDto(row?.Active == true);
     }
-
     public async Task<CorrespondenceModeDto> SetCorrespondenceAsync(bool active, CancellationToken ct = default)
     {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var sageRow = await _tenant.GetSageRowAsync(ct);
+        var pteRow = await _tenant.GetPointeuseRowAsync(ct);
         var repo = _uow.Repository<T_ACTIVECORRESP>();
-        var row = (await repo.ListAsync(_ => true, ct)).FirstOrDefault();
+        var row = (await repo.ListAsync(a =>
+            a.SAGE_SERVEUR == sageRow.SERVEUR && a.SAGE_BDD == sageRow.NOM_BD &&
+            a.POINTEUSE_SERVEUR == pteRow.SERVEUR && a.POINTEUSE_BDD == pteRow.NOM_BD, ct)).FirstOrDefault();
         if (row == null)
         {
-            row = new T_ACTIVECORRESP { Active = active };
+            row = new T_ACTIVECORRESP
+            {
+                Active = active,
+                SAGE_SERVEUR = sageRow.SERVEUR,
+                SAGE_BDD = sageRow.NOM_BD,
+                POINTEUSE_SERVEUR = pteRow.SERVEUR,
+                POINTEUSE_BDD = pteRow.NOM_BD,
+                DATE_MODIF = DateTime.Now
+            };
             await repo.AddAsync(row, ct);
         }
         else
         {
             row.Active = active;
+            row.DATE_MODIF = DateTime.Now;
             repo.Update(row);
         }
         await _uow.SaveChangesAsync(ct);
+        if (!active)
+        {
+            // Desactivation du mode manuel : on relance immediatement l'auto-mapping
+            var result = await SyncCardPaieCoreAsync(sageRow, pteRow, ct);
+            row.DERNIERE_SYNC = DateTime.Now;
+            repo.Update(row);
+            await _uow.SaveChangesAsync(ct);
+        }
         return new CorrespondenceModeDto(active);
     }
 
@@ -399,43 +524,128 @@ public class CatalogService
         await _uow.SaveChangesAsync(ct);
     }
 
-    public async Task<int> AutoMapCardsAsync(CancellationToken ct = default)
+    public async Task<SyncResultDto> AutoMapCardsAsync(CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var sageConn = await _tenant.GetSageConnectionAsync(ct);
-        var pteConn = await _tenant.GetPointeuseConnectionAsync(ct);
-        using var sage = _sageFactory.Create(sageConn);
-        using var pte = _pointeuseFactory.Create(pteConn);
-        var employees = sage.Employees.ToList();
+        var sageRow = await _tenant.GetSageRowAsync(ct);
+        var pteRow = await _tenant.GetPointeuseRowAsync(ct);
+        var mode = await GetCorrespondenceAsync(ct);
+        if (mode.Active)
+            throw new InvalidOperationException(
+                "Le mode correspondance manuelle est actif pour cette paire de bases : la synchronisation automatique est désactivée. Désactivez le mode pour la relancer.");
+        return await SyncCardPaieCoreAsync(sageRow, pteRow, ct);
+    }
+    
+    public async Task<ActivationResultDto> ActivateSagePairAsync(CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var sageRow = await _tenant.GetSageRowAsync(ct);
+
+        var holidaysImported = false;
+        if (sageRow.TYPE_BASE == "STANDARD")
+        {
+            await ImportSageHolidaysAsync(ct);
+            holidaysImported = true;
+        }
+
+        await EnsureCodeConstantesAsync(ct);
+        var sync = await AutoMapCardsAsync(ct);
+
+        return new ActivationResultDto(holidaysImported, sync.Added, sync.Deactivated, sync.Message);
+    }
+    private async Task<SyncResultDto> SyncCardPaieCoreAsync(T_BDD_SAGE sageRow, T_BDD_POINTEUSE pteRow, CancellationToken ct)
+    {
+        using var sage = _sageFactory.Create(ExternalConnectionFactory.Build(
+            sageRow.SERVEUR, sageRow.NOM_BD, sageRow.TYPE_AUTH == true, sageRow.TLOGIN, sageRow.TMDP));
+        using var pte = _pointeuseFactory.Create(ExternalConnectionFactory.Build(
+            pteRow.SERVEUR, pteRow.NOM_BD, pteRow.TYPE_AUTH == true, pteRow.TLOGIN, pteRow.TMDP));
+        var employees = sage.Employees.Where(e => e.SalarieDesactive != 1).ToList();
         var badges = pte.Users.ToList();
+        var affectations = sage.Affectations.ToList();
+        var departments = sage.Departments.ToDictionary(d => d.Code, d => d.Intitule);
+        string? DepartementDe(int numSalarie)
+        {
+            var aff = affectations.Where(a => a.NumSalarie == numSalarie && a.DateSortiePoste == null)
+                                   .OrderByDescending(a => a.DateDebut).FirstOrDefault()
+                      ?? affectations.Where(a => a.NumSalarie == numSalarie)
+                                     .OrderByDescending(a => a.DateDebut).FirstOrDefault();
+            if (aff?.Departement == null) return null;
+            return departments.TryGetValue(aff.Departement, out var intitule) && !string.IsNullOrWhiteSpace(intitule)
+                ? intitule : aff.Departement;
+        }
         var repo = _uow.Repository<T_CARDPAIE>();
-        var existing = await repo.ListAsync(c => c.SAGE_BDD == _tenant.SageDb, ct);
+        var scopeCards = await repo.ListAsync(c =>
+            c.SAGE_SERVEUR == sageRow.SERVEUR && c.SAGE_BDD == sageRow.NOM_BD &&
+            c.POINTEUSE_SERVEUR == pteRow.SERVEUR && c.POINTEUSE_BDD == pteRow.NOM_BD, ct);
+
+        static bool MemeIdentifiant(string? a, string? b)
+        {
+            a = a?.Trim();
+            b = b?.Trim();
+            if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
+            if (long.TryParse(a, out var na) && long.TryParse(b, out var nb))
+                return na == nb;
+            return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+        }
+        var matched = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var added = 0;
-        foreach (var sal in employees.Where(e => e.SalarieDesactive != 1))
+        foreach (var sal in employees)
         {
             var match = badges.FirstOrDefault(b =>
-                string.Equals(b.SSN?.Trim(), sal.MatriculeSalarie.Trim(), StringComparison.OrdinalIgnoreCase)
-                || string.Equals(b.BADGENUMBER?.Trim(), sal.MatriculeSalarie.Trim(), StringComparison.OrdinalIgnoreCase)
-                || string.Equals(b.BADGENUMBER?.Trim(), sal.NumeroDeBadge?.Trim(), StringComparison.OrdinalIgnoreCase));
-            if (match == null)
-                continue;
-            if (existing.Any(c => c.SAGE_MATRICULE == sal.MatriculeSalarie))
-                continue;
-            await repo.AddAsync(new T_CARDPAIE
+                MemeIdentifiant(b.SSN, sal.MatriculeSalarie)
+                || MemeIdentifiant(b.BADGENUMBER, sal.MatriculeSalarie)
+                || MemeIdentifiant(b.BADGENUMBER, sal.NumeroDeBadge));
+            if (match == null) continue;
+            matched.Add(sal.MatriculeSalarie.Trim());
+            var departement = DepartementDe(sal.SA_CompteurNumero);
+            var existingCard = scopeCards.FirstOrDefault(c =>
+                string.Equals(c.SAGE_MATRICULE?.Trim(), sal.MatriculeSalarie.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (existingCard == null)
             {
-                SAGE_MATRICULE = sal.MatriculeSalarie,
-                SAGE_NOM = sal.Nom,
-                SAGE_PRENOM = sal.Prenom,
-                POINTEUSE_NUMERO = match.BADGENUMBER,
-                POINTEUSE_NOM = match.NAME,
-                SAGE_BDD = _tenant.SageDb,
-                POINTEUSE_BDD = _tenant.PointeuseDb,
-                DATE = DateTime.Now
-            }, ct);
-            added++;
+                await repo.AddAsync(new T_CARDPAIE
+                {
+                    SAGE_MATRICULE = sal.MatriculeSalarie.Trim(),
+                    SAGE_NOM = sal.Nom,
+                    SAGE_PRENOM = sal.Prenom,
+                    POINTEUSE_NUMERO = match.BADGENUMBER,
+                    POINTEUSE_NOM = match.NAME,
+                    SAGE_SERVEUR = sageRow.SERVEUR,
+                    POINTEUSE_SERVEUR = pteRow.SERVEUR,
+                    SAGE_BDD = sageRow.NOM_BD,
+                    POINTEUSE_BDD = pteRow.NOM_BD,
+                    DEPARTEMENT = departement,
+                    ORIGINE = "AUTO",
+                    ACTIF = true,
+                    DATE = DateTime.Now
+                }, ct);
+                added++;
+            }
+            else if (existingCard.ORIGINE == "AUTO")
+            {
+                existingCard.SAGE_NOM = sal.Nom;
+                existingCard.SAGE_PRENOM = sal.Prenom;
+                existingCard.POINTEUSE_NUMERO = match.BADGENUMBER;
+                existingCard.POINTEUSE_NOM = match.NAME;
+                if (departement != null) existingCard.DEPARTEMENT = departement;
+                existingCard.ACTIF = true;
+                repo.Update(existingCard);
+            }
+        }
+        var deactivated = 0;
+        foreach (var card in scopeCards.Where(c => c.ORIGINE == "AUTO" && c.ACTIF))
+        {
+            if (matched.Contains((card.SAGE_MATRICULE ?? string.Empty).Trim())) continue;
+            var hasPunches = (await _uow.Repository<T_POINTAGE>().ListAsync(p =>
+                p.NOM_BDD_SAGE == sageRow.NOM_BD && p.MATRICULE_SAGE == card.SAGE_MATRICULE, ct)).Any();
+            var hasCategorie = (await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.MATRICULE_SAGE == card.ID, ct)).Any();
+            if (hasPunches || hasCategorie) continue; // donnees liees : jamais desactivee ni supprimee
+            card.ACTIF = false;
+            repo.Update(card);
+            deactivated++;
         }
         await _uow.SaveChangesAsync(ct);
-        return added;
+        return new SyncResultDto(added, deactivated,
+            $"{added} carte(s) ajoutée(s), {deactivated} mise(s) de côté (plus de correspondance trouvée).");
     }
 
     public async Task<ImportResultDto> ImportCorrespondencesCsvAsync(IReadOnlyList<string[]> lines, CancellationToken ct = default)
