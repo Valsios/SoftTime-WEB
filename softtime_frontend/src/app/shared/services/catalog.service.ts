@@ -17,6 +17,7 @@ import {
   Tolerance,
   SourceConfig,
   DepartementService,
+  ConnectionTestResult,
 } from '../models';
 
 @Injectable({ providedIn: 'root' })
@@ -32,6 +33,32 @@ export class PointeuseDatabasesService extends ApiService {
   }
   remove(id: number): Observable<void> {
     return this.http.delete<void>(this.url(`/api/pointeuse-databases/${id}`));
+  }
+  testConnection(dto: Partial<PointeuseDb>): Observable<ConnectionTestResult> {
+    return this.http.post<ConnectionTestResult>(this.url('/api/pointeuse-databases/test-connection'), dto);
+  }
+}
+
+@Injectable({ providedIn: 'root' })
+export class SageDatabasesService extends ApiService {
+  activate(): Observable<{ holidaysImported: boolean; cardsAdded: number; cardsDeactivated: number; message: string }> {
+    return this.http.post<{ holidaysImported: boolean; cardsAdded: number; cardsDeactivated: number; message: string }>(
+      this.url('/api/sage-databases/activate'), {});
+  }
+}
+@Injectable({ providedIn: 'root' })
+export class DiscoveryService extends ApiService {
+  servers(): Observable<string[]> {
+    return this.http.get<string[]>(this.url('/api/discovery/servers'));
+  }
+  databases(dto: { serveur: string; sqlAuth: boolean; login: string | null; password: string | null }): Observable<string[]> {
+    return this.http.post<string[]>(this.url('/api/discovery/databases'), dto);
+  }
+  tables(dto: { serveur: string; base: string; sqlAuth: boolean; login: string | null; password: string | null }): Observable<string[]> {
+    return this.http.post<string[]>(this.url('/api/discovery/tables'), dto);
+  }
+  columns(dto: { serveur: string; base: string; table: string; sqlAuth: boolean; login: string | null; password: string | null }): Observable<string[]> {
+    return this.http.post<string[]>(this.url('/api/discovery/columns'), dto);
   }
 }
 
@@ -69,8 +96,8 @@ export class CardPaieService extends ApiService {
   remove(id: number): Observable<void> {
     return this.http.delete<void>(this.url(`/api/cardpaie/${id}`));
   }
-  autoMap(): Observable<{ added: number }> {
-    return this.http.post<{ added: number }>(this.url('/api/cardpaie/auto-map'), {});
+    autoMap(): Observable<{ added: number; deactivated: number; message: string }> {
+    return this.http.post<{ added: number; deactivated: number; message: string }>(this.url('/api/cardpaie/auto-map'), {});
   }
   importCsv(file: File): Observable<ImportResult> {
     const form = new FormData();

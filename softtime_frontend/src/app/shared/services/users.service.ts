@@ -79,4 +79,7 @@ export class SageDatabasesService extends ApiService {
   remove(id: number): Observable<void> {
     return this.http.delete<void>(this.url(`/api/sage-databases/${id}`));
   }
+  testConnection(dto: Partial<SageDb>): Observable<import('../models').ConnectionTestResult> {
+    return this.http.post<import('../models').ConnectionTestResult>(this.url('/api/sage-databases/test-connection'), dto);
+  }
 }

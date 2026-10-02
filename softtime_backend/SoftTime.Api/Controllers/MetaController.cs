@@ -59,6 +59,7 @@ public static class ApiCatalog
         E("SageDatabases", "POST", "/api/sage-databases", "Créer connexion SAGE"),
         E("SageDatabases", "PUT", "/api/sage-databases/{id}", "Modifier connexion SAGE"),
         E("SageDatabases", "DELETE", "/api/sage-databases/{id}", "Supprimer connexion SAGE"),
+        E("SageDatabases", "POST", "/api/sage-databases/activate", "Active la base SAGE courante (fériés, codes HS, synchro CardPaie)"),
         E("PointeuseDatabases", "GET", "/api/pointeuse-databases", "Liste connexions pointeuse"),
         E("PointeuseDatabases", "POST", "/api/pointeuse-databases", "Créer connexion pointeuse"),
         E("PointeuseDatabases", "PUT", "/api/pointeuse-databases/{id}", "Modifier connexion pointeuse"),
