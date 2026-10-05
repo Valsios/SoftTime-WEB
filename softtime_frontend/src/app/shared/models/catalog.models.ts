@@ -13,15 +13,6 @@ export interface PointeuseDb {
   typePointage?: string | null;
   active?: boolean | null;
   typeBase?: string; // 'STANDARD' | 'AUTRE'
-  mapUserTable?: string | null;
-  mapUserColId?: string | null;
-  mapUserColBadge?: string | null;
-  mapUserColSsn?: string | null;
-  mapUserColNom?: string | null;
-  mapPunchTable?: string | null;
-  mapPunchColUserId?: string | null;
-  mapPunchColDateTime?: string | null;
-  mapPunchColType?: string | null;
   mappings?: SourceEntityMapping[] | null;
 }
 
@@ -99,21 +90,6 @@ export interface CodeConstante {
 export interface SageConstantOption {
   code: string;
   intitule?: string | null;
-}
-
-export interface SourceConfig {
-  id: number;
-  mode: string;
-  tableName?: string | null;
-  colMatricule?: string | null;
-  colDepartement?: string | null;
-  colService?: string | null;
-  colCodeDepartement?: string | null;
-  extServeur?: string | null;
-  extBase?: string | null;
-  extLogin?: string | null;
-  extPassword?: string | null;
-  extSqlAuth?: boolean | null;
 }
 
 export interface DepartementService {

@@ -123,13 +123,6 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/params/absence-codes').then((m) => m.AbsenceCodesPage),
       },
-      {
-        path: 'source-config',
-        canActivate: [droitGuard],
-        data: { droit: Droit.Parameters },
-        loadComponent: () =>
-          import('./features/params/source-config').then((m) => m.SourceConfigPage),
-      },
       // Processing (droit 3)
       {
         path: 'shifts',

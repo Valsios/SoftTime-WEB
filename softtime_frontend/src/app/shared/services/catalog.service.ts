@@ -15,7 +15,6 @@ import {
   PointeuseDb,
   SageConstantOption,
   Tolerance,
-  SourceConfig,
   DepartementService,
   ConnectionTestResult,
   FieldRole,
@@ -215,27 +214,10 @@ export class AbsenceCodesService extends ApiService {
 }
 
 @Injectable({ providedIn: 'root' })
-export class SourceConfigService extends ApiService {
-  get(): Observable<SourceConfig> {
-    return this.http.get<SourceConfig>(this.url('/api/source-config'));
-  }
-  update(dto: SourceConfig): Observable<SourceConfig> {
-    return this.http.put<SourceConfig>(this.url('/api/source-config'), dto);
-  }
+export class DepartementServiceService extends ApiService {
+  /** Recherche le departement/service Sage pour une liste de matricules. */
   lookupBatch(matricules: string[]): Observable<DepartementService[]> {
-    return this.http.post<DepartementService[]>(this.url('/api/source-config/lookup-batch'), matricules);
-  }
-  discoverServers(): Observable<string[]> {
-    return this.http.get<string[]>(this.url('/api/source-config/discover/servers'));
-  }
-  discoverDatabases(dto: { serveur: string; sqlAuth: boolean; login: string | null; password: string | null }): Observable<string[]> {
-    return this.http.post<string[]>(this.url('/api/source-config/discover/databases'), dto);
-  }
-  discoverTables(dto: { serveur: string; base: string; sqlAuth: boolean; login: string | null; password: string | null }): Observable<string[]> {
-    return this.http.post<string[]>(this.url('/api/source-config/discover/tables'), dto);
-  }
-  discoverColumns(dto: { serveur: string; base: string; table: string; sqlAuth: boolean; login: string | null; password: string | null }): Observable<string[]> {
-    return this.http.post<string[]>(this.url('/api/source-config/discover/columns'), dto);
+    return this.http.post<DepartementService[]>(this.url('/api/departement-service/lookup-batch'), matricules);
   }
 }
 

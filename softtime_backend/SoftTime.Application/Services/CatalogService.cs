@@ -14,20 +14,14 @@ public class CatalogService
     private readonly IUnitOfWork _uow;
     private readonly IMapper _mapper;
     private readonly TenantConnectionService _tenant;
-    private readonly ISageContextFactory _sageFactory;
-    private readonly IPointeuseContextFactory _pointeuseFactory;
-    private readonly IExternalSourceReader _externalReader;
     private readonly IExternalSourceService _externalSource;
     private readonly IExternalDiscoveryService _discovery;
 
-    public CatalogService(IUnitOfWork uow, IMapper mapper, TenantConnectionService tenant, ISageContextFactory sageFactory, IPointeuseContextFactory pointeuseFactory, IExternalSourceReader externalReader, IExternalSourceService externalSource, IExternalDiscoveryService discovery)
+    public CatalogService(IUnitOfWork uow, IMapper mapper, TenantConnectionService tenant, IExternalSourceService externalSource, IExternalDiscoveryService discovery)
     {
         _uow = uow;
         _mapper = mapper;
         _tenant = tenant;
-        _sageFactory = sageFactory;
-        _pointeuseFactory = pointeuseFactory;
-        _externalReader = externalReader;
         _externalSource = externalSource;
         _discovery = discovery;
     }
@@ -35,6 +29,7 @@ public class CatalogService
     public async Task<IReadOnlyList<SageDbDto>> ListSageAsync(CancellationToken ct = default)
     {
         await EnsureMappingSchemaAsync(ct);
+        await MigrateLegacyMappingsAsync(ct);
         var rows = await _uow.Repository<T_BDD_SAGE>().ListAsync(_ => true, ct);
         var byConnection = await LoadMappingLookupAsync(true, ct);
         return rows.Select(r => _mapper.Map<SageDbDto>(r) with
@@ -47,8 +42,8 @@ public class CatalogService
     {
         if (dto.TypeBase != "STANDARD" && dto.TypeBase != "AUTRE")
             throw new InvalidOperationException("TypeBase doit valoir 'STANDARD' ou 'AUTRE'.");
-        if (dto.TypeBase == "AUTRE" && string.IsNullOrWhiteSpace(dto.MapTable) && (dto.Mappings is null || dto.Mappings.Count == 0))
-            throw new InvalidOperationException("Une base 'Autre' nécessite au minimum une table et une colonne matricule.");
+        if (dto.TypeBase == "AUTRE" && (dto.Mappings is null || dto.Mappings.Count == 0))
+            throw new InvalidOperationException("Une base 'Autre' nécessite au minimum un mapping de source.");
         await EnsureMappingSchemaAsync(ct);
         var repo = _uow.Repository<T_BDD_SAGE>();
         var doublon = (await repo.ListAsync(
@@ -72,14 +67,6 @@ public class CatalogService
             entity.TYPE_AUTH = dto.SqlAuth;
             entity.NOM_BD = dto.NomBd;
             entity.TYPE_BASE = dto.TypeBase;
-            entity.MAP_TABLE = dto.MapTable;
-            entity.MAP_COL_MATRICULE = dto.MapColMatricule;
-            entity.MAP_COL_NOM = dto.MapColNom;
-            entity.MAP_COL_PRENOM = dto.MapColPrenom;
-            entity.MAP_COL_BADGE = dto.MapColBadge;
-            entity.MAP_COL_DEPARTEMENT = dto.MapColDepartement;
-            entity.MAP_COL_SERVICE = dto.MapColService;
-            entity.MAP_COL_CODE_DEPARTEMENT = dto.MapColCodeDepartement;
             repo.Update(entity);
         }
         await _uow.SaveChangesAsync(ct);
@@ -109,8 +96,6 @@ public class CatalogService
         if (dto.TypeBase == "AUTRE")
         {
             var missingCustom = new List<string>();
-            if (!string.IsNullOrWhiteSpace(dto.MapTable) && !tables.Contains(dto.MapTable, StringComparer.OrdinalIgnoreCase))
-                missingCustom.Add(dto.MapTable);
             if (dto.Mappings is { Count: > 0 })
             {
                 foreach (var t in dto.Mappings.Where(x => !string.IsNullOrWhiteSpace(x.SourceTable)).Select(x => x.SourceTable!))
@@ -144,6 +129,7 @@ public class CatalogService
     public async Task<IReadOnlyList<PointeuseDbDto>> ListPointeuseAsync(CancellationToken ct = default)
     {
         await EnsureMappingSchemaAsync(ct);
+        await MigrateLegacyMappingsAsync(ct);
         var rows = await _uow.Repository<T_BDD_POINTEUSE>().ListAsync(_ => true, ct);
         var byConnection = await LoadMappingLookupAsync(false, ct);
         return rows.Select(r => _mapper.Map<PointeuseDbDto>(r) with
@@ -156,8 +142,8 @@ public class CatalogService
     {
         if (dto.TypeBase != "STANDARD" && dto.TypeBase != "AUTRE")
             throw new InvalidOperationException("TypeBase doit valoir 'STANDARD' ou 'AUTRE'.");
-        if (dto.TypeBase == "AUTRE" && string.IsNullOrWhiteSpace(dto.MapUserTable) && string.IsNullOrWhiteSpace(dto.MapPunchTable) && (dto.Mappings is null || dto.Mappings.Count == 0))
-            throw new InvalidOperationException("Une base 'Autre' nécessite au minimum une table utilisateurs et une table pointages.");
+        if (dto.TypeBase == "AUTRE" && (dto.Mappings is null || dto.Mappings.Count == 0))
+            throw new InvalidOperationException("Une base 'Autre' nécessite au minimum un mapping de source.");
         await EnsureMappingSchemaAsync(ct);
         var repo = _uow.Repository<T_BDD_POINTEUSE>();
         var doublon = (await repo.ListAsync(
@@ -192,15 +178,6 @@ public class CatalogService
             entity.TYPE_POINTAGE = dto.TypePointage;
             entity.ACTIVE = dto.Active;
             entity.TYPE_BASE = dto.TypeBase;
-            entity.MAP_USER_TABLE = dto.MapUserTable;
-            entity.MAP_USER_COL_ID = dto.MapUserColId;
-            entity.MAP_USER_COL_BADGE = dto.MapUserColBadge;
-            entity.MAP_USER_COL_SSN = dto.MapUserColSsn;
-            entity.MAP_USER_COL_NOM = dto.MapUserColNom;
-            entity.MAP_PUNCH_TABLE = dto.MapPunchTable;
-            entity.MAP_PUNCH_COL_USER_ID = dto.MapPunchColUserId;
-            entity.MAP_PUNCH_COL_DATETIME = dto.MapPunchColDateTime;
-            entity.MAP_PUNCH_COL_TYPE = dto.MapPunchColType;
             repo.Update(entity);
         }
         await _uow.SaveChangesAsync(ct);
@@ -229,10 +206,6 @@ public class CatalogService
         if (dto.TypeBase == "AUTRE")
         {
             var missingCustom = new List<string>();
-            if (!string.IsNullOrWhiteSpace(dto.MapUserTable) && !tables.Contains(dto.MapUserTable, StringComparer.OrdinalIgnoreCase))
-                missingCustom.Add(dto.MapUserTable);
-            if (!string.IsNullOrWhiteSpace(dto.MapPunchTable) && !tables.Contains(dto.MapPunchTable, StringComparer.OrdinalIgnoreCase))
-                missingCustom.Add(dto.MapPunchTable);
             if (dto.Mappings is { Count: > 0 })
             {
                 foreach (var t in dto.Mappings.Where(x => !string.IsNullOrWhiteSpace(x.SourceTable)).Select(x => x.SourceTable!))
@@ -287,87 +260,11 @@ public class CatalogService
         return new ClockParamDto(row.IDPOINT, row.MULTIPOINT);
     }
 
-    public async Task<SourceConfigDto> GetSourceConfigAsync(CancellationToken ct = default)
-    {
-        await EnsureSourceConfigAsync(ct);
-        var row = (await _uow.Repository<T_SOURCE_CONFIG>().ListAsync(_ => true, ct)).FirstOrDefault();
-        return row == null
-            ? new SourceConfigDto(0, "SAGE", null, null, null, null, null)
-            : new SourceConfigDto(row.Id, row.Mode, row.TableName, row.ColMatricule, row.ColDepartement, row.ColService, row.ColCodeDepartement,
-                row.ExtServeur, row.ExtBase, row.ExtLogin, row.ExtPassword, row.ExtSqlAuth);
-    }
-
-    public async Task<SourceConfigDto> SaveSourceConfigAsync(SourceConfigDto dto, CancellationToken ct = default)
-    {
-        await EnsureSourceConfigAsync(ct);
-        if (dto.Mode != "SAGE" && dto.Mode != "AUTRE")
-            throw new InvalidOperationException("Le mode doit être 'SAGE' ou 'AUTRE'.");
-        if (dto.Mode == "AUTRE" && string.IsNullOrWhiteSpace(dto.TableName))
-            throw new InvalidOperationException("Le nom de la table est requis en mode 'AUTRE'.");
-        if (dto.Mode == "AUTRE" && !string.IsNullOrWhiteSpace(dto.ExtServeur) && string.IsNullOrWhiteSpace(dto.ExtBase))
-            throw new InvalidOperationException("Le nom de la base est requis si un serveur externe est renseigné.");
-        if (dto.Mode == "AUTRE" && !string.IsNullOrWhiteSpace(dto.ExtServeur) && dto.ExtSqlAuth && string.IsNullOrWhiteSpace(dto.ExtLogin))
-            throw new InvalidOperationException("Le login est requis en authentification SQL.");
-
-        var repo = _uow.Repository<T_SOURCE_CONFIG>();
-        var row = (await repo.ListAsync(_ => true, ct)).FirstOrDefault();
-        if (row == null)
-        {
-            row = new T_SOURCE_CONFIG
-            {
-                Mode = dto.Mode,
-                TableName = dto.Mode == "AUTRE" ? dto.TableName : null,
-                ColMatricule = dto.Mode == "AUTRE" ? dto.ColMatricule : null,
-                ColDepartement = dto.Mode == "AUTRE" ? dto.ColDepartement : null,
-                ColService = dto.Mode == "AUTRE" ? dto.ColService : null,
-                ColCodeDepartement = dto.Mode == "AUTRE" ? dto.ColCodeDepartement : null,
-                ExtServeur = dto.Mode == "AUTRE" ? dto.ExtServeur : null,
-                ExtBase = dto.Mode == "AUTRE" ? dto.ExtBase : null,
-                ExtLogin = dto.Mode == "AUTRE" ? dto.ExtLogin : null,
-                ExtPassword = dto.Mode == "AUTRE" ? dto.ExtPassword : null,
-                ExtSqlAuth = dto.Mode == "AUTRE" ? dto.ExtSqlAuth : true
-            };
-            await repo.AddAsync(row, ct);
-        }
-        else
-        {
-            row.Mode = dto.Mode;
-            row.TableName = dto.Mode == "AUTRE" ? dto.TableName : null;
-            row.ColMatricule = dto.Mode == "AUTRE" ? dto.ColMatricule : null;
-            row.ColDepartement = dto.Mode == "AUTRE" ? dto.ColDepartement : null;
-            row.ColService = dto.Mode == "AUTRE" ? dto.ColService : null;
-            row.ColCodeDepartement = dto.Mode == "AUTRE" ? dto.ColCodeDepartement : null;
-            row.ExtServeur = dto.Mode == "AUTRE" ? dto.ExtServeur : null;
-            row.ExtBase = dto.Mode == "AUTRE" ? dto.ExtBase : null;
-            row.ExtLogin = dto.Mode == "AUTRE" ? dto.ExtLogin : null;
-            row.ExtPassword = dto.Mode == "AUTRE"
-                ? (string.IsNullOrEmpty(dto.ExtPassword) ? row.ExtPassword : dto.ExtPassword)
-                : null;
-            row.ExtSqlAuth = dto.Mode == "AUTRE" ? dto.ExtSqlAuth : true;
-            repo.Update(row);
-        }
-        await _uow.SaveChangesAsync(ct);
-        return new SourceConfigDto(row.Id, row.Mode, row.TableName, row.ColMatricule, row.ColDepartement, row.ColService, row.ColCodeDepartement,
-            row.ExtServeur, row.ExtBase, row.ExtLogin, row.ExtPassword, row.ExtSqlAuth);
-    }
-
     public async Task<DepartementServiceDto> GetDepartementServiceAsync(string matricule, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(matricule))
             throw new InvalidOperationException("Le matricule est requis.");
-
-        var config = await GetSourceConfigAsync(ct);
-        return config.Mode == "AUTRE"
-            ? await _externalReader.GetDepartementServiceAsync(await ResolveExternalConnectionAsync(config, ct), config, matricule, ct)
-            : await LookupFromSageAsync(matricule, ct);
-    }
-
-    private async Task<string> ResolveExternalConnectionAsync(SourceConfigDto config, CancellationToken ct)
-    {
-        if (!string.IsNullOrWhiteSpace(config.ExtServeur))
-            return ExternalConnectionFactory.Build(config.ExtServeur, config.ExtBase, config.ExtSqlAuth, config.ExtLogin, config.ExtPassword);
-
-        return await _tenant.GetSageConnectionAsync(ct);
+        return await LookupFromSageAsync(matricule, ct);
     }
 
     private async Task<DepartementServiceDto> LookupFromSageAsync(string matricule, CancellationToken ct)
@@ -411,17 +308,6 @@ public class CatalogService
         if (list.Count == 0)
             return Array.Empty<DepartementServiceDto>();
 
-        var config = await GetSourceConfigAsync(ct);
-
-        if (config.Mode == "AUTRE")
-        {
-            var extConn = await ResolveExternalConnectionAsync(config, ct);
-            var result = new List<DepartementServiceDto>();
-            foreach (var m in list)
-                result.Add(await _externalReader.GetDepartementServiceAsync(extConn, config, m, ct));
-            return result;
-        }
-
         var sageRow = await _tenant.GetSageRowAsync(ct);
         var matSet = list.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var emps = (await _externalSource.GetEmployeesAsync(sageRow, ct))
@@ -453,42 +339,6 @@ public class CatalogService
 
     public Task<IReadOnlyList<string>> DiscoverColumnsAsync(DiscoverColumnsDto dto, CancellationToken ct = default)
         => _discovery.ListColumnsAsync(dto.Serveur, dto.Base, dto.Table, dto.SqlAuth, dto.Login, dto.Password, ct);
-
-    private async Task EnsureSourceConfigAsync(CancellationToken ct)
-    {
-        await _uow.ExecuteSqlAsync("""
-            IF OBJECT_ID(N'dbo.T_SOURCE_CONFIG', N'U') IS NULL
-            BEGIN
-                CREATE TABLE dbo.T_SOURCE_CONFIG (
-                    Id int IDENTITY(1,1) NOT NULL PRIMARY KEY,
-                    Mode nvarchar(10) NOT NULL DEFAULT 'SAGE',
-                    TableName nvarchar(128) NULL,
-                    ColMatricule nvarchar(128) NULL,
-                    ColDepartement nvarchar(128) NULL,
-                    ColService nvarchar(128) NULL,
-                    ColCodeDepartement nvarchar(128) NULL,
-                    ExtServeur nvarchar(256) NULL,
-                    ExtBase nvarchar(128) NULL,
-                    ExtLogin nvarchar(128) NULL,
-                    ExtPassword nvarchar(max) NULL,
-                    ExtSqlAuth bit NOT NULL DEFAULT 1
-                );
-            END
-            ELSE
-            BEGIN
-                IF COL_LENGTH(N'dbo.T_SOURCE_CONFIG', N'ExtServeur') IS NULL
-                    ALTER TABLE dbo.T_SOURCE_CONFIG ADD ExtServeur nvarchar(256) NULL;
-                IF COL_LENGTH(N'dbo.T_SOURCE_CONFIG', N'ExtBase') IS NULL
-                    ALTER TABLE dbo.T_SOURCE_CONFIG ADD ExtBase nvarchar(128) NULL;
-                IF COL_LENGTH(N'dbo.T_SOURCE_CONFIG', N'ExtLogin') IS NULL
-                    ALTER TABLE dbo.T_SOURCE_CONFIG ADD ExtLogin nvarchar(128) NULL;
-                IF COL_LENGTH(N'dbo.T_SOURCE_CONFIG', N'ExtPassword') IS NULL
-                    ALTER TABLE dbo.T_SOURCE_CONFIG ADD ExtPassword nvarchar(max) NULL;
-                IF COL_LENGTH(N'dbo.T_SOURCE_CONFIG', N'ExtSqlAuth') IS NULL
-                    ALTER TABLE dbo.T_SOURCE_CONFIG ADD ExtSqlAuth bit NOT NULL CONSTRAINT DF_T_SOURCE_CONFIG_ExtSqlAuth DEFAULT 1;
-            END
-            """, ct);
-    }
 
     // Cree (idempotent) le modele de mapping dynamique et seed le catalogue des roles.
     private async Task EnsureMappingSchemaAsync(CancellationToken ct)
@@ -577,9 +427,80 @@ public class CatalogService
             """, ct);
     }
 
+    // Convertit une fois les anciennes colonnes MAP_* en mappings (idempotent).
+    private async Task MigrateLegacyMappingsAsync(CancellationToken ct)
+    {
+        var entRepo = _uow.Repository<T_SOURCE_ENTITY_MAPPING>();
+        var fldRepo = _uow.Repository<T_SOURCE_FIELD_MAPPING>();
+        var existing = await entRepo.ListAsync(_ => true, ct);
+        var sageDone = existing.Where(e => e.SageDbId != null).Select(e => e.SageDbId!.Value).ToHashSet();
+        var pteDone = existing.Where(e => e.PointeuseDbId != null).Select(e => e.PointeuseDbId!.Value).ToHashSet();
+
+        foreach (var row in await _uow.Repository<T_BDD_SAGE>().ListAsync(_ => true, ct))
+        {
+            if (sageDone.Contains(row.ID) || string.IsNullOrWhiteSpace(row.MAP_TABLE)) continue;
+            var ent = new T_SOURCE_ENTITY_MAPPING { SystemType = "SAGE", SageDbId = row.ID, EntityKind = "EMPLOYEE", SourceTable = row.MAP_TABLE!.Trim() };
+            await entRepo.AddAsync(ent, ct);
+            await _uow.SaveChangesAsync(ct);
+            await AddLegacyFieldsAsync(fldRepo, ent.Id, new[]
+            {
+                ("SAGE_MATRICULE", row.MAP_COL_MATRICULE),
+                ("SAGE_NOM", row.MAP_COL_NOM),
+                ("SAGE_PRENOM", row.MAP_COL_PRENOM),
+                ("SAGE_BADGE", row.MAP_COL_BADGE),
+            }, ct);
+        }
+
+        foreach (var row in await _uow.Repository<T_BDD_POINTEUSE>().ListAsync(_ => true, ct))
+        {
+            if (pteDone.Contains(row.ID)) continue;
+            if (!string.IsNullOrWhiteSpace(row.MAP_USER_TABLE))
+            {
+                var ent = new T_SOURCE_ENTITY_MAPPING { SystemType = "POINTEUSE", PointeuseDbId = row.ID, EntityKind = "PUNCH_USER", SourceTable = row.MAP_USER_TABLE!.Trim() };
+                await entRepo.AddAsync(ent, ct);
+                await _uow.SaveChangesAsync(ct);
+                await AddLegacyFieldsAsync(fldRepo, ent.Id, new[]
+                {
+                    ("PTE_USER_ID", row.MAP_USER_COL_ID),
+                    ("PTE_USER_BADGE", row.MAP_USER_COL_BADGE),
+                    ("PTE_USER_SSN", row.MAP_USER_COL_SSN),
+                    ("PTE_USER_NAME", row.MAP_USER_COL_NOM),
+                }, ct);
+            }
+            if (!string.IsNullOrWhiteSpace(row.MAP_PUNCH_TABLE))
+            {
+                var ent = new T_SOURCE_ENTITY_MAPPING { SystemType = "POINTEUSE", PointeuseDbId = row.ID, EntityKind = "PUNCH", SourceTable = row.MAP_PUNCH_TABLE!.Trim() };
+                await entRepo.AddAsync(ent, ct);
+                await _uow.SaveChangesAsync(ct);
+                await AddLegacyFieldsAsync(fldRepo, ent.Id, new[]
+                {
+                    ("PTE_PUNCH_USER_ID", row.MAP_PUNCH_COL_USER_ID),
+                    ("PTE_PUNCH_DATETIME", row.MAP_PUNCH_COL_DATETIME),
+                    ("PTE_PUNCH_TYPE", row.MAP_PUNCH_COL_TYPE),
+                }, ct);
+            }
+        }
+        await _uow.SaveChangesAsync(ct);
+    }
+
+    private static async Task AddLegacyFieldsAsync(IRepository<T_SOURCE_FIELD_MAPPING> repo, int entityMappingId, (string Role, string? Column)[] pairs, CancellationToken ct)
+    {
+        foreach (var (role, column) in pairs)
+        {
+            if (string.IsNullOrWhiteSpace(column)) continue;
+            await repo.AddAsync(new T_SOURCE_FIELD_MAPPING
+            {
+                EntityMappingId = entityMappingId,
+                FieldRoleCode = role,
+                SourceColumn = column!.Trim()
+            }, ct);
+        }
+    }
+
     public async Task<IReadOnlyList<FieldRoleDto>> GetFieldRolesAsync(string? systemType = null, CancellationToken ct = default)
     {
         await EnsureMappingSchemaAsync(ct);
+        await MigrateLegacyMappingsAsync(ct);
         var list = await _uow.Repository<T_FIELD_ROLE>().ListAsync(_ => true, ct);
         return list
             .Where(r => string.IsNullOrWhiteSpace(systemType)

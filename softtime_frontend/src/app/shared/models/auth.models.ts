@@ -8,14 +8,6 @@ export interface SageDb {
   sqlAuth?: boolean | null;
   nomBd?: string | null;
   typeBase?: string; // 'STANDARD' | 'AUTRE'
-  mapTable?: string | null;
-  mapColMatricule?: string | null;
-  mapColNom?: string | null;
-  mapColPrenom?: string | null;
-  mapColBadge?: string | null;
-  mapColDepartement?: string | null;
-  mapColService?: string | null;
-  mapColCodeDepartement?: string | null;
   mappings?: SourceEntityMapping[] | null;
 }
 

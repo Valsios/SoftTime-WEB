@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { Affectation, CardPaie, Category, DepartementService } from '../../shared/models';
-import { AffectationsService, CardPaieService, CategoriesService, SourceConfigService } from '../../shared/services/catalog.service';
+import { AffectationsService, CardPaieService, CategoriesService, DepartementServiceService } from '../../shared/services/catalog.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, SoftSelect } from '../../shared/components';
 import { asRow } from '../../shared/utils/date';
@@ -85,7 +85,7 @@ export class AffectationsPage implements OnInit {
   private readonly svc = inject(AffectationsService);
   private readonly catSvc = inject(CategoriesService);
   private readonly cardSvc = inject(CardPaieService);
-  private readonly sourceConfig = inject(SourceConfigService);
+  private readonly deptSvc = inject(DepartementServiceService);
   private readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
@@ -151,7 +151,7 @@ export class AffectationsPage implements OnInit {
       this.finish(items);
       return;
     }
-    this.sourceConfig.lookupBatch(matricules).subscribe({
+    this.deptSvc.lookupBatch(matricules).subscribe({
       next: (results: DepartementService[]) => {
         const map = new Map(results.map((r) => [r.matricule.trim(), r]));
         const withDept = items.map((r) => {

@@ -43,14 +43,6 @@ public record SageDbDto(
     bool? SqlAuth,
     string? NomBd,
     string TypeBase = "STANDARD",
-    string? MapTable = null,
-    string? MapColMatricule = null,
-    string? MapColNom = null,
-    string? MapColPrenom = null,
-    string? MapColBadge = null,
-    string? MapColDepartement = null,
-    string? MapColService = null,
-    string? MapColCodeDepartement = null,
     IReadOnlyList<SourceEntityMappingDto>? Mappings = null)
 {
     public SageDbDto() : this(default, default, default, default, default, default) { }
@@ -65,22 +57,13 @@ public record PointeuseDbDto(
     string? TypePointage,
     bool? Active,
     string TypeBase = "STANDARD",
-    string? MapUserTable = null,
-    string? MapUserColId = null,
-    string? MapUserColBadge = null,
-    string? MapUserColSsn = null,
-    string? MapUserColNom = null,
-    string? MapPunchTable = null,
-    string? MapPunchColUserId = null,
-    string? MapPunchColDateTime = null,
-    string? MapPunchColType = null,
     IReadOnlyList<SourceEntityMappingDto>? Mappings = null)
 {
     public PointeuseDbDto() : this(default, default, default, default, default, default, default, default) { }
 }
 
-public record TestSageConnectionDto(string? Serveur, bool? SqlAuth, string? Login, string? Password, string? NomBd, string TypeBase, string? MapTable, IReadOnlyList<SourceEntityMappingDto>? Mappings = null);
-public record TestPointeuseConnectionDto(string? Serveur, bool? SqlAuth, string? Login, string? Password, string? NomBd, string TypeBase, string? MapUserTable, string? MapPunchTable, IReadOnlyList<SourceEntityMappingDto>? Mappings = null);
+public record TestSageConnectionDto(string? Serveur, bool? SqlAuth, string? Login, string? Password, string? NomBd, string TypeBase, IReadOnlyList<SourceEntityMappingDto>? Mappings = null);
+public record TestPointeuseConnectionDto(string? Serveur, bool? SqlAuth, string? Login, string? Password, string? NomBd, string TypeBase, IReadOnlyList<SourceEntityMappingDto>? Mappings = null);
 public record ConnectionTestResultDto(bool Success, string Message, IReadOnlyList<string>? MissingTables = null);
 
 public record FieldRoleDto(string Code, string? Label, string SystemType, string EntityKind, bool IsRequired, string? AutoMappingPatterns, int SortOrder);
@@ -140,23 +123,6 @@ public record HolidayDto(int Id, string? Intitule, DateTime? Date)
 public record MajorationDto(int Id, string? Mojoration, decimal? Cotation)
 {
     public MajorationDto() : this(default, default, default) { }
-}
-
-public record SourceConfigDto(
-    int Id,
-    string Mode,
-    string? TableName,
-    string? ColMatricule,
-    string? ColDepartement,
-    string? ColService,
-    string? ColCodeDepartement,
-    string? ExtServeur = null,
-    string? ExtBase = null,
-    string? ExtLogin = null,
-    string? ExtPassword = null,
-    bool ExtSqlAuth = true)
-{
-    public SourceConfigDto() : this(default, "SAGE", default, default, default, default, default) { }
 }
 
 public record DepartementServiceDto(string Matricule, string? Departement, string? Service);

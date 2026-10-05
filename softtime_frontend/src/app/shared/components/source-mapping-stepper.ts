@@ -9,7 +9,7 @@ import {
   untracked,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { FieldRole, SageDb, PointeuseDb, ConnectionTestResult, SourceEntityMapping } from '../../shared/models';
+import { FieldRole, SageDb, PointeuseDb, ConnectionTestResult } from '../../shared/models';
 import {
   SageDatabasesService,
 } from '../../shared/services/users.service';
@@ -356,7 +356,7 @@ export class SourceMappingStepper {
     this.tablesSig.set([]);
     this.columnsByKind.set({});
     this.loadingColumns.set({});
-    this.entities.set(this.buildEntities(system, this.effectiveMappings(system, init)));
+    this.entities.set(this.buildEntities(system, init?.mappings ?? []));
     this.fieldRoles.list(system).subscribe({
       next: (roles) => {
         this.roles.set(roles);
@@ -366,45 +366,6 @@ export class SourceMappingStepper {
     });
     if (this.form.serveur) this.loadBases();
     if (this.typeBase() === 'AUTRE' && this.form.serveur && this.form.nomBd) this.loadTables();
-  }
-
-  /** Préremplit depuis les mappings persistés, sinon depuis les anciennes colonnes MAP_* (rétrocompatibilité). */
-  private effectiveMappings(system: 'SAGE' | 'POINTEUSE', init: (Partial<SageDb> & Partial<PointeuseDb>) | null): SourceEntityMapping[] {
-    const saved = init?.mappings ?? [];
-    if (saved.length) return saved;
-    return this.legacyMappings(system, init);
-  }
-
-  private legacyMappings(system: 'SAGE' | 'POINTEUSE', init: (Partial<SageDb> & Partial<PointeuseDb>) | null): SourceEntityMapping[] {
-    const out: SourceEntityMapping[] = [];
-    const add = (entityKind: string, table: string | null | undefined, pairs: [string, string | null | undefined][]) => {
-      if (!table) return;
-      const fields = pairs
-        .filter(([, column]) => !!column)
-        .map(([fieldRoleCode, column]) => ({ fieldRoleCode, sourceColumn: column as string }));
-      out.push({ entityKind, sourceTable: table, fields });
-    };
-    if (system === 'SAGE') {
-      add('EMPLOYEE', init?.mapTable, [
-        ['SAGE_MATRICULE', init?.mapColMatricule],
-        ['SAGE_NOM', init?.mapColNom],
-        ['SAGE_PRENOM', init?.mapColPrenom],
-        ['SAGE_BADGE', init?.mapColBadge],
-      ]);
-    } else {
-      add('PUNCH_USER', init?.mapUserTable, [
-        ['PTE_USER_ID', init?.mapUserColId],
-        ['PTE_USER_BADGE', init?.mapUserColBadge],
-        ['PTE_USER_SSN', init?.mapUserColSsn],
-        ['PTE_USER_NOM', init?.mapUserColNom],
-      ]);
-      add('PUNCH', init?.mapPunchTable, [
-        ['PTE_PUNCH_USER_ID', init?.mapPunchColUserId],
-        ['PTE_PUNCH_DATETIME', init?.mapPunchColDateTime],
-        ['PTE_PUNCH_TYPE', init?.mapPunchColType],
-      ]);
-    }
-    return out;
   }
 
   private buildEntities(system: 'SAGE' | 'POINTEUSE', mappings: NonNullable<SageDb['mappings']>): EntityState[] {
