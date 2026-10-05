@@ -9,7 +9,7 @@ import {
   untracked,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { FieldRole, SageDb, PointeuseDb, ConnectionTestResult } from '../../shared/models';
+import { FieldRole, SageDb, PointeuseDb, ConnectionTestResult, SourceEntityMapping } from '../../shared/models';
 import {
   SageDatabasesService,
 } from '../../shared/services/users.service';
@@ -88,7 +88,7 @@ const ENTITY_LABELS: Record<string, string> = {
               [ngModel]="form.nomBd" name="nomBd" (ngModelChange)="onBaseChange($event)" />
           } @else {
             <div class="inline-row">
-              <soft-input label="Nom de la base" [(ngModel)]="form.nomBd" name="nomBd" />
+              <soft-input label="Nom de la base" [ngModel]="form.nomBd" name="nomBd" (ngModelChange)="onBaseChange($event)" />
               <soft-button variant="secondary" size="sm" (click)="loadBases()" [disabled]="!form.serveur">Lister les bases</soft-button>
             </div>
           }
@@ -193,6 +193,7 @@ export class SourceMappingStepper {
   readonly loadingColumns = signal<Record<string, boolean>>({});
 
   private system: 'SAGE' | 'POINTEUSE' = 'SAGE';
+  private loadedConnKey = '';
   private readonly basesSig = signal<string[]>([]);
   private readonly tablesSig = signal<string[]>([]);
   form: Partial<SageDb> & Partial<PointeuseDb> = { sqlAuth: true };
@@ -237,6 +238,12 @@ export class SourceMappingStepper {
 
   onConnectionChange(): void {
     this.testResult.set(null);
+    if (this.connKey() !== this.loadedConnKey) {
+      this.loadedConnKey = this.connKey();
+      this.clearMappings();
+      this.basesSig.set([]);
+      this.tablesSig.set([]);
+    }
   }
 
   canTest(): boolean {
@@ -247,7 +254,22 @@ export class SourceMappingStepper {
     this.form.nomBd = base;
     this.testResult.set(null);
     this.tablesSig.set([]);
+    if (this.connKey() !== this.loadedConnKey) {
+      this.loadedConnKey = this.connKey();
+      this.clearMappings();
+    }
     if (this.typeBase() === 'AUTRE' && base) this.loadTables();
+  }
+
+  /** Réinitialise les tables/colonnes sélectionnées (elles appartiennent à une autre connexion). */
+  private clearMappings(): void {
+    this.entities.update((list) => list.map((e) => ({ ...e, table: null, fields: {} })));
+    this.columnsByKind.set({});
+    this.loadingColumns.set({});
+  }
+
+  private connKey(): string {
+    return `${this.form.serveur ?? ''}|${this.form.nomBd ?? ''}`;
   }
 
   loadBases(): void {
@@ -325,6 +347,7 @@ export class SourceMappingStepper {
     this.system = system;
     this.form = init ? { ...init } : { sqlAuth: true };
     if (system === 'POINTEUSE' && this.form.active === undefined) this.form.active = true;
+    this.loadedConnKey = this.connKey();
     this.typeBase.set((init?.typeBase === 'AUTRE' ? 'AUTRE' : 'STANDARD'));
     this.form.typeBase = this.typeBase();
     this.step.set(1);
@@ -333,7 +356,7 @@ export class SourceMappingStepper {
     this.tablesSig.set([]);
     this.columnsByKind.set({});
     this.loadingColumns.set({});
-    this.entities.set(this.buildEntities(system, init?.mappings ?? []));
+    this.entities.set(this.buildEntities(system, this.effectiveMappings(system, init)));
     this.fieldRoles.list(system).subscribe({
       next: (roles) => {
         this.roles.set(roles);
@@ -342,6 +365,46 @@ export class SourceMappingStepper {
       },
     });
     if (this.form.serveur) this.loadBases();
+    if (this.typeBase() === 'AUTRE' && this.form.serveur && this.form.nomBd) this.loadTables();
+  }
+
+  /** Préremplit depuis les mappings persistés, sinon depuis les anciennes colonnes MAP_* (rétrocompatibilité). */
+  private effectiveMappings(system: 'SAGE' | 'POINTEUSE', init: (Partial<SageDb> & Partial<PointeuseDb>) | null): SourceEntityMapping[] {
+    const saved = init?.mappings ?? [];
+    if (saved.length) return saved;
+    return this.legacyMappings(system, init);
+  }
+
+  private legacyMappings(system: 'SAGE' | 'POINTEUSE', init: (Partial<SageDb> & Partial<PointeuseDb>) | null): SourceEntityMapping[] {
+    const out: SourceEntityMapping[] = [];
+    const add = (entityKind: string, table: string | null | undefined, pairs: [string, string | null | undefined][]) => {
+      if (!table) return;
+      const fields = pairs
+        .filter(([, column]) => !!column)
+        .map(([fieldRoleCode, column]) => ({ fieldRoleCode, sourceColumn: column as string }));
+      out.push({ entityKind, sourceTable: table, fields });
+    };
+    if (system === 'SAGE') {
+      add('EMPLOYEE', init?.mapTable, [
+        ['SAGE_MATRICULE', init?.mapColMatricule],
+        ['SAGE_NOM', init?.mapColNom],
+        ['SAGE_PRENOM', init?.mapColPrenom],
+        ['SAGE_BADGE', init?.mapColBadge],
+      ]);
+    } else {
+      add('PUNCH_USER', init?.mapUserTable, [
+        ['PTE_USER_ID', init?.mapUserColId],
+        ['PTE_USER_BADGE', init?.mapUserColBadge],
+        ['PTE_USER_SSN', init?.mapUserColSsn],
+        ['PTE_USER_NOM', init?.mapUserColNom],
+      ]);
+      add('PUNCH', init?.mapPunchTable, [
+        ['PTE_PUNCH_USER_ID', init?.mapPunchColUserId],
+        ['PTE_PUNCH_DATETIME', init?.mapPunchColDateTime],
+        ['PTE_PUNCH_TYPE', init?.mapPunchColType],
+      ]);
+    }
+    return out;
   }
 
   private buildEntities(system: 'SAGE' | 'POINTEUSE', mappings: NonNullable<SageDb['mappings']>): EntityState[] {
