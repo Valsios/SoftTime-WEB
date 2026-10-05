@@ -40,13 +40,6 @@ export class PointeuseDatabasesService extends ApiService {
 }
 
 @Injectable({ providedIn: 'root' })
-export class SageDatabasesService extends ApiService {
-  activate(): Observable<{ holidaysImported: boolean; cardsAdded: number; cardsDeactivated: number; message: string }> {
-    return this.http.post<{ holidaysImported: boolean; cardsAdded: number; cardsDeactivated: number; message: string }>(
-      this.url('/api/sage-databases/activate'), {});
-  }
-}
-@Injectable({ providedIn: 'root' })
 export class DiscoveryService extends ApiService {
   servers(): Observable<string[]> {
     return this.http.get<string[]>(this.url('/api/discovery/servers'));

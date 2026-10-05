@@ -2,7 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } 
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { SessionStore } from '../core/session.store';
 import { AuthService } from '../shared/services/auth.service';
-import { PointeuseDatabasesService, SageDatabasesService } from '../shared/services/catalog.service';
+import { PointeuseDatabasesService } from '../shared/services/catalog.service';
+import { SageDatabasesService } from '../shared/services/users.service';
 import { NAV_SECTIONS, NavSection } from './nav';
 import { Icon } from '../shared/components/icon';
 import { PointeuseDb } from '../shared/models';
@@ -334,6 +335,11 @@ export class Shell implements OnInit {
   });
 
   ngOnInit(): void {
+    const pending = sessionStorage.getItem('st_pending_toast');
+    if (pending) {
+      sessionStorage.removeItem('st_pending_toast');
+      this.toast.success(pending);
+    }
     this.pointeuseApi.list().subscribe({
       next: (list) => {
         this.pointeuseDbs.set(list);
@@ -365,7 +371,7 @@ export class Shell implements OnInit {
     this.sageApi.activate().subscribe({
       next: (r) => {
         if (r.cardsAdded > 0 || r.cardsDeactivated > 0) {
-          this.toast.success(r.message);
+          sessionStorage.setItem('st_pending_toast', r.message);
         }
         window.location.reload();
       },

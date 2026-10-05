@@ -17,8 +17,10 @@ public class CatalogService
     private readonly IPointeuseContextFactory _pointeuseFactory;
     private readonly IExternalSourceReader _externalReader;
     private readonly IExternalDiscoveryService _discovery;
+    private readonly EmployeeReaderResolver _employeeReaders;
+    private readonly PointeuseReaderResolver _pointeuseReaders;
 
-    public CatalogService(IUnitOfWork uow, IMapper mapper, TenantConnectionService tenant, ISageContextFactory sageFactory, IPointeuseContextFactory pointeuseFactory, IExternalSourceReader externalReader, IExternalDiscoveryService discovery)
+    public CatalogService(IUnitOfWork uow, IMapper mapper, TenantConnectionService tenant, ISageContextFactory sageFactory, IPointeuseContextFactory pointeuseFactory, IExternalSourceReader externalReader, IExternalDiscoveryService discovery, EmployeeReaderResolver employeeReaders, PointeuseReaderResolver pointeuseReaders)
     {
         _uow = uow;
         _mapper = mapper;
@@ -27,6 +29,8 @@ public class CatalogService
         _pointeuseFactory = pointeuseFactory;
         _externalReader = externalReader;
         _discovery = discovery;
+        _employeeReaders = employeeReaders;
+        _pointeuseReaders = pointeuseReaders;
     }
 
     public Task<IReadOnlyList<SageDbDto>> ListSageAsync(CancellationToken ct = default)
@@ -540,39 +544,45 @@ public class CatalogService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageRow = await _tenant.GetSageRowAsync(ct);
-
         var holidaysImported = false;
-        if (sageRow.TYPE_BASE == "STANDARD")
+        if (sageRow.TYPE_BASE != "STANDARD")
         {
-            await ImportSageHolidaysAsync(ct);
-            holidaysImported = true;
+            return new ActivationResultDto(false, 0, 0,
+                "Base de type « Autre » : synchronisation automatique non disponible pour le moment.");
         }
-
+        await ImportSageHolidaysAsync(ct);
+        holidaysImported = true;
         await EnsureCodeConstantesAsync(ct);
         var sync = await AutoMapCardsAsync(ct);
-
         return new ActivationResultDto(holidaysImported, sync.Added, sync.Deactivated, sync.Message);
     }
     private async Task<SyncResultDto> SyncCardPaieCoreAsync(T_BDD_SAGE sageRow, T_BDD_POINTEUSE pteRow, CancellationToken ct)
     {
-        using var sage = _sageFactory.Create(ExternalConnectionFactory.Build(
-            sageRow.SERVEUR, sageRow.NOM_BD, sageRow.TYPE_AUTH == true, sageRow.TLOGIN, sageRow.TMDP));
-        using var pte = _pointeuseFactory.Create(ExternalConnectionFactory.Build(
-            pteRow.SERVEUR, pteRow.NOM_BD, pteRow.TYPE_AUTH == true, pteRow.TLOGIN, pteRow.TMDP));
-        var employees = sage.Employees.Where(e => e.SalarieDesactive != 1).ToList();
-        var badges = pte.Users.ToList();
-        var affectations = sage.Affectations.ToList();
-        var departments = sage.Departments.ToDictionary(d => d.Code, d => d.Intitule);
-        string? DepartementDe(int numSalarie)
+        // Lecture via les adaptateurs : Standard (T_SAL / USERINFO) ou Autre (tables configurées)
+        var employees = await _employeeReaders.Resolve(sageRow).ListActiveEmployeesAsync(sageRow, ct);
+        var badges = await _pointeuseReaders.Resolve(pteRow).ListUsersAsync(pteRow, ct);
+
+        // Département : disponible uniquement pour une base SAGE standard (affectations SAGE)
+        Func<string?, string?> departementDe = _ => null;
+        if (sageRow.TYPE_BASE == "STANDARD")
         {
-            var aff = affectations.Where(a => a.NumSalarie == numSalarie && a.DateSortiePoste == null)
-                                   .OrderByDescending(a => a.DateDebut).FirstOrDefault()
-                      ?? affectations.Where(a => a.NumSalarie == numSalarie)
-                                     .OrderByDescending(a => a.DateDebut).FirstOrDefault();
-            if (aff?.Departement == null) return null;
-            return departments.TryGetValue(aff.Departement, out var intitule) && !string.IsNullOrWhiteSpace(intitule)
-                ? intitule : aff.Departement;
+            using var sage = _sageFactory.Create(ExternalConnectionFactory.Build(
+                sageRow.SERVEUR, sageRow.NOM_BD, sageRow.TYPE_AUTH == true, sageRow.TLOGIN, sageRow.TMDP));
+            var affectations = sage.Affectations.ToList();
+            var departments = sage.Departments.ToDictionary(d => d.Code, d => d.Intitule);
+            departementDe = cle =>
+            {
+                if (!int.TryParse(cle, out var numSalarie)) return null;
+                var aff = affectations.Where(a => a.NumSalarie == numSalarie && a.DateSortiePoste == null)
+                                       .OrderByDescending(a => a.DateDebut).FirstOrDefault()
+                          ?? affectations.Where(a => a.NumSalarie == numSalarie)
+                                         .OrderByDescending(a => a.DateDebut).FirstOrDefault();
+                if (aff?.Departement == null) return null;
+                return departments.TryGetValue(aff.Departement, out var intitule) && !string.IsNullOrWhiteSpace(intitule)
+                    ? intitule : aff.Departement;
+            };
         }
+
         var repo = _uow.Repository<T_CARDPAIE>();
         var scopeCards = await repo.ListAsync(c =>
             c.SAGE_SERVEUR == sageRow.SERVEUR && c.SAGE_BDD == sageRow.NOM_BD &&
@@ -592,23 +602,23 @@ public class CatalogService
         foreach (var sal in employees)
         {
             var match = badges.FirstOrDefault(b =>
-                MemeIdentifiant(b.SSN, sal.MatriculeSalarie)
-                || MemeIdentifiant(b.BADGENUMBER, sal.MatriculeSalarie)
-                || MemeIdentifiant(b.BADGENUMBER, sal.NumeroDeBadge));
+                MemeIdentifiant(b.Ssn, sal.Matricule)
+                || MemeIdentifiant(b.Badge, sal.Matricule)
+                || MemeIdentifiant(b.Badge, sal.NumeroBadge));
             if (match == null) continue;
-            matched.Add(sal.MatriculeSalarie.Trim());
-            var departement = DepartementDe(sal.SA_CompteurNumero);
+            matched.Add(sal.Matricule);
+            var departement = departementDe(sal.CleInterne);
             var existingCard = scopeCards.FirstOrDefault(c =>
-                string.Equals(c.SAGE_MATRICULE?.Trim(), sal.MatriculeSalarie.Trim(), StringComparison.OrdinalIgnoreCase));
+                string.Equals(c.SAGE_MATRICULE?.Trim(), sal.Matricule, StringComparison.OrdinalIgnoreCase));
             if (existingCard == null)
             {
                 await repo.AddAsync(new T_CARDPAIE
                 {
-                    SAGE_MATRICULE = sal.MatriculeSalarie.Trim(),
+                    SAGE_MATRICULE = sal.Matricule,
                     SAGE_NOM = sal.Nom,
                     SAGE_PRENOM = sal.Prenom,
-                    POINTEUSE_NUMERO = match.BADGENUMBER,
-                    POINTEUSE_NOM = match.NAME,
+                    POINTEUSE_NUMERO = match.Badge,
+                    POINTEUSE_NOM = match.Nom,
                     SAGE_SERVEUR = sageRow.SERVEUR,
                     POINTEUSE_SERVEUR = pteRow.SERVEUR,
                     SAGE_BDD = sageRow.NOM_BD,
@@ -624,8 +634,8 @@ public class CatalogService
             {
                 existingCard.SAGE_NOM = sal.Nom;
                 existingCard.SAGE_PRENOM = sal.Prenom;
-                existingCard.POINTEUSE_NUMERO = match.BADGENUMBER;
-                existingCard.POINTEUSE_NOM = match.NAME;
+                existingCard.POINTEUSE_NUMERO = match.Badge;
+                existingCard.POINTEUSE_NOM = match.Nom;
                 if (departement != null) existingCard.DEPARTEMENT = departement;
                 existingCard.ACTIF = true;
                 repo.Update(existingCard);
@@ -1031,31 +1041,66 @@ public class CatalogService
 
     public async Task<IReadOnlyList<CodeConstanteDto>> ListCodeConstantesAsync(CancellationToken ct = default)
     {
+        await _tenant.EnsureAuthorizedAsync(ct);
         await EnsureCodeConstantesAsync(ct);
-        var list = await _uow.Repository<T_CODE_CONSTANTE>().ListAsync(_ => true, ct);
+        var effective = await GetEffectiveCodeConstantesAsync(_tenant.SageDb, ct);
         var order = OvertimeCodeKeys.Defaults.Select((d, i) => (d.Key, i)).ToDictionary(x => x.Key, x => x.i);
-        return list
+        return effective
             .OrderBy(c => order.TryGetValue(c.CATEGORIE, out var i) ? i : 99)
             .Select(_mapper.Map<CodeConstanteDto>)
             .ToList();
     }
-
+ 
     public async Task<CodeConstanteDto> SaveCodeConstanteAsync(CodeConstanteDto dto, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var repo = _uow.Repository<T_CODE_CONSTANTE>();
-        var entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
-        entity.CODE_CONSTANTE = (dto.CodeConstante ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(entity.CODE_CONSTANTE))
+        var code = (dto.CodeConstante ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(code))
             throw new InvalidOperationException("Le code constante SAGE est requis.");
-        repo.Update(entity);
+        var sageDb = _tenant.SageDb;
+        var repo = _uow.Repository<T_CODE_CONSTANTE>();
+        // On ne modifie jamais directement la ligne par defaut globale (BDD_SAGE = NULL) :
+        // on cree/maj toujours une ligne propre a la base SAGE active.
+        var entity = (await repo.ListAsync(c => c.CATEGORIE == dto.Categorie && c.BDD_SAGE == sageDb, ct)).FirstOrDefault();
+        if (entity == null)
+        {
+            var defaultRow = (await repo.ListAsync(c => c.CATEGORIE == dto.Categorie && c.BDD_SAGE == null, ct)).FirstOrDefault();
+            entity = new T_CODE_CONSTANTE
+            {
+                CATEGORIE = dto.Categorie,
+                INTITULE = defaultRow?.INTITULE ?? dto.Intitule,
+                CODE_CONSTANTE = code,
+                BDD_SAGE = sageDb,
+            };
+            await repo.AddAsync(entity, ct);
+        }
+        else
+        {
+            entity.CODE_CONSTANTE = code;
+            repo.Update(entity);
+        }
         await _uow.SaveChangesAsync(ct);
         return _mapper.Map<CodeConstanteDto>(entity);
     }
-
+ 
+    private async Task<IReadOnlyList<T_CODE_CONSTANTE>> GetEffectiveCodeConstantesAsync(string? sageDb, CancellationToken ct)
+    {
+        var all = await _uow.Repository<T_CODE_CONSTANTE>().ListAsync(_ => true, ct);
+        return OvertimeCodeKeys.Defaults
+            .Select(d =>
+                all.FirstOrDefault(c => c.CATEGORIE == d.Key && c.BDD_SAGE == sageDb)
+                ?? all.FirstOrDefault(c => c.CATEGORIE == d.Key && c.BDD_SAGE == null))
+            .Where(c => c != null)
+            .Select(c => c!)
+            .ToList();
+    }
+ 
     public async Task<IReadOnlyList<SageConstantOptionDto>> ListSageConstantOptionsAsync(CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
+        var sageRow = await _tenant.GetSageRowAsync(ct);
+        if (sageRow.TYPE_BASE != "STANDARD")
+            return Array.Empty<SageConstantOptionDto>(); // T_CST n'existe pas forcement sur une base "Autre"
         using var sage = _sageFactory.Create(await _tenant.GetSageConnectionAsync(ct));
         return sage.Constants.ToArray()
             .GroupBy(c => (c.CodeConstante ?? string.Empty).Trim(), StringComparer.OrdinalIgnoreCase)
@@ -1064,14 +1109,15 @@ public class CatalogService
             .Select(g => new SageConstantOptionDto(g.Key, g.First().Intitule))
             .ToList();
     }
-
+ 
     public async Task<OvertimeSageCodes> GetOvertimeSageCodesAsync(CancellationToken ct = default)
     {
+        await _tenant.EnsureAuthorizedAsync(ct);
         await EnsureCodeConstantesAsync(ct);
-        var list = await _uow.Repository<T_CODE_CONSTANTE>().ListAsync(_ => true, ct);
+        var list = await GetEffectiveCodeConstantesAsync(_tenant.SageDb, ct);
         string Code(string key, string fallback) =>
             list.FirstOrDefault(c => c.CATEGORIE == key)?.CODE_CONSTANTE is { Length: > 0 } v ? v.Trim() : fallback;
-
+ 
         return new OvertimeSageCodes(
             Code(OvertimeCodeKeys.Exo130, "HS01"),
             Code(OvertimeCodeKeys.Exo150, "HS02"),
@@ -1081,7 +1127,7 @@ public class CatalogService
             Code(OvertimeCodeKeys.Dim, "HS06"),
             Code(OvertimeCodeKeys.Nuit, "HS07"));
     }
-
+ 
     private async Task EnsureCodeConstantesAsync(CancellationToken ct)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
@@ -1092,19 +1138,18 @@ public class CatalogService
                     ID int IDENTITY(1,1) NOT NULL PRIMARY KEY,
                     CATEGORIE nvarchar(32) NOT NULL,
                     INTITULE nvarchar(64) NULL,
-                    CODE_CONSTANTE nvarchar(20) NOT NULL
+                    CODE_CONSTANTE nvarchar(20) NOT NULL,
+                    BDD_SAGE nvarchar(128) NULL
                 );
             END
-            ELSE IF COL_LENGTH(N'dbo.T_CODE_CONSTANTE', N'BDD_SAGE') IS NOT NULL
+            ELSE IF COL_LENGTH(N'dbo.T_CODE_CONSTANTE', N'BDD_SAGE') IS NULL
             BEGIN
-                DELETE FROM dbo.T_CODE_CONSTANTE
-                WHERE ID NOT IN (SELECT MIN(ID) FROM dbo.T_CODE_CONSTANTE GROUP BY CATEGORIE);
-                ALTER TABLE dbo.T_CODE_CONSTANTE DROP COLUMN BDD_SAGE;
+                ALTER TABLE dbo.T_CODE_CONSTANTE ADD BDD_SAGE nvarchar(128) NULL;
             END
             """, ct);
-
+ 
         var repo = _uow.Repository<T_CODE_CONSTANTE>();
-        var existing = await repo.ListAsync(_ => true, ct);
+        var existing = await repo.ListAsync(c => c.BDD_SAGE == null, ct);
         var added = false;
         foreach (var (key, intitule, defaultCode) in OvertimeCodeKeys.Defaults)
         {
@@ -1115,6 +1160,7 @@ public class CatalogService
                 CATEGORIE = key,
                 INTITULE = intitule,
                 CODE_CONSTANTE = defaultCode,
+                BDD_SAGE = null,
             }, ct);
             added = true;
         }

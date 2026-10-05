@@ -82,4 +82,8 @@ export class SageDatabasesService extends ApiService {
   testConnection(dto: Partial<SageDb>): Observable<import('../models').ConnectionTestResult> {
     return this.http.post<import('../models').ConnectionTestResult>(this.url('/api/sage-databases/test-connection'), dto);
   }
+    activate(): Observable<{ holidaysImported: boolean; cardsAdded: number; cardsDeactivated: number; message: string }> {
+    return this.http.post<{ holidaysImported: boolean; cardsAdded: number; cardsDeactivated: number; message: string }>(
+      this.url('/api/sage-databases/activate'), {});
+  }
 }
