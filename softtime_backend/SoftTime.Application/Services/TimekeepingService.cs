@@ -1,3 +1,4 @@
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
@@ -8,13 +9,13 @@ public class TimekeepingService
 {
     private readonly IUnitOfWork _uow;
     private readonly TenantConnectionService _tenant;
-    private readonly IPointeuseContextFactory _pointeuseFactory;
+    private readonly IExternalSourceService _externalSource;
 
-    public TimekeepingService(IUnitOfWork uow, TenantConnectionService tenant, IPointeuseContextFactory pointeuseFactory)
+    public TimekeepingService(IUnitOfWork uow, TenantConnectionService tenant, IExternalSourceService externalSource)
     {
         _uow = uow;
         _tenant = tenant;
-        _pointeuseFactory = pointeuseFactory;
+        _externalSource = externalSource;
     }
 
     public async Task<IReadOnlyList<PunchDto>> ListPunchesAsync(PeriodRequest filter, CancellationToken ct = default)
@@ -35,17 +36,16 @@ public class TimekeepingService
         var clock = (await _uow.Repository<T_CLOCK>().ListAsync(_ => true, ct)).FirstOrDefault()
             ?? throw new InvalidOperationException("Paramètre pointeuse (T_CLOCK) manquant.");
         var pteRow = await _tenant.GetPointeuseRowAsync(ct);
-        using var pte = _pointeuseFactory.Create(await _tenant.GetPointeuseConnectionAsync(ct));
         var cards = await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == _tenant.SageDb, ct);
         if (!string.IsNullOrEmpty(request.MatriculeFrom))
             cards = cards.Where(c => string.Compare(c.SAGE_MATRICULE, request.MatriculeFrom, StringComparison.Ordinal) >= 0).ToList();
         if (!string.IsNullOrEmpty(request.MatriculeTo))
             cards = cards.Where(c => string.Compare(c.SAGE_MATRICULE, request.MatriculeTo, StringComparison.Ordinal) <= 0).ToList();
         var badgeMap = cards.Where(c => !string.IsNullOrEmpty(c.POINTEUSE_NUMERO)).ToDictionary(c => c.POINTEUSE_NUMERO!.Trim(), c => c, StringComparer.OrdinalIgnoreCase);
-        var users = pte.Users.ToList();
+        var users = await _externalSource.GetPunchUsersAsync(pteRow, ct);
         var from = request.From.Date;
         var to = request.To.Date.AddDays(1);
-        var punches = pte.CheckInOut.Where(c => c.CHECKTIME >= from && c.CHECKTIME < to).ToList();
+        var punches = await _externalSource.GetPunchesAsync(pteRow, from, to, ct);
         var repo = _uow.Repository<T_POINTAGE>();
         var existing = await repo.ListAsync(p =>
             p.NOM_BDD_SAGE == _tenant.SageDb && p.DATE_POINTAGE >= from && p.DATE_POINTAGE < to, ct);
@@ -53,14 +53,14 @@ public class TimekeepingService
         var skipped = 0;
         foreach (var punch in punches)
         {
-            var user = users.FirstOrDefault(u => u.USERID == punch.USERID);
-            if (user == null || !badgeMap.TryGetValue(user.BADGENUMBER.Trim(), out var card))
+            var user = users.FirstOrDefault(u => u.UserId == punch.UserId);
+            if (user?.Badge is not string badge || !badgeMap.TryGetValue(badge.Trim(), out var card))
             { skipped++; continue; }
             var dup = existing.Any(e =>
                 e.MATRICULE_SAGE == card.SAGE_MATRICULE
-                && e.DATE_POINTAGE.HasValue && e.DATE_POINTAGE.Value.Date == punch.CHECKTIME.Date
-                && e.HEURE_POINTAGE.HasValue && e.HEURE_POINTAGE.Value.Hours == punch.CHECKTIME.Hour
-                && e.HEURE_POINTAGE.Value.Minutes == punch.CHECKTIME.Minute);
+                && e.DATE_POINTAGE.HasValue && e.DATE_POINTAGE.Value.Date == punch.CheckTime.Date
+                && e.HEURE_POINTAGE.HasValue && e.HEURE_POINTAGE.Value.Hours == punch.CheckTime.Hour
+                && e.HEURE_POINTAGE.Value.Minutes == punch.CheckTime.Minute);
             if (dup && clock.MULTIPOINT != true)
             { skipped++; continue; }
             await repo.AddAsync(new T_POINTAGE
@@ -68,11 +68,11 @@ public class TimekeepingService
                 NOM_BDD_SAGE = _tenant.SageDb,
                 NOM_BDD_POINTEUSE = pteRow.NOM_BD,
                 MATRICULE_SAGE = card.SAGE_MATRICULE,
-                DATE_POINTAGE = punch.CHECKTIME.Date,
-                HEURE_POINTAGE = punch.CHECKTIME.TimeOfDay,
+                DATE_POINTAGE = punch.CheckTime.Date,
+                HEURE_POINTAGE = punch.CheckTime.TimeOfDay,
                 DATE_IMPORTATION = DateTime.Now,
-                TYPE_POINTAGE = string.IsNullOrWhiteSpace(punch.CHECKTYPE) ? pteRow.TYPE_POINTAGE : punch.CHECKTYPE,
-                IDUNIQUE_POINTAGE = punch.USERID
+                TYPE_POINTAGE = string.IsNullOrWhiteSpace(punch.CheckType) ? pteRow.TYPE_POINTAGE : punch.CheckType,
+                IDUNIQUE_POINTAGE = punch.UserId
             }, ct);
             imported++;
         }

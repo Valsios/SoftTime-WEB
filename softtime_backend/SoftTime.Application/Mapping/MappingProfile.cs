@@ -24,7 +24,8 @@ public class MappingProfile : Profile
             .ForMember(d => d.MapColBadge, o => o.MapFrom(s => s.MAP_COL_BADGE))
             .ForMember(d => d.MapColDepartement, o => o.MapFrom(s => s.MAP_COL_DEPARTEMENT))
             .ForMember(d => d.MapColService, o => o.MapFrom(s => s.MAP_COL_SERVICE))
-            .ForMember(d => d.MapColCodeDepartement, o => o.MapFrom(s => s.MAP_COL_CODE_DEPARTEMENT));
+            .ForMember(d => d.MapColCodeDepartement, o => o.MapFrom(s => s.MAP_COL_CODE_DEPARTEMENT))
+            .ForMember(d => d.Mappings, o => o.Ignore());
         CreateMap<SageDbDto, T_BDD_SAGE>()
             .ForMember(d => d.TYPE_AUTH, o => o.MapFrom(s => s.SqlAuth))
             .ForMember(d => d.NOM_BD, o => o.MapFrom(s => s.NomBd))
@@ -57,7 +58,13 @@ public class MappingProfile : Profile
             .ForMember(d => d.MapPunchTable, o => o.MapFrom(s => s.MAP_PUNCH_TABLE))
             .ForMember(d => d.MapPunchColUserId, o => o.MapFrom(s => s.MAP_PUNCH_COL_USER_ID))
             .ForMember(d => d.MapPunchColDateTime, o => o.MapFrom(s => s.MAP_PUNCH_COL_DATETIME))
-            .ForMember(d => d.MapPunchColType, o => o.MapFrom(s => s.MAP_PUNCH_COL_TYPE));
+            .ForMember(d => d.MapPunchColType, o => o.MapFrom(s => s.MAP_PUNCH_COL_TYPE))
+            .ForMember(d => d.Mappings, o => o.Ignore());
+        CreateMap<T_FIELD_ROLE, FieldRoleDto>();
+        CreateMap<T_SOURCE_FIELD_MAPPING, SourceFieldMappingDto>();
+        CreateMap<T_SOURCE_ENTITY_MAPPING, SourceEntityMappingDto>();
+        CreateMap<SourceFieldMappingDto, T_SOURCE_FIELD_MAPPING>();
+        CreateMap<SourceEntityMappingDto, T_SOURCE_ENTITY_MAPPING>();
         CreateMap<PointeuseDbDto, T_BDD_POINTEUSE>()
             .ForMember(d => d.TYPE_AUTH, o => o.MapFrom(s => s.SqlAuth))
             .ForMember(d => d.NOM_BD, o => o.MapFrom(s => s.NomBd))

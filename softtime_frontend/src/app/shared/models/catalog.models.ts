@@ -1,4 +1,5 @@
 import { SageDb } from './auth.models';
+import type { SourceEntityMapping } from './mapping.models';
 
 export type { SageDb };
 
@@ -21,6 +22,7 @@ export interface PointeuseDb {
   mapPunchColUserId?: string | null;
   mapPunchColDateTime?: string | null;
   mapPunchColType?: string | null;
+  mappings?: SourceEntityMapping[] | null;
 }
 
 export interface ClockParam {

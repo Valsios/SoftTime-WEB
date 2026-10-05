@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using AutoMapper;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.Sage;
@@ -16,9 +17,10 @@ public class CatalogService
     private readonly ISageContextFactory _sageFactory;
     private readonly IPointeuseContextFactory _pointeuseFactory;
     private readonly IExternalSourceReader _externalReader;
+    private readonly IExternalSourceService _externalSource;
     private readonly IExternalDiscoveryService _discovery;
 
-    public CatalogService(IUnitOfWork uow, IMapper mapper, TenantConnectionService tenant, ISageContextFactory sageFactory, IPointeuseContextFactory pointeuseFactory, IExternalSourceReader externalReader, IExternalDiscoveryService discovery)
+    public CatalogService(IUnitOfWork uow, IMapper mapper, TenantConnectionService tenant, ISageContextFactory sageFactory, IPointeuseContextFactory pointeuseFactory, IExternalSourceReader externalReader, IExternalSourceService externalSource, IExternalDiscoveryService discovery)
     {
         _uow = uow;
         _mapper = mapper;
@@ -26,18 +28,28 @@ public class CatalogService
         _sageFactory = sageFactory;
         _pointeuseFactory = pointeuseFactory;
         _externalReader = externalReader;
+        _externalSource = externalSource;
         _discovery = discovery;
     }
 
-    public Task<IReadOnlyList<SageDbDto>> ListSageAsync(CancellationToken ct = default)
-        => MapList<T_BDD_SAGE, SageDbDto>(ct);
+    public async Task<IReadOnlyList<SageDbDto>> ListSageAsync(CancellationToken ct = default)
+    {
+        await EnsureMappingSchemaAsync(ct);
+        var rows = await _uow.Repository<T_BDD_SAGE>().ListAsync(_ => true, ct);
+        var byConnection = await LoadMappingLookupAsync(true, ct);
+        return rows.Select(r => _mapper.Map<SageDbDto>(r) with
+        {
+            Mappings = byConnection.TryGetValue(r.ID, out var m) ? m : Array.Empty<SourceEntityMappingDto>()
+        }).ToList();
+    }
 
     public async Task<SageDbDto> SaveSageAsync(SageDbDto dto, CancellationToken ct = default)
     {
         if (dto.TypeBase != "STANDARD" && dto.TypeBase != "AUTRE")
             throw new InvalidOperationException("TypeBase doit valoir 'STANDARD' ou 'AUTRE'.");
-        if (dto.TypeBase == "AUTRE" && string.IsNullOrWhiteSpace(dto.MapTable))
+        if (dto.TypeBase == "AUTRE" && string.IsNullOrWhiteSpace(dto.MapTable) && (dto.Mappings is null || dto.Mappings.Count == 0))
             throw new InvalidOperationException("Une base 'Autre' nécessite au minimum une table et une colonne matricule.");
+        await EnsureMappingSchemaAsync(ct);
         var repo = _uow.Repository<T_BDD_SAGE>();
         var doublon = (await repo.ListAsync(
             s => s.ID != dto.Id
@@ -71,7 +83,13 @@ public class CatalogService
             repo.Update(entity);
         }
         await _uow.SaveChangesAsync(ct);
-        return _mapper.Map<SageDbDto>(entity);
+        if (dto.Mappings is not null)
+        {
+            await ValidateMappingsAsync(true, dto.Mappings, ct);
+            await ReplaceMappingsAsync(true, entity.ID, dto.Mappings, ct);
+        }
+        var result = _mapper.Map<SageDbDto>(entity);
+        return result with { Mappings = await LoadMappingsForAsync(true, entity.ID, ct) };
     }
     // Verifie la connexion et, en mode STANDARD, la presence des tables attendues par le reste de l'application.
     private static readonly string[] SageStandardTables = { "T_SAL", "T_HST_AFFECTATION", "T_DEPARTEMENT", "T_GHRCAL_SOCIETE", "T_CST" };
@@ -90,11 +108,24 @@ public class CatalogService
         }
         if (dto.TypeBase == "AUTRE")
         {
-            if (string.IsNullOrWhiteSpace(dto.MapTable))
-                return new ConnectionTestResultDto(true, "Connexion réussie. Choisissez une table.");
-            return tables.Contains(dto.MapTable, StringComparer.OrdinalIgnoreCase)
-                ? new ConnectionTestResultDto(true, "Connexion réussie, table trouvée.")
-                : new ConnectionTestResultDto(false, $"Connexion réussie mais la table '{dto.MapTable}' est introuvable.");
+            var missingCustom = new List<string>();
+            if (!string.IsNullOrWhiteSpace(dto.MapTable) && !tables.Contains(dto.MapTable, StringComparer.OrdinalIgnoreCase))
+                missingCustom.Add(dto.MapTable);
+            if (dto.Mappings is { Count: > 0 })
+            {
+                foreach (var t in dto.Mappings.Where(x => !string.IsNullOrWhiteSpace(x.SourceTable)).Select(x => x.SourceTable!))
+                    if (!tables.Contains(t, StringComparer.OrdinalIgnoreCase) && !missingCustom.Contains(t, StringComparer.OrdinalIgnoreCase))
+                        missingCustom.Add(t);
+                if (missingCustom.Count == 0)
+                {
+                    var missingCols = await ValidateMappingColumnsAsync(dto.Serveur!, dto.NomBd!, dto.SqlAuth ?? true, dto.Login, dto.Password, dto.Mappings, ct);
+                    if (missingCols.Count > 0)
+                        return new ConnectionTestResultDto(false, "Connexion réussie mais certaines colonnes mappées sont introuvables.", missingCols);
+                }
+            }
+            return missingCustom.Count == 0
+                ? new ConnectionTestResultDto(true, "Connexion réussie.")
+                : new ConnectionTestResultDto(false, "Connexion réussie mais certaines tables choisies sont introuvables.", missingCustom);
         }
         var missing = SageStandardTables.Where(t => !tables.Contains(t, StringComparer.OrdinalIgnoreCase)).ToList();
         return missing.Count == 0
@@ -110,15 +141,24 @@ public class CatalogService
         await _uow.SaveChangesAsync(ct);
     }
 
-    public Task<IReadOnlyList<PointeuseDbDto>> ListPointeuseAsync(CancellationToken ct = default)
-        => MapList<T_BDD_POINTEUSE, PointeuseDbDto>(ct);
+    public async Task<IReadOnlyList<PointeuseDbDto>> ListPointeuseAsync(CancellationToken ct = default)
+    {
+        await EnsureMappingSchemaAsync(ct);
+        var rows = await _uow.Repository<T_BDD_POINTEUSE>().ListAsync(_ => true, ct);
+        var byConnection = await LoadMappingLookupAsync(false, ct);
+        return rows.Select(r => _mapper.Map<PointeuseDbDto>(r) with
+        {
+            Mappings = byConnection.TryGetValue(r.ID, out var m) ? m : Array.Empty<SourceEntityMappingDto>()
+        }).ToList();
+    }
 
     public async Task<PointeuseDbDto> SavePointeuseAsync(PointeuseDbDto dto, CancellationToken ct = default)
     {
         if (dto.TypeBase != "STANDARD" && dto.TypeBase != "AUTRE")
             throw new InvalidOperationException("TypeBase doit valoir 'STANDARD' ou 'AUTRE'.");
-        if (dto.TypeBase == "AUTRE" && (string.IsNullOrWhiteSpace(dto.MapUserTable) || string.IsNullOrWhiteSpace(dto.MapPunchTable)))
+        if (dto.TypeBase == "AUTRE" && string.IsNullOrWhiteSpace(dto.MapUserTable) && string.IsNullOrWhiteSpace(dto.MapPunchTable) && (dto.Mappings is null || dto.Mappings.Count == 0))
             throw new InvalidOperationException("Une base 'Autre' nécessite au minimum une table utilisateurs et une table pointages.");
+        await EnsureMappingSchemaAsync(ct);
         var repo = _uow.Repository<T_BDD_POINTEUSE>();
         var doublon = (await repo.ListAsync(
             p => p.ID != dto.Id
@@ -164,7 +204,13 @@ public class CatalogService
             repo.Update(entity);
         }
         await _uow.SaveChangesAsync(ct);
-        return _mapper.Map<PointeuseDbDto>(entity);
+        if (dto.Mappings is not null)
+        {
+            await ValidateMappingsAsync(false, dto.Mappings, ct);
+            await ReplaceMappingsAsync(false, entity.ID, dto.Mappings, ct);
+        }
+        var result = _mapper.Map<PointeuseDbDto>(entity);
+        return result with { Mappings = await LoadMappingsForAsync(false, entity.ID, ct) };
     }
     private static readonly string[] PointeuseStandardTables = { "USERINFO", "CHECKINOUT" };
     public async Task<ConnectionTestResultDto> TestPointeuseConnectionAsync(TestPointeuseConnectionDto dto, CancellationToken ct = default)
@@ -187,6 +233,18 @@ public class CatalogService
                 missingCustom.Add(dto.MapUserTable);
             if (!string.IsNullOrWhiteSpace(dto.MapPunchTable) && !tables.Contains(dto.MapPunchTable, StringComparer.OrdinalIgnoreCase))
                 missingCustom.Add(dto.MapPunchTable);
+            if (dto.Mappings is { Count: > 0 })
+            {
+                foreach (var t in dto.Mappings.Where(x => !string.IsNullOrWhiteSpace(x.SourceTable)).Select(x => x.SourceTable!))
+                    if (!tables.Contains(t, StringComparer.OrdinalIgnoreCase) && !missingCustom.Contains(t, StringComparer.OrdinalIgnoreCase))
+                        missingCustom.Add(t);
+                if (missingCustom.Count == 0)
+                {
+                    var missingCols = await ValidateMappingColumnsAsync(dto.Serveur!, dto.NomBd!, dto.SqlAuth ?? true, dto.Login, dto.Password, dto.Mappings, ct);
+                    if (missingCols.Count > 0)
+                        return new ConnectionTestResultDto(false, "Connexion réussie mais certaines colonnes mappées sont introuvables.", missingCols);
+                }
+            }
             return missingCustom.Count == 0
                 ? new ConnectionTestResultDto(true, "Connexion réussie.")
                 : new ConnectionTestResultDto(false, "Connexion réussie mais certaines tables choisies sont introuvables.", missingCustom);
@@ -315,14 +373,15 @@ public class CatalogService
     private async Task<DepartementServiceDto> LookupFromSageAsync(string matricule, CancellationToken ct)
     {
         var mat = matricule.Trim();
-        using var sage = _sageFactory.Create(await _tenant.GetSageConnectionAsync(ct));
-
-        var emp = sage.Employees.FirstOrDefault(e => e.MatriculeSalarie == mat);
+        var sageRow = await _tenant.GetSageRowAsync(ct);
+        var emp = (await _externalSource.GetEmployeesAsync(sageRow, ct))
+            .FirstOrDefault(e => string.Equals(e.Matricule, mat, StringComparison.OrdinalIgnoreCase));
         if (emp == null)
             return new DepartementServiceDto(matricule, null, null);
-
-        var current = PickCurrentAffectation(sage.Affectations.Where(a => a.NumSalarie == emp.SA_CompteurNumero).ToList());
-
+        var affs = (await _externalSource.GetAffectationsAsync(sageRow, ct))
+            .Where(a => a.EmployeeId == emp.EmployeeId)
+            .ToList();
+        var current = PickCurrentAffectation(affs);
         return new DepartementServiceDto(matricule, current?.Departement?.Trim(), current?.Service?.Trim());
     }
 
@@ -330,6 +389,13 @@ public class CatalogService
     {
         var list = rows.ToList();
         return list.Where(a => a.DateSortiePoste == null).OrderByDescending(a => a.DateDebut).FirstOrDefault()
+               ?? list.OrderByDescending(a => a.DateDebut).FirstOrDefault();
+    }
+
+    private static ExternalAffectation? PickCurrentAffectation(IEnumerable<ExternalAffectation> rows)
+    {
+        var list = rows.ToList();
+        return list.Where(a => a.DateSortie == null).OrderByDescending(a => a.DateDebut).FirstOrDefault()
                ?? list.OrderByDescending(a => a.DateDebut).FirstOrDefault();
     }
 
@@ -356,22 +422,18 @@ public class CatalogService
             return result;
         }
 
-        var sageConn = await _tenant.GetSageConnectionAsync(ct);
-        using var sage = _sageFactory.Create(sageConn);
-        var matSet = list.ToHashSet();
-        var emps = sage.Employees
-            .ToList()
-            .Where(e => matSet.Contains(e.MatriculeSalarie.Trim()))
-            .Select(e => new { MatriculeSalarie = e.MatriculeSalarie.Trim(), e.SA_CompteurNumero })
+        var sageRow = await _tenant.GetSageRowAsync(ct);
+        var matSet = list.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var emps = (await _externalSource.GetEmployeesAsync(sageRow, ct))
+            .Where(e => matSet.Contains(e.Matricule))
             .ToList();
-        var idSet = emps.Select(e => e.SA_CompteurNumero).ToHashSet();
-        var byNum = sage.Affectations
-            .ToList()
-            .Where(a => idSet.Contains(a.NumSalarie))
-            .GroupBy(a => a.NumSalarie)
+        var idSet = emps.Select(e => e.EmployeeId).ToHashSet();
+        var byNum = (await _externalSource.GetAffectationsAsync(sageRow, ct))
+            .Where(a => idSet.Contains(a.EmployeeId))
+            .GroupBy(a => a.EmployeeId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        var numByMat = emps.ToDictionary(e => e.MatriculeSalarie.Trim(), e => e.SA_CompteurNumero);
+        var numByMat = emps.ToDictionary(e => e.Matricule, e => e.EmployeeId, StringComparer.OrdinalIgnoreCase);
         return list.Select(m =>
         {
             var cur = numByMat.TryGetValue(m, out var num) && byNum.TryGetValue(num, out var rows)
@@ -426,6 +488,223 @@ public class CatalogService
                     ALTER TABLE dbo.T_SOURCE_CONFIG ADD ExtSqlAuth bit NOT NULL CONSTRAINT DF_T_SOURCE_CONFIG_ExtSqlAuth DEFAULT 1;
             END
             """, ct);
+    }
+
+    // Cree (idempotent) le modele de mapping dynamique et seed le catalogue des roles.
+    private async Task EnsureMappingSchemaAsync(CancellationToken ct)
+    {
+        await _uow.ExecuteSqlAsync("""
+            IF OBJECT_ID(N'dbo.T_FIELD_ROLE', N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.T_FIELD_ROLE (
+                    Code nvarchar(64) NOT NULL PRIMARY KEY,
+                    Label nvarchar(128) NULL,
+                    SystemType nvarchar(16) NOT NULL,
+                    EntityKind nvarchar(32) NOT NULL,
+                    IsRequired bit NOT NULL CONSTRAINT DF_T_FIELD_ROLE_IsRequired DEFAULT 0,
+                    AutoMappingPatterns nvarchar(256) NULL,
+                    SortOrder int NOT NULL CONSTRAINT DF_T_FIELD_ROLE_SortOrder DEFAULT 0
+                );
+            END
+
+            IF OBJECT_ID(N'dbo.T_SOURCE_ENTITY_MAPPING', N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.T_SOURCE_ENTITY_MAPPING (
+                    Id int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    SystemType nvarchar(16) NOT NULL,
+                    SageDbId int NULL,
+                    PointeuseDbId int NULL,
+                    EntityKind nvarchar(32) NOT NULL,
+                    SourceTable nvarchar(128) NULL
+                );
+            END
+
+            IF OBJECT_ID(N'dbo.T_SOURCE_FIELD_MAPPING', N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.T_SOURCE_FIELD_MAPPING (
+                    Id int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                    EntityMappingId int NOT NULL,
+                    FieldRoleCode nvarchar(64) NOT NULL,
+                    SourceColumn nvarchar(128) NULL
+                );
+            END
+
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_SEM_Sage_Kind' AND object_id = OBJECT_ID(N'dbo.T_SOURCE_ENTITY_MAPPING'))
+                CREATE UNIQUE INDEX UX_SEM_Sage_Kind ON dbo.T_SOURCE_ENTITY_MAPPING (SageDbId, EntityKind);
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_SEM_Pte_Kind' AND object_id = OBJECT_ID(N'dbo.T_SOURCE_ENTITY_MAPPING'))
+                CREATE UNIQUE INDEX UX_SEM_Pte_Kind ON dbo.T_SOURCE_ENTITY_MAPPING (PointeuseDbId, EntityKind);
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_SFM_Entity_Role' AND object_id = OBJECT_ID(N'dbo.T_SOURCE_FIELD_MAPPING'))
+                CREATE UNIQUE INDEX UX_SFM_Entity_Role ON dbo.T_SOURCE_FIELD_MAPPING (EntityMappingId, FieldRoleCode);
+
+            INSERT INTO dbo.T_FIELD_ROLE (Code, Label, SystemType, EntityKind, IsRequired, AutoMappingPatterns, SortOrder)
+            SELECT v.Code, v.Label, v.SystemType, v.EntityKind, v.IsRequired, v.AutoMappingPatterns, v.SortOrder
+            FROM (VALUES
+                (N'SAGE_MATRICULE', N'Matricule', N'SAGE', N'EMPLOYEE', 1, N'matricule|matric|mat', 10),
+                (N'SAGE_EMPLOYEE_ID', N'Identifiant employé', N'SAGE', N'EMPLOYEE', 1, N'compteur|numsalarie|num_salarie|salarieid', 20),
+                (N'SAGE_NOM', N'Nom', N'SAGE', N'EMPLOYEE', 0, N'nom|name', 30),
+                (N'SAGE_PRENOM', N'Prénom', N'SAGE', N'EMPLOYEE', 0, N'prenom|prénom|firstname', 40),
+                (N'SAGE_BADGE', N'Numéro de badge', N'SAGE', N'EMPLOYEE', 0, N'badge|badgenumber|numbadge|num_badge|numerobadge', 50),
+                (N'SAGE_INACTIVE_FLAG', N'Indicateur désactivé', N'SAGE', N'EMPLOYEE', 0, N'desactive|désactivé|inactive|actif', 60),
+                (N'SAGE_AFF_EMPLOYEE_ID', N'Identifiant employé', N'SAGE', N'AFFECTATION', 1, N'numsalarie|num_salarie|compteur|salarieid', 10),
+                (N'SAGE_AFF_DEPARTEMENT', N'Code département', N'SAGE', N'AFFECTATION', 0, N'departement|département|code_dep|dep', 20),
+                (N'SAGE_AFF_SERVICE', N'Service', N'SAGE', N'AFFECTATION', 0, N'service', 30),
+                (N'SAGE_AFF_START', N'Date début', N'SAGE', N'AFFECTATION', 0, N'datedebut|date_debut|debut|startdate', 40),
+                (N'SAGE_AFF_END', N'Date sortie', N'SAGE', N'AFFECTATION', 0, N'datesortie|date_sortie|datefin|fin|enddate', 50),
+                (N'SAGE_DEPT_CODE', N'Code département', N'SAGE', N'DEPARTMENT', 1, N'code|code_dep|code_departement', 10),
+                (N'SAGE_DEPT_LABEL', N'Intitulé département', N'SAGE', N'DEPARTMENT', 0, N'intitule|intitulé|libelle|libellé|label', 20),
+                (N'SAGE_CAL_DATE', N'Date', N'SAGE', N'COMPANY_CALENDAR', 1, N'periode|date|jour', 10),
+                (N'SAGE_CAL_IS_HOLIDAY', N'Jour férié', N'SAGE', N'COMPANY_CALENDAR', 0, N'etat|etatjour|ferie|férié|holiday', 20),
+                (N'SAGE_CST_CODE', N'Code constante', N'SAGE', N'CONSTANT', 1, N'code|codeconstante|code_constante', 10),
+                (N'SAGE_CST_LABEL', N'Intitulé', N'SAGE', N'CONSTANT', 0, N'intitule|intitulé|libelle|libellé|label', 20),
+                (N'SAGE_CST_OPERANDE', N'Opérande', N'SAGE', N'CONSTANT', 0, N'operande|codeoperande|ordre|noordre', 30),
+                (N'SAGE_EVT_CODE', N'Code événement', N'SAGE', N'ABSENCE_EVENT', 0, N'code|codene|code_ne', 10),
+                (N'SAGE_EVT_LABEL', N'Intitulé', N'SAGE', N'ABSENCE_EVENT', 0, N'intitule|intitulé|libelle|libellé|label', 20),
+                (N'SAGE_EEV_EMPLOYEE_ID', N'Identifiant employé', N'SAGE', N'EMPLOYEE_EVENT', 1, N'numsalarie|num_salarie|compteur|salarieid', 10),
+                (N'SAGE_EEV_CODE', N'Code événement', N'SAGE', N'EMPLOYEE_EVENT', 0, N'code|codene|code_ne', 20),
+                (N'SAGE_EEV_START', N'Début période', N'SAGE', N'EMPLOYEE_EVENT', 0, N'periode|debut|start|datedebut', 30),
+                (N'SAGE_EEV_END', N'Fin période', N'SAGE', N'EMPLOYEE_EVENT', 0, N'periode|fin|end|datefin', 40),
+                (N'SAGE_EEV_MATIN', N'Matin', N'SAGE', N'EMPLOYEE_EVENT', 0, N'matin|am', 50),
+                (N'SAGE_EEV_APRESMIDI', N'Après-midi', N'SAGE', N'EMPLOYEE_EVENT', 0, N'apresmidi|après-midi|pm', 60),
+                (N'PTE_USER_ID', N'Identifiant utilisateur', N'POINTEUSE', N'PUNCH_USER', 1, N'userid|user_id|id', 10),
+                (N'PTE_USER_BADGE', N'Badge', N'POINTEUSE', N'PUNCH_USER', 0, N'badge|badgenumber|badge_number', 20),
+                (N'PTE_USER_SSN', N'SSN / matricule', N'POINTEUSE', N'PUNCH_USER', 0, N'ssn|matricule|matric', 30),
+                (N'PTE_USER_NAME', N'Nom', N'POINTEUSE', N'PUNCH_USER', 0, N'name|nom', 40),
+                (N'PTE_PUNCH_USER_ID', N'Identifiant utilisateur', N'POINTEUSE', N'PUNCH', 1, N'userid|user_id|id', 10),
+                (N'PTE_PUNCH_DATETIME', N'Date/heure', N'POINTEUSE', N'PUNCH', 1, N'checktime|check_time|datetime|date', 20),
+                (N'PTE_PUNCH_TYPE', N'Type (entrée/sortie)', N'POINTEUSE', N'PUNCH', 0, N'checktype|check_type|type|sens', 30)
+            ) AS v(Code, Label, SystemType, EntityKind, IsRequired, AutoMappingPatterns, SortOrder)
+            WHERE NOT EXISTS (SELECT 1 FROM dbo.T_FIELD_ROLE r WHERE r.Code = v.Code);
+            """, ct);
+    }
+
+    public async Task<IReadOnlyList<FieldRoleDto>> GetFieldRolesAsync(string? systemType = null, CancellationToken ct = default)
+    {
+        await EnsureMappingSchemaAsync(ct);
+        var list = await _uow.Repository<T_FIELD_ROLE>().ListAsync(_ => true, ct);
+        return list
+            .Where(r => string.IsNullOrWhiteSpace(systemType)
+                        || string.Equals(r.SystemType, systemType, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(r => r.SystemType)
+            .ThenBy(r => r.EntityKind)
+            .ThenBy(r => r.SortOrder)
+            .Select(_mapper.Map<FieldRoleDto>)
+            .ToList();
+    }
+
+    private static readonly Regex SafeSourceIdentifier = new("^[A-Za-z0-9_]+$", RegexOptions.Compiled);
+
+    private static void ValidateSourceIdentifier(string? name)
+    {
+        if (!string.IsNullOrWhiteSpace(name) && !SafeSourceIdentifier.IsMatch(name))
+            throw new InvalidOperationException($"Identifiant source invalide : {name}");
+    }
+
+    private async Task ValidateMappingsAsync(bool isSage, IReadOnlyList<SourceEntityMappingDto> mappings, CancellationToken ct)
+    {
+        var system = isSage ? "SAGE" : "POINTEUSE";
+        var roles = await _uow.Repository<T_FIELD_ROLE>().ListAsync(r => r.SystemType == system, ct);
+        foreach (var m in mappings.Where(x => !string.IsNullOrWhiteSpace(x.EntityKind)))
+        {
+            if (string.IsNullOrWhiteSpace(m.SourceTable))
+                throw new InvalidOperationException($"La table source est requise pour '{m.EntityKind}'.");
+            ValidateSourceIdentifier(m.SourceTable);
+            var fields = m.Fields ?? Array.Empty<SourceFieldMappingDto>();
+            foreach (var f in fields)
+                ValidateSourceIdentifier(f.SourceColumn);
+            var provided = fields
+                .Where(f => !string.IsNullOrWhiteSpace(f.SourceColumn))
+                .Select(f => f.FieldRoleCode)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var missing = roles
+                .Where(r => r.EntityKind == m.EntityKind && r.IsRequired && !provided.Contains(r.Code))
+                .Select(r => r.Code)
+                .ToList();
+            if (missing.Count > 0)
+                throw new InvalidOperationException($"Champs obligatoires non mappés pour '{m.EntityKind}' : {string.Join(", ", missing)}.");
+        }
+    }
+
+    private async Task ReplaceMappingsAsync(bool isSage, int connectionId, IReadOnlyList<SourceEntityMappingDto> mappings, CancellationToken ct)
+    {
+        var entRepo = _uow.Repository<T_SOURCE_ENTITY_MAPPING>();
+        var fldRepo = _uow.Repository<T_SOURCE_FIELD_MAPPING>();
+        var existing = await entRepo.ListAsync(m => isSage ? m.SageDbId == connectionId : m.PointeuseDbId == connectionId, ct);
+        if (existing.Count > 0)
+        {
+            var ids = existing.Select(e => e.Id).ToHashSet();
+            var existingFields = await fldRepo.ListAsync(f => ids.Contains(f.EntityMappingId), ct);
+            fldRepo.RemoveRange(existingFields);
+            entRepo.RemoveRange(existing);
+            await _uow.SaveChangesAsync(ct);
+        }
+        foreach (var m in mappings.Where(x => !string.IsNullOrWhiteSpace(x.EntityKind)))
+        {
+            var ent = new T_SOURCE_ENTITY_MAPPING
+            {
+                SystemType = isSage ? "SAGE" : "POINTEUSE",
+                SageDbId = isSage ? connectionId : null,
+                PointeuseDbId = isSage ? null : connectionId,
+                EntityKind = m.EntityKind.Trim(),
+                SourceTable = string.IsNullOrWhiteSpace(m.SourceTable) ? null : m.SourceTable!.Trim()
+            };
+            await entRepo.AddAsync(ent, ct);
+            await _uow.SaveChangesAsync(ct);
+            foreach (var f in (m.Fields ?? Array.Empty<SourceFieldMappingDto>()).Where(x => !string.IsNullOrWhiteSpace(x.FieldRoleCode)))
+            {
+                await fldRepo.AddAsync(new T_SOURCE_FIELD_MAPPING
+                {
+                    EntityMappingId = ent.Id,
+                    FieldRoleCode = f.FieldRoleCode.Trim(),
+                    SourceColumn = string.IsNullOrWhiteSpace(f.SourceColumn) ? null : f.SourceColumn!.Trim()
+                }, ct);
+            }
+        }
+        await _uow.SaveChangesAsync(ct);
+    }
+
+    private async Task<IReadOnlyList<SourceEntityMappingDto>> LoadMappingsForAsync(bool isSage, int connectionId, CancellationToken ct)
+    {
+        var lookup = await LoadMappingLookupAsync(isSage, ct);
+        return lookup.TryGetValue(connectionId, out var list) ? list : Array.Empty<SourceEntityMappingDto>();
+    }
+
+    private async Task<Dictionary<int, List<SourceEntityMappingDto>>> LoadMappingLookupAsync(bool isSage, CancellationToken ct)
+    {
+        var entities = await _uow.Repository<T_SOURCE_ENTITY_MAPPING>().ListAsync(_ => true, ct);
+        var fields = await _uow.Repository<T_SOURCE_FIELD_MAPPING>().ListAsync(_ => true, ct);
+        var fieldsByEntity = fields.GroupBy(f => f.EntityMappingId).ToDictionary(g => g.Key, g => g.ToList());
+        var result = new Dictionary<int, List<SourceEntityMappingDto>>();
+        foreach (var e in entities)
+        {
+            var key = isSage ? e.SageDbId : e.PointeuseDbId;
+            if (key is not int id) continue;
+            var dto = _mapper.Map<SourceEntityMappingDto>(e) with
+            {
+                Fields = (fieldsByEntity.TryGetValue(e.Id, out var fs) ? fs : new List<T_SOURCE_FIELD_MAPPING>())
+                    .Select(_mapper.Map<SourceFieldMappingDto>)
+                    .ToList()
+            };
+            if (!result.TryGetValue(id, out var list)) { list = new List<SourceEntityMappingDto>(); result[id] = list; }
+            list.Add(dto);
+        }
+        return result;
+    }
+
+    private async Task<IReadOnlyList<string>> ValidateMappingColumnsAsync(string serveur, string nomBd, bool sqlAuth, string? login, string? password, IReadOnlyList<SourceEntityMappingDto> mappings, CancellationToken ct)
+    {
+        var missing = new List<string>();
+        foreach (var m in mappings.Where(x => !string.IsNullOrWhiteSpace(x.SourceTable)))
+        {
+            var cols = await _discovery.ListColumnsAsync(serveur, nomBd, m.SourceTable!, sqlAuth, login, password, ct);
+            foreach (var col in (m.Fields ?? Array.Empty<SourceFieldMappingDto>())
+                        .Where(f => !string.IsNullOrWhiteSpace(f.SourceColumn))
+                        .Select(f => f.SourceColumn!))
+            {
+                if (!cols.Contains(col, StringComparer.OrdinalIgnoreCase))
+                    missing.Add($"{m.SourceTable}.{col}");
+            }
+        }
+        return missing;
     }
 
     // Le mode correspondance est rattache a la paire
@@ -555,19 +834,17 @@ public class CatalogService
     }
     private async Task<SyncResultDto> SyncCardPaieCoreAsync(T_BDD_SAGE sageRow, T_BDD_POINTEUSE pteRow, CancellationToken ct)
     {
-        using var sage = _sageFactory.Create(ExternalConnectionFactory.Build(
-            sageRow.SERVEUR, sageRow.NOM_BD, sageRow.TYPE_AUTH == true, sageRow.TLOGIN, sageRow.TMDP));
-        using var pte = _pointeuseFactory.Create(ExternalConnectionFactory.Build(
-            pteRow.SERVEUR, pteRow.NOM_BD, pteRow.TYPE_AUTH == true, pteRow.TLOGIN, pteRow.TMDP));
-        var employees = sage.Employees.Where(e => e.SalarieDesactive != 1).ToList();
-        var badges = pte.Users.ToList();
-        var affectations = sage.Affectations.ToList();
-        var departments = sage.Departments.ToDictionary(d => d.Code, d => d.Intitule);
-        string? DepartementDe(int numSalarie)
+        var employees = await _externalSource.GetEmployeesAsync(sageRow, ct);
+        var badges = await _externalSource.GetPunchUsersAsync(pteRow, ct);
+        var affectations = await _externalSource.GetAffectationsAsync(sageRow, ct);
+        var departments = (await _externalSource.GetDepartmentsAsync(sageRow, ct))
+            .GroupBy(d => d.Code, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().Label, StringComparer.OrdinalIgnoreCase);
+        string? DepartementDe(long numSalarie)
         {
-            var aff = affectations.Where(a => a.NumSalarie == numSalarie && a.DateSortiePoste == null)
+            var aff = affectations.Where(a => a.EmployeeId == numSalarie && a.DateSortie == null)
                                    .OrderByDescending(a => a.DateDebut).FirstOrDefault()
-                      ?? affectations.Where(a => a.NumSalarie == numSalarie)
+                      ?? affectations.Where(a => a.EmployeeId == numSalarie)
                                      .OrderByDescending(a => a.DateDebut).FirstOrDefault();
             if (aff?.Departement == null) return null;
             return departments.TryGetValue(aff.Departement, out var intitule) && !string.IsNullOrWhiteSpace(intitule)
@@ -592,23 +869,23 @@ public class CatalogService
         foreach (var sal in employees)
         {
             var match = badges.FirstOrDefault(b =>
-                MemeIdentifiant(b.SSN, sal.MatriculeSalarie)
-                || MemeIdentifiant(b.BADGENUMBER, sal.MatriculeSalarie)
-                || MemeIdentifiant(b.BADGENUMBER, sal.NumeroDeBadge));
+                MemeIdentifiant(b.Ssn, sal.Matricule)
+                || MemeIdentifiant(b.Badge, sal.Matricule)
+                || MemeIdentifiant(b.Badge, sal.Badge));
             if (match == null) continue;
-            matched.Add(sal.MatriculeSalarie.Trim());
-            var departement = DepartementDe(sal.SA_CompteurNumero);
+            matched.Add(sal.Matricule.Trim());
+            var departement = DepartementDe(sal.EmployeeId);
             var existingCard = scopeCards.FirstOrDefault(c =>
-                string.Equals(c.SAGE_MATRICULE?.Trim(), sal.MatriculeSalarie.Trim(), StringComparison.OrdinalIgnoreCase));
+                string.Equals(c.SAGE_MATRICULE?.Trim(), sal.Matricule.Trim(), StringComparison.OrdinalIgnoreCase));
             if (existingCard == null)
             {
                 await repo.AddAsync(new T_CARDPAIE
                 {
-                    SAGE_MATRICULE = sal.MatriculeSalarie.Trim(),
+                    SAGE_MATRICULE = sal.Matricule.Trim(),
                     SAGE_NOM = sal.Nom,
                     SAGE_PRENOM = sal.Prenom,
-                    POINTEUSE_NUMERO = match.BADGENUMBER,
-                    POINTEUSE_NOM = match.NAME,
+                    POINTEUSE_NUMERO = match.Badge,
+                    POINTEUSE_NOM = match.Name,
                     SAGE_SERVEUR = sageRow.SERVEUR,
                     POINTEUSE_SERVEUR = pteRow.SERVEUR,
                     SAGE_BDD = sageRow.NOM_BD,
@@ -624,8 +901,8 @@ public class CatalogService
             {
                 existingCard.SAGE_NOM = sal.Nom;
                 existingCard.SAGE_PRENOM = sal.Prenom;
-                existingCard.POINTEUSE_NUMERO = match.BADGENUMBER;
-                existingCard.POINTEUSE_NOM = match.NAME;
+                existingCard.POINTEUSE_NUMERO = match.Badge;
+                existingCard.POINTEUSE_NOM = match.Name;
                 if (departement != null) existingCard.DEPARTEMENT = departement;
                 existingCard.ACTIF = true;
                 repo.Update(existingCard);
@@ -971,13 +1248,13 @@ public class CatalogService
     public async Task ImportSageHolidaysAsync(CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        using var sage = _sageFactory.Create(await _tenant.GetSageConnectionAsync(ct));
-        var cal = sage.CompanyCalendar.Where(c => c.EtatJour == 1).ToList();
+        var sageRow = await _tenant.GetSageRowAsync(ct);
+        var holidays = await _externalSource.GetCompanyCalendarAsync(sageRow, ct);
         var repo = _uow.Repository<T_FERIE>();
         var existing = await repo.ListAsync(f => f.BDD_SAGE == _tenant.SageDb, ct);
-        foreach (var day in cal.Where(d => d.PeriodeDebut.HasValue))
+        foreach (var day in holidays)
         {
-            var date = day.PeriodeDebut!.Value.Date;
+            var date = day.Date;
             if (existing.Any(e => e.DATE.HasValue && e.DATE.Value.Date == date))
                 continue;
             await repo.AddAsync(new T_FERIE { DATE = date, INTITULE = "Férié SAGE", BDD_SAGE = _tenant.SageDb }, ct);
@@ -1056,12 +1333,13 @@ public class CatalogService
     public async Task<IReadOnlyList<SageConstantOptionDto>> ListSageConstantOptionsAsync(CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        using var sage = _sageFactory.Create(await _tenant.GetSageConnectionAsync(ct));
-        return sage.Constants.ToArray()
-            .GroupBy(c => (c.CodeConstante ?? string.Empty).Trim(), StringComparer.OrdinalIgnoreCase)
+        var sageRow = await _tenant.GetSageRowAsync(ct);
+        var constants = await _externalSource.GetConstantsAsync(sageRow, ct);
+        return constants
+            .GroupBy(c => (c.Code ?? string.Empty).Trim(), StringComparer.OrdinalIgnoreCase)
             .Where(g => g.Key.Length > 0)
             .OrderBy(g => g.Key)
-            .Select(g => new SageConstantOptionDto(g.Key, g.First().Intitule))
+            .Select(g => new SageConstantOptionDto(g.Key, g.First().Label))
             .ToList();
     }
 
@@ -1125,15 +1403,15 @@ public class CatalogService
     public async Task SyncAbsenceCodesFromSageAsync(CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        using var sage = _sageFactory.Create(await _tenant.GetSageConnectionAsync(ct));
-        var events = sage.Events.ToList();
+        var sageRow = await _tenant.GetSageRowAsync(ct);
+        var events = await _externalSource.GetEventsAsync(sageRow, ct);
         var repo = _uow.Repository<T_CODEABSENCE>();
         var existing = await repo.ListAsync(_ => true, ct);
         foreach (var ev in events)
         {
-            if (existing.Any(e => e.INTITULE_ABSENCE == ev.Intitule || e.INTITULE_ABSENCE == ev.CodeNE))
+            if (existing.Any(e => e.INTITULE_ABSENCE == ev.Label || e.INTITULE_ABSENCE == ev.Code))
                 continue;
-            var newCode = new T_CODEABSENCE { INTITULE_ABSENCE = ev.Intitule ?? ev.CodeNE, NOT_PAY = false };
+            var newCode = new T_CODEABSENCE { INTITULE_ABSENCE = ev.Label ?? ev.Code, NOT_PAY = false };
             await repo.AddAsync(newCode, ct);
             existing.Add(newCode);
         }

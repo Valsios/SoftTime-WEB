@@ -1,5 +1,6 @@
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.Mapping;
 using SoftTime.Application.Services;
 
@@ -14,6 +15,7 @@ public static class DependencyInjection
         services.AddScoped<TenantConnectionService>();
         services.AddScoped<AuthService>();
         services.AddScoped<CatalogService>();
+        services.AddScoped<IExternalSourceService, ExternalSourceService>();
         services.AddScoped<PlanningService>();
         services.AddScoped<TimekeepingService>();
         services.AddScoped<OvertimeService>();

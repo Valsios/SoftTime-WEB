@@ -1,5 +1,6 @@
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
+using SoftTime.Domain.Entities.Sage;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
@@ -11,15 +12,15 @@ public class OvertimeService
 {
     private readonly IUnitOfWork _uow;
     private readonly TenantConnectionService _tenant;
-    private readonly ISageContextFactory _sageFactory;
+    private readonly IExternalSourceService _externalSource;
     private readonly ISagePayrollWriter _payroll;
     private readonly CatalogService _catalog;
 
-    public OvertimeService(IUnitOfWork uow, TenantConnectionService tenant, ISageContextFactory sageFactory, ISagePayrollWriter payroll, CatalogService catalog)
+    public OvertimeService(IUnitOfWork uow, TenantConnectionService tenant, IExternalSourceService externalSource, ISagePayrollWriter payroll, CatalogService catalog)
     {
         _uow = uow;
         _tenant = tenant;
-        _sageFactory = sageFactory;
+        _externalSource = externalSource;
         _payroll = payroll;
         _catalog = catalog;
     }
@@ -118,12 +119,12 @@ public class OvertimeService
         var numSalByMat = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         try
         {
-            using var sage = _sageFactory.Create(await _tenant.GetSageConnectionAsync(ct));
-            foreach (var emp in sage.Employees.ToArray())
+            var sageRow = await _tenant.GetSageRowAsync(ct);
+            foreach (var emp in await _externalSource.GetEmployeesAsync(sageRow, ct))
             {
-                var mat = emp.MatriculeSalarie?.Trim();
+                var mat = emp.Matricule?.Trim();
                 if (!string.IsNullOrEmpty(mat))
-                    numSalByMat[mat] = emp.SA_CompteurNumero;
+                    numSalByMat[mat] = (int)emp.EmployeeId;
             }
         }
         catch { /* SAGE optional for preview */ }
@@ -218,8 +219,11 @@ public class OvertimeService
         EnsureMondayToSunday(request);
         var rows = await _uow.Repository<T_HSExoImp>().ListAsync(h =>
             h.BDD_SAGE == _tenant.SageDb && h.PeriodeDebut == request.From.Date && h.PeriodeFin == request.To.Date, ct);
-        using var sage = _sageFactory.Create(await _tenant.GetSageConnectionAsync(ct));
-        var constants = sage.Constants.ToArray();
+        var sageRow = await _tenant.GetSageRowAsync(ct);
+        var constants = (await _externalSource.GetConstantsAsync(sageRow, ct))
+            .Where(c => c.Code is not null)
+            .Select(c => new T_CST { CodeConstante = c.Code!.Trim(), CodeOperande1 = c.Operande, Intitule = c.Label })
+            .ToArray();
         var conn = await _tenant.GetSageConnectionAsync(ct);
         var codes = await _catalog.GetOvertimeSageCodesAsync(ct);
         foreach (var hs in rows.Where(h => h.NumSal.HasValue))

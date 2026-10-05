@@ -1,3 +1,4 @@
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
@@ -10,13 +11,13 @@ public class ReportService
 {
     private readonly IUnitOfWork _uow;
     private readonly TenantConnectionService _tenant;
-    private readonly ISageContextFactory _sageFactory;
+    private readonly IExternalSourceService _externalSource;
 
-    public ReportService(IUnitOfWork uow, TenantConnectionService tenant, ISageContextFactory sageFactory)
+    public ReportService(IUnitOfWork uow, TenantConnectionService tenant, IExternalSourceService externalSource)
     {
         _uow = uow;
         _tenant = tenant;
-        _sageFactory = sageFactory;
+        _externalSource = externalSource;
     }
 
     public async Task<IReadOnlyList<CorrectedHourDto>> PointageAsync(ReportFilter filter, CancellationToken ct = default)
@@ -132,23 +133,30 @@ public class ReportService
     public async Task<AbsenceInfo?> GetLeaveAsync(string matricule, DateTime date, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        using var sage = _sageFactory.Create(await _tenant.GetSageConnectionAsync(ct));
+        var sageRow = await _tenant.GetSageRowAsync(ct);
         var excluded = new[] { "0200", "0300" };
-        var codes = sage.Events.Where(e => !excluded.Contains(e.CodeNE)).Select(e => e.CodeNE).ToList();
-        var emp = sage.Employees.FirstOrDefault(e => e.MatriculeSalarie == matricule);
+        var allEvents = await _externalSource.GetEventsAsync(sageRow, ct);
+        var codes = allEvents.Select(e => e.Code)
+            .Where(c => !string.IsNullOrWhiteSpace(c) && !excluded.Contains(c))
+            .Select(c => c!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var emp = (await _externalSource.GetEmployeesAsync(sageRow, ct))
+            .FirstOrDefault(e => string.Equals(e.Matricule, matricule, StringComparison.OrdinalIgnoreCase));
         if (emp == null) return null;
-        var events = sage.EmployeeEvents.Where(e => e.NumSalarie == emp.SA_CompteurNumero && codes.Contains(e.CodeNE)).ToList();
+        var events = (await _externalSource.GetEmployeeEventsAsync(sageRow, ct))
+            .Where(e => e.EmployeeId == emp.EmployeeId && e.Code is not null && codes.Contains(e.Code))
+            .ToList();
         foreach (var ghrs in events)
         {
-            if (!ghrs.PeriodeDebut.HasValue || !ghrs.PeriodeFin.HasValue) continue;
-            var days = (int)ghrs.PeriodeFin.Value.Subtract(ghrs.PeriodeDebut.Value).TotalDays;
+            if (ghrs.Start is null || ghrs.End is null) continue;
+            var days = (int)ghrs.End.Value.Subtract(ghrs.Start.Value).TotalDays;
             for (var i = 0; i <= days; i++)
             {
-                var d = ghrs.PeriodeDebut.Value.Date.AddDays(i);
+                var d = ghrs.Start.Value.Date.AddDays(i);
                 if (d.DayOfWeek == DayOfWeek.Sunday) continue;
                 if (d != date.Date) continue;
-                var valeur = (ghrs.Matin == 1 || ghrs.ApresMidi == 1) && days == 0 ? 0.5 : 1;
-                return new AbsenceInfo { Date = d, Evenement = ghrs.CodeNE, Matricule = matricule, Valeur = valeur };
+                var valeur = (ghrs.Matin == true || ghrs.ApresMidi == true) && days == 0 ? 0.5 : 1;
+                return new AbsenceInfo { Date = d, Evenement = ghrs.Code, Matricule = matricule, Valeur = valeur };
             }
         }
         return null;

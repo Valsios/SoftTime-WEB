@@ -1,3 +1,5 @@
+import type { SourceEntityMapping } from './mapping.models';
+
 export interface SageDb {
   id: number;
   serveur?: string | null;
@@ -14,6 +16,7 @@ export interface SageDb {
   mapColDepartement?: string | null;
   mapColService?: string | null;
   mapColCodeDepartement?: string | null;
+  mappings?: SourceEntityMapping[] | null;
 }
 
 export interface LoginRequest {

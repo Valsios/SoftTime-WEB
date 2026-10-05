@@ -50,7 +50,8 @@ public record SageDbDto(
     string? MapColBadge = null,
     string? MapColDepartement = null,
     string? MapColService = null,
-    string? MapColCodeDepartement = null)
+    string? MapColCodeDepartement = null,
+    IReadOnlyList<SourceEntityMappingDto>? Mappings = null)
 {
     public SageDbDto() : this(default, default, default, default, default, default) { }
 }
@@ -72,14 +73,27 @@ public record PointeuseDbDto(
     string? MapPunchTable = null,
     string? MapPunchColUserId = null,
     string? MapPunchColDateTime = null,
-    string? MapPunchColType = null)
+    string? MapPunchColType = null,
+    IReadOnlyList<SourceEntityMappingDto>? Mappings = null)
 {
     public PointeuseDbDto() : this(default, default, default, default, default, default, default, default) { }
 }
 
-public record TestSageConnectionDto(string? Serveur, bool? SqlAuth, string? Login, string? Password, string? NomBd, string TypeBase, string? MapTable);
-public record TestPointeuseConnectionDto(string? Serveur, bool? SqlAuth, string? Login, string? Password, string? NomBd, string TypeBase, string? MapUserTable, string? MapPunchTable);
+public record TestSageConnectionDto(string? Serveur, bool? SqlAuth, string? Login, string? Password, string? NomBd, string TypeBase, string? MapTable, IReadOnlyList<SourceEntityMappingDto>? Mappings = null);
+public record TestPointeuseConnectionDto(string? Serveur, bool? SqlAuth, string? Login, string? Password, string? NomBd, string TypeBase, string? MapUserTable, string? MapPunchTable, IReadOnlyList<SourceEntityMappingDto>? Mappings = null);
 public record ConnectionTestResultDto(bool Success, string Message, IReadOnlyList<string>? MissingTables = null);
+
+public record FieldRoleDto(string Code, string? Label, string SystemType, string EntityKind, bool IsRequired, string? AutoMappingPatterns, int SortOrder);
+
+public record SourceFieldMappingDto(int Id, string FieldRoleCode, string? SourceColumn)
+{
+    public SourceFieldMappingDto() : this(default, default!, default) { }
+}
+
+public record SourceEntityMappingDto(int Id, string? SystemType, int? SageDbId, int? PointeuseDbId, string EntityKind, string? SourceTable, IReadOnlyList<SourceFieldMappingDto> Fields)
+{
+    public SourceEntityMappingDto() : this(default, default, default, default, default!, default, Array.Empty<SourceFieldMappingDto>()) { }
+}
 
 public record ClockParamDto(int Id, bool? MultiPoint)
 {

@@ -12,3 +12,4 @@ export * from './confirm-host';
 export * from './period-filter';
 export * from './icon';
 export * from './soft-tabs';
+export * from './source-mapping-stepper';

@@ -18,6 +18,7 @@ import {
   SourceConfig,
   DepartementService,
   ConnectionTestResult,
+  FieldRole,
 } from '../models';
 
 @Injectable({ providedIn: 'root' })
@@ -44,6 +45,14 @@ export class SageDatabasesService extends ApiService {
   activate(): Observable<{ holidaysImported: boolean; cardsAdded: number; cardsDeactivated: number; message: string }> {
     return this.http.post<{ holidaysImported: boolean; cardsAdded: number; cardsDeactivated: number; message: string }>(
       this.url('/api/sage-databases/activate'), {});
+  }
+}
+@Injectable({ providedIn: 'root' })
+export class FieldRolesService extends ApiService {
+  list(systemType?: 'SAGE' | 'POINTEUSE'): Observable<FieldRole[]> {
+    return this.http.get<FieldRole[]>(this.url('/api/field-roles'), {
+      params: this.params({ systemType }),
+    });
   }
 }
 @Injectable({ providedIn: 'root' })

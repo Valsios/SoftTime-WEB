@@ -47,6 +47,9 @@ public class SoftTimeDbContext : DbContext
     public DbSet<T_HSSAL> T_HSSAL => Set<T_HSSAL>();
     public DbSet<T_CODE_CONSTANTE> T_CODE_CONSTANTE => Set<T_CODE_CONSTANTE>();
     public DbSet<T_SOURCE_CONFIG> T_SOURCE_CONFIG => Set<T_SOURCE_CONFIG>();
+    public DbSet<T_FIELD_ROLE> T_FIELD_ROLE => Set<T_FIELD_ROLE>();
+    public DbSet<T_SOURCE_ENTITY_MAPPING> T_SOURCE_ENTITY_MAPPING => Set<T_SOURCE_ENTITY_MAPPING>();
+    public DbSet<T_SOURCE_FIELD_MAPPING> T_SOURCE_FIELD_MAPPING => Set<T_SOURCE_FIELD_MAPPING>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -69,6 +72,41 @@ public class SoftTimeDbContext : DbContext
             e.Property(x => x.LOGIN).IsRequired(false);
             e.Property(x => x.PASSWORD).IsRequired(false);
             e.Property(x => x.NOMRESPONSABLE).IsRequired(false);
+        });
+
+        modelBuilder.Entity<T_FIELD_ROLE>(e =>
+        {
+            e.ToTable("T_FIELD_ROLE");
+            e.HasKey(x => x.Code);
+            e.Property(x => x.Code).HasMaxLength(64);
+            e.Property(x => x.Label).HasMaxLength(128);
+            e.Property(x => x.SystemType).HasMaxLength(16);
+            e.Property(x => x.EntityKind).HasMaxLength(32);
+            e.Property(x => x.AutoMappingPatterns).HasMaxLength(256);
+        });
+
+        modelBuilder.Entity<T_SOURCE_ENTITY_MAPPING>(e =>
+        {
+            e.ToTable("T_SOURCE_ENTITY_MAPPING");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.SystemType).HasMaxLength(16);
+            e.Property(x => x.EntityKind).HasMaxLength(32);
+            e.Property(x => x.SourceTable).HasMaxLength(128);
+            e.HasMany(x => x.Fields)
+                .WithOne()
+                .HasForeignKey(x => x.EntityMappingId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.SageDbId, x.EntityKind }).IsUnique();
+            e.HasIndex(x => new { x.PointeuseDbId, x.EntityKind }).IsUnique();
+        });
+
+        modelBuilder.Entity<T_SOURCE_FIELD_MAPPING>(e =>
+        {
+            e.ToTable("T_SOURCE_FIELD_MAPPING");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.FieldRoleCode).HasMaxLength(64);
+            e.Property(x => x.SourceColumn).HasMaxLength(128);
+            e.HasIndex(x => new { x.EntityMappingId, x.FieldRoleCode }).IsUnique();
         });
     }
 }
