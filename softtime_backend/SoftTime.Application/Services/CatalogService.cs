@@ -319,7 +319,11 @@ public class CatalogService
             .GroupBy(a => a.EmployeeId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        var numByMat = emps.ToDictionary(e => e.Matricule, e => e.EmployeeId, StringComparer.OrdinalIgnoreCase);
+        // La source externe peut contenir des matricules en double : on conserve le premier
+        // au lieu de lever une exception de cle dupliquee.
+        var numByMat = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        foreach (var e in emps)
+            numByMat.TryAdd(e.Matricule, e.EmployeeId);
         return list.Select(m =>
         {
             var cur = numByMat.TryGetValue(m, out var num) && byNum.TryGetValue(num, out var rows)
@@ -772,9 +776,14 @@ public class CatalogService
                 ? intitule : aff.Departement;
         }
         var repo = _uow.Repository<T_CARDPAIE>();
-        var scopeCards = await repo.ListAsync(c =>
-            c.SAGE_SERVEUR == sageRow.SERVEUR && c.SAGE_BDD == sageRow.NOM_BD &&
-            c.POINTEUSE_SERVEUR == pteRow.SERVEUR && c.POINTEUSE_BDD == pteRow.NOM_BD, ct);
+        // L'identite d'une carte est le salarie (matricule) dans une base SAGE : le reste de
+        // l'application (ListCardsAsync, ImportFromClockAsync) raisonne par base SAGE et non par
+        // paire de serveurs. Filtrer ici sur la paire recreait un jeu complet de cartes des que
+        // le libelle du serveur ou la base pointeuse changeait.
+        var sageDbName = (sageRow.NOM_BD ?? string.Empty).Trim();
+        var scopeCards = (await repo.ListAsync(_ => true, ct))
+            .Where(c => string.Equals((c.SAGE_BDD ?? string.Empty).Trim(), sageDbName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
 
         static bool MemeIdentifiant(string? a, string? b)
         {
@@ -785,24 +794,30 @@ public class CatalogService
                 return na == nb;
             return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
         }
-        var matched = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var matched = new List<string>();
+        var seenEmployees = new HashSet<long>();
         var added = 0;
         foreach (var sal in employees)
         {
+            var matricule = (sal.Matricule ?? string.Empty).Trim();
+            // La source peut renvoyer plusieurs fois le meme salarie (matricule formate differemment) :
+            // une seule carte doit etre produite par employe.
+            if (matricule.Length == 0 || !seenEmployees.Add(sal.EmployeeId)) continue;
             var match = badges.FirstOrDefault(b =>
-                MemeIdentifiant(b.Ssn, sal.Matricule)
-                || MemeIdentifiant(b.Badge, sal.Matricule)
+                MemeIdentifiant(b.Ssn, matricule)
+                || MemeIdentifiant(b.Badge, matricule)
                 || MemeIdentifiant(b.Badge, sal.Badge));
             if (match == null) continue;
-            matched.Add(sal.Matricule.Trim());
+            matched.Add(matricule);
             var departement = DepartementDe(sal.EmployeeId);
-            var existingCard = scopeCards.FirstOrDefault(c =>
-                string.Equals(c.SAGE_MATRICULE?.Trim(), sal.Matricule.Trim(), StringComparison.OrdinalIgnoreCase));
+            // Comparaison par identifiant (00369 == 369) : un simple changement de format du
+            // matricule ne doit pas creer une nouvelle carte.
+            var existingCard = scopeCards.FirstOrDefault(c => MemeIdentifiant(c.SAGE_MATRICULE, matricule));
             if (existingCard == null)
             {
-                await repo.AddAsync(new T_CARDPAIE
+                var newCard = new T_CARDPAIE
                 {
-                    SAGE_MATRICULE = sal.Matricule.Trim(),
+                    SAGE_MATRICULE = matricule,
                     SAGE_NOM = sal.Nom,
                     SAGE_PRENOM = sal.Prenom,
                     POINTEUSE_NUMERO = match.Badge,
@@ -815,7 +830,9 @@ public class CatalogService
                     ORIGINE = "AUTO",
                     ACTIF = true,
                     DATE = DateTime.Now
-                }, ct);
+                };
+                await repo.AddAsync(newCard, ct);
+                scopeCards.Add(newCard); // sinon la carte creee n'est pas vue plus loin dans la meme passe
                 added++;
             }
             else if (existingCard.ORIGINE == "AUTO")
@@ -824,6 +841,11 @@ public class CatalogService
                 existingCard.SAGE_PRENOM = sal.Prenom;
                 existingCard.POINTEUSE_NUMERO = match.Badge;
                 existingCard.POINTEUSE_NOM = match.Name;
+                // La carte suit la configuration courante : la paire est mise a jour au lieu
+                // de creer une seconde carte pour le meme salarie.
+                existingCard.SAGE_SERVEUR = sageRow.SERVEUR;
+                existingCard.POINTEUSE_SERVEUR = pteRow.SERVEUR;
+                existingCard.POINTEUSE_BDD = pteRow.NOM_BD;
                 if (departement != null) existingCard.DEPARTEMENT = departement;
                 existingCard.ACTIF = true;
                 repo.Update(existingCard);
@@ -832,7 +854,7 @@ public class CatalogService
         var deactivated = 0;
         foreach (var card in scopeCards.Where(c => c.ORIGINE == "AUTO" && c.ACTIF))
         {
-            if (matched.Contains((card.SAGE_MATRICULE ?? string.Empty).Trim())) continue;
+            if (matched.Any(m => MemeIdentifiant(m, card.SAGE_MATRICULE))) continue;
             var hasPunches = (await _uow.Repository<T_POINTAGE>().ListAsync(p =>
                 p.NOM_BDD_SAGE == sageRow.NOM_BD && p.MATRICULE_SAGE == card.SAGE_MATRICULE, ct)).Any();
             var hasCategorie = (await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.MATRICULE_SAGE == card.ID, ct)).Any();

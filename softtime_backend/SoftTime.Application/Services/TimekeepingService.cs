@@ -41,7 +41,21 @@ public class TimekeepingService
             cards = cards.Where(c => string.Compare(c.SAGE_MATRICULE, request.MatriculeFrom, StringComparison.Ordinal) >= 0).ToList();
         if (!string.IsNullOrEmpty(request.MatriculeTo))
             cards = cards.Where(c => string.Compare(c.SAGE_MATRICULE, request.MatriculeTo, StringComparison.Ordinal) <= 0).ToList();
-        var badgeMap = cards.Where(c => !string.IsNullOrEmpty(c.POINTEUSE_NUMERO)).ToDictionary(c => c.POINTEUSE_NUMERO!.Trim(), c => c, StringComparer.OrdinalIgnoreCase);
+        // Un meme badge peut etre associe a plusieurs correspondances paie : le rattachement est alors
+        // ambigu, on ignore ce badge plutot que d'importer des pointages sur le mauvais salarie.
+        var badgeMap = new Dictionary<string, T_CARDPAIE>(StringComparer.OrdinalIgnoreCase);
+        var ambiguousBadges = new List<string>();
+        foreach (var group in cards
+                     .Where(c => !string.IsNullOrWhiteSpace(c.POINTEUSE_NUMERO))
+                     .GroupBy(c => c.POINTEUSE_NUMERO!.Trim(), StringComparer.OrdinalIgnoreCase))
+        {
+            if (group.Count() > 1)
+            {
+                ambiguousBadges.Add(group.Key);
+                continue;
+            }
+            badgeMap[group.Key] = group.First();
+        }
         var users = await _externalSource.GetPunchUsersAsync(pteRow, ct);
         var from = request.From.Date;
         var to = request.To.Date.AddDays(1);
@@ -77,7 +91,13 @@ public class TimekeepingService
             imported++;
         }
         await _uow.SaveChangesAsync(ct);
-        return new ImportResultDto(imported, skipped, "Import pointeuse terminé.");
+        var message = ambiguousBadges.Count == 0
+            ? "Import pointeuse terminé."
+            : $"Import pointeuse terminé. {ambiguousBadges.Count} badge(s) associé(s) à plusieurs salariés ont été ignorés : "
+              + string.Join(", ", ambiguousBadges.Take(10))
+              + (ambiguousBadges.Count > 10 ? ", …" : string.Empty)
+              + ". Corrigez les correspondances paie en double pour importer ces pointages.";
+        return new ImportResultDto(imported, skipped, message);
     }
 
     public async Task<ImportResultDto> ImportPunchesExcelAsync(IReadOnlyList<Dictionary<string, string>> rows, CancellationToken ct = default)
