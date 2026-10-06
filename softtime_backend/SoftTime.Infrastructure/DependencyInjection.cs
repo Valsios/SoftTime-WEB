@@ -2,11 +2,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SoftTime.Application.Abstractions;
+using SoftTime.Application.Services;
 using SoftTime.Domain.Repositories;
 using SoftTime.Infrastructure.Integrations;
 using SoftTime.Infrastructure.Persistence;
 using SoftTime.Infrastructure.Queries;
 using SoftTime.Infrastructure.Repositories;
+using SoftTime.Infrastructure.Readers;
 
 namespace SoftTime.Infrastructure;
 
@@ -25,6 +27,12 @@ public static class DependencyInjection
         services.AddScoped<IExternalSourceReader, ExternalSourceReader>();
         services.AddScoped<IExternalDiscoveryService, ExternalDiscoveryService>();
         services.AddScoped<IPunchAggregate, PunchAggregate>();
+        services.AddScoped<IEmployeeReader, StandardEmployeeReader>();
+        services.AddScoped<IEmployeeReader, OtherEmployeeReader>();
+        services.AddScoped<IPointeuseReader, StandardPointeuseReader>();
+        services.AddScoped<IPointeuseReader, OtherPointeuseReader>();
+        services.AddScoped<EmployeeReaderResolver>();
+        services.AddScoped<PointeuseReaderResolver>();
         return services;
     }
 }

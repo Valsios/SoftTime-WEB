@@ -215,6 +215,10 @@ public class OvertimeService
     public async Task SyncSageAsync(PeriodRequest request, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
+        var sageRow = await _tenant.GetSageRowAsync(ct);
+        if (sageRow.TYPE_BASE != "STANDARD")
+            throw new InvalidOperationException(
+                "L'écriture des heures supplémentaires dans SAGE n'est disponible que pour une base SAGE standard. Pour une base « Autre », les heures sont calculées dans SoftTime sans écriture dans la base.");
         EnsureMondayToSunday(request);
         var rows = await _uow.Repository<T_HSExoImp>().ListAsync(h =>
             h.BDD_SAGE == _tenant.SageDb && h.PeriodeDebut == request.From.Date && h.PeriodeFin == request.To.Date, ct);

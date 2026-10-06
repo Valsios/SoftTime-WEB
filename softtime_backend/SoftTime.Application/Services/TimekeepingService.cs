@@ -82,13 +82,28 @@ public class TimekeepingService
                 DATE_POINTAGE = punch.DateHeure.Date,
                 HEURE_POINTAGE = punch.DateHeure.TimeOfDay,
                 DATE_IMPORTATION = DateTime.Now,
-                TYPE_POINTAGE = string.IsNullOrWhiteSpace(punch.Type) ? pteRow.TYPE_POINTAGE : punch.Type,
+                TYPE_POINTAGE = NormalizePunchType(punch.Type, pteRow.TYPE_POINTAGE),
                 IDUNIQUE_POINTAGE = idUnique
             }, ct);
             imported++;
         }
         await _uow.SaveChangesAsync(ct);
         return new ImportResultDto(imported, skipped, "Import pointeuse terminé.");
+    }
+
+    private static string? NormalizePunchType(string? raw, string? fallback)
+    {
+        var t = string.IsNullOrWhiteSpace(raw) ? fallback : raw.Trim();
+        if (string.IsNullOrWhiteSpace(t)) return null;
+        t = t.Trim();
+        switch (t.ToUpperInvariant())
+        {
+            case "IN": case "ENTREE": case "ENTRÉE": case "E":
+                return "I";
+            case "OUT": case "SORTIE": case "S":
+                return "O";
+        }
+        return t.Length > 2 ? t.Substring(0, 2) : t;
     }
 
     public async Task<ImportResultDto> ImportPunchesExcelAsync(IReadOnlyList<Dictionary<string, string>> rows, CancellationToken ct = default)

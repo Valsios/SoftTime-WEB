@@ -981,6 +981,10 @@ public class CatalogService
     public async Task ImportSageHolidaysAsync(CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
+        var sageRow = await _tenant.GetSageRowAsync(ct);
+        if (sageRow.TYPE_BASE != "STANDARD")
+            throw new InvalidOperationException(
+                "L'import des jours fériés n'est disponible que pour une base SAGE standard. Pour une base « Autre », saisissez les jours fériés manuellement.");
         using var sage = _sageFactory.Create(await _tenant.GetSageConnectionAsync(ct));
         var cal = sage.CompanyCalendar.Where(c => c.EtatJour == 1).ToList();
         var repo = _uow.Repository<T_FERIE>();
@@ -1171,6 +1175,10 @@ public class CatalogService
     public async Task SyncAbsenceCodesFromSageAsync(CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
+        var sageRow = await _tenant.GetSageRowAsync(ct);
+        if (sageRow.TYPE_BASE != "STANDARD")
+            throw new InvalidOperationException(
+                "La synchronisation des codes d'absence n'est disponible que pour une base SAGE standard. Pour une base « Autre », saisissez les codes manuellement.");
         using var sage = _sageFactory.Create(await _tenant.GetSageConnectionAsync(ct));
         var events = sage.Events.ToList();
         var repo = _uow.Repository<T_CODEABSENCE>();

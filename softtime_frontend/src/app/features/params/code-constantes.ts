@@ -22,7 +22,7 @@ import { asRow } from '../../shared/utils/date';
     <soft-modal [open]="modal()" title="Modifier code constante" (closed)="modal.set(false)">
       <div class="form-grid">
         <p class="muted">{{ form.intitule || form.categorie }}</p>
-        @if (sageOptions().length) {
+        @if (hasSageList()) {
           <soft-select
             label="Code constante SAGE"
             [(ngModel)]="form.codeConstante"
@@ -51,22 +51,28 @@ export class CodeConstantesPage implements OnInit {
   readonly editId = signal<number | null>(null);
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly sageOptions = signal<{ value: string; label: string }[]>([]);
+  readonly hasSageList = signal(false);
   form: Partial<CodeConstante> = {};
   readonly columns: Column[] = [
     { key: 'intitule', label: 'Catégorie' },
     { key: 'codeConstante', label: 'Code constante' },
   ];
 
-  ngOnInit(): void {
+    ngOnInit(): void {
     this.svc.sageOptions().subscribe({
-      next: (opts) =>
+      next: (opts) => {
+        this.hasSageList.set(opts.length > 0);
         this.sageOptions.set(
           opts.map((o) => ({
             value: o.code,
             label: o.intitule ? `${o.code} — ${o.intitule}` : o.code,
           })),
-        ),
-      error: () => this.sageOptions.set([]),
+        );
+      },
+      error: () => {
+        this.hasSageList.set(false);
+        this.sageOptions.set([]);
+      },
     });
     this.load();
   }
@@ -86,7 +92,7 @@ export class CodeConstantesPage implements OnInit {
     this.editId.set(row['id'] as number);
     this.form = { ...(row as unknown as CodeConstante) };
     const current = this.form.codeConstante;
-    if (current && !this.sageOptions().some((o) => o.value === current)) {
+    if (this.hasSageList() && current && !this.sageOptions().some((o) => o.value === current)) {
       this.sageOptions.set([{ value: current, label: current }, ...this.sageOptions()]);
     }
     this.modal.set(true);
