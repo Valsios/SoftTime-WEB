@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { filter } from 'rxjs/operators';
 import { SessionStore } from '../core/session.store';
 import { AuthService } from '../shared/services/auth.service';
 import { PointeuseDatabasesService } from '../shared/services/catalog.service';
@@ -37,18 +39,30 @@ import { PointeuseDb } from '../shared/models';
 
           @for (section of visibleSections(); track section.title) {
             <div class="sidebar__section">
-              @if (!collapsed()) {<span class="sidebar__section-title">{{ section.title }}</span>}
-              @for (item of section.items; track item.path) {
-                @if (session.hasRight(item.droit)) {
-                  <a
-                    [routerLink]="item.path"
-                    routerLinkActive="is-active"
-                    class="sidebar__item"
-                    [title]="item.label"
-                  >
-                    <app-icon [name]="item.icon"></app-icon>
-                    @if (!collapsed()) {<span>{{ item.label }}</span>}
-                  </a>
+              @if (!collapsed()) {
+                <button
+                  type="button"
+                  class="sidebar__section-title"
+                  [class.is-open]="isSectionOpen(section.title)"
+                  (click)="toggleSection(section.title)"
+                >
+                  <span>{{ section.title }}</span>
+                  <app-icon name="chevron-down" [size]="14"></app-icon>
+                </button>
+              }
+              @if (collapsed() || isSectionOpen(section.title)) {
+                @for (item of section.items; track item.path) {
+                  @if (session.hasRight(item.droit)) {
+                    <a
+                      [routerLink]="item.path"
+                      routerLinkActive="is-active"
+                      class="sidebar__item"
+                      [title]="item.label"
+                    >
+                      <app-icon [name]="item.icon"></app-icon>
+                      @if (!collapsed()) {<span>{{ item.label }}</span>}
+                    </a>
+                  }
                 }
               }
             </div>
@@ -182,11 +196,34 @@ import { PointeuseDb } from '../shared/models';
         gap: 2px;
       }
       .sidebar__section-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        width: 100%;
+        border: none;
+        background: transparent;
+        font: inherit;
         font-size: 10px;
+        font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.08em;
         color: var(--sidebar-text-muted);
-        padding: 6px 10px 2px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        cursor: pointer;
+        text-align: left;
+      }
+      .sidebar__section-title:hover {
+        background: var(--sidebar-hover);
+        color: #fff;
+      }
+      .sidebar__section-title app-icon {
+        flex: none;
+        transition: transform var(--t-fast) var(--ease);
+      }
+      .sidebar__section-title.is-open app-icon {
+        transform: rotate(180deg);
       }
       .sidebar__item {
         display: flex;
@@ -316,6 +353,7 @@ export class Shell implements OnInit {
   private readonly pointeuseApi = inject(PointeuseDatabasesService);
 
   readonly collapsed = signal(false);
+  readonly openSection = signal<string | null>(null);
   readonly databases = computed(() => this.session.databases());
   readonly pointeuseDbs = signal<PointeuseDb[]>([]);
 
@@ -331,6 +369,32 @@ export class Shell implements OnInit {
     const parts = name.split(/\s+/);
     return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase();
   });
+
+  constructor() {
+    this.syncOpenSection(this.router.url);
+    this.router.events
+      .pipe(
+        filter((e): e is NavigationEnd => e instanceof NavigationEnd),
+        takeUntilDestroyed(),
+      )
+      .subscribe((e) => this.syncOpenSection(e.urlAfterRedirects));
+  }
+
+  isSectionOpen(title: string): boolean {
+    return this.openSection() === title;
+  }
+
+  toggleSection(title: string): void {
+    this.openSection.set(this.openSection() === title ? null : title);
+  }
+
+  private syncOpenSection(url: string): void {
+    const path = url.split('?')[0];
+    const match = NAV_SECTIONS.find((s) =>
+      s.items.some((i) => path === i.path || path.startsWith(`${i.path}/`)),
+    );
+    this.openSection.set(match?.title ?? null);
+  }
 
   ngOnInit(): void {
     this.pointeuseApi.list().subscribe({
