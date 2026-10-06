@@ -19,9 +19,9 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'Bases de données',
     droit: Droit.Databases,
     items: [
-      { label: 'Bases SAGE', path: '/sage-databases', icon: 'server', droit: Droit.Databases },
+      { label: 'Bases RH / paie', path: '/sage-databases', icon: 'server', droit: Droit.Databases },
       {
-        label: 'Bases pointeuse',
+        label: 'Bases de pointage',
         path: '/pointeuse-databases',
         icon: 'clock',
         droit: Droit.Databases,

@@ -11,6 +11,13 @@ public class TimekeepingService
     private readonly IPointeuseContextFactory _pointeuseFactory;
     private readonly PointeuseReaderResolver _pointeuseReaders;
 
+    private static string? NormalizeTypePointage(string? type)
+    {
+        if (string.IsNullOrWhiteSpace(type)) return type;
+        type = type.Trim();
+        return type.Length > 2 ? type[..2] : type;
+    }
+
     public TimekeepingService(IUnitOfWork uow, TenantConnectionService tenant, IPointeuseContextFactory pointeuseFactory, PointeuseReaderResolver pointeuseReaders)
     {
         _uow = uow;
@@ -82,7 +89,7 @@ public class TimekeepingService
                 DATE_POINTAGE = punch.DateHeure.Date,
                 HEURE_POINTAGE = punch.DateHeure.TimeOfDay,
                 DATE_IMPORTATION = DateTime.Now,
-                TYPE_POINTAGE = NormalizePunchType(punch.Type, pteRow.TYPE_POINTAGE),
+                TYPE_POINTAGE = NormalizeTypePointage(string.IsNullOrWhiteSpace(punch.Type) ? pteRow.TYPE_POINTAGE : punch.Type),
                 IDUNIQUE_POINTAGE = idUnique
             }, ct);
             imported++;

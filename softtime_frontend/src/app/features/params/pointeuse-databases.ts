@@ -35,7 +35,7 @@ import { asRow } from '../../shared/utils/date';
     SoftToggle,
   ],
   template: `
-    <page-header title="Bases pointeuse" subtitle="Connexions aux bases pointeuse (ou toute autre base)">
+    <page-header title="Bases de pointage" subtitle="Connexions aux bases de pointage (pointeuse standard ou toute autre base)">
       <soft-button (click)="openCreate()">Ajouter</soft-button>
     </page-header>
     <soft-card>
