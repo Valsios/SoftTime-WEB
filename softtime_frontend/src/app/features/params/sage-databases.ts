@@ -36,7 +36,7 @@ import { asRow } from '../../shared/utils/date';
     SoftToggle,
   ],
   template: `
-    <page-header title="Bases SAGE" subtitle="Connexions aux bases SAGE (ou toute autre base)">
+    <page-header title="Bases RH / paie" subtitle="Connexions aux bases RH / paie (SAGE ou toute autre base)">
       <soft-button (click)="openCreate()">Ajouter</soft-button>
     </page-header>
     <soft-card>
@@ -150,7 +150,7 @@ export class SageDatabasesPage implements OnInit {
   readonly testing = signal(false);
   readonly testResult = signal<ConnectionTestResult | null>(null);
   readonly typeTabs: TabItem[] = [
-    { id: 'STANDARD', label: 'Base SAGE standard' },
+    { id: 'STANDARD', label: 'SAGE (standard)' },
     { id: 'AUTRE', label: 'Autre base' },
   ];
   private bases_ : string[] = [];
