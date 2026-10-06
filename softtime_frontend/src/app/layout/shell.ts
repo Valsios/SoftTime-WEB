@@ -83,7 +83,7 @@ import { ToastService } from '../core/toast.service';
             <div class="topbar__company">
               <select
                 (change)="onPointeuseChange($event)"
-                aria-label="Base pointeuse"
+                aria-label="Base de pointage"
               >
                 @for (db of pointeuseDbs(); track db.id) {
                   <option [value]="db.nomBd" [selected]="db.nomBd === session.activePointeuseDb()">{{ db.nomBd }}</option>
