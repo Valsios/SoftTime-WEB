@@ -318,6 +318,10 @@ public class CatalogService
 
     private async Task<DepartementServiceDto> LookupFromSageAsync(string matricule, CancellationToken ct)
     {
+        var sageRow = await _tenant.GetSageRowAsync(ct);
+        if (sageRow.TYPE_BASE != "STANDARD")
+            return new DepartementServiceDto(matricule, null, null);
+
         var mat = matricule.Trim();
         using var sage = _sageFactory.Create(await _tenant.GetSageConnectionAsync(ct));
 
@@ -350,6 +354,9 @@ public class CatalogService
             return Array.Empty<DepartementServiceDto>();
 
         var config = await GetSourceConfigAsync(ct);
+        var sageRow = await _tenant.GetSageRowAsync(ct);
+        if (sageRow.TYPE_BASE != "STANDARD" && config.Mode != "AUTRE")
+            return list.Select(m => new DepartementServiceDto(m, null, null)).ToList();
 
         if (config.Mode == "AUTRE")
         {
