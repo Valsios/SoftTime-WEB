@@ -18,6 +18,7 @@ import {
   DepartementService,
   ConnectionTestResult,
   FieldRole,
+  PayrollWriteConfiguration,
 } from '../models';
 
 @Injectable({ providedIn: 'root' })
@@ -231,5 +232,34 @@ export class CodeConstantesService extends ApiService {
   }
   sageOptions(): Observable<SageConstantOption[]> {
     return this.http.get<SageConstantOption[]>(this.url('/api/code-constantes/sage-options'));
+  }
+  /** Tables candidates pour un code constante de base AUTRE (table du mapping CONSTANT). */
+  otherTables(): Observable<string[]> {
+    return this.http.get<string[]>(this.url('/api/code-constantes/autre-tables'));
+  }
+  /** Valeurs distinctes de la colonne de code constante mappee pour une base AUTRE. */
+  otherValues(table: string): Observable<string[]> {
+    return this.http.get<string[]>(this.url('/api/code-constantes/autre-values'), {
+      params: this.params({ table }),
+    });
+  }
+}
+
+@Injectable({ providedIn: 'root' })
+export class PayrollWriteConfigurationService extends ApiService {
+  list(): Observable<PayrollWriteConfiguration[]> {
+    return this.http.get<PayrollWriteConfiguration[]>(this.url('/api/payroll-write-config'));
+  }
+  create(dto: PayrollWriteConfiguration): Observable<PayrollWriteConfiguration> {
+    return this.http.post<PayrollWriteConfiguration>(this.url('/api/payroll-write-config'), dto);
+  }
+  update(id: number, dto: PayrollWriteConfiguration): Observable<PayrollWriteConfiguration> {
+    return this.http.put<PayrollWriteConfiguration>(this.url(`/api/payroll-write-config/${id}`), dto);
+  }
+  remove(id: number): Observable<void> {
+    return this.http.delete<void>(this.url(`/api/payroll-write-config/${id}`));
+  }
+  test(): Observable<ConnectionTestResult> {
+    return this.http.post<ConnectionTestResult>(this.url('/api/payroll-write-config/test'), {});
   }
 }

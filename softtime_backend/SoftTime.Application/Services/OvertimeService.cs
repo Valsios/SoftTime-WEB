@@ -13,16 +13,14 @@ public class OvertimeService
     private readonly IUnitOfWork _uow;
     private readonly TenantConnectionService _tenant;
     private readonly IExternalSourceService _externalSource;
-    private readonly ISagePayrollWriter _payroll;
-    private readonly CatalogService _catalog;
+    private readonly PayrollWriterResolver _payrollWriters;
 
-    public OvertimeService(IUnitOfWork uow, TenantConnectionService tenant, IExternalSourceService externalSource, ISagePayrollWriter payroll, CatalogService catalog)
+    public OvertimeService(IUnitOfWork uow, TenantConnectionService tenant, IExternalSourceService externalSource, PayrollWriterResolver payrollWriters)
     {
         _uow = uow;
         _tenant = tenant;
         _externalSource = externalSource;
-        _payroll = payroll;
-        _catalog = catalog;
+        _payrollWriters = payrollWriters;
     }
 
     public async Task<IReadOnlyList<WeeklyHsDto>> PreviewWeekAsync(PeriodRequest request, CancellationToken ct = default)
@@ -213,25 +211,30 @@ public class OvertimeService
         await _uow.SaveChangesAsync(ct);
     }
 
+    // Endpoint historique : conserve pour les integrations existantes, uniquement pour STANDARD.
     public async Task SyncSageAsync(PeriodRequest request, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
+        var sageRow = await _tenant.GetSageRowAsync(ct);
+        if (!string.Equals(sageRow.TYPE_BASE, "STANDARD", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "La synchronisation SAGE est disponible uniquement pour une base STANDARD. Utilisez la synchronisation de paie pour une base AUTRE.");
+        await SyncPayrollAsync(request, ct);
+    }
+
+    // Ecriture de paie unifiee : le resolveur choisit le writer STANDARD (T_CUMSAL) ou AUTRE (T_PAIE_ECRITURE).
+    public async Task<PayrollWriteResultDto> SyncPayrollAsync(PeriodRequest request, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
         EnsureMondayToSunday(request);
+        var sageRow = await _tenant.GetSageRowAsync(ct);
         var rows = await _uow.Repository<T_HSExoImp>().ListAsync(h =>
             h.BDD_SAGE == _tenant.SageDb && h.PeriodeDebut == request.From.Date && h.PeriodeFin == request.To.Date, ct);
-        var sageRow = await _tenant.GetSageRowAsync(ct);
-        var constants = (await _externalSource.GetConstantsAsync(sageRow, ct))
-            .Where(c => c.Code is not null)
-            .Select(c => new T_CST { CodeConstante = c.Code!.Trim(), CodeOperande1 = c.Operande, Intitule = c.Label })
-            .ToArray();
-        var conn = await _tenant.GetSageConnectionAsync(ct);
-        var codes = await _catalog.GetOvertimeSageCodesAsync(ct);
-        foreach (var hs in rows.Where(h => h.NumSal.HasValue))
-        {
-            await _payroll.SyncOvertimeAsync(conn, constants, hs.NumSal!.Value, codes,
-                hs.EXO130 ?? 0, hs.EXO150 ?? 0, hs.I130 ?? 0, hs.I150 ?? 0,
-                hs.FERIE ?? 0, hs.NUIT ?? 0, hs.DIM ?? 0, ct);
-        }
+        var dtos = rows
+            .Select(h => new HsExoDto(h.OID, h.Matricule, h.NumSal, h.EXO130, h.EXO150, h.I130, h.I150,
+                h.FERIE, h.NUIT, h.DIM, h.RETARD, h.ABSENCE))
+            .ToList();
+        return await _payrollWriters.Resolve(sageRow).WriteAsync(sageRow, dtos, ct);
     }
 
     private async Task<List<WeeklyHsDto>> ComputeWeekAsync(PeriodRequest request, bool persistNonValidated, CancellationToken ct)

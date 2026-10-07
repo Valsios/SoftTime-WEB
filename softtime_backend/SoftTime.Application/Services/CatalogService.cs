@@ -332,6 +332,193 @@ public class CatalogService
         }).ToList();
     }
 
+    /// <summary>
+    /// Options de departement / service proposees pour une base AUTRE.
+    /// Adapte au nouveau schema : elles proviennent du mapping de l'entite AFFECTATION
+    /// (roles SAGE_AFF_DEPARTEMENT / SAGE_AFF_SERVICE) et non plus des colonnes MAP_*.
+    /// </summary>
+    public async Task<DepartementServiceOptionsDto> GetDepartementServiceOptionsAsync(CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var database = await _tenant.GetSageRowAsync(ct);
+        if (!string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase))
+            return new DepartementServiceOptionsDto(Array.Empty<string>(), Array.Empty<string>());
+
+        var entity = (await _uow.Repository<T_SOURCE_ENTITY_MAPPING>()
+                .ListAsync(m => m.SageDbId == database.ID && m.EntityKind == "AFFECTATION", ct))
+            .FirstOrDefault();
+        if (entity is null || string.IsNullOrWhiteSpace(entity.SourceTable))
+            return new DepartementServiceOptionsDto(Array.Empty<string>(), Array.Empty<string>());
+
+        var fields = await _uow.Repository<T_SOURCE_FIELD_MAPPING>()
+            .ListAsync(f => f.EntityMappingId == entity.Id, ct);
+        string? ColumnOf(string role) => fields
+            .FirstOrDefault(f => string.Equals(f.FieldRoleCode, role, StringComparison.OrdinalIgnoreCase))
+            ?.SourceColumn?.Trim();
+
+        async Task<IReadOnlyList<string>> ValuesAsync(string role)
+        {
+            var column = ColumnOf(role);
+            if (string.IsNullOrWhiteSpace(column))
+                return Array.Empty<string>();
+            ValidateSourceIdentifier(entity.SourceTable);
+            ValidateSourceIdentifier(column);
+            return await _discovery.ListDistinctValuesAsync(
+                database.SERVEUR!, database.NOM_BD!, entity.SourceTable!, column!,
+                database.TYPE_AUTH == true, database.TLOGIN, database.TMDP, ct);
+        }
+
+        return new DepartementServiceOptionsDto(
+            await ValuesAsync("SAGE_AFF_DEPARTEMENT"),
+            await ValuesAsync("SAGE_AFF_SERVICE"));
+    }
+
+    // --- Configuration de l'ecriture de paie dynamique (bases AUTRE) ---
+
+    public async Task<IReadOnlyList<PayrollWriteConfigurationDto>> ListPayrollWriteConfigurationsAsync(CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        await PayrollWritingConfiguration.EnsureStorageAsync(_uow, ct);
+        var list = await _uow.Repository<T_PAIE_ECRITURE>().ListAsync(c => c.BDD_SAGE == _tenant.SageDb, ct);
+        return list.OrderBy(c => Array.IndexOf(PayrollWritingConfiguration.Categories, c.CATEGORIE))
+            .Select(c => new PayrollWriteConfigurationDto(c.ID, c.TABLE_CIBLE, c.COL_MATRICULE, c.CATEGORIE, c.COL_VALEUR)).ToList();
+    }
+
+    public async Task<PayrollWriteConfigurationDto> SavePayrollWriteConfigurationAsync(PayrollWriteConfigurationDto dto, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var database = await _tenant.GetSageRowAsync(ct);
+        if (!string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("La configuration d'écriture dynamique est réservée aux bases AUTRE.");
+        await PayrollWritingConfiguration.EnsureStorageAsync(_uow, ct);
+        var category = PayrollWritingConfiguration.NormalizeCategory(dto.Categorie);
+        PayrollWritingConfiguration.ValidateIdentifier(dto.TableCible, "La table cible", allowQualifiedTable: true);
+        PayrollWritingConfiguration.ValidateIdentifier(dto.ColMatricule, "La colonne matricule");
+        PayrollWritingConfiguration.ValidateIdentifier(dto.ColValeur, "La colonne de valeur");
+        var repo = _uow.Repository<T_PAIE_ECRITURE>();
+        var current = await repo.ListAsync(c => c.BDD_SAGE == _tenant.SageDb, ct);
+        if (current.Any(c => c.ID != dto.Id && string.Equals(c.CATEGORIE, category, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException($"La catégorie {category} est déjà configurée pour cette base.");
+        T_PAIE_ECRITURE entity;
+        if (dto.Id == 0)
+        {
+            entity = new T_PAIE_ECRITURE { BDD_SAGE = _tenant.SageDb };
+            await repo.AddAsync(entity, ct);
+        }
+        else
+        {
+            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
+            if (!string.Equals(entity.BDD_SAGE, _tenant.SageDb, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Cette configuration appartient à une autre base.");
+            repo.Update(entity);
+        }
+        entity.TABLE_CIBLE = dto.TableCible!.Trim();
+        entity.COL_MATRICULE = dto.ColMatricule!.Trim();
+        entity.CATEGORIE = category;
+        entity.COL_VALEUR = dto.ColValeur!.Trim();
+        await _uow.SaveChangesAsync(ct);
+        return new PayrollWriteConfigurationDto(entity.ID, entity.TABLE_CIBLE, entity.COL_MATRICULE, entity.CATEGORIE, entity.COL_VALEUR);
+    }
+
+    public async Task DeletePayrollWriteConfigurationAsync(int id, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        await PayrollWritingConfiguration.EnsureStorageAsync(_uow, ct);
+        var entity = await _uow.Repository<T_PAIE_ECRITURE>().GetByIdAsync(id, ct) ?? throw new KeyNotFoundException();
+        if (!string.Equals(entity.BDD_SAGE, _tenant.SageDb, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Cette configuration appartient à une autre base.");
+        _uow.Repository<T_PAIE_ECRITURE>().Remove(entity);
+        await _uow.SaveChangesAsync(ct);
+    }
+
+    public async Task<ConnectionTestResultDto> TestPayrollWriteConfigurationAsync(CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var database = await _tenant.GetSageRowAsync(ct);
+        if (!string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase))
+            return new ConnectionTestResultDto(false, "Cette configuration est réservée aux bases AUTRE.");
+        try
+        {
+            await PayrollWritingConfiguration.EnsureStorageAsync(_uow, ct);
+            var configs = await _uow.Repository<T_PAIE_ECRITURE>().ListAsync(c => c.BDD_SAGE == _tenant.SageDb, ct);
+            var missing = PayrollWritingConfiguration.Categories.FirstOrDefault(category => !configs.Any(c => string.Equals(c.CATEGORIE, category, StringComparison.OrdinalIgnoreCase)));
+            if (missing != null)
+                return new ConnectionTestResultDto(false, $"La configuration d'écriture de la base AUTRE est incomplète : la catégorie {missing} n'est pas configurée.");
+            var first = configs.First();
+            if (configs.Any(c => !string.Equals(c.TABLE_CIBLE, first.TABLE_CIBLE, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(c.COL_MATRICULE, first.COL_MATRICULE, StringComparison.OrdinalIgnoreCase)))
+                return new ConnectionTestResultDto(false, "Toutes les catégories doivent utiliser la même table cible et la même colonne matricule.");
+            var (schema, table) = PayrollWritingConfiguration.SplitTable(first.TABLE_CIBLE);
+            if (!string.Equals(schema, "dbo", StringComparison.OrdinalIgnoreCase))
+                return new ConnectionTestResultDto(false, "La découverte des tables ne prend actuellement en charge que le schéma dbo.");
+            var tables = await _discovery.ListTablesAsync(database.SERVEUR!, database.NOM_BD!, database.TYPE_AUTH == true, database.TLOGIN, database.TMDP, ct);
+            if (!tables.Contains(table, StringComparer.OrdinalIgnoreCase))
+                return new ConnectionTestResultDto(false, $"La table {first.TABLE_CIBLE} n'existe pas.");
+            var columns = await _discovery.ListColumnsAsync(database.SERVEUR!, database.NOM_BD!, table, database.TYPE_AUTH == true, database.TLOGIN, database.TMDP, ct);
+            var required = configs.Select(c => c.COL_VALEUR).Append(first.COL_MATRICULE).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var missingColumn = required.FirstOrDefault(column => !columns.Contains(column, StringComparer.OrdinalIgnoreCase));
+            return missingColumn == null
+                ? new ConnectionTestResultDto(true, "Configuration d'écriture valide.")
+                : new ConnectionTestResultDto(false, $"La colonne {missingColumn} n'existe pas.");
+        }
+        catch (Exception ex)
+        {
+            return new ConnectionTestResultDto(false, $"Validation impossible : {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Tables candidates pour le choix d'un code constante sur une base AUTRE.
+    /// Adapte au nouveau schema : la table provient du mapping CONSTANT (role SAGE_CST_CODE).
+    /// </summary>
+    public async Task<IReadOnlyList<string>> ListOtherCodeConstantTablesAsync(CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var (table, _) = await GetOtherCodeConstantMappingAsync(ct);
+        return new[] { table };
+    }
+
+    /// <summary>
+    /// Valeurs distinctes de la colonne de code constante pour une base AUTRE.
+    /// Adapte au nouveau schema : table et colonne proviennent du mapping CONSTANT
+    /// (le parametre <paramref name="table"/> n'est conserve que pour la compatibilite de l'API).
+    /// </summary>
+    public async Task<IReadOnlyList<string>> ListOtherCodeConstantValuesAsync(string table, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        return await ListMappedCodeConstantValuesAsync(ct);
+    }
+
+    // Valeurs distinctes de la colonne de code constante definie par le mapping CONSTANT.
+    private async Task<IReadOnlyList<string>> ListMappedCodeConstantValuesAsync(CancellationToken ct)
+    {
+        var database = await _tenant.GetSageRowAsync(ct);
+        var (mappedTable, column) = await GetOtherCodeConstantMappingAsync(ct);
+        ValidateSourceIdentifier(mappedTable);
+        ValidateSourceIdentifier(column);
+        return await _discovery.ListDistinctValuesAsync(database.SERVEUR!, database.NOM_BD!, mappedTable, column,
+            database.TYPE_AUTH == true, database.TLOGIN, database.TMDP, ct);
+    }
+
+    // Resout la table/colonne du code constante depuis le mapping de l'entite CONSTANT.
+    private async Task<(string Table, string Column)> GetOtherCodeConstantMappingAsync(CancellationToken ct)
+    {
+        var database = await _tenant.GetSageRowAsync(ct);
+        if (!string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Cette liste est réservée aux bases AUTRE.");
+        var entity = (await _uow.Repository<T_SOURCE_ENTITY_MAPPING>()
+                .ListAsync(m => m.SageDbId == database.ID && m.EntityKind == "CONSTANT", ct))
+            .FirstOrDefault();
+        if (entity is null || string.IsNullOrWhiteSpace(entity.SourceTable))
+            throw new InvalidOperationException("Configurez d'abord le mapping « Code constante » (table et colonne) dans Bases RH / paie.");
+        var field = (await _uow.Repository<T_SOURCE_FIELD_MAPPING>()
+                .ListAsync(f => f.EntityMappingId == entity.Id && f.FieldRoleCode == "SAGE_CST_CODE", ct))
+            .FirstOrDefault();
+        if (field is null || string.IsNullOrWhiteSpace(field.SourceColumn))
+            throw new InvalidOperationException("La colonne de code constante n'est pas mappée (rôle SAGE_CST_CODE).");
+        return (entity.SourceTable!.Trim(), field.SourceColumn!.Trim());
+    }
+
     public Task<IReadOnlyList<string>> DiscoverServersAsync(CancellationToken ct = default)
         => _discovery.ListServersAsync(ct);
 
@@ -1254,23 +1441,42 @@ public class CatalogService
         await EnsureCodeConstantesAsync(ct);
         var list = await _uow.Repository<T_CODE_CONSTANTE>().ListAsync(_ => true, ct);
         var order = OvertimeCodeKeys.Defaults.Select((d, i) => (d.Key, i)).ToDictionary(x => x.Key, x => x.i);
+        // Sur une base AUTRE, la table cible provient du mapping « Code constante » : on l'expose
+        // pour que l'ecran pre-selectionne la bonne table (le code reste global, comme dans la refonte).
+        string? mappedTable = null;
+        var database = await _tenant.GetSageRowAsync(ct);
+        if (string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase))
+        {
+            try { mappedTable = (await GetOtherCodeConstantMappingAsync(ct)).Table; }
+            catch (InvalidOperationException) { mappedTable = null; }
+        }
         return list
             .OrderBy(c => order.TryGetValue(c.CATEGORIE, out var i) ? i : 99)
-            .Select(_mapper.Map<CodeConstanteDto>)
+            .Select(c => _mapper.Map<CodeConstanteDto>(c) with { TableCible = mappedTable })
             .ToList();
     }
 
     public async Task<CodeConstanteDto> SaveCodeConstanteAsync(CodeConstanteDto dto, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
+        var code = (dto.CodeConstante ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(code))
+            throw new InvalidOperationException("Le code constante SAGE est requis.");
+        var database = await _tenant.GetSageRowAsync(ct);
+        if (string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase))
+        {
+            // Herite de la fonctionnalite « code constante » de la base AUTRE : le code choisi doit
+            // exister dans la colonne mappee (role SAGE_CST_CODE) de la table cible.
+            var values = await ListMappedCodeConstantValuesAsync(ct);
+            if (!values.Contains(code, StringComparer.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Le code constante sélectionné n'existe pas dans la table mappée.");
+        }
         var repo = _uow.Repository<T_CODE_CONSTANTE>();
         var entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
-        entity.CODE_CONSTANTE = (dto.CodeConstante ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(entity.CODE_CONSTANTE))
-            throw new InvalidOperationException("Le code constante SAGE est requis.");
+        entity.CODE_CONSTANTE = code;
         repo.Update(entity);
         await _uow.SaveChangesAsync(ct);
-        return _mapper.Map<CodeConstanteDto>(entity);
+        return _mapper.Map<CodeConstanteDto>(entity) with { TableCible = dto.TableCible };
     }
 
     public async Task<IReadOnlyList<SageConstantOptionDto>> ListSageConstantOptionsAsync(CancellationToken ct = default)

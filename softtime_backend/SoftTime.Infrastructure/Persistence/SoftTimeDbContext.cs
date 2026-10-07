@@ -46,6 +46,7 @@ public class SoftTimeDbContext : DbContext
     public DbSet<T_CARDPAIE> T_CARDPAIE => Set<T_CARDPAIE>();
     public DbSet<T_HSSAL> T_HSSAL => Set<T_HSSAL>();
     public DbSet<T_CODE_CONSTANTE> T_CODE_CONSTANTE => Set<T_CODE_CONSTANTE>();
+    public DbSet<T_PAIE_ECRITURE> T_PAIE_ECRITURE => Set<T_PAIE_ECRITURE>();
     public DbSet<T_FIELD_ROLE> T_FIELD_ROLE => Set<T_FIELD_ROLE>();
     public DbSet<T_SOURCE_ENTITY_MAPPING> T_SOURCE_ENTITY_MAPPING => Set<T_SOURCE_ENTITY_MAPPING>();
     public DbSet<T_SOURCE_FIELD_MAPPING> T_SOURCE_FIELD_MAPPING => Set<T_SOURCE_FIELD_MAPPING>();
@@ -60,6 +61,12 @@ public class SoftTimeDbContext : DbContext
         {
             e.ToTable("T_MAJORATION");
             e.Property(x => x.Cotation).HasPrecision(18, 2);
+        });
+
+        modelBuilder.Entity<T_PAIE_ECRITURE>(e =>
+        {
+            e.ToTable("T_PAIE_ECRITURE");
+            e.HasIndex(x => new { x.BDD_SAGE, x.CATEGORIE }).IsUnique();
         });
 
         modelBuilder.Entity<T_RESPONSABLE>(e =>
