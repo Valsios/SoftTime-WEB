@@ -12,4 +12,7 @@ public interface IExternalDiscoveryService
 
     Task<IReadOnlyList<string>> ListColumnsAsync(
         string serveur, string baseDb, string table, bool sqlAuth, string? login, string? password, CancellationToken ct = default);
+
+    Task<IReadOnlyList<string>> ListDistinctValuesAsync(
+        string serveur, string baseDb, string table, string column, bool sqlAuth, string? login, string? password, CancellationToken ct = default);
 }

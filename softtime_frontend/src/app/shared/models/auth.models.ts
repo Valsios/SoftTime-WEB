@@ -14,6 +14,8 @@ export interface SageDb {
   mapColDepartement?: string | null;
   mapColService?: string | null;
   mapColCodeDepartement?: string | null;
+  mapTableCodeConstante?: string | null;
+  mapColCodeConstante?: string | null;
 }
 
 export interface LoginRequest {

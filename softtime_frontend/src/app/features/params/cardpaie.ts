@@ -3,7 +3,8 @@ import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { CardPaie, DepartementService } from '../../shared/models';
-import { CardPaieService, SourceConfigService } from '../../shared/services/catalog.service';
+import { CardPaieService } from '../../shared/services/catalog.service';
+import { SageDatabasesService } from '../../shared/services/users.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal } from '../../shared/components';
 import { asRow, fmtDate } from '../../shared/utils/date';
@@ -51,7 +52,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
 })
 export class CardPaiePage implements OnInit {
   private readonly svc = inject(CardPaieService);
-  private readonly sourceConfig = inject(SourceConfigService);
+  private readonly sageDatabases = inject(SageDatabasesService);
   private readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
@@ -95,7 +96,7 @@ export class CardPaiePage implements OnInit {
       .filter((m): m is string => !!m);
     if (matricules.length === 0) return;
 
-    this.sourceConfig.lookupBatch(matricules).subscribe({
+    this.sageDatabases.lookupBatch(matricules).subscribe({
       next: (results) => {
         const byMat = new Map<string, DepartementService>(results.map((r) => [r.matricule.trim(), r]));
         const merged = this.rows().map((row) => {

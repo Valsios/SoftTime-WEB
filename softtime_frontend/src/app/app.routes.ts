@@ -125,10 +125,13 @@ export const routes: Routes = [
       },
       {
         path: 'source-config',
-        canActivate: [droitGuard],
-        data: { droit: Droit.Parameters },
-        loadComponent: () =>
-          import('./features/params/source-config').then((m) => m.SourceConfigPage),
+        pathMatch: 'full',
+        redirectTo: 'sage-databases',
+      },
+      {
+        path: 'payroll-write-config',
+        pathMatch: 'full',
+        redirectTo: 'code-constantes',
       },
       // Processing (droit 3)
       {

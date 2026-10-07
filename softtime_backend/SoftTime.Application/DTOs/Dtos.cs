@@ -50,7 +50,9 @@ public record SageDbDto(
     string? MapColBadge = null,
     string? MapColDepartement = null,
     string? MapColService = null,
-    string? MapColCodeDepartement = null)
+    string? MapColCodeDepartement = null,
+    string? MapTableCodeConstante = null,
+    string? MapColCodeConstante = null)
 {
     public SageDbDto() : this(default, default, default, default, default, default) { }
 }
@@ -128,29 +130,12 @@ public record MajorationDto(int Id, string? Mojoration, decimal? Cotation)
     public MajorationDto() : this(default, default, default) { }
 }
 
-public record SourceConfigDto(
-    int Id,
-    string Mode,
-    string? TableName,
-    string? ColMatricule,
-    string? ColDepartement,
-    string? ColService,
-    string? ColCodeDepartement,
-    string? ExtServeur = null,
-    string? ExtBase = null,
-    string? ExtLogin = null,
-    string? ExtPassword = null,
-    bool ExtSqlAuth = true)
-{
-    public SourceConfigDto() : this(default, "SAGE", default, default, default, default, default) { }
-}
-
 public record DepartementServiceDto(string Matricule, string? Departement, string? Service);
 public record DiscoverDatabasesDto(string Serveur, bool SqlAuth, string? Login, string? Password);
 public record DiscoverTablesDto(string Serveur, string Base, bool SqlAuth, string? Login, string? Password);
 public record DiscoverColumnsDto(string Serveur, string Base, string Table, bool SqlAuth, string? Login, string? Password);
 
-public record CodeConstanteDto(int Id, string Categorie, string? Intitule, string CodeConstante)
+public record CodeConstanteDto(int Id, string Categorie, string? Intitule, string CodeConstante, string? TableCible = null)
 {
     public CodeConstanteDto() : this(default, default!, default, default!) { }
 }
@@ -159,6 +144,8 @@ public record SageConstantOptionDto(string Code, string? Intitule)
 {
     public SageConstantOptionDto() : this(default!, default) { }
 }
+
+public record DepartementServiceOptionsDto(IReadOnlyList<string> Departements, IReadOnlyList<string> Services);
 
 public record OvertimeSageCodes(string Exo130, string Exo150, string I130, string I150, string Ferie, string Dim, string Nuit)
 {
@@ -267,3 +254,10 @@ public record ReportFilter(string? MatriculeFrom, string? MatriculeTo, DateTime 
 {
     public ReportFilter() : this(default, default, default, default, default) { }
 }
+
+public record PayrollWriteConfigurationDto(int Id, string? TableCible, string? ColMatricule, string Categorie, string? ColValeur)
+{
+    public PayrollWriteConfigurationDto() : this(default, default, default, "Exo130", default) { }
+}
+
+public record PayrollWriteResultDto(string Database, string TypeBase, int EmployeesUpdated, int CategoriesUpdated, string Message);

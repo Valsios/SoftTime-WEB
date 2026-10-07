@@ -107,6 +107,23 @@ import { asRow } from '../../shared/utils/date';
               <soft-select label="Colonne code département" [options]="columnOptions(true)" placeholder="Aucune" [(ngModel)]="form.mapColCodeDepartement" name="mapColCodeDepartement"></soft-select>
             }
           }
+          <p class="section-title">Configuration code constante</p>
+          <soft-select
+            label="Table cible du code constante"
+            [required]="true"
+            [options]="tableOptions()"
+            placeholder="Sélectionner une table"
+            [ngModel]="form.mapTableCodeConstante"
+            name="mapTableCodeConstante"
+            (ngModelChange)="onCodeConstantTableChange($event)"
+          ></soft-select>
+          @if (form.mapTableCodeConstante) {
+            @if (loadingCodeConstantColumns()) {
+              <p class="muted">Chargement des colonnes de code constante...</p>
+            } @else {
+              <soft-select label="Colonne code constante" [required]="true" [options]="codeConstantColumnOptions()" placeholder="Choisir" [(ngModel)]="form.mapColCodeConstante" name="mapColCodeConstante"></soft-select>
+            }
+          }
         }
         <div class="test-row">
           <soft-button variant="secondary" size="sm" [loading]="testing()" (click)="testConnection()">Tester la connexion</soft-button>
@@ -147,6 +164,7 @@ export class SageDatabasesPage implements OnInit {
   readonly loadingBases = signal(false);
   readonly loadingTables = signal(false);
   readonly loadingColumns = signal(false);
+  readonly loadingCodeConstantColumns = signal(false);
   readonly testing = signal(false);
   readonly testResult = signal<ConnectionTestResult | null>(null);
   readonly typeTabs: TabItem[] = [
@@ -156,6 +174,7 @@ export class SageDatabasesPage implements OnInit {
   private bases_ : string[] = [];
   private tables: string[] = [];
   private dbColumns: string[] = [];
+  private codeConstantColumns: string[] = [];
   form: Partial<SageDb> = {};
   readonly columns: Column[] = [
     { key: 'id', label: 'ID' },
@@ -171,6 +190,7 @@ export class SageDatabasesPage implements OnInit {
     const opts = this.dbColumns.map((c) => ({ value: c, label: c }));
     return withNone ? [{ value: null, label: 'Aucune' }, ...opts] : opts;
   }
+  codeConstantColumnOptions(): SelectOption[] { return this.codeConstantColumns.map((c) => ({ value: c, label: c })); }
   ngOnInit(): void { this.load(); }
   load(): void {
     this.loading.set(true);
@@ -190,6 +210,7 @@ export class SageDatabasesPage implements OnInit {
     this.form = { ...(row as unknown as SageDb) };
     this.resetDiscoveryState();
     if (this.form.serveur) this.loadBases();
+    if (this.form.typeBase === 'AUTRE' && this.form.serveur && this.form.nomBd) this.loadTables();
     this.modal.set(true);
   }
   closeModal(): void { this.modal.set(false); }
@@ -204,7 +225,10 @@ export class SageDatabasesPage implements OnInit {
       this.form.mapColDepartement = null;
       this.form.mapColService = null;
       this.form.mapColCodeDepartement = null;
+      this.form.mapTableCodeConstante = null;
+      this.form.mapColCodeConstante = null;
     }
+    if (t === 'AUTRE' && this.form.serveur && this.form.nomBd) this.loadTables();
     this.testResult.set(null);
   }
   private authPayload() {
@@ -215,6 +239,7 @@ export class SageDatabasesPage implements OnInit {
     this.bases_ = [];
     this.tables = [];
     this.dbColumns = [];
+    this.codeConstantColumns = [];
     this.testResult.set(null);
   }
   resetDiscovery(): void { this.resetDiscoveryState(); }
@@ -230,6 +255,17 @@ export class SageDatabasesPage implements OnInit {
     this.form.nomBd = base;
     this.tables = [];
     this.dbColumns = [];
+    this.codeConstantColumns = [];
+    this.form.mapTable = null;
+    this.form.mapColMatricule = null;
+    this.form.mapColNom = null;
+    this.form.mapColPrenom = null;
+    this.form.mapColBadge = null;
+    this.form.mapColDepartement = null;
+    this.form.mapColService = null;
+    this.form.mapColCodeDepartement = null;
+    this.form.mapTableCodeConstante = null;
+    this.form.mapColCodeConstante = null;
     this.testResult.set(null);
     if (this.form.typeBase === 'AUTRE' && base && this.form.serveur) this.loadTables();
   }
@@ -237,7 +273,12 @@ export class SageDatabasesPage implements OnInit {
     if (!this.form.serveur || !this.form.nomBd) return;
     this.loadingTables.set(true);
     this.discovery.tables({ serveur: this.form.serveur, base: this.form.nomBd, ...this.authPayload() }).subscribe({
-      next: (list) => { this.tables = list; this.loadingTables.set(false); },
+      next: (list) => {
+        this.tables = list;
+        this.loadingTables.set(false);
+        if (this.form.mapTable) this.loadEmployeeColumns();
+        if (this.form.mapTableCodeConstante) this.loadCodeConstantColumns();
+      },
       error: () => { this.loadingTables.set(false); this.toast.error('Impossible de lister les tables de cette base.'); },
     });
   }
@@ -251,11 +292,30 @@ export class SageDatabasesPage implements OnInit {
     this.form.mapColDepartement = null;
     this.form.mapColService = null;
     this.form.mapColCodeDepartement = null;
+    this.loadEmployeeColumns();
+  }
+  private loadEmployeeColumns(): void {
+    const table = this.form.mapTable;
     if (!table || !this.form.serveur || !this.form.nomBd) return;
     this.loadingColumns.set(true);
     this.discovery.columns({ serveur: this.form.serveur, base: this.form.nomBd, table, ...this.authPayload() }).subscribe({
       next: (list) => { this.dbColumns = list; this.loadingColumns.set(false); },
       error: () => { this.loadingColumns.set(false); this.toast.error('Impossible de lister les colonnes de cette table.'); },
+    });
+  }
+  onCodeConstantTableChange(table: string | null): void {
+    this.form.mapTableCodeConstante = table;
+    this.form.mapColCodeConstante = null;
+    this.codeConstantColumns = [];
+    this.loadCodeConstantColumns();
+  }
+  private loadCodeConstantColumns(): void {
+    const table = this.form.mapTableCodeConstante;
+    if (!table || !this.form.serveur || !this.form.nomBd) return;
+    this.loadingCodeConstantColumns.set(true);
+    this.discovery.columns({ serveur: this.form.serveur, base: this.form.nomBd, table, ...this.authPayload() }).subscribe({
+      next: (list) => { this.codeConstantColumns = list; this.loadingCodeConstantColumns.set(false); },
+      error: () => { this.loadingCodeConstantColumns.set(false); this.toast.error('Impossible de lister les colonnes de cette table.'); },
     });
   }
   testConnection(): void {
@@ -267,6 +327,10 @@ export class SageDatabasesPage implements OnInit {
     });
   }
   save(): void {
+    if (this.form.typeBase === 'AUTRE' && (!this.form.mapTable || !this.form.mapColMatricule || !this.form.mapTableCodeConstante || !this.form.mapColCodeConstante)) {
+      this.toast.warning('Renseignez la table des employés, le matricule, la table cible et la colonne de code constante.');
+      return;
+    }
     this.saving.set(true);
     const id = this.editId();
     const dto = { ...(this.form as SageDb), typeBase: this.form.typeBase || 'STANDARD' };

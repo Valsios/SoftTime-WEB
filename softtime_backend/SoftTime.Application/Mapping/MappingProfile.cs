@@ -24,7 +24,9 @@ public class MappingProfile : Profile
             .ForMember(d => d.MapColBadge, o => o.MapFrom(s => s.MAP_COL_BADGE))
             .ForMember(d => d.MapColDepartement, o => o.MapFrom(s => s.MAP_COL_DEPARTEMENT))
             .ForMember(d => d.MapColService, o => o.MapFrom(s => s.MAP_COL_SERVICE))
-            .ForMember(d => d.MapColCodeDepartement, o => o.MapFrom(s => s.MAP_COL_CODE_DEPARTEMENT));
+            .ForMember(d => d.MapColCodeDepartement, o => o.MapFrom(s => s.MAP_COL_CODE_DEPARTEMENT))
+            .ForMember(d => d.MapTableCodeConstante, o => o.MapFrom(s => s.MAP_TABLE_CODE_CONSTANTE))
+            .ForMember(d => d.MapColCodeConstante, o => o.MapFrom(s => s.MAP_COL_CODE_CONSTANTE));
         CreateMap<SageDbDto, T_BDD_SAGE>()
             .ForMember(d => d.TYPE_AUTH, o => o.MapFrom(s => s.SqlAuth))
             .ForMember(d => d.NOM_BD, o => o.MapFrom(s => s.NomBd))
@@ -39,7 +41,9 @@ public class MappingProfile : Profile
             .ForMember(d => d.MAP_COL_BADGE, o => o.MapFrom(s => s.MapColBadge))
             .ForMember(d => d.MAP_COL_DEPARTEMENT, o => o.MapFrom(s => s.MapColDepartement))
             .ForMember(d => d.MAP_COL_SERVICE, o => o.MapFrom(s => s.MapColService))
-            .ForMember(d => d.MAP_COL_CODE_DEPARTEMENT, o => o.MapFrom(s => s.MapColCodeDepartement));
+            .ForMember(d => d.MAP_COL_CODE_DEPARTEMENT, o => o.MapFrom(s => s.MapColCodeDepartement))
+            .ForMember(d => d.MAP_TABLE_CODE_CONSTANTE, o => o.MapFrom(s => s.MapTableCodeConstante))
+            .ForMember(d => d.MAP_COL_CODE_CONSTANTE, o => o.MapFrom(s => s.MapColCodeConstante));
         CreateMap<T_BDD_POINTEUSE, PointeuseDbDto>()
             .ForMember(d => d.Id, o => o.MapFrom(s => s.ID))
             .ForMember(d => d.SqlAuth, o => o.MapFrom(s => s.TYPE_AUTH))
@@ -109,7 +113,8 @@ public class MappingProfile : Profile
             .ForMember(d => d.Id, o => o.MapFrom(s => s.ID))
             .ForMember(d => d.Categorie, o => o.MapFrom(s => s.CATEGORIE))
             .ForMember(d => d.Intitule, o => o.MapFrom(s => s.INTITULE))
-            .ForMember(d => d.CodeConstante, o => o.MapFrom(s => s.CODE_CONSTANTE));
+            .ForMember(d => d.CodeConstante, o => o.MapFrom(s => s.CODE_CONSTANTE))
+            .ForMember(d => d.TableCible, o => o.MapFrom(s => s.TABLE_CIBLE));
         CreateMap<T_FERIE, HolidayDto>();
         CreateMap<T_PLANNING, ShiftDto>()
             .ForMember(d => d.Id, o => o.MapFrom(s => s.IDPLANNING))

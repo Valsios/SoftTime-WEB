@@ -1,9 +1,11 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
+import { SessionStore } from '../../core/session.store';
 import { ToastService } from '../../core/toast.service';
 import { Affectation, CardPaie, Category, DepartementService } from '../../shared/models';
-import { AffectationsService, CardPaieService, CategoriesService, SourceConfigService } from '../../shared/services/catalog.service';
+import { AffectationsService, CardPaieService, CategoriesService } from '../../shared/services/catalog.service';
+import { SageDatabasesService } from '../../shared/services/users.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, SoftSelect } from '../../shared/components';
 import { asRow } from '../../shared/utils/date';
@@ -85,7 +87,8 @@ export class AffectationsPage implements OnInit {
   private readonly svc = inject(AffectationsService);
   private readonly catSvc = inject(CategoriesService);
   private readonly cardSvc = inject(CardPaieService);
-  private readonly sourceConfig = inject(SourceConfigService);
+  private readonly sageDatabases = inject(SageDatabasesService);
+  private readonly session = inject(SessionStore);
   private readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
@@ -106,6 +109,9 @@ export class AffectationsPage implements OnInit {
 
   private cardsById = new Map<number, CardPaie>();
   private enrichedRows: AffectationRow[] = [];
+  private cardsLoaded = false;
+  private activeDatabase: string | null = null;
+  private loadRevision = 0;
 
   readonly columns: Column[] = [
     { key: 'matricule', label: 'Matricule' },
@@ -116,17 +122,32 @@ export class AffectationsPage implements OnInit {
     { key: 'categoryId', label: 'Catégorie' },
   ];
 
+  constructor() {
+    effect(() => {
+      const active = this.session.activeSageDb();
+      if (this.activeDatabase === active) return;
+      this.activeDatabase = active;
+      this.filterDept = 'ALL';
+      this.filterService = 'ALL';
+      this.deptOptions.set([{ value: 'ALL', label: 'Tous' }]);
+      this.servOptions.set([{ value: 'ALL', label: 'Tous' }]);
+      if (this.cardsLoaded) this.load();
+    });
+  }
+
   ngOnInit(): void {
     this.catSvc.list().subscribe((cats) =>
       this.categoryOptions.set(cats.map((c) => ({ value: c.id, label: c.intitule ?? `Cat. ${c.id}` }))),
     );
     this.cardSvc.list().subscribe((cards) => {
       this.cardsById = new Map(cards.map((c) => [c.id, c]));
+      this.cardsLoaded = true;
       this.load();
     });
   }
 
   load(): void {
+    const revision = ++this.loadRevision;
     this.loading.set(true);
     this.svc.list(this.filterCategoryId ?? undefined).subscribe({
       next: (items) => {
@@ -139,35 +160,51 @@ export class AffectationsPage implements OnInit {
             prenom: card?.sagePrenom ?? null,
           };
         });
-        this.loadDepartements(enriched);
+        this.loadDepartements(enriched, revision);
       },
       error: () => this.loading.set(false),
     });
   }
 
-  private loadDepartements(items: AffectationRow[]): void {
-    const matricules = items.map((r) => r.matricule).filter((m): m is string => !!m);
-    if (matricules.length === 0) {
-      this.finish(items);
+  private loadDepartements(items: AffectationRow[], revision: number): void {
+    if (this.isOtherActive()) {
+      this.sageDatabases.departementServiceOptions().subscribe({
+        next: (options) => this.loadDepartementRows(items, revision, options.departements, options.services),
+        error: () => this.loadDepartementRows(items, revision, [], []),
+      });
       return;
     }
-    this.sourceConfig.lookupBatch(matricules).subscribe({
+    this.loadDepartementRows(items, revision);
+  }
+
+  private isOtherActive(): boolean {
+    return this.session.databases().some((database) => database.nomBd === this.session.activeSageDb() && database.typeBase === 'AUTRE');
+  }
+
+  private loadDepartementRows(items: AffectationRow[], revision: number, departements?: string[], services?: string[]): void {
+    const matricules = items.map((r) => r.matricule).filter((m): m is string => !!m);
+    if (matricules.length === 0) {
+      this.finish(items, revision, departements, services);
+      return;
+    }
+    this.sageDatabases.lookupBatch(matricules).subscribe({
       next: (results: DepartementService[]) => {
         const map = new Map(results.map((r) => [r.matricule.trim(), r]));
         const withDept = items.map((r) => {
           const ds = r.matricule ? map.get(r.matricule) : undefined;
           return { ...r, departement: ds?.departement ?? null, service: ds?.service ?? null };
         });
-        this.finish(withDept);
+        this.finish(withDept, revision, departements, services);
       },
-      error: () => this.finish(items),
+      error: () => this.finish(items, revision, departements, services),
     });
   }
 
-  private finish(items: AffectationRow[]): void {
+  private finish(items: AffectationRow[], revision: number, departements?: string[], services?: string[]): void {
+    if (revision !== this.loadRevision) return;
     this.enrichedRows = items;
-    const depts = Array.from(new Set(items.map((r) => r.departement).filter((d): d is string => !!d))).sort();
-    const servs = Array.from(new Set(items.map((r) => r.service).filter((s): s is string => !!s))).sort();
+    const depts = departements ?? Array.from(new Set(items.map((r) => r.departement).filter((d): d is string => !!d))).sort();
+    const servs = services ?? Array.from(new Set(items.map((r) => r.service).filter((s): s is string => !!s))).sort();
     this.deptOptions.set([{ value: 'ALL', label: 'Tous' }, ...depts.map((d) => ({ value: d, label: d }))]);
     this.servOptions.set([{ value: 'ALL', label: 'Tous' }, ...servs.map((s) => ({ value: s, label: s }))]);
     this.applyFilters();

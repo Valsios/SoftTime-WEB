@@ -17,4 +17,6 @@ public class T_CODE_CONSTANTE
     public string CODE_CONSTANTE { get; set; } = string.Empty;
  
     public string? BDD_SAGE { get; set; }
+
+    public string? TABLE_CIBLE { get; set; }
 }

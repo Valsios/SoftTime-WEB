@@ -17,6 +17,7 @@ public static class DependencyInjection
         services.AddScoped<PlanningService>();
         services.AddScoped<TimekeepingService>();
         services.AddScoped<OvertimeService>();
+        services.AddScoped<PayrollWriterResolver>();
         services.AddScoped<ReportService>();
         services.AddScoped<ExtraService>();
         services.AddScoped<AuditService>();

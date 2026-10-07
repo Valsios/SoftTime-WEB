@@ -14,6 +14,7 @@ import {
   Shift,
   WeeklyHs,
   WeeklyValidationRequest,
+  PayrollWriteResult,
 } from '../models';
 
 @Injectable({ providedIn: 'root' })
@@ -143,5 +144,8 @@ export class OvertimeService extends ApiService {
   }
   syncSage(req: PeriodRequest): Observable<void> {
     return this.http.post<void>(this.url('/api/overtime/sync-sage'), req);
+  }
+  syncPayroll(req: PeriodRequest): Observable<PayrollWriteResult> {
+    return this.http.post<PayrollWriteResult>(this.url('/api/overtime/sync-payroll'), req);
   }
 }

@@ -92,26 +92,12 @@ export interface CodeConstante {
   categorie: string;
   intitule?: string | null;
   codeConstante: string;
+  tableCible?: string | null;
 }
 
 export interface SageConstantOption {
   code: string;
   intitule?: string | null;
-}
-
-export interface SourceConfig {
-  id: number;
-  mode: string;
-  tableName?: string | null;
-  colMatricule?: string | null;
-  colDepartement?: string | null;
-  colService?: string | null;
-  colCodeDepartement?: string | null;
-  extServeur?: string | null;
-  extBase?: string | null;
-  extLogin?: string | null;
-  extPassword?: string | null;
-  extSqlAuth?: boolean | null;
 }
 
 export interface DepartementService {
@@ -120,8 +106,29 @@ export interface DepartementService {
   service?: string | null;
 }
 
+export interface DepartementServiceOptions {
+  departements: string[];
+  services: string[];
+}
+
 export interface ConnectionTestResult {
   success: boolean;
   message: string;
   missingTables?: string[] | null;
+}
+
+export interface PayrollWriteConfiguration {
+  id: number;
+  tableCible?: string | null;
+  colMatricule?: string | null;
+  categorie: string;
+  colValeur?: string | null;
+}
+
+export interface PayrollWriteResult {
+  database: string;
+  typeBase: string;
+  employeesUpdated: number;
+  categoriesUpdated: number;
+  message: string;
 }

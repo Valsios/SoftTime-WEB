@@ -2,30 +2,31 @@ using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
+using SoftTime.Domain.Entities.SoftTime;
 
 namespace SoftTime.Infrastructure.Integrations;
 
-public class ExternalSourceReader : IExternalSourceReader
+public class ExternalEmployeeLookup : IExternalEmployeeLookup
 {
     private static readonly Regex SafeIdentifier = new("^[A-Za-z0-9_]+$", RegexOptions.Compiled);
 
     public async Task<DepartementServiceDto> GetDepartementServiceAsync(
         string connectionString,
-        SourceConfigDto config,
+        T_BDD_SAGE database,
         string matricule,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(config.TableName) || string.IsNullOrWhiteSpace(config.ColMatricule))
-            throw new InvalidOperationException("Configuration 'Autre base' incomplète : table et colonne matricule requises.");
+        if (string.IsNullOrWhiteSpace(database.MAP_TABLE) || string.IsNullOrWhiteSpace(database.MAP_COL_MATRICULE))
+            throw new InvalidOperationException("Configuration de la base RH/paie AUTRE incomplète : table et colonne matricule requises.");
 
-        foreach (var id in new[] { config.TableName, config.ColMatricule, config.ColDepartement, config.ColService })
+        foreach (var id in new[] { database.MAP_TABLE, database.MAP_COL_MATRICULE, database.MAP_COL_DEPARTEMENT, database.MAP_COL_SERVICE })
             if (!string.IsNullOrWhiteSpace(id) && !SafeIdentifier.IsMatch(id))
-                throw new InvalidOperationException($"Nom de table/colonne invalide dans la configuration : {id}");
+                throw new InvalidOperationException($"Nom de table/colonne invalide dans la configuration RH/paie : {id}");
 
-        var selectDep = string.IsNullOrWhiteSpace(config.ColDepartement) ? "NULL" : $"[{config.ColDepartement}]";
-        var selectServ = string.IsNullOrWhiteSpace(config.ColService) ? "NULL" : $"[{config.ColService}]";
+        var selectDep = string.IsNullOrWhiteSpace(database.MAP_COL_DEPARTEMENT) ? "NULL" : $"[{database.MAP_COL_DEPARTEMENT}]";
+        var selectServ = string.IsNullOrWhiteSpace(database.MAP_COL_SERVICE) ? "NULL" : $"[{database.MAP_COL_SERVICE}]";
         var sql = $"SELECT TOP 1 {selectDep} AS Departement, {selectServ} AS Service " +
-          $"FROM [{config.TableName}] WHERE CAST([{config.ColMatricule}] AS NVARCHAR(64)) = @matricule";
+            $"FROM [{database.MAP_TABLE}] WHERE CAST([{database.MAP_COL_MATRICULE}] AS NVARCHAR(64)) = @matricule";
 
         await using var con = new SqlConnection(connectionString);
         await con.OpenAsync(cancellationToken);

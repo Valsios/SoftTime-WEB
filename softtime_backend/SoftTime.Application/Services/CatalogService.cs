@@ -15,33 +15,131 @@ public class CatalogService
     private readonly TenantConnectionService _tenant;
     private readonly ISageContextFactory _sageFactory;
     private readonly IPointeuseContextFactory _pointeuseFactory;
-    private readonly IExternalSourceReader _externalReader;
+    private readonly IExternalEmployeeLookup _externalEmployeeLookup;
     private readonly IExternalDiscoveryService _discovery;
     private readonly EmployeeReaderResolver _employeeReaders;
     private readonly PointeuseReaderResolver _pointeuseReaders;
 
-    public CatalogService(IUnitOfWork uow, IMapper mapper, TenantConnectionService tenant, ISageContextFactory sageFactory, IPointeuseContextFactory pointeuseFactory, IExternalSourceReader externalReader, IExternalDiscoveryService discovery, EmployeeReaderResolver employeeReaders, PointeuseReaderResolver pointeuseReaders)
+    public CatalogService(IUnitOfWork uow, IMapper mapper, TenantConnectionService tenant, ISageContextFactory sageFactory, IPointeuseContextFactory pointeuseFactory, IExternalEmployeeLookup externalEmployeeLookup, IExternalDiscoveryService discovery, EmployeeReaderResolver employeeReaders, PointeuseReaderResolver pointeuseReaders)
     {
         _uow = uow;
         _mapper = mapper;
         _tenant = tenant;
         _sageFactory = sageFactory;
         _pointeuseFactory = pointeuseFactory;
-        _externalReader = externalReader;
+        _externalEmployeeLookup = externalEmployeeLookup;
         _discovery = discovery;
         _employeeReaders = employeeReaders;
         _pointeuseReaders = pointeuseReaders;
     }
 
-    public Task<IReadOnlyList<SageDbDto>> ListSageAsync(CancellationToken ct = default)
-        => MapList<T_BDD_SAGE, SageDbDto>(ct);
+    public async Task<IReadOnlyList<SageDbDto>> ListSageAsync(CancellationToken ct = default)
+    {
+        await SageDatabaseConfiguration.EnsureStorageAsync(_uow, ct);
+        return await MapList<T_BDD_SAGE, SageDbDto>(ct);
+    }
+
+    public async Task<IReadOnlyList<PayrollWriteConfigurationDto>> ListPayrollWriteConfigurationsAsync(CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        await PayrollWritingConfiguration.EnsureStorageAsync(_uow, ct);
+        var list = await _uow.Repository<T_PAIE_ECRITURE>().ListAsync(c => c.BDD_SAGE == _tenant.SageDb, ct);
+        return list.OrderBy(c => Array.IndexOf(PayrollWritingConfiguration.Categories, c.CATEGORIE))
+            .Select(c => new PayrollWriteConfigurationDto(c.ID, c.TABLE_CIBLE, c.COL_MATRICULE, c.CATEGORIE, c.COL_VALEUR)).ToList();
+    }
+
+    public async Task<PayrollWriteConfigurationDto> SavePayrollWriteConfigurationAsync(PayrollWriteConfigurationDto dto, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var database = await _tenant.GetSageRowAsync(ct);
+        if (!string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("La configuration d'écriture dynamique est réservée aux bases AUTRE.");
+        await PayrollWritingConfiguration.EnsureStorageAsync(_uow, ct);
+        var category = PayrollWritingConfiguration.NormalizeCategory(dto.Categorie);
+        PayrollWritingConfiguration.ValidateIdentifier(dto.TableCible, "La table cible", allowQualifiedTable: true);
+        PayrollWritingConfiguration.ValidateIdentifier(dto.ColMatricule, "La colonne matricule");
+        PayrollWritingConfiguration.ValidateIdentifier(dto.ColValeur, "La colonne de valeur");
+        var repo = _uow.Repository<T_PAIE_ECRITURE>();
+        var current = await repo.ListAsync(c => c.BDD_SAGE == _tenant.SageDb, ct);
+        if (current.Any(c => c.ID != dto.Id && string.Equals(c.CATEGORIE, category, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException($"La catégorie {category} est déjà configurée pour cette base.");
+        T_PAIE_ECRITURE entity;
+        if (dto.Id == 0)
+        {
+            entity = new T_PAIE_ECRITURE { BDD_SAGE = _tenant.SageDb };
+            await repo.AddAsync(entity, ct);
+        }
+        else
+        {
+            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
+            if (!string.Equals(entity.BDD_SAGE, _tenant.SageDb, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Cette configuration appartient à une autre base.");
+            repo.Update(entity);
+        }
+        entity.TABLE_CIBLE = dto.TableCible!.Trim();
+        entity.COL_MATRICULE = dto.ColMatricule!.Trim();
+        entity.CATEGORIE = category;
+        entity.COL_VALEUR = dto.ColValeur!.Trim();
+        await _uow.SaveChangesAsync(ct);
+        return new PayrollWriteConfigurationDto(entity.ID, entity.TABLE_CIBLE, entity.COL_MATRICULE, entity.CATEGORIE, entity.COL_VALEUR);
+    }
+
+    public async Task DeletePayrollWriteConfigurationAsync(int id, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        await PayrollWritingConfiguration.EnsureStorageAsync(_uow, ct);
+        var entity = await _uow.Repository<T_PAIE_ECRITURE>().GetByIdAsync(id, ct) ?? throw new KeyNotFoundException();
+        if (!string.Equals(entity.BDD_SAGE, _tenant.SageDb, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Cette configuration appartient à une autre base.");
+        _uow.Repository<T_PAIE_ECRITURE>().Remove(entity);
+        await _uow.SaveChangesAsync(ct);
+    }
+
+    public async Task<ConnectionTestResultDto> TestPayrollWriteConfigurationAsync(CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var database = await _tenant.GetSageRowAsync(ct);
+        if (!string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase))
+            return new ConnectionTestResultDto(false, "Cette configuration est réservée aux bases AUTRE.");
+        try
+        {
+            await PayrollWritingConfiguration.EnsureStorageAsync(_uow, ct);
+            var configs = await _uow.Repository<T_PAIE_ECRITURE>().ListAsync(c => c.BDD_SAGE == _tenant.SageDb, ct);
+            var missing = PayrollWritingConfiguration.Categories.FirstOrDefault(category => !configs.Any(c => string.Equals(c.CATEGORIE, category, StringComparison.OrdinalIgnoreCase)));
+            if (missing != null)
+                return new ConnectionTestResultDto(false, $"La configuration d'écriture de la base AUTRE est incomplète : la catégorie {missing} n'est pas configurée.");
+            var first = configs.First();
+            if (configs.Any(c => !string.Equals(c.TABLE_CIBLE, first.TABLE_CIBLE, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(c.COL_MATRICULE, first.COL_MATRICULE, StringComparison.OrdinalIgnoreCase)))
+                return new ConnectionTestResultDto(false, "Toutes les catégories doivent utiliser la même table cible et la même colonne matricule.");
+            var (schema, table) = PayrollWritingConfiguration.SplitTable(first.TABLE_CIBLE);
+            if (!string.Equals(schema, "dbo", StringComparison.OrdinalIgnoreCase))
+                return new ConnectionTestResultDto(false, "La découverte des tables ne prend actuellement en charge que le schéma dbo.");
+            var tables = await _discovery.ListTablesAsync(database.SERVEUR!, database.NOM_BD!, database.TYPE_AUTH == true, database.TLOGIN, database.TMDP, ct);
+            if (!tables.Contains(table, StringComparer.OrdinalIgnoreCase))
+                return new ConnectionTestResultDto(false, $"La table {first.TABLE_CIBLE} n'existe pas.");
+            var columns = await _discovery.ListColumnsAsync(database.SERVEUR!, database.NOM_BD!, table, database.TYPE_AUTH == true, database.TLOGIN, database.TMDP, ct);
+            var required = configs.Select(c => c.COL_VALEUR).Append(first.COL_MATRICULE).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var missingColumn = required.FirstOrDefault(column => !columns.Contains(column, StringComparer.OrdinalIgnoreCase));
+            return missingColumn == null
+                ? new ConnectionTestResultDto(true, "Configuration d'écriture valide.")
+                : new ConnectionTestResultDto(false, $"La colonne {missingColumn} n'existe pas.");
+        }
+        catch (Exception ex)
+        {
+            return new ConnectionTestResultDto(false, $"Validation impossible : {ex.Message}");
+        }
+    }
 
     public async Task<SageDbDto> SaveSageAsync(SageDbDto dto, CancellationToken ct = default)
     {
+        await SageDatabaseConfiguration.EnsureStorageAsync(_uow, ct);
         if (dto.TypeBase != "STANDARD" && dto.TypeBase != "AUTRE")
             throw new InvalidOperationException("TypeBase doit valoir 'STANDARD' ou 'AUTRE'.");
-        if (dto.TypeBase == "AUTRE" && string.IsNullOrWhiteSpace(dto.MapTable))
-            throw new InvalidOperationException("Une base 'Autre' nécessite au minimum une table et une colonne matricule.");
+        if (dto.TypeBase == "AUTRE" && (string.IsNullOrWhiteSpace(dto.MapTable) || string.IsNullOrWhiteSpace(dto.MapColMatricule)))
+            throw new InvalidOperationException("Une base 'Autre' nécessite une table des employés et une colonne matricule.");
+        if (dto.TypeBase == "AUTRE" && (string.IsNullOrWhiteSpace(dto.MapTableCodeConstante) || string.IsNullOrWhiteSpace(dto.MapColCodeConstante)))
+            throw new InvalidOperationException("Une base 'Autre' nécessite une table cible et une colonne de code constante.");
         var repo = _uow.Repository<T_BDD_SAGE>();
         var doublon = (await repo.ListAsync(
             s => s.ID != dto.Id
@@ -72,6 +170,8 @@ public class CatalogService
             entity.MAP_COL_DEPARTEMENT = dto.MapColDepartement;
             entity.MAP_COL_SERVICE = dto.MapColService;
             entity.MAP_COL_CODE_DEPARTEMENT = dto.MapColCodeDepartement;
+            entity.MAP_TABLE_CODE_CONSTANTE = dto.MapTableCodeConstante;
+            entity.MAP_COL_CODE_CONSTANTE = dto.MapColCodeConstante;
             repo.Update(entity);
         }
         await _uow.SaveChangesAsync(ct);
@@ -233,87 +333,15 @@ public class CatalogService
         return new ClockParamDto(row.IDPOINT, row.MULTIPOINT);
     }
 
-    public async Task<SourceConfigDto> GetSourceConfigAsync(CancellationToken ct = default)
-    {
-        await EnsureSourceConfigAsync(ct);
-        var row = (await _uow.Repository<T_SOURCE_CONFIG>().ListAsync(_ => true, ct)).FirstOrDefault();
-        return row == null
-            ? new SourceConfigDto(0, "SAGE", null, null, null, null, null)
-            : new SourceConfigDto(row.Id, row.Mode, row.TableName, row.ColMatricule, row.ColDepartement, row.ColService, row.ColCodeDepartement,
-                row.ExtServeur, row.ExtBase, row.ExtLogin, row.ExtPassword, row.ExtSqlAuth);
-    }
-
-    public async Task<SourceConfigDto> SaveSourceConfigAsync(SourceConfigDto dto, CancellationToken ct = default)
-    {
-        await EnsureSourceConfigAsync(ct);
-        if (dto.Mode != "SAGE" && dto.Mode != "AUTRE")
-            throw new InvalidOperationException("Le mode doit être 'SAGE' ou 'AUTRE'.");
-        if (dto.Mode == "AUTRE" && string.IsNullOrWhiteSpace(dto.TableName))
-            throw new InvalidOperationException("Le nom de la table est requis en mode 'AUTRE'.");
-        if (dto.Mode == "AUTRE" && !string.IsNullOrWhiteSpace(dto.ExtServeur) && string.IsNullOrWhiteSpace(dto.ExtBase))
-            throw new InvalidOperationException("Le nom de la base est requis si un serveur externe est renseigné.");
-        if (dto.Mode == "AUTRE" && !string.IsNullOrWhiteSpace(dto.ExtServeur) && dto.ExtSqlAuth && string.IsNullOrWhiteSpace(dto.ExtLogin))
-            throw new InvalidOperationException("Le login est requis en authentification SQL.");
-
-        var repo = _uow.Repository<T_SOURCE_CONFIG>();
-        var row = (await repo.ListAsync(_ => true, ct)).FirstOrDefault();
-        if (row == null)
-        {
-            row = new T_SOURCE_CONFIG
-            {
-                Mode = dto.Mode,
-                TableName = dto.Mode == "AUTRE" ? dto.TableName : null,
-                ColMatricule = dto.Mode == "AUTRE" ? dto.ColMatricule : null,
-                ColDepartement = dto.Mode == "AUTRE" ? dto.ColDepartement : null,
-                ColService = dto.Mode == "AUTRE" ? dto.ColService : null,
-                ColCodeDepartement = dto.Mode == "AUTRE" ? dto.ColCodeDepartement : null,
-                ExtServeur = dto.Mode == "AUTRE" ? dto.ExtServeur : null,
-                ExtBase = dto.Mode == "AUTRE" ? dto.ExtBase : null,
-                ExtLogin = dto.Mode == "AUTRE" ? dto.ExtLogin : null,
-                ExtPassword = dto.Mode == "AUTRE" ? dto.ExtPassword : null,
-                ExtSqlAuth = dto.Mode == "AUTRE" ? dto.ExtSqlAuth : true
-            };
-            await repo.AddAsync(row, ct);
-        }
-        else
-        {
-            row.Mode = dto.Mode;
-            row.TableName = dto.Mode == "AUTRE" ? dto.TableName : null;
-            row.ColMatricule = dto.Mode == "AUTRE" ? dto.ColMatricule : null;
-            row.ColDepartement = dto.Mode == "AUTRE" ? dto.ColDepartement : null;
-            row.ColService = dto.Mode == "AUTRE" ? dto.ColService : null;
-            row.ColCodeDepartement = dto.Mode == "AUTRE" ? dto.ColCodeDepartement : null;
-            row.ExtServeur = dto.Mode == "AUTRE" ? dto.ExtServeur : null;
-            row.ExtBase = dto.Mode == "AUTRE" ? dto.ExtBase : null;
-            row.ExtLogin = dto.Mode == "AUTRE" ? dto.ExtLogin : null;
-            row.ExtPassword = dto.Mode == "AUTRE"
-                ? (string.IsNullOrEmpty(dto.ExtPassword) ? row.ExtPassword : dto.ExtPassword)
-                : null;
-            row.ExtSqlAuth = dto.Mode == "AUTRE" ? dto.ExtSqlAuth : true;
-            repo.Update(row);
-        }
-        await _uow.SaveChangesAsync(ct);
-        return new SourceConfigDto(row.Id, row.Mode, row.TableName, row.ColMatricule, row.ColDepartement, row.ColService, row.ColCodeDepartement,
-            row.ExtServeur, row.ExtBase, row.ExtLogin, row.ExtPassword, row.ExtSqlAuth);
-    }
-
     public async Task<DepartementServiceDto> GetDepartementServiceAsync(string matricule, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(matricule))
             throw new InvalidOperationException("Le matricule est requis.");
 
-        var config = await GetSourceConfigAsync(ct);
-        return config.Mode == "AUTRE"
-            ? await _externalReader.GetDepartementServiceAsync(await ResolveExternalConnectionAsync(config, ct), config, matricule, ct)
+        var database = await _tenant.GetSageRowAsync(ct);
+        return string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase)
+            ? await _externalEmployeeLookup.GetDepartementServiceAsync(await _tenant.GetSageConnectionAsync(ct), database, matricule, ct)
             : await LookupFromSageAsync(matricule, ct);
-    }
-
-    private async Task<string> ResolveExternalConnectionAsync(SourceConfigDto config, CancellationToken ct)
-    {
-        if (!string.IsNullOrWhiteSpace(config.ExtServeur))
-            return ExternalConnectionFactory.Build(config.ExtServeur, config.ExtBase, config.ExtSqlAuth, config.ExtLogin, config.ExtPassword);
-
-        return await _tenant.GetSageConnectionAsync(ct);
     }
 
     private async Task<DepartementServiceDto> LookupFromSageAsync(string matricule, CancellationToken ct)
@@ -353,17 +381,16 @@ public class CatalogService
         if (list.Count == 0)
             return Array.Empty<DepartementServiceDto>();
 
-        var config = await GetSourceConfigAsync(ct);
         var sageRow = await _tenant.GetSageRowAsync(ct);
-        if (sageRow.TYPE_BASE != "STANDARD" && config.Mode != "AUTRE")
+        if (sageRow.TYPE_BASE != "STANDARD" && sageRow.TYPE_BASE != "AUTRE")
             return list.Select(m => new DepartementServiceDto(m, null, null)).ToList();
 
-        if (config.Mode == "AUTRE")
+        if (string.Equals(sageRow.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase))
         {
-            var extConn = await ResolveExternalConnectionAsync(config, ct);
+            var extConn = await _tenant.GetSageConnectionAsync(ct);
             var result = new List<DepartementServiceDto>();
             foreach (var m in list)
-                result.Add(await _externalReader.GetDepartementServiceAsync(extConn, config, m, ct));
+                result.Add(await _externalEmployeeLookup.GetDepartementServiceAsync(extConn, sageRow, m, ct));
             return result;
         }
 
@@ -403,40 +430,26 @@ public class CatalogService
     public Task<IReadOnlyList<string>> DiscoverColumnsAsync(DiscoverColumnsDto dto, CancellationToken ct = default)
         => _discovery.ListColumnsAsync(dto.Serveur, dto.Base, dto.Table, dto.SqlAuth, dto.Login, dto.Password, ct);
 
-    private async Task EnsureSourceConfigAsync(CancellationToken ct)
+    public async Task<DepartementServiceOptionsDto> GetDepartementServiceOptionsAsync(CancellationToken ct = default)
     {
-        await _uow.ExecuteSqlAsync("""
-            IF OBJECT_ID(N'dbo.T_SOURCE_CONFIG', N'U') IS NULL
-            BEGIN
-                CREATE TABLE dbo.T_SOURCE_CONFIG (
-                    Id int IDENTITY(1,1) NOT NULL PRIMARY KEY,
-                    Mode nvarchar(10) NOT NULL DEFAULT 'SAGE',
-                    TableName nvarchar(128) NULL,
-                    ColMatricule nvarchar(128) NULL,
-                    ColDepartement nvarchar(128) NULL,
-                    ColService nvarchar(128) NULL,
-                    ColCodeDepartement nvarchar(128) NULL,
-                    ExtServeur nvarchar(256) NULL,
-                    ExtBase nvarchar(128) NULL,
-                    ExtLogin nvarchar(128) NULL,
-                    ExtPassword nvarchar(max) NULL,
-                    ExtSqlAuth bit NOT NULL DEFAULT 1
-                );
-            END
-            ELSE
-            BEGIN
-                IF COL_LENGTH(N'dbo.T_SOURCE_CONFIG', N'ExtServeur') IS NULL
-                    ALTER TABLE dbo.T_SOURCE_CONFIG ADD ExtServeur nvarchar(256) NULL;
-                IF COL_LENGTH(N'dbo.T_SOURCE_CONFIG', N'ExtBase') IS NULL
-                    ALTER TABLE dbo.T_SOURCE_CONFIG ADD ExtBase nvarchar(128) NULL;
-                IF COL_LENGTH(N'dbo.T_SOURCE_CONFIG', N'ExtLogin') IS NULL
-                    ALTER TABLE dbo.T_SOURCE_CONFIG ADD ExtLogin nvarchar(128) NULL;
-                IF COL_LENGTH(N'dbo.T_SOURCE_CONFIG', N'ExtPassword') IS NULL
-                    ALTER TABLE dbo.T_SOURCE_CONFIG ADD ExtPassword nvarchar(max) NULL;
-                IF COL_LENGTH(N'dbo.T_SOURCE_CONFIG', N'ExtSqlAuth') IS NULL
-                    ALTER TABLE dbo.T_SOURCE_CONFIG ADD ExtSqlAuth bit NOT NULL CONSTRAINT DF_T_SOURCE_CONFIG_ExtSqlAuth DEFAULT 1;
-            END
-            """, ct);
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var database = await _tenant.GetSageRowAsync(ct);
+        if (!string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(database.MAP_TABLE))
+            return new DepartementServiceOptionsDto(Array.Empty<string>(), Array.Empty<string>());
+
+        async Task<IReadOnlyList<string>> ValuesAsync(string? column)
+        {
+            if (string.IsNullOrWhiteSpace(column)) return Array.Empty<string>();
+            PayrollWritingConfiguration.ValidateIdentifier(database.MAP_TABLE, "La table des employés");
+            PayrollWritingConfiguration.ValidateIdentifier(column, "La colonne configurée");
+            return await _discovery.ListDistinctValuesAsync(database.SERVEUR!, database.NOM_BD!, database.MAP_TABLE,
+                column, database.TYPE_AUTH == true, database.TLOGIN, database.TMDP, ct);
+        }
+
+        return new DepartementServiceOptionsDto(
+            await ValuesAsync(database.MAP_COL_DEPARTEMENT),
+            await ValuesAsync(database.MAP_COL_SERVICE));
     }
 
     // Le mode correspondance est rattache a la paire
@@ -1067,7 +1080,17 @@ public class CatalogService
         await _tenant.EnsureAuthorizedAsync(ct);
         var code = (dto.CodeConstante ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(code))
-            throw new InvalidOperationException("Le code constante SAGE est requis.");
+            throw new InvalidOperationException("Le code constante est requis.");
+        var database = await _tenant.GetSageRowAsync(ct);
+        var table = dto.TableCible?.Trim();
+        if (string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(table))
+                throw new InvalidOperationException("La table correspondante est requise.");
+            var values = await ListOtherCodeConstantValuesAsync(table, ct);
+            if (!values.Contains(code, StringComparer.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Le code constante sélectionné n'existe pas dans la table choisie.");
+        }
         var sageDb = _tenant.SageDb;
         var repo = _uow.Repository<T_CODE_CONSTANTE>();
         // On ne modifie jamais directement la ligne par defaut globale (BDD_SAGE = NULL) :
@@ -1082,12 +1105,14 @@ public class CatalogService
                 INTITULE = defaultRow?.INTITULE ?? dto.Intitule,
                 CODE_CONSTANTE = code,
                 BDD_SAGE = sageDb,
+                TABLE_CIBLE = table,
             };
             await repo.AddAsync(entity, ct);
         }
         else
         {
             entity.CODE_CONSTANTE = code;
+            entity.TABLE_CIBLE = table;
             repo.Update(entity);
         }
         await _uow.SaveChangesAsync(ct);
@@ -1120,6 +1145,39 @@ public class CatalogService
             .Select(g => new SageConstantOptionDto(g.Key, g.First().Intitule))
             .ToList();
     }
+
+    public async Task<IReadOnlyList<string>> ListOtherCodeConstantTablesAsync(CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var database = await _tenant.GetSageRowAsync(ct);
+        EnsureOtherCodeConstantConfiguration(database);
+        return await _discovery.ListTablesAsync(database.SERVEUR!, database.NOM_BD!, database.TYPE_AUTH == true, database.TLOGIN, database.TMDP, ct);
+    }
+
+    public async Task<IReadOnlyList<string>> ListOtherCodeConstantValuesAsync(string table, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var database = await _tenant.GetSageRowAsync(ct);
+        EnsureOtherCodeConstantConfiguration(database);
+        PayrollWritingConfiguration.ValidateIdentifier(table, "La table correspondante");
+        var tables = await _discovery.ListTablesAsync(database.SERVEUR!, database.NOM_BD!, database.TYPE_AUTH == true, database.TLOGIN, database.TMDP, ct);
+        if (!tables.Contains(table, StringComparer.OrdinalIgnoreCase))
+            throw new InvalidOperationException("La table correspondante n'existe pas dans la base active.");
+        var columns = await _discovery.ListColumnsAsync(database.SERVEUR!, database.NOM_BD!, table, database.TYPE_AUTH == true, database.TLOGIN, database.TMDP, ct);
+        if (!columns.Contains(database.MAP_COL_CODE_CONSTANTE!, StringComparer.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"La colonne de code constante configurée n'existe pas dans la table {table}.");
+        return await _discovery.ListDistinctValuesAsync(database.SERVEUR!, database.NOM_BD!, table, database.MAP_COL_CODE_CONSTANTE!, database.TYPE_AUTH == true, database.TLOGIN, database.TMDP, ct);
+    }
+
+    private static void EnsureOtherCodeConstantConfiguration(T_BDD_SAGE database)
+    {
+        if (!string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Cette liste est réservée aux bases AUTRE.");
+        if (string.IsNullOrWhiteSpace(database.MAP_TABLE_CODE_CONSTANTE) || string.IsNullOrWhiteSpace(database.MAP_COL_CODE_CONSTANTE))
+            throw new InvalidOperationException("Configurez d'abord la table cible et la colonne de code constante dans Bases RH / paie.");
+        PayrollWritingConfiguration.ValidateIdentifier(database.MAP_TABLE_CODE_CONSTANTE, "La table cible du code constante");
+        PayrollWritingConfiguration.ValidateIdentifier(database.MAP_COL_CODE_CONSTANTE, "La colonne de code constante");
+    }
  
     public async Task<OvertimeSageCodes> GetOvertimeSageCodesAsync(CancellationToken ct = default)
     {
@@ -1150,12 +1208,17 @@ public class CatalogService
                     CATEGORIE nvarchar(32) NOT NULL,
                     INTITULE nvarchar(64) NULL,
                     CODE_CONSTANTE nvarchar(20) NOT NULL,
-                    BDD_SAGE nvarchar(128) NULL
+                    BDD_SAGE nvarchar(128) NULL,
+                    TABLE_CIBLE nvarchar(128) NULL
                 );
             END
             ELSE IF COL_LENGTH(N'dbo.T_CODE_CONSTANTE', N'BDD_SAGE') IS NULL
             BEGIN
                 ALTER TABLE dbo.T_CODE_CONSTANTE ADD BDD_SAGE nvarchar(128) NULL;
+            END
+            IF COL_LENGTH(N'dbo.T_CODE_CONSTANTE', N'TABLE_CIBLE') IS NULL
+            BEGIN
+                ALTER TABLE dbo.T_CODE_CONSTANTE ADD TABLE_CIBLE nvarchar(128) NULL;
             END
             """, ct);
  
