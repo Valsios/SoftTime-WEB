@@ -253,4 +253,8 @@ public class OvertimeController : ControllerBase
         await _svc.SyncSageAsync(request, ct);
         return NoContent();
     }
+
+    [HttpPost("sync-payroll")]
+    public async Task<IActionResult> SyncPayroll([FromBody] PeriodRequest request, CancellationToken ct)
+        => Ok(await _svc.SyncPayrollAsync(request, ct));
 }

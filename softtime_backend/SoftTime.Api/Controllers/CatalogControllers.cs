@@ -40,6 +40,50 @@ public class SageDatabasesController : ControllerBase
     [HttpPost("activate")]
     public async Task<IActionResult> Activate(CancellationToken ct)
         => Ok(await _svc.ActivateSagePairAsync(ct));
+
+    [HttpGet("lookup/{matricule}")]
+    public async Task<IActionResult> Lookup(string matricule, CancellationToken ct)
+        => Ok(await _svc.GetDepartementServiceAsync(matricule, ct));
+
+    [HttpPost("lookup-batch")]
+    public async Task<IActionResult> LookupBatch([FromBody] string[] matricules, CancellationToken ct)
+        => Ok(await _svc.GetDepartementServiceBatchAsync(matricules ?? Array.Empty<string>(), ct));
+
+    [HttpGet("departement-service-options")]
+    public async Task<IActionResult> DepartementServiceOptions(CancellationToken ct)
+        => Ok(await _svc.GetDepartementServiceOptionsAsync(ct));
+}
+
+[ApiController]
+[Authorize]
+[RequireDroit(Droit.Parameters)]
+[Route("api/payroll-write-config")]
+[Tags("PayrollWriteConfiguration")]
+public class PayrollWriteConfigurationController : ControllerBase
+{
+    private readonly CatalogService _svc;
+    public PayrollWriteConfigurationController(CatalogService svc) => _svc = svc;
+
+    [HttpGet]
+    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListPayrollWriteConfigurationsAsync(ct));
+
+    [HttpPost]
+    public async Task<IActionResult> Create([FromBody] PayrollWriteConfigurationDto dto, CancellationToken ct)
+        => Ok(await _svc.SavePayrollWriteConfigurationAsync(dto with { Id = 0 }, ct));
+
+    [HttpPut("{id:int}")]
+    public async Task<IActionResult> Update(int id, [FromBody] PayrollWriteConfigurationDto dto, CancellationToken ct)
+        => Ok(await _svc.SavePayrollWriteConfigurationAsync(dto with { Id = id }, ct));
+
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> Delete(int id, CancellationToken ct)
+    {
+        await _svc.DeletePayrollWriteConfigurationAsync(id, ct);
+        return NoContent();
+    }
+
+    [HttpPost("test")]
+    public async Task<IActionResult> Test(CancellationToken ct) => Ok(await _svc.TestPayrollWriteConfigurationAsync(ct));
 }
 
 [ApiController]
@@ -369,6 +413,13 @@ public class CodeConstantesController : ControllerBase
 
     [HttpGet("sage-options")]
     public async Task<IActionResult> SageOptions(CancellationToken ct) => Ok(await _svc.ListSageConstantOptionsAsync(ct));
+
+    [HttpGet("autre-tables")]
+    public async Task<IActionResult> OtherTables(CancellationToken ct) => Ok(await _svc.ListOtherCodeConstantTablesAsync(ct));
+
+    [HttpGet("autre-values")]
+    public async Task<IActionResult> OtherValues([FromQuery] string table, CancellationToken ct)
+        => Ok(await _svc.ListOtherCodeConstantValuesAsync(table, ct));
 
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] CodeConstanteDto dto, CancellationToken ct)

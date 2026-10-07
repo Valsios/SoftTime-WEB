@@ -9,7 +9,9 @@ using SoftTime.Api.Middleware;
 using SoftTime.Api.Security;
 using SoftTime.Application;
 using SoftTime.Application.Abstractions;
+using SoftTime.Application.Services;
 using SoftTime.Infrastructure;
+using SoftTime.Domain.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -116,6 +118,10 @@ builder.Services.AddAuthorization();
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
 var app = builder.Build();
+using (var scope = app.Services.CreateScope())
+{
+    await SageDatabaseConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
+}
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseSwagger();
 app.UseSwaggerUI();

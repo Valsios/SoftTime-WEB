@@ -6,6 +6,7 @@ import { OvertimeService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, PeriodFilter } from '../../shared/components';
 import { asRow, isMondayToSundayWeek } from '../../shared/utils/date';
+import { SessionStore } from '../../core/session.store';
 
 @Component({
   selector: 'app-overtime',
@@ -15,7 +16,7 @@ import { asRow, isMondayToSundayWeek } from '../../shared/utils/date';
     <page-header title="Heures supplémentaires" subtitle="Calcul EXO/IMPO — période lundi à dimanche (7 jours)">
       <soft-button variant="danger" [loading]="busy()" (click)="purge()">Purger</soft-button>
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
-      <soft-button variant="accent" [loading]="busy()" (click)="syncSage()">Sync SAGE</soft-button>
+      <soft-button variant="accent" [loading]="busy()" (click)="syncPayroll()">{{ syncLabel() }}</soft-button>
       <soft-button [loading]="busy()" (click)="calculate()">Calculer</soft-button>
     </page-header>
 
@@ -31,10 +32,15 @@ export class OvertimePage {
   private readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
+  private readonly session = inject(SessionStore);
 
   readonly busy = signal(false);
   readonly rows = signal<Record<string, unknown>[]>([]);
   private lastFilter: PeriodRequest | null = null;
+
+  readonly currentDatabase = () => this.session.databases().find((db) => db.nomBd === this.session.activeSageDb());
+  readonly isStandard = () => this.currentDatabase()?.typeBase !== 'AUTRE';
+  readonly syncLabel = () => this.isStandard() ? 'Synchroniser vers SAGE' : 'Synchroniser vers la base';
 
   readonly columns: Column[] = [
     { key: 'matricule', label: 'Matricule' },
@@ -97,12 +103,16 @@ export class OvertimePage {
     });
   }
 
-  async syncSage(): Promise<void> {
+  async syncPayroll(): Promise<void> {
     if (this.busy() || !this.requireWeek(this.lastFilter)) return;
-    if (!(await this.confirm.ask('Pousser les HS vers SAGE (T_CUMSAL) ?'))) return;
+    const database = this.currentDatabase()?.nomBd ?? this.session.activeSageDb() ?? 'la base active';
+    const question = this.isStandard()
+      ? 'Pousser les HS vers SAGE (T_CUMSAL) ?'
+      : `Écrire les HS dans la base ${database} ?`;
+    if (!(await this.confirm.ask(question))) return;
     this.busy.set(true);
-    this.svc.syncSage(this.lastFilter).subscribe({
-      next: () => { this.busy.set(false); this.toast.success('Synchronisation SAGE terminée.'); },
+    this.svc.syncPayroll(this.lastFilter).subscribe({
+      next: (result) => { this.busy.set(false); this.toast.success(result.message); },
       error: () => this.busy.set(false),
     });
   }

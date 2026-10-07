@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '../../core/api';
-import { DbAccess, Droit, Privilege, Role, SageDb, User } from '../models';
+import { DbAccess, DepartementService, DepartementServiceOptions, Droit, Privilege, Role, SageDb, User } from '../models';
 
 @Injectable({ providedIn: 'root' })
 export class UsersService extends ApiService {
@@ -81,5 +81,15 @@ export class SageDatabasesService extends ApiService {
   }
   testConnection(dto: Partial<SageDb>): Observable<import('../models').ConnectionTestResult> {
     return this.http.post<import('../models').ConnectionTestResult>(this.url('/api/sage-databases/test-connection'), dto);
+  }
+  lookupBatch(matricules: string[]): Observable<DepartementService[]> {
+    return this.http.post<DepartementService[]>(this.url('/api/sage-databases/lookup-batch'), matricules);
+  }
+  departementServiceOptions(): Observable<DepartementServiceOptions> {
+    return this.http.get<DepartementServiceOptions>(this.url('/api/sage-databases/departement-service-options'));
+  }
+    activate(): Observable<{ holidaysImported: boolean; cardsAdded: number; cardsDeactivated: number; message: string }> {
+    return this.http.post<{ holidaysImported: boolean; cardsAdded: number; cardsDeactivated: number; message: string }>(
+      this.url('/api/sage-databases/activate'), {});
   }
 }

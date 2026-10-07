@@ -82,7 +82,8 @@ public class MappingProfile : Profile
             .ForMember(d => d.Id, o => o.MapFrom(s => s.ID))
             .ForMember(d => d.Categorie, o => o.MapFrom(s => s.CATEGORIE))
             .ForMember(d => d.Intitule, o => o.MapFrom(s => s.INTITULE))
-            .ForMember(d => d.CodeConstante, o => o.MapFrom(s => s.CODE_CONSTANTE));
+            .ForMember(d => d.CodeConstante, o => o.MapFrom(s => s.CODE_CONSTANTE))
+            .ForMember(d => d.TableCible, o => o.MapFrom(s => s.TABLE_CIBLE));
         CreateMap<T_FERIE, HolidayDto>();
         CreateMap<T_PLANNING, ShiftDto>()
             .ForMember(d => d.Id, o => o.MapFrom(s => s.IDPLANNING))

@@ -33,7 +33,7 @@ const DROIT_LABELS: Record<number, string> = {
         <dl class="dash-dl">
           <dt>Utilisateur</dt><dd>{{ session.displayName() }}</dd>
           <dt>Login</dt><dd>{{ session.session()?.login }}</dd>
-          <dt>Base SAGE active</dt><dd>{{ session.activeSageDb() || '—' }}</dd>
+          <dt>Base RH / paie active</dt><dd>{{ session.activeSageDb() || '—' }}</dd>
         </dl>
       </soft-card>
 

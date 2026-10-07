@@ -85,6 +85,7 @@ export interface CodeConstante {
   categorie: string;
   intitule?: string | null;
   codeConstante: string;
+  tableCible?: string | null;
 }
 
 export interface SageConstantOption {
@@ -98,8 +99,29 @@ export interface DepartementService {
   service?: string | null;
 }
 
+export interface DepartementServiceOptions {
+  departements: string[];
+  services: string[];
+}
+
 export interface ConnectionTestResult {
   success: boolean;
   message: string;
   missingTables?: string[] | null;
+}
+
+export interface PayrollWriteConfiguration {
+  id: number;
+  tableCible?: string | null;
+  colMatricule?: string | null;
+  categorie: string;
+  colValeur?: string | null;
+}
+
+export interface PayrollWriteResult {
+  database: string;
+  typeBase: string;
+  employeesUpdated: number;
+  categoriesUpdated: number;
+  message: string;
 }

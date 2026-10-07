@@ -21,4 +21,6 @@ public class T_BDD_SAGE
     public string? MAP_COL_DEPARTEMENT { get; set; }
     public string? MAP_COL_SERVICE { get; set; }
     public string? MAP_COL_CODE_DEPARTEMENT { get; set; }
+    public string? MAP_TABLE_CODE_CONSTANTE { get; set; }
+    public string? MAP_COL_CODE_CONSTANTE { get; set; }
 }
