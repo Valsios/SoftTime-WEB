@@ -102,8 +102,10 @@ public class SoftTimeDbContext : DbContext
                 .WithOne()
                 .HasForeignKey(x => x.EntityMappingId)
                 .OnDelete(DeleteBehavior.Cascade);
-            e.HasIndex(x => new { x.SageDbId, x.EntityKind }).IsUnique();
-            e.HasIndex(x => new { x.PointeuseDbId, x.EntityKind }).IsUnique();
+            // Index filtres : la FK non applicable est NULL pour chaque ligne, or SQL Server
+            // traite les NULL comme egaux dans un index unique (voir EnsureMappingSchemaAsync).
+            e.HasIndex(x => new { x.SageDbId, x.EntityKind }).IsUnique().HasFilter("[SageDbId] IS NOT NULL");
+            e.HasIndex(x => new { x.PointeuseDbId, x.EntityKind }).IsUnique().HasFilter("[PointeuseDbId] IS NOT NULL");
         });
 
         modelBuilder.Entity<T_SOURCE_FIELD_MAPPING>(e =>

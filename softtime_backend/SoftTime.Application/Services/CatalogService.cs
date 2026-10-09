@@ -122,7 +122,23 @@ public class CatalogService
     {
         var repo = _uow.Repository<T_BDD_SAGE>();
         var e = await repo.GetByIdAsync(id, ct) ?? throw new KeyNotFoundException();
+        await RemoveMappingsAsync(true, id, ct);
         repo.Remove(e);
+        await _uow.SaveChangesAsync(ct);
+    }
+
+    // Supprime les mappings d'entite (et leurs champs) d'une connexion. Sans cela les lignes
+    // restent orphelines et bloquent la reutilisation de l'index unique (SageDbId/PointeuseDbId, EntityKind).
+    private async Task RemoveMappingsAsync(bool isSage, int connectionId, CancellationToken ct)
+    {
+        var entRepo = _uow.Repository<T_SOURCE_ENTITY_MAPPING>();
+        var fldRepo = _uow.Repository<T_SOURCE_FIELD_MAPPING>();
+        var existing = await entRepo.ListAsync(m => isSage ? m.SageDbId == connectionId : m.PointeuseDbId == connectionId, ct);
+        if (existing.Count == 0) return;
+        var ids = existing.Select(x => x.Id).ToHashSet();
+        var fields = await fldRepo.ListAsync(f => ids.Contains(f.EntityMappingId), ct);
+        fldRepo.RemoveRange(fields);
+        entRepo.RemoveRange(existing);
         await _uow.SaveChangesAsync(ct);
     }
 
@@ -232,6 +248,7 @@ public class CatalogService
     {
         var repo = _uow.Repository<T_BDD_POINTEUSE>();
         var e = await repo.GetByIdAsync(id, ct) ?? throw new KeyNotFoundException();
+        await RemoveMappingsAsync(false, id, ct);
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
     }
@@ -570,10 +587,17 @@ public class CatalogService
                 );
             END
 
+            -- Index uniques FILTRES : pour une ligne SAGE, PointeuseDbId est NULL (et inversement).
+            -- Sans filtre, SQL Server considere tous les NULL comme egaux et n'autoriserait qu'UNE
+            -- seule ligne par EntityKind pour tout le systeme (2e base Sage/pointeuse refusee).
+            IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_SEM_Sage_Kind' AND object_id = OBJECT_ID(N'dbo.T_SOURCE_ENTITY_MAPPING') AND filter_definition IS NULL)
+                DROP INDEX UX_SEM_Sage_Kind ON dbo.T_SOURCE_ENTITY_MAPPING;
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_SEM_Sage_Kind' AND object_id = OBJECT_ID(N'dbo.T_SOURCE_ENTITY_MAPPING'))
-                CREATE UNIQUE INDEX UX_SEM_Sage_Kind ON dbo.T_SOURCE_ENTITY_MAPPING (SageDbId, EntityKind);
+                CREATE UNIQUE INDEX UX_SEM_Sage_Kind ON dbo.T_SOURCE_ENTITY_MAPPING (SageDbId, EntityKind) WHERE SageDbId IS NOT NULL;
+            IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_SEM_Pte_Kind' AND object_id = OBJECT_ID(N'dbo.T_SOURCE_ENTITY_MAPPING') AND filter_definition IS NULL)
+                DROP INDEX UX_SEM_Pte_Kind ON dbo.T_SOURCE_ENTITY_MAPPING;
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_SEM_Pte_Kind' AND object_id = OBJECT_ID(N'dbo.T_SOURCE_ENTITY_MAPPING'))
-                CREATE UNIQUE INDEX UX_SEM_Pte_Kind ON dbo.T_SOURCE_ENTITY_MAPPING (PointeuseDbId, EntityKind);
+                CREATE UNIQUE INDEX UX_SEM_Pte_Kind ON dbo.T_SOURCE_ENTITY_MAPPING (PointeuseDbId, EntityKind) WHERE PointeuseDbId IS NOT NULL;
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_SFM_Entity_Role' AND object_id = OBJECT_ID(N'dbo.T_SOURCE_FIELD_MAPPING'))
                 CREATE UNIQUE INDEX UX_SFM_Entity_Role ON dbo.T_SOURCE_FIELD_MAPPING (EntityMappingId, FieldRoleCode);
 
