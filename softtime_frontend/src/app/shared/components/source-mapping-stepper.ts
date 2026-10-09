@@ -35,7 +35,7 @@ interface EntityState {
   fields: Record<string, string | null>;
 }
 
-const SAGE_ENTITIES = ['EMPLOYEE', 'AFFECTATION', 'DEPARTMENT', 'COMPANY_CALENDAR', 'CONSTANT', 'ABSENCE_EVENT', 'EMPLOYEE_EVENT'];
+const SAGE_ENTITIES = ['EMPLOYEE', 'AFFECTATION', 'DEPARTMENT', 'COMPANY_CALENDAR', 'CONSTANT'];
 const POINTEUSE_ENTITIES = ['PUNCH_USER', 'PUNCH'];
 
 const ENTITY_LABELS: Record<string, string> = {
@@ -44,8 +44,6 @@ const ENTITY_LABELS: Record<string, string> = {
   DEPARTMENT: 'Départements',
   COMPANY_CALENDAR: 'Calendrier / fériés',
   CONSTANT: 'Constantes',
-  ABSENCE_EVENT: 'Événements absence',
-  EMPLOYEE_EVENT: 'Événements employé',
   PUNCH_USER: 'Utilisateurs pointeuse',
   PUNCH: 'Pointages',
 };
