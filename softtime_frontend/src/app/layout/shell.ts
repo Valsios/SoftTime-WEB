@@ -8,6 +8,7 @@ import { NAV_SECTIONS, NavSection } from './nav';
 import { Icon } from '../shared/components/icon';
 import { PointeuseDb } from '../shared/models';
 import { ToastService } from '../core/toast.service';
+import { ConfirmService } from '../core/confirm.service';
 
 @Component({
   selector: 'app-shell',
@@ -81,6 +82,7 @@ import { ToastService } from '../core/toast.service';
           }
           @if (pointeuseDbs().length) {
             <div class="topbar__company">
+              <app-icon name="clock" [size]="16"></app-icon>
               <select
                 (change)="onPointeuseChange($event)"
                 aria-label="Base de pointage"
@@ -316,6 +318,7 @@ export class Shell implements OnInit {
 
   private readonly sageApi = inject(SageDatabasesService);
   private readonly toast = inject(ToastService);
+  private readonly confirm = inject(ConfirmService);
 
   readonly collapsed = signal(false);
   readonly databases = computed(() => this.session.databases());
@@ -379,7 +382,9 @@ export class Shell implements OnInit {
     });
   }
 
-  logout(): void {
+  async logout(): Promise<void> {
+    const ok = await this.confirm.ask('Voulez-vous vraiment vous déconnecter ?', 'Déconnexion', 'Se déconnecter');
+    if (!ok) return;
     this.auth.logout();
     this.router.navigate(['/login']);
   }
