@@ -570,10 +570,14 @@ public class CatalogService
                 );
             END
 
+            IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_SEM_Sage_Kind' AND object_id = OBJECT_ID(N'dbo.T_SOURCE_ENTITY_MAPPING') AND has_filter = 0)
+                DROP INDEX UX_SEM_Sage_Kind ON dbo.T_SOURCE_ENTITY_MAPPING;
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_SEM_Sage_Kind' AND object_id = OBJECT_ID(N'dbo.T_SOURCE_ENTITY_MAPPING'))
-                CREATE UNIQUE INDEX UX_SEM_Sage_Kind ON dbo.T_SOURCE_ENTITY_MAPPING (SageDbId, EntityKind);
+                CREATE UNIQUE INDEX UX_SEM_Sage_Kind ON dbo.T_SOURCE_ENTITY_MAPPING (SageDbId, EntityKind) WHERE SageDbId IS NOT NULL;
+            IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_SEM_Pte_Kind' AND object_id = OBJECT_ID(N'dbo.T_SOURCE_ENTITY_MAPPING') AND has_filter = 0)
+                DROP INDEX UX_SEM_Pte_Kind ON dbo.T_SOURCE_ENTITY_MAPPING;
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_SEM_Pte_Kind' AND object_id = OBJECT_ID(N'dbo.T_SOURCE_ENTITY_MAPPING'))
-                CREATE UNIQUE INDEX UX_SEM_Pte_Kind ON dbo.T_SOURCE_ENTITY_MAPPING (PointeuseDbId, EntityKind);
+                CREATE UNIQUE INDEX UX_SEM_Pte_Kind ON dbo.T_SOURCE_ENTITY_MAPPING (PointeuseDbId, EntityKind) WHERE PointeuseDbId IS NOT NULL;
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_SFM_Entity_Role' AND object_id = OBJECT_ID(N'dbo.T_SOURCE_FIELD_MAPPING'))
                 CREATE UNIQUE INDEX UX_SFM_Entity_Role ON dbo.T_SOURCE_FIELD_MAPPING (EntityMappingId, FieldRoleCode);
 
@@ -1526,6 +1530,10 @@ public class CatalogService
             BEGIN
                 DELETE FROM dbo.T_CODE_CONSTANTE
                 WHERE ID NOT IN (SELECT MIN(ID) FROM dbo.T_CODE_CONSTANTE GROUP BY CATEGORIE);
+                IF EXISTS (SELECT * FROM sys.indexes WHERE name = 'UX_T_CODE_CONSTANTE_GLOBAL' AND object_id = OBJECT_ID('dbo.T_CODE_CONSTANTE'))
+                    DROP INDEX UX_T_CODE_CONSTANTE_GLOBAL ON dbo.T_CODE_CONSTANTE;
+                IF EXISTS (SELECT * FROM sys.indexes WHERE name = 'UX_T_CODE_CONSTANTE_BASE' AND object_id = OBJECT_ID('dbo.T_CODE_CONSTANTE'))
+                    DROP INDEX UX_T_CODE_CONSTANTE_BASE ON dbo.T_CODE_CONSTANTE;
                 ALTER TABLE dbo.T_CODE_CONSTANTE DROP COLUMN BDD_SAGE;
             END
             """, ct);
