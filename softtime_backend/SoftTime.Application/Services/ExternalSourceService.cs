@@ -69,7 +69,7 @@ public sealed class ExternalSourceService : IExternalSourceService
     {
         var (table, map) = await LoadRoleMapAsync(isSage, connectionId, entityKind, ct);
         if (string.IsNullOrWhiteSpace(table))
-            throw new InvalidOperationException($"Table source non définie pour l'entité '{entityKind}'.");
+            return Array.Empty<MappedRow>();
         return await _reader.ReadAsync(connectionString, table!, map, query, ct);
     }
 
