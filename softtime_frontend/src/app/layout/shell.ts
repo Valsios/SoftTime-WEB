@@ -42,17 +42,15 @@ import { ConfirmService } from '../core/confirm.service';
             <div class="sidebar__section">
               @if (!collapsed()) {<span class="sidebar__section-title">{{ section.title }}</span>}
               @for (item of section.items; track item.path) {
-                @if (session.hasRight(item.droit)) {
-                  <a
-                    [routerLink]="item.path"
-                    routerLinkActive="is-active"
-                    class="sidebar__item"
-                    [title]="item.label"
-                  >
-                    <app-icon [name]="item.icon"></app-icon>
-                    @if (!collapsed()) {<span>{{ item.label }}</span>}
-                  </a>
-                }
+                <a
+                  [routerLink]="item.path"
+                  routerLinkActive="is-active"
+                  class="sidebar__item"
+                  [title]="item.label"
+                >
+                  <app-icon [name]="item.icon"></app-icon>
+                  @if (!collapsed()) {<span>{{ item.label }}</span>}
+                </a>
               }
             </div>
           }
@@ -338,9 +336,10 @@ export class Shell implements OnInit {
   readonly pointeuseDbs = computed(() => this.session.pointeuseDatabases());
 
   readonly visibleSections = computed<NavSection[]>(() =>
-    NAV_SECTIONS.filter(
-      (s) => this.session.hasRight(s.droit) && s.items.some((i) => this.session.hasRight(i.droit)),
-    ),
+    NAV_SECTIONS.map((section) => ({
+      ...section,
+      items: section.items.filter((item) => this.session.hasPermission(item.permission, item.droit)),
+    })).filter((section) => section.items.length > 0),
   );
 
   readonly initials = computed(() => {

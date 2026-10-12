@@ -25,6 +25,7 @@ export interface LoginResponse {
   matricule?: string | null;
   rights: number[];
   authorizedDatabases: SageDb[];
+  permissions?: string[];
 }
 
 export interface User {

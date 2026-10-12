@@ -15,6 +15,7 @@ interface StoredSession {
   matricule?: string | null;
   rights: number[];
   authorizedDatabases: SageDb[];
+  permissions?: string[];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -32,6 +33,7 @@ export class SessionStore {
   readonly session = this._session.asReadonly();
   readonly isAuthenticated = computed(() => !!this._token());
   readonly rights = computed(() => this._session()?.rights ?? []);
+  readonly permissions = computed(() => this._session()?.permissions ?? []);
   readonly databases = computed(() => this._session()?.authorizedDatabases ?? []);
   readonly displayName = computed(() => this._session()?.nom ?? this._session()?.login ?? '');
 
@@ -47,6 +49,23 @@ export class SessionStore {
     return this.rights().includes(droit);
   }
 
+  hasPermission(permissionCode?: string, fallbackDroit?: number): boolean {
+    if (!permissionCode) {
+      return fallbackDroit ? this.hasRight(fallbackDroit) : true;
+    }
+    const perms = this.permissions();
+    if (perms && perms.length > 0) {
+      if (permissionCode === 'SAGE') {
+        return perms.some((p) => p.startsWith('SAGE:'));
+      }
+      if (permissionCode === 'POINTEUSE') {
+        return perms.some((p) => p.startsWith('POINTEUSE:'));
+      }
+      return perms.includes(permissionCode);
+    }
+    return fallbackDroit ? this.hasRight(fallbackDroit) : true;
+  }
+
   setSession(res: LoginResponse): void {
     const session: StoredSession = {
       userId: res.userId,
@@ -56,6 +75,7 @@ export class SessionStore {
       matricule: res.matricule,
       rights: res.rights ?? [],
       authorizedDatabases: res.authorizedDatabases ?? [],
+      permissions: res.permissions ?? [],
     };
     this._token.set(res.token);
     this._session.set(session);
@@ -111,6 +131,17 @@ export class SessionStore {
       const preferred = dbs.find((d) => d.active)?.nomBd ?? names[0] ?? null;
       this.setActivePointeuseDb(preferred);
     }
+  }
+
+  setPermissions(permissions: string[]): void {
+    const cur = this._session();
+    if (!cur) return;
+    const updated: StoredSession = {
+      ...cur,
+      permissions: permissions ?? [],
+    };
+    this._session.set(updated);
+    localStorage.setItem(SESSION_KEY, JSON.stringify(updated));
   }
 
   toggleTheme(): void {
