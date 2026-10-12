@@ -8,6 +8,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/auth/login').then((m) => m.LoginPage),
   },
   {
+    // Démarrage initial : création du premier administrateur (anonyme, une seule fois).
+    path: 'setup',
+    loadComponent: () => import('./features/auth/setup').then((m) => m.SetupPage),
+  },
+  {
     path: '',
     loadComponent: () => import('./layout/shell').then((m) => m.Shell),
     canActivate: [authGuard],
@@ -16,6 +21,10 @@ export const routes: Routes = [
       {
         path: 'dashboard',
         loadComponent: () => import('./features/dashboard/dashboard').then((m) => m.Dashboard),
+      },
+      {
+        path: 'analytics',
+        loadComponent: () => import('./features/dashboard/analytics').then((m) => m.AnalyticsPage),
       },
 
       // Databases (droit 1)
@@ -193,6 +202,12 @@ export const routes: Routes = [
       },
 
       // Traceability (droit 5)
+      {
+        path: 'history',
+        canActivate: [droitGuard],
+        data: { droit: Droit.Traceability },
+        loadComponent: () => import('./features/reports/history').then((m) => m.HistoryPage),
+      },
       {
         path: 'audit',
         canActivate: [droitGuard],

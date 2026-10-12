@@ -49,6 +49,14 @@ const DROIT_LABELS: Record<number, string> = {
       </soft-card>
     </div>
 
+    <h2 class="dash-section-title">Analyse</h2>
+    <div class="dash-links">
+      <a routerLink="/analytics" class="dash-link soft-card soft-card--interactive soft-card--pad-md">
+        <strong>Analyse de la période</strong>
+        <small>Absences, retards et indicateurs clés</small>
+      </a>
+    </div>
+
     <h2 class="dash-section-title">Accès rapide</h2>
     <div class="dash-links">
       @for (item of quickLinks(); track item.path) {

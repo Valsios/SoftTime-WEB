@@ -27,6 +27,7 @@ public static class DependencyInjection
         services.AddScoped<IPayrollWriter, OtherPayrollWriter>();
         services.AddScoped<IExternalDiscoveryService, ExternalDiscoveryService>();
         services.AddScoped<IPunchAggregate, PunchAggregate>();
+        services.AddScoped<IEmailService, EmailService>();
         return services;
     }
 }

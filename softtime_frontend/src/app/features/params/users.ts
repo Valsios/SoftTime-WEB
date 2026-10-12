@@ -39,6 +39,7 @@ import { asRow } from '../../shared/utils/date';
       <div class="form-grid">
         <soft-input label="Nom" [(ngModel)]="form.nom" name="nom"></soft-input>
         <soft-input label="Login" [(ngModel)]="form.login" name="login"></soft-input>
+        <soft-input label="E-mail" type="email" [(ngModel)]="form.email" name="email" placeholder="Envoi des identifiants"></soft-input>
         <soft-select label="Matricule" [(ngModel)]="form.matricule" name="matricule" placeholder="Aucun" [options]="matriculeOptions()"></soft-select>
         <soft-input label="Mot de passe" type="password" [(ngModel)]="form.password" name="password"></soft-input>
         <soft-select label="Rôle" [(ngModel)]="form.roleId" name="roleId" [options]="roleOptions()"></soft-select>
@@ -71,6 +72,7 @@ export class UsersPage implements OnInit {
     { key: 'id', label: 'ID' },
     { key: 'nom', label: 'Nom' },
     { key: 'login', label: 'Login' },
+    { key: 'email', label: 'E-mail' },
     { key: 'matricule', label: 'Matricule' },
     { key: 'roleName', label: 'Rôle' },
   ];

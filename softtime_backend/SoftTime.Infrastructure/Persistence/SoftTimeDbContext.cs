@@ -35,7 +35,6 @@ public class SoftTimeDbContext : DbContext
     public DbSet<T_MAJORATION> T_MAJORATION => Set<T_MAJORATION>();
     public DbSet<T_TOLERANCE> T_TOLERANCE => Set<T_TOLERANCE>();
     public DbSet<T_HS_VALIDER> T_HS_VALIDER => Set<T_HS_VALIDER>();
-    public DbSet<T_CARDPAIE_SAUVE> T_CARDPAIE_SAUVE => Set<T_CARDPAIE_SAUVE>();
     public DbSet<T_CATEGORIE> T_CATEGORIE => Set<T_CATEGORIE>();
     public DbSet<T_CAT_SAL> T_CAT_SAL => Set<T_CAT_SAL>();
     public DbSet<T_POINTAGE> T_POINTAGE => Set<T_POINTAGE>();
@@ -50,6 +49,9 @@ public class SoftTimeDbContext : DbContext
     public DbSet<T_FIELD_ROLE> T_FIELD_ROLE => Set<T_FIELD_ROLE>();
     public DbSet<T_SOURCE_ENTITY_MAPPING> T_SOURCE_ENTITY_MAPPING => Set<T_SOURCE_ENTITY_MAPPING>();
     public DbSet<T_SOURCE_FIELD_MAPPING> T_SOURCE_FIELD_MAPPING => Set<T_SOURCE_FIELD_MAPPING>();
+    public DbSet<T_HISTORIQUE_POINTAGE> T_HISTORIQUE_POINTAGE => Set<T_HISTORIQUE_POINTAGE>();
+    public DbSet<T_HISTORIQUE_ANOMALIE> T_HISTORIQUE_ANOMALIE => Set<T_HISTORIQUE_ANOMALIE>();
+    public DbSet<T_HISTORIQUE_HS> T_HISTORIQUE_HS => Set<T_HISTORIQUE_HS>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../shared/services/auth.service';
@@ -109,7 +109,7 @@ import { SoftInput } from '../../shared/components/soft-input';
     `,
   ],
 })
-export class LoginPage {
+export class LoginPage implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly session = inject(SessionStore);
   private readonly router = inject(Router);
@@ -117,6 +117,16 @@ export class LoginPage {
   readonly login = signal('');
   readonly password = signal('');
   readonly loading = signal(false);
+
+  ngOnInit(): void {
+    // Installation vierge : aucun compte à authentifier, on propose la création de l'administrateur.
+    this.auth.isFirstRun().subscribe({
+      next: (firstRun) => {
+        if (firstRun) this.router.navigateByUrl('/setup', { replaceUrl: true });
+      },
+      error: () => undefined,
+    });
+  }
 
   submit(): void {
     if (!this.login() || !this.password() || this.loading()) return;

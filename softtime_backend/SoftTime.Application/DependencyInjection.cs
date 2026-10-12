@@ -18,9 +18,12 @@ public static class DependencyInjection
         services.AddScoped<IExternalSourceService, ExternalSourceService>();
         services.AddScoped<PlanningService>();
         services.AddScoped<TimekeepingService>();
+        services.AddScoped<PunchProcessingService>();
+        services.AddScoped<HistoryArchiveService>();
         services.AddScoped<OvertimeService>();
         services.AddScoped<PayrollWriterResolver>();
         services.AddScoped<ReportService>();
+        services.AddScoped<DashboardService>();
         services.AddScoped<ExtraService>();
         services.AddScoped<AuditService>();
         return services;

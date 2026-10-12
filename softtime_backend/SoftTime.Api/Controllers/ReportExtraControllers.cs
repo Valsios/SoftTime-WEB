@@ -59,9 +59,24 @@ public class CanteenController : ControllerBase
     public async Task<IActionResult> List([FromQuery] PeriodRequest request, CancellationToken ct)
         => Ok(await _svc.ListCanteenAsync(request, ct));
 
+    /// <summary>Anomalies du calcul cantine : pointage contredisant une absence complète.</summary>
+    [HttpGet("anomalies")]
+    public async Task<IActionResult> Anomalies([FromQuery] PeriodRequest request, CancellationToken ct)
+        => Ok(await _svc.ListCanteenAnomaliesAsync(request, ct));
+
     [HttpPost("compute")]
     public async Task<IActionResult> Compute([FromBody] PeriodRequest request, CancellationToken ct)
         => Ok(await _svc.ComputeCanteenAsync(request, ct));
+
+    /// <summary>Pousse les totaux cantine de la période dans le cumul SAGE (T_CUMSAL).</summary>
+    [HttpPost("sync")]
+    public async Task<IActionResult> Sync([FromBody] PeriodRequest request, CancellationToken ct)
+        => Ok(await _svc.SyncCanteenAsync(request, ct));
+
+    /// <summary>Purge les cantines calculées sur la période.</summary>
+    [HttpDelete]
+    public async Task<IActionResult> Purge([FromQuery] PeriodRequest request, CancellationToken ct)
+        => Ok(await _svc.PurgeCanteenAsync(request, ct));
 }
 
 [ApiController]
@@ -81,6 +96,11 @@ public class TravelController : ControllerBase
     [HttpPost("compute")]
     public async Task<IActionResult> Compute([FromBody] PeriodRequest request, CancellationToken ct)
         => Ok(await _svc.ComputeTravelAsync(request, ct));
+
+    /// <summary>Pousse les totaux de frais de déplacement de la période dans le cumul SAGE (T_CUMSAL).</summary>
+    [HttpPost("sync")]
+    public async Task<IActionResult> Sync([FromBody] PeriodRequest request, CancellationToken ct)
+        => Ok(await _svc.SyncTravelAsync(request, ct));
 }
 
 [ApiController]

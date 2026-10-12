@@ -9,13 +9,15 @@ using SoftTime.Api.Middleware;
 using SoftTime.Api.Security;
 using SoftTime.Application;
 using SoftTime.Application.Abstractions;
+using SoftTime.Application.Serialization;
 using SoftTime.Application.Services;
 using SoftTime.Infrastructure;
 using SoftTime.Domain.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(o => SoftTimeJsonOptions.Configure(o.JsonSerializerOptions));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -121,6 +123,9 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     await SageDatabaseConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
+    await PunchProcessingConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
+    await HistoryArchiveConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
+    await UserAccountConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
 }
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseSwagger();

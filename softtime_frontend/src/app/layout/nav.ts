@@ -77,6 +77,9 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: 'Traçabilité',
     droit: Droit.Traceability,
-    items: [{ label: 'Audit', path: '/audit', icon: 'history', droit: Droit.Traceability }],
+    items: [
+      { label: 'Audit', path: '/audit', icon: 'history', droit: Droit.Traceability },
+      { label: 'Historique', path: '/history', icon: 'layers', droit: Droit.Traceability },
+    ],
   },
 ];

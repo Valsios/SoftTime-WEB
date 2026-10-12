@@ -167,6 +167,9 @@ export class TolerancesService extends ApiService {
   update(id: number, dto: Tolerance): Observable<Tolerance> {
     return this.http.put<Tolerance>(this.url(`/api/tolerances/${id}`), dto);
   }
+  remove(id: number): Observable<void> {
+    return this.http.delete<void>(this.url(`/api/tolerances/${id}`));
+  }
 }
 
 @Injectable({ providedIn: 'root' })

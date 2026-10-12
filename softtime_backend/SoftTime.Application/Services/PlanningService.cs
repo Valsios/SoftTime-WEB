@@ -1,6 +1,7 @@
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
+using SoftTime.Domain.Services;
 
 namespace SoftTime.Application.Services;
 
@@ -231,6 +232,160 @@ public class PlanningService
         }
         await _uow.SaveChangesAsync(ct);
         return new ImportResultDto(imported, skipped, "Planning importé.");
+    }
+
+    /// <summary>
+    /// Génère le planning d'une semaine depuis un CSV « catégorie ; lundi ; (début ; fin) × 7 ».
+    /// Chaque ligne alimente tous les salariés affectés à la catégorie, avec la pause de la catégorie.
+    /// Portage de <c>GenererPlanningParCategorieAsync</c> du desktop.
+    /// Écart assumé : un jour « OFF » est enregistré <c>OffP = true</c> avec des heures nulles, au lieu
+    /// de la date sentinelle 1800-01-01 du desktop (le calcul de semaine ignore déjà ces jours).
+    /// </summary>
+    public Task<ImportResultDto> GenerateFromCategoryCsvAsync(IReadOnlyList<string[]> lines, CancellationToken ct = default)
+        => GenerateFromCsvAsync(lines, parCategorie: true, ct);
+
+    /// <summary>
+    /// Génère le planning d'une semaine depuis un CSV « matricule ; lundi ; (début ; pause ; fin) × 7 »,
+    /// avec une pause saisie par jour. Portage de <c>GenererPlanningsAsync</c> du desktop.
+    /// </summary>
+    public Task<ImportResultDto> GenerateFromMatriculeCsvAsync(IReadOnlyList<string[]> lines, CancellationToken ct = default)
+        => GenerateFromCsvAsync(lines, parCategorie: false, ct);
+
+    private async Task<ImportResultDto> GenerateFromCsvAsync(
+        IReadOnlyList<string[]> lines, bool parCategorie, CancellationToken ct)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        if (lines.Count <= 1)
+            return new ImportResultDto(0, 0, "Fichier vide (en-tête seule).");
+
+        var sageDb = _tenant.SageDb;
+        var pointeuseDb = _tenant.PointeuseDb;
+        var cards = await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == sageDb, ct);
+        var categories = await _uow.Repository<T_CATEGORIE>().ListAsync(c => c.BDD_SAGE == sageDb, ct);
+        var affectations = await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == sageDb, ct);
+        var repo = _uow.Repository<T_PLANNING_SAL>();
+        var existantes = await repo.ListAsync(p => p.BDD_SAGE == sageDb, ct);
+
+        var pas = parCategorie ? 2 : 3;   // (début, fin) ou (début, pause, fin)
+        var ecrites = 0;
+        var joursIgnores = 0;
+        var lignesIgnores = 0;
+
+        // La première ligne est un en-tête.
+        foreach (var cells in lines.Skip(1))
+        {
+            if (cells.Length < 1 + pas)
+            {
+                lignesIgnores++;
+                continue;
+            }
+            var cle = cells[0].Trim();
+            if (!PlanningGenerationRules.TryLundi(PlanningGenerationRules.Cellule(cells, 1), out var lundi))
+            {
+                lignesIgnores++;
+                continue;
+            }
+
+            List<T_CARDPAIE> cibles;
+            TimeSpan? pauseCategorie = null;
+            if (parCategorie)
+            {
+                var categorie = categories.FirstOrDefault(c =>
+                    string.Equals(c.INTITULE?.Trim(), cle, StringComparison.OrdinalIgnoreCase));
+                if (categorie is null)
+                {
+                    lignesIgnores++;
+                    continue;
+                }
+                pauseCategorie = categorie.PAUSE;
+                var ids = affectations.Where(a => a.ID_CATEG == categorie.IDCATEGORIE).Select(a => a.MATRICULE_SAGE).ToHashSet();
+                cibles = cards.Where(c => ids.Contains(c.ID)).ToList();
+            }
+            else
+            {
+                var carte = cards.FirstOrDefault(c => MemeIdentifiant(c.SAGE_MATRICULE, cle));
+                cibles = carte is null ? new List<T_CARDPAIE>() : new List<T_CARDPAIE> { carte };
+            }
+            if (cibles.Count == 0)
+            {
+                lignesIgnores++;
+                continue;
+            }
+
+            for (var jourSemaine = 0; jourSemaine < PlanningGenerationRules.JoursParSemaine; jourSemaine++)
+            {
+                var debutIndex = PlanningGenerationRules.IndiceDebut(jourSemaine, avecPauseParJour: !parCategorie);
+                var debutTxt = PlanningGenerationRules.Cellule(cells, debutIndex);
+                var finTxt = PlanningGenerationRules.Cellule(cells, debutIndex + pas - 1);
+                var jour = lundi.AddDays(jourSemaine);
+                var off = PlanningGenerationRules.EstOff(debutTxt);
+
+                DateTime? ha = null;
+                DateTime? hd = null;
+                var pause = pauseCategorie;
+                if (!off)
+                {
+                    if (!PlanningGenerationRules.TryIntervalle(jour, debutTxt, finTxt, out ha, out hd))
+                    {
+                        joursIgnores++;
+                        continue;
+                    }
+                    if (!parCategorie && PlanningGenerationRules.TryHeure(PlanningGenerationRules.Cellule(cells, debutIndex + 1), out var pauseJour))
+                        pause = pauseJour;
+                }
+
+                foreach (var carte in cibles)
+                {
+                    var entity = existantes.FirstOrDefault(p => p.IDSAL == carte.ID && p.DateP?.Date == jour);
+                    if (entity is null)
+                    {
+                        entity = new T_PLANNING_SAL
+                        {
+                            IDSAL = carte.ID,
+                            DateP = jour,
+                            HA = ha,
+                            HD = hd,
+                            Pause = off ? TimeSpan.Zero : pause,
+                            OffP = off,
+                            BDD_SAGE = sageDb,
+                            BDD_POINTEUSE = pointeuseDb
+                        };
+                        await repo.AddAsync(entity, ct);
+                        existantes.Add(entity);
+                    }
+                    else
+                    {
+                        entity.DateP = jour;
+                        entity.HA = ha;
+                        entity.HD = hd;
+                        entity.Pause = off ? TimeSpan.Zero : pause;
+                        entity.OffP = off;
+                        entity.BDD_SAGE = sageDb;
+                        entity.BDD_POINTEUSE = pointeuseDb;
+                        repo.Update(entity);
+                    }
+                    ecrites++;
+                }
+            }
+        }
+
+        await _uow.SaveChangesAsync(ct);
+        var message = $"{ecrites} jour(s) de planning généré(s)"
+            + (joursIgnores > 0 ? $", {joursIgnores} jour(s) ignoré(s) (heures illisibles)" : string.Empty)
+            + (lignesIgnores > 0 ? $", {lignesIgnores} ligne(s) ignorée(s)" : string.Empty) + ".";
+        return new ImportResultDto(ecrites, joursIgnores + lignesIgnores, message);
+    }
+
+    /// <summary>Comparaison de matricule insensible au remplissage par des zéros (« 00369 » == « 369 »).</summary>
+    private static bool MemeIdentifiant(string? a, string? b)
+    {
+        a = a?.Trim();
+        b = b?.Trim();
+        if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b))
+            return false;
+        if (long.TryParse(a, out var na) && long.TryParse(b, out var nb))
+            return na == nb;
+        return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
     }
 
     public async Task<ImportResultDto> ImportShiftsExcelAsync(IReadOnlyList<Dictionary<string, string>> rows, CancellationToken ct = default)

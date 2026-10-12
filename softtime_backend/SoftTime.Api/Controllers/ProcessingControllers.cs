@@ -98,6 +98,38 @@ public class EmployeePlanningController : ControllerBase
             return BadRequest("Fichier Excel vide ou sans en-têtes.");
         return Ok(await _svc.ImportExcelAsync(rows, headers, ct));
     }
+
+    /// <summary>
+    /// Génère le planning d'une semaine pour toute une catégorie.
+    /// CSV « catégorie ; lundi ; (début ; fin) × 7 », « OFF » pour un jour non travaillé.
+    /// </summary>
+    [HttpPost("generate-from-category")]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> GenerateFromCategory(IFormFile file, CancellationToken ct)
+        => Ok(await _svc.GenerateFromCategoryCsvAsync(await ReadCsvAsync(file, ct), ct));
+
+    /// <summary>
+    /// Génère le planning d'une semaine pour un ou plusieurs salariés.
+    /// CSV « matricule ; lundi ; (début ; pause ; fin) × 7 », « OFF » pour un jour non travaillé.
+    /// </summary>
+    [HttpPost("generate")]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> Generate(IFormFile file, CancellationToken ct)
+        => Ok(await _svc.GenerateFromMatriculeCsvAsync(await ReadCsvAsync(file, ct), ct));
+
+    /// <summary>Lecture d'un CSV point-virgule (ou virgule) en lignes de cellules nettoyées.</summary>
+    private static async Task<IReadOnlyList<string[]>> ReadCsvAsync(IFormFile file, CancellationToken ct)
+    {
+        using var reader = new StreamReader(file.OpenReadStream());
+        var text = await reader.ReadToEndAsync(ct);
+        return text.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(l =>
+            {
+                var sep = l.Contains(';') ? ';' : ',';
+                return l.Split(sep).Select(p => p.Trim().Trim('"')).ToArray();
+            })
+            .ToList();
+    }
 }
 
 [ApiController]
@@ -108,15 +140,43 @@ public class EmployeePlanningController : ControllerBase
 public class PunchesController : ControllerBase
 {
     private readonly TimekeepingService _svc;
-    public PunchesController(TimekeepingService svc) => _svc = svc;
+    private readonly PunchProcessingService _processing;
+    public PunchesController(TimekeepingService svc, PunchProcessingService processing)
+    {
+        _svc = svc;
+        _processing = processing;
+    }
 
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery] PeriodRequest filter, CancellationToken ct)
         => Ok(await _svc.ListPunchesAsync(filter, ct));
 
+    /// <summary>
+    /// Même liste que <c>GET /api/punches</c>, mais paginée (page à partir de 1, taille plafonnée à 100).
+    /// Variante additive : le contrat de l'endpoint non paginé est conservé pour l'export Excel du client.
+    /// </summary>
+    [HttpGet("paged")]
+    public async Task<IActionResult> GetPaged([FromQuery] PeriodRequest filter, [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
+        => Ok(await _svc.ListPunchesPagedAsync(filter, page, pageSize, ct));
+
     [HttpPost("import-clock")]
     public async Task<IActionResult> ImportClock([FromBody] ImportPunchesRequest request, CancellationToken ct)
         => Ok(await _svc.ImportFromClockAsync(request, ct));
+
+    /// <summary>Pré-traitement : pointages → heures corrigées (T_HEURECORRIGER) + anomalies.</summary>
+    [HttpPost("preprocess")]
+    public async Task<IActionResult> Preprocess([FromBody] PeriodRequest request, CancellationToken ct)
+        => Ok(await _processing.ProcessAsync(request, ct));
+
+    /// <summary>Corrige un pointage importé (refusé si la semaine est validée).</summary>
+    [HttpPut("{id}")]
+    public async Task<IActionResult> Update(decimal id, [FromBody] PunchUpdateDto dto, CancellationToken ct)
+        => Ok(await _svc.UpdatePunchAsync(id, dto, ct));
+
+    /// <summary>Purge la période : pointages + corrections automatiques + anomalies (archivés).</summary>
+    [HttpDelete]
+    public async Task<IActionResult> Purge([FromQuery] PeriodRequest filter, CancellationToken ct)
+        => Ok(await _svc.PurgePunchesAsync(filter, ct));
 
     [HttpPost("import-excel")]
     [Consumes("multipart/form-data")]
@@ -141,6 +201,23 @@ public class AnomaliesController : ControllerBase
     public async Task<IActionResult> Get([FromQuery] PeriodRequest filter, CancellationToken ct)
         => Ok(await _svc.ListAnomaliesAsync(filter, ct));
 
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetOne(decimal id, CancellationToken ct)
+    {
+        var dto = await _svc.GetAnomalyAsync(id, ct);
+        return dto is null ? NotFound() : Ok(dto);
+    }
+
+    /// <summary>Arbitrage : heures retenues + drapeaux d'absence / férié.</summary>
+    [HttpPut("{id}")]
+    public async Task<IActionResult> Update(decimal id, [FromBody] AnomalyUpdateDto dto, CancellationToken ct)
+        => Ok(await _svc.UpdateAnomalyAsync(id, dto, ct));
+
+    /// <summary>Validation en masse : les anomalies deviennent des heures corrigées puis sont supprimées.</summary>
+    [HttpPost("validate")]
+    public async Task<IActionResult> Validate([FromBody] AnomalyValidationRequest request, CancellationToken ct)
+        => Ok(await _svc.ValidateAnomaliesAsync(request.Ids, ct));
+
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(decimal id, CancellationToken ct)
     {
@@ -162,6 +239,14 @@ public class CorrectedHoursController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery] PeriodRequest filter, CancellationToken ct)
         => Ok(await _svc.ListCorrectionsAsync(filter, ct));
+
+    /// <summary>
+    /// Même liste que <c>GET /api/corrected-hours</c>, mais paginée (page à partir de 1, taille plafonnée à 100).
+    /// Variante additive : le contrat de l'endpoint non paginé est conservé pour l'export Excel du client.
+    /// </summary>
+    [HttpGet("paged")]
+    public async Task<IActionResult> GetPaged([FromQuery] PeriodRequest filter, [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
+        => Ok(await _svc.ListCorrectionsPagedAsync(filter, page, pageSize, ct));
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CorrectedHourDto dto, CancellationToken ct)
@@ -214,6 +299,11 @@ public class WeeklyValidationController : ControllerBase
         await _svc.ValidateWeekAsync(request, false, ct);
         return NoContent();
     }
+
+    /// <summary>Purge la validation de la semaine (supprime T_HS_VALIDER et déverrouille les heures).</summary>
+    [HttpDelete]
+    public async Task<IActionResult> Purge([FromQuery] PeriodRequest filter, CancellationToken ct)
+        => Ok(await _svc.PurgeValidationAsync(filter, ct));
 }
 
 [ApiController]
@@ -257,4 +347,9 @@ public class OvertimeController : ControllerBase
     [HttpPost("sync-payroll")]
     public async Task<IActionResult> SyncPayroll([FromBody] PeriodRequest request, CancellationToken ct)
         => Ok(await _svc.SyncPayrollAsync(request, ct));
+
+    /// <summary>Détail du calcul des heures supplémentaires d'un salarié (jours, semaines, EXO/IMPO).</summary>
+    [HttpGet("detail/{matricule}")]
+    public async Task<IActionResult> Detail(string matricule, [FromQuery] DateTime from, [FromQuery] DateTime to, CancellationToken ct)
+        => Ok(await _svc.DetailAsync(matricule, from, to, ct));
 }
