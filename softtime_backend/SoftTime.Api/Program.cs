@@ -121,6 +121,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     await SageDatabaseConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
+    await PunchProcessingConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
 }
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseSwagger();

@@ -127,6 +127,7 @@ public static class ApiCatalog
         E("Punches", "GET", "/api/punches?from=&to=&matriculeFrom=&matriculeTo=", "Liste pointages"),
         E("Punches", "POST", "/api/punches/import-clock", "Import CHECKINOUT"),
         E("Punches", "POST", "/api/punches/import-excel", "Import Excel pointages"),
+        E("Punches", "POST", "/api/punches/preprocess", "Traiter les pointages → heures corrigées + anomalies"),
         E("Anomalies", "GET", "/api/anomalies?from=&to=", "Heures anomalie"),
         E("Anomalies", "DELETE", "/api/anomalies/{id}", "Supprimer anomalie"),
         E("CorrectedHours", "GET", "/api/corrected-hours?from=&to=", "Heures corrigées"),

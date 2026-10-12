@@ -108,7 +108,12 @@ public class EmployeePlanningController : ControllerBase
 public class PunchesController : ControllerBase
 {
     private readonly TimekeepingService _svc;
-    public PunchesController(TimekeepingService svc) => _svc = svc;
+    private readonly PunchProcessingService _processing;
+    public PunchesController(TimekeepingService svc, PunchProcessingService processing)
+    {
+        _svc = svc;
+        _processing = processing;
+    }
 
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery] PeriodRequest filter, CancellationToken ct)
@@ -117,6 +122,11 @@ public class PunchesController : ControllerBase
     [HttpPost("import-clock")]
     public async Task<IActionResult> ImportClock([FromBody] ImportPunchesRequest request, CancellationToken ct)
         => Ok(await _svc.ImportFromClockAsync(request, ct));
+
+    /// <summary>Pré-traitement : pointages → heures corrigées (T_HEURECORRIGER) + anomalies.</summary>
+    [HttpPost("preprocess")]
+    public async Task<IActionResult> Preprocess([FromBody] PeriodRequest request, CancellationToken ct)
+        => Ok(await _processing.ProcessAsync(request, ct));
 
     [HttpPost("import-excel")]
     [Consumes("multipart/form-data")]

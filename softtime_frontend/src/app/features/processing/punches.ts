@@ -12,9 +12,10 @@ import { asRow, fmtDate } from '../../shared/utils/date';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FormsModule, PageHeader, SoftButton, SoftCard, DataTable, PeriodFilter],
   template: `
-    <page-header title="Pointages" subtitle="Liste et import des pointages">
+    <page-header title="Pointages" subtitle="Liste, import et traitement des pointages">
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
       <soft-button variant="secondary" (click)="importClock()">Import pointeuse</soft-button>
+      <soft-button [loading]="processing()" (click)="preprocess()">Traiter les pointages</soft-button>
       <label class="file-btn">
         <input #punchFile type="file" accept=".xlsx,.xls" hidden (change)="onFile($event)" />
         <soft-button variant="accent" (click)="punchFile.click()">Import Excel</soft-button>
@@ -35,6 +36,7 @@ export class PunchesPage {
   private readonly toast = inject(ToastService);
 
   readonly loading = signal(false);
+  readonly processing = signal(false);
   readonly rows = signal<Record<string, unknown>[]>([]);
   private lastFilter: PeriodRequest | null = null;
 
@@ -64,6 +66,20 @@ export class PunchesPage {
       matriculeTo: this.lastFilter.matriculeTo,
     }).subscribe({
       next: (r) => { this.toast.success(r.message || `${r.imported} importé(s).`); this.onSearch(this.lastFilter!); },
+    });
+  }
+
+  /** Prétraitement : transforme les pointages en heures corrigées + anomalies à arbitrer. */
+  preprocess(): void {
+    if (!this.lastFilter) { this.toast.warning('Lancez d\'abord une recherche.'); return; }
+    this.processing.set(true);
+    this.svc.preprocess(this.lastFilter).subscribe({
+      next: (r) => {
+        this.processing.set(false);
+        this.toast.success(r.message || `${r.correctionsCreees} correction(s) créée(s).`);
+        this.onSearch(this.lastFilter!);
+      },
+      error: () => this.processing.set(false),
     });
   }
 

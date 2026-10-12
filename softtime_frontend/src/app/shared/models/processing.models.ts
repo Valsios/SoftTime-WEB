@@ -50,6 +50,14 @@ export interface ImportResult {
   message: string;
 }
 
+/** Résultat du pré-traitement des pointages (pointage → heures corrigées + anomalies). */
+export interface PreprocessResult {
+  correctionsCreees: number;
+  anomaliesCreees: number;
+  joursIgnores: number;
+  message: string;
+}
+
 export interface Anomaly {
   id: number;
   matricule?: string | null;

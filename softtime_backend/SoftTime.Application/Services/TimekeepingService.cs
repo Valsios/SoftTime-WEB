@@ -181,7 +181,9 @@ public class TimekeepingService
             {
                 BDD_SAGE = _tenant.SageDb,
                 BDD_POINTEUSE = _tenant.PointeuseDb,
-                MATRICULE_SAGE = dto.Matricule
+                MATRICULE_SAGE = dto.Matricule,
+                // Une saisie manuelle est protégée du pré-traitement des pointages.
+                ORIGINE = PunchProcessingConfiguration.OrigineManuel
             };
             Apply(dto, entity);
             await repo.AddAsync(entity, ct);
@@ -189,6 +191,7 @@ public class TimekeepingService
         else
         {
             entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
+            entity.ORIGINE = PunchProcessingConfiguration.OrigineManuel;
             Apply(dto, entity);
             repo.Update(entity);
         }
@@ -226,7 +229,9 @@ public class TimekeepingService
                 HSORTIE = hOut,
                 BDD_SAGE = _tenant.SageDb,
                 BDD_POINTEUSE = _tenant.PointeuseDb,
-                VALIDER_CORRECTION = true
+                VALIDER_CORRECTION = true,
+                // Une correction importée est protégée du pré-traitement des pointages.
+                ORIGINE = PunchProcessingConfiguration.OrigineManuel
             }, ct);
             imported++;
         }

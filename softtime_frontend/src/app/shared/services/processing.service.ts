@@ -10,6 +10,7 @@ import {
   ImportResult,
   PeriodRequest,
   PlanningEmployee,
+  PreprocessResult,
   Punch,
   Shift,
   WeeklyHs,
@@ -78,6 +79,10 @@ export class PunchesService extends ApiService {
     const form = new FormData();
     form.append('file', file);
     return this.http.post<ImportResult>(this.url('/api/punches/import-excel'), form);
+  }
+  /** Pré-traitement : pointages → heures corrigées (T_HEURECORRIGER) + anomalies. */
+  preprocess(req: PeriodRequest): Observable<PreprocessResult> {
+    return this.http.post<PreprocessResult>(this.url('/api/punches/preprocess'), req);
   }
 }
 
