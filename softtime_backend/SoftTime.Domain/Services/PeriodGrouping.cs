@@ -26,6 +26,34 @@ public static class PeriodGrouping
         _ => (new DateTime(date.Year, date.Month, 1), $"{date.Month:00}-{date.Year}")
     };
 
+    /// <summary>
+    /// Toutes les périodes balayées par <paramref name="from"/> → <paramref name="to"/>, dans
+    /// l'ordre chronologique et sans trou. Le dashboard s'en sert pour afficher 0 au lieu d'omettre
+    /// une semaine/mois sans événement : sans cela les courbes et les tableaux ne sont plus alignés
+    /// (deux séries issues de requêtes différentes n'ont pas les mêmes trous).
+    /// </summary>
+    public static IReadOnlyList<(DateTime Cle, string Libelle)> Clefs(DateTime from, DateTime to, string periode)
+    {
+        var cles = new List<(DateTime Cle, string Libelle)>();
+        if (to.Date < from.Date)
+            return cles;
+
+        var curseur = from.Date;
+        while (curseur <= to.Date)
+        {
+            var cle = Grouper(curseur, periode);
+            if (cles.Count == 0 || cles[^1].Cle != cle.Cle)
+                cles.Add(cle);
+            curseur = periode switch
+            {
+                Quotidienne => curseur.AddDays(1),
+                Hebdomadaire => cle.Cle.AddDays(7),
+                _ => cle.Cle.AddMonths(1)
+            };
+        }
+        return cles;
+    }
+
     /// <summary>Lundi de la semaine ISO, avec un libellé « Semaine 27 (30/06 - 06/07/2025) ».</summary>
     private static (DateTime Cle, string Libelle) SemaineIso(DateTime date)
     {

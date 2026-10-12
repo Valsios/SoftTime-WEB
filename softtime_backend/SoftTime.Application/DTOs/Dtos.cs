@@ -273,11 +273,22 @@ public record DashboardStatsDto(
     int TotalEmployes,
     DashboardKpiDto Kpi,
     DashboardAbsencesDto Absences,
-    DashboardRetardsDto Retards)
+    DashboardRetardsDto Retards,
+    IReadOnlyList<DashboardSerieDto> Series,
+    DashboardRepartitionDto Repartition,
+    DashboardAssiduiteDto Assiduite)
 {
-    public DashboardStatsDto() : this(default, default!, default!, default!) { }
+    public DashboardStatsDto() : this(default, default!, default!, default!,
+        Array.Empty<DashboardSerieDto>(), default!, default!) { }
 }
 
+/// <param name="JoursPlanifies">
+/// Présence théorique de la période : jours de planning non off, hors week-end et férié.
+/// </param>
+/// <param name="TauxAbsenteisme">Jours d'absence / jours planifiés, en pourcentage.</param>
+/// <param name="TauxPonctualite">
+/// Jours travaillés sans retard / jours travaillés, en pourcentage.
+/// </param>
 public record DashboardKpiDto(
     int CartesActives,
     int Anomalies,
@@ -285,9 +296,23 @@ public record DashboardKpiDto(
     int SemainesValidees,
     int SemainesEnAttente,
     decimal HeuresTravaillees,
-    decimal HeuresSupplementaires)
+    decimal HeuresSupplementaires,
+    int JoursPlanifies,
+    int JoursTravailles,
+    int JoursAbsence,
+    int JoursRetard,
+    int MinutesRetard,
+    decimal TauxAbsenteisme,
+    decimal TauxPonctualite)
 {
-    public DashboardKpiDto() : this(default, default, default, default, default, default, default) { }
+    public DashboardKpiDto() : this(default, default, default, default, default, default, default,
+        default, default, default, default, default, default, default) { }
+}
+
+/// <summary>Point d'une courbe d'évolution (une période = un regroupement).</summary>
+public record DashboardSerieDto(string Periode, decimal Heures, decimal HeuresSupplementaires)
+{
+    public DashboardSerieDto() : this(string.Empty, default, default) { }
 }
 
 /// <param name="Total">Absences explicites + jours planifiés sans pointage.</param>
@@ -313,6 +338,51 @@ public record DashboardGroupDto(string Periode, int Count, int TotalMinutes)
 public record DashboardTopDto(string Matricule, string? Nom, string? Prenom, string? Departement, int Count, int TotalMinutes)
 {
     public DashboardTopDto() : this(string.Empty, default, default, default, default, default) { }
+}
+
+/// <summary>Répartition de l'effectif et de l'activité d'un axe (catégorie, branche, département).</summary>
+public record DashboardSliceDto(string Libelle, int Effectif, int Absences, int Retards, int MinutesRetard, decimal HeuresSupplementaires)
+{
+    public DashboardSliceDto() : this(string.Empty, default, default, default, default, default) { }
+}
+
+public record DashboardRepartitionDto(
+    IReadOnlyList<DashboardSliceDto> ParCategorie,
+    IReadOnlyList<DashboardSliceDto> ParBranche,
+    IReadOnlyList<DashboardSliceDto> ParDepartement)
+{
+    public DashboardRepartitionDto() : this(Array.Empty<DashboardSliceDto>(), Array.Empty<DashboardSliceDto>(), Array.Empty<DashboardSliceDto>()) { }
+}
+
+/// <param name="TauxPonctualite">Jours travaillés sans retard / jours travaillés, en pourcentage.</param>
+public record DashboardAssiduiteRowDto(
+    string Matricule, string? Nom, string? Prenom, string? Departement, string? Categorie,
+    int JoursTravailles, int JoursAbsence, int JoursRetard, int MinutesRetard, decimal TauxPonctualite)
+{
+    public DashboardAssiduiteRowDto() : this(string.Empty, default, default, default, default,
+        default, default, default, default, default) { }
+}
+
+/// <summary>Classements d'assiduité : les plus ponctuels et les moins ponctuels de la période.</summary>
+public record DashboardAssiduiteDto(
+    IReadOnlyList<DashboardAssiduiteRowDto> PlusPonctuels,
+    IReadOnlyList<DashboardAssiduiteRowDto> MoinsPonctuels)
+{
+    public DashboardAssiduiteDto() : this(Array.Empty<DashboardAssiduiteRowDto>(), Array.Empty<DashboardAssiduiteRowDto>()) { }
+}
+
+/// <summary>Valeurs disponibles pour les filtres du tableau de bord analytique.</summary>
+public record DashboardFiltersDto(
+    IReadOnlyList<string> Departements,
+    IReadOnlyList<string> Branches,
+    IReadOnlyList<DashboardOptionDto> Categories)
+{
+    public DashboardFiltersDto() : this(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<DashboardOptionDto>()) { }
+}
+
+public record DashboardOptionDto(int Id, string Libelle)
+{
+    public DashboardOptionDto() : this(default, string.Empty) { }
 }
 
 public record CorrectedHourDto(decimal Id, string? Matricule, DateTime? DateIn, DateTime? DateOut, TimeSpan? HEntree, TimeSpan? HPs, TimeSpan? HPe, TimeSpan? HSortie, bool? AbsAm, bool? AbsPm, string? IntituleAbsence, TimeSpan? Retard, bool? Ferie, bool? FerieAm, bool? FeriePm, bool? ValiderCorrection, bool? ValiderHs, decimal? Hs, decimal? MNuit, decimal? MDimanche, decimal? MFeries)

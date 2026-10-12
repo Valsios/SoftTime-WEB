@@ -62,4 +62,56 @@ public class PeriodGroupingTests
         Assert.Equal(new DateTime(2025, 7, 1), cle);
         Assert.Equal("07-2025", libelle);
     }
+
+    [Fact]
+    public void Clefs_Weekly_CoversEveryWeekWithoutGap()
+    {
+        var cles = PeriodGrouping.Clefs(
+            new DateTime(2025, 6, 30), new DateTime(2025, 7, 20), PeriodGrouping.Hebdomadaire);
+
+        Assert.Equal(3, cles.Count);
+        Assert.Equal(new DateTime(2025, 6, 30), cles[0].Cle);
+        Assert.Equal(new DateTime(2025, 7, 7), cles[1].Cle);
+        Assert.Equal(new DateTime(2025, 7, 14), cles[2].Cle);
+    }
+
+    [Fact]
+    public void Clefs_Weekly_StaysChronologicalAcrossYearBoundary()
+    {
+        var cles = PeriodGrouping.Clefs(
+            new DateTime(2025, 12, 29), new DateTime(2026, 1, 6), PeriodGrouping.Hebdomadaire);
+
+        Assert.Equal(2, cles.Count);
+        Assert.Equal("Semaine 1 (29/12 - 04/01/2026)", cles[0].Libelle);
+        Assert.Equal("Semaine 2 (05/01 - 11/01/2026)", cles[1].Libelle);
+        Assert.True(cles[0].Cle < cles[1].Cle);
+    }
+
+    [Fact]
+    public void Clefs_Monthly_IncludesPartialFirstMonth()
+    {
+        var cles = PeriodGrouping.Clefs(
+            new DateTime(2025, 7, 15), new DateTime(2025, 8, 2), PeriodGrouping.Mensuelle);
+
+        Assert.Equal(2, cles.Count);
+        Assert.Equal("07-2025", cles[0].Libelle);
+        Assert.Equal("08-2025", cles[1].Libelle);
+    }
+
+    [Fact]
+    public void Clefs_Daily_ReturnsOneKeyPerDay()
+    {
+        var cles = PeriodGrouping.Clefs(
+            new DateTime(2025, 7, 1), new DateTime(2025, 7, 3), PeriodGrouping.Quotidienne);
+
+        Assert.Equal(3, cles.Count);
+        Assert.Equal("2025-07-01", cles[0].Libelle);
+    }
+
+    [Fact]
+    public void Clefs_ReversedRange_IsEmpty()
+    {
+        Assert.Empty(PeriodGrouping.Clefs(
+            new DateTime(2025, 7, 10), new DateTime(2025, 7, 1), PeriodGrouping.Quotidienne));
+    }
 }
