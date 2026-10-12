@@ -13,3 +13,7 @@ export * from './period-filter';
 export * from './icon';
 export * from './soft-tabs';
 export * from './source-mapping-stepper';
+export * from './chart.util';
+export * from './soft-line-chart';
+export * from './soft-bar-chart';
+export * from './soft-donut-chart';

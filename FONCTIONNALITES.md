@@ -66,6 +66,30 @@ Période + plage de matricules, export Excel :
 
 ---
 
+## 5 bis. Tableau de bord analytique (`/analytics`)
+
+Période + **regroupement** (quotidien / hebdomadaire / mensuel) + filtres **département** et
+**catégorie de personnel**. Le regroupement hebdomadaire suit la semaine ISO lundi→dimanche et
+s'affiche « Semaine 27 (30/06 - 06/07/2025) » (année ISO, donc correcte au passage d'année).
+
+- **Indicateurs** : 5 cartes — effectif actif, taux d'absentéisme (jours d'absence / jours
+  planifiés), taux de ponctualité (jours pointés sans retard / jours pointés), cumul des heures
+  supplémentaires, semaines validées. Les totaux secondaires (absences, retards, anomalies,
+  corrections) sont sur une ligne de détail sous les cartes.
+- **Courbes** : évolution des absences et des retards ; évolution des heures (travaillées /
+  supplémentaires). Le tableau chiffré « Absences et retards par période » les suit.
+- **Répartition** : onglets **Catégorie / Branche / Département** (barres, anneau, barres) avec
+  l'activité de l'axe sélectionné (effectif actif, absences, retards, minutes, HS).
+- **Assiduité** : top 5 des salariés les plus et les moins ponctuels de la période (matricule, nom,
+  ponctualité, jours pointés, retards, absences).
+- Les périodes sans événement sont affichées à 0 : tableaux et courbes restent alignés.
+- Les absences « planifiées sans pointage » n'excluent pas encore les congés SAGE (LOT 9) : le taux
+  d'absentéisme est donc une borne haute.
+- Regroupement et taux sont calculés par `PeriodGrouping` / `DashboardRules` (SoftTime.Domain) et
+  couverts par des tests unitaires.
+
+---
+
 ## 6. Divers
 
 - **Cantine** : jours avec pointage 11h–14h30 ; recherche sur `T_CANTINE`, **Calculer** pour régénérer.

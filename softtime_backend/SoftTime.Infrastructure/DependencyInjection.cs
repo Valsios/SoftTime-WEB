@@ -17,7 +17,10 @@ public static class DependencyInjection
         services.AddDbContext<SoftTimeDbContext>(options =>
             options.UseSqlServer(
                 configuration.GetConnectionString("SoftTime"),
-                sql => sql.EnableRetryOnFailure()));
+                // CommandTimeout relevé : les tables de pointages n'ont pas d'index couvrant le filtre
+                // (base + plage de dates), donc les rapports balayent tout le fichier. Sur un SQL Server
+                // dont le cache est froid, 30 s (défaut) suffisaient à faire échouer la page d'analyse.
+                sql => sql.EnableRetryOnFailure().CommandTimeout(120)));
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddSingleton<ISageContextFactory, SageContextFactory>();
         services.AddSingleton<IPointeuseContextFactory, PointeuseContextFactory>();
