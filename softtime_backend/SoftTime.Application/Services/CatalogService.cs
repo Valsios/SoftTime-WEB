@@ -1351,6 +1351,14 @@ public class CatalogService
         return new ToleranceDto(entity.ID, entity.IDCATEGORIE, entity.TOLERANCE, entity.TYPES_TOL, entity.SORTIE);
     }
 
+    public async Task DeleteToleranceAsync(int id, CancellationToken ct = default)
+    {
+        var repo = _uow.Repository<T_TOLERANCE>();
+        var e = await repo.GetByIdAsync(id, ct) ?? throw new KeyNotFoundException();
+        repo.Remove(e);
+        await _uow.SaveChangesAsync(ct);
+    }
+
     public async Task<IReadOnlyList<HolidayDto>> ListHolidaysAsync(CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);

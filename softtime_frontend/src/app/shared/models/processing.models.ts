@@ -44,6 +44,29 @@ export interface ImportPunchesRequest {
   to: string;
 }
 
+/** Correction d'un pointage importé : les champs non renseignés restent inchangés. */
+export interface PunchUpdate {
+  date?: string | null;
+  heure?: string | null;
+  type?: string | null;
+}
+
+/** Résultat de la purge d'une période de traitement. */
+export interface PurgePunchesResult {
+  pointages: number;
+  corrections: number;
+  anomalies: number;
+  correctionsManuellesConservees: number;
+  message: string;
+}
+
+/** Résultat de la purge des validations d'une semaine. */
+export interface PurgeValidationResult {
+  validations: number;
+  corrections: number;
+  message: string;
+}
+
 export interface ImportResult {
   imported: number;
   skipped: number;
@@ -66,12 +89,37 @@ export interface Anomaly {
   h1?: string | null;
   h2?: string | null;
   hEntree?: string | null;
+  hPs?: string | null;
+  hPe?: string | null;
   hSortie?: string | null;
   absAm?: boolean | null;
   absPm?: boolean | null;
+  feries?: boolean | null;
   feriesAm?: boolean | null;
   feriesPm?: boolean | null;
   intituleAbsence?: string | null;
+}
+
+/** Arbitrage d'une anomalie : les champs absents (undefined) restent inchangés côté serveur. */
+export interface AnomalyUpdate {
+  dateIn?: string | null;
+  dateOut?: string | null;
+  hEntree?: string | null;
+  hPs?: string | null;
+  hPe?: string | null;
+  hSortie?: string | null;
+  absAm?: boolean | null;
+  absPm?: boolean | null;
+  feries?: boolean | null;
+  feriesAm?: boolean | null;
+  feriesPm?: boolean | null;
+  intituleAbsence?: string | null;
+}
+
+export interface AnomalyValidationResult {
+  correctionsCreees: number;
+  anomaliesSupprimees: number;
+  message: string;
 }
 
 export interface CorrectedHour {

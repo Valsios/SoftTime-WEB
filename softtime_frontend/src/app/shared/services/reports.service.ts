@@ -5,6 +5,10 @@ import {
   AuditConfig,
   AuditEvent,
   Canteen,
+  HistoryAnomalie,
+  HistoryDeleteResult,
+  HistoryHs,
+  HistoryPointage,
   PeriodRequest,
   ReportFilter,
   ReportRow,
@@ -87,5 +91,31 @@ export class AuditService extends ApiService {
   }
   schema(): Observable<ReportRow[]> {
     return this.http.get<ReportRow[]>(this.url('/api/audit/schema'));
+  }
+}
+
+/** Archives des suppressions : consultation et purge. Le filtre porte sur la date de suppression. */
+@Injectable({ providedIn: 'root' })
+export class HistoryService extends ApiService {
+  pointages(filter: ReportFilter): Observable<HistoryPointage[]> {
+    return this.list('pointages', filter);
+  }
+  anomalies(filter: ReportFilter): Observable<HistoryAnomalie[]> {
+    return this.list('anomalies', filter);
+  }
+  hs(filter: ReportFilter): Observable<HistoryHs[]> {
+    return this.list('hs', filter);
+  }
+  removeOne(segment: string, id: number): Observable<void> {
+    return this.http.delete<void>(this.url(`/api/history/${segment}/${id}`));
+  }
+  purgeAll(segment: string): Observable<HistoryDeleteResult> {
+    return this.http.delete<HistoryDeleteResult>(this.url(`/api/history/${segment}`));
+  }
+
+  private list<T>(segment: string, filter: ReportFilter): Observable<T[]> {
+    return this.http.get<T[]>(this.url(`/api/history/${segment}`), {
+      params: this.params({ ...filter }),
+    });
   }
 }

@@ -50,6 +50,9 @@ public class SoftTimeDbContext : DbContext
     public DbSet<T_FIELD_ROLE> T_FIELD_ROLE => Set<T_FIELD_ROLE>();
     public DbSet<T_SOURCE_ENTITY_MAPPING> T_SOURCE_ENTITY_MAPPING => Set<T_SOURCE_ENTITY_MAPPING>();
     public DbSet<T_SOURCE_FIELD_MAPPING> T_SOURCE_FIELD_MAPPING => Set<T_SOURCE_FIELD_MAPPING>();
+    public DbSet<T_HISTORIQUE_POINTAGE> T_HISTORIQUE_POINTAGE => Set<T_HISTORIQUE_POINTAGE>();
+    public DbSet<T_HISTORIQUE_ANOMALIE> T_HISTORIQUE_ANOMALIE => Set<T_HISTORIQUE_ANOMALIE>();
+    public DbSet<T_HISTORIQUE_HS> T_HISTORIQUE_HS => Set<T_HISTORIQUE_HS>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

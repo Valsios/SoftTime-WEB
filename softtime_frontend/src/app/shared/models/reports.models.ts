@@ -35,6 +35,47 @@ export interface AuditConfig {
   base?: string | null;
 }
 
+// --- Archives des suppressions (ex-tables « Historique* ») ---
+
+export interface HistoryPointage {
+  id: number;
+  matricule?: string | null;
+  date?: string | null;
+  heure?: string | null;
+  type?: string | null;
+  supprimeLe?: string | null;
+}
+
+export interface HistoryAnomalie {
+  id: number;
+  matricule?: string | null;
+  dateIn?: string | null;
+  dateOut?: string | null;
+  hEntree?: string | null;
+  hSortie?: string | null;
+  absAm?: boolean | null;
+  absPm?: boolean | null;
+  intituleAbsence?: string | null;
+  supprimeLe?: string | null;
+}
+
+export interface HistoryHs {
+  id: number;
+  matricule?: string | null;
+  periodeDebut?: string | null;
+  periodeFin?: string | null;
+  exo130?: number | null;
+  exo150?: number | null;
+  i130?: number | null;
+  i150?: number | null;
+  supprimeLe?: string | null;
+}
+
+export interface HistoryDeleteResult {
+  supprimees: number;
+  message: string;
+}
+
 export interface ReportFilter {
   matriculeFrom?: string | null;
   matriculeTo?: string | null;

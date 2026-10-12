@@ -14,13 +14,15 @@ public class OvertimeService
     private readonly TenantConnectionService _tenant;
     private readonly IExternalSourceService _externalSource;
     private readonly PayrollWriterResolver _payrollWriters;
+    private readonly HistoryArchiveService _history;
 
-    public OvertimeService(IUnitOfWork uow, TenantConnectionService tenant, IExternalSourceService externalSource, PayrollWriterResolver payrollWriters)
+    public OvertimeService(IUnitOfWork uow, TenantConnectionService tenant, IExternalSourceService externalSource, PayrollWriterResolver payrollWriters, HistoryArchiveService history)
     {
         _uow = uow;
         _tenant = tenant;
         _externalSource = externalSource;
         _payrollWriters = payrollWriters;
+        _history = history;
     }
 
     public async Task<IReadOnlyList<WeeklyHsDto>> PreviewWeekAsync(PeriodRequest request, CancellationToken ct = default)
@@ -207,8 +209,59 @@ public class OvertimeService
             && (string.IsNullOrEmpty(request.MatriculeFrom) || string.Compare(h.Matricule, request.MatriculeFrom) >= 0)
             && (string.IsNullOrEmpty(request.MatriculeTo) || string.Compare(h.Matricule, request.MatriculeTo) <= 0), ct);
         _uow.Repository<T_HSSemaine>().RemoveRange(sem);
+        await _history.ArchiveHsAsync(exo, ct);
         _uow.Repository<T_HSExoImp>().RemoveRange(exo);
         await _uow.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Purge la validation d'une semaine (lundi–dimanche) : supprime les lignes <c>T_HS_VALIDER</c>
+    /// et déverrouille les heures corrigées correspondantes. Refuse si le calcul EXO/IMPO existe
+    /// encore, pour ne pas laisser des montants payés sans validation.
+    /// </summary>
+    public async Task<PurgeValidationResultDto> PurgeValidationAsync(PeriodRequest request, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        EnsureMondayToSunday(request);
+        var sageDb = _tenant.SageDb;
+        var from = request.From.Date;
+        var to = request.To.Date;
+
+        var hs = (await _uow.Repository<T_HSExoImp>().ListAsync(
+            h => h.BDD_SAGE == sageDb && h.PeriodeDebut == from && h.PeriodeFin == to, ct)).Count;
+        if (hs > 0)
+            throw new InvalidOperationException(
+                "Des calculs EXO/IMPO existent sur la période : purgez d'abord les heures supplémentaires.");
+
+        var repo = _uow.Repository<T_HS_VALIDER>();
+        var lignes = (await repo.ListAsync(
+                v => v.BDD_SAGE == sageDb && v.DATE_DEB == from && v.DATE_FIN == to, ct))
+            .Where(v => MatriculeRange.Contains(v.MATRICULES, request))
+            .ToList();
+        if (lignes.Count == 0)
+            return new PurgeValidationResultDto(0, 0, "Aucune validation à purger sur la période.");
+
+        var corrRepo = _uow.Repository<T_HEURECORRIGER>();
+        var deverrouillees = 0;
+        foreach (var ligne in lignes)
+        {
+            var heures = await corrRepo.ListAsync(h => h.BDD_SAGE == sageDb
+                && h.MATRICULE_SAGE == ligne.MATRICULES
+                && h.DATE_POINTAGE_IN >= from && h.DATE_POINTAGE_IN <= to, ct);
+            foreach (var heure in heures)
+            {
+                if (heure.VALIDER_HS != true)
+                    continue;
+                heure.VALIDER_HS = false;
+                corrRepo.Update(heure);
+                deverrouillees++;
+            }
+        }
+
+        repo.RemoveRange(lignes);
+        await _uow.SaveChangesAsync(ct);
+        return new PurgeValidationResultDto(lignes.Count, deverrouillees,
+            $"{lignes.Count} validation(s) purgée(s), {deverrouillees} heure(s) corrigée(s) déverrouillée(s).");
     }
 
     // Endpoint historique : conserve pour les integrations existantes, uniquement pour STANDARD.

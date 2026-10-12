@@ -194,6 +194,12 @@ export const routes: Routes = [
 
       // Traceability (droit 5)
       {
+        path: 'history',
+        canActivate: [droitGuard],
+        data: { droit: Droit.Traceability },
+        loadComponent: () => import('./features/reports/history').then((m) => m.HistoryPage),
+      },
+      {
         path: 'audit',
         canActivate: [droitGuard],
         data: { droit: Droit.Traceability },

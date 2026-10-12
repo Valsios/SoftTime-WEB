@@ -128,6 +128,16 @@ public class PunchesController : ControllerBase
     public async Task<IActionResult> Preprocess([FromBody] PeriodRequest request, CancellationToken ct)
         => Ok(await _processing.ProcessAsync(request, ct));
 
+    /// <summary>Corrige un pointage importé (refusé si la semaine est validée).</summary>
+    [HttpPut("{id}")]
+    public async Task<IActionResult> Update(decimal id, [FromBody] PunchUpdateDto dto, CancellationToken ct)
+        => Ok(await _svc.UpdatePunchAsync(id, dto, ct));
+
+    /// <summary>Purge la période : pointages + corrections automatiques + anomalies (archivés).</summary>
+    [HttpDelete]
+    public async Task<IActionResult> Purge([FromQuery] PeriodRequest filter, CancellationToken ct)
+        => Ok(await _svc.PurgePunchesAsync(filter, ct));
+
     [HttpPost("import-excel")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> ImportExcel(IFormFile file, CancellationToken ct)
@@ -150,6 +160,23 @@ public class AnomaliesController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery] PeriodRequest filter, CancellationToken ct)
         => Ok(await _svc.ListAnomaliesAsync(filter, ct));
+
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetOne(decimal id, CancellationToken ct)
+    {
+        var dto = await _svc.GetAnomalyAsync(id, ct);
+        return dto is null ? NotFound() : Ok(dto);
+    }
+
+    /// <summary>Arbitrage : heures retenues + drapeaux d'absence / férié.</summary>
+    [HttpPut("{id}")]
+    public async Task<IActionResult> Update(decimal id, [FromBody] AnomalyUpdateDto dto, CancellationToken ct)
+        => Ok(await _svc.UpdateAnomalyAsync(id, dto, ct));
+
+    /// <summary>Validation en masse : les anomalies deviennent des heures corrigées puis sont supprimées.</summary>
+    [HttpPost("validate")]
+    public async Task<IActionResult> Validate([FromBody] AnomalyValidationRequest request, CancellationToken ct)
+        => Ok(await _svc.ValidateAnomaliesAsync(request.Ids, ct));
 
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(decimal id, CancellationToken ct)
@@ -224,6 +251,11 @@ public class WeeklyValidationController : ControllerBase
         await _svc.ValidateWeekAsync(request, false, ct);
         return NoContent();
     }
+
+    /// <summary>Purge la validation de la semaine (supprime T_HS_VALIDER et déverrouille les heures).</summary>
+    [HttpDelete]
+    public async Task<IActionResult> Purge([FromQuery] PeriodRequest filter, CancellationToken ct)
+        => Ok(await _svc.PurgeValidationAsync(filter, ct));
 }
 
 [ApiController]

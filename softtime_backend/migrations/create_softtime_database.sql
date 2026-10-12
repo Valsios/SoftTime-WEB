@@ -684,6 +684,76 @@ CREATE TABLE dbo.T_PAIE_ECRITURE (
 GO
 
 /* =====================================================================================
+   13b. Archives des suppressions (ex-tables « Historique* ») — alimentées par l'application
+   ===================================================================================== */
+IF OBJECT_ID(N'dbo.T_HISTORIQUE_POINTAGE', N'U') IS NULL
+CREATE TABLE dbo.T_HISTORIQUE_POINTAGE (
+    ID                 int           IDENTITY(1,1) NOT NULL,
+    POINTAGE_ID        decimal(18,0) NULL,
+    NOM_BDD_SAGE       nvarchar(max) NULL,
+    NOM_BDD_POINTEUSE  nvarchar(max) NULL,
+    MATRICULE_SAGE     nvarchar(max) NULL,
+    DATE_POINTAGE      datetime2     NULL,
+    HEURE_POINTAGE     time          NULL,
+    DATE_IMPORTATION   datetime2     NULL,
+    IDUNIQUE_POINTAGE  decimal(18,2) NULL,
+    TYPE_POINTAGE      nvarchar(max) NULL,
+    DATE_SUPPRESSION   datetime2     NOT NULL,
+    CONSTRAINT PK_T_HISTORIQUE_POINTAGE PRIMARY KEY (ID)
+);
+GO
+
+IF OBJECT_ID(N'dbo.T_HISTORIQUE_ANOMALIE', N'U') IS NULL
+CREATE TABLE dbo.T_HISTORIQUE_ANOMALIE (
+    ID                 int           IDENTITY(1,1) NOT NULL,
+    ANOMALIE_ID        decimal(18,0) NULL,
+    BDD_SAGE           nvarchar(max) NULL,
+    BDD_POINTEUSE      nvarchar(max) NULL,
+    MATRICULE_SAGE     nvarchar(max) NULL,
+    DATE_POINTAGE_IN   datetime2     NULL,
+    DATE_POINTAGE_OUT  datetime2     NULL,
+    H1                 time          NULL,
+    H2                 time          NULL,
+    HENTREE            time          NULL,
+    HPS                time          NULL,
+    HPE                time          NULL,
+    HSORTIE            time          NULL,
+    ABS_AM             bit           NULL,
+    ABS_PM             bit           NULL,
+    FERIES             bit           NULL,
+    FERIES_AM          bit           NULL,
+    FERIES_PM          bit           NULL,
+    INTITULE_ABSENCE   nvarchar(max) NULL,
+    DATE_SUPPRESSION   datetime2     NOT NULL,
+    CONSTRAINT PK_T_HISTORIQUE_ANOMALIE PRIMARY KEY (ID)
+);
+GO
+
+IF OBJECT_ID(N'dbo.T_HISTORIQUE_HS', N'U') IS NULL
+CREATE TABLE dbo.T_HISTORIQUE_HS (
+    ID                int           IDENTITY(1,1) NOT NULL,
+    HS_ID             int           NULL,
+    MATRICULE         nvarchar(max) NULL,
+    NUM_SAL           int           NULL,
+    EXO130            decimal(18,2) NULL,
+    EXO150            decimal(18,2) NULL,
+    I130              decimal(18,2) NULL,
+    I150              decimal(18,2) NULL,
+    PERIODE_DEBUT     datetime2     NULL,
+    PERIODE_FIN       datetime2     NULL,
+    FERIE             decimal(18,2) NULL,
+    NUIT              decimal(18,2) NULL,
+    DIM               decimal(18,2) NULL,
+    RETARD            decimal(18,2) NULL,
+    ABSENCE           decimal(18,2) NULL,
+    BDD_SAGE          nvarchar(max) NULL,
+    BDD_POINTEUSE     nvarchar(max) NULL,
+    DATE_SUPPRESSION  datetime2     NOT NULL,
+    CONSTRAINT PK_T_HISTORIQUE_HS PRIMARY KEY (ID)
+);
+GO
+
+/* =====================================================================================
    14. Index (dont les index uniques FILTRÉS exigés par le mapping dynamique)
    ===================================================================================== */
 

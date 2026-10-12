@@ -3,6 +3,8 @@ import { Observable } from 'rxjs';
 import { ApiService } from '../../core/api';
 import {
   Anomaly,
+  AnomalyUpdate,
+  AnomalyValidationResult,
   CorrectedHour,
   EmployeePlanning,
   HsExo,
@@ -12,6 +14,9 @@ import {
   PlanningEmployee,
   PreprocessResult,
   Punch,
+  PunchUpdate,
+  PurgePunchesResult,
+  PurgeValidationResult,
   Shift,
   WeeklyHs,
   WeeklyValidationRequest,
@@ -84,6 +89,16 @@ export class PunchesService extends ApiService {
   preprocess(req: PeriodRequest): Observable<PreprocessResult> {
     return this.http.post<PreprocessResult>(this.url('/api/punches/preprocess'), req);
   }
+  /** Corrige un pointage importé (refusé si la semaine est validée). */
+  update(id: number, dto: PunchUpdate): Observable<Punch> {
+    return this.http.put<Punch>(this.url(`/api/punches/${id}`), dto);
+  }
+  /** Purge la période : pointages + corrections automatiques + anomalies (archivés). */
+  purge(filter: PeriodRequest): Observable<PurgePunchesResult> {
+    return this.http.delete<PurgePunchesResult>(this.url('/api/punches'), {
+      params: this.params({ ...filter }),
+    });
+  }
 }
 
 @Injectable({ providedIn: 'root' })
@@ -92,6 +107,17 @@ export class AnomaliesService extends ApiService {
     return this.http.get<Anomaly[]>(this.url('/api/anomalies'), {
       params: this.params({ ...filter }),
     });
+  }
+  get(id: number): Observable<Anomaly> {
+    return this.http.get<Anomaly>(this.url(`/api/anomalies/${id}`));
+  }
+  /** Arbitre une anomalie : heures retenues + drapeaux d'absence / férié. */
+  update(id: number, dto: AnomalyUpdate): Observable<Anomaly> {
+    return this.http.put<Anomaly>(this.url(`/api/anomalies/${id}`), dto);
+  }
+  /** Convertit les anomalies sélectionnées en heures corrigées puis les supprime. */
+  validate(ids: number[]): Observable<AnomalyValidationResult> {
+    return this.http.post<AnomalyValidationResult>(this.url('/api/anomalies/validate'), { ids });
   }
   remove(id: number): Observable<void> {
     return this.http.delete<void>(this.url(`/api/anomalies/${id}`));
@@ -131,6 +157,12 @@ export class WeeklyValidationService extends ApiService {
   }
   unvalidate(req: WeeklyValidationRequest): Observable<void> {
     return this.http.post<void>(this.url('/api/weekly-validation/unvalidate'), req);
+  }
+  /** Purge la validation de la semaine (supprime T_HS_VALIDER et déverrouille les heures). */
+  purge(filter: PeriodRequest): Observable<PurgeValidationResult> {
+    return this.http.delete<PurgeValidationResult>(this.url('/api/weekly-validation'), {
+      params: this.params({ ...filter }),
+    });
   }
 }
 

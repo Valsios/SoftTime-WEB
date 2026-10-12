@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { Tolerance } from '../../shared/models';
 import { CategoriesService, TolerancesService } from '../../shared/services/catalog.service';
@@ -23,6 +24,7 @@ import { asRow } from '../../shared/utils/date';
       <data-table [columns]="columns" [rows]="rows()" [loading]="loading()">
         <ng-template #actions let-row>
           <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
+          <soft-button size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
         </ng-template>
       </data-table>
     </soft-card>
@@ -46,6 +48,7 @@ export class TolerancesPage implements OnInit {
   private readonly svc = inject(TolerancesService);
   private readonly catSvc = inject(CategoriesService);
   private readonly toast = inject(ToastService);
+  private readonly confirm = inject(ConfirmService);
 
   readonly loading = signal(true);
   readonly saving = signal(false);
@@ -87,5 +90,12 @@ export class TolerancesPage implements OnInit {
     const dto = this.form as Tolerance;
     const req = id ? this.svc.update(id, { ...dto, id }) : this.svc.create({ ...dto, id: 0 });
     req.subscribe({ next: () => { this.saving.set(false); this.modal.set(false); this.toast.success('Enregistré.'); this.load(); }, error: () => this.saving.set(false) });
+  }
+
+  async remove(row: Record<string, unknown>): Promise<void> {
+    if (!(await this.confirm.ask('Supprimer cette tolérance ?'))) return;
+    this.svc.remove(row['id'] as number).subscribe({
+      next: () => { this.toast.success('Supprimé.'); this.load(); },
+    });
   }
 }

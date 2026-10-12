@@ -19,6 +19,7 @@ public static class DependencyInjection
         services.AddScoped<PlanningService>();
         services.AddScoped<TimekeepingService>();
         services.AddScoped<PunchProcessingService>();
+        services.AddScoped<HistoryArchiveService>();
         services.AddScoped<OvertimeService>();
         services.AddScoped<PayrollWriterResolver>();
         services.AddScoped<ReportService>();

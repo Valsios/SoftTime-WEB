@@ -313,6 +313,13 @@ public class TolerancesController : ControllerBase
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] ToleranceDto dto, CancellationToken ct)
         => Ok(await _svc.SaveToleranceAsync(dto with { Id = id }, ct));
+
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> Delete(int id, CancellationToken ct)
+    {
+        await _svc.DeleteToleranceAsync(id, ct);
+        return NoContent();
+    }
 }
 
 [ApiController]

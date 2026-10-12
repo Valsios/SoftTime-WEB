@@ -188,9 +188,71 @@ public record PreprocessPunchesResultDto(int CorrectionsCreees, int AnomaliesCre
     public PreprocessPunchesResultDto() : this(default, default, default, default!) { }
 }
 
-public record AnomalyDto(decimal Id, string? Matricule, DateTime? DateIn, DateTime? DateOut, TimeSpan? H1, TimeSpan? H2, TimeSpan? HEntree, TimeSpan? HSortie, bool? AbsAm, bool? AbsPm, bool? FeriesAm, bool? FeriesPm, string? IntituleAbsence)
+public record AnomalyDto(decimal Id, string? Matricule, DateTime? DateIn, DateTime? DateOut, TimeSpan? H1, TimeSpan? H2, TimeSpan? HEntree, TimeSpan? HPs, TimeSpan? HPe, TimeSpan? HSortie, bool? AbsAm, bool? AbsPm, bool? Feries, bool? FeriesAm, bool? FeriesPm, string? IntituleAbsence)
 {
-    public AnomalyDto() : this(default, default, default, default, default, default, default, default, default, default, default, default, default) { }
+    public AnomalyDto() : this(default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default) { }
+}
+
+/// <summary>
+/// Arbitrage d'une anomalie : heures retenues et drapeaux d'absence / férié.
+/// Les propriétés non renseignées (null) laissent la valeur existante inchangée.
+/// </summary>
+public record AnomalyUpdateDto(DateTime? DateIn, DateTime? DateOut, TimeSpan? HEntree, TimeSpan? HPs, TimeSpan? HPe, TimeSpan? HSortie, bool? AbsAm, bool? AbsPm, bool? Feries, bool? FeriesAm, bool? FeriesPm, string? IntituleAbsence)
+{
+    public AnomalyUpdateDto() : this(default, default, default, default, default, default, default, default, default, default, default, default) { }
+}
+
+/// <summary>Validation en masse : les anomalies sélectionnées deviennent des heures corrigées.</summary>
+public record AnomalyValidationRequest(List<decimal> Ids)
+{
+    public AnomalyValidationRequest() : this(new List<decimal>()) { }
+}
+
+public record AnomalyValidationResultDto(int CorrectionsCreees, int AnomaliesSupprimees, string Message)
+{
+    public AnomalyValidationResultDto() : this(default, default, default!) { }
+}
+
+// --- Archives des suppressions (ex-tables « Historique* » du desktop) ---
+
+public record HistoryPointageDto(decimal Id, string? Matricule, DateTime? Date, TimeSpan? Heure, string? Type, DateTime SupprimeLe)
+{
+    public HistoryPointageDto() : this(default, default, default, default, default, default) { }
+}
+
+public record HistoryAnomalieDto(decimal Id, string? Matricule, DateTime? DateIn, DateTime? DateOut, TimeSpan? HEntree, TimeSpan? HSortie, bool? AbsAm, bool? AbsPm, string? IntituleAbsence, DateTime SupprimeLe)
+{
+    public HistoryAnomalieDto() : this(default, default, default, default, default, default, default, default, default, default) { }
+}
+
+public record HistoryHsDto(decimal Id, string? Matricule, DateTime? PeriodeDebut, DateTime? PeriodeFin, decimal? Exo130, decimal? Exo150, decimal? I130, decimal? I150, DateTime SupprimeLe)
+{
+    public HistoryHsDto() : this(default, default, default, default, default, default, default, default, default) { }
+}
+
+public record HistoryDeleteResultDto(int Supprimees, string Message)
+{
+    public HistoryDeleteResultDto() : this(default, default!) { }
+}
+
+// --- Corrections et purges de la période de traitement ---
+
+/// <summary>Correction d'un pointage importé : les champs null restent inchangés.</summary>
+public record PunchUpdateDto(DateTime? Date, TimeSpan? Heure, string? Type)
+{
+    public PunchUpdateDto() : this(default, default, default) { }
+}
+
+/// <summary>Résultat de la purge d'une période de traitement.</summary>
+public record PurgePunchesResultDto(int Pointages, int Corrections, int Anomalies, int CorrectionsManuellesConservees, string Message)
+{
+    public PurgePunchesResultDto() : this(default, default, default, default, default!) { }
+}
+
+/// <summary>Résultat de la purge des validations d'une semaine.</summary>
+public record PurgeValidationResultDto(int Validations, int Corrections, string Message)
+{
+    public PurgeValidationResultDto() : this(default, default, default!) { }
 }
 
 public record CorrectedHourDto(decimal Id, string? Matricule, DateTime? DateIn, DateTime? DateOut, TimeSpan? HEntree, TimeSpan? HPs, TimeSpan? HPe, TimeSpan? HSortie, bool? AbsAm, bool? AbsPm, string? IntituleAbsence, TimeSpan? Retard, bool? Ferie, bool? FerieAm, bool? FeriePm, bool? ValiderCorrection, bool? ValiderHs, decimal? Hs, decimal? MNuit, decimal? MDimanche, decimal? MFeries)
