@@ -67,8 +67,14 @@ CREATE TABLE dbo.T_RESPONSABLE (
     LOGIN           nvarchar(max) NULL,
     PASSWORD        nvarchar(max) NULL,
     MATRICULE       nvarchar(max) NULL,
+    EMAIL           nvarchar(200) NULL,
     CONSTRAINT PK_T_RESPONSABLE PRIMARY KEY (IDRESPONSABLE)
 );
+GO
+
+-- Colonne ajoutee apres coup sur les bases existantes (envoi des identifiants par e-mail).
+IF COL_LENGTH(N'dbo.T_RESPONSABLE', N'EMAIL') IS NULL
+    ALTER TABLE dbo.T_RESPONSABLE ADD EMAIL nvarchar(200) NULL;
 GO
 
 IF OBJECT_ID(N'dbo.T_DROIT', N'U') IS NULL

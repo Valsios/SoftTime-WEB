@@ -8,6 +8,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/auth/login').then((m) => m.LoginPage),
   },
   {
+    // Démarrage initial : création du premier administrateur (anonyme, une seule fois).
+    path: 'setup',
+    loadComponent: () => import('./features/auth/setup').then((m) => m.SetupPage),
+  },
+  {
     path: '',
     loadComponent: () => import('./layout/shell').then((m) => m.Shell),
     canActivate: [authGuard],

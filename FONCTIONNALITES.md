@@ -10,6 +10,12 @@ L’accès est filtré par **rôle** (6 droits) et par **société SAGE** active
 ## 1. Authentification et contexte
 
 - Connexion JWT (utilisateurs `T_RESPONSABLE`).
+- **Démarrage initial** : tant qu'aucun compte n'existe, l'écran de connexion bascule sur la création du
+  premier **administrateur** (`GET /api/auth/is-first-run`, `POST /api/auth/create-admin`). Le serveur
+  refuse toute seconde création.
+- **E-mail** : la création ou la modification d'un compte peut envoyer les identifiants par SMTP
+  (section `Email` de `appsettings.json`). Tant que cette section est incomplète, **aucun envoi n'est
+  tenté** : les identifiants sont à communiquer directement (le compte est créé normalement).
 - Choix de la **base SAGE** et de la **base pointeuse** dans la barre supérieure.
 - Droits : Bases de données, Paramètres, Traitement, Divers, Traçabilité, États.
 

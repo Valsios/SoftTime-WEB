@@ -37,6 +37,25 @@ public class AuthController : ControllerBase
             return Unauthorized();
         return Ok(await _auth.GetMeAsync(id, ct));
     }
+
+    /// <summary>
+    /// GET — Installation vierge ? (aucun compte utilisateur). Anonyme : c'est cet appel qui decide
+    /// si le client affiche l'ecran de creation du compte administrateur initial.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("is-first-run")]
+    public async Task<ActionResult<bool>> IsFirstRun(CancellationToken ct)
+        => Ok(await _auth.IsFirstRunAsync(ct));
+
+    /// <summary>
+    /// POST — Cree le premier compte administrateur. Anonyme, mais refuse dès qu'un compte existe.
+    /// Envoie les identifiants par e-mail si la configuration SMTP est renseignee.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpPost("create-admin")]
+    [ProducesResponseType(typeof(AdminSetupResultDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<AdminSetupResultDto>> CreateAdmin([FromBody] AdminSetupDto dto, CancellationToken ct)
+        => Ok(await _auth.CreateAdminAsync(dto, ct));
 }
 
 [ApiController]

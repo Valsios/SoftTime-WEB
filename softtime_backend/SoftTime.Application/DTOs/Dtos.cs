@@ -12,8 +12,20 @@ public record LoginResponse(string Token, decimal UserId, string Login, string N
 
 public record UserDto(decimal Id, decimal RoleId, string Nom, string Login, string? Matricule, string? Password)
 {
+    /// <summary>Adresse d'envoi des identifiants (facultative).</summary>
+    public string? Email { get; init; }
+
     public UserDto() : this(default, default, default!, default!, default, default) { }
 }
+
+/// <summary>Création du premier compte administrateur (installation vierge).</summary>
+public record AdminSetupDto(string Nom, string Login, string Password, string? Email)
+{
+    public AdminSetupDto() : this(string.Empty, string.Empty, string.Empty, null) { }
+}
+
+/// <summary>Résultat de la création du compte initial : indique si les identifiants ont pu être envoyés.</summary>
+public record AdminSetupResultDto(decimal UserId, string Login, bool EmailEnvoye, string Message);
 
 public record RoleDto(decimal Id, string Nom)
 {
