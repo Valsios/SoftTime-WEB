@@ -13,6 +13,9 @@ import { Icon } from '../../shared/components/icon';
 interface FeatureItem {
   code: string;
   label: string;
+  canCreate?: boolean;
+  canUpdate?: boolean;
+  canDelete?: boolean;
   desc?: string;
 }
 
@@ -81,12 +84,20 @@ interface FeatureCategory {
             <span class="count-badge">{{ countActiveCategory('SAGE') }} / {{ totalSagePerms() }}</span>
           </div>
           <div class="card-bulk-actions">
+            <label class="action-check header-action-check">
+              <input
+                type="checkbox"
+                [checked]="has('SAGE:CREATE')"
+                (change)="toggle('SAGE:CREATE', $event)"
+              />
+              <span>Ajouter une base</span>
+            </label>
             <button type="button" class="btn-xs" (click)="toggleGroup('SAGE', true)">Tout cocher</button>
             <button type="button" class="btn-xs" (click)="toggleGroup('SAGE', false)">Tout décocher</button>
           </div>
         </div>
 
-        <p class="perm-section-desc">Permissions d'accès et d'actions (Consulter, Ajouter, Modifier, Supprimer) par base RH configurée.</p>
+        <p class="perm-section-desc">Permissions d'accès et d'actions (Consulter, Modifier, Supprimer) par base RH configurée.</p>
 
         @if (!sageDbs().length) {
           <div class="empty-hint">Aucune base SAGE configurée.</div>
@@ -106,14 +117,6 @@ interface FeatureCategory {
                       (change)="toggle('SAGE:' + db.nomBd + ':READ', $event)"
                     />
                     <span>Consulter</span>
-                  </label>
-                  <label class="action-check">
-                    <input
-                      type="checkbox"
-                      [checked]="has('SAGE:' + db.nomBd + ':CREATE')"
-                      (change)="toggle('SAGE:' + db.nomBd + ':CREATE', $event)"
-                    />
-                    <span>Ajouter</span>
                   </label>
                   <label class="action-check">
                     <input
@@ -147,12 +150,20 @@ interface FeatureCategory {
             <span class="count-badge">{{ countActiveCategory('POINTEUSE') }} / {{ totalPointeusePerms() }}</span>
           </div>
           <div class="card-bulk-actions">
+            <label class="action-check header-action-check">
+              <input
+                type="checkbox"
+                [checked]="has('POINTEUSE:CREATE')"
+                (change)="toggle('POINTEUSE:CREATE', $event)"
+              />
+              <span>Ajouter une base</span>
+            </label>
             <button type="button" class="btn-xs" (click)="toggleGroup('POINTEUSE', true)">Tout cocher</button>
             <button type="button" class="btn-xs" (click)="toggleGroup('POINTEUSE', false)">Tout décocher</button>
           </div>
         </div>
 
-        <p class="perm-section-desc">Permissions d'accès et d'actions (Consulter, Ajouter, Modifier, Supprimer) par pointeuse configurée.</p>
+        <p class="perm-section-desc">Permissions d'accès et d'actions (Consulter, Modifier, Supprimer) par pointeuse configurée.</p>
 
         @if (!pointeuseDbs().length) {
           <div class="empty-hint">Aucune base pointeuse configurée.</div>
@@ -172,14 +183,6 @@ interface FeatureCategory {
                       (change)="toggle('POINTEUSE:' + db.nomBd + ':READ', $event)"
                     />
                     <span>Consulter</span>
-                  </label>
-                  <label class="action-check">
-                    <input
-                      type="checkbox"
-                      [checked]="has('POINTEUSE:' + db.nomBd + ':CREATE')"
-                      (change)="toggle('POINTEUSE:' + db.nomBd + ':CREATE', $event)"
-                    />
-                    <span>Ajouter</span>
                   </label>
                   <label class="action-check">
                     <input
@@ -211,7 +214,7 @@ interface FeatureCategory {
             <div class="perm-title-group">
               <app-icon [name]="cat.icon" [size]="20"></app-icon>
               <h3>{{ cat.title }}</h3>
-              <span class="count-badge">{{ countActiveCategory(cat.key) }} / {{ cat.items.length }}</span>
+              <span class="count-badge">{{ countActiveCategory(cat.key) }} / {{ totalCategoryPerms(cat) }}</span>
             </div>
             <div class="card-bulk-actions">
               <button type="button" class="btn-xs" (click)="toggleGroup(cat.key, true)">Tout cocher</button>
@@ -219,16 +222,52 @@ interface FeatureCategory {
             </div>
           </div>
 
-          <div class="features-grid">
+          <div class="db-perm-grid">
             @for (item of cat.items; track item.code) {
-              <label class="feature-checkbox-item" [class.is-checked]="has(item.code)">
-                <input
-                  type="checkbox"
-                  [checked]="has(item.code)"
-                  (change)="toggle(item.code, $event)"
-                />
-                <span class="feature-label-text">{{ item.label }}</span>
-              </label>
+              <div class="db-perm-row">
+                <label class="action-check item-access-check">
+                  <input
+                    type="checkbox"
+                    [checked]="has(item.code)"
+                    (change)="toggle(item.code, $event)"
+                  />
+                  <strong>{{ item.label }}</strong>
+                </label>
+                @if (item.canCreate || item.canUpdate || item.canDelete) {
+                  <div class="db-actions-toggles">
+                    @if (item.canCreate) {
+                      <label class="action-check">
+                        <input
+                          type="checkbox"
+                          [checked]="has(item.code + ':CREATE')"
+                          (change)="toggle(item.code + ':CREATE', $event)"
+                        />
+                        <span>Ajouter</span>
+                      </label>
+                    }
+                    @if (item.canUpdate) {
+                      <label class="action-check">
+                        <input
+                          type="checkbox"
+                          [checked]="has(item.code + ':UPDATE')"
+                          (change)="toggle(item.code + ':UPDATE', $event)"
+                        />
+                        <span>Modifier</span>
+                      </label>
+                    }
+                    @if (item.canDelete) {
+                      <label class="action-check">
+                        <input
+                          type="checkbox"
+                          [checked]="has(item.code + ':DELETE')"
+                          (change)="toggle(item.code + ':DELETE', $event)"
+                        />
+                        <span>Supprimer</span>
+                      </label>
+                    }
+                  </div>
+                }
+              </div>
             }
           </div>
         </soft-card>
@@ -422,40 +461,13 @@ interface FeatureCategory {
         width: 15px;
         height: 15px;
       }
-
-      .features-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-        gap: 10px;
+      .header-action-check {
+        margin-right: 8px;
+        font-weight: 600;
+        color: var(--softtime);
       }
-      .feature-checkbox-item {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 10px 12px;
-        border-radius: var(--radius-md);
-        background: var(--surface-dark);
-        border: 1px solid var(--border-light);
-        cursor: pointer;
-        transition: all var(--t-fast) var(--ease);
-      }
-      .feature-checkbox-item:hover {
-        background: var(--app-surface-soft);
-        border-color: var(--primary-200);
-      }
-      .feature-checkbox-item.is-checked {
-        border-color: var(--softtime);
-        background: rgba(37, 99, 235, 0.04);
-      }
-      .feature-checkbox-item input {
-        width: 16px;
-        height: 16px;
-        cursor: pointer;
-      }
-      .feature-label-text {
-        font-size: 13.5px;
-        font-weight: 500;
-        color: var(--app-text);
+      .item-access-check {
+        min-width: 220px;
       }
     `,
   ],
@@ -490,20 +502,20 @@ export class PrivilegesPage implements OnInit {
       title: 'Paramètres',
       icon: 'sliders',
       items: [
-        { code: 'PARAMS:USERS', label: 'Utilisateurs' },
-        { code: 'PARAMS:ROLES', label: 'Rôles' },
+        { code: 'PARAMS:USERS', label: 'Utilisateurs', canCreate: true, canUpdate: true, canDelete: true },
+        { code: 'PARAMS:ROLES', label: 'Rôles', canCreate: true, canUpdate: true, canDelete: true },
         { code: 'PARAMS:PRIVILEGES', label: 'Privilèges' },
         { code: 'PARAMS:DB_ACCESS', label: 'Accès bases' },
         { code: 'PARAMS:CLOCK_PARAMS', label: 'Paramètres pointeuse' },
         { code: 'PARAMS:CORRESPONDENCE', label: 'Correspondance' },
-        { code: 'PARAMS:CARDPAIE', label: 'Correspondances paie' },
-        { code: 'PARAMS:CATEGORIES', label: 'Catégories' },
-        { code: 'PARAMS:AFFECTATIONS', label: 'Affectations' },
-        { code: 'PARAMS:TOLERANCES', label: 'Tolérances' },
-        { code: 'PARAMS:HOLIDAYS', label: 'Jours fériés' },
-        { code: 'PARAMS:MAJORATIONS', label: 'Majorations' },
+        { code: 'PARAMS:CARDPAIE', label: 'Correspondances paie', canCreate: true, canUpdate: true, canDelete: true },
+        { code: 'PARAMS:CATEGORIES', label: 'Catégories', canCreate: true, canUpdate: true, canDelete: true },
+        { code: 'PARAMS:AFFECTATIONS', label: 'Affectations', canCreate: true, canUpdate: true, canDelete: true },
+        { code: 'PARAMS:TOLERANCES', label: 'Tolérances', canCreate: true, canUpdate: true },
+        { code: 'PARAMS:HOLIDAYS', label: 'Jours fériés', canCreate: true, canUpdate: true, canDelete: true },
+        { code: 'PARAMS:MAJORATIONS', label: 'Majorations', canUpdate: true },
         { code: 'PARAMS:CODE_CONSTANTES', label: 'Code Constante' },
-        { code: 'PARAMS:ABSENCE_CODES', label: 'Codes absence' },
+        { code: 'PARAMS:ABSENCE_CODES', label: 'Codes absence', canCreate: true, canUpdate: true },
       ],
     },
     {
@@ -511,11 +523,11 @@ export class PrivilegesPage implements OnInit {
       title: 'Traitements',
       icon: 'grid',
       items: [
-        { code: 'PROC:SHIFTS', label: 'Shifts' },
-        { code: 'PROC:EMPLOYEE_PLANNING', label: 'Planning salariés' },
+        { code: 'PROC:SHIFTS', label: 'Shifts', canCreate: true, canUpdate: true, canDelete: true },
+        { code: 'PROC:EMPLOYEE_PLANNING', label: 'Planning salariés', canCreate: true, canUpdate: true, canDelete: true },
         { code: 'PROC:PUNCHES', label: 'Pointages' },
-        { code: 'PROC:ANOMALIES', label: 'Anomalies' },
-        { code: 'PROC:CORRECTED_HOURS', label: 'Heures corrigées' },
+        { code: 'PROC:ANOMALIES', label: 'Anomalies', canDelete: true },
+        { code: 'PROC:CORRECTED_HOURS', label: 'Heures corrigées', canCreate: true, canUpdate: true, canDelete: true },
         { code: 'PROC:WEEKLY_VALIDATION', label: 'Validation semaine' },
         { code: 'PROC:OVERTIME', label: 'Heures supplémentaires' },
       ],
@@ -543,8 +555,18 @@ export class PrivilegesPage implements OnInit {
     },
   ];
 
-  readonly totalSagePerms = computed(() => this.sageDbs().length * 4);
-  readonly totalPointeusePerms = computed(() => this.pointeuseDbs().length * 4);
+  readonly totalSagePerms = computed(() => (this.sageDbs().length > 0 ? 1 + this.sageDbs().length * 3 : 0));
+  readonly totalPointeusePerms = computed(() => (this.pointeuseDbs().length > 0 ? 1 + this.pointeuseDbs().length * 3 : 0));
+
+  totalCategoryPerms(cat: FeatureCategory): number {
+    return cat.items.reduce((acc, it) => {
+      let count = 1;
+      if (it.canCreate) count++;
+      if (it.canUpdate) count++;
+      if (it.canDelete) count++;
+      return acc + count;
+    }, 0);
+  }
 
   ngOnInit(): void {
     this.sageSvc.list().subscribe((dbs) => this.sageDbs.set(dbs));
@@ -606,10 +628,11 @@ export class PrivilegesPage implements OnInit {
     this.grantedPermissions.update((set) => {
       const next = new Set(set);
       if (prefix === 'SAGE') {
+        if (enable) next.add('SAGE:CREATE');
+        else next.delete('SAGE:CREATE');
         for (const db of this.sageDbs()) {
           const codes = [
             `SAGE:${db.nomBd}:READ`,
-            `SAGE:${db.nomBd}:CREATE`,
             `SAGE:${db.nomBd}:UPDATE`,
             `SAGE:${db.nomBd}:DELETE`,
           ];
@@ -619,10 +642,11 @@ export class PrivilegesPage implements OnInit {
           }
         }
       } else if (prefix === 'POINTEUSE') {
+        if (enable) next.add('POINTEUSE:CREATE');
+        else next.delete('POINTEUSE:CREATE');
         for (const db of this.pointeuseDbs()) {
           const codes = [
             `POINTEUSE:${db.nomBd}:READ`,
-            `POINTEUSE:${db.nomBd}:CREATE`,
             `POINTEUSE:${db.nomBd}:UPDATE`,
             `POINTEUSE:${db.nomBd}:DELETE`,
           ];
@@ -635,8 +659,14 @@ export class PrivilegesPage implements OnInit {
         const cat = this.featureCategories.find((c) => c.key === prefix);
         if (cat) {
           for (const item of cat.items) {
-            if (enable) next.add(item.code);
-            else next.delete(item.code);
+            const itemCodes = [item.code];
+            if (item.canCreate) itemCodes.push(item.code + ':CREATE');
+            if (item.canUpdate) itemCodes.push(item.code + ':UPDATE');
+            if (item.canDelete) itemCodes.push(item.code + ':DELETE');
+            for (const c of itemCodes) {
+              if (enable) next.add(c);
+              else next.delete(c);
+            }
           }
         }
       }
@@ -651,23 +681,30 @@ export class PrivilegesPage implements OnInit {
     }
     const next = new Set<string>();
     // SAGE
-    for (const db of this.sageDbs()) {
-      next.add(`SAGE:${db.nomBd}:READ`);
-      next.add(`SAGE:${db.nomBd}:CREATE`);
-      next.add(`SAGE:${db.nomBd}:UPDATE`);
-      next.add(`SAGE:${db.nomBd}:DELETE`);
+    if (this.sageDbs().length > 0) {
+      next.add('SAGE:CREATE');
+      for (const db of this.sageDbs()) {
+        next.add(`SAGE:${db.nomBd}:READ`);
+        next.add(`SAGE:${db.nomBd}:UPDATE`);
+        next.add(`SAGE:${db.nomBd}:DELETE`);
+      }
     }
     // POINTEUSE
-    for (const db of this.pointeuseDbs()) {
-      next.add(`POINTEUSE:${db.nomBd}:READ`);
-      next.add(`POINTEUSE:${db.nomBd}:CREATE`);
-      next.add(`POINTEUSE:${db.nomBd}:UPDATE`);
-      next.add(`POINTEUSE:${db.nomBd}:DELETE`);
+    if (this.pointeuseDbs().length > 0) {
+      next.add('POINTEUSE:CREATE');
+      for (const db of this.pointeuseDbs()) {
+        next.add(`POINTEUSE:${db.nomBd}:READ`);
+        next.add(`POINTEUSE:${db.nomBd}:UPDATE`);
+        next.add(`POINTEUSE:${db.nomBd}:DELETE`);
+      }
     }
     // Categories
     for (const cat of this.featureCategories) {
       for (const item of cat.items) {
         next.add(item.code);
+        if (item.canCreate) next.add(item.code + ':CREATE');
+        if (item.canUpdate) next.add(item.code + ':UPDATE');
+        if (item.canDelete) next.add(item.code + ':DELETE');
       }
     }
     this.grantedPermissions.set(next);

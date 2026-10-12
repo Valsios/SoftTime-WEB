@@ -1,6 +1,9 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ToastService } from '../../core/toast.service';
+import { SessionStore } from '../../core/session.store';
+import { Droit } from '../../core/rights';
 import { AbsenceCode } from '../../shared/models';
 import { AbsenceCodesService } from '../../shared/services/catalog.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, SoftToggle } from '../../shared/components';
@@ -9,16 +12,16 @@ import { asRow } from '../../shared/utils/date';
 @Component({
   selector: 'app-absence-codes',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, SoftToggle],
+  imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, SoftToggle],
   template: `
     <page-header title="Codes absence" subtitle="Codes absence">
       <soft-button variant="secondary" (click)="syncSage()">Sync SAGE</soft-button>
-      <soft-button (click)="openCreate()">Ajouter</soft-button>
+      <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter</soft-button>
     </page-header>
     <soft-card>
       <data-table [columns]="columns" [rows]="rows()" [loading]="loading()">
         <ng-template #actions let-row>
-          <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
+          <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
         </ng-template>
       </data-table>
     </soft-card>
@@ -38,6 +41,10 @@ import { asRow } from '../../shared/utils/date';
 export class AbsenceCodesPage implements OnInit {
   private readonly svc = inject(AbsenceCodesService);
   private readonly toast = inject(ToastService);
+  private readonly session = inject(SessionStore);
+
+  readonly canCreate = computed(() => this.session.hasPermission('PARAMS:ABSENCE_CODES:CREATE', Droit.Parameters));
+  readonly canUpdate = computed(() => this.session.hasPermission('PARAMS:ABSENCE_CODES:UPDATE', Droit.Parameters));
 
   readonly loading = signal(true);
   readonly saving = signal(false);

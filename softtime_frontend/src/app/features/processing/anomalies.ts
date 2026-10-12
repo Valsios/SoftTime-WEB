@@ -1,6 +1,9 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
+import { SessionStore } from '../../core/session.store';
+import { Droit } from '../../core/rights';
 import { PeriodRequest } from '../../shared/models';
 import { AnomaliesService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
@@ -10,7 +13,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
 @Component({
   selector: 'app-anomalies',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [PageHeader, SoftButton, SoftCard, DataTable, PeriodFilter],
+  imports: [CommonModule, PageHeader, SoftButton, SoftCard, DataTable, PeriodFilter],
   template: `
     <page-header title="Anomalies" subtitle="Heures en anomalie">
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
@@ -19,7 +22,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
     <soft-card>
       <data-table [columns]="columns" [rows]="rows()" [loading]="loading()">
         <ng-template #actions let-row>
-          <soft-button size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
+          <soft-button *ngIf="canDelete()" size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
         </ng-template>
       </data-table>
     </soft-card>
@@ -30,6 +33,9 @@ export class AnomaliesPage {
   private readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
+  private readonly session = inject(SessionStore);
+
+  readonly canDelete = computed(() => this.session.hasPermission('PROC:ANOMALIES:DELETE', Droit.Processing));
 
   readonly loading = signal(false);
   readonly rows = signal<Record<string, unknown>[]>([]);

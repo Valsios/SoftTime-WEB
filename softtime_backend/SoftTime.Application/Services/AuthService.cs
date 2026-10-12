@@ -204,24 +204,28 @@ public class AuthService
 
         var defaults = new List<string>();
 
+        if (sageDbs.Count > 0 || rights.Contains(Rights.Databases))
+        {
+            defaults.Add("SAGE:CREATE");
+        }
+
         foreach (var s in sageDbs)
         {
             var name = s.NOM_BD ?? string.Empty;
             if (string.IsNullOrWhiteSpace(name)) continue;
             defaults.Add($"SAGE:{name}:READ");
-            defaults.Add($"SAGE:{name}:CREATE");
             defaults.Add($"SAGE:{name}:UPDATE");
             defaults.Add($"SAGE:{name}:DELETE");
         }
 
         if (rights.Contains(Rights.Databases))
         {
+            defaults.Add("POINTEUSE:CREATE");
             foreach (var p in pointeuseDbs)
             {
                 var name = p.NOM_BD ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(name)) continue;
                 defaults.Add($"POINTEUSE:{name}:READ");
-                defaults.Add($"POINTEUSE:{name}:CREATE");
                 defaults.Add($"POINTEUSE:{name}:UPDATE");
                 defaults.Add($"POINTEUSE:{name}:DELETE");
             }
@@ -231,10 +235,20 @@ public class AuthService
         {
             defaults.AddRange(new[]
             {
-                "PARAMS:USERS", "PARAMS:ROLES", "PARAMS:PRIVILEGES", "PARAMS:DB_ACCESS",
-                "PARAMS:CLOCK_PARAMS", "PARAMS:CORRESPONDENCE", "PARAMS:CARDPAIE",
-                "PARAMS:CATEGORIES", "PARAMS:AFFECTATIONS", "PARAMS:TOLERANCES",
-                "PARAMS:HOLIDAYS", "PARAMS:MAJORATIONS", "PARAMS:CODE_CONSTANTES", "PARAMS:ABSENCE_CODES"
+                "PARAMS:USERS", "PARAMS:USERS:CREATE", "PARAMS:USERS:UPDATE", "PARAMS:USERS:DELETE",
+                "PARAMS:ROLES", "PARAMS:ROLES:CREATE", "PARAMS:ROLES:UPDATE", "PARAMS:ROLES:DELETE",
+                "PARAMS:PRIVILEGES",
+                "PARAMS:DB_ACCESS",
+                "PARAMS:CLOCK_PARAMS",
+                "PARAMS:CORRESPONDENCE",
+                "PARAMS:CARDPAIE", "PARAMS:CARDPAIE:CREATE", "PARAMS:CARDPAIE:UPDATE", "PARAMS:CARDPAIE:DELETE",
+                "PARAMS:CATEGORIES", "PARAMS:CATEGORIES:CREATE", "PARAMS:CATEGORIES:UPDATE", "PARAMS:CATEGORIES:DELETE",
+                "PARAMS:AFFECTATIONS", "PARAMS:AFFECTATIONS:CREATE", "PARAMS:AFFECTATIONS:UPDATE", "PARAMS:AFFECTATIONS:DELETE",
+                "PARAMS:TOLERANCES", "PARAMS:TOLERANCES:CREATE", "PARAMS:TOLERANCES:UPDATE",
+                "PARAMS:HOLIDAYS", "PARAMS:HOLIDAYS:CREATE", "PARAMS:HOLIDAYS:UPDATE", "PARAMS:HOLIDAYS:DELETE",
+                "PARAMS:MAJORATIONS", "PARAMS:MAJORATIONS:UPDATE",
+                "PARAMS:CODE_CONSTANTES",
+                "PARAMS:ABSENCE_CODES", "PARAMS:ABSENCE_CODES:CREATE", "PARAMS:ABSENCE_CODES:UPDATE"
             });
         }
 
@@ -242,8 +256,13 @@ public class AuthService
         {
             defaults.AddRange(new[]
             {
-                "PROC:SHIFTS", "PROC:EMPLOYEE_PLANNING", "PROC:PUNCHES",
-                "PROC:ANOMALIES", "PROC:CORRECTED_HOURS", "PROC:WEEKLY_VALIDATION", "PROC:OVERTIME"
+                "PROC:SHIFTS", "PROC:SHIFTS:CREATE", "PROC:SHIFTS:UPDATE", "PROC:SHIFTS:DELETE",
+                "PROC:EMPLOYEE_PLANNING", "PROC:EMPLOYEE_PLANNING:CREATE", "PROC:EMPLOYEE_PLANNING:UPDATE", "PROC:EMPLOYEE_PLANNING:DELETE",
+                "PROC:PUNCHES",
+                "PROC:ANOMALIES", "PROC:ANOMALIES:DELETE",
+                "PROC:CORRECTED_HOURS", "PROC:CORRECTED_HOURS:CREATE", "PROC:CORRECTED_HOURS:UPDATE", "PROC:CORRECTED_HOURS:DELETE",
+                "PROC:WEEKLY_VALIDATION",
+                "PROC:OVERTIME"
             });
         }
 
