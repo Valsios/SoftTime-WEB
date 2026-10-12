@@ -38,6 +38,7 @@ export interface CardPaie {
   sageBdd?: string | null;
   pointeuseBdd?: string | null;
   date?: string | null;
+  departement?: string | null;
 }
 
 export interface Category {

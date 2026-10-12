@@ -12,7 +12,7 @@ import { SoftSelect } from './soft-select';
 import { SoftButton } from './soft-button';
 import { PeriodRequest } from '../models';
 import { monthStart, today, currentMonday, currentSunday } from '../utils/date';
-import { CardPaieService } from '../services/catalog.service';
+import { CardPaieService, DepartementServiceService } from '../services/catalog.service';
 
 @Component({
   selector: 'period-filter',
@@ -53,15 +53,26 @@ import { CardPaieService } from '../services/catalog.service';
           [options]="brancheOptions()"
         ></soft-select>
       }
+      @if (showDepartement()) {
+        <soft-select
+          label="Département"
+          placeholder="Tous"
+          [(ngModel)]="departement"
+          name="departement"
+          [options]="departementOptions()"
+        ></soft-select>
+      }
       <soft-button (click)="emit()">{{ searchLabel() }}</soft-button>
     </div>
   `,
 })
 export class PeriodFilter implements OnInit {
   private readonly cards = inject(CardPaieService);
+  private readonly deptSvc = inject(DepartementServiceService);
 
   readonly showMatricule = input(true);
   readonly showBranche = input(false);
+  readonly showDepartement = input(false);
   readonly autoSearch = input(false);
   readonly mondaySundayWeek = input(false);
   readonly searchLabel = input('Rechercher');
@@ -71,9 +82,11 @@ export class PeriodFilter implements OnInit {
   matriculeFrom: string | null = null;
   matriculeTo: string | null = null;
   branche: string | null = null;
+  departement: string | null = null;
 
   readonly matriculeOptions = signal<{ value: string; label: string }[]>([]);
   readonly brancheOptions = signal<{ value: string; label: string }[]>([]);
+  readonly departementOptions = signal<{ value: string; label: string }[]>([]);
   readonly search = output<PeriodRequest>();
 
   ngOnInit(): void {
@@ -98,9 +111,27 @@ export class PeriodFilter implements OnInit {
           ...new Set(list.map((c) => c.branche).filter((b): b is string => !!b?.trim())),
         ].sort();
         this.brancheOptions.set(branches.map((b) => ({ value: b, label: b })));
+
+        const rawDepts = list.map((c) => c.departement).filter((d): d is string => !!d?.trim());
+        const depts = [...new Set(rawDepts)].sort((a, b) => a.localeCompare(b, 'fr'));
+        this.departementOptions.set(depts.map((d) => ({ value: d, label: d })));
+        if (depts.length === 0 && mats.length > 0) {
+          this.deptSvc.lookupBatch(mats).subscribe({
+            next: (results) => {
+              const fromLookup = [
+                ...new Set(results.map((r) => r.departement).filter((d): d is string => !!d?.trim())),
+              ].sort((a, b) => a.localeCompare(b, 'fr'));
+              if (fromLookup.length > 0) {
+                this.departementOptions.set(fromLookup.map((d) => ({ value: d, label: d })));
+              }
+            },
+          });
+        }
       },
       error: () => {
         this.matriculeOptions.set([]);
+        this.brancheOptions.set([]);
+        this.departementOptions.set([]);
       },
     });
   }
@@ -112,6 +143,7 @@ export class PeriodFilter implements OnInit {
       matriculeFrom: this.matriculeFrom || null,
       matriculeTo: this.matriculeTo || null,
       branche: this.branche || null,
+      departement: this.departement || null,
     });
   }
 }

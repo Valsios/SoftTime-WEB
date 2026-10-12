@@ -71,7 +71,6 @@ export class CardPaiePage implements OnInit {
     { key: 'departement', label: 'Département' },
     { key: 'service', label: 'Service' },
     { key: 'pointeuseNumero', label: 'Badge' },
-    { key: 'branche', label: 'Branche' },
     { key: 'date', label: 'Date', format: fmtDate },
   ];
 

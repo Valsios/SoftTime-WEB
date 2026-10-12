@@ -34,6 +34,29 @@ export function isMondayToSundayWeek(from: string, to: string): boolean {
   return a.getDay() === 1 && b.getDay() === 0 && days === 6;
 }
 
+/** Ajoute un mois calendaire avec gestion de fin de mois (ex: 31 jan -> 28/29 fév). */
+export function addOneMonth(d: Date): Date {
+  const year = d.getFullYear();
+  const month = d.getMonth();
+  const day = d.getDate();
+  const targetMonth = month + 1;
+  const res = new Date(year, targetMonth, day);
+  if (res.getMonth() !== targetMonth % 12) {
+    return new Date(year, targetMonth + 1, 0);
+  }
+  return res;
+}
+
+/** Vérifie qu'une période ne dépasse pas un mois calendaire et que from <= to. */
+export function isMaxOneMonth(from: string, to: string): boolean {
+  if (!from || !to) return false;
+  const a = parseLocalDate(from);
+  const b = parseLocalDate(to);
+  if (isNaN(a.getTime()) || isNaN(b.getTime()) || a > b) return false;
+  const max = addOneMonth(a);
+  return b <= max;
+}
+
 /** First day of current month. */
 export function monthStart(): string {
   const d = new Date();

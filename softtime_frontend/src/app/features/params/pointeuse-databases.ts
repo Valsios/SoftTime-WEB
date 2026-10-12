@@ -103,6 +103,7 @@ export class PointeuseDatabasesPage implements OnInit {
         this.saving.set(false);
         this.modal.set(false);
         this.toast.success('Enregistré.');
+        this.svc.refresh().subscribe();
         this.load();
       },
       error: (e) => {
@@ -117,6 +118,7 @@ export class PointeuseDatabasesPage implements OnInit {
     this.svc.remove(row['id'] as number).subscribe({
       next: () => {
         this.toast.success('Supprimé.');
+        this.svc.refresh().subscribe();
         this.load();
       },
     });

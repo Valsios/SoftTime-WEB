@@ -51,6 +51,17 @@ export class PrivilegesService extends ApiService {
   replace(roleId: number, droitIds: number[]): Observable<void> {
     return this.http.put<void>(this.url(`/api/privileges/${roleId}`), droitIds);
   }
+  byUser(userId: number): Observable<{ userId: number; grantedPermissions: string[]; isCustomized: boolean }> {
+    return this.http.get<{ userId: number; grantedPermissions: string[]; isCustomized: boolean }>(
+      this.url(`/api/privileges/user/${userId}`),
+    );
+  }
+  saveUserPermissions(userId: number, permissions: string[]): Observable<void> {
+    return this.http.put<void>(this.url(`/api/privileges/user/${userId}`), {
+      userId,
+      grantedPermissions: permissions,
+    });
+  }
 }
 
 @Injectable({ providedIn: 'root' })

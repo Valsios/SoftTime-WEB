@@ -1,6 +1,7 @@
-import { Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { inject, Injectable } from '@angular/core';
+import { Observable, tap } from 'rxjs';
 import { ApiService } from '../../core/api';
+import { SessionStore } from '../../core/session.store';
 import {
   AbsenceCode,
   Affectation,
@@ -23,8 +24,15 @@ import {
 
 @Injectable({ providedIn: 'root' })
 export class PointeuseDatabasesService extends ApiService {
+  private readonly session = inject(SessionStore);
+
   list(): Observable<PointeuseDb[]> {
     return this.http.get<PointeuseDb[]>(this.url('/api/pointeuse-databases'));
+  }
+  refresh(): Observable<PointeuseDb[]> {
+    return this.list().pipe(
+      tap((list) => this.session.setPointeuseDatabases(list)),
+    );
   }
   create(dto: PointeuseDb): Observable<PointeuseDb> {
     return this.http.post<PointeuseDb>(this.url('/api/pointeuse-databases'), dto);

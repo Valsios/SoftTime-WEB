@@ -67,32 +67,39 @@ import { ConfirmService } from '../core/confirm.service';
 
           <div class="topbar__spacer"></div>
 
-          @if (databases().length) {
-            <div class="topbar__company">
-              <app-icon name="server" [size]="16"></app-icon>
-              <select
-                (change)="onCompanyChange($event)"
-                aria-label="Société / base SAGE"
-              >
+          <div class="topbar__company" [class.topbar__company--empty]="!databases().length" [title]="databases().length ? 'Société / base SAGE' : 'Aucune base RH / paie configurée ou autorisée'">
+            <app-icon name="server" [size]="16"></app-icon>
+            <select
+              (change)="onCompanyChange($event)"
+              aria-label="Société / base SAGE"
+              [disabled]="!databases().length"
+            >
+              @if (!databases().length) {
+                <option value="">Aucune base RH</option>
+              } @else {
                 @for (db of databases(); track db.id) {
                   <option [value]="db.nomBd" [selected]="db.nomBd === session.activeSageDb()">{{ db.nomBd }}</option>
                 }
-              </select>
-            </div>
-          }
-          @if (pointeuseDbs().length) {
-            <div class="topbar__company">
-              <app-icon name="clock" [size]="16"></app-icon>
-              <select
-                (change)="onPointeuseChange($event)"
-                aria-label="Base de pointage"
-              >
+              }
+            </select>
+          </div>
+
+          <div class="topbar__company" [class.topbar__company--empty]="!pointeuseDbs().length" [title]="pointeuseDbs().length ? 'Base de pointage' : 'Aucune base de pointage configurée'">
+            <app-icon name="clock" [size]="16"></app-icon>
+            <select
+              (change)="onPointeuseChange($event)"
+              aria-label="Base de pointage"
+              [disabled]="!pointeuseDbs().length"
+            >
+              @if (!pointeuseDbs().length) {
+                <option value="">Aucune pointeuse</option>
+              } @else {
                 @for (db of pointeuseDbs(); track db.id) {
                   <option [value]="db.nomBd" [selected]="db.nomBd === session.activePointeuseDb()">{{ db.nomBd }}</option>
                 }
-              </select>
-            </div>
-          }
+              }
+            </select>
+          </div>
 
           <button
             class="topbar__icon-btn"
@@ -259,6 +266,12 @@ import { ConfirmService } from '../core/confirm.service';
         border-radius: 10px;
         color: var(--text-secondary);
       }
+      .topbar__company--empty {
+        opacity: 0.65;
+      }
+      .topbar__company--empty select {
+        cursor: default;
+      }
       .topbar__company select {
         border: none;
         background: transparent;
@@ -322,7 +335,7 @@ export class Shell implements OnInit {
 
   readonly collapsed = signal(false);
   readonly databases = computed(() => this.session.databases());
-  readonly pointeuseDbs = signal<PointeuseDb[]>([]);
+  readonly pointeuseDbs = computed(() => this.session.pointeuseDatabases());
 
   readonly visibleSections = computed<NavSection[]>(() =>
     NAV_SECTIONS.filter(
@@ -343,17 +356,8 @@ export class Shell implements OnInit {
       sessionStorage.removeItem('st_pending_toast');
       this.toast.success(pending);
     }
-    this.pointeuseApi.list().subscribe({
-      next: (list) => {
-        this.pointeuseDbs.set(list);
-        const names = list.map((d) => d.nomBd).filter((n): n is string => !!n);
-        const current = this.session.activePointeuseDb();
-        if (!current || !names.includes(current)) {
-          const preferred = list.find((d) => d.active)?.nomBd ?? names[0] ?? null;
-          this.session.setActivePointeuseDb(preferred);
-        }
-      },
-    });
+    this.auth.refreshMe().subscribe();
+    this.pointeuseApi.refresh().subscribe();
   }
 
   onCompanyChange(event: Event): void {

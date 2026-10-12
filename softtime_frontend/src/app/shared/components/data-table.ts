@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, contentChild, input, model, TemplateRef } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, contentChild, input, model, signal, TemplateRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 export interface Column {
@@ -41,7 +41,7 @@ export interface Column {
             </tr>
           </thead>
           <tbody>
-            @for (row of rows(); track trackId(row, $index)) {
+            @for (row of paginatedRows(); track trackId(row, $index)) {
               <tr [class.is-selected]="selectable() && isSelected(row)">
                 @if (selectable()) {
                   <td class="soft-table__check">
@@ -77,6 +77,74 @@ export interface Column {
           </tbody>
         </table>
       </div>
+
+      @if (paginate() && rows().length > 0) {
+        <div class="soft-pagination-wrap">
+          <div class="soft-pagination-info">{{ rangeInfo() }}</div>
+          @if (totalPages() > 1) {
+            <nav class="soft-pagination-nav" aria-label="Pagination">
+              <button
+                type="button"
+                class="soft-page-btn"
+                [disabled]="safeCurrentPage() === 1"
+                (click)="goToPage(1)"
+                aria-label="Première page"
+                title="Première page"
+              >
+                &laquo;
+              </button>
+              <button
+                type="button"
+                class="soft-page-btn"
+                [disabled]="safeCurrentPage() === 1"
+                (click)="goToPage(safeCurrentPage() - 1)"
+                aria-label="Page précédente"
+                title="Page précédente"
+              >
+                &lsaquo;
+              </button>
+
+              @for (item of paginationItems(); track $index) {
+                @if (item === '...') {
+                  <span class="soft-page-ellipsis">&hellip;</span>
+                } @else {
+                  <button
+                    type="button"
+                    class="soft-page-btn"
+                    [class.is-active]="item === safeCurrentPage()"
+                    [attr.aria-current]="item === safeCurrentPage() ? 'page' : null"
+                    (click)="goToPage(item)"
+                    [attr.aria-label]="'Page ' + item"
+                  >
+                    {{ item }}
+                  </button>
+                }
+              }
+
+              <button
+                type="button"
+                class="soft-page-btn"
+                [disabled]="safeCurrentPage() === totalPages()"
+                (click)="goToPage(safeCurrentPage() + 1)"
+                aria-label="Page suivante"
+                title="Page suivante"
+              >
+                &rsaquo;
+              </button>
+              <button
+                type="button"
+                class="soft-page-btn"
+                [disabled]="safeCurrentPage() === totalPages()"
+                (click)="goToPage(totalPages())"
+                aria-label="Dernière page"
+                title="Dernière page"
+              >
+                &raquo;
+              </button>
+            </nav>
+          }
+        </div>
+      }
     }
   `,
 })
@@ -90,6 +158,87 @@ export class DataTable {
   readonly selectedKeys = model<string[]>([]);
   readonly actionsTpl =
     contentChild<TemplateRef<{ $implicit: Record<string, unknown> }>>('actions');
+
+  readonly paginate = input<boolean>(true);
+  readonly pageSize = input<number>(15);
+  readonly currentPage = signal<number>(1);
+
+  readonly totalRows = computed(() => this.rows().length);
+  readonly totalPages = computed(() => {
+    const size = this.pageSize();
+    if (size <= 0) return 1;
+    return Math.max(1, Math.ceil(this.totalRows() / size));
+  });
+
+  readonly safeCurrentPage = computed(() => {
+    const cur = this.currentPage();
+    const max = this.totalPages();
+    if (cur < 1) return 1;
+    if (cur > max) return max;
+    return cur;
+  });
+
+  readonly paginatedRows = computed(() => {
+    const all = this.rows();
+    if (!this.paginate()) return all;
+    const size = this.pageSize();
+    if (size <= 0) return all;
+    const page = this.safeCurrentPage();
+    const start = (page - 1) * size;
+    return all.slice(start, start + size);
+  });
+
+  readonly rangeInfo = computed(() => {
+    const total = this.totalRows();
+    if (total === 0) return '0 résultat';
+    if (!this.paginate()) return `${total} résultat${total > 1 ? 's' : ''}`;
+    const size = this.pageSize();
+    const page = this.safeCurrentPage();
+    const start = (page - 1) * size + 1;
+    const end = Math.min(page * size, total);
+    return `Affichage de ${start} à ${end} sur ${total} résultat${total > 1 ? 's' : ''}`;
+  });
+
+  readonly paginationItems = computed(() => {
+    const total = this.totalPages();
+    const current = this.safeCurrentPage();
+    return this.getPaginationItems(current, total);
+  });
+
+  private getPaginationItems(current: number, total: number): (number | '...')[] {
+    if (total <= 7) {
+      return Array.from({ length: total }, (_, i) => i + 1);
+    }
+    const items: (number | '...')[] = [];
+    if (current <= 4) {
+      for (let i = 1; i <= 5; i++) {
+        items.push(i);
+      }
+      items.push('...');
+      items.push(total);
+    } else if (current >= total - 3) {
+      items.push(1);
+      items.push('...');
+      for (let i = total - 4; i <= total; i++) {
+        items.push(i);
+      }
+    } else {
+      items.push(1);
+      items.push('...');
+      for (let i = current - 2; i <= current + 2; i++) {
+        items.push(i);
+      }
+      items.push('...');
+      items.push(total);
+    }
+    return items;
+  }
+
+  goToPage(p: number | '...'): void {
+    if (typeof p !== 'number') return;
+    const target = Math.max(1, Math.min(p, this.totalPages()));
+    this.currentPage.set(target);
+  }
 
   colspan(): number {
     return this.columns().length + (this.actionsTpl() ? 1 : 0) + (this.selectable() ? 1 : 0);

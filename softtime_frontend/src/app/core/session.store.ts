@@ -1,5 +1,5 @@
 import { Injectable, computed, effect, signal } from '@angular/core';
-import { LoginResponse, SageDb } from '../shared/models';
+import { LoginResponse, PointeuseDb, SageDb } from '../shared/models';
 
 const TOKEN_KEY = 'st_token';
 const SESSION_KEY = 'st_session';
@@ -23,6 +23,7 @@ export class SessionStore {
   private readonly _session = signal<StoredSession | null>(this.readSession());
   readonly activeSageDb = signal<string | null>(localStorage.getItem(SAGE_KEY));
   readonly activePointeuseDb = signal<string | null>(localStorage.getItem(POINTEUSE_KEY));
+  readonly pointeuseDatabases = signal<PointeuseDb[]>([]);
   readonly theme = signal<'light' | 'dark'>(
     (localStorage.getItem(THEME_KEY) as 'light' | 'dark') || 'light',
   );
@@ -80,6 +81,36 @@ export class SessionStore {
     this.activePointeuseDb.set(nomBd);
     if (nomBd) localStorage.setItem(POINTEUSE_KEY, nomBd);
     else localStorage.removeItem(POINTEUSE_KEY);
+  }
+
+  setAuthorizedDatabases(databases: SageDb[]): void {
+    const cur = this._session();
+    if (!cur) return;
+    const updated: StoredSession = {
+      ...cur,
+      authorizedDatabases: databases ?? [],
+    };
+    this._session.set(updated);
+    localStorage.setItem(SESSION_KEY, JSON.stringify(updated));
+
+    const allowed = (databases ?? [])
+      .map((d) => d.nomBd)
+      .filter((n): n is string => !!n);
+    const current = this.activeSageDb();
+    if (!current || !allowed.includes(current)) {
+      this.setActiveSageDb(allowed[0] ?? null);
+    }
+  }
+
+  setPointeuseDatabases(list: PointeuseDb[]): void {
+    const dbs = list ?? [];
+    this.pointeuseDatabases.set(dbs);
+    const names = dbs.map((d) => d.nomBd).filter((n): n is string => !!n);
+    const current = this.activePointeuseDb();
+    if (!current || !names.includes(current)) {
+      const preferred = dbs.find((d) => d.active)?.nomBd ?? names[0] ?? null;
+      this.setActivePointeuseDb(preferred);
+    }
   }
 
   toggleTheme(): void {

@@ -19,6 +19,16 @@ export class AuthService extends ApiService {
     return this.http.get<LoginResponse>(this.url('/api/auth/me'));
   }
 
+  refreshMe(): Observable<LoginResponse> {
+    return this.me().pipe(
+      tap((res) => {
+        if (res.authorizedDatabases) {
+          this.session.setAuthorizedDatabases(res.authorizedDatabases);
+        }
+      }),
+    );
+  }
+
   logout(): void {
     this.session.clear();
   }

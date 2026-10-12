@@ -50,4 +50,21 @@ public class OvertimeRulesTests
         Assert.Equal(30, OvertimeRules.GetMinuteSortie(35, 30));
         Assert.Equal(0, OvertimeRules.GetMinuteSortie(20, 30));
     }
+
+    [Fact]
+    public void IsMaxOneMonth_AcceptsWithinMonth()
+    {
+        var start = new DateTime(2026, 1, 15);
+        Assert.True(OvertimeRules.IsMaxOneMonth(start, start));
+        Assert.True(OvertimeRules.IsMaxOneMonth(start, start.AddDays(10)));
+        Assert.True(OvertimeRules.IsMaxOneMonth(start, new DateTime(2026, 2, 15)));
+    }
+
+    [Fact]
+    public void IsMaxOneMonth_RejectsExceedingMonth()
+    {
+        var start = new DateTime(2026, 1, 15);
+        Assert.False(OvertimeRules.IsMaxOneMonth(start, new DateTime(2026, 2, 16)));
+        Assert.False(OvertimeRules.IsMaxOneMonth(start, start.AddDays(-1)));
+    }
 }

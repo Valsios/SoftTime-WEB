@@ -96,6 +96,7 @@ export interface PeriodRequest {
   from: string;
   to: string;
   branche?: string | null;
+  departement?: string | null;
 }
 
 export interface WeeklyValidationRequest extends PeriodRequest {

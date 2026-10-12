@@ -3,6 +3,7 @@ import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { SageDb } from '../../shared/models';
 import { SageDatabasesService } from '../../shared/services/users.service';
+import { AuthService } from '../../shared/services/auth.service';
 import {
   Column,
   DataTable,
@@ -45,6 +46,7 @@ import { asRow } from '../../shared/utils/date';
 })
 export class SageDatabasesPage implements OnInit {
   private readonly svc = inject(SageDatabasesService);
+  private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
 
@@ -105,8 +107,9 @@ export class SageDatabasesPage implements OnInit {
         this.toast.success(
           id
             ? 'Enregistré.'
-            : "Base enregistrée. Pour qu'elle apparaisse dans le menu en haut, accordez l'accès dans « Accès bases » puis reconnectez-vous.",
+            : "Base enregistrée. Pour qu'elle apparaisse dans le menu en haut, accordez l'accès dans « Accès bases ».",
         );
+        this.auth.refreshMe().subscribe();
         this.load();
       },
       error: (e) => {
@@ -121,6 +124,7 @@ export class SageDatabasesPage implements OnInit {
     this.svc.remove(row['id'] as number).subscribe({
       next: () => {
         this.toast.success('Supprimé.');
+        this.auth.refreshMe().subscribe();
         this.load();
       },
     });

@@ -5,7 +5,7 @@ import { PeriodRequest } from '../../shared/models';
 import { OvertimeService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, PeriodFilter } from '../../shared/components';
-import { asRow, isMondayToSundayWeek } from '../../shared/utils/date';
+import { asRow, isMaxOneMonth } from '../../shared/utils/date';
 import { SessionStore } from '../../core/session.store';
 
 @Component({
@@ -13,14 +13,14 @@ import { SessionStore } from '../../core/session.store';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [PageHeader, SoftButton, SoftCard, DataTable, PeriodFilter],
   template: `
-    <page-header title="Heures supplémentaires" subtitle="Calcul EXO/IMPO — période lundi à dimanche (7 jours)">
+    <page-header title="Heures supplémentaires" subtitle="Calcul EXO/IMPO — période maximale d'un mois">
       <soft-button variant="danger" [loading]="busy()" (click)="purge()">Purger</soft-button>
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
       <soft-button variant="accent" [loading]="busy()" (click)="syncPayroll()">{{ syncLabel() }}</soft-button>
       <soft-button [loading]="busy()" (click)="calculate()">Calculer</soft-button>
     </page-header>
 
-    <period-filter [autoSearch]="true" [mondaySundayWeek]="true" (search)="onSearch($event)"></period-filter>
+    <period-filter [autoSearch]="true" [showDepartement]="true" (search)="onSearch($event)"></period-filter>
 
     <soft-card>
       <data-table [columns]="columns" [rows]="rows()" [loading]="busy()"></data-table>
@@ -55,13 +55,17 @@ export class OvertimePage {
     { key: 'absence', label: 'Absence' },
   ];
 
-  private requireWeek(filter: PeriodRequest | null): filter is PeriodRequest {
+  private validatePeriod(filter: PeriodRequest | null): filter is PeriodRequest {
     if (!filter) {
       this.toast.warning('Définissez une période.');
       return false;
     }
-    if (!isMondayToSundayWeek(filter.from, filter.to)) {
-      this.toast.warning('La date début doit être un lundi et la date fin le dimanche de la même semaine.');
+    if (filter.from > filter.to) {
+      this.toast.warning('La date de début doit être antérieure ou égale à la date de fin.');
+      return false;
+    }
+    if (!isMaxOneMonth(filter.from, filter.to)) {
+      this.toast.warning('La période sélectionnée ne doit pas dépasser un mois.');
       return false;
     }
     return true;
@@ -69,7 +73,7 @@ export class OvertimePage {
 
   onSearch(filter: PeriodRequest): void {
     this.lastFilter = filter;
-    if (!this.requireWeek(filter)) {
+    if (!this.validatePeriod(filter)) {
       this.rows.set([]);
       return;
     }
@@ -85,7 +89,7 @@ export class OvertimePage {
   }
 
   calculate(): void {
-    if (this.busy() || !this.requireWeek(this.lastFilter)) return;
+    if (this.busy() || !this.validatePeriod(this.lastFilter)) return;
     this.busy.set(true);
     this.svc.calculate(this.lastFilter).subscribe({
       next: (items) => { this.rows.set(items.map(asRow)); this.busy.set(false); this.toast.success('Calcul terminé.'); },
@@ -94,7 +98,7 @@ export class OvertimePage {
   }
 
   async purge(): Promise<void> {
-    if (this.busy() || !this.requireWeek(this.lastFilter)) return;
+    if (this.busy() || !this.validatePeriod(this.lastFilter)) return;
     if (!(await this.confirm.ask('Purger les HS de la période ?'))) return;
     this.busy.set(true);
     this.svc.purge(this.lastFilter).subscribe({
@@ -104,7 +108,7 @@ export class OvertimePage {
   }
 
   async syncPayroll(): Promise<void> {
-    if (this.busy() || !this.requireWeek(this.lastFilter)) return;
+    if (this.busy() || !this.validatePeriod(this.lastFilter)) return;
     const database = this.currentDatabase()?.nomBd ?? this.session.activeSageDb() ?? 'la base active';
     const question = this.isStandard()
       ? 'Pousser les HS vers SAGE (T_CUMSAL) ?'

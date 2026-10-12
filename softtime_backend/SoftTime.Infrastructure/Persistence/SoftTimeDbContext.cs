@@ -50,6 +50,7 @@ public class SoftTimeDbContext : DbContext
     public DbSet<T_FIELD_ROLE> T_FIELD_ROLE => Set<T_FIELD_ROLE>();
     public DbSet<T_SOURCE_ENTITY_MAPPING> T_SOURCE_ENTITY_MAPPING => Set<T_SOURCE_ENTITY_MAPPING>();
     public DbSet<T_SOURCE_FIELD_MAPPING> T_SOURCE_FIELD_MAPPING => Set<T_SOURCE_FIELD_MAPPING>();
+    public DbSet<T_USER_PERMISSION> T_USER_PERMISSION => Set<T_USER_PERMISSION>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -113,6 +114,15 @@ public class SoftTimeDbContext : DbContext
             e.Property(x => x.FieldRoleCode).HasMaxLength(64);
             e.Property(x => x.SourceColumn).HasMaxLength(128);
             e.HasIndex(x => new { x.EntityMappingId, x.FieldRoleCode }).IsUnique();
+        });
+
+        modelBuilder.Entity<T_USER_PERMISSION>(e =>
+        {
+            e.ToTable("T_USER_PERMISSION");
+            e.HasKey(x => x.ID);
+            e.Property(x => x.IDRESPONSABLE).HasPrecision(18, 0);
+            e.Property(x => x.PERMISSION_CODE).HasMaxLength(128);
+            e.HasIndex(x => new { x.IDRESPONSABLE, x.PERMISSION_CODE }).IsUnique();
         });
     }
 }

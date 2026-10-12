@@ -108,7 +108,12 @@ public class RolesController : ControllerBase
 public class PrivilegesController : ControllerBase
 {
     private readonly AuthService _auth;
-    public PrivilegesController(AuthService auth) => _auth = auth;
+    private readonly ICurrentUser _user;
+    public PrivilegesController(AuthService auth, ICurrentUser user)
+    {
+        _auth = auth;
+        _user = user;
+    }
 
     [HttpGet("droits")]
     public async Task<IActionResult> GetDroits(CancellationToken ct) => Ok(await _auth.GetDroitsAsync(ct));
@@ -121,6 +126,19 @@ public class PrivilegesController : ControllerBase
     public async Task<IActionResult> Replace(decimal roleId, [FromBody] List<decimal> droits, CancellationToken ct)
     {
         await _auth.SetPrivilegesAsync(roleId, droits, ct);
+        return NoContent();
+    }
+
+    [HttpGet("user/{userId}")]
+    public async Task<IActionResult> GetUserPermissions(decimal userId, CancellationToken ct)
+        => Ok(await _auth.GetUserDetailedPermissionsAsync(userId, ct));
+
+    [HttpPut("user/{userId}")]
+    public async Task<IActionResult> SaveUserPermissions(decimal userId, [FromBody] SaveUserDetailedPermissionsRequest request, CancellationToken ct)
+    {
+        if (_user.UserId is not decimal currentUserId)
+            return Unauthorized();
+        await _auth.SaveUserDetailedPermissionsAsync(currentUserId, userId, request.GrantedPermissions, ct);
         return NoContent();
     }
 }

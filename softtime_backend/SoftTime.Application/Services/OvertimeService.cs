@@ -96,13 +96,22 @@ public class OvertimeService
     public async Task<IReadOnlyList<HsExoDto>> ListExoAsync(PeriodRequest request, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        EnsureMondayToSunday(request);
+        EnsureMaxOneMonth(request);
+        var cards = await TargetCards(request, ct);
+        var targetMatricules = cards.Select(c => c.SAGE_MATRICULE).Where(m => !string.IsNullOrEmpty(m)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         var list = await _uow.Repository<T_HSExoImp>().ListAsync(h =>
             h.BDD_SAGE == _tenant.SageDb
             && h.PeriodeDebut <= request.To.Date
             && h.PeriodeFin >= request.From.Date
             && (string.IsNullOrEmpty(request.MatriculeFrom) || string.Compare(h.Matricule, request.MatriculeFrom) >= 0)
             && (string.IsNullOrEmpty(request.MatriculeTo) || string.Compare(h.Matricule, request.MatriculeTo) <= 0), ct);
+
+        if (!string.IsNullOrEmpty(request.Departement) || !string.IsNullOrEmpty(request.Branche))
+        {
+            list = list.Where(h => h.Matricule != null && targetMatricules.Contains(h.Matricule)).ToList();
+        }
+
         return list
             .OrderBy(h => h.Matricule)
             .Select(h => new HsExoDto(h.OID, h.Matricule, h.NumSal, h.EXO130, h.EXO150, h.I130, h.I150, h.FERIE, h.NUIT, h.DIM, h.RETARD, h.ABSENCE))
@@ -112,7 +121,7 @@ public class OvertimeService
     public async Task<IReadOnlyList<HsExoDto>> CalculateExoImpoAsync(PeriodRequest request, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        EnsureMondayToSunday(request);
+        EnsureMaxOneMonth(request);
         var cards = await TargetCards(request, ct);
         var numSalByMat = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         try
@@ -197,7 +206,7 @@ public class OvertimeService
     public async Task PurgeHsAsync(PeriodRequest request, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        EnsureMondayToSunday(request);
+        EnsureMaxOneMonth(request);
         var sem = await _uow.Repository<T_HSSemaine>().ListAsync(h =>
             h.BDD_SAGE == _tenant.SageDb && h.PeriodeDebut == request.From.Date && h.PeriodeFin == request.To.Date
             && (string.IsNullOrEmpty(request.MatriculeFrom) || string.Compare(h.Matricule, request.MatriculeFrom) >= 0)
@@ -206,6 +215,15 @@ public class OvertimeService
             h.BDD_SAGE == _tenant.SageDb && h.PeriodeDebut == request.From.Date && h.PeriodeFin == request.To.Date
             && (string.IsNullOrEmpty(request.MatriculeFrom) || string.Compare(h.Matricule, request.MatriculeFrom) >= 0)
             && (string.IsNullOrEmpty(request.MatriculeTo) || string.Compare(h.Matricule, request.MatriculeTo) <= 0), ct);
+
+        if (!string.IsNullOrEmpty(request.Departement) || !string.IsNullOrEmpty(request.Branche))
+        {
+            var cards = await TargetCards(request, ct);
+            var targetMatricules = cards.Select(c => c.SAGE_MATRICULE).Where(m => !string.IsNullOrEmpty(m)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            sem = sem.Where(h => h.Matricule != null && targetMatricules.Contains(h.Matricule)).ToList();
+            exo = exo.Where(h => h.Matricule != null && targetMatricules.Contains(h.Matricule)).ToList();
+        }
+
         _uow.Repository<T_HSSemaine>().RemoveRange(sem);
         _uow.Repository<T_HSExoImp>().RemoveRange(exo);
         await _uow.SaveChangesAsync(ct);
@@ -226,10 +244,18 @@ public class OvertimeService
     public async Task<PayrollWriteResultDto> SyncPayrollAsync(PeriodRequest request, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        EnsureMondayToSunday(request);
+        EnsureMaxOneMonth(request);
         var sageRow = await _tenant.GetSageRowAsync(ct);
         var rows = await _uow.Repository<T_HSExoImp>().ListAsync(h =>
             h.BDD_SAGE == _tenant.SageDb && h.PeriodeDebut == request.From.Date && h.PeriodeFin == request.To.Date, ct);
+
+        if (!string.IsNullOrEmpty(request.Departement) || !string.IsNullOrEmpty(request.Branche))
+        {
+            var cards = await TargetCards(request, ct);
+            var targetMatricules = cards.Select(c => c.SAGE_MATRICULE).Where(m => !string.IsNullOrEmpty(m)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            rows = rows.Where(h => h.Matricule != null && targetMatricules.Contains(h.Matricule)).ToList();
+        }
+
         var dtos = rows
             .Select(h => new HsExoDto(h.OID, h.Matricule, h.NumSal, h.EXO130, h.EXO150, h.I130, h.I150,
                 h.FERIE, h.NUIT, h.DIM, h.RETARD, h.ABSENCE))
@@ -349,11 +375,20 @@ public class OvertimeService
             throw new InvalidOperationException("La période doit être un lundi–dimanche (7 jours).");
     }
 
+    private static void EnsureMaxOneMonth(PeriodRequest request)
+    {
+        if (request.To.Date < request.From.Date)
+            throw new InvalidOperationException("La date de début doit être antérieure ou égale à la date de fin.");
+        if (!OvertimeRules.IsMaxOneMonth(request.From, request.To))
+            throw new InvalidOperationException("La période sélectionnée ne doit pas dépasser un mois.");
+    }
+
     private async Task<List<T_CARDPAIE>> TargetCards(PeriodRequest request, CancellationToken ct)
     {
         var cards = await _uow.Repository<T_CARDPAIE>().ListAsync(c =>
             c.SAGE_BDD == _tenant.SageDb
             && (string.IsNullOrEmpty(request.Branche) || c.BRANCHE == request.Branche)
+            && (string.IsNullOrEmpty(request.Departement) || c.DEPARTEMENT == request.Departement)
             && (string.IsNullOrEmpty(request.MatriculeFrom) || string.Compare(c.SAGE_MATRICULE, request.MatriculeFrom) >= 0)
             && (string.IsNullOrEmpty(request.MatriculeTo) || string.Compare(c.SAGE_MATRICULE, request.MatriculeTo) <= 0), ct);
         return cards;
