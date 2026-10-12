@@ -2,6 +2,7 @@ using System.Globalization;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
+using SoftTime.Domain.Services;
 
 namespace SoftTime.Application.Services;
 
@@ -124,22 +125,15 @@ public class DashboardService
             }
         }
 
-        string Grouper(DateTime d) => periode switch
-        {
-            "quotidienne" => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-            "hebdomadaire" => $"{ISOWeek(d)}-{d.Year}",
-            _ => $"{d.Month:00}-{d.Year}"
-        };
-
         var statsAbsences = absences
-            .GroupBy(a => Grouper(a.Date))
-            .OrderBy(g => g.Key)
-            .Select(g => new DashboardGroupDto(g.Key, g.Count(), 0))
+            .GroupBy(a => PeriodGrouping.Grouper(a.Date, periode))
+            .OrderBy(g => g.Key.Cle)
+            .Select(g => new DashboardGroupDto(g.Key.Libelle, g.Count(), 0))
             .ToList();
         var statsRetards = retards
-            .GroupBy(r => Grouper(r.Date))
-            .OrderBy(g => g.Key)
-            .Select(g => new DashboardGroupDto(g.Key, g.Count(), g.Sum(r => r.Minutes)))
+            .GroupBy(r => PeriodGrouping.Grouper(r.Date, periode))
+            .OrderBy(g => g.Key.Cle)
+            .Select(g => new DashboardGroupDto(g.Key.Libelle, g.Count(), g.Sum(r => r.Minutes)))
             .ToList();
 
         var topAbsences = absences
@@ -218,8 +212,4 @@ public class DashboardService
         var m = matricule?.Trim() ?? string.Empty;
         return long.TryParse(m, out var n) ? n.ToString(CultureInfo.InvariantCulture) : m.ToUpperInvariant();
     }
-
-    private static int ISOWeek(DateTime date) =>
-        CultureInfo.InvariantCulture.Calendar.GetWeekOfYear(
-            date, CalendarWeekRule.FirstFourDayWeek, DayOfWeek.Monday);
 }
