@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { SessionStore } from '../core/session.store';
+import { Droit } from '../core/rights';
 import { AuthService } from '../shared/services/auth.service';
 import { PointeuseDatabasesService } from '../shared/services/catalog.service';
 import { SageDatabasesService } from '../shared/services/users.service';
@@ -332,8 +333,14 @@ export class Shell implements OnInit {
   private readonly confirm = inject(ConfirmService);
 
   readonly collapsed = signal(false);
-  readonly databases = computed(() => this.session.databases());
-  readonly pointeuseDbs = computed(() => this.session.pointeuseDatabases());
+  readonly databases = computed(() =>
+    this.session.databases().filter((db) => this.session.hasPermission(`SAGE:${db.nomBd}:READ`, Droit.Databases)),
+  );
+  readonly pointeuseDbs = computed(() =>
+    this.session.pointeuseDatabases().filter((db) =>
+      this.session.hasPermission(`POINTEUSE:${db.nomBd}:READ`, Droit.Databases),
+    ),
+  );
 
   readonly visibleSections = computed<NavSection[]>(() =>
     NAV_SECTIONS.map((section) => ({

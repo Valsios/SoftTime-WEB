@@ -6,6 +6,7 @@ import { SessionStore } from '../../core/session.store';
 import { PointeuseDb, SageDb, User } from '../../shared/models';
 import { PointeuseDatabasesService } from '../../shared/services/catalog.service';
 import { PrivilegesService, SageDatabasesService, UsersService } from '../../shared/services/users.service';
+import { AuthService } from '../../shared/services/auth.service';
 import { PageHeader, SoftButton, SoftCard, SoftSelect } from '../../shared/components';
 import { Icon } from '../../shared/components/icon';
 
@@ -465,6 +466,7 @@ export class PrivilegesPage implements OnInit {
   private readonly sageSvc = inject(SageDatabasesService);
   private readonly pointeuseSvc = inject(PointeuseDatabasesService);
   private readonly session = inject(SessionStore);
+  private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
 
   readonly users = signal<User[]>([]);
@@ -688,6 +690,10 @@ export class PrivilegesPage implements OnInit {
       next: () => {
         this.saving.set(false);
         this.isCustomized.set(true);
+        if (currentSessionUser && currentSessionUser.userId === userId) {
+          this.session.setPermissions(perms);
+          this.auth.refreshMe().subscribe();
+        }
         this.toast.success('Permissions enregistrées avec succès.');
       },
       error: (e) => {

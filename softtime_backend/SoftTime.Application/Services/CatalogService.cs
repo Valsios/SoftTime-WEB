@@ -38,6 +38,12 @@ public class CatalogService
         }).ToList();
     }
 
+    public async Task<SageDbDto?> GetSageByIdAsync(int id, CancellationToken ct = default)
+    {
+        var entity = await _uow.Repository<T_BDD_SAGE>().GetByIdAsync(id, ct);
+        return entity == null ? null : _mapper.Map<SageDbDto>(entity);
+    }
+
     public async Task<SageDbDto> SaveSageAsync(SageDbDto dto, CancellationToken ct = default)
     {
         if (dto.TypeBase != "STANDARD" && dto.TypeBase != "AUTRE")
@@ -136,6 +142,12 @@ public class CatalogService
         {
             Mappings = byConnection.TryGetValue(r.ID, out var m) ? m : Array.Empty<SourceEntityMappingDto>()
         }).ToList();
+    }
+
+    public async Task<PointeuseDbDto?> GetPointeuseByIdAsync(int id, CancellationToken ct = default)
+    {
+        var entity = await _uow.Repository<T_BDD_POINTEUSE>().GetByIdAsync(id, ct);
+        return entity == null ? null : _mapper.Map<PointeuseDbDto>(entity);
     }
 
     public async Task<PointeuseDbDto> SavePointeuseAsync(PointeuseDbDto dto, CancellationToken ct = default)

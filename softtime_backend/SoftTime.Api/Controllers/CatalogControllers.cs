@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Services;
 using SoftTime.Infrastructure.Excel;
@@ -14,22 +15,84 @@ namespace SoftTime.Api.Controllers;
 public class SageDatabasesController : ControllerBase
 {
     private readonly CatalogService _svc;
-    public SageDatabasesController(CatalogService svc) => _svc = svc;
+    private readonly AuthService _auth;
+    private readonly ICurrentUser _user;
+
+    public SageDatabasesController(CatalogService svc, AuthService auth, ICurrentUser user)
+    {
+        _svc = svc;
+        _auth = auth;
+        _user = user;
+    }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListSageAsync(ct));
+    public async Task<IActionResult> GetAll(CancellationToken ct)
+    {
+        var list = await _svc.ListSageAsync(ct);
+        if (_user.UserId is decimal uid)
+        {
+            var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
+            if (p.IsCustomized)
+            {
+                list = list.Where(s => !string.IsNullOrEmpty(s.NomBd) && p.GrantedPermissions.Contains($"SAGE:{s.NomBd}:READ")).ToList();
+            }
+        }
+        return Ok(list);
+    }
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] SageDbDto dto, CancellationToken ct)
-        => Ok(await _svc.SaveSageAsync(dto with { Id = 0 }, ct));
+    {
+        if (_user.UserId is decimal uid)
+        {
+            var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
+            if (p.IsCustomized)
+            {
+                var canCreate = p.GrantedPermissions.Any(x => x.StartsWith("SAGE:") && x.EndsWith(":CREATE"))
+                                || p.GrantedPermissions.Contains("SAGE:CREATE");
+                if (!canCreate)
+                    return StatusCode(StatusCodes.Status403Forbidden, "Vous n'avez pas la permission d'ajouter une base SAGE.");
+            }
+        }
+        return Ok(await _svc.SaveSageAsync(dto with { Id = 0 }, ct));
+    }
 
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] SageDbDto dto, CancellationToken ct)
-        => Ok(await _svc.SaveSageAsync(dto with { Id = id }, ct));
+    {
+        if (_user.UserId is decimal uid)
+        {
+            var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
+            if (p.IsCustomized)
+            {
+                var existing = await _svc.GetSageByIdAsync(id, ct);
+                var dbName = existing?.NomBd ?? dto.NomBd;
+                var canUpdate = p.GrantedPermissions.Contains($"SAGE:{dbName}:UPDATE");
+                if (!canUpdate)
+                    return StatusCode(StatusCodes.Status403Forbidden, $"Vous n'avez pas la permission de modifier la base '{dbName}'.");
+            }
+        }
+        return Ok(await _svc.SaveSageAsync(dto with { Id = id }, ct));
+    }
 
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
+        if (_user.UserId is decimal uid)
+        {
+            var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
+            if (p.IsCustomized)
+            {
+                var existing = await _svc.GetSageByIdAsync(id, ct);
+                var dbName = existing?.NomBd;
+                if (!string.IsNullOrEmpty(dbName))
+                {
+                    var canDelete = p.GrantedPermissions.Contains($"SAGE:{dbName}:DELETE");
+                    if (!canDelete)
+                        return StatusCode(StatusCodes.Status403Forbidden, $"Vous n'avez pas la permission de supprimer la base '{dbName}'.");
+                }
+            }
+        }
         await _svc.DeleteSageAsync(id, ct);
         return NoContent();
     }
@@ -93,22 +156,84 @@ public class PayrollWriteConfigurationController : ControllerBase
 public class PointeuseDatabasesController : ControllerBase
 {
     private readonly CatalogService _svc;
-    public PointeuseDatabasesController(CatalogService svc) => _svc = svc;
+    private readonly AuthService _auth;
+    private readonly ICurrentUser _user;
+
+    public PointeuseDatabasesController(CatalogService svc, AuthService auth, ICurrentUser user)
+    {
+        _svc = svc;
+        _auth = auth;
+        _user = user;
+    }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListPointeuseAsync(ct));
+    public async Task<IActionResult> GetAll(CancellationToken ct)
+    {
+        var list = await _svc.ListPointeuseAsync(ct);
+        if (_user.UserId is decimal uid)
+        {
+            var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
+            if (p.IsCustomized)
+            {
+                list = list.Where(s => !string.IsNullOrEmpty(s.NomBd) && p.GrantedPermissions.Contains($"POINTEUSE:{s.NomBd}:READ")).ToList();
+            }
+        }
+        return Ok(list);
+    }
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] PointeuseDbDto dto, CancellationToken ct)
-        => Ok(await _svc.SavePointeuseAsync(dto with { Id = 0 }, ct));
+    {
+        if (_user.UserId is decimal uid)
+        {
+            var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
+            if (p.IsCustomized)
+            {
+                var canCreate = p.GrantedPermissions.Any(x => x.StartsWith("POINTEUSE:") && x.EndsWith(":CREATE"))
+                                || p.GrantedPermissions.Contains("POINTEUSE:CREATE");
+                if (!canCreate)
+                    return StatusCode(StatusCodes.Status403Forbidden, "Vous n'avez pas la permission d'ajouter une base pointeuse.");
+            }
+        }
+        return Ok(await _svc.SavePointeuseAsync(dto with { Id = 0 }, ct));
+    }
 
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] PointeuseDbDto dto, CancellationToken ct)
-        => Ok(await _svc.SavePointeuseAsync(dto with { Id = id }, ct));
+    {
+        if (_user.UserId is decimal uid)
+        {
+            var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
+            if (p.IsCustomized)
+            {
+                var existing = await _svc.GetPointeuseByIdAsync(id, ct);
+                var dbName = existing?.NomBd ?? dto.NomBd;
+                var canUpdate = p.GrantedPermissions.Contains($"POINTEUSE:{dbName}:UPDATE");
+                if (!canUpdate)
+                    return StatusCode(StatusCodes.Status403Forbidden, $"Vous n'avez pas la permission de modifier la base pointeuse '{dbName}'.");
+            }
+        }
+        return Ok(await _svc.SavePointeuseAsync(dto with { Id = id }, ct));
+    }
 
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
+        if (_user.UserId is decimal uid)
+        {
+            var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
+            if (p.IsCustomized)
+            {
+                var existing = await _svc.GetPointeuseByIdAsync(id, ct);
+                var dbName = existing?.NomBd;
+                if (!string.IsNullOrEmpty(dbName))
+                {
+                    var canDelete = p.GrantedPermissions.Contains($"POINTEUSE:{dbName}:DELETE");
+                    if (!canDelete)
+                        return StatusCode(StatusCodes.Status403Forbidden, $"Vous n'avez pas la permission de supprimer la base pointeuse '{dbName}'.");
+                }
+            }
+        }
         await _svc.DeletePointeuseAsync(id, ct);
         return NoContent();
     }
