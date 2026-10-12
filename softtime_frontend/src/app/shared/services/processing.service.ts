@@ -10,6 +10,8 @@ import {
   HsExo,
   ImportPunchesRequest,
   ImportResult,
+  OvertimeDetail,
+  PagedResult,
   PeriodRequest,
   PlanningEmployee,
   PreprocessResult,
@@ -68,12 +70,33 @@ export class EmployeePlanningService extends ApiService {
     form.append('file', file);
     return this.http.post<ImportResult>(this.url('/api/employee-planning/import-excel'), form);
   }
+  /** CSV « catégorie ; lundi ; (début ; fin) × 7 » : génère la semaine pour toute la catégorie. */
+  generateFromCategory(file: File): Observable<ImportResult> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post<ImportResult>(this.url('/api/employee-planning/generate-from-category'), form);
+  }
+  /** CSV « matricule ; lundi ; (début ; pause ; fin) × 7 » : génère la semaine pour chaque salarié. */
+  generate(file: File): Observable<ImportResult> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post<ImportResult>(this.url('/api/employee-planning/generate'), form);
+  }
 }
 
 @Injectable({ providedIn: 'root' })
 export class PunchesService extends ApiService {
   list(filter: PeriodRequest): Observable<Punch[]> {
     return this.http.get<Punch[]>(this.url('/api/punches'), {
+      params: this.params({ ...filter }),
+    });
+  }
+  /**
+   * Même liste, paginée. Le contrat de la liste complète est conservé pour l'export Excel
+   * (qui porte sur la grille entière).
+   */
+  listPaged(filter: PeriodRequest): Observable<PagedResult<Punch>> {
+    return this.http.get<PagedResult<Punch>>(this.url('/api/punches/paged'), {
       params: this.params({ ...filter }),
     });
   }
@@ -131,6 +154,12 @@ export class CorrectedHoursService extends ApiService {
       params: this.params({ ...filter }),
     });
   }
+  /** Même liste, paginée (voir `PunchesService.listPaged`). */
+  listPaged(filter: PeriodRequest): Observable<PagedResult<CorrectedHour>> {
+    return this.http.get<PagedResult<CorrectedHour>>(this.url('/api/corrected-hours/paged'), {
+      params: this.params({ ...filter }),
+    });
+  }
   create(dto: CorrectedHour): Observable<CorrectedHour> {
     return this.http.post<CorrectedHour>(this.url('/api/corrected-hours'), dto);
   }
@@ -184,5 +213,11 @@ export class OvertimeService extends ApiService {
   }
   syncPayroll(req: PeriodRequest): Observable<PayrollWriteResult> {
     return this.http.post<PayrollWriteResult>(this.url('/api/overtime/sync-payroll'), req);
+  }
+  /** Détail du calcul HS d'un salarié : jours, semaines EXO/IMPO et allocation enregistrée. */
+  detail(matricule: string, from: string, to: string): Observable<OvertimeDetail> {
+    return this.http.get<OvertimeDetail>(this.url(`/api/overtime/detail/${encodeURIComponent(matricule)}`), {
+      params: this.params({ from, to }),
+    });
   }
 }

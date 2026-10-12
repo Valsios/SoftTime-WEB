@@ -17,6 +17,10 @@ export const routes: Routes = [
         path: 'dashboard',
         loadComponent: () => import('./features/dashboard/dashboard').then((m) => m.Dashboard),
       },
+      {
+        path: 'analytics',
+        loadComponent: () => import('./features/dashboard/analytics').then((m) => m.AnalyticsPage),
+      },
 
       // Databases (droit 1)
       {

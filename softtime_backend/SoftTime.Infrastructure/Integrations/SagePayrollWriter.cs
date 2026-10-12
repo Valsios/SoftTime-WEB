@@ -12,16 +12,16 @@ public class SagePayrollWriter : ISagePayrollWriter
         short Op(string code) => constants.First(c => c.CodeConstante.Trim() == code).CodeOperande1
             ?? throw new InvalidOperationException($"Constante SAGE {code} introuvable.");
 
-        await UpdateCumAsync(sageConnectionString, numSal, Op(codes.Exo130), exo130, cancellationToken);
-        await UpdateCumAsync(sageConnectionString, numSal, Op(codes.Exo150), exo150, cancellationToken);
-        await UpdateCumAsync(sageConnectionString, numSal, Op(codes.I130), i130, cancellationToken);
-        await UpdateCumAsync(sageConnectionString, numSal, Op(codes.I150), i150, cancellationToken);
-        await UpdateCumAsync(sageConnectionString, numSal, Op(codes.Ferie), ferie, cancellationToken);
-        await UpdateCumAsync(sageConnectionString, numSal, Op(codes.Dim), dim, cancellationToken);
-        await UpdateCumAsync(sageConnectionString, numSal, Op(codes.Nuit), nuit, cancellationToken);
+        await UpdateCumulAsync(sageConnectionString, numSal, Op(codes.Exo130), exo130, cancellationToken);
+        await UpdateCumulAsync(sageConnectionString, numSal, Op(codes.Exo150), exo150, cancellationToken);
+        await UpdateCumulAsync(sageConnectionString, numSal, Op(codes.I130), i130, cancellationToken);
+        await UpdateCumulAsync(sageConnectionString, numSal, Op(codes.I150), i150, cancellationToken);
+        await UpdateCumulAsync(sageConnectionString, numSal, Op(codes.Ferie), ferie, cancellationToken);
+        await UpdateCumulAsync(sageConnectionString, numSal, Op(codes.Dim), dim, cancellationToken);
+        await UpdateCumulAsync(sageConnectionString, numSal, Op(codes.Nuit), nuit, cancellationToken);
     }
 
-    private static async Task UpdateCumAsync(string connectionString, int numSal, short opCst, decimal value, CancellationToken cancellationToken)
+    public async Task<int> UpdateCumulAsync(string connectionString, int numSal, short opCst, decimal value, CancellationToken cancellationToken = default)
     {
         var formatted = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
         await using var con = new SqlConnection(connectionString);
@@ -32,6 +32,6 @@ public class SagePayrollWriter : ISagePayrollWriter
         cmd.Parameters.AddWithValue("@val", formatted);
         cmd.Parameters.AddWithValue("@num", numSal);
         cmd.Parameters.AddWithValue("@op", opCst);
-        await cmd.ExecuteNonQueryAsync(cancellationToken);
+        return await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 }

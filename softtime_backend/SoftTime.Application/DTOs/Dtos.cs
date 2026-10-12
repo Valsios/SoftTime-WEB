@@ -255,6 +255,54 @@ public record PurgeValidationResultDto(int Validations, int Corrections, string 
     public PurgeValidationResultDto() : this(default, default, default!) { }
 }
 
+// --- Tableau de bord analytique ---
+
+public record DashboardStatsDto(
+    int TotalEmployes,
+    DashboardKpiDto Kpi,
+    DashboardAbsencesDto Absences,
+    DashboardRetardsDto Retards)
+{
+    public DashboardStatsDto() : this(default, default!, default!, default!) { }
+}
+
+public record DashboardKpiDto(
+    int CartesActives,
+    int Anomalies,
+    int CorrectionsManuelles,
+    int SemainesValidees,
+    int SemainesEnAttente,
+    decimal HeuresTravaillees,
+    decimal HeuresSupplementaires)
+{
+    public DashboardKpiDto() : this(default, default, default, default, default, default, default) { }
+}
+
+/// <param name="Total">Absences explicites + jours planifiés sans pointage.</param>
+/// <param name="PlanifiesSansPointage">
+/// Jours planifiés (OffP = false) sans heure corrigée, hors week-end et férié.
+/// Les congés SAGE ne sont pas encore exclus de ce compteur (voir LOT 9).
+/// </param>
+public record DashboardAbsencesDto(int Total, int Explicites, int PlanifiesSansPointage, IReadOnlyList<DashboardGroupDto> Stats, IReadOnlyList<DashboardTopDto> Top)
+{
+    public DashboardAbsencesDto() : this(default, default, default, Array.Empty<DashboardGroupDto>(), Array.Empty<DashboardTopDto>()) { }
+}
+
+public record DashboardRetardsDto(int Total, int TotalMinutes, IReadOnlyList<DashboardGroupDto> Stats, IReadOnlyList<DashboardTopDto> Top)
+{
+    public DashboardRetardsDto() : this(default, default, Array.Empty<DashboardGroupDto>(), Array.Empty<DashboardTopDto>()) { }
+}
+
+public record DashboardGroupDto(string Periode, int Count, int TotalMinutes)
+{
+    public DashboardGroupDto() : this(string.Empty, default, default) { }
+}
+
+public record DashboardTopDto(string Matricule, string? Nom, string? Prenom, string? Departement, int Count, int TotalMinutes)
+{
+    public DashboardTopDto() : this(string.Empty, default, default, default, default, default) { }
+}
+
 public record CorrectedHourDto(decimal Id, string? Matricule, DateTime? DateIn, DateTime? DateOut, TimeSpan? HEntree, TimeSpan? HPs, TimeSpan? HPe, TimeSpan? HSortie, bool? AbsAm, bool? AbsPm, string? IntituleAbsence, TimeSpan? Retard, bool? Ferie, bool? FerieAm, bool? FeriePm, bool? ValiderCorrection, bool? ValiderHs, decimal? Hs, decimal? MNuit, decimal? MDimanche, decimal? MFeries)
 {
     public CorrectedHourDto() : this(default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default) { }
@@ -286,6 +334,46 @@ public record HsExoDto(int Oid, string? Matricule, int? NumSal, decimal? Exo130,
     public HsExoDto() : this(default, default, default, default, default, default, default, default, default, default, default, default) { }
 }
 
+/// <summary>Jour détaillé du calcul des heures supplémentaires d'un salarié.</summary>
+public record OvertimeDetailDayDto(
+    DateTime Date,
+    TimeSpan? Entree,
+    TimeSpan? Sortie,
+    decimal HeuresTravaillees,
+    decimal HeuresSupJournalieres,
+    decimal HeuresNuit,
+    bool Dimanche,
+    bool Ferie,
+    TimeSpan? Retard,
+    bool AbsenceAm,
+    bool AbsencePm,
+    bool Conge,
+    bool JourTravaille)
+{
+    public OvertimeDetailDayDto() : this(default, default, default, default, default, default, default, default, default, default, default, default, default) { }
+}
+
+/// <summary>Semaine du calcul EXO/IMPO d'un salarié (répartition 130 % / 150 %).</summary>
+public record OvertimeDetailWeekDto(int? Semaine, DateTime? Debut, DateTime? Fin, decimal Hs, decimal Hs1, decimal Hs2)
+{
+    public OvertimeDetailWeekDto() : this(default, default, default, default, default, default) { }
+}
+
+/// <summary>Détail du calcul des heures supplémentaires d'un salarié (remplace le <c>DetailHS</c> du desktop).</summary>
+public record OvertimeDetailDto(
+    string? Matricule,
+    DateTime From,
+    DateTime To,
+    IReadOnlyList<OvertimeDetailDayDto> Jours,
+    IReadOnlyList<OvertimeDetailWeekDto> Semaines,
+    HsExoDto? ExoImpo)
+{
+    public OvertimeDetailDto() : this(default, default, default, new List<OvertimeDetailDayDto>(), new List<OvertimeDetailWeekDto>(), default) { }
+}
+
+/// <summary>Page de résultats d'une liste massive (pointages, heures corrigées).</summary>
+public record PagedResult<T>(IReadOnlyList<T> Items, int Total, int Page, int PageSize, int TotalPages);
+
 public record PunchCountDto(string? Matricule, int Total);
 
 public record CanteenDto(int Id, string? Matricule, DateTime? DateDeb, DateTime? DateFin, int? Total)
@@ -297,6 +385,18 @@ public record TravelDto(int Id, string? Matricule, DateTime? DateDeb, DateTime? 
 {
     public TravelDto() : this(default, default, default, default, default) { }
 }
+
+/// <summary>Anomalie du calcul cantine : le total du jour est contradictoire (pointage vs absence déclarée).</summary>
+public record CanteenAnomalyDto(string? Matricule, DateTime Date, string Motif)
+{
+    public CanteenAnomalyDto() : this(default, default, string.Empty) { }
+}
+
+/// <summary>Résultat de la synchronisation des cumuls cantine / frais vers SAGE.</summary>
+public record ExtrasSyncResultDto(string Database, string TypeBase, int EmployeesSynced, int CumulsUpdated, string Message);
+
+/// <summary>Résultat de la purge des lignes cantine / frais d'une période.</summary>
+public record PurgeExtrasResultDto(int LignesSupprimees, string Message);
 
 public record AuditEventDto(int Id, string? Table, string? Column, string? User, string? Action, DateTime? Date, string? NewValue, string? OldValue, string? Base)
 {

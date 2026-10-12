@@ -35,7 +35,6 @@ public class SoftTimeDbContext : DbContext
     public DbSet<T_MAJORATION> T_MAJORATION => Set<T_MAJORATION>();
     public DbSet<T_TOLERANCE> T_TOLERANCE => Set<T_TOLERANCE>();
     public DbSet<T_HS_VALIDER> T_HS_VALIDER => Set<T_HS_VALIDER>();
-    public DbSet<T_CARDPAIE_SAUVE> T_CARDPAIE_SAUVE => Set<T_CARDPAIE_SAUVE>();
     public DbSet<T_CATEGORIE> T_CATEGORIE => Set<T_CATEGORIE>();
     public DbSet<T_CAT_SAL> T_CAT_SAL => Set<T_CAT_SAL>();
     public DbSet<T_POINTAGE> T_POINTAGE => Set<T_POINTAGE>();

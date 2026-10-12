@@ -5,11 +5,14 @@ import {
   AuditConfig,
   AuditEvent,
   Canteen,
+  CanteenAnomaly,
+  ExtrasSyncResult,
   HistoryAnomalie,
   HistoryDeleteResult,
   HistoryHs,
   HistoryPointage,
   PeriodRequest,
+  PurgeExtrasResult,
   ReportFilter,
   ReportRow,
   Travel,
@@ -56,6 +59,16 @@ export class CanteenService extends ApiService {
   compute(req: PeriodRequest): Observable<Canteen[]> {
     return this.http.post<Canteen[]>(this.url('/api/canteen/compute'), req);
   }
+  anomalies(req: PeriodRequest): Observable<CanteenAnomaly[]> {
+    return this.http.get<CanteenAnomaly[]>(this.url('/api/canteen/anomalies'), { params: this.params({ ...req }) });
+  }
+  /** Pousse les totaux cantine de la période dans le cumul SAGE. */
+  sync(req: PeriodRequest): Observable<ExtrasSyncResult> {
+    return this.http.post<ExtrasSyncResult>(this.url('/api/canteen/sync'), req);
+  }
+  purge(req: PeriodRequest): Observable<PurgeExtrasResult> {
+    return this.http.delete<PurgeExtrasResult>(this.url('/api/canteen'), { params: this.params({ ...req }) });
+  }
 }
 
 @Injectable({ providedIn: 'root' })
@@ -65,6 +78,10 @@ export class TravelService extends ApiService {
   }
   compute(req: PeriodRequest): Observable<Travel[]> {
     return this.http.post<Travel[]>(this.url('/api/travel-expenses/compute'), req);
+  }
+  /** Pousse les totaux de frais de déplacement de la période dans le cumul SAGE. */
+  sync(req: PeriodRequest): Observable<ExtrasSyncResult> {
+    return this.http.post<ExtrasSyncResult>(this.url('/api/travel-expenses/sync'), req);
   }
 }
 

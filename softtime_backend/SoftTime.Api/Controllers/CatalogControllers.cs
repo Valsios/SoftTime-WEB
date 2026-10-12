@@ -202,6 +202,21 @@ public class CardPaieController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Supprime la correspondance SAGE ↔ badge identifiée par le couple de matricules
+    /// (portage de <c>SupprimerParCorrespondance</c> du desktop).
+    /// </summary>
+    [HttpDelete("by-correspondence")]
+    [RequireDroit(Droit.Parameters)]
+    public async Task<IActionResult> DeleteByCorrespondence(
+        [FromQuery] string matriculeSage,
+        [FromQuery] string? matriculePointeuse,
+        CancellationToken ct)
+    {
+        await _svc.DeleteCardByCorrespondenceAsync(matriculeSage, matriculePointeuse, ct);
+        return NoContent();
+    }
+
     [HttpPost("auto-map")]
     [RequireDroit(Droit.Parameters)]
     public async Task<IActionResult> AutoMap(CancellationToken ct)

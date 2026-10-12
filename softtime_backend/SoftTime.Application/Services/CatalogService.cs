@@ -939,6 +939,32 @@ public class CatalogService
         await _uow.SaveChangesAsync(ct);
     }
 
+    /// <summary>
+    /// Supprime la correspondance SAGE ↔ badge identifiée par le couple de matricules
+    /// (portage de <c>SupprimerParCorrespondance</c> du desktop). La comparaison des matricules est
+    /// insensible au remplissage par des zéros. Le badge est optionnel : sans lui, toutes les
+    /// correspondances du matricule SAGE du tenant courant sont supprimées.
+    /// </summary>
+    public async Task<int> DeleteCardByCorrespondenceAsync(string matriculeSage, string? matriculePointeuse, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        if (string.IsNullOrWhiteSpace(matriculeSage))
+            throw new InvalidOperationException("Matricule SAGE requis.");
+        var sage = _tenant.SageDb;
+        var repo = _uow.Repository<T_CARDPAIE>();
+        var candidates = (await repo.ListAsync(c =>
+                c.SAGE_BDD == sage && c.SAGE_MATRICULE == matriculeSage, ct))
+            .Where(c => MatriculeIdentity.MemeSalarie(c.SAGE_MATRICULE, matriculeSage))
+            .Where(c => string.IsNullOrWhiteSpace(matriculePointeuse)
+                        || MatriculeIdentity.MemeSalarie(c.POINTEUSE_NUMERO, matriculePointeuse))
+            .ToList();
+        if (candidates.Count == 0)
+            throw new KeyNotFoundException($"Aucune correspondance {matriculeSage} ↔ {matriculePointeuse ?? "*"} sur la base {sage}.");
+        repo.RemoveRange(candidates);
+        await _uow.SaveChangesAsync(ct);
+        return candidates.Count;
+    }
+
     public async Task<SyncResultDto> AutoMapCardsAsync(CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);

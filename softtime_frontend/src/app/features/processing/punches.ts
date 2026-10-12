@@ -32,6 +32,15 @@ import { asRow, fmtDate } from '../../shared/utils/date';
           <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
         </ng-template>
       </data-table>
+      <div class="pager">
+        <span class="pager-info">{{ total() }} pointage(s) — page {{ page() }} / {{ totalPages() }}</span>
+        <soft-button variant="ghost" size="sm" [disabled]="page() <= 1 || loading()" (click)="goTo(page() - 1)">
+          Précédent
+        </soft-button>
+        <soft-button variant="ghost" size="sm" [disabled]="page() >= totalPages() || loading()" (click)="goTo(page() + 1)">
+          Suivant
+        </soft-button>
+      </div>
     </soft-card>
 
     <soft-modal [open]="modal()" title="Corriger le pointage" (closed)="modal.set(false)">
@@ -47,7 +56,9 @@ import { asRow, fmtDate } from '../../shared/utils/date';
       </div>
     </soft-modal>
   `,
-  styles: [`.file-btn { cursor: pointer; } .form-grid { display: grid; gap: 14px; }`],
+  styles: [`.file-btn { cursor: pointer; } .form-grid { display: grid; gap: 14px; }
+    .pager { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+    .pager-info { margin-right: auto; color: var(--soft-text-muted, #6b7280); font-size: 13px; }`],
 })
 export class PunchesPage {
   private readonly svc = inject(PunchesService);
@@ -60,6 +71,10 @@ export class PunchesPage {
   readonly busy = signal(false);
   readonly modal = signal(false);
   readonly rows = signal<Record<string, unknown>[]>([]);
+  readonly page = signal(1);
+  readonly pageSize = signal(50);
+  readonly total = signal(0);
+  readonly totalPages = signal(1);
   private lastFilter: PeriodRequest | null = null;
   private editId: number | null = null;
   currentMatricule = '';
@@ -75,11 +90,35 @@ export class PunchesPage {
 
   onSearch(filter: PeriodRequest): void {
     this.lastFilter = filter;
+    this.page.set(1);
+    this.loadPage();
+  }
+
+  /** Charge la page courante (liste paginée : une période peut compter des dizaines de milliers de lignes). */
+  private loadPage(): void {
+    if (!this.lastFilter) return;
     this.loading.set(true);
-    this.svc.list(filter).subscribe({
-      next: (items) => { this.rows.set(items.map(asRow)); this.loading.set(false); },
+    this.svc.listPaged({
+      ...this.lastFilter,
+      page: this.page(),
+      pageSize: this.pageSize(),
+    }).subscribe({
+      next: (r) => {
+        this.rows.set(r.items.map(asRow));
+        this.total.set(r.total);
+        this.totalPages.set(r.totalPages);
+        this.page.set(r.page);
+        this.pageSize.set(r.pageSize);
+        this.loading.set(false);
+      },
       error: () => this.loading.set(false),
     });
+  }
+
+  goTo(page: number): void {
+    if (page < 1 || page > this.totalPages()) return;
+    this.page.set(page);
+    this.loadPage();
   }
 
   importClock(): void {
@@ -117,8 +156,23 @@ export class PunchesPage {
     });
     input.value = '';
   }
+  /**
+   * Export de la grille complète : la pagination ne porte que sur l'affichage, l'export recharge
+   * donc toute la période pour ne pas tronquer le fichier.
+   */
   exportExcel(): void {
-    this.excel.download('pointages', this.columns, this.rows());
+    if (!this.lastFilter) {
+      this.excel.download('pointages', this.columns, this.rows());
+      return;
+    }
+    this.loading.set(true);
+    this.svc.list(this.lastFilter).subscribe({
+      next: (items) => {
+        this.loading.set(false);
+        this.excel.download('pointages', this.columns, items.map(asRow));
+      },
+      error: () => this.loading.set(false),
+    });
   }
 
   openEdit(row: Record<string, unknown>): void {
@@ -165,7 +219,7 @@ export class PunchesPage {
   }
 
   private refresh(): void {
-    if (this.lastFilter) this.onSearch(this.lastFilter);
+    if (this.lastFilter) this.loadPage();
   }
 
   private toDateInput(value: unknown): string | null {

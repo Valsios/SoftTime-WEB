@@ -14,6 +14,28 @@ export interface Travel {
   total?: number | null;
 }
 
+/** Anomalie du calcul cantine : pointage contredisant une absence complète. */
+export interface CanteenAnomaly {
+  matricule?: string | null;
+  date?: string | null;
+  motif?: string | null;
+}
+
+/** Résultat d'une synchronisation de cumuls (cantine / frais) vers SAGE. */
+export interface ExtrasSyncResult {
+  database: string;
+  typeBase: string;
+  employeesSynced: number;
+  cumulsUpdated: number;
+  message: string;
+}
+
+/** Résultat d'une purge de lignes cantine / frais. */
+export interface PurgeExtrasResult {
+  lignesSupprimees: number;
+  message: string;
+}
+
 export interface AuditEvent {
   id: number;
   table?: string | null;

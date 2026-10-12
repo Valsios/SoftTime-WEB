@@ -2,6 +2,7 @@ using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
+using SoftTime.Domain.Services;
 
 namespace SoftTime.Application.Services;
 
@@ -30,6 +31,24 @@ public class TimekeepingService
             && (string.IsNullOrEmpty(filter.MatriculeFrom) || string.Compare(p.MATRICULE_SAGE, filter.MatriculeFrom) >= 0)
             && (string.IsNullOrEmpty(filter.MatriculeTo) || string.Compare(p.MATRICULE_SAGE, filter.MatriculeTo) <= 0), ct);
         return list.Select(p => new PunchDto(p.IDPOINTAGE, p.MATRICULE_SAGE, p.DATE_POINTAGE, p.HEURE_POINTAGE, p.TYPE_POINTAGE, p.DATE_IMPORTATION)).ToList();
+    }
+
+    /// <summary>
+    /// Liste paginée des pointages. Variante de <see cref="ListPunchesAsync"/> destinée aux périodes
+    /// massives (plusieurs dizaines de milliers de lignes) : l'endpoint non paginé reste inchangé,
+    /// car l'export Excel du client s'appuie sur la grille complète.
+    /// </summary>
+    public async Task<PagedResult<PunchDto>> ListPunchesPagedAsync(PeriodRequest filter, int? page, int? pageSize, CancellationToken ct = default)
+    {
+        var all = await ListPunchesAsync(filter, ct);
+        var ordonnees = all.OrderBy(p => p.Date).ThenBy(p => p.Heure).ThenBy(p => p.Matricule).ToList();
+        var (pageNormalisee, taille) = PaginationRules.Normaliser(page, pageSize);
+        return new PagedResult<PunchDto>(
+            ordonnees.Skip(PaginationRules.Decalage(pageNormalisee, taille)).Take(taille).ToList(),
+            ordonnees.Count,
+            pageNormalisee,
+            taille,
+            PaginationRules.NombreDePages(ordonnees.Count, taille));
     }
 
     /// <summary>
@@ -449,6 +468,23 @@ public class TimekeepingService
             && (string.IsNullOrEmpty(filter.MatriculeFrom) || string.Compare(a.MATRICULE_SAGE, filter.MatriculeFrom) >= 0)
             && (string.IsNullOrEmpty(filter.MatriculeTo) || string.Compare(a.MATRICULE_SAGE, filter.MatriculeTo) <= 0), ct);
         return list.Select(MapCorrection).ToList();
+    }
+
+    /// <summary>
+    /// Liste paginée des heures corrigées (voir <see cref="ListPunchesPagedAsync"/> : l'endpoint
+    /// non paginé reste inchangé pour ne pas tronquer l'export Excel du client).
+    /// </summary>
+    public async Task<PagedResult<CorrectedHourDto>> ListCorrectionsPagedAsync(PeriodRequest filter, int? page, int? pageSize, CancellationToken ct = default)
+    {
+        var all = await ListCorrectionsAsync(filter, ct);
+        var ordonnees = all.OrderBy(c => c.DateIn).ThenBy(c => c.Matricule).ToList();
+        var (pageNormalisee, taille) = PaginationRules.Normaliser(page, pageSize);
+        return new PagedResult<CorrectedHourDto>(
+            ordonnees.Skip(PaginationRules.Decalage(pageNormalisee, taille)).Take(taille).ToList(),
+            ordonnees.Count,
+            pageNormalisee,
+            taille,
+            PaginationRules.NombreDePages(ordonnees.Count, taille));
     }
 
     public async Task<CorrectedHourDto> SaveCorrectionAsync(CorrectedHourDto dto, CancellationToken ct = default)

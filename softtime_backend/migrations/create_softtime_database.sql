@@ -171,20 +171,9 @@ CREATE TABLE dbo.T_CARDPAIE (
 );
 GO
 
-IF OBJECT_ID(N'dbo.T_CARDPAIE_SAUVE', N'U') IS NULL
-CREATE TABLE dbo.T_CARDPAIE_SAUVE (
-    ID                int           IDENTITY(1,1) NOT NULL,
-    SAGE_MATRICULE    nvarchar(max) NULL,
-    SAGE_NOM          nvarchar(max) NULL,
-    SAGE_PRENOM       nvarchar(max) NULL,
-    POINTEUSE_NUMERO  nvarchar(max) NULL,
-    POINTEUSE_NOM     nvarchar(max) NULL,
-    SAGE_SERVEUR      nvarchar(max) NULL,
-    POINTEUSE_SERVEUR nvarchar(max) NULL,
-    SAGE_BDD          nvarchar(max) NULL,
-    POINTEUSE_BDD     nvarchar(max) NULL,
-    CONSTRAINT PK_T_CARDPAIE_SAUVE PRIMARY KEY (ID)
-);
+-- T_CARDPAIE_SAUVE (instantane des correspondances du desktop) n'est PAS creee :
+-- le mode correspondance de l'application web est non destructif, la table n'est plus mappee.
+-- Pour la retirer d'une base existante : migrations/drop_legacy_cardpaie_sauve.sql
 GO
 
 IF OBJECT_ID(N'dbo.T_CATEGORIE', N'U') IS NULL

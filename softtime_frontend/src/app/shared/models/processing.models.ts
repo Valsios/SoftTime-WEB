@@ -152,6 +152,10 @@ export interface PeriodRequest {
   from: string;
   to: string;
   branche?: string | null;
+  /** Numéro de page (1-based), uniquement pour les listes paginées. */
+  page?: number;
+  /** Taille de page, plafonnée à 100 par le serveur. */
+  pageSize?: number;
 }
 
 export interface WeeklyValidationRequest extends PeriodRequest {
@@ -186,4 +190,50 @@ export interface HsExo {
   dim?: number | null;
   retard?: number | null;
   absence?: number | null;
+}
+
+/** Page de résultats d'une liste massive (pointages, heures corrigées). */
+export interface PagedResult<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+/** Jour détaillé du calcul des heures supplémentaires d'un salarié. */
+export interface OvertimeDetailDay {
+  date?: string | null;
+  entree?: string | null;
+  sortie?: string | null;
+  heuresTravaillees: number;
+  heuresSupJournalieres: number;
+  heuresNuit: number;
+  dimanche: boolean;
+  ferie: boolean;
+  retard?: string | null;
+  absenceAm: boolean;
+  absencePm: boolean;
+  conge: boolean;
+  jourTravaille: boolean;
+}
+
+/** Semaine du calcul EXO/IMPO d'un salarié. */
+export interface OvertimeDetailWeek {
+  semaine?: number | null;
+  debut?: string | null;
+  fin?: string | null;
+  hs: number;
+  hs1: number;
+  hs2: number;
+}
+
+/** Détail du calcul HS d'un salarié (remplace le `DetailHS` du desktop). */
+export interface OvertimeDetail {
+  matricule?: string | null;
+  from: string;
+  to: string;
+  jours: OvertimeDetailDay[];
+  semaines: OvertimeDetailWeek[];
+  exoImpo?: HsExo | null;
 }

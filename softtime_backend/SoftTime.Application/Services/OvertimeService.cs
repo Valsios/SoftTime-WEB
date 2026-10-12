@@ -297,6 +297,7 @@ public class OvertimeService
         var cats = await _uow.Repository<T_CATEGORIE>().ListAsync(c => c.BDD_SAGE == _tenant.SageDb, ct);
         var affect = await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == _tenant.SageDb, ct);
         var tols = await _uow.Repository<T_TOLERANCE>().ListAsync(_ => true, ct);
+        var leaves = await LoadLeaveDaysAsync(ct);
         var hsRepo = _uow.Repository<T_HS_VALIDER>();
         var result = new List<WeeklyHsDto>();
         foreach (var card in cards)
@@ -315,12 +316,18 @@ public class OvertimeService
             var cat = aff == null ? null : cats.FirstOrDefault(c => c.IDCATEGORIE == aff.ID_CATEG);
             var weeklyNeed = cat?.HEURESEMAINE ?? 40;
             var pause = cat?.PAUSE ?? TimeSpan.Zero;
+            var conges = leaves.TryGetValue(MatriculeIdentity.Cle(card.SAGE_MATRICULE), out var joursConge)
+                ? joursConge
+                : new List<LeaveDay>();
             decimal ht = 0, nuit = 0, dim = 0, ferieH = 0, retard = 0, absence = 0;
             foreach (var day in Enumerable.Range(0, 7).Select(i => request.From.Date.AddDays(i)))
             {
                 var plan = planning.FirstOrDefault(p => p.DateP == day);
                 var corr = hours.FirstOrDefault(h => h.DATE_POINTAGE_IN.HasValue && h.DATE_POINTAGE_IN.Value.Date == day);
                 var isFerie = feries.Any(f => f.DATE.HasValue && f.DATE.Value.Date == day);
+                // Un jour de congé SAGE n'est pas une absence : le desktop le traitait aussi à part
+                // (Calcul_HSService : IsConge => la journée est réputée travaillée, jamais absente).
+                var estConge = LeaveRules.EstConge(conges, day);
                 if (corr?.HENTREE != null && corr.HSORTIE != null)
                 {
                     var start = corr.HENTREE.Value;
@@ -329,7 +336,7 @@ public class OvertimeService
                     var worked = corr.HSORTIE.Value - start - pause;
                     if (worked < TimeSpan.Zero) worked = TimeSpan.Zero;
                     ht += (decimal)worked.TotalHours;
-                    if (start.Hours < 6 || corr.HSORTIE.Value.Hours >= 21)
+                    if (OvertimeRules.EstPlageNuit(start, corr.HSORTIE.Value))
                         nuit += (decimal)Math.Max(0, worked.TotalHours);
                     if (day.DayOfWeek == DayOfWeek.Sunday)
                         dim += (decimal)worked.TotalHours;
@@ -338,7 +345,7 @@ public class OvertimeService
                     if (corr.RETARD.HasValue)
                         retard += (decimal)corr.RETARD.Value.TotalHours;
                 }
-                else if (plan is { OffP: not true, HA: not null, HD: not null })
+                else if (!estConge && plan is { OffP: not true, HA: not null, HD: not null })
                 {
                     var abs = plan.HD.Value.TimeOfDay - plan.HA.Value.TimeOfDay - pause;
                     if (abs > TimeSpan.Zero)
@@ -430,5 +437,130 @@ public class OvertimeService
             BDD_SAGE = _tenant.SageDb,
             BDD_POINTEUSE = _tenant.PointeuseDb
         }, ct);
+    }
+
+    /// <summary>
+    /// Congés SAGE de tous les salariés du tenant, indexés par clé canonique de matricule
+    /// (les zéros de remplissage diffèrent entre les deux bases). Chargé en une seule passe :
+    /// le desktop mettait les congés en cache par matricule.
+    /// </summary>
+    private async Task<Dictionary<string, List<LeaveDay>>> LoadLeaveDaysAsync(CancellationToken ct)
+    {
+        var sageRow = await _tenant.GetSageRowAsync(ct);
+        var codes = (await _externalSource.GetEventsAsync(sageRow, ct))
+            .Select(e => e.Code)
+            .Where(LeaveRules.EstCodeConge)
+            .Select(c => c!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var parCle = new Dictionary<string, List<LeaveDay>>(StringComparer.Ordinal);
+        if (codes.Count == 0)
+            return parCle;
+
+        var matriculeParNumSalarie = (await _externalSource.GetEmployeesAsync(sageRow, ct))
+            .Where(e => !string.IsNullOrEmpty(e.Matricule))
+            .GroupBy(e => e.EmployeeId)
+            .ToDictionary(g => g.Key, g => MatriculeIdentity.Cle(g.First().Matricule));
+
+        var parMatricule = (await _externalSource.GetEmployeeEventsAsync(sageRow, ct))
+            .Where(e => e.Code is not null && codes.Contains(e.Code.Trim())
+                        && e.Start.HasValue && e.End.HasValue
+                        && matriculeParNumSalarie.ContainsKey(e.EmployeeId))
+            .GroupBy(e => matriculeParNumSalarie[e.EmployeeId])
+            .ToDictionary(
+                g => g.Key,
+                g => LeaveRules.Expandre(g.Select(e =>
+                    new LeavePeriod(e.Start!.Value, e.End!.Value, e.Matin == true, e.ApresMidi == true, e.Code))).ToList());
+        return parMatricule;
+    }
+
+    /// <summary>
+    /// Détail du calcul des heures supplémentaires d'un salarié : jours issus des heures corrigées,
+    /// répartition hebdomadaire EXO/IMPO et allocation enregistrée. Reprend l'intention du
+    /// <c>DetailHS</c> du desktop, qui lisait la table brute de la pointeuse et dont le
+    /// <c>Include</c> était invalide : la source est ici la chaîne de traitement de l'application.
+    /// </summary>
+    public async Task<OvertimeDetailDto> DetailAsync(string matricule, DateTime from, DateTime to, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        if (string.IsNullOrWhiteSpace(matricule))
+            throw new InvalidOperationException("Matricule requis.");
+        if (from == default || to == default)
+            throw new InvalidOperationException("Période requise (du … au …).");
+        var debut = from.Date;
+        var fin = to.Date;
+        if (fin < debut)
+            throw new InvalidOperationException("La date de fin doit suivre la date de début.");
+
+        var cle = MatriculeIdentity.Cle(matricule);
+        var cards = await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == _tenant.SageDb, ct);
+        var card = cards.FirstOrDefault(c => MatriculeIdentity.Cle(c.SAGE_MATRICULE) == cle);
+        var matriculeCarte = card?.SAGE_MATRICULE ?? matricule;
+
+        var corrections = await _uow.Repository<T_HEURECORRIGER>().ListAsync(h =>
+            h.BDD_SAGE == _tenant.SageDb
+            && h.MATRICULE_SAGE == matriculeCarte
+            && h.DATE_POINTAGE_IN != null
+            && h.DATE_POINTAGE_IN >= debut && h.DATE_POINTAGE_IN < fin.AddDays(1), ct);
+        var feries = await _uow.Repository<T_FERIE>().ListAsync(f => f.BDD_SAGE == _tenant.SageDb, ct);
+        var conges = (await LoadLeaveDaysAsync(ct)).TryGetValue(cle, out var jours) ? jours : new List<LeaveDay>();
+
+        var pause = TimeSpan.Zero;
+        if (card is not null)
+        {
+            var affectations = await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == _tenant.SageDb && a.MATRICULE_SAGE == card.ID, ct);
+            var categories = await _uow.Repository<T_CATEGORIE>().ListAsync(c => c.BDD_SAGE == _tenant.SageDb, ct);
+            var categorie = categories.FirstOrDefault(c => affectations.Any(a => a.ID_CATEG == c.IDCATEGORIE));
+            pause = categorie?.PAUSE ?? TimeSpan.Zero;
+        }
+
+        var joursDetail = new List<OvertimeDetailDayDto>();
+        for (var day = debut; day <= fin; day = day.AddDays(1))
+        {
+            var corr = corrections.FirstOrDefault(h => h.DATE_POINTAGE_IN!.Value.Date == day);
+            var entree = corr?.HENTREE;
+            var sortie = corr?.HSORTIE;
+            var jourTravaille = entree.HasValue && sortie.HasValue;
+            var heures = TimeSpan.Zero;
+            var heuresNuit = TimeSpan.Zero;
+            if (jourTravaille)
+            {
+                heures = sortie!.Value - entree!.Value - pause;
+                if (heures < TimeSpan.Zero)
+                    heures = TimeSpan.Zero;
+                if (OvertimeRules.EstPlageNuit(entree.Value, sortie.Value))
+                    heuresNuit = heures;
+            }
+            joursDetail.Add(new OvertimeDetailDayDto(
+                day,
+                entree,
+                sortie,
+                Math.Round((decimal)heures.TotalHours, 2),
+                Math.Round(OvertimeRules.HeuresSupJournalieres(heures), 2),
+                Math.Round((decimal)heuresNuit.TotalHours, 2),
+                day.DayOfWeek == DayOfWeek.Sunday,
+                feries.Any(f => f.DATE.HasValue && f.DATE.Value.Date == day),
+                corr?.RETARD,
+                corr?.ABSENCE_AM == true,
+                corr?.ABSENCE_PM == true,
+                LeaveRules.EstConge(conges, day),
+                jourTravaille));
+        }
+
+        var semaines = (await _uow.Repository<T_HSSemaine>().ListAsync(h =>
+                h.BDD_SAGE == _tenant.SageDb && h.Matricule == matriculeCarte, ct))
+            .Where(h => h.PeriodeDebut.HasValue && h.PeriodeFin.HasValue
+                        && h.PeriodeDebut!.Value.Date <= fin && h.PeriodeFin!.Value.Date >= debut)
+            .OrderBy(h => h.Semaine)
+            .Select(h => new OvertimeDetailWeekDto(h.Semaine, h.PeriodeDebut, h.PeriodeFin, h.HS ?? 0, h.HS1 ?? 0, h.HS2 ?? 0))
+            .ToList();
+
+        var exo = (await _uow.Repository<T_HSExoImp>().ListAsync(h =>
+                h.BDD_SAGE == _tenant.SageDb && h.Matricule == matriculeCarte
+                && h.PeriodeDebut == debut && h.PeriodeFin == fin, ct))
+            .Select(h => new HsExoDto(h.OID, h.Matricule, h.NumSal, h.EXO130, h.EXO150, h.I130, h.I150,
+                h.FERIE, h.NUIT, h.DIM, h.RETARD, h.ABSENCE))
+            .FirstOrDefault();
+
+        return new OvertimeDetailDto(matriculeCarte, debut, fin, joursDetail, semaines, exo);
     }
 }
