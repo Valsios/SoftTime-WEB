@@ -1,7 +1,11 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
+import { SessionStore } from '../../core/session.store';
+import { Droit } from '../../core/rights';
+import { PeriodRequest } from '../../shared/models';
+import { FormsModule } from '@angular/forms';
 import { AnomalyUpdate, PeriodRequest } from '../../shared/models';
 import { AnomaliesService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
@@ -22,6 +26,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
   selector: 'app-anomalies',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    CommonModule,
     FormsModule,
     PageHeader,
     SoftButton,
@@ -51,7 +56,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
       >
         <ng-template #actions let-row>
           <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Arbitrer</soft-button>
-          <soft-button size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
+          <soft-button *ngIf="canDelete()" size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
         </ng-template>
       </data-table>
     </soft-card>
@@ -89,6 +94,9 @@ export class AnomaliesPage {
   private readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
+  private readonly session = inject(SessionStore);
+
+  readonly canDelete = computed(() => this.session.hasPermission('PROC:ANOMALIES:DELETE', Droit.Processing));
 
   readonly loading = signal(false);
   readonly busy = signal(false);

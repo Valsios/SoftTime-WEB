@@ -3,6 +3,7 @@ using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
+using SoftTime.Domain;
 
 namespace SoftTime.Application.Services;
 
@@ -44,7 +45,8 @@ public class AuthService
         var access = await _uow.Repository<T_BDD_AUTORISE>().ListAsync(a => a.IDRESPONSABLE == user.IDRESPONSABLE, cancellationToken);
         var sageIds = access.Select(a => a.IDBDD).ToHashSet();
         var sages = await _uow.Repository<T_BDD_SAGE>().ListAsync(s => sageIds.Contains(s.ID), cancellationToken);
-        return new LoginResponse(token, user.IDRESPONSABLE, user.LOGIN ?? login, user.NOMRESPONSABLE ?? login, user.IDROLE, user.MATRICULE, rights, sages.Select(_mapper.Map<SageDbDto>).ToList());
+        var detailed = await GetUserDetailedPermissionsAsync(user.IDRESPONSABLE, cancellationToken);
+        return new LoginResponse(token, user.IDRESPONSABLE, user.LOGIN ?? login, user.NOMRESPONSABLE ?? login, user.IDROLE, user.MATRICULE, rights, sages.Select(_mapper.Map<SageDbDto>).ToList(), detailed.GrantedPermissions);
     }
 
     public async Task<LoginResponse> GetMeAsync(decimal userId, CancellationToken cancellationToken = default)
@@ -56,7 +58,8 @@ public class AuthService
         var access = await _uow.Repository<T_BDD_AUTORISE>().ListAsync(a => a.IDRESPONSABLE == user.IDRESPONSABLE, cancellationToken);
         var sageIds = access.Select(a => a.IDBDD).ToHashSet();
         var sages = await _uow.Repository<T_BDD_SAGE>().ListAsync(s => sageIds.Contains(s.ID), cancellationToken);
-        return new LoginResponse(string.Empty, user.IDRESPONSABLE, user.LOGIN ?? string.Empty, user.NOMRESPONSABLE ?? string.Empty, user.IDROLE, user.MATRICULE, rights, sages.Select(_mapper.Map<SageDbDto>).ToList());
+        var detailed = await GetUserDetailedPermissionsAsync(user.IDRESPONSABLE, cancellationToken);
+        return new LoginResponse(string.Empty, user.IDRESPONSABLE, user.LOGIN ?? string.Empty, user.NOMRESPONSABLE ?? string.Empty, user.IDROLE, user.MATRICULE, rights, sages.Select(_mapper.Map<SageDbDto>).ToList(), detailed.GrantedPermissions);
     }
 
     public async Task<UserDto> GetUserAsync(decimal id, CancellationToken cancellationToken = default)
@@ -261,6 +264,145 @@ public class AuthService
         repo.RemoveRange(existing);
         foreach (var id in sageDbIds.Distinct())
             await repo.AddAsync(new T_BDD_AUTORISE { IDRESPONSABLE = userId, IDBDD = id }, cancellationToken);
+        await _uow.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<UserDetailedPermissionsDto> GetUserDetailedPermissionsAsync(decimal userId, CancellationToken cancellationToken = default)
+    {
+        var user = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(userId, cancellationToken)
+            ?? throw new KeyNotFoundException("Utilisateur introuvable.");
+
+        var customList = await _uow.Repository<T_USER_PERMISSION>().ListAsync(
+            p => p.IDRESPONSABLE == userId && p.IS_GRANTED, cancellationToken);
+
+        if (customList.Count > 0)
+        {
+            return new UserDetailedPermissionsDto(userId, customList.Select(p => p.PERMISSION_CODE).Distinct().ToList(), true);
+        }
+
+        var rolePrivileges = await _uow.Repository<T_DROIT_ROLE>().ListAsync(p => p.IDROLE == user.IDROLE, cancellationToken);
+        var rights = rolePrivileges.Select(p => (int)p.IDDROIT).ToHashSet();
+
+        var access = await _uow.Repository<T_BDD_AUTORISE>().ListAsync(a => a.IDRESPONSABLE == userId, cancellationToken);
+        var sageIds = access.Select(a => a.IDBDD).ToHashSet();
+        var sageDbs = await _uow.Repository<T_BDD_SAGE>().ListAsync(s => sageIds.Contains(s.ID), cancellationToken);
+        var pointeuseDbs = await _uow.Repository<T_BDD_POINTEUSE>().ListAsync(_ => true, cancellationToken);
+
+        var defaults = new List<string>();
+
+        if (sageDbs.Count > 0 || rights.Contains(Rights.Databases))
+        {
+            defaults.Add("SAGE:CREATE");
+        }
+
+        foreach (var s in sageDbs)
+        {
+            var name = s.NOM_BD ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            defaults.Add($"SAGE:{name}:READ");
+            defaults.Add($"SAGE:{name}:UPDATE");
+            defaults.Add($"SAGE:{name}:DELETE");
+        }
+
+        if (rights.Contains(Rights.Databases))
+        {
+            defaults.Add("POINTEUSE:CREATE");
+            foreach (var p in pointeuseDbs)
+            {
+                var name = p.NOM_BD ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(name)) continue;
+                defaults.Add($"POINTEUSE:{name}:READ");
+                defaults.Add($"POINTEUSE:{name}:UPDATE");
+                defaults.Add($"POINTEUSE:{name}:DELETE");
+            }
+        }
+
+        if (rights.Contains(Rights.Parameters))
+        {
+            defaults.AddRange(new[]
+            {
+                "PARAMS:USERS", "PARAMS:USERS:CREATE", "PARAMS:USERS:UPDATE", "PARAMS:USERS:DELETE",
+                "PARAMS:ROLES", "PARAMS:ROLES:CREATE", "PARAMS:ROLES:UPDATE", "PARAMS:ROLES:DELETE",
+                "PARAMS:PRIVILEGES",
+                "PARAMS:DB_ACCESS",
+                "PARAMS:CLOCK_PARAMS",
+                "PARAMS:CORRESPONDENCE",
+                "PARAMS:CARDPAIE", "PARAMS:CARDPAIE:CREATE", "PARAMS:CARDPAIE:UPDATE", "PARAMS:CARDPAIE:DELETE",
+                "PARAMS:CATEGORIES", "PARAMS:CATEGORIES:CREATE", "PARAMS:CATEGORIES:UPDATE", "PARAMS:CATEGORIES:DELETE",
+                "PARAMS:AFFECTATIONS", "PARAMS:AFFECTATIONS:CREATE", "PARAMS:AFFECTATIONS:UPDATE", "PARAMS:AFFECTATIONS:DELETE",
+                "PARAMS:TOLERANCES", "PARAMS:TOLERANCES:CREATE", "PARAMS:TOLERANCES:UPDATE",
+                "PARAMS:HOLIDAYS", "PARAMS:HOLIDAYS:CREATE", "PARAMS:HOLIDAYS:UPDATE", "PARAMS:HOLIDAYS:DELETE",
+                "PARAMS:MAJORATIONS", "PARAMS:MAJORATIONS:UPDATE",
+                "PARAMS:CODE_CONSTANTES",
+                "PARAMS:ABSENCE_CODES", "PARAMS:ABSENCE_CODES:CREATE", "PARAMS:ABSENCE_CODES:UPDATE"
+            });
+        }
+
+        if (rights.Contains(Rights.Processing))
+        {
+            defaults.AddRange(new[]
+            {
+                "PROC:SHIFTS", "PROC:SHIFTS:CREATE", "PROC:SHIFTS:UPDATE", "PROC:SHIFTS:DELETE",
+                "PROC:EMPLOYEE_PLANNING", "PROC:EMPLOYEE_PLANNING:CREATE", "PROC:EMPLOYEE_PLANNING:UPDATE", "PROC:EMPLOYEE_PLANNING:DELETE",
+                "PROC:PUNCHES",
+                "PROC:ANOMALIES", "PROC:ANOMALIES:DELETE",
+                "PROC:CORRECTED_HOURS", "PROC:CORRECTED_HOURS:CREATE", "PROC:CORRECTED_HOURS:UPDATE", "PROC:CORRECTED_HOURS:DELETE",
+                "PROC:WEEKLY_VALIDATION",
+                "PROC:OVERTIME"
+            });
+        }
+
+        if (rights.Contains(Rights.Other))
+        {
+            defaults.AddRange(new[]
+            {
+                "OTHER:CANTEEN", "OTHER:TRAVEL_EXPENSES"
+            });
+        }
+
+        if (rights.Contains(Rights.Traceability))
+        {
+            defaults.Add("TRACE:AUDIT");
+        }
+
+        if (rights.Contains(Rights.Reports))
+        {
+            defaults.Add("REPORTS:REPORTS");
+        }
+
+        return new UserDetailedPermissionsDto(userId, defaults.Distinct().ToList(), false);
+    }
+
+    public async Task SaveUserDetailedPermissionsAsync(decimal currentUserId, decimal targetUserId, IReadOnlyCollection<string> permissions, CancellationToken cancellationToken = default)
+    {
+        var caller = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(currentUserId, cancellationToken)
+            ?? throw new UnauthorizedAccessException("Utilisateur connecté introuvable.");
+
+        var target = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(targetUserId, cancellationToken)
+            ?? throw new KeyNotFoundException("Utilisateur cible introuvable.");
+
+        var callerRole = await _uow.Repository<T_ROLE>().GetByIdAsync(caller.IDROLE, cancellationToken);
+        var isAdmin = caller.IDROLE == 1 || (callerRole?.NOMROLE?.Contains("ADMIN", StringComparison.OrdinalIgnoreCase) ?? false);
+
+        if (currentUserId == targetUserId && !isAdmin)
+        {
+            throw new InvalidOperationException("Un utilisateur ne peut pas modifier ses propres privilèges sans droit d'administration.");
+        }
+
+        var repo = _uow.Repository<T_USER_PERMISSION>();
+        var existing = await repo.ListAsync(p => p.IDRESPONSABLE == targetUserId, cancellationToken);
+        repo.RemoveRange(existing);
+
+        foreach (var p in permissions.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct())
+        {
+            await repo.AddAsync(new T_USER_PERMISSION
+            {
+                IDRESPONSABLE = targetUserId,
+                PERMISSION_CODE = p.Trim(),
+                IS_GRANTED = true
+            }, cancellationToken);
+        }
+
         await _uow.SaveChangesAsync(cancellationToken);
     }
 }

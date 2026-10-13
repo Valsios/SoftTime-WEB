@@ -1,7 +1,10 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
+import { SessionStore } from '../../core/session.store';
+import { Droit } from '../../core/rights';
 import { Affectation, CardPaie, Category, DepartementService } from '../../shared/models';
 import { AffectationsService, CardPaieService, CategoriesService, DepartementServiceService } from '../../shared/services/catalog.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
@@ -19,7 +22,7 @@ interface AffectationRow extends Affectation {
 @Component({
   selector: 'app-affectations',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, SoftSelect],
+  imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, SoftSelect],
   template: `
     <page-header title="Affectations" subtitle="Salariés par catégorie">
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
@@ -27,7 +30,7 @@ interface AffectationRow extends Affectation {
         <input #affFile type="file" accept=".xlsx,.xls" hidden (change)="onFile($event)" />
         <soft-button variant="secondary" (click)="affFile.click()">Import Excel</soft-button>
       </label>
-      <soft-button (click)="openCreate()">Ajouter</soft-button>
+      <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter</soft-button>
     </page-header>
 
     <div class="soft-toolbar">
@@ -61,8 +64,8 @@ interface AffectationRow extends Affectation {
       <data-table [columns]="columns" [rows]="rows()" [loading]="loading()">
         <ng-template #actions let-row>
           <div class="soft-actions" style="justify-content: end">
-            <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
-            <soft-button size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
+            <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
+            <soft-button *ngIf="canDelete()" size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
           </div>
         </ng-template>
       </data-table>
@@ -89,6 +92,11 @@ export class AffectationsPage implements OnInit {
   private readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
+  private readonly session = inject(SessionStore);
+
+  readonly canCreate = computed(() => this.session.hasPermission('PARAMS:AFFECTATIONS:CREATE', Droit.Parameters));
+  readonly canUpdate = computed(() => this.session.hasPermission('PARAMS:AFFECTATIONS:UPDATE', Droit.Parameters));
+  readonly canDelete = computed(() => this.session.hasPermission('PARAMS:AFFECTATIONS:DELETE', Droit.Parameters));
 
   readonly loading = signal(true);
   readonly saving = signal(false);

@@ -19,14 +19,17 @@ export class AuthService extends ApiService {
     return this.http.get<LoginResponse>(this.url('/api/auth/me'));
   }
 
-  /** Installation vierge (aucun compte) : le client affiche l'écran de création de l'administrateur. */
-  isFirstRun(): Observable<boolean> {
-    return this.http.get<boolean>(this.url('/api/auth/is-first-run'));
-  }
-
-  /** Crée le premier compte administrateur. Le serveur refuse dès qu'un compte existe. */
-  createAdmin(body: AdminSetupRequest): Observable<AdminSetupResult> {
-    return this.http.post<AdminSetupResult>(this.url('/api/auth/create-admin'), body);
+  refreshMe(): Observable<LoginResponse> {
+    return this.me().pipe(
+      tap((res) => {
+        if (res.authorizedDatabases) {
+          this.session.setAuthorizedDatabases(res.authorizedDatabases);
+        }
+        if (res.permissions) {
+          this.session.setPermissions(res.permissions);
+        }
+      }),
+    );
   }
 
   logout(): void {

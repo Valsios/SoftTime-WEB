@@ -323,8 +323,9 @@ public class OvertimeController : ControllerBase
         [FromQuery] string? matriculeFrom,
         [FromQuery] string? matriculeTo,
         [FromQuery] string? branche,
+        [FromQuery] string? departement,
         CancellationToken ct)
-        => Ok(await _svc.ListExoAsync(new PeriodRequest(matriculeFrom, matriculeTo, from, to, branche), ct));
+        => Ok(await _svc.ListExoAsync(new PeriodRequest(matriculeFrom, matriculeTo, from, to, branche, departement), ct));
 
     [HttpPost("calculate")]
     public async Task<IActionResult> Calculate([FromBody] PeriodRequest request, CancellationToken ct)

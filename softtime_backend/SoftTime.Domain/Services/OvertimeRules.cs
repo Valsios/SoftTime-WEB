@@ -27,6 +27,16 @@ public static class OvertimeRules
                && (end - start).TotalDays == 6;
     }
 
+    public static bool IsMaxOneMonth(DateTime start, DateTime end)
+    {
+        start = start.Date;
+        end = end.Date;
+        if (end < start)
+            return false;
+
+        return end <= start.AddMonths(1);
+    }
+
     public static int GetMinuteSortie(int sortie, int tol)
     {
         if (tol <= 0)

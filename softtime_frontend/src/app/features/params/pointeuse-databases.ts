@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
+import { SessionStore } from '../../core/session.store';
+import { Droit } from '../../core/rights';
 import { PointeuseDb } from '../../shared/models';
 import { PointeuseDatabasesService } from '../../shared/services/catalog.service';
 import {
@@ -19,14 +21,20 @@ import { asRow } from '../../shared/utils/date';
   imports: [PageHeader, SoftButton, SoftCard, DataTable, SourceMappingStepper],
   template: `
     <page-header title="Bases pointeuse" subtitle="Connexions aux bases pointeuse (standard ou autre)">
-      <soft-button (click)="openCreate()">Ajouter</soft-button>
+      @if (canCreate()) {
+        <soft-button (click)="openCreate()">Ajouter</soft-button>
+      }
     </page-header>
     <soft-card>
       <data-table [columns]="columns" [rows]="rows()" [loading]="loading()">
         <ng-template #actions let-row>
           <div class="soft-actions">
-            <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
-            <soft-button size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
+            @if (canUpdate(row)) {
+              <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
+            }
+            @if (canDelete(row)) {
+              <soft-button size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
+            }
           </div>
         </ng-template>
       </data-table>
@@ -45,6 +53,7 @@ import { asRow } from '../../shared/utils/date';
 })
 export class PointeuseDatabasesPage implements OnInit {
   private readonly svc = inject(PointeuseDatabasesService);
+  private readonly session = inject(SessionStore);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
 
@@ -66,11 +75,47 @@ export class PointeuseDatabasesPage implements OnInit {
     this.load();
   }
 
+  canCreate(): boolean {
+    const perms = this.session.permissions();
+    if (!perms || perms.length === 0) {
+      return this.session.hasRight(Droit.Databases);
+    }
+    return perms.some((p) => p.startsWith('POINTEUSE:') && p.endsWith(':CREATE')) || perms.includes('POINTEUSE:CREATE');
+  }
+
+  canRead(nomBd?: string | null): boolean {
+    if (!nomBd) return true;
+    const perms = this.session.permissions();
+    if (!perms || perms.length === 0) {
+      return this.session.hasRight(Droit.Databases);
+    }
+    return perms.includes(`POINTEUSE:${nomBd}:READ`);
+  }
+
+  canUpdate(row: Record<string, unknown>): boolean {
+    const perms = this.session.permissions();
+    if (!perms || perms.length === 0) {
+      return this.session.hasRight(Droit.Databases);
+    }
+    const nom = (row['nomBd'] as string) || '';
+    return perms.includes(`POINTEUSE:${nom}:UPDATE`);
+  }
+
+  canDelete(row: Record<string, unknown>): boolean {
+    const perms = this.session.permissions();
+    if (!perms || perms.length === 0) {
+      return this.session.hasRight(Droit.Databases);
+    }
+    const nom = (row['nomBd'] as string) || '';
+    return perms.includes(`POINTEUSE:${nom}:DELETE`);
+  }
+
   load(): void {
     this.loading.set(true);
     this.svc.list().subscribe({
       next: (items) => {
-        this.rows.set(items.map(asRow));
+        const visible = items.filter((d) => this.canRead(d.nomBd));
+        this.rows.set(visible.map(asRow));
         this.loading.set(false);
       },
       error: () => this.loading.set(false),
@@ -78,12 +123,20 @@ export class PointeuseDatabasesPage implements OnInit {
   }
 
   openCreate(): void {
+    if (!this.canCreate()) {
+      this.toast.error("Vous n'avez pas la permission d'ajouter une base pointeuse.");
+      return;
+    }
     this.editId.set(null);
     this.form.set({ sqlAuth: true, active: true, typeBase: 'STANDARD' });
     this.modal.set(true);
   }
 
   openEdit(row: Record<string, unknown>): void {
+    if (!this.canUpdate(row)) {
+      this.toast.error("Vous n'avez pas la permission de modifier cette base pointeuse.");
+      return;
+    }
     this.editId.set(row['id'] as number);
     this.form.set({ ...(row as unknown as PointeuseDb) });
     this.modal.set(true);
@@ -95,6 +148,14 @@ export class PointeuseDatabasesPage implements OnInit {
 
   onSaved(dto: Record<string, unknown>): void {
     const id = this.editId();
+    if (id && !this.canUpdate(dto)) {
+      this.toast.error("Vous n'avez pas la permission de modifier cette base pointeuse.");
+      return;
+    }
+    if (!id && !this.canCreate()) {
+      this.toast.error("Vous n'avez pas la permission d'ajouter une base pointeuse.");
+      return;
+    }
     const payload = dto as unknown as PointeuseDb;
     this.saving.set(true);
     const req = id ? this.svc.update(id, payload) : this.svc.create({ ...payload, id: 0 });
@@ -103,6 +164,7 @@ export class PointeuseDatabasesPage implements OnInit {
         this.saving.set(false);
         this.modal.set(false);
         this.toast.success('Enregistré.');
+        this.svc.refresh().subscribe();
         this.load();
       },
       error: (e) => {
@@ -113,10 +175,15 @@ export class PointeuseDatabasesPage implements OnInit {
   }
 
   async remove(row: Record<string, unknown>): Promise<void> {
+    if (!this.canDelete(row)) {
+      this.toast.error("Vous n'avez pas la permission de supprimer cette base pointeuse.");
+      return;
+    }
     if (!(await this.confirm.ask('Supprimer cette base pointeuse ?'))) return;
     this.svc.remove(row['id'] as number).subscribe({
       next: () => {
         this.toast.success('Supprimé.');
+        this.svc.refresh().subscribe();
         this.load();
       },
     });

@@ -1,7 +1,10 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
+import { SessionStore } from '../../core/session.store';
+import { Droit } from '../../core/rights';
 import { Tolerance } from '../../shared/models';
 import { CategoriesService, TolerancesService } from '../../shared/services/catalog.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, SoftSelect, SoftToggle } from '../../shared/components';
@@ -10,10 +13,10 @@ import { asRow } from '../../shared/utils/date';
 @Component({
   selector: 'app-tolerances',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, SoftSelect, SoftToggle],
+  imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, SoftSelect, SoftToggle],
   template: `
     <page-header title="Tolérances" subtitle="Tolérances entrée/sortie par catégorie">
-      <soft-button (click)="openCreate()">Ajouter</soft-button>
+      <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter</soft-button>
     </page-header>
 
     <div class="soft-toolbar">
@@ -23,7 +26,7 @@ import { asRow } from '../../shared/utils/date';
     <soft-card>
       <data-table [columns]="columns" [rows]="rows()" [loading]="loading()">
         <ng-template #actions let-row>
-          <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
+          <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
           <soft-button size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
         </ng-template>
       </data-table>
@@ -48,6 +51,10 @@ export class TolerancesPage implements OnInit {
   private readonly svc = inject(TolerancesService);
   private readonly catSvc = inject(CategoriesService);
   private readonly toast = inject(ToastService);
+  private readonly session = inject(SessionStore);
+
+  readonly canCreate = computed(() => this.session.hasPermission('PARAMS:TOLERANCES:CREATE', Droit.Parameters));
+  readonly canUpdate = computed(() => this.session.hasPermission('PARAMS:TOLERANCES:UPDATE', Droit.Parameters));
   private readonly confirm = inject(ConfirmService);
 
   readonly loading = signal(true);

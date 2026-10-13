@@ -1,7 +1,10 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
+import { SessionStore } from '../../core/session.store';
+import { Droit } from '../../core/rights';
 import { CardPaie, DepartementService } from '../../shared/models';
 import { CardPaieService, DepartementServiceService } from '../../shared/services/catalog.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
@@ -11,7 +14,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
 @Component({
   selector: 'app-cardpaie',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput],
+  imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput],
   template: `
     <page-header title="Correspondances paie" subtitle="Cartes SAGE ↔ pointeuse">
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
@@ -20,14 +23,14 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         <soft-button variant="secondary" (click)="csvFile.click()">Import CSV</soft-button>
       </label>
       <soft-button variant="secondary" [loading]="autoMapping()" [disabled]="autoMapping()" (click)="autoMap()">Auto-mapping</soft-button>
-      <soft-button (click)="openCreate()">Ajouter</soft-button>
+      <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter</soft-button>
     </page-header>
     <soft-card>
       <data-table [columns]="columns" [rows]="rows()" [loading]="loading()">
         <ng-template #actions let-row>
           <div class="soft-actions" style="justify-content: end">
-            <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
-            <soft-button size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
+            <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
+            <soft-button *ngIf="canDelete()" size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
           </div>
         </ng-template>
       </data-table>
@@ -55,6 +58,11 @@ export class CardPaiePage implements OnInit {
   private readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
+  private readonly session = inject(SessionStore);
+
+  readonly canCreate = computed(() => this.session.hasPermission('PARAMS:CARDPAIE:CREATE', Droit.Parameters));
+  readonly canUpdate = computed(() => this.session.hasPermission('PARAMS:CARDPAIE:UPDATE', Droit.Parameters));
+  readonly canDelete = computed(() => this.session.hasPermission('PARAMS:CARDPAIE:DELETE', Droit.Parameters));
 
   readonly loading = signal(true);
   readonly saving = signal(false);
@@ -71,7 +79,6 @@ export class CardPaiePage implements OnInit {
     { key: 'departement', label: 'Département' },
     { key: 'service', label: 'Service' },
     { key: 'pointeuseNumero', label: 'Badge' },
-    { key: 'branche', label: 'Branche' },
     { key: 'date', label: 'Date', format: fmtDate },
   ];
 

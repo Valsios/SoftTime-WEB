@@ -38,6 +38,12 @@ public class CatalogService
         }).ToList();
     }
 
+    public async Task<SageDbDto?> GetSageByIdAsync(int id, CancellationToken ct = default)
+    {
+        var entity = await _uow.Repository<T_BDD_SAGE>().GetByIdAsync(id, ct);
+        return entity == null ? null : _mapper.Map<SageDbDto>(entity);
+    }
+
     public async Task<SageDbDto> SaveSageAsync(SageDbDto dto, CancellationToken ct = default)
     {
         if (dto.TypeBase != "STANDARD" && dto.TypeBase != "AUTRE")
@@ -152,6 +158,12 @@ public class CatalogService
         {
             Mappings = byConnection.TryGetValue(r.ID, out var m) ? m : Array.Empty<SourceEntityMappingDto>()
         }).ToList();
+    }
+
+    public async Task<PointeuseDbDto?> GetPointeuseByIdAsync(int id, CancellationToken ct = default)
+    {
+        var entity = await _uow.Repository<T_BDD_POINTEUSE>().GetByIdAsync(id, ct);
+        return entity == null ? null : _mapper.Map<PointeuseDbDto>(entity);
     }
 
     public async Task<PointeuseDbDto> SavePointeuseAsync(PointeuseDbDto dto, CancellationToken ct = default)
@@ -587,6 +599,11 @@ public class CatalogService
                 );
             END
 
+            IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_SEM_Sage_Kind' AND object_id = OBJECT_ID(N'dbo.T_SOURCE_ENTITY_MAPPING') AND has_filter = 0)
+                DROP INDEX UX_SEM_Sage_Kind ON dbo.T_SOURCE_ENTITY_MAPPING;
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_SEM_Sage_Kind' AND object_id = OBJECT_ID(N'dbo.T_SOURCE_ENTITY_MAPPING'))
+                CREATE UNIQUE INDEX UX_SEM_Sage_Kind ON dbo.T_SOURCE_ENTITY_MAPPING (SageDbId, EntityKind) WHERE SageDbId IS NOT NULL;
+            IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_SEM_Pte_Kind' AND object_id = OBJECT_ID(N'dbo.T_SOURCE_ENTITY_MAPPING') AND has_filter = 0)
             -- Index uniques FILTRES : pour une ligne SAGE, PointeuseDbId est NULL (et inversement).
             -- Sans filtre, SQL Server considere tous les NULL comme egaux et n'autoriserait qu'UNE
             -- seule ligne par EntityKind pour tout le systeme (2e base Sage/pointeuse refusee).
@@ -1584,6 +1601,10 @@ public class CatalogService
             BEGIN
                 DELETE FROM dbo.T_CODE_CONSTANTE
                 WHERE ID NOT IN (SELECT MIN(ID) FROM dbo.T_CODE_CONSTANTE GROUP BY CATEGORIE);
+                IF EXISTS (SELECT * FROM sys.indexes WHERE name = 'UX_T_CODE_CONSTANTE_GLOBAL' AND object_id = OBJECT_ID('dbo.T_CODE_CONSTANTE'))
+                    DROP INDEX UX_T_CODE_CONSTANTE_GLOBAL ON dbo.T_CODE_CONSTANTE;
+                IF EXISTS (SELECT * FROM sys.indexes WHERE name = 'UX_T_CODE_CONSTANTE_BASE' AND object_id = OBJECT_ID('dbo.T_CODE_CONSTANTE'))
+                    DROP INDEX UX_T_CODE_CONSTANTE_BASE ON dbo.T_CODE_CONSTANTE;
                 ALTER TABLE dbo.T_CODE_CONSTANTE DROP COLUMN BDD_SAGE;
             END
             """, ct);

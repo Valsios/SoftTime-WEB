@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { SessionStore } from '../core/session.store';
+import { Droit } from '../core/rights';
 import { AuthService } from '../shared/services/auth.service';
 import { PointeuseDatabasesService } from '../shared/services/catalog.service';
 import { SageDatabasesService } from '../shared/services/users.service';
@@ -8,6 +9,7 @@ import { NAV_SECTIONS, NavSection } from './nav';
 import { Icon } from '../shared/components/icon';
 import { PointeuseDb } from '../shared/models';
 import { ToastService } from '../core/toast.service';
+import { ConfirmService } from '../core/confirm.service';
 
 @Component({
   selector: 'app-shell',
@@ -41,17 +43,15 @@ import { ToastService } from '../core/toast.service';
             <div class="sidebar__section">
               @if (!collapsed()) {<span class="sidebar__section-title">{{ section.title }}</span>}
               @for (item of section.items; track item.path) {
-                @if (session.hasRight(item.droit)) {
-                  <a
-                    [routerLink]="item.path"
-                    routerLinkActive="is-active"
-                    class="sidebar__item"
-                    [title]="item.label"
-                  >
-                    <app-icon [name]="item.icon"></app-icon>
-                    @if (!collapsed()) {<span>{{ item.label }}</span>}
-                  </a>
-                }
+                <a
+                  [routerLink]="item.path"
+                  routerLinkActive="is-active"
+                  class="sidebar__item"
+                  [title]="item.label"
+                >
+                  <app-icon [name]="item.icon"></app-icon>
+                  @if (!collapsed()) {<span>{{ item.label }}</span>}
+                </a>
               }
             </div>
           }
@@ -66,31 +66,39 @@ import { ToastService } from '../core/toast.service';
 
           <div class="topbar__spacer"></div>
 
-          @if (databases().length) {
-            <div class="topbar__company">
-              <app-icon name="server" [size]="16"></app-icon>
-              <select
-                (change)="onCompanyChange($event)"
-                aria-label="Société / base SAGE"
-              >
+          <div class="topbar__company" [class.topbar__company--empty]="!databases().length" [title]="databases().length ? 'Société / base SAGE' : 'Aucune base RH / paie configurée ou autorisée'">
+            <app-icon name="server" [size]="16"></app-icon>
+            <select
+              (change)="onCompanyChange($event)"
+              aria-label="Société / base SAGE"
+              [disabled]="!databases().length"
+            >
+              @if (!databases().length) {
+                <option value="">Aucune base RH</option>
+              } @else {
                 @for (db of databases(); track db.id) {
                   <option [value]="db.nomBd" [selected]="db.nomBd === session.activeSageDb()">{{ db.nomBd }}</option>
                 }
-              </select>
-            </div>
-          }
-          @if (pointeuseDbs().length) {
-            <div class="topbar__company">
-              <select
-                (change)="onPointeuseChange($event)"
-                aria-label="Base de pointage"
-              >
+              }
+            </select>
+          </div>
+
+          <div class="topbar__company" [class.topbar__company--empty]="!pointeuseDbs().length" [title]="pointeuseDbs().length ? 'Base de pointage' : 'Aucune base de pointage configurée'">
+            <app-icon name="clock" [size]="16"></app-icon>
+            <select
+              (change)="onPointeuseChange($event)"
+              aria-label="Base de pointage"
+              [disabled]="!pointeuseDbs().length"
+            >
+              @if (!pointeuseDbs().length) {
+                <option value="">Aucune pointeuse</option>
+              } @else {
                 @for (db of pointeuseDbs(); track db.id) {
                   <option [value]="db.nomBd" [selected]="db.nomBd === session.activePointeuseDb()">{{ db.nomBd }}</option>
                 }
-              </select>
-            </div>
-          }
+              }
+            </select>
+          </div>
 
           <button
             class="topbar__icon-btn"
@@ -257,6 +265,12 @@ import { ToastService } from '../core/toast.service';
         border-radius: 10px;
         color: var(--text-secondary);
       }
+      .topbar__company--empty {
+        opacity: 0.65;
+      }
+      .topbar__company--empty select {
+        cursor: default;
+      }
       .topbar__company select {
         border: none;
         background: transparent;
@@ -316,15 +330,23 @@ export class Shell implements OnInit {
 
   private readonly sageApi = inject(SageDatabasesService);
   private readonly toast = inject(ToastService);
+  private readonly confirm = inject(ConfirmService);
 
   readonly collapsed = signal(false);
-  readonly databases = computed(() => this.session.databases());
-  readonly pointeuseDbs = signal<PointeuseDb[]>([]);
+  readonly databases = computed(() =>
+    this.session.databases().filter((db) => this.session.hasPermission(`SAGE:${db.nomBd}:READ`, Droit.Databases)),
+  );
+  readonly pointeuseDbs = computed(() =>
+    this.session.pointeuseDatabases().filter((db) =>
+      this.session.hasPermission(`POINTEUSE:${db.nomBd}:READ`, Droit.Databases),
+    ),
+  );
 
   readonly visibleSections = computed<NavSection[]>(() =>
-    NAV_SECTIONS.filter(
-      (s) => this.session.hasRight(s.droit) && s.items.some((i) => this.session.hasRight(i.droit)),
-    ),
+    NAV_SECTIONS.map((section) => ({
+      ...section,
+      items: section.items.filter((item) => this.session.hasPermission(item.permission, item.droit)),
+    })).filter((section) => section.items.length > 0),
   );
 
   readonly initials = computed(() => {
@@ -340,17 +362,8 @@ export class Shell implements OnInit {
       sessionStorage.removeItem('st_pending_toast');
       this.toast.success(pending);
     }
-    this.pointeuseApi.list().subscribe({
-      next: (list) => {
-        this.pointeuseDbs.set(list);
-        const names = list.map((d) => d.nomBd).filter((n): n is string => !!n);
-        const current = this.session.activePointeuseDb();
-        if (!current || !names.includes(current)) {
-          const preferred = list.find((d) => d.active)?.nomBd ?? names[0] ?? null;
-          this.session.setActivePointeuseDb(preferred);
-        }
-      },
-    });
+    this.auth.refreshMe().subscribe();
+    this.pointeuseApi.refresh().subscribe();
   }
 
   onCompanyChange(event: Event): void {
@@ -379,7 +392,9 @@ export class Shell implements OnInit {
     });
   }
 
-  logout(): void {
+  async logout(): Promise<void> {
+    const ok = await this.confirm.ask('Voulez-vous vraiment vous déconnecter ?', 'Déconnexion', 'Se déconnecter');
+    if (!ok) return;
     this.auth.logout();
     this.router.navigate(['/login']);
   }

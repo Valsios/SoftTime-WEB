@@ -1,7 +1,10 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
+import { SessionStore } from '../../core/session.store';
+import { Droit } from '../../core/rights';
 import { CorrectedHour, PeriodRequest } from '../../shared/models';
 import { CorrectedHoursService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
@@ -11,11 +14,11 @@ import { asRow, fmtDate } from '../../shared/utils/date';
 @Component({
   selector: 'app-corrected-hours',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, PeriodFilter],
+  imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, PeriodFilter],
   template: `
     <page-header title="Heures corrigées" subtitle="Corrections manuelles">
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
-      <soft-button (click)="openCreate()">Ajouter</soft-button>
+      <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter</soft-button>
       <label class="file-btn">
         <input #corrFile type="file" accept=".xlsx,.xls" hidden (change)="onFile($event)" />
         <soft-button variant="secondary" (click)="corrFile.click()">Import Excel</soft-button>
@@ -28,8 +31,8 @@ import { asRow, fmtDate } from '../../shared/utils/date';
       <data-table [columns]="columns" [rows]="rows()" [loading]="loading()">
         <ng-template #actions let-row>
           <div class="soft-actions">
-            <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
-            <soft-button size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
+            <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
+            <soft-button *ngIf="canDelete()" size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
           </div>
         </ng-template>
       </data-table>
@@ -56,6 +59,11 @@ export class CorrectedHoursPage {
   private readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
+  private readonly session = inject(SessionStore);
+
+  readonly canCreate = computed(() => this.session.hasPermission('PROC:CORRECTED_HOURS:CREATE', Droit.Processing));
+  readonly canUpdate = computed(() => this.session.hasPermission('PROC:CORRECTED_HOURS:UPDATE', Droit.Processing));
+  readonly canDelete = computed(() => this.session.hasPermission('PROC:CORRECTED_HOURS:DELETE', Droit.Processing));
 
   readonly loading = signal(false);
   readonly saving = signal(false);

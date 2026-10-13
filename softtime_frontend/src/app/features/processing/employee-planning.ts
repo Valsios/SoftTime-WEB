@@ -1,7 +1,10 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ToastService } from '../../core/toast.service';
 import { ConfirmService } from '../../core/confirm.service';
+import { SessionStore } from '../../core/session.store';
+import { Droit } from '../../core/rights';
 import { EmployeePlanning, PeriodRequest, PlanningEmployee } from '../../shared/models';
 import { EmployeePlanningService, ShiftsService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
@@ -24,6 +27,7 @@ import { asRow, fmtDate, monthStart, today } from '../../shared/utils/date';
   selector: 'app-employee-planning',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    CommonModule,
     FormsModule,
     PageHeader,
     SoftButton,
@@ -39,7 +43,7 @@ import { asRow, fmtDate, monthStart, today } from '../../shared/utils/date';
   template: `
     <page-header title="Planning salariés" subtitle="Tous les salariés, même sans planning">
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
-      <soft-button (click)="openCreate()">Ajouter un planning</soft-button>
+      <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter un planning</soft-button>
       <label class="file-btn">
         <input #planningFile type="file" accept=".xlsx,.xls" hidden (change)="onFile($event)" />
         <soft-button variant="secondary" (click)="planningFile.click()">Import Excel</soft-button>
@@ -62,7 +66,7 @@ import { asRow, fmtDate, monthStart, today } from '../../shared/utils/date';
       <soft-card padding="md">
         <data-table [columns]="employeeColumns" [rows]="employeeRows()" [loading]="loadingPeople()">
           <ng-template #actions let-row>
-            <soft-button size="sm" (click)="openCreate(row)">Planifier</soft-button>
+            <soft-button *ngIf="canCreate()" size="sm" (click)="openCreate(row)">Planifier</soft-button>
           </ng-template>
         </data-table>
       </soft-card>
@@ -71,8 +75,8 @@ import { asRow, fmtDate, monthStart, today } from '../../shared/utils/date';
         <data-table [columns]="planningColumns" [rows]="planningRows()" [loading]="loading()">
           <ng-template #actions let-row>
             <div class="soft-actions" style="justify-content: end">
-              <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
-              <soft-button size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
+              <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
+              <soft-button *ngIf="canDelete()" size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
             </div>
           </ng-template>
         </data-table>
@@ -120,6 +124,11 @@ export class EmployeePlanningPage implements OnInit {
   private readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
+  private readonly session = inject(SessionStore);
+
+  readonly canCreate = computed(() => this.session.hasPermission('PROC:EMPLOYEE_PLANNING:CREATE', Droit.Processing));
+  readonly canUpdate = computed(() => this.session.hasPermission('PROC:EMPLOYEE_PLANNING:UPDATE', Droit.Processing));
+  readonly canDelete = computed(() => this.session.hasPermission('PROC:EMPLOYEE_PLANNING:DELETE', Droit.Processing));
 
   readonly loading = signal(false);
   readonly loadingPeople = signal(true);

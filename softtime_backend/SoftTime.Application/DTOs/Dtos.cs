@@ -5,9 +5,9 @@ public record LoginRequest(string Login, string Password)
     public LoginRequest() : this(default!, default!) { }
 }
 
-public record LoginResponse(string Token, decimal UserId, string Login, string Nom, decimal RoleId, string? Matricule, IReadOnlyCollection<int> Rights, IReadOnlyCollection<SageDbDto> AuthorizedDatabases)
+public record LoginResponse(string Token, decimal UserId, string Login, string Nom, decimal RoleId, string? Matricule, IReadOnlyCollection<int> Rights, IReadOnlyCollection<SageDbDto> AuthorizedDatabases, IReadOnlyCollection<string>? Permissions = null)
 {
-    public LoginResponse() : this(default!, default, default!, default!, default, default, default!, default!) { }
+    public LoginResponse() : this(default!, default, default!, default!, default, default, default!, default!, null) { }
 }
 
 public record UserDto(decimal Id, decimal RoleId, string Nom, string Login, string? Matricule, string? Password)
@@ -390,9 +390,9 @@ public record CorrectedHourDto(decimal Id, string? Matricule, DateTime? DateIn, 
     public CorrectedHourDto() : this(default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default) { }
 }
 
-public record PeriodRequest(string? MatriculeFrom, string? MatriculeTo, DateTime From, DateTime To, string? Branche)
+public record PeriodRequest(string? MatriculeFrom, string? MatriculeTo, DateTime From, DateTime To, string? Branche, string? Departement = null)
 {
-    public PeriodRequest() : this(default, default, default, default, default) { }
+    public PeriodRequest() : this(default, default, default, default, default, default) { }
 }
 
 public record WeeklyValidationRequest(
@@ -401,9 +401,10 @@ public record WeeklyValidationRequest(
     DateTime From,
     DateTime To,
     string? Branche,
-    IReadOnlyList<string>? SelectedMatricules) : PeriodRequest(MatriculeFrom, MatriculeTo, From, To, Branche)
+    IReadOnlyList<string>? SelectedMatricules,
+    string? Departement = null) : PeriodRequest(MatriculeFrom, MatriculeTo, From, To, Branche, Departement)
 {
-    public WeeklyValidationRequest() : this(default, default, default, default, default, default) { }
+    public WeeklyValidationRequest() : this(default, default, default, default, default, default, default) { }
 }
 
 public record WeeklyHsDto(int Id, string? Matricule, DateTime? DateDeb, DateTime? DateFin, decimal? Ht, decimal? Hs, decimal? Nuit, decimal? Dimanche, decimal? Feries, decimal? Retard, decimal? Absence, bool? Validated)
@@ -506,3 +507,20 @@ public record PayrollWriteConfigurationDto(int Id, string? TableCible, string? C
 }
 
 public record PayrollWriteResultDto(string Database, string TypeBase, int EmployeesUpdated, int CategoriesUpdated, string Message);
+
+public record UserDetailedPermissionsDto(
+    decimal UserId,
+    IReadOnlyList<string> GrantedPermissions,
+    bool IsCustomized
+)
+{
+    public UserDetailedPermissionsDto() : this(0, Array.Empty<string>(), false) { }
+}
+
+public record SaveUserDetailedPermissionsRequest(
+    decimal UserId,
+    IReadOnlyList<string> GrantedPermissions
+)
+{
+    public SaveUserDetailedPermissionsRequest() : this(0, Array.Empty<string>()) { }
+}

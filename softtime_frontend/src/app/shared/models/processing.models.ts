@@ -152,10 +152,7 @@ export interface PeriodRequest {
   from: string;
   to: string;
   branche?: string | null;
-  /** Numéro de page (1-based), uniquement pour les listes paginées. */
-  page?: number;
-  /** Taille de page, plafonnée à 100 par le serveur. */
-  pageSize?: number;
+  departement?: string | null;
 }
 
 export interface WeeklyValidationRequest extends PeriodRequest {

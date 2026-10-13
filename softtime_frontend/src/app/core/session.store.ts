@@ -1,5 +1,5 @@
 import { Injectable, computed, effect, signal } from '@angular/core';
-import { LoginResponse, SageDb } from '../shared/models';
+import { LoginResponse, PointeuseDb, SageDb } from '../shared/models';
 
 const TOKEN_KEY = 'st_token';
 const SESSION_KEY = 'st_session';
@@ -15,6 +15,7 @@ interface StoredSession {
   matricule?: string | null;
   rights: number[];
   authorizedDatabases: SageDb[];
+  permissions?: string[];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -23,6 +24,7 @@ export class SessionStore {
   private readonly _session = signal<StoredSession | null>(this.readSession());
   readonly activeSageDb = signal<string | null>(localStorage.getItem(SAGE_KEY));
   readonly activePointeuseDb = signal<string | null>(localStorage.getItem(POINTEUSE_KEY));
+  readonly pointeuseDatabases = signal<PointeuseDb[]>([]);
   readonly theme = signal<'light' | 'dark'>(
     (localStorage.getItem(THEME_KEY) as 'light' | 'dark') || 'light',
   );
@@ -31,6 +33,7 @@ export class SessionStore {
   readonly session = this._session.asReadonly();
   readonly isAuthenticated = computed(() => !!this._token());
   readonly rights = computed(() => this._session()?.rights ?? []);
+  readonly permissions = computed(() => this._session()?.permissions ?? []);
   readonly databases = computed(() => this._session()?.authorizedDatabases ?? []);
   readonly displayName = computed(() => this._session()?.nom ?? this._session()?.login ?? '');
 
@@ -46,6 +49,23 @@ export class SessionStore {
     return this.rights().includes(droit);
   }
 
+  hasPermission(permissionCode?: string, fallbackDroit?: number): boolean {
+    if (!permissionCode) {
+      return fallbackDroit ? this.hasRight(fallbackDroit) : true;
+    }
+    const perms = this.permissions();
+    if (perms && perms.length > 0) {
+      if (permissionCode === 'SAGE') {
+        return perms.some((p) => p.startsWith('SAGE:'));
+      }
+      if (permissionCode === 'POINTEUSE') {
+        return perms.some((p) => p.startsWith('POINTEUSE:'));
+      }
+      return perms.includes(permissionCode);
+    }
+    return fallbackDroit ? this.hasRight(fallbackDroit) : true;
+  }
+
   setSession(res: LoginResponse): void {
     const session: StoredSession = {
       userId: res.userId,
@@ -55,6 +75,7 @@ export class SessionStore {
       matricule: res.matricule,
       rights: res.rights ?? [],
       authorizedDatabases: res.authorizedDatabases ?? [],
+      permissions: res.permissions ?? [],
     };
     this._token.set(res.token);
     this._session.set(session);
@@ -80,6 +101,47 @@ export class SessionStore {
     this.activePointeuseDb.set(nomBd);
     if (nomBd) localStorage.setItem(POINTEUSE_KEY, nomBd);
     else localStorage.removeItem(POINTEUSE_KEY);
+  }
+
+  setAuthorizedDatabases(databases: SageDb[]): void {
+    const cur = this._session();
+    if (!cur) return;
+    const updated: StoredSession = {
+      ...cur,
+      authorizedDatabases: databases ?? [],
+    };
+    this._session.set(updated);
+    localStorage.setItem(SESSION_KEY, JSON.stringify(updated));
+
+    const allowed = (databases ?? [])
+      .map((d) => d.nomBd)
+      .filter((n): n is string => !!n);
+    const current = this.activeSageDb();
+    if (!current || !allowed.includes(current)) {
+      this.setActiveSageDb(allowed[0] ?? null);
+    }
+  }
+
+  setPointeuseDatabases(list: PointeuseDb[]): void {
+    const dbs = list ?? [];
+    this.pointeuseDatabases.set(dbs);
+    const names = dbs.map((d) => d.nomBd).filter((n): n is string => !!n);
+    const current = this.activePointeuseDb();
+    if (!current || !names.includes(current)) {
+      const preferred = dbs.find((d) => d.active)?.nomBd ?? names[0] ?? null;
+      this.setActivePointeuseDb(preferred);
+    }
+  }
+
+  setPermissions(permissions: string[]): void {
+    const cur = this._session();
+    if (!cur) return;
+    const updated: StoredSession = {
+      ...cur,
+      permissions: permissions ?? [],
+    };
+    this._session.set(updated);
+    localStorage.setItem(SESSION_KEY, JSON.stringify(updated));
   }
 
   toggleTheme(): void {

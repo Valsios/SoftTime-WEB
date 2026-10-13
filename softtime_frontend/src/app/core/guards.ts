@@ -9,11 +9,13 @@ export const authGuard: CanActivateFn = () => {
   return router.createUrlTree(['/login']);
 };
 
-/** Route data: { droit: number }. Redirects to home when the right is missing. */
+/** Route data: { droit?: number, permission?: string }. Redirects to home when the right or permission is missing. */
 export const droitGuard: CanActivateFn = (route) => {
   const session = inject(SessionStore);
   const router = inject(Router);
   const droit = route.data?.['droit'] as number | undefined;
-  if (droit === undefined || session.hasRight(droit)) return true;
+  const permission = route.data?.['permission'] as string | undefined;
+  if (droit === undefined && permission === undefined) return true;
+  if (session.hasPermission(permission, droit)) return true;
   return router.createUrlTree(['/']);
 };
