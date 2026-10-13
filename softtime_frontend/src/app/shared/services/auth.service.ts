@@ -32,6 +32,16 @@ export class AuthService extends ApiService {
     );
   }
 
+  /** Installation vierge ? (aucun compte utilisateur) — appel anonyme. */
+  isFirstRun(): Observable<boolean> {
+    return this.http.get<boolean>(this.url('/api/auth/is-first-run'));
+  }
+
+  /** Crée le premier compte administrateur (refusé dès qu'un compte existe). */
+  createAdmin(body: AdminSetupRequest): Observable<AdminSetupResult> {
+    return this.http.post<AdminSetupResult>(this.url('/api/auth/create-admin'), body);
+  }
+
   logout(): void {
     this.session.clear();
   }

@@ -155,6 +155,12 @@ export interface PeriodRequest {
   departement?: string | null;
 }
 
+/** Période + pagination (listes massives : pointages, heures corrigées). */
+export interface PagedPeriodRequest extends PeriodRequest {
+  page?: number;
+  pageSize?: number;
+}
+
 export interface WeeklyValidationRequest extends PeriodRequest {
   selectedMatricules: string[];
 }

@@ -11,6 +11,7 @@ import {
   ImportPunchesRequest,
   ImportResult,
   OvertimeDetail,
+  PagedPeriodRequest,
   PagedResult,
   PeriodRequest,
   PlanningEmployee,
@@ -95,7 +96,7 @@ export class PunchesService extends ApiService {
    * Même liste, paginée. Le contrat de la liste complète est conservé pour l'export Excel
    * (qui porte sur la grille entière).
    */
-  listPaged(filter: PeriodRequest): Observable<PagedResult<Punch>> {
+  listPaged(filter: PagedPeriodRequest): Observable<PagedResult<Punch>> {
     return this.http.get<PagedResult<Punch>>(this.url('/api/punches/paged'), {
       params: this.params({ ...filter }),
     });
@@ -155,7 +156,7 @@ export class CorrectedHoursService extends ApiService {
     });
   }
   /** Même liste, paginée (voir `PunchesService.listPaged`). */
-  listPaged(filter: PeriodRequest): Observable<PagedResult<CorrectedHour>> {
+  listPaged(filter: PagedPeriodRequest): Observable<PagedResult<CorrectedHour>> {
     return this.http.get<PagedResult<CorrectedHour>>(this.url('/api/corrected-hours/paged'), {
       params: this.params({ ...filter }),
     });
