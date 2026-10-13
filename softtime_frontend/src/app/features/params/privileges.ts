@@ -76,7 +76,7 @@ interface FeatureCategory {
 
     <div class="permissions-container" *ngIf="selectedUserId">
       <!-- Section 1 : Bases RH / Paie -->
-      <soft-card padding="lg" class="perm-card">
+      <soft-card padding="lg" class="perm-card" [class.is-collapsed]="isCollapsed('SAGE')">
         <div class="perm-card-header">
           <div class="perm-title-group">
             <app-icon name="server" [size]="20"></app-icon>
@@ -94,55 +94,65 @@ interface FeatureCategory {
             </label>
             <button type="button" class="btn-xs" (click)="toggleGroup('SAGE', true)">Tout cocher</button>
             <button type="button" class="btn-xs" (click)="toggleGroup('SAGE', false)">Tout décocher</button>
+            <button
+              type="button"
+              class="btn-xs btn-collapse"
+              [title]="isCollapsed('SAGE') ? 'Déplier' : 'Replier'"
+              (click)="toggleCollapse('SAGE')"
+            >
+              <app-icon [name]="isCollapsed('SAGE') ? 'chevron-down' : 'chevron-up'" [size]="14"></app-icon>
+            </button>
           </div>
         </div>
 
-        <p class="perm-section-desc">Permissions d'accès et d'actions (Consulter, Modifier, Supprimer) par base RH configurée.</p>
+        @if (!isCollapsed('SAGE')) {
+          <p class="perm-section-desc">Permissions d'accès et d'actions (Consulter, Modifier, Supprimer) par base RH configurée.</p>
 
-        @if (!sageDbs().length) {
-          <div class="empty-hint">Aucune base SAGE configurée.</div>
-        } @else {
-          <div class="db-perm-grid">
-            @for (db of sageDbs(); track db.id) {
-              <div class="db-perm-row">
-                <div class="db-perm-name">
-                  <strong>{{ db.nomBd }}</strong>
-                  <small>{{ db.serveur }}</small>
+          @if (!sageDbs().length) {
+            <div class="empty-hint">Aucune base SAGE configurée.</div>
+          } @else {
+            <div class="db-perm-grid">
+              @for (db of sageDbs(); track db.id) {
+                <div class="db-perm-row">
+                  <div class="db-perm-name">
+                    <strong>{{ db.nomBd }}</strong>
+                    <small>{{ db.serveur }}</small>
+                  </div>
+                  <div class="db-actions-toggles">
+                    <label class="action-check">
+                      <input
+                        type="checkbox"
+                        [checked]="has('SAGE:' + db.nomBd + ':READ')"
+                        (change)="toggle('SAGE:' + db.nomBd + ':READ', $event)"
+                      />
+                      <span>Consulter</span>
+                    </label>
+                    <label class="action-check">
+                      <input
+                        type="checkbox"
+                        [checked]="has('SAGE:' + db.nomBd + ':UPDATE')"
+                        (change)="toggle('SAGE:' + db.nomBd + ':UPDATE', $event)"
+                      />
+                      <span>Modifier</span>
+                    </label>
+                    <label class="action-check">
+                      <input
+                        type="checkbox"
+                        [checked]="has('SAGE:' + db.nomBd + ':DELETE')"
+                        (change)="toggle('SAGE:' + db.nomBd + ':DELETE', $event)"
+                      />
+                      <span>Supprimer</span>
+                    </label>
+                  </div>
                 </div>
-                <div class="db-actions-toggles">
-                  <label class="action-check">
-                    <input
-                      type="checkbox"
-                      [checked]="has('SAGE:' + db.nomBd + ':READ')"
-                      (change)="toggle('SAGE:' + db.nomBd + ':READ', $event)"
-                    />
-                    <span>Consulter</span>
-                  </label>
-                  <label class="action-check">
-                    <input
-                      type="checkbox"
-                      [checked]="has('SAGE:' + db.nomBd + ':UPDATE')"
-                      (change)="toggle('SAGE:' + db.nomBd + ':UPDATE', $event)"
-                    />
-                    <span>Modifier</span>
-                  </label>
-                  <label class="action-check">
-                    <input
-                      type="checkbox"
-                      [checked]="has('SAGE:' + db.nomBd + ':DELETE')"
-                      (change)="toggle('SAGE:' + db.nomBd + ':DELETE', $event)"
-                    />
-                    <span>Supprimer</span>
-                  </label>
-                </div>
-              </div>
-            }
-          </div>
+              }
+            </div>
+          }
         }
       </soft-card>
 
       <!-- Section 2 : Bases de pointage -->
-      <soft-card padding="lg" class="perm-card">
+      <soft-card padding="lg" class="perm-card" [class.is-collapsed]="isCollapsed('POINTEUSE')">
         <div class="perm-card-header">
           <div class="perm-title-group">
             <app-icon name="clock" [size]="20"></app-icon>
@@ -160,56 +170,66 @@ interface FeatureCategory {
             </label>
             <button type="button" class="btn-xs" (click)="toggleGroup('POINTEUSE', true)">Tout cocher</button>
             <button type="button" class="btn-xs" (click)="toggleGroup('POINTEUSE', false)">Tout décocher</button>
+            <button
+              type="button"
+              class="btn-xs btn-collapse"
+              [title]="isCollapsed('POINTEUSE') ? 'Déplier' : 'Replier'"
+              (click)="toggleCollapse('POINTEUSE')"
+            >
+              <app-icon [name]="isCollapsed('POINTEUSE') ? 'chevron-down' : 'chevron-up'" [size]="14"></app-icon>
+            </button>
           </div>
         </div>
 
-        <p class="perm-section-desc">Permissions d'accès et d'actions (Consulter, Modifier, Supprimer) par pointeuse configurée.</p>
+        @if (!isCollapsed('POINTEUSE')) {
+          <p class="perm-section-desc">Permissions d'accès et d'actions (Consulter, Modifier, Supprimer) par pointeuse configurée.</p>
 
-        @if (!pointeuseDbs().length) {
-          <div class="empty-hint">Aucune base pointeuse configurée.</div>
-        } @else {
-          <div class="db-perm-grid">
-            @for (db of pointeuseDbs(); track db.id) {
-              <div class="db-perm-row">
-                <div class="db-perm-name">
-                  <strong>{{ db.nomBd }}</strong>
-                  <small>{{ db.serveur }}</small>
+          @if (!pointeuseDbs().length) {
+            <div class="empty-hint">Aucune base pointeuse configurée.</div>
+          } @else {
+            <div class="db-perm-grid">
+              @for (db of pointeuseDbs(); track db.id) {
+                <div class="db-perm-row">
+                  <div class="db-perm-name">
+                    <strong>{{ db.nomBd }}</strong>
+                    <small>{{ db.serveur }}</small>
+                  </div>
+                  <div class="db-actions-toggles">
+                    <label class="action-check">
+                      <input
+                        type="checkbox"
+                        [checked]="has('POINTEUSE:' + db.nomBd + ':READ')"
+                        (change)="toggle('POINTEUSE:' + db.nomBd + ':READ', $event)"
+                      />
+                      <span>Consulter</span>
+                    </label>
+                    <label class="action-check">
+                      <input
+                        type="checkbox"
+                        [checked]="has('POINTEUSE:' + db.nomBd + ':UPDATE')"
+                        (change)="toggle('POINTEUSE:' + db.nomBd + ':UPDATE', $event)"
+                      />
+                      <span>Modifier</span>
+                    </label>
+                    <label class="action-check">
+                      <input
+                        type="checkbox"
+                        [checked]="has('POINTEUSE:' + db.nomBd + ':DELETE')"
+                        (change)="toggle('POINTEUSE:' + db.nomBd + ':DELETE', $event)"
+                      />
+                      <span>Supprimer</span>
+                    </label>
+                  </div>
                 </div>
-                <div class="db-actions-toggles">
-                  <label class="action-check">
-                    <input
-                      type="checkbox"
-                      [checked]="has('POINTEUSE:' + db.nomBd + ':READ')"
-                      (change)="toggle('POINTEUSE:' + db.nomBd + ':READ', $event)"
-                    />
-                    <span>Consulter</span>
-                  </label>
-                  <label class="action-check">
-                    <input
-                      type="checkbox"
-                      [checked]="has('POINTEUSE:' + db.nomBd + ':UPDATE')"
-                      (change)="toggle('POINTEUSE:' + db.nomBd + ':UPDATE', $event)"
-                    />
-                    <span>Modifier</span>
-                  </label>
-                  <label class="action-check">
-                    <input
-                      type="checkbox"
-                      [checked]="has('POINTEUSE:' + db.nomBd + ':DELETE')"
-                      (change)="toggle('POINTEUSE:' + db.nomBd + ':DELETE', $event)"
-                    />
-                    <span>Supprimer</span>
-                  </label>
-                </div>
-              </div>
-            }
-          </div>
+              }
+            </div>
+          }
         }
       </soft-card>
 
       <!-- Sections 3 à 7 : Catégories fonctionnelles -->
       @for (cat of featureCategories; track cat.key) {
-        <soft-card padding="lg" class="perm-card">
+        <soft-card padding="lg" class="perm-card" [class.is-collapsed]="isCollapsed(cat.key)">
           <div class="perm-card-header">
             <div class="perm-title-group">
               <app-icon [name]="cat.icon" [size]="20"></app-icon>
@@ -219,57 +239,67 @@ interface FeatureCategory {
             <div class="card-bulk-actions">
               <button type="button" class="btn-xs" (click)="toggleGroup(cat.key, true)">Tout cocher</button>
               <button type="button" class="btn-xs" (click)="toggleGroup(cat.key, false)">Tout décocher</button>
+              <button
+                type="button"
+                class="btn-xs btn-collapse"
+                [title]="isCollapsed(cat.key) ? 'Déplier' : 'Replier'"
+                (click)="toggleCollapse(cat.key)"
+              >
+                <app-icon [name]="isCollapsed(cat.key) ? 'chevron-down' : 'chevron-up'" [size]="14"></app-icon>
+              </button>
             </div>
           </div>
 
-          <div class="db-perm-grid">
-            @for (item of cat.items; track item.code) {
-              <div class="db-perm-row">
-                <label class="action-check item-access-check">
-                  <input
-                    type="checkbox"
-                    [checked]="has(item.code)"
-                    (change)="toggle(item.code, $event)"
-                  />
-                  <strong>{{ item.label }}</strong>
-                </label>
-                @if (item.canCreate || item.canUpdate || item.canDelete) {
-                  <div class="db-actions-toggles">
-                    @if (item.canCreate) {
-                      <label class="action-check">
-                        <input
-                          type="checkbox"
-                          [checked]="has(item.code + ':CREATE')"
-                          (change)="toggle(item.code + ':CREATE', $event)"
-                        />
-                        <span>Ajouter</span>
-                      </label>
-                    }
-                    @if (item.canUpdate) {
-                      <label class="action-check">
-                        <input
-                          type="checkbox"
-                          [checked]="has(item.code + ':UPDATE')"
-                          (change)="toggle(item.code + ':UPDATE', $event)"
-                        />
-                        <span>Modifier</span>
-                      </label>
-                    }
-                    @if (item.canDelete) {
-                      <label class="action-check">
-                        <input
-                          type="checkbox"
-                          [checked]="has(item.code + ':DELETE')"
-                          (change)="toggle(item.code + ':DELETE', $event)"
-                        />
-                        <span>Supprimer</span>
-                      </label>
-                    }
-                  </div>
-                }
-              </div>
-            }
-          </div>
+          @if (!isCollapsed(cat.key)) {
+            <div class="db-perm-grid">
+              @for (item of cat.items; track item.code) {
+                <div class="db-perm-row">
+                  <label class="action-check item-access-check">
+                    <input
+                      type="checkbox"
+                      [checked]="has(item.code)"
+                      (change)="toggle(item.code, $event)"
+                    />
+                    <strong>{{ item.label }}</strong>
+                  </label>
+                  @if (item.canCreate || item.canUpdate || item.canDelete) {
+                    <div class="db-actions-toggles">
+                      @if (item.canCreate) {
+                        <label class="action-check">
+                          <input
+                            type="checkbox"
+                            [checked]="has(item.code + ':CREATE')"
+                            (change)="toggle(item.code + ':CREATE', $event)"
+                          />
+                          <span>Ajouter</span>
+                        </label>
+                      }
+                      @if (item.canUpdate) {
+                        <label class="action-check">
+                          <input
+                            type="checkbox"
+                            [checked]="has(item.code + ':UPDATE')"
+                            (change)="toggle(item.code + ':UPDATE', $event)"
+                          />
+                          <span>Modifier</span>
+                        </label>
+                      }
+                      @if (item.canDelete) {
+                        <label class="action-check">
+                          <input
+                            type="checkbox"
+                            [checked]="has(item.code + ':DELETE')"
+                            (change)="toggle(item.code + ':DELETE', $event)"
+                          />
+                          <span>Supprimer</span>
+                        </label>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          }
         </soft-card>
       }
     </div>
@@ -383,7 +413,27 @@ interface FeatureCategory {
 
       .card-bulk-actions {
         display: flex;
+        align-items: center;
         gap: 6px;
+      }
+      .btn-collapse {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 24px;
+        padding: 0;
+        color: var(--text-secondary);
+      }
+      .btn-collapse:hover {
+        color: var(--softtime);
+        background: var(--primary-50);
+        border-color: var(--primary-200);
+      }
+      .perm-card.is-collapsed .perm-card-header {
+        border-bottom: none;
+        margin-bottom: 0;
+        padding-bottom: 0;
       }
       .btn-xs {
         background: var(--surface-dark);
@@ -615,13 +665,54 @@ export class PrivilegesPage implements OnInit {
     });
   }
 
+  readonly collapsedSections = signal<Set<string>>(
+    new Set(['SAGE', 'POINTEUSE', 'PARAMS', 'PROC', 'OTHER', 'TRACE', 'REPORTS']),
+  );
+
+  isCollapsed(key: string): boolean {
+    return this.collapsedSections().has(key);
+  }
+
+  toggleCollapse(key: string): void {
+    this.collapsedSections.update((set) => {
+      const next = new Set(set);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
   countActiveCategory(prefix: string): number {
-    let count = 0;
-    const current = this.grantedPermissions();
-    for (const code of current) {
-      if (code.startsWith(prefix + ':')) count++;
+    if (prefix === 'SAGE') {
+      let count = this.has('SAGE:CREATE') ? 1 : 0;
+      for (const db of this.sageDbs()) {
+        if (this.has(`SAGE:${db.nomBd}:READ`)) count++;
+        if (this.has(`SAGE:${db.nomBd}:UPDATE`)) count++;
+        if (this.has(`SAGE:${db.nomBd}:DELETE`)) count++;
+      }
+      return count;
     }
-    return count;
+    if (prefix === 'POINTEUSE') {
+      let count = this.has('POINTEUSE:CREATE') ? 1 : 0;
+      for (const db of this.pointeuseDbs()) {
+        if (this.has(`POINTEUSE:${db.nomBd}:READ`)) count++;
+        if (this.has(`POINTEUSE:${db.nomBd}:UPDATE`)) count++;
+        if (this.has(`POINTEUSE:${db.nomBd}:DELETE`)) count++;
+      }
+      return count;
+    }
+    const cat = this.featureCategories.find((c) => c.key === prefix);
+    if (cat) {
+      let count = 0;
+      for (const item of cat.items) {
+        if (this.has(item.code)) count++;
+        if (item.canCreate && this.has(`${item.code}:CREATE`)) count++;
+        if (item.canUpdate && this.has(`${item.code}:UPDATE`)) count++;
+        if (item.canDelete && this.has(`${item.code}:DELETE`)) count++;
+      }
+      return count;
+    }
+    return 0;
   }
 
   toggleGroup(prefix: string, enable: boolean): void {
