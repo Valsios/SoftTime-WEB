@@ -244,8 +244,12 @@ public sealed class ExternalSourceService : IExternalSourceService
         if (!IsAutre(row.TYPE_BASE))
         {
             using var pte = _pointeuseFactory.Create(conn);
-            return pte.CheckInOut.ToList()
+            // Le filtre de date doit rester cote SQL : charger CHECKINOUT en entier puis filtrer en
+            // memoire fait expirer le delai de commande des que la table est volumineuse.
+            var punches = pte.CheckInOut
                 .Where(c => c.CHECKTIME >= from && c.CHECKTIME < to)
+                .ToList();
+            return punches
                 .Select(c => new ExternalPunch(c.USERID, c.CHECKTIME, c.CHECKTYPE))
                 .ToList();
         }
