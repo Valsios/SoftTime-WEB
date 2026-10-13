@@ -35,6 +35,24 @@ export interface User {
   login: string;
   matricule?: string | null;
   password?: string | null;
+  /** Adresse d'envoi des identifiants (facultative). */
+  email?: string | null;
+}
+
+/** Création du premier compte administrateur (installation vierge). */
+export interface AdminSetupRequest {
+  nom: string;
+  login: string;
+  password: string;
+  email?: string | null;
+}
+
+/** Résultat de la création du compte initial. */
+export interface AdminSetupResult {
+  userId: number;
+  login: string;
+  emailEnvoye: boolean;
+  message: string;
 }
 
 export interface Role {

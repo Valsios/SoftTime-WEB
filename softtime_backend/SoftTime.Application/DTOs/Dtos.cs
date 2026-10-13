@@ -12,8 +12,20 @@ public record LoginResponse(string Token, decimal UserId, string Login, string N
 
 public record UserDto(decimal Id, decimal RoleId, string Nom, string Login, string? Matricule, string? Password)
 {
+    /// <summary>Adresse d'envoi des identifiants (facultative).</summary>
+    public string? Email { get; init; }
+
     public UserDto() : this(default, default, default!, default!, default, default) { }
 }
+
+/// <summary>Création du premier compte administrateur (installation vierge).</summary>
+public record AdminSetupDto(string Nom, string Login, string Password, string? Email)
+{
+    public AdminSetupDto() : this(string.Empty, string.Empty, string.Empty, null) { }
+}
+
+/// <summary>Résultat de la création du compte initial : indique si les identifiants ont pu être envoyés.</summary>
+public record AdminSetupResultDto(decimal UserId, string Login, bool EmailEnvoye, string Message);
 
 public record RoleDto(decimal Id, string Nom)
 {
@@ -182,9 +194,195 @@ public record ImportResultDto(int Imported, int Skipped, string Message)
     public ImportResultDto() : this(default, default, default!) { }
 }
 
-public record AnomalyDto(decimal Id, string? Matricule, DateTime? DateIn, DateTime? DateOut, TimeSpan? H1, TimeSpan? H2, TimeSpan? HEntree, TimeSpan? HSortie, bool? AbsAm, bool? AbsPm, bool? FeriesAm, bool? FeriesPm, string? IntituleAbsence)
+/// <summary>Résultat du pré-traitement des pointages (pointage → heures corrigées + anomalies).</summary>
+public record PreprocessPunchesResultDto(int CorrectionsCreees, int AnomaliesCreees, int JoursIgnores, string Message)
 {
-    public AnomalyDto() : this(default, default, default, default, default, default, default, default, default, default, default, default, default) { }
+    public PreprocessPunchesResultDto() : this(default, default, default, default!) { }
+}
+
+public record AnomalyDto(decimal Id, string? Matricule, DateTime? DateIn, DateTime? DateOut, TimeSpan? H1, TimeSpan? H2, TimeSpan? HEntree, TimeSpan? HPs, TimeSpan? HPe, TimeSpan? HSortie, bool? AbsAm, bool? AbsPm, bool? Feries, bool? FeriesAm, bool? FeriesPm, string? IntituleAbsence)
+{
+    public AnomalyDto() : this(default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default) { }
+}
+
+/// <summary>
+/// Arbitrage d'une anomalie : heures retenues et drapeaux d'absence / férié.
+/// Les propriétés non renseignées (null) laissent la valeur existante inchangée.
+/// </summary>
+public record AnomalyUpdateDto(DateTime? DateIn, DateTime? DateOut, TimeSpan? HEntree, TimeSpan? HPs, TimeSpan? HPe, TimeSpan? HSortie, bool? AbsAm, bool? AbsPm, bool? Feries, bool? FeriesAm, bool? FeriesPm, string? IntituleAbsence)
+{
+    public AnomalyUpdateDto() : this(default, default, default, default, default, default, default, default, default, default, default, default) { }
+}
+
+/// <summary>Validation en masse : les anomalies sélectionnées deviennent des heures corrigées.</summary>
+public record AnomalyValidationRequest(List<decimal> Ids)
+{
+    public AnomalyValidationRequest() : this(new List<decimal>()) { }
+}
+
+public record AnomalyValidationResultDto(int CorrectionsCreees, int AnomaliesSupprimees, string Message)
+{
+    public AnomalyValidationResultDto() : this(default, default, default!) { }
+}
+
+// --- Archives des suppressions (ex-tables « Historique* » du desktop) ---
+
+public record HistoryPointageDto(decimal Id, string? Matricule, DateTime? Date, TimeSpan? Heure, string? Type, DateTime SupprimeLe)
+{
+    public HistoryPointageDto() : this(default, default, default, default, default, default) { }
+}
+
+public record HistoryAnomalieDto(decimal Id, string? Matricule, DateTime? DateIn, DateTime? DateOut, TimeSpan? HEntree, TimeSpan? HSortie, bool? AbsAm, bool? AbsPm, string? IntituleAbsence, DateTime SupprimeLe)
+{
+    public HistoryAnomalieDto() : this(default, default, default, default, default, default, default, default, default, default) { }
+}
+
+public record HistoryHsDto(decimal Id, string? Matricule, DateTime? PeriodeDebut, DateTime? PeriodeFin, decimal? Exo130, decimal? Exo150, decimal? I130, decimal? I150, DateTime SupprimeLe)
+{
+    public HistoryHsDto() : this(default, default, default, default, default, default, default, default, default) { }
+}
+
+public record HistoryDeleteResultDto(int Supprimees, string Message)
+{
+    public HistoryDeleteResultDto() : this(default, default!) { }
+}
+
+// --- Corrections et purges de la période de traitement ---
+
+/// <summary>Correction d'un pointage importé : les champs null restent inchangés.</summary>
+public record PunchUpdateDto(DateTime? Date, TimeSpan? Heure, string? Type)
+{
+    public PunchUpdateDto() : this(default, default, default) { }
+}
+
+/// <summary>Résultat de la purge d'une période de traitement.</summary>
+public record PurgePunchesResultDto(int Pointages, int Corrections, int Anomalies, int CorrectionsManuellesConservees, string Message)
+{
+    public PurgePunchesResultDto() : this(default, default, default, default, default!) { }
+}
+
+/// <summary>Résultat de la purge des validations d'une semaine.</summary>
+public record PurgeValidationResultDto(int Validations, int Corrections, string Message)
+{
+    public PurgeValidationResultDto() : this(default, default, default!) { }
+}
+
+// --- Tableau de bord analytique ---
+
+public record DashboardStatsDto(
+    int TotalEmployes,
+    DashboardKpiDto Kpi,
+    DashboardAbsencesDto Absences,
+    DashboardRetardsDto Retards,
+    IReadOnlyList<DashboardSerieDto> Series,
+    DashboardRepartitionDto Repartition,
+    DashboardAssiduiteDto Assiduite)
+{
+    public DashboardStatsDto() : this(default, default!, default!, default!,
+        Array.Empty<DashboardSerieDto>(), default!, default!) { }
+}
+
+/// <param name="JoursPlanifies">
+/// Présence théorique de la période : jours de planning non off, hors week-end et férié.
+/// </param>
+/// <param name="TauxAbsenteisme">Jours d'absence / jours planifiés, en pourcentage.</param>
+/// <param name="TauxPonctualite">
+/// Jours travaillés sans retard / jours travaillés, en pourcentage.
+/// </param>
+public record DashboardKpiDto(
+    int CartesActives,
+    int Anomalies,
+    int CorrectionsManuelles,
+    int SemainesValidees,
+    int SemainesEnAttente,
+    decimal HeuresTravaillees,
+    decimal HeuresSupplementaires,
+    int JoursPlanifies,
+    int JoursTravailles,
+    int JoursAbsence,
+    int JoursRetard,
+    int MinutesRetard,
+    decimal TauxAbsenteisme,
+    decimal TauxPonctualite)
+{
+    public DashboardKpiDto() : this(default, default, default, default, default, default, default,
+        default, default, default, default, default, default, default) { }
+}
+
+/// <summary>Point d'une courbe d'évolution (une période = un regroupement).</summary>
+public record DashboardSerieDto(string Periode, decimal Heures, decimal HeuresSupplementaires)
+{
+    public DashboardSerieDto() : this(string.Empty, default, default) { }
+}
+
+/// <param name="Total">Absences explicites + jours planifiés sans pointage.</param>
+/// <param name="PlanifiesSansPointage">
+/// Jours planifiés (OffP = false) sans heure corrigée, hors week-end et férié.
+/// Les congés SAGE ne sont pas encore exclus de ce compteur (voir LOT 9).
+/// </param>
+public record DashboardAbsencesDto(int Total, int Explicites, int PlanifiesSansPointage, IReadOnlyList<DashboardGroupDto> Stats, IReadOnlyList<DashboardTopDto> Top)
+{
+    public DashboardAbsencesDto() : this(default, default, default, Array.Empty<DashboardGroupDto>(), Array.Empty<DashboardTopDto>()) { }
+}
+
+public record DashboardRetardsDto(int Total, int TotalMinutes, IReadOnlyList<DashboardGroupDto> Stats, IReadOnlyList<DashboardTopDto> Top)
+{
+    public DashboardRetardsDto() : this(default, default, Array.Empty<DashboardGroupDto>(), Array.Empty<DashboardTopDto>()) { }
+}
+
+public record DashboardGroupDto(string Periode, int Count, int TotalMinutes)
+{
+    public DashboardGroupDto() : this(string.Empty, default, default) { }
+}
+
+public record DashboardTopDto(string Matricule, string? Nom, string? Prenom, string? Departement, int Count, int TotalMinutes)
+{
+    public DashboardTopDto() : this(string.Empty, default, default, default, default, default) { }
+}
+
+/// <summary>Répartition de l'effectif et de l'activité d'un axe (catégorie, branche, département).</summary>
+public record DashboardSliceDto(string Libelle, int Effectif, int Absences, int Retards, int MinutesRetard, decimal HeuresSupplementaires)
+{
+    public DashboardSliceDto() : this(string.Empty, default, default, default, default, default) { }
+}
+
+public record DashboardRepartitionDto(
+    IReadOnlyList<DashboardSliceDto> ParCategorie,
+    IReadOnlyList<DashboardSliceDto> ParBranche,
+    IReadOnlyList<DashboardSliceDto> ParDepartement)
+{
+    public DashboardRepartitionDto() : this(Array.Empty<DashboardSliceDto>(), Array.Empty<DashboardSliceDto>(), Array.Empty<DashboardSliceDto>()) { }
+}
+
+/// <param name="TauxPonctualite">Jours travaillés sans retard / jours travaillés, en pourcentage.</param>
+public record DashboardAssiduiteRowDto(
+    string Matricule, string? Nom, string? Prenom, string? Departement, string? Categorie,
+    int JoursTravailles, int JoursAbsence, int JoursRetard, int MinutesRetard, decimal TauxPonctualite)
+{
+    public DashboardAssiduiteRowDto() : this(string.Empty, default, default, default, default,
+        default, default, default, default, default) { }
+}
+
+/// <summary>Classements d'assiduité : les plus ponctuels et les moins ponctuels de la période.</summary>
+public record DashboardAssiduiteDto(
+    IReadOnlyList<DashboardAssiduiteRowDto> PlusPonctuels,
+    IReadOnlyList<DashboardAssiduiteRowDto> MoinsPonctuels)
+{
+    public DashboardAssiduiteDto() : this(Array.Empty<DashboardAssiduiteRowDto>(), Array.Empty<DashboardAssiduiteRowDto>()) { }
+}
+
+/// <summary>Valeurs disponibles pour les filtres du tableau de bord analytique.</summary>
+public record DashboardFiltersDto(
+    IReadOnlyList<string> Departements,
+    IReadOnlyList<string> Branches,
+    IReadOnlyList<DashboardOptionDto> Categories)
+{
+    public DashboardFiltersDto() : this(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<DashboardOptionDto>()) { }
+}
+
+public record DashboardOptionDto(int Id, string Libelle)
+{
+    public DashboardOptionDto() : this(default, string.Empty) { }
 }
 
 public record CorrectedHourDto(decimal Id, string? Matricule, DateTime? DateIn, DateTime? DateOut, TimeSpan? HEntree, TimeSpan? HPs, TimeSpan? HPe, TimeSpan? HSortie, bool? AbsAm, bool? AbsPm, string? IntituleAbsence, TimeSpan? Retard, bool? Ferie, bool? FerieAm, bool? FeriePm, bool? ValiderCorrection, bool? ValiderHs, decimal? Hs, decimal? MNuit, decimal? MDimanche, decimal? MFeries)
@@ -219,6 +417,46 @@ public record HsExoDto(int Oid, string? Matricule, int? NumSal, decimal? Exo130,
     public HsExoDto() : this(default, default, default, default, default, default, default, default, default, default, default, default) { }
 }
 
+/// <summary>Jour détaillé du calcul des heures supplémentaires d'un salarié.</summary>
+public record OvertimeDetailDayDto(
+    DateTime Date,
+    TimeSpan? Entree,
+    TimeSpan? Sortie,
+    decimal HeuresTravaillees,
+    decimal HeuresSupJournalieres,
+    decimal HeuresNuit,
+    bool Dimanche,
+    bool Ferie,
+    TimeSpan? Retard,
+    bool AbsenceAm,
+    bool AbsencePm,
+    bool Conge,
+    bool JourTravaille)
+{
+    public OvertimeDetailDayDto() : this(default, default, default, default, default, default, default, default, default, default, default, default, default) { }
+}
+
+/// <summary>Semaine du calcul EXO/IMPO d'un salarié (répartition 130 % / 150 %).</summary>
+public record OvertimeDetailWeekDto(int? Semaine, DateTime? Debut, DateTime? Fin, decimal Hs, decimal Hs1, decimal Hs2)
+{
+    public OvertimeDetailWeekDto() : this(default, default, default, default, default, default) { }
+}
+
+/// <summary>Détail du calcul des heures supplémentaires d'un salarié (remplace le <c>DetailHS</c> du desktop).</summary>
+public record OvertimeDetailDto(
+    string? Matricule,
+    DateTime From,
+    DateTime To,
+    IReadOnlyList<OvertimeDetailDayDto> Jours,
+    IReadOnlyList<OvertimeDetailWeekDto> Semaines,
+    HsExoDto? ExoImpo)
+{
+    public OvertimeDetailDto() : this(default, default, default, new List<OvertimeDetailDayDto>(), new List<OvertimeDetailWeekDto>(), default) { }
+}
+
+/// <summary>Page de résultats d'une liste massive (pointages, heures corrigées).</summary>
+public record PagedResult<T>(IReadOnlyList<T> Items, int Total, int Page, int PageSize, int TotalPages);
+
 public record PunchCountDto(string? Matricule, int Total);
 
 public record CanteenDto(int Id, string? Matricule, DateTime? DateDeb, DateTime? DateFin, int? Total)
@@ -230,6 +468,18 @@ public record TravelDto(int Id, string? Matricule, DateTime? DateDeb, DateTime? 
 {
     public TravelDto() : this(default, default, default, default, default) { }
 }
+
+/// <summary>Anomalie du calcul cantine : le total du jour est contradictoire (pointage vs absence déclarée).</summary>
+public record CanteenAnomalyDto(string? Matricule, DateTime Date, string Motif)
+{
+    public CanteenAnomalyDto() : this(default, default, string.Empty) { }
+}
+
+/// <summary>Résultat de la synchronisation des cumuls cantine / frais vers SAGE.</summary>
+public record ExtrasSyncResultDto(string Database, string TypeBase, int EmployeesSynced, int CumulsUpdated, string Message);
+
+/// <summary>Résultat de la purge des lignes cantine / frais d'une période.</summary>
+public record PurgeExtrasResultDto(int LignesSupprimees, string Message);
 
 public record AuditEventDto(int Id, string? Table, string? Column, string? User, string? Action, DateTime? Date, string? NewValue, string? OldValue, string? Base)
 {

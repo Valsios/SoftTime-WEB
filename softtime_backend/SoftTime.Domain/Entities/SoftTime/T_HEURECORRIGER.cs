@@ -58,4 +58,11 @@ public class T_HEURECORRIGER
 
     public bool? VALIDER_HS { get; set; }
 
+    /// <summary>
+    /// Origine de la ligne : <c>AUTO</c> (pré-traitement des pointages) ou <c>MANUEL</c>
+    /// (saisie ou import Excel). NULL = ligne héritée, jamais écrasée par le pré-traitement.
+    /// Colonne ajoutée de façon idempotente par <see cref="PunchProcessingService"/>.
+    /// </summary>
+    public string? ORIGINE { get; set; }
+
 }

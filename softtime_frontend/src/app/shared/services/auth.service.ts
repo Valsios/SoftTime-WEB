@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { Observable, tap } from 'rxjs';
 import { ApiService } from '../../core/api';
 import { SessionStore } from '../../core/session.store';
-import { LoginRequest, LoginResponse } from '../models';
+import { AdminSetupRequest, AdminSetupResult, LoginRequest, LoginResponse } from '../models';
 import { inject } from '@angular/core';
 
 @Injectable({ providedIn: 'root' })

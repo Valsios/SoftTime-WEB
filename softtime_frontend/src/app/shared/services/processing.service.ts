@@ -3,14 +3,22 @@ import { Observable } from 'rxjs';
 import { ApiService } from '../../core/api';
 import {
   Anomaly,
+  AnomalyUpdate,
+  AnomalyValidationResult,
   CorrectedHour,
   EmployeePlanning,
   HsExo,
   ImportPunchesRequest,
   ImportResult,
+  OvertimeDetail,
+  PagedResult,
   PeriodRequest,
   PlanningEmployee,
+  PreprocessResult,
   Punch,
+  PunchUpdate,
+  PurgePunchesResult,
+  PurgeValidationResult,
   Shift,
   WeeklyHs,
   WeeklyValidationRequest,
@@ -62,12 +70,33 @@ export class EmployeePlanningService extends ApiService {
     form.append('file', file);
     return this.http.post<ImportResult>(this.url('/api/employee-planning/import-excel'), form);
   }
+  /** CSV « catégorie ; lundi ; (début ; fin) × 7 » : génère la semaine pour toute la catégorie. */
+  generateFromCategory(file: File): Observable<ImportResult> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post<ImportResult>(this.url('/api/employee-planning/generate-from-category'), form);
+  }
+  /** CSV « matricule ; lundi ; (début ; pause ; fin) × 7 » : génère la semaine pour chaque salarié. */
+  generate(file: File): Observable<ImportResult> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post<ImportResult>(this.url('/api/employee-planning/generate'), form);
+  }
 }
 
 @Injectable({ providedIn: 'root' })
 export class PunchesService extends ApiService {
   list(filter: PeriodRequest): Observable<Punch[]> {
     return this.http.get<Punch[]>(this.url('/api/punches'), {
+      params: this.params({ ...filter }),
+    });
+  }
+  /**
+   * Même liste, paginée. Le contrat de la liste complète est conservé pour l'export Excel
+   * (qui porte sur la grille entière).
+   */
+  listPaged(filter: PeriodRequest): Observable<PagedResult<Punch>> {
+    return this.http.get<PagedResult<Punch>>(this.url('/api/punches/paged'), {
       params: this.params({ ...filter }),
     });
   }
@@ -79,6 +108,20 @@ export class PunchesService extends ApiService {
     form.append('file', file);
     return this.http.post<ImportResult>(this.url('/api/punches/import-excel'), form);
   }
+  /** Pré-traitement : pointages → heures corrigées (T_HEURECORRIGER) + anomalies. */
+  preprocess(req: PeriodRequest): Observable<PreprocessResult> {
+    return this.http.post<PreprocessResult>(this.url('/api/punches/preprocess'), req);
+  }
+  /** Corrige un pointage importé (refusé si la semaine est validée). */
+  update(id: number, dto: PunchUpdate): Observable<Punch> {
+    return this.http.put<Punch>(this.url(`/api/punches/${id}`), dto);
+  }
+  /** Purge la période : pointages + corrections automatiques + anomalies (archivés). */
+  purge(filter: PeriodRequest): Observable<PurgePunchesResult> {
+    return this.http.delete<PurgePunchesResult>(this.url('/api/punches'), {
+      params: this.params({ ...filter }),
+    });
+  }
 }
 
 @Injectable({ providedIn: 'root' })
@@ -87,6 +130,17 @@ export class AnomaliesService extends ApiService {
     return this.http.get<Anomaly[]>(this.url('/api/anomalies'), {
       params: this.params({ ...filter }),
     });
+  }
+  get(id: number): Observable<Anomaly> {
+    return this.http.get<Anomaly>(this.url(`/api/anomalies/${id}`));
+  }
+  /** Arbitre une anomalie : heures retenues + drapeaux d'absence / férié. */
+  update(id: number, dto: AnomalyUpdate): Observable<Anomaly> {
+    return this.http.put<Anomaly>(this.url(`/api/anomalies/${id}`), dto);
+  }
+  /** Convertit les anomalies sélectionnées en heures corrigées puis les supprime. */
+  validate(ids: number[]): Observable<AnomalyValidationResult> {
+    return this.http.post<AnomalyValidationResult>(this.url('/api/anomalies/validate'), { ids });
   }
   remove(id: number): Observable<void> {
     return this.http.delete<void>(this.url(`/api/anomalies/${id}`));
@@ -97,6 +151,12 @@ export class AnomaliesService extends ApiService {
 export class CorrectedHoursService extends ApiService {
   list(filter: PeriodRequest): Observable<CorrectedHour[]> {
     return this.http.get<CorrectedHour[]>(this.url('/api/corrected-hours'), {
+      params: this.params({ ...filter }),
+    });
+  }
+  /** Même liste, paginée (voir `PunchesService.listPaged`). */
+  listPaged(filter: PeriodRequest): Observable<PagedResult<CorrectedHour>> {
+    return this.http.get<PagedResult<CorrectedHour>>(this.url('/api/corrected-hours/paged'), {
       params: this.params({ ...filter }),
     });
   }
@@ -127,6 +187,12 @@ export class WeeklyValidationService extends ApiService {
   unvalidate(req: WeeklyValidationRequest): Observable<void> {
     return this.http.post<void>(this.url('/api/weekly-validation/unvalidate'), req);
   }
+  /** Purge la validation de la semaine (supprime T_HS_VALIDER et déverrouille les heures). */
+  purge(filter: PeriodRequest): Observable<PurgeValidationResult> {
+    return this.http.delete<PurgeValidationResult>(this.url('/api/weekly-validation'), {
+      params: this.params({ ...filter }),
+    });
+  }
 }
 
 @Injectable({ providedIn: 'root' })
@@ -147,5 +213,11 @@ export class OvertimeService extends ApiService {
   }
   syncPayroll(req: PeriodRequest): Observable<PayrollWriteResult> {
     return this.http.post<PayrollWriteResult>(this.url('/api/overtime/sync-payroll'), req);
+  }
+  /** Détail du calcul HS d'un salarié : jours, semaines EXO/IMPO et allocation enregistrée. */
+  detail(matricule: string, from: string, to: string): Observable<OvertimeDetail> {
+    return this.http.get<OvertimeDetail>(this.url(`/api/overtime/detail/${encodeURIComponent(matricule)}`), {
+      params: this.params({ from, to }),
+    });
   }
 }

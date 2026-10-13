@@ -1,17 +1,18 @@
+import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
-import { PeriodRequest } from '../../shared/models';
+import { OvertimeDetail, PeriodRequest } from '../../shared/models';
 import { OvertimeService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
-import { Column, DataTable, PageHeader, SoftButton, SoftCard, PeriodFilter } from '../../shared/components';
+import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftModal, PeriodFilter } from '../../shared/components';
 import { asRow, isMaxOneMonth } from '../../shared/utils/date';
 import { SessionStore } from '../../core/session.store';
 
 @Component({
   selector: 'app-overtime',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [PageHeader, SoftButton, SoftCard, DataTable, PeriodFilter],
+  imports: [DatePipe, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, PeriodFilter],
   template: `
     <page-header title="Heures supplémentaires" subtitle="Calcul EXO/IMPO — période maximale d'un mois">
       <soft-button variant="danger" [loading]="busy()" (click)="purge()">Purger</soft-button>
@@ -23,9 +24,44 @@ import { SessionStore } from '../../core/session.store';
     <period-filter [autoSearch]="true" [showDepartement]="true" (search)="onSearch($event)"></period-filter>
 
     <soft-card>
-      <data-table [columns]="columns" [rows]="rows()" [loading]="busy()"></data-table>
+      <data-table [columns]="columns" [rows]="rows()" [loading]="busy()">
+        <ng-template #actions let-row>
+          <soft-button size="sm" variant="ghost" (click)="openDetail(row)">Détail</soft-button>
+        </ng-template>
+      </data-table>
     </soft-card>
+
+    <soft-modal [open]="detailOpen()" title="Détail du calcul HS" (closed)="detailOpen.set(false)">
+      @if (detail(); as d) {
+        <p class="detail-head">
+          Matricule <strong>{{ d.matricule }}</strong> — du {{ d.from | date: 'dd/MM/yyyy' }}
+          au {{ d.to | date: 'dd/MM/yyyy' }}
+        </p>
+        <h3 class="detail-title">Jours</h3>
+        <data-table [columns]="dayColumns" [rows]="dayRows()" [loading]="detailLoading()"></data-table>
+        <h3 class="detail-title">Semaines (EXO/IMPO)</h3>
+        <data-table [columns]="weekColumns" [rows]="weekRows()" [loading]="detailLoading()"></data-table>
+        @if (d.exoImpo; as exo) {
+          <h3 class="detail-title">Allocation enregistrée</h3>
+          <p class="detail-head">
+            EXO 130 : <strong>{{ exo.exo130 ?? 0 }}</strong> — EXO 150 : <strong>{{ exo.exo150 ?? 0 }}</strong>
+            — IMPO 130 : <strong>{{ exo.i130 ?? 0 }}</strong> — IMPO 150 : <strong>{{ exo.i150 ?? 0 }}</strong>
+          </p>
+        } @else {
+          <p class="detail-head">Aucune allocation EXO/IMPO enregistrée sur cette période.</p>
+        }
+      } @else {
+        <p class="detail-head">Chargement…</p>
+      }
+      <div footer>
+        <soft-button variant="ghost" (click)="detailOpen.set(false)">Fermer</soft-button>
+      </div>
+    </soft-modal>
   `,
+  styles: [`
+    .detail-head { margin: 0 0 12px; }
+    .detail-title { font-size: 15px; margin: 18px 0 10px; }
+  `],
 })
 export class OvertimePage {
   private readonly svc = inject(OvertimeService);
@@ -36,6 +72,9 @@ export class OvertimePage {
 
   readonly busy = signal(false);
   readonly rows = signal<Record<string, unknown>[]>([]);
+  readonly detailOpen = signal(false);
+  readonly detailLoading = signal(false);
+  readonly detail = signal<OvertimeDetail | null>(null);
   private lastFilter: PeriodRequest | null = null;
 
   readonly currentDatabase = () => this.session.databases().find((db) => db.nomBd === this.session.activeSageDb());
@@ -123,5 +162,47 @@ export class OvertimePage {
 
   exportExcel(): void {
     this.excel.download('heures-supplementaires', this.columns, this.rows());
+  }
+
+  readonly dayColumns: Column[] = [
+    { key: 'date', label: 'Date', format: fmtDate },
+    { key: 'entree', label: 'Entrée' },
+    { key: 'sortie', label: 'Sortie' },
+    { key: 'heuresTravaillees', label: 'Heures' },
+    { key: 'heuresSupJournalieres', label: 'Sup. jour' },
+    { key: 'heuresNuit', label: 'Nuit' },
+    { key: 'retard', label: 'Retard' },
+    { key: 'conge', label: 'Congé' },
+    { key: 'ferie', label: 'Férié' },
+    { key: 'dimanche', label: 'Dimanche' },
+  ];
+
+  readonly weekColumns: Column[] = [
+    { key: 'semaine', label: 'Semaine' },
+    { key: 'debut', label: 'Début', format: fmtDate },
+    { key: 'fin', label: 'Fin', format: fmtDate },
+    { key: 'hs', label: 'HS' },
+    { key: 'hs1', label: 'HS 130 %' },
+    { key: 'hs2', label: 'HS 150 %' },
+  ];
+
+  readonly dayRows = () => (this.detail()?.jours ?? []).map(asRow);
+  readonly weekRows = () => (this.detail()?.semaines ?? []).map(asRow);
+
+  /** Détail du calcul HS du salarié de la ligne (jours, semaines EXO/IMPO, allocation). */
+  openDetail(row: Record<string, unknown>): void {
+    const matricule = row['matricule'];
+    if (typeof matricule !== 'string' || !matricule) {
+      this.toast.warning('Matricule introuvable sur cette ligne.');
+      return;
+    }
+    if (!this.requireWeek(this.lastFilter)) return;
+    this.detail.set(null);
+    this.detailOpen.set(true);
+    this.detailLoading.set(true);
+    this.svc.detail(matricule, this.lastFilter!.from, this.lastFilter!.to).subscribe({
+      next: (d) => { this.detail.set(d); this.detailLoading.set(false); },
+      error: () => this.detailLoading.set(false),
+    });
   }
 }

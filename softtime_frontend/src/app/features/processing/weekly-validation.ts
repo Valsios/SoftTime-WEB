@@ -16,6 +16,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
       <soft-button variant="secondary" [loading]="busy()" (click)="validate(false)">Annuler validation</soft-button>
       <soft-button [loading]="busy()" (click)="validate(true)">Valider semaine</soft-button>
+      <soft-button variant="danger" [loading]="busy()" (click)="purge()">Purger la validation</soft-button>
     </page-header>
 
     <period-filter searchLabel="Calculer" (search)="preview($event)"></period-filter>
@@ -97,5 +98,24 @@ export class WeeklyValidationPage {
 
   exportExcel(): void {
     this.excel.download('validation-semaine', this.columns, this.rows());
+  }
+
+  /** Purge la validation de la semaine : supprime T_HS_VALIDER et déverrouille les heures corrigées. */
+  async purge(): Promise<void> {
+    if (!this.lastFilter) {
+      this.toast.warning("Lancez d'abord un aperçu.");
+      return;
+    }
+    if (!(await this.confirm.ask(
+      'Purger la validation de cette semaine ? Les heures corrigées seront déverrouillées et la semaine redeviendra calculable.'))) return;
+    this.busy.set(true);
+    this.svc.purge(this.lastFilter).subscribe({
+      next: (r) => {
+        this.busy.set(false);
+        this.toast.success(r.message);
+        this.preview(this.lastFilter!);
+      },
+      error: () => this.busy.set(false),
+    });
   }
 }

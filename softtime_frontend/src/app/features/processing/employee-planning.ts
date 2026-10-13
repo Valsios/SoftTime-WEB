@@ -48,6 +48,14 @@ import { asRow, fmtDate, monthStart, today } from '../../shared/utils/date';
         <input #planningFile type="file" accept=".xlsx,.xls" hidden (change)="onFile($event)" />
         <soft-button variant="secondary" (click)="planningFile.click()">Import Excel</soft-button>
       </label>
+      <label class="file-btn">
+        <input #categoryFile type="file" accept=".csv" hidden (change)="onGenerateFromCategoryFile($event)" />
+        <soft-button variant="secondary" (click)="categoryFile.click()">Générer par catégorie (CSV)</soft-button>
+      </label>
+      <label class="file-btn">
+        <input #generateFile type="file" accept=".csv" hidden (change)="onGenerateFile($event)" />
+        <soft-button variant="secondary" (click)="generateFile.click()">Générer par matricule (CSV)</soft-button>
+      </label>
     </page-header>
 
     <period-filter [showMatricule]="false" (search)="onSearch($event)"></period-filter>
@@ -289,6 +297,36 @@ export class EmployeePlanningPage implements OnInit {
     this.svc.importExcel(file).subscribe({
       next: (r) => {
         this.toast.success(r.message || `${r.imported} ligne(s) importée(s).`);
+        this.activeTab.set('planning');
+        this.loadPlanning();
+      },
+    });
+    input.value = '';
+  }
+
+  /** Génération du planning d'une semaine pour toute une catégorie (CSV). */
+  onGenerateFromCategoryFile(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    this.svc.generateFromCategory(file).subscribe({
+      next: (r) => {
+        this.toast.success(r.message || `${r.imported} jour(s) généré(s).`);
+        this.activeTab.set('planning');
+        this.loadPlanning();
+      },
+    });
+    input.value = '';
+  }
+
+  /** Génération du planning d'une semaine par matricule (CSV, pause par jour). */
+  onGenerateFile(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    this.svc.generate(file).subscribe({
+      next: (r) => {
+        this.toast.success(r.message || `${r.imported} jour(s) généré(s).`);
         this.activeTab.set('planning');
         this.loadPlanning();
       },

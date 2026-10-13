@@ -130,4 +130,19 @@ public static class OvertimeRules
 
         return result;
     }
+
+    /// <summary>
+    /// La plage est-elle de nuit ? Même règle que le calcul de semaine (entrée avant 6 h
+    /// ou sortie à partir de 21 h).
+    /// </summary>
+    public static bool EstPlageNuit(TimeSpan entree, TimeSpan sortie)
+        => entree.Hours < 6 || sortie.Hours >= 21;
+
+    /// <summary>
+    /// Indicateur de dépassement journalier, porté du desktop
+    /// (<c>DetailHS</c> : <c>Math.Max(0, totalHeures - 8)</c>). Les heures supplémentaires
+    /// réellement payées restent calculées à la semaine (voir <see cref="SplitWeekly"/>).
+    /// </summary>
+    public static decimal HeuresSupJournalieres(TimeSpan heures, double seuil = 8)
+        => heures.TotalHours <= seuil ? 0m : (decimal)(heures.TotalHours - seuil);
 }

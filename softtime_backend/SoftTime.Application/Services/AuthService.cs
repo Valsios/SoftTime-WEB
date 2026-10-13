@@ -9,15 +9,20 @@ namespace SoftTime.Application.Services;
 
 public class AuthService
 {
+    /// <summary>Rôle d'administration attendu lors du démarrage initial (voir le script de base saine).</summary>
+    public const string RoleAdministrateur = "Administrateur";
+
     private readonly IUnitOfWork _uow;
     private readonly ITokenService _tokens;
     private readonly IMapper _mapper;
+    private readonly IEmailService _email;
 
-    public AuthService(IUnitOfWork uow, ITokenService tokens, IMapper mapper)
+    public AuthService(IUnitOfWork uow, ITokenService tokens, IMapper mapper, IEmailService email)
     {
         _uow = uow;
         _tokens = tokens;
         _mapper = mapper;
+        _email = email;
     }
 
     public async Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
@@ -60,7 +65,7 @@ public class AuthService
     public async Task<UserDto> GetUserAsync(decimal id, CancellationToken cancellationToken = default)
     {
         var u = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(id, cancellationToken) ?? throw new KeyNotFoundException();
-        return new UserDto(u.IDRESPONSABLE, u.IDROLE, u.NOMRESPONSABLE ?? string.Empty, u.LOGIN ?? string.Empty, u.MATRICULE, null);
+        return new UserDto(u.IDRESPONSABLE, u.IDROLE, u.NOMRESPONSABLE ?? string.Empty, u.LOGIN ?? string.Empty, u.MATRICULE, null) { Email = u.EMAIL };
     }
 
     public async Task<IReadOnlyList<UserDto>> GetUsersAsync(CancellationToken cancellationToken = default)
@@ -69,14 +74,84 @@ public class AuthService
         return list
             .OrderBy(u => u.NOMRESPONSABLE)
             .ThenBy(u => u.LOGIN)
-            .Select(u => new UserDto(u.IDRESPONSABLE, u.IDROLE, u.NOMRESPONSABLE ?? string.Empty, u.LOGIN ?? string.Empty, u.MATRICULE, null))
+            .Select(u => new UserDto(u.IDRESPONSABLE, u.IDROLE, u.NOMRESPONSABLE ?? string.Empty, u.LOGIN ?? string.Empty, u.MATRICULE, null) { Email = u.EMAIL })
             .ToList();
+    }
+
+    /// <summary>
+    /// Installation vierge ? Portage de <c>is-first-run</c> du desktop, avec un critère plus sain :
+    /// le desktop cherchait un rôle nommé « administrateur », ici on constate simplement qu'aucun
+    /// compte n'existe. Le critère ne dépend donc pas d'une convention de nommage des rôles, et il
+    /// reste vrai après la suppression du dernier compte (seul moyen de sortir d'un verrouillage total).
+    /// </summary>
+    public async Task<bool> IsFirstRunAsync(CancellationToken cancellationToken = default)
+        => (await _uow.Repository<T_RESPONSABLE>().ListAsync(_ => true, cancellationToken)).Count == 0;
+
+    /// <summary>
+    /// Crée le premier compte administrateur. Refusé dès qu'un compte existe, et le rôle
+    /// <see cref="RoleAdministrateur"/> se voit garantir tous les droits : sans cela, l'application
+    /// serait inaccessible juste après son installation.
+    /// </summary>
+    public async Task<AdminSetupResultDto> CreateAdminAsync(AdminSetupDto dto, CancellationToken cancellationToken = default)
+    {
+        if (!await IsFirstRunAsync(cancellationToken))
+            throw new InvalidOperationException(
+                "Des comptes existent déjà : la création initiale n'est plus possible. Utilisez l'écran Utilisateurs.");
+        var login = (dto.Login ?? string.Empty).Trim();
+        var motDePasse = dto.Password ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(dto.Nom))
+            throw new InvalidOperationException("Le nom est requis.");
+        if (string.IsNullOrWhiteSpace(login))
+            throw new InvalidOperationException("L'identifiant est requis.");
+        if (string.IsNullOrWhiteSpace(motDePasse))
+            throw new InvalidOperationException("Le mot de passe est requis.");
+
+        var roles = await _uow.Repository<T_ROLE>().ListAsync(_ => true, cancellationToken);
+        var role = roles.FirstOrDefault(r => string.Equals(r.NOMROLE?.Trim(), RoleAdministrateur, StringComparison.OrdinalIgnoreCase))
+            ?? roles.OrderBy(r => r.IDROLE).FirstOrDefault()
+            ?? throw new InvalidOperationException(
+                "Aucun rôle n'est défini : exécutez le script de base saine (create_softtime_database.sql) avant le démarrage initial.");
+
+        var entity = new T_RESPONSABLE
+        {
+            IDROLE = role.IDROLE,
+            NOMRESPONSABLE = dto.Nom.Trim(),
+            LOGIN = login,
+            PASSWORD = motDePasse,
+            EMAIL = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim()
+        };
+        await _uow.Repository<T_RESPONSABLE>().AddAsync(entity, cancellationToken);
+        await EnsureRoleHasAllRightsAsync(role.IDROLE, cancellationToken);
+        await _uow.SaveChangesAsync(cancellationToken);
+
+        var envoye = await _email.SendUserCredentialsAsync(entity.EMAIL, entity.LOGIN, motDePasse, entity.NOMRESPONSABLE, null, cancellationToken);
+        var message = envoye
+            ? "Compte administrateur créé et identifiants envoyés par e-mail."
+            : _email.EstConfigure
+                ? "Compte administrateur créé. L'envoi de l'e-mail a échoué : communiquez les identifiants manuellement."
+                : "Compte administrateur créé. Aucune configuration SMTP (« Email ») : communiquez les identifiants manuellement.";
+        return new AdminSetupResultDto(entity.IDRESPONSABLE, entity.LOGIN ?? login, envoye, message);
+    }
+
+    /// <summary>Garantit que le rôle d'administration détient tous les droits (idempotent).</summary>
+    private async Task EnsureRoleHasAllRightsAsync(decimal roleId, CancellationToken cancellationToken)
+    {
+        var droits = await _uow.Repository<T_DROIT>().ListAsync(_ => true, cancellationToken);
+        var existants = await _uow.Repository<T_DROIT_ROLE>().ListAsync(p => p.IDROLE == roleId, cancellationToken);
+        var manquants = droits.Where(d => existants.All(e => e.IDDROIT != d.IDDROIT)).ToList();
+        if (manquants.Count == 0)
+            return;
+        var repo = _uow.Repository<T_DROIT_ROLE>();
+        foreach (var droit in manquants)
+            await repo.AddAsync(new T_DROIT_ROLE { IDROLE = roleId, IDDROIT = droit.IDDROIT }, cancellationToken);
     }
 
     public async Task<UserDto> SaveUserAsync(UserDto dto, CancellationToken cancellationToken = default)
     {
         var repo = _uow.Repository<T_RESPONSABLE>();
         T_RESPONSABLE entity;
+        var loginModifie = false;
+        var motDePasseModifie = false;
         if (dto.Id == 0)
         {
             entity = new T_RESPONSABLE
@@ -85,23 +160,34 @@ public class AuthService
                 NOMRESPONSABLE = dto.Nom,
                 LOGIN = dto.Login,
                 PASSWORD = dto.Password ?? string.Empty,
-                MATRICULE = dto.Matricule
+                MATRICULE = dto.Matricule,
+                EMAIL = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim()
             };
             await repo.AddAsync(entity, cancellationToken);
         }
         else
         {
             entity = await repo.GetByIdAsync(dto.Id, cancellationToken) ?? throw new KeyNotFoundException();
+            loginModifie = !string.Equals((entity.LOGIN ?? string.Empty).Trim(), (dto.Login ?? string.Empty).Trim(), StringComparison.Ordinal);
+            motDePasseModifie = !string.IsNullOrWhiteSpace(dto.Password) && dto.Password != entity.PASSWORD;
             entity.IDROLE = dto.RoleId;
             entity.NOMRESPONSABLE = dto.Nom;
             entity.LOGIN = dto.Login;
             entity.MATRICULE = dto.Matricule;
-            if (!string.IsNullOrWhiteSpace(dto.Password))
+            entity.EMAIL = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim();
+            if (motDePasseModifie)
                 entity.PASSWORD = dto.Password;
             repo.Update(entity);
         }
         await _uow.SaveChangesAsync(cancellationToken);
-        return new UserDto(entity.IDRESPONSABLE, entity.IDROLE, entity.NOMRESPONSABLE, entity.LOGIN, entity.MATRICULE, null);
+
+        // Notification best-effort : le service journalise et n'échoue jamais la requête.
+        if (dto.Id == 0)
+            await _email.SendUserCredentialsAsync(entity.EMAIL, entity.LOGIN, dto.Password, entity.NOMRESPONSABLE, null, cancellationToken);
+        else if (loginModifie || motDePasseModifie)
+            await _email.SendUserUpdateAsync(entity.EMAIL, entity.LOGIN, dto.Password, entity.NOMRESPONSABLE, null, loginModifie, motDePasseModifie, cancellationToken);
+
+        return new UserDto(entity.IDRESPONSABLE, entity.IDROLE, entity.NOMRESPONSABLE, entity.LOGIN, entity.MATRICULE, null) { Email = entity.EMAIL };
     }
 
     public async Task DeleteUserAsync(decimal id, CancellationToken cancellationToken = default)

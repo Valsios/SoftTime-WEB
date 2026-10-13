@@ -128,7 +128,23 @@ public class CatalogService
     {
         var repo = _uow.Repository<T_BDD_SAGE>();
         var e = await repo.GetByIdAsync(id, ct) ?? throw new KeyNotFoundException();
+        await RemoveMappingsAsync(true, id, ct);
         repo.Remove(e);
+        await _uow.SaveChangesAsync(ct);
+    }
+
+    // Supprime les mappings d'entite (et leurs champs) d'une connexion. Sans cela les lignes
+    // restent orphelines et bloquent la reutilisation de l'index unique (SageDbId/PointeuseDbId, EntityKind).
+    private async Task RemoveMappingsAsync(bool isSage, int connectionId, CancellationToken ct)
+    {
+        var entRepo = _uow.Repository<T_SOURCE_ENTITY_MAPPING>();
+        var fldRepo = _uow.Repository<T_SOURCE_FIELD_MAPPING>();
+        var existing = await entRepo.ListAsync(m => isSage ? m.SageDbId == connectionId : m.PointeuseDbId == connectionId, ct);
+        if (existing.Count == 0) return;
+        var ids = existing.Select(x => x.Id).ToHashSet();
+        var fields = await fldRepo.ListAsync(f => ids.Contains(f.EntityMappingId), ct);
+        fldRepo.RemoveRange(fields);
+        entRepo.RemoveRange(existing);
         await _uow.SaveChangesAsync(ct);
     }
 
@@ -244,6 +260,7 @@ public class CatalogService
     {
         var repo = _uow.Repository<T_BDD_POINTEUSE>();
         var e = await repo.GetByIdAsync(id, ct) ?? throw new KeyNotFoundException();
+        await RemoveMappingsAsync(false, id, ct);
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
     }
@@ -587,6 +604,14 @@ public class CatalogService
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_SEM_Sage_Kind' AND object_id = OBJECT_ID(N'dbo.T_SOURCE_ENTITY_MAPPING'))
                 CREATE UNIQUE INDEX UX_SEM_Sage_Kind ON dbo.T_SOURCE_ENTITY_MAPPING (SageDbId, EntityKind) WHERE SageDbId IS NOT NULL;
             IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_SEM_Pte_Kind' AND object_id = OBJECT_ID(N'dbo.T_SOURCE_ENTITY_MAPPING') AND has_filter = 0)
+            -- Index uniques FILTRES : pour une ligne SAGE, PointeuseDbId est NULL (et inversement).
+            -- Sans filtre, SQL Server considere tous les NULL comme egaux et n'autoriserait qu'UNE
+            -- seule ligne par EntityKind pour tout le systeme (2e base Sage/pointeuse refusee).
+            IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_SEM_Sage_Kind' AND object_id = OBJECT_ID(N'dbo.T_SOURCE_ENTITY_MAPPING') AND filter_definition IS NULL)
+                DROP INDEX UX_SEM_Sage_Kind ON dbo.T_SOURCE_ENTITY_MAPPING;
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_SEM_Sage_Kind' AND object_id = OBJECT_ID(N'dbo.T_SOURCE_ENTITY_MAPPING'))
+                CREATE UNIQUE INDEX UX_SEM_Sage_Kind ON dbo.T_SOURCE_ENTITY_MAPPING (SageDbId, EntityKind) WHERE SageDbId IS NOT NULL;
+            IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_SEM_Pte_Kind' AND object_id = OBJECT_ID(N'dbo.T_SOURCE_ENTITY_MAPPING') AND filter_definition IS NULL)
                 DROP INDEX UX_SEM_Pte_Kind ON dbo.T_SOURCE_ENTITY_MAPPING;
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_SEM_Pte_Kind' AND object_id = OBJECT_ID(N'dbo.T_SOURCE_ENTITY_MAPPING'))
                 CREATE UNIQUE INDEX UX_SEM_Pte_Kind ON dbo.T_SOURCE_ENTITY_MAPPING (PointeuseDbId, EntityKind) WHERE PointeuseDbId IS NOT NULL;
@@ -929,6 +954,32 @@ public class CatalogService
         var e = await repo.GetByIdAsync(id, ct) ?? throw new KeyNotFoundException();
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Supprime la correspondance SAGE ↔ badge identifiée par le couple de matricules
+    /// (portage de <c>SupprimerParCorrespondance</c> du desktop). La comparaison des matricules est
+    /// insensible au remplissage par des zéros. Le badge est optionnel : sans lui, toutes les
+    /// correspondances du matricule SAGE du tenant courant sont supprimées.
+    /// </summary>
+    public async Task<int> DeleteCardByCorrespondenceAsync(string matriculeSage, string? matriculePointeuse, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        if (string.IsNullOrWhiteSpace(matriculeSage))
+            throw new InvalidOperationException("Matricule SAGE requis.");
+        var sage = _tenant.SageDb;
+        var repo = _uow.Repository<T_CARDPAIE>();
+        var candidates = (await repo.ListAsync(c =>
+                c.SAGE_BDD == sage && c.SAGE_MATRICULE == matriculeSage, ct))
+            .Where(c => MatriculeIdentity.MemeSalarie(c.SAGE_MATRICULE, matriculeSage))
+            .Where(c => string.IsNullOrWhiteSpace(matriculePointeuse)
+                        || MatriculeIdentity.MemeSalarie(c.POINTEUSE_NUMERO, matriculePointeuse))
+            .ToList();
+        if (candidates.Count == 0)
+            throw new KeyNotFoundException($"Aucune correspondance {matriculeSage} ↔ {matriculePointeuse ?? "*"} sur la base {sage}.");
+        repo.RemoveRange(candidates);
+        await _uow.SaveChangesAsync(ct);
+        return candidates.Count;
     }
 
     public async Task<SyncResultDto> AutoMapCardsAsync(CancellationToken ct = default)
@@ -1341,6 +1392,14 @@ public class CatalogService
         }
         await _uow.SaveChangesAsync(ct);
         return new ToleranceDto(entity.ID, entity.IDCATEGORIE, entity.TOLERANCE, entity.TYPES_TOL, entity.SORTIE);
+    }
+
+    public async Task DeleteToleranceAsync(int id, CancellationToken ct = default)
+    {
+        var repo = _uow.Repository<T_TOLERANCE>();
+        var e = await repo.GetByIdAsync(id, ct) ?? throw new KeyNotFoundException();
+        repo.Remove(e);
+        await _uow.SaveChangesAsync(ct);
     }
 
     public async Task<IReadOnlyList<HolidayDto>> ListHolidaysAsync(CancellationToken ct = default)
