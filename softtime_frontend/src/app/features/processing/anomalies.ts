@@ -4,7 +4,6 @@ import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
 import { Droit } from '../../core/rights';
-import { PeriodRequest } from '../../shared/models';
 import { FormsModule } from '@angular/forms';
 import { AnomalyUpdate, PeriodRequest } from '../../shared/models';
 import { AnomaliesService } from '../../shared/services/processing.service';

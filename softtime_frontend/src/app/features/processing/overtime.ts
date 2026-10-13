@@ -6,7 +6,7 @@ import { OvertimeDetail, PeriodRequest } from '../../shared/models';
 import { OvertimeService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftModal, PeriodFilter } from '../../shared/components';
-import { asRow, isMaxOneMonth } from '../../shared/utils/date';
+import { asRow, fmtDate, isMaxOneMonth } from '../../shared/utils/date';
 import { SessionStore } from '../../core/session.store';
 
 @Component({
@@ -196,7 +196,7 @@ export class OvertimePage {
       this.toast.warning('Matricule introuvable sur cette ligne.');
       return;
     }
-    if (!this.requireWeek(this.lastFilter)) return;
+    if (!this.validatePeriod(this.lastFilter)) return;
     this.detail.set(null);
     this.detailOpen.set(true);
     this.detailLoading.set(true);

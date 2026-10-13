@@ -60,6 +60,9 @@ interface FeatureCategory {
           <span class="user-status-tag" [class.is-custom]="isCustomized()">
             {{ isCustomized() ? 'Permissions personnalisées' : 'Permissions par défaut (Rôle)' }}
           </span>
+          <span class="user-status-tag is-admin-shield" *ngIf="isTargetAdmin()">
+            Bases et gestion verrouillées
+          </span>
         </div>
 
         <div class="bulk-actions">
@@ -88,12 +91,13 @@ interface FeatureCategory {
               <input
                 type="checkbox"
                 [checked]="has('SAGE:CREATE')"
+                [disabled]="isMandatory('SAGE:CREATE')"
                 (change)="toggle('SAGE:CREATE', $event)"
               />
               <span>Ajouter une base</span>
             </label>
             <button type="button" class="btn-xs" (click)="toggleGroup('SAGE', true)">Tout cocher</button>
-            <button type="button" class="btn-xs" (click)="toggleGroup('SAGE', false)">Tout décocher</button>
+            <button type="button" class="btn-xs" (click)="toggleGroup('SAGE', false)" [disabled]="isTargetAdmin()">Tout décocher</button>
             <button
               type="button"
               class="btn-xs btn-collapse"
@@ -123,6 +127,7 @@ interface FeatureCategory {
                       <input
                         type="checkbox"
                         [checked]="has('SAGE:' + db.nomBd + ':READ')"
+                        [disabled]="isMandatory('SAGE:' + db.nomBd + ':READ')"
                         (change)="toggle('SAGE:' + db.nomBd + ':READ', $event)"
                       />
                       <span>Consulter</span>
@@ -131,6 +136,7 @@ interface FeatureCategory {
                       <input
                         type="checkbox"
                         [checked]="has('SAGE:' + db.nomBd + ':UPDATE')"
+                        [disabled]="isMandatory('SAGE:' + db.nomBd + ':UPDATE')"
                         (change)="toggle('SAGE:' + db.nomBd + ':UPDATE', $event)"
                       />
                       <span>Modifier</span>
@@ -139,6 +145,7 @@ interface FeatureCategory {
                       <input
                         type="checkbox"
                         [checked]="has('SAGE:' + db.nomBd + ':DELETE')"
+                        [disabled]="isMandatory('SAGE:' + db.nomBd + ':DELETE')"
                         (change)="toggle('SAGE:' + db.nomBd + ':DELETE', $event)"
                       />
                       <span>Supprimer</span>
@@ -164,12 +171,13 @@ interface FeatureCategory {
               <input
                 type="checkbox"
                 [checked]="has('POINTEUSE:CREATE')"
+                [disabled]="isMandatory('POINTEUSE:CREATE')"
                 (change)="toggle('POINTEUSE:CREATE', $event)"
               />
               <span>Ajouter une base</span>
             </label>
             <button type="button" class="btn-xs" (click)="toggleGroup('POINTEUSE', true)">Tout cocher</button>
-            <button type="button" class="btn-xs" (click)="toggleGroup('POINTEUSE', false)">Tout décocher</button>
+            <button type="button" class="btn-xs" (click)="toggleGroup('POINTEUSE', false)" [disabled]="isTargetAdmin()">Tout décocher</button>
             <button
               type="button"
               class="btn-xs btn-collapse"
@@ -199,6 +207,7 @@ interface FeatureCategory {
                       <input
                         type="checkbox"
                         [checked]="has('POINTEUSE:' + db.nomBd + ':READ')"
+                        [disabled]="isMandatory('POINTEUSE:' + db.nomBd + ':READ')"
                         (change)="toggle('POINTEUSE:' + db.nomBd + ':READ', $event)"
                       />
                       <span>Consulter</span>
@@ -207,6 +216,7 @@ interface FeatureCategory {
                       <input
                         type="checkbox"
                         [checked]="has('POINTEUSE:' + db.nomBd + ':UPDATE')"
+                        [disabled]="isMandatory('POINTEUSE:' + db.nomBd + ':UPDATE')"
                         (change)="toggle('POINTEUSE:' + db.nomBd + ':UPDATE', $event)"
                       />
                       <span>Modifier</span>
@@ -215,6 +225,7 @@ interface FeatureCategory {
                       <input
                         type="checkbox"
                         [checked]="has('POINTEUSE:' + db.nomBd + ':DELETE')"
+                        [disabled]="isMandatory('POINTEUSE:' + db.nomBd + ':DELETE')"
                         (change)="toggle('POINTEUSE:' + db.nomBd + ':DELETE', $event)"
                       />
                       <span>Supprimer</span>
@@ -258,6 +269,7 @@ interface FeatureCategory {
                     <input
                       type="checkbox"
                       [checked]="has(item.code)"
+                      [disabled]="isMandatory(item.code)"
                       (change)="toggle(item.code, $event)"
                     />
                     <strong>{{ item.label }}</strong>
@@ -269,6 +281,7 @@ interface FeatureCategory {
                           <input
                             type="checkbox"
                             [checked]="has(item.code + ':CREATE')"
+                            [disabled]="isMandatory(item.code + ':CREATE')"
                             (change)="toggle(item.code + ':CREATE', $event)"
                           />
                           <span>Ajouter</span>
@@ -279,6 +292,7 @@ interface FeatureCategory {
                           <input
                             type="checkbox"
                             [checked]="has(item.code + ':UPDATE')"
+                            [disabled]="isMandatory(item.code + ':UPDATE')"
                             (change)="toggle(item.code + ':UPDATE', $event)"
                           />
                           <span>Modifier</span>
@@ -289,6 +303,7 @@ interface FeatureCategory {
                           <input
                             type="checkbox"
                             [checked]="has(item.code + ':DELETE')"
+                            [disabled]="isMandatory(item.code + ':DELETE')"
                             (change)="toggle(item.code + ':DELETE', $event)"
                           />
                           <span>Supprimer</span>
@@ -651,11 +666,50 @@ export class PrivilegesPage implements OnInit {
     });
   }
 
+  readonly isTargetAdmin = computed(() => this.selectedUser()?.roleId === 1);
+
+  isMandatory(code: string): boolean {
+    if (!this.isTargetAdmin()) return false;
+    return (
+      code.startsWith('SAGE:') ||
+      code.startsWith('POINTEUSE:') ||
+      code === 'PARAMS:PRIVILEGES' ||
+      code === 'PARAMS:ROLES' ||
+      code === 'PARAMS:USERS' ||
+      code === 'PARAMS:DB_ACCESS'
+    );
+  }
+
+  private addMandatoryPermissions(set: Set<string>): void {
+    set.add('SAGE:CREATE');
+    for (const db of this.sageDbs()) {
+      set.add(`SAGE:${db.nomBd}:READ`);
+      set.add(`SAGE:${db.nomBd}:UPDATE`);
+      set.add(`SAGE:${db.nomBd}:DELETE`);
+    }
+    set.add('POINTEUSE:CREATE');
+    for (const db of this.pointeuseDbs()) {
+      set.add(`POINTEUSE:${db.nomBd}:READ`);
+      set.add(`POINTEUSE:${db.nomBd}:UPDATE`);
+      set.add(`POINTEUSE:${db.nomBd}:DELETE`);
+    }
+    set.add('PARAMS:PRIVILEGES');
+    set.add('PARAMS:ROLES');
+    set.add('PARAMS:USERS');
+    set.add('PARAMS:DB_ACCESS');
+  }
+
   has(code: string): boolean {
+    if (this.isMandatory(code)) return true;
     return this.grantedPermissions().has(code);
   }
 
   toggle(code: string, event: Event): void {
+    if (this.isMandatory(code)) {
+      (event.target as HTMLInputElement).checked = true;
+      this.toast.info('Cette permission est obligatoire pour un compte administrateur.');
+      return;
+    }
     const checked = (event.target as HTMLInputElement).checked;
     this.grantedPermissions.update((set) => {
       const next = new Set(set);
@@ -716,6 +770,10 @@ export class PrivilegesPage implements OnInit {
   }
 
   toggleGroup(prefix: string, enable: boolean): void {
+    if (!enable && this.isTargetAdmin() && (prefix === 'SAGE' || prefix === 'POINTEUSE')) {
+      this.toast.info("L'accès aux bases ne peut pas être retiré à un administrateur.");
+      return;
+    }
     this.grantedPermissions.update((set) => {
       const next = new Set(set);
       if (prefix === 'SAGE') {
@@ -756,7 +814,7 @@ export class PrivilegesPage implements OnInit {
             if (item.canDelete) itemCodes.push(item.code + ':DELETE');
             for (const c of itemCodes) {
               if (enable) next.add(c);
-              else next.delete(c);
+              else if (!this.isMandatory(c)) next.delete(c);
             }
           }
         }
@@ -767,6 +825,13 @@ export class PrivilegesPage implements OnInit {
 
   toggleAll(enable: boolean): void {
     if (!enable) {
+      if (this.isTargetAdmin()) {
+        const next = new Set<string>();
+        this.addMandatoryPermissions(next);
+        this.grantedPermissions.set(next);
+        this.toast.info("Les bases et privilèges d'administration restent obligatoirement activés pour ce profil.");
+        return;
+      }
       this.grantedPermissions.set(new Set());
       return;
     }
@@ -810,6 +875,12 @@ export class PrivilegesPage implements OnInit {
     if (currentSessionUser && currentSessionUser.userId === userId && currentSessionUser.roleId !== 1) {
       this.toast.error("Vous ne pouvez pas modifier vos propres privilèges sans droit d'administration.");
       return;
+    }
+
+    if (this.isTargetAdmin()) {
+      const current = new Set(this.grantedPermissions());
+      this.addMandatoryPermissions(current);
+      this.grantedPermissions.set(current);
     }
 
     this.saving.set(true);

@@ -28,9 +28,13 @@ public class TenantConnectionService
             ?? throw new InvalidOperationException("Base SAGE inconnue.");
         if (_user.UserId is decimal uid)
         {
-            var ok = (await _uow.Repository<T_BDD_AUTORISE>().ListAsync(a => a.IDRESPONSABLE == uid && a.IDBDD == sage.ID, cancellationToken)).Count > 0;
-            if (!ok)
-                throw new UnauthorizedAccessException("Base SAGE non autorisée pour cet utilisateur.");
+            var isDbAdmin = _user.RoleId == 1 || _user.HasRight(SoftTime.Domain.Rights.Databases);
+            if (!isDbAdmin)
+            {
+                var ok = (await _uow.Repository<T_BDD_AUTORISE>().ListAsync(a => a.IDRESPONSABLE == uid && a.IDBDD == sage.ID, cancellationToken)).Count > 0;
+                if (!ok)
+                    throw new UnauthorizedAccessException("Base SAGE non autorisée pour cet utilisateur.");
+            }
         }
         await ResolvePointeuseAsync(cancellationToken);
     }

@@ -41,10 +41,19 @@ public class AuthService
         var user = users.FirstOrDefault() ?? throw new UnauthorizedAccessException("Identifiants invalides.");
         var privileges = await _uow.Repository<T_DROIT_ROLE>().ListAsync(p => p.IDROLE == user.IDROLE, cancellationToken);
         var rights = privileges.Select(p => (int)p.IDDROIT).Distinct().ToList();
+        var isAdmin = user.IDROLE == 1;
+        if (isAdmin)
+        {
+            rights = new List<int> { Rights.Databases, Rights.Parameters, Rights.Processing, Rights.Other, Rights.Traceability, Rights.Reports };
+        }
         var token = _tokens.CreateToken(user.IDRESPONSABLE, user.LOGIN ?? login, user.IDROLE, user.MATRICULE, rights);
         var access = await _uow.Repository<T_BDD_AUTORISE>().ListAsync(a => a.IDRESPONSABLE == user.IDRESPONSABLE, cancellationToken);
         var sageIds = access.Select(a => a.IDBDD).ToHashSet();
-        var sages = await _uow.Repository<T_BDD_SAGE>().ListAsync(s => sageIds.Contains(s.ID), cancellationToken);
+        // Un admin voit toujours toutes les bases SAGE configurées.
+        var rightsSet = rights.ToHashSet();
+        var sages = (isAdmin || rightsSet.Contains(Rights.Databases))
+            ? await _uow.Repository<T_BDD_SAGE>().ListAsync(_ => true, cancellationToken)
+            : await _uow.Repository<T_BDD_SAGE>().ListAsync(s => sageIds.Contains(s.ID), cancellationToken);
         var detailed = await GetUserDetailedPermissionsAsync(user.IDRESPONSABLE, cancellationToken);
         return new LoginResponse(token, user.IDRESPONSABLE, user.LOGIN ?? login, user.NOMRESPONSABLE ?? login, user.IDROLE, user.MATRICULE, rights, sages.Select(_mapper.Map<SageDbDto>).ToList(), detailed.GrantedPermissions);
     }
@@ -55,9 +64,18 @@ public class AuthService
             ?? throw new KeyNotFoundException("Utilisateur introuvable.");
         var privileges = await _uow.Repository<T_DROIT_ROLE>().ListAsync(p => p.IDROLE == user.IDROLE, cancellationToken);
         var rights = privileges.Select(p => (int)p.IDDROIT).Distinct().ToList();
+        var isAdmin = user.IDROLE == 1;
+        if (isAdmin)
+        {
+            rights = new List<int> { Rights.Databases, Rights.Parameters, Rights.Processing, Rights.Other, Rights.Traceability, Rights.Reports };
+        }
+        var rightsSet = rights.ToHashSet();
         var access = await _uow.Repository<T_BDD_AUTORISE>().ListAsync(a => a.IDRESPONSABLE == user.IDRESPONSABLE, cancellationToken);
         var sageIds = access.Select(a => a.IDBDD).ToHashSet();
-        var sages = await _uow.Repository<T_BDD_SAGE>().ListAsync(s => sageIds.Contains(s.ID), cancellationToken);
+        // Admin : toutes les bases SAGE sont toujours visibles dans la topbar.
+        var sages = (isAdmin || rightsSet.Contains(Rights.Databases))
+            ? await _uow.Repository<T_BDD_SAGE>().ListAsync(_ => true, cancellationToken)
+            : await _uow.Repository<T_BDD_SAGE>().ListAsync(s => sageIds.Contains(s.ID), cancellationToken);
         var detailed = await GetUserDetailedPermissionsAsync(user.IDRESPONSABLE, cancellationToken);
         return new LoginResponse(string.Empty, user.IDRESPONSABLE, user.LOGIN ?? string.Empty, user.NOMRESPONSABLE ?? string.Empty, user.IDROLE, user.MATRICULE, rights, sages.Select(_mapper.Map<SageDbDto>).ToList(), detailed.GrantedPermissions);
     }
@@ -275,17 +293,20 @@ public class AuthService
         var customList = await _uow.Repository<T_USER_PERMISSION>().ListAsync(
             p => p.IDRESPONSABLE == userId && p.IS_GRANTED, cancellationToken);
 
-        if (customList.Count > 0)
-        {
-            return new UserDetailedPermissionsDto(userId, customList.Select(p => p.PERMISSION_CODE).Distinct().ToList(), true);
-        }
-
         var rolePrivileges = await _uow.Repository<T_DROIT_ROLE>().ListAsync(p => p.IDROLE == user.IDROLE, cancellationToken);
         var rights = rolePrivileges.Select(p => (int)p.IDDROIT).ToHashSet();
+        var isAdmin = user.IDROLE == 1;
+        if (isAdmin)
+        {
+            rights = new HashSet<int> { Rights.Databases, Rights.Parameters, Rights.Processing, Rights.Other, Rights.Traceability, Rights.Reports };
+        }
 
         var access = await _uow.Repository<T_BDD_AUTORISE>().ListAsync(a => a.IDRESPONSABLE == userId, cancellationToken);
         var sageIds = access.Select(a => a.IDBDD).ToHashSet();
-        var sageDbs = await _uow.Repository<T_BDD_SAGE>().ListAsync(s => sageIds.Contains(s.ID), cancellationToken);
+        // Admin : toutes les bases ; autres : seulement celles de T_BDD_AUTORISE.
+        var sageDbs = (isAdmin || rights.Contains(Rights.Databases))
+            ? await _uow.Repository<T_BDD_SAGE>().ListAsync(_ => true, cancellationToken)
+            : await _uow.Repository<T_BDD_SAGE>().ListAsync(s => sageIds.Contains(s.ID), cancellationToken);
         var pointeuseDbs = await _uow.Repository<T_BDD_POINTEUSE>().ListAsync(_ => true, cancellationToken);
 
         var defaults = new List<string>();
@@ -370,6 +391,41 @@ public class AuthService
             defaults.Add("REPORTS:REPORTS");
         }
 
+        if (customList.Count > 0)
+        {
+            var perms = customList.Select(p => p.PERMISSION_CODE).ToList();
+
+            if (isAdmin)
+            {
+                // Un administrateur doit impérativement avoir tous les privilèges système
+                // même si une personnalisation partielle a été enregistrée.
+                perms.AddRange(defaults);
+            }
+            else if (rights.Contains(Rights.Databases))
+            {
+                perms.Add("SAGE:CREATE");
+                perms.Add("POINTEUSE:CREATE");
+                foreach (var s in sageDbs)
+                {
+                    var n = s.NOM_BD ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(n)) continue;
+                    perms.Add($"SAGE:{n}:READ");
+                    perms.Add($"SAGE:{n}:UPDATE");
+                    perms.Add($"SAGE:{n}:DELETE");
+                }
+                foreach (var p in pointeuseDbs)
+                {
+                    var n = p.NOM_BD ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(n)) continue;
+                    perms.Add($"POINTEUSE:{n}:READ");
+                    perms.Add($"POINTEUSE:{n}:UPDATE");
+                    perms.Add($"POINTEUSE:{n}:DELETE");
+                }
+            }
+
+            return new UserDetailedPermissionsDto(userId, perms.Distinct().ToList(), true);
+        }
+
         return new UserDetailedPermissionsDto(userId, defaults.Distinct().ToList(), false);
     }
 
@@ -382,18 +438,55 @@ public class AuthService
             ?? throw new KeyNotFoundException("Utilisateur cible introuvable.");
 
         var callerRole = await _uow.Repository<T_ROLE>().GetByIdAsync(caller.IDROLE, cancellationToken);
-        var isAdmin = caller.IDROLE == 1 || (callerRole?.NOMROLE?.Contains("ADMIN", StringComparison.OrdinalIgnoreCase) ?? false);
+        var callerIsAdmin = caller.IDROLE == 1 || (callerRole?.NOMROLE?.Contains("ADMIN", StringComparison.OrdinalIgnoreCase) ?? false);
 
-        if (currentUserId == targetUserId && !isAdmin)
+        if (currentUserId == targetUserId && !callerIsAdmin)
         {
             throw new InvalidOperationException("Un utilisateur ne peut pas modifier ses propres privilèges sans droit d'administration.");
+        }
+
+        var targetPrivileges = await _uow.Repository<T_DROIT_ROLE>().ListAsync(p => p.IDROLE == target.IDROLE, cancellationToken);
+        var targetRights = targetPrivileges.Select(p => (int)p.IDDROIT).ToHashSet();
+        var targetIsAdmin = target.IDROLE == 1 || targetRights.Contains(Rights.Databases);
+
+        var toSaveList = permissions.Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
+
+        if (targetIsAdmin)
+        {
+            // Un administrateur doit obligatoirement conserver l'accès à toutes les bases et aux écrans clés
+            toSaveList.Add("SAGE:CREATE");
+            toSaveList.Add("POINTEUSE:CREATE");
+            toSaveList.Add("PARAMS:PRIVILEGES");
+            toSaveList.Add("PARAMS:ROLES");
+            toSaveList.Add("PARAMS:USERS");
+            toSaveList.Add("PARAMS:DB_ACCESS");
+
+            var allSages = await _uow.Repository<T_BDD_SAGE>().ListAsync(_ => true, cancellationToken);
+            foreach (var s in allSages)
+            {
+                var n = s.NOM_BD ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(n)) continue;
+                toSaveList.Add($"SAGE:{n}:READ");
+                toSaveList.Add($"SAGE:{n}:UPDATE");
+                toSaveList.Add($"SAGE:{n}:DELETE");
+            }
+
+            var allPointeuses = await _uow.Repository<T_BDD_POINTEUSE>().ListAsync(_ => true, cancellationToken);
+            foreach (var p in allPointeuses)
+            {
+                var n = p.NOM_BD ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(n)) continue;
+                toSaveList.Add($"POINTEUSE:{n}:READ");
+                toSaveList.Add($"POINTEUSE:{n}:UPDATE");
+                toSaveList.Add($"POINTEUSE:{n}:DELETE");
+            }
         }
 
         var repo = _uow.Repository<T_USER_PERMISSION>();
         var existing = await repo.ListAsync(p => p.IDRESPONSABLE == targetUserId, cancellationToken);
         repo.RemoveRange(existing);
 
-        foreach (var p in permissions.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct())
+        foreach (var p in toSaveList.Distinct())
         {
             await repo.AddAsync(new T_USER_PERMISSION
             {
@@ -406,3 +499,4 @@ public class AuthService
         await _uow.SaveChangesAsync(cancellationToken);
     }
 }
+

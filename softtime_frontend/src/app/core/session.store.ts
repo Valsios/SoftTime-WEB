@@ -46,10 +46,12 @@ export class SessionStore {
   }
 
   hasRight(droit: number): boolean {
+    if (this._session()?.roleId === 1) return true;
     return this.rights().includes(droit);
   }
 
   hasPermission(permissionCode?: string, fallbackDroit?: number): boolean {
+    if (this._session()?.roleId === 1) return true;
     if (!permissionCode) {
       return fallbackDroit ? this.hasRight(fallbackDroit) : true;
     }
