@@ -73,24 +73,37 @@ const DROIT_LABELS: Record<number, string> = {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
         gap: 16px;
-        margin-bottom: 28px;
+        margin-bottom: 32px;
       }
-      h3 { margin: 0 0 12px; font-size: 16px; }
+      h3 {
+        margin: 0 0 14px;
+        font-family: var(--font-heading);
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--navy-900);
+      }
       .dash-dl {
         margin: 0;
         display: grid;
         grid-template-columns: auto 1fr;
-        gap: 6px 16px;
+        gap: 8px 16px;
         font-size: 14px;
       }
-      .dash-dl dt { color: var(--text-muted); }
-      .dash-dl dd { margin: 0; font-weight: 600; }
+      .dash-dl dt { color: var(--text-muted); font-size: 13px; }
+      .dash-dl dd { margin: 0; font-weight: 600; color: var(--app-text); }
       .dash-badges { display: flex; flex-wrap: wrap; gap: 8px; }
-      .dash-section-title { font-size: 18px; margin: 0 0 14px; }
+      .dash-section-title {
+        font-family: var(--font-heading);
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--navy-950);
+        margin: 0 0 16px;
+      }
       .dash-links {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-        gap: 12px;
+        grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+        gap: 14px;
+        margin-bottom: 28px;
       }
       .dash-link {
         display: flex;
@@ -98,6 +111,15 @@ const DROIT_LABELS: Record<number, string> = {
         gap: 4px;
         text-decoration: none;
         color: inherit;
+        border-left: 3px solid transparent;
+        transition: all var(--t-fast) var(--ease);
+      }
+      .dash-link:hover {
+        border-left-color: var(--gold-400);
+      }
+      .dash-link strong {
+        font-size: 14px;
+        color: var(--navy-950);
       }
       .dash-link small { color: var(--text-muted); font-size: 12px; }
     `,

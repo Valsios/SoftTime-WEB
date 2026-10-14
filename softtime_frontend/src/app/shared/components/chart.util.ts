@@ -7,22 +7,18 @@
  * composants maison de `shared/components`.
  */
 export const CHART_COLORS = [
-  'var(--primary-500)',
-  'var(--accent-600)',
-  'var(--success)',
-  'var(--warning)',
-  'var(--danger)',
-  'var(--info)',
-  // Couleurs d'appoint : au-delà de 8 séries (beaucoup de branches/départements) la palette du
-  // thème s'épuise et deux secteurs voisins se retrouveraient de la même couleur.
-  '#6366f1',
-  '#0ea5e9',
-  '#14b8a6',
-  '#a855f7',
-  '#f43f5e',
-  '#84cc16',
-  'var(--primary-800)',
-  'var(--accent-900)',
+  '#2E427B', // Marine Softwell (navy-700)
+  '#AA9E39', // Or Softwell (gold-400)
+  '#047857', // Emerald-700 (Succès)
+  '#BC9C22', // Or chaud (complémentaire)
+  '#575D8F', // Ardoise (complémentaire)
+  '#B45309', // Amber-700 (Avertissement)
+  '#AEB091', // Sauge (complémentaire)
+  '#BE123C', // Rose-700 (Danger)
+  '#455D9C', // Navy-600
+  '#819AD6', // Navy-400
+  '#E1C340', // Or clair (gold-300)
+  '#18244F', // Marine profond (navy-900)
 ];
 
 /** Un point d'un graphique de répartition. */

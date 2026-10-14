@@ -59,26 +59,20 @@ import { SoftInput } from '../../shared/components/soft-input';
         display: grid;
         place-items: center;
         padding: 24px;
-        background: radial-gradient(
-            circle at 20% 20%,
-            rgba(37, 99, 235, 0.12),
-            transparent 45%
-          ),
-          radial-gradient(circle at 80% 80%, rgba(37, 99, 235, 0.08), transparent 45%),
-          var(--app-bg);
+        background: var(--app-bg);
       }
       .login__panel {
         width: 100%;
-        max-width: 400px;
+        max-width: 420px;
         background: var(--app-surface);
         border: 1px solid var(--app-border);
-        border-radius: var(--radius-2xl);
-        box-shadow: var(--shadow-lg);
-        padding: 34px 30px;
+        border-radius: var(--radius-xl);
+        box-shadow: var(--shadow-xl);
+        padding: 36px 32px;
       }
       .login__brand {
         text-align: center;
-        margin-bottom: 26px;
+        margin-bottom: 28px;
       }
       .login__logo {
         display: inline-block;
@@ -87,21 +81,25 @@ import { SoftInput } from '../../shared/components/soft-input';
         object-fit: contain;
       }
       .login__brand h1 {
-        margin: 14px 0 4px;
+        margin: 16px 0 4px;
+        font-family: var(--font-heading);
         font-size: 24px;
+        font-weight: 700;
+        color: var(--navy-950);
+        letter-spacing: -0.02em;
       }
       .login__brand p {
         margin: 0;
         color: var(--text-secondary);
-        font-size: 13px;
+        font-size: 13.5px;
       }
       form {
         display: flex;
         flex-direction: column;
-        gap: 16px;
+        gap: 18px;
       }
       .login__hint {
-        margin: 20px 0 0;
+        margin: 22px 0 0;
         text-align: center;
         font-size: 12px;
         color: var(--text-muted);

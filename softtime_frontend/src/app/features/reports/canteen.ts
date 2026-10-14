@@ -37,8 +37,8 @@ import { asRow, fmtDate } from '../../shared/utils/date';
     </soft-card>
   `,
   styles: [`
-    .section-title { font-size: 18px; margin: 0 0 14px; }
-    .muted { color: var(--soft-text-muted, #6b7280); margin: 0 0 14px; }
+    .section-title { font-family: var(--font-heading); font-size: 18px; font-weight: 600; color: var(--navy-950); margin: 0 0 14px; }
+    .muted { color: var(--text-muted); margin: 0 0 14px; font-size: 13.5px; }
   `],
 })
 export class CanteenPage {

@@ -57,8 +57,8 @@ import { asRow, fmtDate } from '../../shared/utils/date';
     </soft-modal>
   `,
   styles: [`.file-btn { cursor: pointer; } .form-grid { display: grid; gap: 14px; }
-    .pager { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
-    .pager-info { margin-right: auto; color: var(--soft-text-muted, #6b7280); font-size: 13px; }`],
+    .pager { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+    .pager-info { margin-right: auto; color: var(--text-muted); font-size: 13px; font-weight: 500; }`],
 })
 export class PunchesPage {
   private readonly svc = inject(PunchesService);
