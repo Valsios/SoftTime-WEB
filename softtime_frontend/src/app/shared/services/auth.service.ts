@@ -32,7 +32,7 @@ export class AuthService extends ApiService {
     );
   }
 
-  /** Installation vierge ? (aucun compte utilisateur) — appel anonyme. */
+  /** Installation vierge (aucun compte) : le client affiche l'écran de création de l'administrateur. */
   isFirstRun(): Observable<boolean> {
     return this.http.get<boolean>(this.url('/api/auth/is-first-run'));
   }

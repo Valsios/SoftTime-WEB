@@ -153,6 +153,10 @@ export interface PeriodRequest {
   to: string;
   branche?: string | null;
   departement?: string | null;
+  /** Numéro de page (1-based), uniquement pour les listes paginées. */
+  page?: number;
+  /** Taille de page, plafonnée à 100 par le serveur. */
+  pageSize?: number;
 }
 
 /** Période + pagination (listes massives : pointages, heures corrigées). */

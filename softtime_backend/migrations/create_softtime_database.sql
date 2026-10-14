@@ -1,4 +1,4 @@
-﻿/* =====================================================================================
+/* =====================================================================================
    SoftTime — Script de création d'une base SAINE (schéma + données de démarrage)
    -------------------------------------------------------------------------------------
    Cible        : SQL Server (2016+)
@@ -101,6 +101,19 @@ CREATE TABLE dbo.T_BDD_AUTORISE (
     IDBDD          int           NOT NULL,
     CONSTRAINT PK_T_BDD_AUTORISE PRIMARY KEY (IDBDDAUTORISE)
 );
+GO
+
+IF OBJECT_ID(N'dbo.T_USER_PERMISSION', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.T_USER_PERMISSION (
+        ID              int           IDENTITY(1,1) NOT NULL,
+        IDRESPONSABLE   decimal(18,0) NOT NULL,
+        PERMISSION_CODE nvarchar(128) NOT NULL,
+        IS_GRANTED      bit           NOT NULL CONSTRAINT DF_T_USER_PERMISSION_IS_GRANTED DEFAULT (1),
+        CONSTRAINT PK_T_USER_PERMISSION PRIMARY KEY (ID)
+    );
+    CREATE UNIQUE INDEX UX_T_USER_PERMISSION ON dbo.T_USER_PERMISSION (IDRESPONSABLE, PERMISSION_CODE);
+END;
 GO
 
 /* =====================================================================================

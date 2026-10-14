@@ -59,7 +59,9 @@ public class DashboardService
         if (cartes.Count == 0)
             return Vide(await BuildKpiAsync(sageDb, from, to, 0, VideMetrics, ct));
 
-        var cles = cartes.ToDictionary(c => Cle(c.SAGE_MATRICULE), c => c, StringComparer.OrdinalIgnoreCase);
+        var cles = cartes
+            .GroupBy(c => Cle(c.SAGE_MATRICULE), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
         var categorieParCle = cartes
             .GroupBy(c => Cle(c.SAGE_MATRICULE), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => LibelleCategorie(g.First(), categorieParCarte, categoriesParId),
