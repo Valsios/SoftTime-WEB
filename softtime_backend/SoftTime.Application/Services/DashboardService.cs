@@ -1,6 +1,7 @@
 using System.Globalization;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
+using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
 
@@ -19,11 +20,13 @@ public class DashboardService
 {
     private readonly IUnitOfWork _uow;
     private readonly TenantConnectionService _tenant;
+    private readonly SageLeaveCalendar _leaves;
 
-    public DashboardService(IUnitOfWork uow, TenantConnectionService tenant)
+    public DashboardService(IUnitOfWork uow, TenantConnectionService tenant, SageLeaveCalendar leaves)
     {
         _uow = uow;
         _tenant = tenant;
+        _leaves = leaves;
     }
 
     public async Task<DashboardStatsDto> GetStatsAsync(
@@ -65,6 +68,8 @@ public class DashboardService
             .Where(f => f.DATE.HasValue)
             .Select(f => f.DATE!.Value.Date)
             .ToHashSet();
+        // Congés SAGE du tenant, charges une seule fois pour toute la periode (LOT 9).
+        var congesParCle = await _leaves.LoadAsync(ct);
 
         var corrections = await _uow.Repository<T_HEURECORRIGER>().ListAsync(
             h => h.BDD_SAGE == sageDb && h.DATE_POINTAGE_IN >= from && h.DATE_POINTAGE_IN <= to, ct);
@@ -100,6 +105,7 @@ public class DashboardService
             var cle = Cle(carte.SAGE_MATRICULE);
             correctionsParCle.TryGetValue(cle, out var lignes);
             lignes ??= new List<T_HEURECORRIGER>();
+            var conges = congesParCle.TryGetValue(cle, out var joursConge) ? joursConge : new List<LeaveDay>();
 
             // Absences explicites : l'absence est portée par l'heure corrigée.
             foreach (var ligne in lignes.Where(h => h.ABSENCE_AM == true || h.ABSENCE_PM == true))
@@ -113,11 +119,12 @@ public class DashboardService
                          .Where(p => p.OffP != true && p.DateP.HasValue)
                          .Select(p => p.DateP!.Value.Date))
             {
-                if (EstNonTravaille(jour, feries))
+                // LOT 9 : un jour de conge SAGE n'est ni une presence theorique ni une absence, comme
+                // dans la validation semaine — il sort donc aussi du denominateur de l'absenteisme.
+                if (!DashboardRules.CompteDansPresenceTheorique(EstNonTravaille(jour, feries), LeaveRules.EstConge(conges, jour)))
                     continue;
                 joursPlanifies++;
-                // Jour planifié sans heure corrigée = absence probable (les congés SAGE ne sont pas
-                // encore exclus de ce compteur, cf. LOT 9).
+                // Jour planifie sans heure corrigee = absence probable.
                 if (!lignes.Any(h => h.DATE_POINTAGE_IN?.Date == jour))
                     absences.Add((cle, jour));
             }

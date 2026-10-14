@@ -33,8 +33,8 @@ function libelleCourt(periode: string): string {
  * Analyse de la période : KPI, évolution, répartition et assiduité.
  * Page distincte de l'accueil (`/dashboard`), qui reste le tableau de bord de session.
  *
- * Les absences « planifiées sans pointage » n'excluent pas encore les congés SAGE (LOT 9) :
- * le libellé le dit explicitement pour ne pas être lu comme une absence avérée.
+ * Les absences « planifiées sans pointage » excluent désormais les congés SAGE (LOT 9) : un jour de
+ * congé n'est ni une absence ni une présence théorique, exactement comme dans la validation semaine.
  * Les taux sont calculés côté serveur (`DashboardRules`) pour rester cohérents avec la paie.
  */
 @Component({

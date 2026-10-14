@@ -13,6 +13,15 @@ public static class DashboardRules
     public static decimal TauxAbsenteisme(int joursAbsence, int joursPlanifies) =>
         Pourcentage(joursAbsence, joursPlanifies);
 
+    /// <summary>
+    /// Un jour de planning compte-t-il dans la « présence théorique » (dénominateur du taux
+    /// d'absentéisme) ? Non pour un week-end / jour férié, et non plus pour un jour de congé SAGE :
+    /// un jour de congé n'est ni une absence ni une journée attendue — même règle que la validation
+    /// semaine (<c>OvertimeService.ComputeWeekAsync</c>).
+    /// </summary>
+    public static bool CompteDansPresenceTheorique(bool estNonTravaille, bool estConge)
+        => !estNonTravaille && !estConge;
+
     /// <summary>Jours travaillés sans retard / jours travaillés, en pourcentage.</summary>
     public static decimal TauxPonctualite(int joursTravailles, int joursRetard) =>
         Pourcentage(joursTravailles - joursRetard, joursTravailles);

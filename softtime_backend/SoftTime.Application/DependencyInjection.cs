@@ -16,6 +16,7 @@ public static class DependencyInjection
         services.AddScoped<AuthService>();
         services.AddScoped<CatalogService>();
         services.AddScoped<IExternalSourceService, ExternalSourceService>();
+        services.AddScoped<SageLeaveCalendar>();
         services.AddScoped<PlanningService>();
         services.AddScoped<TimekeepingService>();
         services.AddScoped<PunchProcessingService>();

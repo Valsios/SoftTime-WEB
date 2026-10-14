@@ -18,6 +18,16 @@ public class DashboardRulesTests
     }
 
     [Fact]
+    public void CompteDansPresenceTheorique_ExcludesHolidaysAndSageLeaves()
+    {
+        // Seul un jour réellement planifié et attendu alimente le dénominateur du taux d'absentéisme.
+        Assert.True(DashboardRules.CompteDansPresenceTheorique(estNonTravaille: false, estConge: false));
+        Assert.False(DashboardRules.CompteDansPresenceTheorique(estNonTravaille: true, estConge: false));
+        Assert.False(DashboardRules.CompteDansPresenceTheorique(estNonTravaille: false, estConge: true));
+        Assert.False(DashboardRules.CompteDansPresenceTheorique(estNonTravaille: true, estConge: true));
+    }
+
+    [Fact]
     public void TauxPonctualite_IsWorkedDaysWithoutLateOverWorkedDays()
     {
         // 20 jours travaillés dont 1 en retard ⇒ 19/20 = 95 %.

@@ -43,7 +43,7 @@ public sealed class SageContextFactory : ISageContextFactory
     public IDisposableSageContext Create(string connectionString)
     {
         var options = new DbContextOptionsBuilder<SageDbContext>()
-            .UseSqlServer(connectionString)
+            .UseSqlServer(connectionString, o => o.CommandTimeout(120))
             .Options;
         return new DisposableSageContext(new SageDbContext(options));
     }

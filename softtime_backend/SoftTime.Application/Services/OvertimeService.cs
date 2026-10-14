@@ -15,14 +15,16 @@ public class OvertimeService
     private readonly IExternalSourceService _externalSource;
     private readonly PayrollWriterResolver _payrollWriters;
     private readonly HistoryArchiveService _history;
+    private readonly SageLeaveCalendar _leaves;
 
-    public OvertimeService(IUnitOfWork uow, TenantConnectionService tenant, IExternalSourceService externalSource, PayrollWriterResolver payrollWriters, HistoryArchiveService history)
+    public OvertimeService(IUnitOfWork uow, TenantConnectionService tenant, IExternalSourceService externalSource, PayrollWriterResolver payrollWriters, HistoryArchiveService history, SageLeaveCalendar leaves)
     {
         _uow = uow;
         _tenant = tenant;
         _externalSource = externalSource;
         _payrollWriters = payrollWriters;
         _history = history;
+        _leaves = leaves;
     }
 
     public async Task<IReadOnlyList<WeeklyHsDto>> PreviewWeekAsync(PeriodRequest request, CancellationToken ct = default)
@@ -323,7 +325,7 @@ public class OvertimeService
         var cats = await _uow.Repository<T_CATEGORIE>().ListAsync(c => c.BDD_SAGE == _tenant.SageDb, ct);
         var affect = await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == _tenant.SageDb, ct);
         var tols = await _uow.Repository<T_TOLERANCE>().ListAsync(_ => true, ct);
-        var leaves = await LoadLeaveDaysAsync(ct);
+        var leaves = await _leaves.LoadAsync(ct);
         var hsRepo = _uow.Repository<T_HS_VALIDER>();
         var result = new List<WeeklyHsDto>();
         foreach (var card in cards)
@@ -475,40 +477,6 @@ public class OvertimeService
     }
 
     /// <summary>
-    /// Congés SAGE de tous les salariés du tenant, indexés par clé canonique de matricule
-    /// (les zéros de remplissage diffèrent entre les deux bases). Chargé en une seule passe :
-    /// le desktop mettait les congés en cache par matricule.
-    /// </summary>
-    private async Task<Dictionary<string, List<LeaveDay>>> LoadLeaveDaysAsync(CancellationToken ct)
-    {
-        var sageRow = await _tenant.GetSageRowAsync(ct);
-        var codes = (await _externalSource.GetEventsAsync(sageRow, ct))
-            .Select(e => e.Code)
-            .Where(LeaveRules.EstCodeConge)
-            .Select(c => c!)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var parCle = new Dictionary<string, List<LeaveDay>>(StringComparer.Ordinal);
-        if (codes.Count == 0)
-            return parCle;
-
-        var matriculeParNumSalarie = (await _externalSource.GetEmployeesAsync(sageRow, ct))
-            .Where(e => !string.IsNullOrEmpty(e.Matricule))
-            .GroupBy(e => e.EmployeeId)
-            .ToDictionary(g => g.Key, g => MatriculeIdentity.Cle(g.First().Matricule));
-
-        var parMatricule = (await _externalSource.GetEmployeeEventsAsync(sageRow, ct))
-            .Where(e => e.Code is not null && codes.Contains(e.Code.Trim())
-                        && e.Start.HasValue && e.End.HasValue
-                        && matriculeParNumSalarie.ContainsKey(e.EmployeeId))
-            .GroupBy(e => matriculeParNumSalarie[e.EmployeeId])
-            .ToDictionary(
-                g => g.Key,
-                g => LeaveRules.Expandre(g.Select(e =>
-                    new LeavePeriod(e.Start!.Value, e.End!.Value, e.Matin == true, e.ApresMidi == true, e.Code))).ToList());
-        return parMatricule;
-    }
-
-    /// <summary>
     /// Détail du calcul des heures supplémentaires d'un salarié : jours issus des heures corrigées,
     /// répartition hebdomadaire EXO/IMPO et allocation enregistrée. Reprend l'intention du
     /// <c>DetailHS</c> du desktop, qui lisait la table brute de la pointeuse et dont le
@@ -537,7 +505,7 @@ public class OvertimeService
             && h.DATE_POINTAGE_IN != null
             && h.DATE_POINTAGE_IN >= debut && h.DATE_POINTAGE_IN < fin.AddDays(1), ct);
         var feries = await _uow.Repository<T_FERIE>().ListAsync(f => f.BDD_SAGE == _tenant.SageDb, ct);
-        var conges = (await LoadLeaveDaysAsync(ct)).TryGetValue(cle, out var jours) ? jours : new List<LeaveDay>();
+        var conges = (await _leaves.LoadAsync(ct)).TryGetValue(cle, out var jours) ? jours : new List<LeaveDay>();
 
         var pause = TimeSpan.Zero;
         if (card is not null)
