@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, HostListener, inject, OnInit, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { SessionStore } from '../core/session.store';
 import { Droit } from '../core/rights';
@@ -17,7 +17,17 @@ import { ConfirmService } from '../core/confirm.service';
   imports: [RouterOutlet, RouterLink, RouterLinkActive, Icon],
   template: `
     <div class="shell" [class.shell--mini]="collapsed()">
-      <aside class="sidebar softtime-sidebar">
+      @if (isMobileViewport() && mobileMenuOpen()) {
+        <button class="mobile-nav-overlay" type="button" aria-label="Fermer le menu de navigation" (click)="closeMobileNavigation()"></button>
+      }
+
+      <aside
+        id="main-navigation"
+        class="sidebar softtime-sidebar"
+        [class.sidebar--mobile-open]="mobileMenuOpen()"
+        [attr.aria-hidden]="isMobileViewport() && !mobileMenuOpen() ? 'true' : null"
+        [attr.inert]="isMobileViewport() && !mobileMenuOpen() ? '' : null"
+      >
         <div class="sidebar__brand">
           <img class="sidebar__logo" src="assets/SoftTimeLogo.png" alt="Soft Time" />
           @if (!collapsed()) {
@@ -34,6 +44,7 @@ import { ConfirmService } from '../core/confirm.service';
             routerLinkActive="is-active"
             class="sidebar__item"
             [title]="'Tableau de bord'"
+            (click)="closeMobileNavigation()"
           >
             <app-icon name="home"></app-icon>
             @if (!collapsed()) {<span>Tableau de bord</span>}
@@ -48,6 +59,7 @@ import { ConfirmService } from '../core/confirm.service';
                   routerLinkActive="is-active"
                   class="sidebar__item"
                   [title]="item.label"
+                  (click)="closeMobileNavigation()"
                 >
                   <app-icon [name]="item.icon"></app-icon>
                   @if (!collapsed()) {<span>{{ item.label }}</span>}
@@ -60,9 +72,18 @@ import { ConfirmService } from '../core/confirm.service';
 
       <div class="main">
         <header class="topbar">
-          <button class="topbar__toggle" type="button" (click)="collapsed.set(!collapsed())">
+          <button
+            class="topbar__toggle"
+            type="button"
+            aria-controls="main-navigation"
+            [attr.aria-expanded]="isMobileViewport() ? mobileMenuOpen() : !collapsed()"
+            [attr.aria-label]="isMobileViewport() ? (mobileMenuOpen() ? 'Fermer le menu de navigation' : 'Ouvrir le menu de navigation') : 'Réduire ou développer le menu de navigation'"
+            (click)="toggleNavigation()"
+          >
             <app-icon name="grid" [size]="18"></app-icon>
           </button>
+
+          <img class="topbar__mobile-logo" src="assets/SoftTimeLogo.png" alt="Soft Time" />
 
           <div class="topbar__spacer"></div>
 
@@ -148,6 +169,7 @@ import { ConfirmService } from '../core/confirm.service';
         overflow-y: auto;
         overflow-x: hidden;
         border-right: 1px solid rgba(0, 0, 0, 0.15);
+        transition: transform var(--t-normal) var(--ease);
       }
       .sidebar__brand {
         display: flex;
@@ -252,6 +274,13 @@ import { ConfirmService } from '../core/confirm.service';
       .topbar__spacer {
         flex: 1;
       }
+      .topbar__mobile-logo {
+        display: none;
+        width: 28px;
+        height: 28px;
+        object-fit: contain;
+        flex: none;
+      }
       .topbar__toggle,
       .topbar__icon-btn {
         background: var(--app-surface);
@@ -340,7 +369,32 @@ import { ConfirmService } from '../core/confirm.service';
       }
       @media (max-width: 1023px) {
         .shell {
-          grid-template-columns: var(--sidebar-mini-width) 1fr;
+          grid-template-columns: 1fr;
+        }
+        .sidebar {
+          position: fixed;
+          inset: 0 auto 0 0;
+          z-index: var(--z-drawer);
+          width: min(320px, 86vw);
+          transform: translateX(-100%);
+          box-shadow: var(--shadow-xl);
+        }
+        .sidebar.sidebar--mobile-open {
+          transform: translateX(0);
+        }
+        .mobile-nav-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: var(--z-dropdown);
+          border: 0;
+          background: rgba(11, 19, 50, 0.5);
+          cursor: pointer;
+        }
+        .topbar {
+          position: sticky;
+          top: 0;
+          min-height: 56px;
+          padding: 0 16px;
         }
       }
       @media (max-width: 860px) {
@@ -357,13 +411,30 @@ import { ConfirmService } from '../core/confirm.service';
           gap: 8px;
           min-height: 56px;
         }
+        .topbar__mobile-logo {
+          display: block;
+        }
+        .topbar__spacer {
+          display: none;
+        }
         .topbar__company {
-          max-width: 120px;
+          flex: 1 1 0;
+          min-width: 0;
+          max-width: none;
           padding: 0 6px;
           height: 36px;
         }
+        .topbar__company app-icon {
+          display: none;
+        }
         .topbar__company select {
+          width: 100%;
+          min-width: 0;
           font-size: 12px;
+        }
+        .topbar__icon-btn:not(:last-child),
+        .topbar__user {
+          display: none;
         }
         .content {
           padding: 12px;
@@ -383,6 +454,8 @@ export class Shell implements OnInit {
   private readonly confirm = inject(ConfirmService);
 
   readonly collapsed = signal(false);
+  readonly mobileMenuOpen = signal(false);
+  readonly isMobileViewport = signal(false);
   readonly databases = computed(() =>
     this.session.databases().filter((db) => this.session.hasPermission(`SAGE:${db.nomBd}:READ`, Droit.Databases)),
   );
@@ -407,6 +480,7 @@ export class Shell implements OnInit {
   });
 
   ngOnInit(): void {
+    this.syncViewport();
     const pending = sessionStorage.getItem('st_pending_toast');
     if (pending) {
       sessionStorage.removeItem('st_pending_toast');
@@ -414,6 +488,29 @@ export class Shell implements OnInit {
     }
     this.auth.refreshMe().subscribe();
     this.pointeuseApi.refresh().subscribe();
+  }
+
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    this.syncViewport();
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    this.closeMobileNavigation();
+  }
+
+  toggleNavigation(): void {
+    if (this.isMobileViewport()) {
+      this.mobileMenuOpen.update((open) => !open);
+      if (this.mobileMenuOpen()) this.collapsed.set(false);
+      return;
+    }
+    this.collapsed.update((collapsed) => !collapsed);
+  }
+
+  closeMobileNavigation(): void {
+    if (this.isMobileViewport()) this.mobileMenuOpen.set(false);
   }
 
   onCompanyChange(event: Event): void {
@@ -447,5 +544,12 @@ export class Shell implements OnInit {
     if (!ok) return;
     this.auth.logout();
     this.router.navigate(['/login']);
+  }
+
+  private syncViewport(): void {
+    const mobile = window.matchMedia('(max-width: 1023px)').matches;
+    this.isMobileViewport.set(mobile);
+    if (mobile) this.collapsed.set(false);
+    else this.mobileMenuOpen.set(false);
   }
 }

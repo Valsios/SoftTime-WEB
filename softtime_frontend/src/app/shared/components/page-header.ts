@@ -6,10 +6,6 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
   template: `
     <div class="soft-page-header">
       <div>
-        <div class="soft-eyebrow">
-          <span class="soft-eyebrow-line"></span>
-          <span>{{ eyebrow() || 'CONSOLE DE GESTION' }}</span>
-        </div>
         <h1>{{ title() }}</h1>
         @if (subtitle()) {
           <p>{{ subtitle() }}</p>
@@ -24,5 +20,4 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 export class PageHeader {
   readonly title = input('');
   readonly subtitle = input('');
-  readonly eyebrow = input('');
 }

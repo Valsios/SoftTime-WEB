@@ -16,7 +16,10 @@ export interface TabItem {
           role="tab"
           class="soft-tabs__item"
           [class.is-active]="activeTab() === tab.id"
+          [attr.aria-selected]="activeTab() === tab.id"
+          [attr.tabindex]="activeTab() === tab.id ? 0 : -1"
           (click)="activeTab.set(tab.id)"
+          (keydown)="onKeydown($event, $index)"
         >
           {{ tab.label }}
         </button>
@@ -58,4 +61,20 @@ export interface TabItem {
 export class SoftTabs {
   readonly tabs = input<TabItem[]>([]);
   readonly activeTab = model('0');
+
+  onKeydown(event: KeyboardEvent, index: number): void {
+    const tabs = this.tabs();
+    if (!tabs.length) return;
+    let next = index;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (index + 1) % tabs.length;
+    else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (index - 1 + tabs.length) % tabs.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = tabs.length - 1;
+    else return;
+
+    event.preventDefault();
+    this.activeTab.set(tabs[next].id);
+    const tablist = (event.currentTarget as HTMLElement).parentElement;
+    tablist?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
+  }
 }

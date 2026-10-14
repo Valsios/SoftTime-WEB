@@ -150,7 +150,7 @@ function libelleCourt(periode: string): string {
         } @else if (axe() === 'departement') {
           <soft-bar-chart
             [items]="departementBars()"
-            color="var(--accent-600)"
+            color="var(--gold-warm)"
             [format]="formatCount"
           ></soft-bar-chart>
         } @else {
@@ -351,7 +351,7 @@ export class AnalyticsPage implements OnInit {
       { name: 'Heures travaillées', color: 'var(--primary-500)', values: stats.series.map((s) => s.heures) },
       {
         name: 'Heures supplémentaires',
-        color: 'var(--accent-600)',
+        color: 'var(--gold-warm)',
         values: stats.series.map((s) => s.heuresSupplementaires),
       },
     ];

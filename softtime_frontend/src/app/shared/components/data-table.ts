@@ -78,6 +78,45 @@ export interface Column {
         </table>
       </div>
 
+      <div class="soft-table-cards">
+        @for (row of paginatedRows(); track trackId(row, $index)) {
+          <article class="soft-table-card" [class.is-selected]="selectable() && isSelected(row)">
+            @if (selectable()) {
+              <label class="soft-table-card__select">
+                <input
+                  type="checkbox"
+                  [checked]="isSelected(row)"
+                  (change)="toggleRow(row)"
+                  [attr.aria-label]="'Sélectionner ' + rowKey(row)"
+                />
+                <span>Sélectionner</span>
+              </label>
+            }
+            @for (col of columns(); track col.key) {
+              <div class="soft-table-card__field">
+                <span>{{ col.label }}</span>
+                <strong [class.text-right]="col.align === 'right'" [class.text-center]="col.align === 'center'">
+                  {{ display(col, row) }}
+                </strong>
+              </div>
+            }
+            @if (actionsTpl(); as tpl) {
+              <div class="soft-table-card__actions">
+                <span>Actions</span>
+                <div>
+                  <ng-container
+                    [ngTemplateOutlet]="tpl"
+                    [ngTemplateOutletContext]="{ $implicit: row }"
+                  ></ng-container>
+                </div>
+              </div>
+            }
+          </article>
+        } @empty {
+          <p class="soft-table-card__empty">{{ emptyText() }}</p>
+        }
+      </div>
+
       @if (paginate() && rows().length > 0) {
         <div class="soft-pagination-wrap">
           <div class="soft-pagination-info">{{ rangeInfo() }}</div>
