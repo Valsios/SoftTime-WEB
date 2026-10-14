@@ -37,7 +37,7 @@ export class AuthService extends ApiService {
     return this.http.get<boolean>(this.url('/api/auth/is-first-run'));
   }
 
-  /** Crée le premier compte administrateur. Le serveur refuse dès qu'un compte existe. */
+  /** Crée le premier compte administrateur (refusé dès qu'un compte existe). */
   createAdmin(body: AdminSetupRequest): Observable<AdminSetupResult> {
     return this.http.post<AdminSetupResult>(this.url('/api/auth/create-admin'), body);
   }
