@@ -50,20 +50,35 @@ import { ConfirmService } from '../core/confirm.service';
             @if (!collapsed()) {<span>Tableau de bord</span>}
           </a>
 
-          @for (section of visibleSections(); track section.title) {
+          @for (section of visibleSections(); track section.title; let sectionIndex = $index) {
             <div class="sidebar__section">
-              @if (!collapsed()) {<span class="sidebar__section-title">{{ section.title }}</span>}
-              @for (item of section.items; track item.path) {
-                <a
-                  [routerLink]="item.path"
-                  routerLinkActive="is-active"
-                  class="sidebar__item"
-                  [title]="item.label"
-                  (click)="closeMobileNavigation()"
+              @if (!collapsed()) {
+                <button
+                  class="sidebar__section-toggle"
+                  type="button"
+                  [attr.aria-expanded]="isSectionExpanded(section.title)"
+                  [attr.aria-controls]="'navigation-section-' + sectionIndex"
+                  (click)="toggleSection(section.title)"
                 >
-                  <app-icon [name]="item.icon"></app-icon>
-                  @if (!collapsed()) {<span>{{ item.label }}</span>}
-                </a>
+                  <span class="sidebar__section-title">{{ section.title }}</span>
+                  <app-icon [name]="isSectionExpanded(section.title) ? 'chevron-up' : 'chevron-down'" [size]="16"></app-icon>
+                </button>
+              }
+              @if (collapsed() || isSectionExpanded(section.title)) {
+                <div class="sidebar__section-items" [id]="'navigation-section-' + sectionIndex">
+                  @for (item of section.items; track item.path) {
+                    <a
+                      [routerLink]="item.path"
+                      routerLinkActive="is-active"
+                      class="sidebar__item"
+                      [title]="item.label"
+                      (click)="closeMobileNavigation()"
+                    >
+                      <app-icon [name]="item.icon"></app-icon>
+                      @if (!collapsed()) {<span>{{ item.label }}</span>}
+                    </a>
+                  }
+                </div>
               }
             </div>
           }
@@ -215,13 +230,38 @@ import { ConfirmService } from '../core/confirm.service';
         flex-direction: column;
         gap: 3px;
       }
+      .sidebar__section-toggle {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 6px 12px 4px;
+        border: 0;
+        background: transparent;
+        color: var(--sidebar-text-muted);
+        cursor: pointer;
+        text-align: left;
+        border-radius: var(--radius-sm);
+      }
+      .sidebar__section-toggle:hover {
+        color: var(--sidebar-text);
+        background: var(--sidebar-hover);
+      }
+      .sidebar__section-toggle:focus-visible {
+        outline: 2px solid var(--gold-300);
+        outline-offset: 2px;
+      }
       .sidebar__section-title {
         font-size: 11px;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.08em;
-        color: var(--sidebar-text-muted);
-        padding: 6px 12px 4px;
+      }
+      .sidebar__section-items {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
       }
       .sidebar__item {
         display: flex;
@@ -456,6 +496,7 @@ export class Shell implements OnInit {
   readonly collapsed = signal(false);
   readonly mobileMenuOpen = signal(false);
   readonly isMobileViewport = signal(false);
+  readonly collapsedSections = signal<ReadonlySet<string>>(new Set());
   readonly databases = computed(() =>
     this.session.databases().filter((db) => this.session.hasPermission(`SAGE:${db.nomBd}:READ`, Droit.Databases)),
   );
@@ -511,6 +552,19 @@ export class Shell implements OnInit {
 
   closeMobileNavigation(): void {
     if (this.isMobileViewport()) this.mobileMenuOpen.set(false);
+  }
+
+  isSectionExpanded(title: string): boolean {
+    return !this.collapsedSections().has(title);
+  }
+
+  toggleSection(title: string): void {
+    this.collapsedSections.update((sections) => {
+      const next = new Set(sections);
+      if (next.has(title)) next.delete(title);
+      else next.add(title);
+      return next;
+    });
   }
 
   onCompanyChange(event: Event): void {
