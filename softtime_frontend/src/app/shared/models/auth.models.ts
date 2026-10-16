@@ -26,6 +26,7 @@ export interface LoginResponse {
   rights: number[];
   authorizedDatabases: SageDb[];
   permissions?: string[];
+  permissionsCustomized?: boolean;
 }
 
 export interface User {

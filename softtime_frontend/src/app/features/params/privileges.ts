@@ -1304,7 +1304,7 @@ export class PrivilegesPage implements OnInit {
         this.saving.set(false);
         this.isCustomized.set(true);
         if (currentSessionUser && currentSessionUser.userId === userId) {
-          this.session.setPermissions(perms);
+          this.session.setPermissions(perms, true);
           this.auth.refreshMe().subscribe();
         }
         this.toast.success('Permissions enregistrées avec succès.');

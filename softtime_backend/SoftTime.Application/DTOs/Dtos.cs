@@ -5,9 +5,9 @@ public record LoginRequest(string Login, string Password)
     public LoginRequest() : this(default!, default!) { }
 }
 
-public record LoginResponse(string Token, decimal UserId, string Login, string Nom, decimal RoleId, string? Matricule, IReadOnlyCollection<int> Rights, IReadOnlyCollection<SageDbDto> AuthorizedDatabases, IReadOnlyCollection<string>? Permissions = null)
+public record LoginResponse(string Token, decimal UserId, string Login, string Nom, decimal RoleId, string? Matricule, IReadOnlyCollection<int> Rights, IReadOnlyCollection<SageDbDto> AuthorizedDatabases, IReadOnlyCollection<string>? Permissions = null, bool PermissionsCustomized = false)
 {
-    public LoginResponse() : this(default!, default, default!, default!, default, default, default!, default!, null) { }
+    public LoginResponse() : this(default!, default, default!, default!, default, default, default!, default!, null, false) { }
 }
 
 public record UserDto(decimal Id, decimal RoleId, string Nom, string Login, string? Matricule, string? Password)

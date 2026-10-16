@@ -16,6 +16,7 @@ interface StoredSession {
   rights: number[];
   authorizedDatabases: SageDb[];
   permissions?: string[];
+  permissionsCustomized?: boolean;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -55,8 +56,9 @@ export class SessionStore {
     if (!permissionCode) {
       return fallbackDroit ? this.hasRight(fallbackDroit) : true;
     }
+    const session = this._session();
     const perms = this.permissions();
-    if (perms && perms.length > 0) {
+    if (session?.permissionsCustomized || perms.length > 0) {
       if (permissionCode === 'SAGE') {
         return perms.some((p) => p.startsWith('SAGE:'));
       }
@@ -78,6 +80,7 @@ export class SessionStore {
       rights: res.rights ?? [],
       authorizedDatabases: res.authorizedDatabases ?? [],
       permissions: res.permissions ?? [],
+      permissionsCustomized: res.permissionsCustomized ?? false,
     };
     this._token.set(res.token);
     this._session.set(session);
@@ -135,12 +138,13 @@ export class SessionStore {
     }
   }
 
-  setPermissions(permissions: string[]): void {
+  setPermissions(permissions: string[], permissionsCustomized?: boolean): void {
     const cur = this._session();
     if (!cur) return;
     const updated: StoredSession = {
       ...cur,
       permissions: permissions ?? [],
+      permissionsCustomized: permissionsCustomized ?? cur.permissionsCustomized ?? false,
     };
     this._session.set(updated);
     localStorage.setItem(SESSION_KEY, JSON.stringify(updated));

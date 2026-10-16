@@ -11,6 +11,7 @@ public class AuthService
 {
     /// <summary>Rôle d'administration attendu lors du démarrage initial (voir le script de base saine).</summary>
     public const string RoleAdministrateur = "Administrateur";
+    private const string EmptyPermissionsMarker = "__SOFTTIME_EMPTY_CUSTOM_PERMISSIONS__";
 
     private readonly IUnitOfWork _uow;
     private readonly ITokenService _tokens;
@@ -55,7 +56,10 @@ public class AuthService
             ? await _uow.Repository<T_BDD_SAGE>().ListAsync(_ => true, cancellationToken)
             : await _uow.Repository<T_BDD_SAGE>().ListAsync(s => sageIds.Contains(s.ID), cancellationToken);
         var detailed = await GetUserDetailedPermissionsAsync(user.IDRESPONSABLE, cancellationToken);
-        return new LoginResponse(token, user.IDRESPONSABLE, user.LOGIN ?? login, user.NOMRESPONSABLE ?? login, user.IDROLE, user.MATRICULE, rights, sages.Select(_mapper.Map<SageDbDto>).ToList(), detailed.GrantedPermissions);
+        var authorizedSages = detailed.IsCustomized
+            ? sages.Where(s => !string.IsNullOrWhiteSpace(s.NOM_BD) && detailed.GrantedPermissions.Contains($"SAGE:{s.NOM_BD}:READ")).ToList()
+            : sages;
+        return new LoginResponse(token, user.IDRESPONSABLE, user.LOGIN ?? login, user.NOMRESPONSABLE ?? login, user.IDROLE, user.MATRICULE, rights, authorizedSages.Select(_mapper.Map<SageDbDto>).ToList(), detailed.GrantedPermissions, detailed.IsCustomized);
     }
 
     public async Task<LoginResponse> GetMeAsync(decimal userId, CancellationToken cancellationToken = default)
@@ -77,7 +81,10 @@ public class AuthService
             ? await _uow.Repository<T_BDD_SAGE>().ListAsync(_ => true, cancellationToken)
             : await _uow.Repository<T_BDD_SAGE>().ListAsync(s => sageIds.Contains(s.ID), cancellationToken);
         var detailed = await GetUserDetailedPermissionsAsync(user.IDRESPONSABLE, cancellationToken);
-        return new LoginResponse(string.Empty, user.IDRESPONSABLE, user.LOGIN ?? string.Empty, user.NOMRESPONSABLE ?? string.Empty, user.IDROLE, user.MATRICULE, rights, sages.Select(_mapper.Map<SageDbDto>).ToList(), detailed.GrantedPermissions);
+        var authorizedSages = detailed.IsCustomized
+            ? sages.Where(s => !string.IsNullOrWhiteSpace(s.NOM_BD) && detailed.GrantedPermissions.Contains($"SAGE:{s.NOM_BD}:READ")).ToList()
+            : sages;
+        return new LoginResponse(string.Empty, user.IDRESPONSABLE, user.LOGIN ?? string.Empty, user.NOMRESPONSABLE ?? string.Empty, user.IDROLE, user.MATRICULE, rights, authorizedSages.Select(_mapper.Map<SageDbDto>).ToList(), detailed.GrantedPermissions, detailed.IsCustomized);
     }
 
     public async Task<UserDto> GetUserAsync(decimal id, CancellationToken cancellationToken = default)
@@ -393,7 +400,10 @@ public class AuthService
 
         if (customList.Count > 0)
         {
-            var perms = customList.Select(p => p.PERMISSION_CODE).ToList();
+            var perms = customList
+                .Where(p => p.PERMISSION_CODE != EmptyPermissionsMarker)
+                .Select(p => p.PERMISSION_CODE)
+                .ToList();
 
             if (isAdmin)
             {
@@ -401,28 +411,6 @@ public class AuthService
                 // même si une personnalisation partielle a été enregistrée.
                 perms.AddRange(defaults);
             }
-            else if (rights.Contains(Rights.Databases))
-            {
-                perms.Add("SAGE:CREATE");
-                perms.Add("POINTEUSE:CREATE");
-                foreach (var s in sageDbs)
-                {
-                    var n = s.NOM_BD ?? string.Empty;
-                    if (string.IsNullOrWhiteSpace(n)) continue;
-                    perms.Add($"SAGE:{n}:READ");
-                    perms.Add($"SAGE:{n}:UPDATE");
-                    perms.Add($"SAGE:{n}:DELETE");
-                }
-                foreach (var p in pointeuseDbs)
-                {
-                    var n = p.NOM_BD ?? string.Empty;
-                    if (string.IsNullOrWhiteSpace(n)) continue;
-                    perms.Add($"POINTEUSE:{n}:READ");
-                    perms.Add($"POINTEUSE:{n}:UPDATE");
-                    perms.Add($"POINTEUSE:{n}:DELETE");
-                }
-            }
-
             return new UserDetailedPermissionsDto(userId, perms.Distinct().ToList(), true);
         }
 
@@ -445,11 +433,11 @@ public class AuthService
             throw new InvalidOperationException("Un utilisateur ne peut pas modifier ses propres privilèges sans droit d'administration.");
         }
 
-        var targetPrivileges = await _uow.Repository<T_DROIT_ROLE>().ListAsync(p => p.IDROLE == target.IDROLE, cancellationToken);
-        var targetRights = targetPrivileges.Select(p => (int)p.IDDROIT).ToHashSet();
-        var targetIsAdmin = target.IDROLE == 1 || targetRights.Contains(Rights.Databases);
+        var targetIsAdmin = target.IDROLE == 1;
 
-        var toSaveList = permissions.Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
+        var toSaveList = permissions
+            .Where(p => !string.IsNullOrWhiteSpace(p) && p != EmptyPermissionsMarker)
+            .ToList();
 
         if (targetIsAdmin)
         {
@@ -492,6 +480,18 @@ public class AuthService
             {
                 IDRESPONSABLE = targetUserId,
                 PERMISSION_CODE = p.Trim(),
+                IS_GRANTED = true
+            }, cancellationToken);
+        }
+
+        // Une ligne sentinelle conserve l'intention "aucun privilège" : sans elle,
+        // l'absence de ligne serait interprétée comme un retour aux droits du rôle.
+        if (toSaveList.Count == 0)
+        {
+            await repo.AddAsync(new T_USER_PERMISSION
+            {
+                IDRESPONSABLE = targetUserId,
+                PERMISSION_CODE = EmptyPermissionsMarker,
                 IS_GRANTED = true
             }, cancellationToken);
         }
