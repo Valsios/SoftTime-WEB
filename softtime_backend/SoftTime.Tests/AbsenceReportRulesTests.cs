@@ -481,8 +481,37 @@ public class AbsenceReportRulesTests
             date);
 
         var row = Assert.Single(result);
-        Assert.Equal(" 00369 ", row.Matricule);
+        Assert.Equal("00369", row.Matricule);
         Assert.Equal("RECUP", row.Motif);
+    }
+
+    [Fact]
+    public void Calculer_CarteAvecEspacesDeFin_AfficheValeursSansEspaces()
+    {
+        // Carte avec NCHAR(10) espaces de fin sur matricule, nom, prénom, département
+        var date = new DateTime(2025, 11, 4);
+        var cartes = new[] { Carte(1, "03919     ", nom: "ANDRIANARISOA   ", prenom: "Jean Eddy   ", dep: "BR730   ") };
+        var conges = new Dictionary<string, List<LeaveDay>>
+        {
+            ["3919"] = new() { new LeaveDay(date, 1m, "0410") }
+        };
+
+        var result = AbsenceReportRules.Calculer(
+            Array.Empty<T_PLANNING_SAL>(),
+            cartes,
+            Array.Empty<T_HEURECORRIGER>(),
+            conges,
+            new HashSet<DateTime>(),
+            date,
+            date,
+            Today,
+            date);
+
+        var row = Assert.Single(result);
+        Assert.Equal("03919", row.Matricule);
+        Assert.Equal("ANDRIANARISOA", row.Nom);
+        Assert.Equal("Jean Eddy", row.Prenom);
+        Assert.Equal("BR730", row.Departement);
     }
 
     [Fact]

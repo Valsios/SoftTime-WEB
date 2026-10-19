@@ -57,9 +57,9 @@ public class ReportService
         var borneFinExclusive = finGenerale.AddDays(1);
 
         // 1. Cartes filtrées par tenant SAGE, plage de matricules (MatriculeRange) et Branche (C5)
-        var periodRequest = new PeriodRequest(filter.MatriculeFrom, filter.MatriculeTo, filter.From, filter.To, filter.Branche);
+        var periodRequest = new PeriodRequest(filter.MatriculeFrom?.Trim(), filter.MatriculeTo?.Trim(), filter.From, filter.To, filter.Branche);
         var cartes = (await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == sageDb, ct))
-            .Where(c => MatriculeRange.Contains(c.SAGE_MATRICULE, periodRequest))
+            .Where(c => MatriculeRange.Contains(c.SAGE_MATRICULE?.Trim(), periodRequest))
             .Where(c => string.IsNullOrWhiteSpace(filter.Branche)
                         || string.Equals(c.BRANCHE, filter.Branche, StringComparison.OrdinalIgnoreCase))
             .ToList();
