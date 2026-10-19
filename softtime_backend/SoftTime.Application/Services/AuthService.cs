@@ -1,6 +1,8 @@
 using AutoMapper;
+using Microsoft.AspNetCore.Identity;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
+using SoftTime.Application.Security;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain;
@@ -17,29 +19,80 @@ public class AuthService
     private readonly ITokenService _tokens;
     private readonly IMapper _mapper;
     private readonly IEmailService _email;
+    private readonly IPasswordHasher<T_RESPONSABLE> _passwordHasher;
 
-    public AuthService(IUnitOfWork uow, ITokenService tokens, IMapper mapper, IEmailService email)
+    public AuthService(
+        IUnitOfWork uow,
+        ITokenService tokens,
+        IMapper mapper,
+        IEmailService email,
+        IPasswordHasher<T_RESPONSABLE>? passwordHasher = null)
     {
         _uow = uow;
         _tokens = tokens;
         _mapper = mapper;
         _email = email;
+        _passwordHasher = passwordHasher ?? new PasswordHasher<T_RESPONSABLE>();
     }
 
     public async Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
     {
         var login = (request.Login ?? string.Empty).Trim();
         var password = request.Password ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(login) || string.IsNullOrEmpty(password))
+            throw new UnauthorizedAccessException("Identifiants invalides.");
+
         var users = await _uow.Repository<T_RESPONSABLE>().ListAsync(
-            u => u.LOGIN == login && u.PASSWORD == password, cancellationToken);
+            u => u.LOGIN == login, cancellationToken);
         if (users.Count == 0)
         {
             users = (await _uow.Repository<T_RESPONSABLE>().ListAsync(_ => true, cancellationToken))
-                .Where(u => string.Equals((u.LOGIN ?? string.Empty).Trim(), login, StringComparison.OrdinalIgnoreCase)
-                            && (u.PASSWORD ?? string.Empty) == password)
+                .Where(u => string.Equals((u.LOGIN ?? string.Empty).Trim(), login, StringComparison.OrdinalIgnoreCase))
                 .ToList();
         }
         var user = users.FirstOrDefault() ?? throw new UnauthorizedAccessException("Identifiants invalides.");
+
+        var passwordVerified = false;
+        var needsUpgrade = false;
+
+        if (!string.IsNullOrEmpty(user.PASSWORD))
+        {
+            try
+            {
+                var verifyResult = _passwordHasher.VerifyHashedPassword(user, user.PASSWORD, password);
+                if (verifyResult == PasswordVerificationResult.Success)
+                {
+                    passwordVerified = true;
+                }
+                else if (verifyResult == PasswordVerificationResult.SuccessRehashNeeded)
+                {
+                    passwordVerified = true;
+                    needsUpgrade = true;
+                }
+            }
+            catch
+            {
+                // FormatException if stored string is not valid Base64
+            }
+
+            if (!passwordVerified && PasswordSecurityHelper.IsPlainText(user.PASSWORD) && string.Equals(user.PASSWORD, password, StringComparison.Ordinal))
+            {
+                passwordVerified = true;
+                needsUpgrade = true;
+            }
+        }
+
+        if (!passwordVerified)
+            throw new UnauthorizedAccessException("Identifiants invalides.");
+
+        if (needsUpgrade)
+        {
+            user.PASSWORD = _passwordHasher.HashPassword(user, password);
+            _uow.Repository<T_RESPONSABLE>().Update(user);
+            await _uow.SaveChangesAsync(cancellationToken);
+        }
+
         var privileges = await _uow.Repository<T_DROIT_ROLE>().ListAsync(p => p.IDROLE == user.IDROLE, cancellationToken);
         var rights = privileges.Select(p => (int)p.IDDROIT).Distinct().ToList();
         var isAdmin = user.IDROLE == 1;
@@ -142,7 +195,7 @@ public class AuthService
             IDROLE = role.IDROLE,
             NOMRESPONSABLE = dto.Nom.Trim(),
             LOGIN = login,
-            PASSWORD = motDePasse,
+            PASSWORD = _passwordHasher.HashPassword(null!, motDePasse),
             EMAIL = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim()
         };
         await _uow.Repository<T_RESPONSABLE>().AddAsync(entity, cancellationToken);
@@ -179,12 +232,15 @@ public class AuthService
         var motDePasseModifie = false;
         if (dto.Id == 0)
         {
+            if (string.IsNullOrWhiteSpace(dto.Password))
+                throw new InvalidOperationException("Le mot de passe est requis pour un nouvel utilisateur.");
+
             entity = new T_RESPONSABLE
             {
                 IDROLE = dto.RoleId,
                 NOMRESPONSABLE = dto.Nom,
                 LOGIN = dto.Login,
-                PASSWORD = dto.Password ?? string.Empty,
+                PASSWORD = _passwordHasher.HashPassword(null!, dto.Password),
                 MATRICULE = dto.Matricule,
                 EMAIL = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim()
             };
@@ -194,14 +250,42 @@ public class AuthService
         {
             entity = await repo.GetByIdAsync(dto.Id, cancellationToken) ?? throw new KeyNotFoundException();
             loginModifie = !string.Equals((entity.LOGIN ?? string.Empty).Trim(), (dto.Login ?? string.Empty).Trim(), StringComparison.Ordinal);
-            motDePasseModifie = !string.IsNullOrWhiteSpace(dto.Password) && dto.Password != entity.PASSWORD;
+
+            if (!string.IsNullOrWhiteSpace(dto.Password))
+            {
+                var isSame = false;
+                if (!string.IsNullOrEmpty(entity.PASSWORD))
+                {
+                    try
+                    {
+                        var res = _passwordHasher.VerifyHashedPassword(entity, entity.PASSWORD, dto.Password);
+                        if (res == PasswordVerificationResult.Success)
+                            isSame = true;
+                    }
+                    catch
+                    {
+                        if (string.Equals(entity.PASSWORD, dto.Password, StringComparison.Ordinal))
+                            isSame = true;
+                    }
+                }
+
+                if (!isSame)
+                {
+                    motDePasseModifie = true;
+                    entity.PASSWORD = _passwordHasher.HashPassword(entity, dto.Password);
+                }
+                else if (!PasswordSecurityHelper.IsHashedPassword(entity.PASSWORD))
+                {
+                    // Plain-text legacy password matching the same password: upgrade to hash!
+                    entity.PASSWORD = _passwordHasher.HashPassword(entity, dto.Password);
+                }
+            }
+
             entity.IDROLE = dto.RoleId;
             entity.NOMRESPONSABLE = dto.Nom;
             entity.LOGIN = dto.Login;
             entity.MATRICULE = dto.Matricule;
             entity.EMAIL = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim();
-            if (motDePasseModifie)
-                entity.PASSWORD = dto.Password;
             repo.Update(entity);
         }
         await _uow.SaveChangesAsync(cancellationToken);
@@ -210,7 +294,7 @@ public class AuthService
         if (dto.Id == 0)
             await _email.SendUserCredentialsAsync(entity.EMAIL, entity.LOGIN, dto.Password, entity.NOMRESPONSABLE, null, cancellationToken);
         else if (loginModifie || motDePasseModifie)
-            await _email.SendUserUpdateAsync(entity.EMAIL, entity.LOGIN, dto.Password, entity.NOMRESPONSABLE, null, loginModifie, motDePasseModifie, cancellationToken);
+            await _email.SendUserUpdateAsync(entity.EMAIL, entity.LOGIN, motDePasseModifie ? dto.Password : null, entity.NOMRESPONSABLE, null, loginModifie, motDePasseModifie, cancellationToken);
 
         return new UserDto(entity.IDRESPONSABLE, entity.IDROLE, entity.NOMRESPONSABLE, entity.LOGIN, entity.MATRICULE, null) { Email = entity.EMAIL };
     }

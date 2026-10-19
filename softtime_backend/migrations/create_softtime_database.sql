@@ -852,9 +852,9 @@ SELECT d.IDDROIT, 1 FROM dbo.T_DROIT d;
 GO
 
 /*  15.3 Utilisateur de démarrage.
-    ⚠ Compte de BOOTSTRAP en clair (l'application compare PASSWORD en clair).
-    Connectez-vous puis CHANGEZ IMMÉDIATEMENT ce mot de passe (écran Utilisateurs).
-    Supprimez ce bloc si vous préférez créer le premier utilisateur vous-même. */
+    Compte de BOOTSTRAP (mot de passe initial 'admin', automatiquement migré en hachage sécurisé
+    PBKDF2 HMAC-SHA256 dès le premier démarrage de l'API via UserAccountConfiguration.MigrateLegacyPasswordsAsync
+    ou lors de la première connexion). Changez ensuite ce mot de passe via l'écran Utilisateurs. */
 IF NOT EXISTS (SELECT 1 FROM dbo.T_RESPONSABLE)
 BEGIN
     SET IDENTITY_INSERT dbo.T_RESPONSABLE ON;
