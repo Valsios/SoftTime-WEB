@@ -23,6 +23,26 @@ const REPORTS = [
   { id: 'heures-dimanche', label: 'Heures dimanche' },
 ] as const;
 
+const ABSENCE_COLUMNS: Column[] = [
+  { key: 'matricule', label: 'Matricule' },
+  { key: 'nom', label: 'Nom', format: (v: unknown) => String(v ?? '') },
+  { key: 'prenom', label: 'Prénom', format: (v: unknown) => String(v ?? '') },
+  { key: 'departement', label: 'Département', format: (v: unknown) => String(v ?? '') },
+  {
+    key: 'date',
+    label: 'Date',
+    format: (v: unknown) => (typeof v === 'string' ? fmtDate(v) : String(v ?? '')),
+  },
+  { key: 'periode', label: 'Période' },
+  {
+    key: 'dureeHeures',
+    label: 'Durée (h)',
+    format: (v: unknown) => (v != null && v !== '' ? `${v} h` : '-'),
+  },
+  { key: 'type', label: 'Type' },
+  { key: 'motif', label: 'Motif', format: (v: unknown) => String(v ?? '-') },
+];
+
 @Component({
   selector: 'app-reports',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -65,7 +85,11 @@ export class ReportsPage {
       next: (items) => {
         const rows = items as Record<string, unknown>[];
         this.rows.set(rows);
-        this.columns.set(this.inferColumns(rows));
+        if (this.reportType === 'absences') {
+          this.columns.set(ABSENCE_COLUMNS);
+        } else {
+          this.columns.set(this.inferColumns(rows));
+        }
         this.loading.set(false);
       },
       error: () => this.loading.set(false),

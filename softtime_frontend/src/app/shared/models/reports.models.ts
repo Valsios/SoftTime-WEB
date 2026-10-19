@@ -106,5 +106,18 @@ export interface ReportFilter {
   branche?: string | null;
 }
 
+export interface AbsenceReportRow {
+  matricule: string;
+  nom?: string | null;
+  prenom?: string | null;
+  departement?: string | null;
+  date: string;
+  periode: string;
+  dureeHeures?: number | null;
+  type: string;
+  motif?: string | null;
+}
+
 /** Generic report rows are returned as untyped records by the backend. */
 export type ReportRow = Record<string, unknown>;
+
