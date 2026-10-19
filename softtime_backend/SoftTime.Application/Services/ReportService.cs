@@ -111,7 +111,10 @@ public class ReportService
             .Where(p => idsalSet.Contains(p.IDSAL))
             .ToList();
 
-        // 6. Rapprochement et dédoublonnage pur via AbsenceReportRules
+        // 6. Définitions des shifts (pour identifier les shifts sans heures / repos)
+        var shifts = await _uow.Repository<T_PLANNING>().ListAsync(_ => true, ct);
+
+        // 7. Rapprochement et dédoublonnage pur via AbsenceReportRules
         return AbsenceReportRules.Calculer(
             plannings,
             cartes,
@@ -121,7 +124,8 @@ public class ReportService
             from,
             to,
             dateDuJour,
-            dernierJourTraite);
+            dernierJourTraite,
+            shifts);
     }
 
     public async Task<IReadOnlyList<object>> RetardsAsync(ReportFilter filter, CancellationToken ct = default)

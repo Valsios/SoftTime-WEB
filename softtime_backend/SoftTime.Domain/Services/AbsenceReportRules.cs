@@ -35,11 +35,18 @@ public static class AbsenceReportRules
         DateTime from,
         DateTime to,
         DateTime dateDuJour,
-        DateTime? dernierJourTraite)
+        DateTime? dernierJourTraite,
+        IReadOnlyList<T_PLANNING>? shifts = null)
     {
         var debut = from.Date;
         var finDemande = to.Date;
         var hier = dateDuJour.Date.AddDays(-1);
+
+        // Dictionnaire des shifts connus (pour distinguer les shifts trouvés sans heures / repos)
+        var shiftsConnus = shifts?
+            .Where(s => s.NoSHIFT.HasValue)
+            .GroupBy(s => s.NoSHIFT!.Value)
+            .ToDictionary(g => g.Key, g => g.First());
 
         // Plafond général : aucun jour futur, jamais après hier
         var finGenerale = finDemande < hier ? finDemande : hier;
@@ -256,18 +263,29 @@ public static class AbsenceReportRules
                     var aPointageOuCorrection = corrsParJour.ContainsKey(jour);
                     if (!aPointageOuCorrection)
                     {
-                        var dureeTheorique = CalculerDureeHeures(planDuJour);
-                        resultats.Add(new AbsenceReportRow(
-                            Matricule: matriculeAffiche,
-                            Nom: nomAffiche,
-                            Prenom: prenomAffiche,
-                            Departement: deptAffiche,
-                            Date: jour,
-                            Periode: "Journée",
-                            DureeHeures: dureeTheorique,
-                            Type: TypeNonJustifiee,
-                            Motif: null
-                        ));
+                        // Règle repos : si le planning référence un shift trouvé dont HA et HD sont NULL,
+                        // c'est un jour de repos planifié (ex: Pause) -> ne pas générer de ligne "Non justifiée".
+                        // Si le shift est introuvable dans T_PLANNING, la ligne est conservée (durée nulle).
+                        var estReposPlanifie = planDuJour.NoSHIFT.HasValue
+                            && shiftsConnus != null
+                            && shiftsConnus.TryGetValue(planDuJour.NoSHIFT.Value, out var defShift)
+                            && defShift.HA == null && defShift.HD == null;
+
+                        if (!estReposPlanifie)
+                        {
+                            var dureeTheorique = CalculerDureeHeures(planDuJour);
+                            resultats.Add(new AbsenceReportRow(
+                                Matricule: matriculeAffiche,
+                                Nom: nomAffiche,
+                                Prenom: prenomAffiche,
+                                Departement: deptAffiche,
+                                Date: jour,
+                                Periode: "Journée",
+                                DureeHeures: dureeTheorique,
+                                Type: TypeNonJustifiee,
+                                Motif: null
+                            ));
+                        }
                     }
                 }
             }
