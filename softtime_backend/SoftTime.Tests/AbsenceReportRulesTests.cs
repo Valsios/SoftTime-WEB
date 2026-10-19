@@ -666,4 +666,196 @@ public class AbsenceReportRulesTests
         var row = Assert.Single(result);
         Assert.Equal("001", row.Matricule);
     }
+
+    private static T_PLANNING_SAL PlanWithShift(int id, int idsal, DateTime date, int noShift, TimeSpan? ha = null, TimeSpan? hd = null, TimeSpan? pause = null, bool offP = false)
+        => new()
+        {
+            ID = id,
+            IDSAL = idsal,
+            NoSHIFT = noShift,
+            DateP = date,
+            HA = ha.HasValue ? date.Date.Add(ha.Value) : null,
+            HD = hd.HasValue ? date.Date.Add(hd.Value) : null,
+            Pause = pause,
+            OffP = offP
+        };
+
+    private static T_PLANNING ShiftDef(int noShift, string intitule, TimeSpan? ha = null, TimeSpan? hd = null)
+        => new()
+        {
+            IDPLANNING = noShift,
+            NoSHIFT = noShift,
+            Intitule = intitule,
+            HA = ha,
+            HD = hd
+        };
+
+    [Fact]
+    public void Calculer_ShiftSansHeures_AucunPointage_NeGenereAucuneLigne()
+    {
+        // (a) Shift 17 (Pause) avec HA/HD null dans T_PLANNING et aucun pointage -> jour de repos, aucune ligne
+        var date = new DateTime(2025, 11, 4); // Mardi ouvré
+        var cartes = new[] { Carte(1, "001") };
+        var shifts = new[] { ShiftDef(17, "Pause", null, null) };
+        var plannings = new[] { PlanWithShift(1, 1, date, 17, TimeSpan.Zero, TimeSpan.Zero) };
+
+        var result = AbsenceReportRules.Calculer(
+            plannings,
+            cartes,
+            Array.Empty<T_HEURECORRIGER>(),
+            new Dictionary<string, List<LeaveDay>>(),
+            new HashSet<DateTime>(),
+            date,
+            date,
+            Today,
+            date,
+            shifts);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void Calculer_ShiftSansHeures_CongeSageCeJour_LigneCongeSageConservee()
+    {
+        // (b) Shift 17 (Pause) avec congé SAGE -> la priorité 1 Congé SAGE prime et la ligne est conservée
+        var date = new DateTime(2025, 11, 4);
+        var cartes = new[] { Carte(1, "001") };
+        var shifts = new[] { ShiftDef(17, "Pause", null, null) };
+        var plannings = new[] { PlanWithShift(1, 1, date, 17, TimeSpan.Zero, TimeSpan.Zero) };
+        var conges = new Dictionary<string, List<LeaveDay>>
+        {
+            ["1"] = new() { new LeaveDay(date, 1m, "0410") }
+        };
+
+        var result = AbsenceReportRules.Calculer(
+            plannings,
+            cartes,
+            Array.Empty<T_HEURECORRIGER>(),
+            conges,
+            new HashSet<DateTime>(),
+            date,
+            date,
+            Today,
+            date,
+            shifts);
+
+        var row = Assert.Single(result);
+        Assert.Equal("Congé SAGE", row.Type);
+        Assert.Equal("0410", row.Motif);
+        Assert.Null(row.DureeHeures);
+    }
+
+    [Fact]
+    public void Calculer_ShiftNormal_AucunPointage_GenereNonJustifieeAvecDuree()
+    {
+        // (c) Shift 13 normal (06:00 à 18:00) avec aucun pointage -> Non justifiée avec 12h
+        var date = new DateTime(2025, 11, 4);
+        var cartes = new[] { Carte(1, "001") };
+        var shifts = new[] { ShiftDef(13, "Jour", TimeSpan.FromHours(6), TimeSpan.FromHours(18)) };
+        var plannings = new[] { PlanWithShift(1, 1, date, 13, TimeSpan.FromHours(6), TimeSpan.FromHours(18)) };
+
+        var result = AbsenceReportRules.Calculer(
+            plannings,
+            cartes,
+            Array.Empty<T_HEURECORRIGER>(),
+            new Dictionary<string, List<LeaveDay>>(),
+            new HashSet<DateTime>(),
+            date,
+            date,
+            Today,
+            date,
+            shifts);
+
+        var row = Assert.Single(result);
+        Assert.Equal("Non justifiée", row.Type);
+        Assert.Equal(12m, row.DureeHeures);
+    }
+
+    [Fact]
+    public void Calculer_ShiftIntrouvable_GenereNonJustifieeDureeNulle()
+    {
+        // (d) Shift 999 absent de T_PLANNING -> anomalie de données, ligne Non justifiée conservée avec durée nulle
+        var date = new DateTime(2025, 11, 4);
+        var cartes = new[] { Carte(1, "001") };
+        var shifts = new[] { ShiftDef(17, "Pause", null, null) }; // 999 n'y est pas
+        var plannings = new[] { PlanWithShift(1, 1, date, 999) };
+
+        var result = AbsenceReportRules.Calculer(
+            plannings,
+            cartes,
+            Array.Empty<T_HEURECORRIGER>(),
+            new Dictionary<string, List<LeaveDay>>(),
+            new HashSet<DateTime>(),
+            date,
+            date,
+            Today,
+            date,
+            shifts);
+
+        var row = Assert.Single(result);
+        Assert.Equal("Non justifiée", row.Type);
+        Assert.Null(row.DureeHeures);
+    }
+
+    [Fact]
+    public void Calculer_ShiftSansHeures_AvecPointage_NeGenereAucuneLigne()
+    {
+        // (e) Salarié qui a pointé un jour de Pause -> pas d'absence
+        var date = new DateTime(2025, 11, 4);
+        var cartes = new[] { Carte(1, "001") };
+        var shifts = new[] { ShiftDef(17, "Pause", null, null) };
+        var plannings = new[] { PlanWithShift(1, 1, date, 17, TimeSpan.Zero, TimeSpan.Zero) };
+        var corrections = new[] { Corr(1, "001", date) };
+
+        var result = AbsenceReportRules.Calculer(
+            plannings,
+            cartes,
+            corrections,
+            new Dictionary<string, List<LeaveDay>>(),
+            new HashSet<DateTime>(),
+            date,
+            date,
+            Today,
+            date,
+            shifts);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void Calculer_SalariéAlternantPauseEtTravail_SeulLeJourDeTravailEstCompteEnNonJustifiee()
+    {
+        // (f) Jour 1 : Shift 13 (travail) non pointé -> Non justifiée
+        //     Jour 2 : Shift 17 (Pause) non pointé -> pas d'absence (repos)
+        var jTravail = new DateTime(2025, 11, 4);
+        var jPause = new DateTime(2025, 11, 5);
+        var cartes = new[] { Carte(1, "001") };
+        var shifts = new[]
+        {
+            ShiftDef(13, "Jour", TimeSpan.FromHours(6), TimeSpan.FromHours(18)),
+            ShiftDef(17, "Pause", null, null)
+        };
+        var plannings = new[]
+        {
+            PlanWithShift(1, 1, jTravail, 13, TimeSpan.FromHours(6), TimeSpan.FromHours(18)),
+            PlanWithShift(2, 1, jPause, 17, TimeSpan.Zero, TimeSpan.Zero)
+        };
+
+        var result = AbsenceReportRules.Calculer(
+            plannings,
+            cartes,
+            Array.Empty<T_HEURECORRIGER>(),
+            new Dictionary<string, List<LeaveDay>>(),
+            new HashSet<DateTime>(),
+            jTravail,
+            jPause,
+            Today,
+            jPause,
+            shifts);
+
+        var row = Assert.Single(result);
+        Assert.Equal(jTravail, row.Date);
+        Assert.Equal("Non justifiée", row.Type);
+        Assert.Equal(12m, row.DureeHeures);
+    }
 }
