@@ -52,36 +52,61 @@ public static class AbsenceReportRules
             ? (finGenerale < dernierJourTraite.Value.Date ? finGenerale : dernierJourTraite.Value.Date)
             : null;
 
-        // Indexation des salariés filtrés par clé canonique
+        // C11 : Toutes les cartes de même clé matricule sont mappées par leur IDSAL
+        var cleParIdSal = new Dictionary<int, string>();
         var cartesParCle = new Dictionary<string, T_CARDPAIE>(StringComparer.OrdinalIgnoreCase);
-        var cartesParId = new Dictionary<int, T_CARDPAIE>();
+
         foreach (var carte in cartes)
         {
             var cle = MatriculeIdentity.Cle(carte.SAGE_MATRICULE);
-            if (!string.IsNullOrEmpty(cle) && !cartesParCle.ContainsKey(cle))
+            if (string.IsNullOrEmpty(cle))
+                continue;
+
+            cleParIdSal[carte.ID] = cle;
+            if (!cartesParCle.ContainsKey(cle))
                 cartesParCle[cle] = carte;
-            cartesParId[carte.ID] = carte;
         }
 
         if (cartesParCle.Count == 0)
             return Array.Empty<AbsenceReportRow>();
 
-        // Plannings indexés par (Cle, Date) pour les salariés retenus
+        // C11 : Plannings de TOUTES les cartes de même clé matricule pris en compte.
+        // Si deux plannings tombent le même (clé, jour), conservation déterministe du plus petit ID.
         var planningsParCleEtDate = new Dictionary<(string Cle, DateTime Date), T_PLANNING_SAL>();
         foreach (var p in plannings)
         {
             if (p.DateP is not DateTime dateP || p.OffP == true)
                 continue;
-            if (!cartesParId.TryGetValue(p.IDSAL, out var carte))
-                continue;
-            var cle = MatriculeIdentity.Cle(carte.SAGE_MATRICULE);
-            if (string.IsNullOrEmpty(cle))
+            if (!cleParIdSal.TryGetValue(p.IDSAL, out var cle))
                 continue;
 
             var jour = dateP.Date;
             if (jour >= debut && jour <= finGenerale)
             {
-                planningsParCleEtDate[(cle, jour)] = p;
+                var key = (cle, jour);
+                if (!planningsParCleEtDate.TryGetValue(key, out var existant) || p.ID < existant.ID)
+                {
+                    planningsParCleEtDate[key] = p;
+                }
+            }
+        }
+
+        // C10 (PERFORMANCE) : Dictionnaire clé-matricule -> dates planifiées précalculé UNE fois avant la boucle
+        var datesPlanifieesParCle = new Dictionary<string, List<DateTime>>(StringComparer.OrdinalIgnoreCase);
+        if (finNonJustifiee.HasValue)
+        {
+            foreach (var kvp in planningsParCleEtDate)
+            {
+                var (cle, jour) = kvp.Key;
+                if (jour >= debut && jour <= finNonJustifiee.Value)
+                {
+                    if (!datesPlanifieesParCle.TryGetValue(cle, out var liste))
+                    {
+                        liste = new List<DateTime>();
+                        datesPlanifieesParCle[cle] = liste;
+                    }
+                    liste.Add(jour);
+                }
             }
         }
 
@@ -107,12 +132,22 @@ public static class AbsenceReportRules
                 .GroupBy(h => h.DATE_POINTAGE_IN!.Value.Date)
                 .ToDictionary(g => g.Key, g => g.ToList());
 
-            // Congés SAGE du salarié
+            // Congés SAGE du salarié (C12 : gestion de plusieurs LeaveDay le même jour)
             congesParCle.TryGetValue(cle, out var congesSalarie);
             congesSalarie ??= new List<LeaveDay>();
             var congesParJour = congesSalarie
                 .GroupBy(c => c.Date.Date)
-                .ToDictionary(g => g.Key, g => g.First());
+                .ToDictionary(
+                    g => g.Key,
+                    g =>
+                    {
+                        var valeurTotale = Math.Min(1m, g.Sum(c => c.Valeur));
+                        var codes = g.Select(c => c.Code?.Trim())
+                            .Where(c => !string.IsNullOrEmpty(c))
+                            .Distinct(StringComparer.OrdinalIgnoreCase);
+                        var motif = string.Join(", ", codes);
+                        return (Valeur: valeurTotale, Motif: string.IsNullOrEmpty(motif) ? null : motif);
+                    });
 
             // Dates candidates pour ce salarié
             var datesCandidates = new HashSet<DateTime>();
@@ -136,18 +171,11 @@ public static class AbsenceReportRules
                 }
             }
 
-            // 3. Plannings du salarié dans [debut, finNonJustifiee] si finNonJustifiee est active
-            if (finNonJustifiee.HasValue && debut <= finNonJustifiee.Value)
+            // 3. Plannings du salarié dans [debut, finNonJustifiee] via dictionnaire précalculé (C10)
+            if (datesPlanifieesParCle.TryGetValue(cle, out var datesPlan))
             {
-                foreach (var p in plannings)
-                {
-                    if (p.IDSAL == carte.ID && p.DateP.HasValue && p.OffP != true)
-                    {
-                        var j = p.DateP.Value.Date;
-                        if (j >= debut && j <= finNonJustifiee.Value)
-                            datesCandidates.Add(j);
-                    }
-                }
+                foreach (var j in datesPlan)
+                    datesCandidates.Add(j);
             }
 
             foreach (var jour in datesCandidates.OrderBy(d => d))
@@ -158,12 +186,12 @@ public static class AbsenceReportRules
 
                 planningsParCleEtDate.TryGetValue((cle, jour), out var planDuJour);
 
-                // Priorité 1 : Congé SAGE (C3 : jour <= finGenerale)
+                // Priorité 1 : Congé SAGE (C3 : jour <= finGenerale ; C12 : somme des valeurs)
                 if (congesParJour.TryGetValue(jour, out var conge))
                 {
-                    var periode = conge.Valeur < 1m ? "Demi-journée" : "Journée";
+                    var periode = conge.Valeur >= 1m ? "Journée" : "Demi-journée";
                     var dureeTheorique = CalculerDureeHeures(planDuJour);
-                    if (dureeTheorique.HasValue && conge.Valeur < 1m)
+                    if (dureeTheorique.HasValue)
                     {
                         dureeTheorique = Math.Round(dureeTheorique.Value * conge.Valeur, 2);
                     }
@@ -177,18 +205,17 @@ public static class AbsenceReportRules
                         Periode: periode,
                         DureeHeures: dureeTheorique,
                         Type: TypeCongeSage,
-                        Motif: conge.Code
+                        Motif: conge.Motif
                     ));
                     continue;
                 }
 
-                // Priorité 2 : Arbitrée GTA (C3 : jour <= finGenerale)
+                // Priorité 2 : Arbitrée GTA (C3 : jour <= finGenerale ; C4 : périodes AM/PM)
                 if (corrsParJour.TryGetValue(jour, out var corrsDuJour))
                 {
                     var arb = corrsDuJour.FirstOrDefault(h => h.ABSENCE_AM == true || h.ABSENCE_PM == true);
                     if (arb != null)
                     {
-                        // C4 : Période d'une absence arbitrée
                         string periode;
                         if (arb.ABSENCE_AM == true && arb.ABSENCE_PM == true)
                             periode = "Journée";
