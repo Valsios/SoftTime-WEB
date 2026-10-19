@@ -122,7 +122,10 @@ public static class AbsenceReportRules
         {
             var cle = kvp.Key;
             var carte = kvp.Value;
-            var matriculeAffiche = !string.IsNullOrWhiteSpace(carte.SAGE_MATRICULE) ? carte.SAGE_MATRICULE : cle;
+            var matriculeAffiche = !string.IsNullOrWhiteSpace(carte.SAGE_MATRICULE) ? carte.SAGE_MATRICULE.Trim() : cle;
+            var nomAffiche = carte.SAGE_NOM?.Trim();
+            var prenomAffiche = carte.SAGE_PRENOM?.Trim();
+            var deptAffiche = carte.DEPARTEMENT?.Trim();
 
             // Corrections du salarié
             correctionsParCle.TryGetValue(cle, out var corrsSalarie);
@@ -198,9 +201,9 @@ public static class AbsenceReportRules
 
                     resultats.Add(new AbsenceReportRow(
                         Matricule: matriculeAffiche,
-                        Nom: carte.SAGE_NOM,
-                        Prenom: carte.SAGE_PRENOM,
-                        Departement: carte.DEPARTEMENT,
+                        Nom: nomAffiche,
+                        Prenom: prenomAffiche,
+                        Departement: deptAffiche,
                         Date: jour,
                         Periode: periode,
                         DureeHeures: dureeTheorique,
@@ -234,9 +237,9 @@ public static class AbsenceReportRules
 
                         resultats.Add(new AbsenceReportRow(
                             Matricule: matriculeAffiche,
-                            Nom: carte.SAGE_NOM,
-                            Prenom: carte.SAGE_PRENOM,
-                            Departement: carte.DEPARTEMENT,
+                            Nom: nomAffiche,
+                            Prenom: prenomAffiche,
+                            Departement: deptAffiche,
                             Date: jour,
                             Periode: periode,
                             DureeHeures: dureeTheorique,
@@ -256,9 +259,9 @@ public static class AbsenceReportRules
                         var dureeTheorique = CalculerDureeHeures(planDuJour);
                         resultats.Add(new AbsenceReportRow(
                             Matricule: matriculeAffiche,
-                            Nom: carte.SAGE_NOM,
-                            Prenom: carte.SAGE_PRENOM,
-                            Departement: carte.DEPARTEMENT,
+                            Nom: nomAffiche,
+                            Prenom: prenomAffiche,
+                            Departement: deptAffiche,
                             Date: jour,
                             Periode: "Journée",
                             DureeHeures: dureeTheorique,
