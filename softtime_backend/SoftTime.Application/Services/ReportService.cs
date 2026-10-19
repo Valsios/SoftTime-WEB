@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using Microsoft.Extensions.Logging;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
@@ -13,12 +14,21 @@ public class ReportService
     private readonly IUnitOfWork _uow;
     private readonly TenantConnectionService _tenant;
     private readonly IExternalSourceService _externalSource;
+    private readonly SageLeaveCalendar _leaves;
+    private readonly ILogger<ReportService> _logger;
 
-    public ReportService(IUnitOfWork uow, TenantConnectionService tenant, IExternalSourceService externalSource)
+    public ReportService(
+        IUnitOfWork uow,
+        TenantConnectionService tenant,
+        IExternalSourceService externalSource,
+        SageLeaveCalendar leaves,
+        ILogger<ReportService> logger)
     {
         _uow = uow;
         _tenant = tenant;
         _externalSource = externalSource;
+        _leaves = leaves;
+        _logger = logger;
     }
 
     // ---------------------------------------------------------------- États (lecture paginée)
@@ -48,27 +58,105 @@ public class ReportService
     }
 
     /// <summary>
-    /// État absences : complet + écriture des tables d'impression (<c>T_impr_ABS</c>) pour
-    /// l'export/impression. Le filtre week-end est appliqué avant l'écriture.
+    /// État absences : croisement planning / corrections / congés SAGE / fériés.
+    /// Retourne des <see cref="AbsenceReportRow"/> calculés par <see cref="AbsenceReportRules"/>.
     /// </summary>
-    public async Task<IReadOnlyList<object>> AbsencesAsync(ReportFilter filter, CancellationToken ct = default)
+    public async Task<IReadOnlyList<AbsenceReportRow>> AbsencesAsync(ReportFilter filter, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var list = await BuildAbsencesAsync(filter, ct);
-        await WriteAbsencesPrintAsync(list, ct);
-        return list.Select(ToAbsenceRow).ToList();
+        var sageDb = _tenant.SageDb;
+        var from = filter.From.Date;
+        var to = filter.To.Date;
+        var dateDuJour = DateTime.Today;
+        var hier = dateDuJour.AddDays(-1);
+        var finGenerale = to < hier ? to : hier;
+
+        if (from > finGenerale)
+            return Array.Empty<AbsenceReportRow>();
+
+        var borneFinExclusive = finGenerale.AddDays(1);
+
+        // 1. Cartes filtrées par tenant SAGE, plage de matricules (MatriculeRange) et Branche (C5)
+        var periodRequest = new PeriodRequest(filter.MatriculeFrom?.Trim(), filter.MatriculeTo?.Trim(), filter.From, filter.To, filter.Branche);
+        var cartes = (await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == sageDb, ct))
+            .Where(c => MatriculeRange.Contains(c.SAGE_MATRICULE?.Trim(), periodRequest))
+            .Where(c => string.IsNullOrWhiteSpace(filter.Branche)
+                        || string.Equals(c.BRANCHE, filter.Branche, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (cartes.Count == 0)
+            return Array.Empty<AbsenceReportRow>();
+
+        var idsalSet = cartes.Select(c => c.ID).ToHashSet();
+        var clesCartes = cartes
+            .Select(c => MatriculeIdentity.Cle(c.SAGE_MATRICULE))
+            .Where(c => !string.IsNullOrEmpty(c))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // 2. Fériés de la base SAGE
+        var feries = (await _uow.Repository<T_FERIE>().ListAsync(f => f.BDD_SAGE == sageDb, ct))
+            .Where(f => f.DATE.HasValue)
+            .Select(f => f.DATE!.Value.Date)
+            .ToHashSet();
+
+        // 3. Congés SAGE chargés une seule fois pour le tenant (C6 : log warning si indisponible)
+        Dictionary<string, List<LeaveDay>> conges = new(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            conges = await _leaves.LoadAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Impossible de charger les congés SAGE pour le rapport d'absence (base: {SageDb}).", sageDb);
+        }
+
+        // 4. Corrections de la plage [From, finGenerale] restreintes aux salariés retenus (C5)
+        var corrections = (await _uow.Repository<T_HEURECORRIGER>().ListAsync(h =>
+            h.BDD_SAGE == sageDb
+            && h.DATE_POINTAGE_IN >= from && h.DATE_POINTAGE_IN < borneFinExclusive, ct))
+            .Where(h => clesCartes.Contains(MatriculeIdentity.Cle(h.MATRICULE_SAGE)))
+            .ToList();
+
+        // C2 : dernierJourTraite = max des dates lues dans [From, finGenerale] (null si aucune)
+        DateTime? dernierJourTraite = corrections
+            .Where(h => h.DATE_POINTAGE_IN.HasValue)
+            .Select(h => (DateTime?)h.DATE_POINTAGE_IN!.Value.Date)
+            .Max();
+
+        // 5. Plannings de la plage [From, finGenerale] restreints aux salariés retenus (C5)
+        var plannings = (await _uow.Repository<T_PLANNING_SAL>().ListAsync(p =>
+            p.BDD_SAGE == sageDb
+            && p.DateP >= from && p.DateP < borneFinExclusive
+            && p.OffP != true, ct))
+            .Where(p => idsalSet.Contains(p.IDSAL))
+            .ToList();
+
+        // 6. Définitions des shifts (pour identifier les shifts sans heures / repos)
+        var shifts = await _uow.Repository<T_PLANNING>().ListAsync(_ => true, ct);
+
+        // 7. Rapprochement et dédoublonnage pur via AbsenceReportRules
+        return AbsenceReportRules.Calculer(
+            plannings,
+            cartes,
+            corrections,
+            conges,
+            feries,
+            from,
+            to,
+            dateDuJour,
+            dernierJourTraite,
+            shifts);
     }
 
     /// <summary>
-    /// État absences paginé. Ne réécrit <b>pas</b> <c>T_impr_ABS</c> : la lecture d'une page ne doit
-    /// pas déclencher d'écriture. Le filtre week-end est appliqué côté serveur avant le découpage.
+    /// État absences paginé. Délègue au calcul complet puis découpe en mémoire.
+    /// TODO (phase adaptation) : remplacer par un vrai découpage SQL sur AbsenceReportRules.
     /// </summary>
     public async Task<PagedResult<object>> AbsencesPagedAsync(
         ReportFilter filter, int? page, int? pageSize, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var list = await BuildAbsencesAsync(filter, ct);
-        var rows = list.Select(ToAbsenceRow).ToList();
+        var rows = (await AbsencesAsync(filter, ct)).Cast<object>().ToList();
         return PagedLists.Page(rows, page, pageSize);
     }
 
@@ -275,45 +363,6 @@ public class ReportService
         return h => h.BDD_SAGE == sageDb && h.Date_Dim >= from && h.Date_Dim <= to;
     }
 
-    private async Task<IReadOnlyList<T_HEURECORRIGER>> BuildAbsencesAsync(ReportFilter filter, CancellationToken ct)
-    {
-        var sageDb = _tenant.SageDb;
-        var from = filter.From;
-        var to = filter.To;
-        var list = await _uow.Repository<T_HEURECORRIGER>().ListAsync(
-            h => h.BDD_SAGE == sageDb
-                 && h.VALIDER_CORRECTION == true
-                 && (h.ABSENCE_AM == true || h.ABSENCE_PM == true)
-                 && h.DATE_POINTAGE_IN >= from
-                 && h.DATE_POINTAGE_IN <= to, ct);
-        return list
-            .Where(h => h.DATE_POINTAGE_IN.HasValue
-                        && h.DATE_POINTAGE_IN.Value.DayOfWeek is not DayOfWeek.Saturday and not DayOfWeek.Sunday)
-            .ToList();
-    }
-
-    private async Task WriteAbsencesPrintAsync(IReadOnlyList<T_HEURECORRIGER> list, CancellationToken ct)
-    {
-        var print = _uow.Repository<T_impr_ABS>();
-        var old = await print.ListAsync(_ => true, ct);
-        print.RemoveRange(old);
-        foreach (var h in list)
-        {
-            var d = h.DATE_POINTAGE_IN!.Value;
-            await print.AddAsync(new T_impr_ABS
-            {
-                BDD_SAGE = _tenant.SageDb,
-                BDD_POINTEUSE = _tenant.PointeuseDb,
-                MATRICULES = h.MATRICULE_SAGE,
-                DATE_POINTAGE = d.ToString("dd/MM/yyyy"),
-                ABSENCE_AM = h.ABSENCE_AM,
-                ABSENCE_PM = h.ABSENCE_PM,
-                INTITULE_ABS = h.INTITULE_ABSENCE
-            }, ct);
-        }
-        await _uow.SaveChangesAsync(ct);
-    }
-
     private async Task WriteRetardsPrintAsync(IReadOnlyList<T_HEURECORRIGER> list, CancellationToken ct)
     {
         var print = _uow.Repository<T_impr_RET>();
@@ -338,15 +387,6 @@ public class ReportService
         a.ID, a.MATRICULE_SAGE, a.DATE_POINTAGE_IN, a.DATE_POINTAGE_OUT, a.HENTREE, a.HPS, a.HPE, a.HSORTIE,
         a.ABSENCE_AM, a.ABSENCE_PM, a.INTITULE_ABSENCE, a.RETARD, a.FERIER, a.FERIER_AM, a.FERIER_PM,
         a.VALIDER_CORRECTION, a.VALIDER_HS, a.HS, a.M_NUIT, a.M_DIMANCHE, a.M_FERIES);
-
-    private static object ToAbsenceRow(T_HEURECORRIGER h) => new
-    {
-        h.MATRICULE_SAGE,
-        Date = h.DATE_POINTAGE_IN!.Value,
-        h.ABSENCE_AM,
-        h.ABSENCE_PM,
-        h.INTITULE_ABSENCE
-    };
 
     private static object ToRetardRow(T_HEURECORRIGER h) => new
     {
