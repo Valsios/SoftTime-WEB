@@ -4,6 +4,7 @@ import { ApiService } from '../../core/api';
 import {
   AuditConfig,
   AuditEvent,
+  AuditTypeOption,
   Canteen,
   CanteenAnomaly,
   ExtrasSyncResult,
@@ -87,6 +88,9 @@ export class TravelService extends ApiService {
 
 @Injectable({ providedIn: 'root' })
 export class AuditService extends ApiService {
+  types(): Observable<AuditTypeOption[]> {
+    return this.http.get<AuditTypeOption[]>(this.url('/api/audit/types'));
+  }
   config(): Observable<AuditConfig[]> {
     return this.http.get<AuditConfig[]>(this.url('/api/audit/config'));
   }

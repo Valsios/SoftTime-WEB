@@ -57,6 +57,11 @@ export interface AuditConfig {
   base?: string | null;
 }
 
+export interface AuditTypeOption {
+  value: string;
+  label: string;
+}
+
 // --- Archives des suppressions (ex-tables « Historique* ») ---
 
 export interface HistoryPointage {
