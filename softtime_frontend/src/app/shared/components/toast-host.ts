@@ -7,7 +7,12 @@ import { ToastService } from '../../core/toast.service';
   template: `
     <div class="soft-toasts">
       @for (toast of toasts.toasts(); track toast.id) {
-        <div class="soft-toast" [class]="'soft-toast--' + toast.kind" (click)="toasts.dismiss(toast.id)">
+        <div
+          class="soft-toast"
+          [class]="'soft-toast--' + toast.kind"
+          [attr.role]="toast.kind === 'error' ? 'alert' : 'status'"
+          (click)="toasts.dismiss(toast.id)"
+        >
           {{ toast.message }}
         </div>
       }

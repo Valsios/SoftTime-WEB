@@ -64,13 +64,18 @@ import { ChartFormatter, ChartPoint, colorAt } from './chart.util';
         line-height: 1.15;
       }
       .soft-donut__hole strong {
+        font-family: var(--font-heading);
         font-size: 22px;
+        font-weight: 700;
+        color: var(--navy-950);
+        font-variant-numeric: tabular-nums;
       }
       .soft-donut__hole small {
         color: var(--text-muted);
         font-size: 11px;
         text-transform: uppercase;
-        letter-spacing: 0.04em;
+        letter-spacing: 0.06em;
+        font-weight: 600;
       }
       .soft-donut__legend {
         margin: 0;

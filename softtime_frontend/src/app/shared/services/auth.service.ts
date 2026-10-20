@@ -25,8 +25,8 @@ export class AuthService extends ApiService {
         if (res.authorizedDatabases) {
           this.session.setAuthorizedDatabases(res.authorizedDatabases);
         }
-        if (res.permissions) {
-          this.session.setPermissions(res.permissions);
+        if (res.permissions !== undefined) {
+          this.session.setPermissions(res.permissions, res.permissionsCustomized);
         }
       }),
     );

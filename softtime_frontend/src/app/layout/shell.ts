@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, HostListener, inject, OnInit, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { SessionStore } from '../core/session.store';
 import { Droit } from '../core/rights';
@@ -17,7 +17,17 @@ import { ConfirmService } from '../core/confirm.service';
   imports: [RouterOutlet, RouterLink, RouterLinkActive, Icon],
   template: `
     <div class="shell" [class.shell--mini]="collapsed()">
-      <aside class="sidebar softtime-sidebar">
+      @if (isMobileViewport() && mobileMenuOpen()) {
+        <button class="mobile-nav-overlay" type="button" aria-label="Fermer le menu de navigation" (click)="closeMobileNavigation()"></button>
+      }
+
+      <aside
+        id="main-navigation"
+        class="sidebar softtime-sidebar"
+        [class.sidebar--mobile-open]="mobileMenuOpen()"
+        [attr.aria-hidden]="isMobileViewport() && !mobileMenuOpen() ? 'true' : null"
+        [attr.inert]="isMobileViewport() && !mobileMenuOpen() ? '' : null"
+      >
         <div class="sidebar__brand">
           <img class="sidebar__logo" src="assets/SoftTimeLogo.png" alt="Soft Time" />
           @if (!collapsed()) {
@@ -34,24 +44,41 @@ import { ConfirmService } from '../core/confirm.service';
             routerLinkActive="is-active"
             class="sidebar__item"
             [title]="'Tableau de bord'"
+            (click)="closeMobileNavigation()"
           >
             <app-icon name="home"></app-icon>
             @if (!collapsed()) {<span>Tableau de bord</span>}
           </a>
 
-          @for (section of visibleSections(); track section.title) {
+          @for (section of visibleSections(); track section.title; let sectionIndex = $index) {
             <div class="sidebar__section">
-              @if (!collapsed()) {<span class="sidebar__section-title">{{ section.title }}</span>}
-              @for (item of section.items; track item.path) {
-                <a
-                  [routerLink]="item.path"
-                  routerLinkActive="is-active"
-                  class="sidebar__item"
-                  [title]="item.label"
+              @if (!collapsed()) {
+                <button
+                  class="sidebar__section-toggle"
+                  type="button"
+                  [attr.aria-expanded]="isSectionExpanded(section.title)"
+                  [attr.aria-controls]="'navigation-section-' + sectionIndex"
+                  (click)="toggleSection(section.title)"
                 >
-                  <app-icon [name]="item.icon"></app-icon>
-                  @if (!collapsed()) {<span>{{ item.label }}</span>}
-                </a>
+                  <span class="sidebar__section-title">{{ section.title }}</span>
+                  <app-icon [name]="isSectionExpanded(section.title) ? 'chevron-up' : 'chevron-down'" [size]="16"></app-icon>
+                </button>
+              }
+              @if (collapsed() || isSectionExpanded(section.title)) {
+                <div class="sidebar__section-items" [id]="'navigation-section-' + sectionIndex">
+                  @for (item of section.items; track item.path) {
+                    <a
+                      [routerLink]="item.path"
+                      routerLinkActive="is-active"
+                      class="sidebar__item"
+                      [title]="item.label"
+                      (click)="closeMobileNavigation()"
+                    >
+                      <app-icon [name]="item.icon"></app-icon>
+                      @if (!collapsed()) {<span>{{ item.label }}</span>}
+                    </a>
+                  }
+                </div>
               }
             </div>
           }
@@ -60,9 +87,18 @@ import { ConfirmService } from '../core/confirm.service';
 
       <div class="main">
         <header class="topbar">
-          <button class="topbar__toggle" type="button" (click)="collapsed.set(!collapsed())">
+          <button
+            class="topbar__toggle"
+            type="button"
+            aria-controls="main-navigation"
+            [attr.aria-expanded]="isMobileViewport() ? mobileMenuOpen() : !collapsed()"
+            [attr.aria-label]="isMobileViewport() ? (mobileMenuOpen() ? 'Fermer le menu de navigation' : 'Ouvrir le menu de navigation') : 'Réduire ou développer le menu de navigation'"
+            (click)="toggleNavigation()"
+          >
             <app-icon name="grid" [size]="18"></app-icon>
           </button>
+
+          <img class="topbar__mobile-logo" src="assets/SoftTimeLogo.png" alt="Soft Time" />
 
           <div class="topbar__spacer"></div>
 
@@ -142,20 +178,21 @@ import { ConfirmService } from '../core/confirm.service';
       }
       .sidebar {
         background: var(--sidebar-bg);
-        --sidebar-active-color: #4a90d9;
-        --sidebar-active-bg: rgba(74, 144, 217, 0.15);
         color: var(--sidebar-text);
         display: flex;
         flex-direction: column;
         overflow-y: auto;
         overflow-x: hidden;
+        border-right: 1px solid rgba(0, 0, 0, 0.15);
+        transition: transform var(--t-normal) var(--ease);
       }
       .sidebar__brand {
         display: flex;
         align-items: center;
-        gap: 10px;
-        padding: 18px 16px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        gap: 12px;
+        padding: 20px 18px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        min-height: 68px;
       }
       .sidebar__logo {
         width: 36px;
@@ -169,38 +206,70 @@ import { ConfirmService } from '../core/confirm.service';
         line-height: 1.2;
       }
       .sidebar__brand-text strong {
-        color: #fff;
-        font-size: 15px;
+        color: #ffffff;
+        font-family: var(--font-heading);
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
       }
       .sidebar__brand-text small {
-        color: var(--sidebar-text-muted);
+        color: rgba(255, 255, 255, 0.6);
         font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.02em;
       }
       .sidebar__nav {
-        padding: 8px;
+        padding: 12px 10px;
         display: flex;
         flex-direction: column;
-        gap: 2px;
+        gap: 4px;
       }
       .sidebar__section {
-        margin-top: 12px;
+        margin-top: 16px;
         display: flex;
         flex-direction: column;
-        gap: 2px;
+        gap: 3px;
+      }
+      .sidebar__section-toggle {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 6px 12px 4px;
+        border: 0;
+        background: transparent;
+        color: var(--sidebar-text-muted);
+        cursor: pointer;
+        text-align: left;
+        border-radius: var(--radius-sm);
+      }
+      .sidebar__section-toggle:hover {
+        color: var(--sidebar-text);
+        background: var(--sidebar-hover);
+      }
+      .sidebar__section-toggle:focus-visible {
+        outline: 2px solid var(--gold-300);
+        outline-offset: 2px;
       }
       .sidebar__section-title {
-        font-size: 10px;
+        font-size: 11px;
+        font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.08em;
-        color: var(--sidebar-text-muted);
-        padding: 6px 10px 2px;
+      }
+      .sidebar__section-items {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
       }
       .sidebar__item {
         display: flex;
         align-items: center;
-        gap: 10px;
-        padding: 9px 10px;
-        border-radius: 8px;
+        gap: 12px;
+        min-height: 44px;
+        padding: 10px 14px;
+        border-radius: var(--radius-md);
         color: var(--sidebar-text);
         font-size: 13.5px;
         font-weight: 500;
@@ -209,43 +278,57 @@ import { ConfirmService } from '../core/confirm.service';
       }
       .sidebar__item:hover {
         background: var(--sidebar-hover);
-        color: #fff;
+        color: #ffffff;
       }
       .sidebar__item.is-active {
         background: var(--sidebar-active-bg);
+        color: var(--sidebar-active-color);
+        border-left: 3px solid var(--sidebar-active-color);
+        border-top-left-radius: 0;
+        border-bottom-left-radius: 0;
+        font-weight: 600;
+      }
+      .sidebar__item.is-active app-icon {
         color: var(--sidebar-active-color);
       }
       .main {
         display: flex;
         flex-direction: column;
         overflow: hidden;
+        background: var(--app-bg);
       }
       .topbar {
-        height: 78px;
+        min-height: 68px;
         display: flex;
         align-items: center;
         gap: 14px;
-        padding: 0 22px;
-        background: rgba(255, 255, 255, 0.94);
-        backdrop-filter: blur(12px);
+        padding: 0 24px;
+        background: var(--app-surface);
         border-bottom: 1px solid var(--app-border);
-        box-shadow: 0 10px 30px rgba(31, 41, 90, 0.06);
+        box-shadow: var(--shadow-xs);
         z-index: var(--z-sticky);
       }
       :root[data-theme='dark'] .topbar {
-        background: rgba(18, 24, 43, 0.9);
+        background: var(--app-surface);
       }
       .topbar__spacer {
         flex: 1;
       }
+      .topbar__mobile-logo {
+        display: none;
+        width: 28px;
+        height: 28px;
+        object-fit: contain;
+        flex: none;
+      }
       .topbar__toggle,
       .topbar__icon-btn {
-        background: transparent;
-        border: 1px solid var(--app-border);
+        background: var(--app-surface);
+        border: 1px solid var(--color-border);
         color: var(--text-secondary);
-        width: 38px;
-        height: 38px;
-        border-radius: 10px;
+        width: 40px;
+        height: 40px;
+        border-radius: var(--radius-md);
         display: grid;
         place-items: center;
         cursor: pointer;
@@ -253,17 +336,25 @@ import { ConfirmService } from '../core/confirm.service';
       }
       .topbar__toggle:hover,
       .topbar__icon-btn:hover {
-        color: var(--softtime);
-        border-color: var(--primary-200);
+        color: var(--navy-700);
+        border-color: var(--navy-700);
+        background: var(--navy-50);
       }
       .topbar__company {
         display: flex;
         align-items: center;
         gap: 8px;
-        padding: 6px 10px;
-        border: 1px solid var(--app-border);
-        border-radius: 10px;
+        height: 40px;
+        padding: 0 12px;
+        border: 1px solid var(--color-border-input);
+        border-radius: var(--radius-md);
+        background: var(--app-surface);
         color: var(--text-secondary);
+        transition: border var(--t-fast) var(--ease);
+      }
+      .topbar__company:focus-within {
+        border-color: var(--navy-700);
+        box-shadow: 0 0 0 3px rgba(46, 66, 123, 0.1);
       }
       .topbar__company--empty {
         opacity: 0.65;
@@ -277,7 +368,7 @@ import { ConfirmService } from '../core/confirm.service';
         color: var(--app-text);
         font-weight: 600;
         font-family: inherit;
-        font-size: 14px;
+        font-size: 13.5px;
         cursor: pointer;
         outline: none;
       }
@@ -290,33 +381,103 @@ import { ConfirmService } from '../core/confirm.service';
         width: 38px;
         height: 38px;
         border-radius: 50%;
-        background: var(--softtime);
-        color: #fff;
+        background: var(--navy-700);
+        color: #ffffff;
         display: grid;
         place-items: center;
         font-weight: 700;
-        font-size: 14px;
+        font-size: 13px;
+        letter-spacing: 0.03em;
       }
       .topbar__user-info {
         display: flex;
         flex-direction: column;
-        line-height: 1.2;
+        line-height: 1.25;
       }
       .topbar__user-info strong {
-        font-size: 14px;
+        font-size: 13.5px;
+        color: var(--app-text);
       }
       .topbar__user-info small {
         color: var(--text-muted);
-        font-size: 12px;
+        font-size: 11.5px;
       }
       .content {
         flex: 1;
         overflow-y: auto;
-        padding: 24px;
+        padding: 24px 32px;
+      }
+      @media (max-width: 1023px) {
+        .shell {
+          grid-template-columns: 1fr;
+        }
+        .sidebar {
+          position: fixed;
+          inset: 0 auto 0 0;
+          z-index: var(--z-drawer);
+          width: min(320px, 86vw);
+          transform: translateX(-100%);
+          box-shadow: var(--shadow-xl);
+        }
+        .sidebar.sidebar--mobile-open {
+          transform: translateX(0);
+        }
+        .mobile-nav-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: var(--z-dropdown);
+          border: 0;
+          background: rgba(11, 19, 50, 0.5);
+          cursor: pointer;
+        }
+        .topbar {
+          position: sticky;
+          top: 0;
+          min-height: 56px;
+          padding: 0 16px;
+        }
       }
       @media (max-width: 860px) {
+        .content {
+          padding: 16px;
+        }
         .topbar__user-info {
           display: none;
+        }
+      }
+      @media (max-width: 640px) {
+        .topbar {
+          padding: 0 12px;
+          gap: 8px;
+          min-height: 56px;
+        }
+        .topbar__mobile-logo {
+          display: block;
+        }
+        .topbar__spacer {
+          display: none;
+        }
+        .topbar__company {
+          flex: 1 1 0;
+          min-width: 0;
+          max-width: none;
+          padding: 0 6px;
+          height: 36px;
+        }
+        .topbar__company app-icon {
+          display: none;
+        }
+        .topbar__company select {
+          width: 100%;
+          min-width: 0;
+          font-size: 12px;
+        }
+        .topbar__icon-btn:not(:last-child),
+        .topbar__user {
+          display: none;
+        }
+        .content {
+          padding: 12px;
         }
       }
     `,
@@ -333,6 +494,9 @@ export class Shell implements OnInit {
   private readonly confirm = inject(ConfirmService);
 
   readonly collapsed = signal(false);
+  readonly mobileMenuOpen = signal(false);
+  readonly isMobileViewport = signal(false);
+  readonly collapsedSections = signal<ReadonlySet<string>>(new Set());
   readonly databases = computed(() =>
     this.session.databases().filter((db) => this.session.hasPermission(`SAGE:${db.nomBd}:READ`, Droit.Databases)),
   );
@@ -357,6 +521,7 @@ export class Shell implements OnInit {
   });
 
   ngOnInit(): void {
+    this.syncViewport();
     const pending = sessionStorage.getItem('st_pending_toast');
     if (pending) {
       sessionStorage.removeItem('st_pending_toast');
@@ -364,6 +529,42 @@ export class Shell implements OnInit {
     }
     this.auth.refreshMe().subscribe();
     this.pointeuseApi.refresh().subscribe();
+  }
+
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    this.syncViewport();
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    this.closeMobileNavigation();
+  }
+
+  toggleNavigation(): void {
+    if (this.isMobileViewport()) {
+      this.mobileMenuOpen.update((open) => !open);
+      if (this.mobileMenuOpen()) this.collapsed.set(false);
+      return;
+    }
+    this.collapsed.update((collapsed) => !collapsed);
+  }
+
+  closeMobileNavigation(): void {
+    if (this.isMobileViewport()) this.mobileMenuOpen.set(false);
+  }
+
+  isSectionExpanded(title: string): boolean {
+    return !this.collapsedSections().has(title);
+  }
+
+  toggleSection(title: string): void {
+    this.collapsedSections.update((sections) => {
+      const next = new Set(sections);
+      if (next.has(title)) next.delete(title);
+      else next.add(title);
+      return next;
+    });
   }
 
   onCompanyChange(event: Event): void {
@@ -397,5 +598,12 @@ export class Shell implements OnInit {
     if (!ok) return;
     this.auth.logout();
     this.router.navigate(['/login']);
+  }
+
+  private syncViewport(): void {
+    const mobile = window.matchMedia('(max-width: 1023px)').matches;
+    this.isMobileViewport.set(mobile);
+    if (mobile) this.collapsed.set(false);
+    else this.mobileMenuOpen.set(false);
   }
 }

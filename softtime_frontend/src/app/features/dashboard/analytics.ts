@@ -150,7 +150,7 @@ function libelleCourt(periode: string): string {
         } @else if (axe() === 'departement') {
           <soft-bar-chart
             [items]="departementBars()"
-            color="var(--accent-600)"
+            color="var(--gold-warm)"
             [format]="formatCount"
           ></soft-bar-chart>
         } @else {
@@ -208,37 +208,60 @@ function libelleCourt(periode: string): string {
     `
       .kpi-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-        gap: 14px;
-        margin-bottom: 10px;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+        margin-bottom: 14px;
       }
       .kpi-detail {
         margin: 0 0 28px;
+        padding: 12px 16px;
+        background: var(--surface-light);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
         color: var(--text-secondary);
-        font-size: 13px;
+        font-size: 13.5px;
+        line-height: 1.5;
       }
-      .kpi-detail strong { color: var(--app-text); }
-      .kpi-grid strong { display: block; font-size: 26px; line-height: 1.2; }
+      .kpi-detail strong { color: var(--navy-950); }
+      .kpi-grid strong {
+        display: block;
+        font-family: var(--font-heading);
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1.2;
+        color: var(--navy-950);
+        font-variant-numeric: tabular-nums;
+        margin: 4px 0 2px;
+      }
       .kpi-grid small { color: var(--text-muted); font-size: 12px; }
       .kpi-label {
         display: block;
         font-size: 12px;
+        font-weight: 600;
         text-transform: uppercase;
-        letter-spacing: 0.04em;
-        color: var(--text-muted);
+        letter-spacing: 0.06em;
+        color: var(--text-secondary);
       }
-      .section-title { font-size: 18px; margin: 0 0 14px; }
+      .section-title {
+        font-family: var(--font-heading);
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--navy-950);
+        margin: 28px 0 14px;
+      }
       .chart-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-        gap: 16px;
+        gap: 18px;
         margin-bottom: 28px;
       }
       .chart-grid .section-title { margin-top: 0; }
       .sub-title {
-        margin: 20px 0 10px;
-        font-size: 14px;
-        color: var(--text-secondary);
+        font-family: var(--font-heading);
+        margin: 22px 0 12px;
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--navy-900);
       }
       .muted { color: var(--text-muted); }
     `,
@@ -328,7 +351,7 @@ export class AnalyticsPage implements OnInit {
       { name: 'Heures travaillées', color: 'var(--primary-500)', values: stats.series.map((s) => s.heures) },
       {
         name: 'Heures supplémentaires',
-        color: 'var(--accent-600)',
+        color: 'var(--gold-warm)',
         values: stats.series.map((s) => s.heuresSupplementaires),
       },
     ];
