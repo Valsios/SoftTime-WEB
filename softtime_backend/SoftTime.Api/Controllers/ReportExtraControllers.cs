@@ -113,6 +113,9 @@ public class AuditController : ControllerBase
     private readonly AuditService _svc;
     public AuditController(AuditService svc) => _svc = svc;
 
+    [HttpGet("types")]
+    public IActionResult GetTypes() => Ok(_svc.ListAllowedTypes());
+
     [HttpGet("config")]
     public async Task<IActionResult> GetConfig(CancellationToken ct) => Ok(await _svc.ListConfigAsync(ct));
 

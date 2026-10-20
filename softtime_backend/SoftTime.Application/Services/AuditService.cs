@@ -1,6 +1,7 @@
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
+using SoftTime.Domain.Services;
 
 namespace SoftTime.Application.Services;
 
@@ -9,6 +10,8 @@ public class AuditService
     private readonly IUnitOfWork _uow;
 
     public AuditService(IUnitOfWork uow) => _uow = uow;
+
+    public IReadOnlyList<AuditTypeOption> ListAllowedTypes() => AuditConfigurationRules.AllowedTypeOptions;
 
     public async Task<IReadOnlyList<AuditConfigDto>> ListConfigAsync(CancellationToken ct = default)
     {
@@ -21,11 +24,14 @@ public class AuditService
         var repo = _uow.Repository<suivi_TBLCLN>();
         if (dto.Id == 0)
         {
+            AuditConfigurationRules.Valider(dto.Type);
+            var typeCanonique = AuditConfigurationRules.Normalize(dto.Type!);
+
             await repo.AddAsync(new suivi_TBLCLN
             {
                 TABLES = dto.Table,
                 COLONNES = dto.Column,
-                TYPES = dto.Type,
+                TYPES = typeCanonique,
                 ETATS = dto.Enabled,
                 BASES = dto.Base
             }, ct);
@@ -35,7 +41,16 @@ public class AuditService
             var e = await repo.GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
             e.TABLES = dto.Table;
             e.COLONNES = dto.Column;
-            e.TYPES = dto.Type;
+
+            // Si le type a été modifié par rapport à l'existant (comparaison insensible)
+            var typeInchange = string.Equals(e.TYPES, dto.Type, StringComparison.OrdinalIgnoreCase);
+            if (!typeInchange)
+            {
+                AuditConfigurationRules.Valider(dto.Type);
+                e.TYPES = AuditConfigurationRules.Normalize(dto.Type!);
+            }
+            // Si le type est inchangé, on préserve la valeur existante en base sans la réécrire ni la normaliser
+
             e.ETATS = dto.Enabled;
             e.BASES = dto.Base;
             repo.Update(e);
