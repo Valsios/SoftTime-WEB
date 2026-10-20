@@ -16,6 +16,11 @@ L’accès est filtré par **rôle** (6 droits) et par **société SAGE** active
 - **E-mail** : la création ou la modification d'un compte peut envoyer les identifiants par SMTP
   (section `Email` de `appsettings.json`). Tant que cette section est incomplète, **aucun envoi n'est
   tenté** : les identifiants sont à communiquer directement (le compte est créé normalement).
+- **Mot de passe** : toute création ou modification de mot de passe exige au moins 8 caractères,
+  une majuscule, une minuscule, un chiffre et un caractère spécial. La politique est appliquée par
+  le serveur (`PasswordPolicy`) et exposée par `GET /api/auth/password-policy` ; les écrans de
+  démarrage et Utilisateurs affichent les règles en direct avant l'enregistrement. Les champs mot
+  de passe proposent un bouton œil pour afficher/masquer la saisie.
 - Choix de la **base SAGE** et de la **base pointeuse** dans la barre supérieure.
 - Droits : Bases de données, Paramètres, Traitement, Divers, Traçabilité, États.
 

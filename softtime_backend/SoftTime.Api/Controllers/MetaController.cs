@@ -43,6 +43,7 @@ public static class ApiCatalog
         E("Auth", "GET", "/api/auth/me", "Utilisateur courant + bases SAGE"),
         E("Auth", "GET", "/api/auth/is-first-run", "Installation vierge ? (anonyme)"),
         E("Auth", "POST", "/api/auth/create-admin", "Créer le premier compte administrateur (anonyme, une seule fois)"),
+        E("Auth", "GET", "/api/auth/password-policy", "Politique de mot de passe (anonyme)"),
         E("Users", "GET", "/api/users", "Liste utilisateurs"),
         E("Users", "GET", "/api/users/{id}", "Détail utilisateur"),
         E("Users", "POST", "/api/users", "Créer utilisateur (identifiants envoyés par e-mail si SMTP configuré)"),

@@ -5,13 +5,15 @@ import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
 import { Droit } from '../../core/rights';
-import { Role, User } from '../../shared/models';
+import { PasswordPolicy, Role, User } from '../../shared/models';
 import { CardPaieService } from '../../shared/services/catalog.service';
+import { PasswordPolicyService } from '../../shared/services/password-policy.service';
 import { RolesService, UsersService } from '../../shared/services/users.service';
 import {
   Column,
   DataTable,
   PageHeader,
+  PasswordPolicyHint,
   SoftButton,
   SoftCard,
   SoftInput,
@@ -19,11 +21,16 @@ import {
   SoftSelect,
 } from '../../shared/components';
 import { asRow } from '../../shared/utils/date';
+import {
+  FALLBACK_PASSWORD_POLICY,
+  evaluatePasswordPolicy,
+  isPasswordCompliant,
+} from '../../shared/utils/password-policy';
 
 @Component({
   selector: 'app-users',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, SoftSelect],
+  imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, SoftSelect, PasswordPolicyHint],
   template: `
     <page-header title="Utilisateurs" subtitle="Gestion RESPONSABLE">
       <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter</soft-button>
@@ -44,21 +51,40 @@ import { asRow } from '../../shared/utils/date';
         <soft-input label="Login" [(ngModel)]="form.login" name="login"></soft-input>
         <soft-input label="E-mail" type="email" [(ngModel)]="form.email" name="email" placeholder="Envoi des identifiants"></soft-input>
         <soft-select label="Matricule" [(ngModel)]="form.matricule" name="matricule" placeholder="Aucun" [options]="matriculeOptions()"></soft-select>
-        <soft-input label="Mot de passe" type="password" [(ngModel)]="form.password" name="password"></soft-input>
+        <div class="form-grid__password">
+          <soft-input
+            label="Mot de passe"
+            type="password"
+            [(ngModel)]="form.password"
+            name="password"
+            [required]="!editId()"
+            [placeholder]="editId() ? 'Laisser vide pour conserver' : '••••••••'"
+          ></soft-input>
+          <password-policy-hint
+            [password]="form.password ?? ''"
+            [policy]="policy()"
+          ></password-policy-hint>
+        </div>
         <soft-select label="Rôle" [(ngModel)]="form.roleId" name="roleId" [options]="roleOptions()"></soft-select>
       </div>
       <div footer>
         <soft-button variant="ghost" (click)="modal.set(false)">Annuler</soft-button>
-        <soft-button [loading]="saving()" (click)="save()">Enregistrer</soft-button>
+        <soft-button [loading]="saving()" [disabled]="!canSave()" (click)="save()">Enregistrer</soft-button>
       </div>
     </soft-modal>
   `,
-  styles: [`.form-grid { display: grid; gap: 14px; }`],
+  styles: [
+    `
+      .form-grid { display: grid; gap: 14px; }
+      .form-grid__password { display: grid; gap: 8px; }
+    `,
+  ],
 })
 export class UsersPage implements OnInit {
   private readonly svc = inject(UsersService);
   private readonly rolesSvc = inject(RolesService);
   private readonly cards = inject(CardPaieService);
+  private readonly passwordPolicies = inject(PasswordPolicyService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly session = inject(SessionStore);
@@ -74,6 +100,7 @@ export class UsersPage implements OnInit {
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly roleOptions = signal<{ value: number; label: string }[]>([]);
   readonly matriculeOptions = signal<{ value: string; label: string }[]>([]);
+  readonly policy = signal<PasswordPolicy | null>(null);
   form: Partial<User> = {};
 
   readonly columns: Column[] = [
@@ -86,6 +113,7 @@ export class UsersPage implements OnInit {
   ];
 
   ngOnInit(): void {
+    this.passwordPolicies.get().subscribe((policy) => this.policy.set(policy));
     this.rolesSvc.list().subscribe((roles) =>
       this.roleOptions.set(roles.map((r) => ({ value: r.id, label: r.nom }))),
     );
@@ -123,10 +151,33 @@ export class UsersPage implements OnInit {
   openCreate(): void { this.editId.set(null); this.form = { roleId: this.roleOptions()[0]?.value ?? 0 }; this.modal.set(true); }
   openEdit(row: Record<string, unknown>): void { this.editId.set(row['id'] as number); this.form = { ...(row as unknown as User) }; this.modal.set(true); }
 
+  /** Un mot de passe saisi doit respecter la politique ; en modification, un champ vide conserve l'ancien. */
+  passwordValid(): boolean {
+    return isPasswordCompliant(
+      evaluatePasswordPolicy(this.form.password ?? '', this.policy() ?? FALLBACK_PASSWORD_POLICY),
+    );
+  }
+
+  canSave(): boolean {
+    if (this.saving()) return false;
+    const passwordSaisi = (this.form.password ?? '').trim().length > 0;
+    // En modification, laisser le champ vide conserve le mot de passe existant.
+    if (this.editId() && !passwordSaisi) return true;
+    return this.passwordValid();
+  }
+
   save(): void {
-    this.saving.set(true);
+    if (!this.canSave()) {
+      this.toast.warning(
+        this.editId()
+          ? 'Le nouveau mot de passe ne respecte pas les règles de sécurité.'
+          : 'Choisissez un mot de passe conforme aux règles de sécurité.',
+      );
+      return;
+    }
     const id = this.editId();
     const dto = this.form as User;
+    this.saving.set(true);
     const req = id ? this.svc.update(id, { ...dto, id }) : this.svc.create({ ...dto, id: 0 });
     req.subscribe({ next: () => { this.saving.set(false); this.modal.set(false); this.toast.success('Enregistré.'); this.load(); }, error: () => this.saving.set(false) });
   }

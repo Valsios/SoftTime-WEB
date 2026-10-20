@@ -56,6 +56,21 @@ export interface AdminSetupResult {
   message: string;
 }
 
+/** Une règle de la politique de mot de passe, avec son libellé prêt à afficher. */
+export interface PasswordPolicyRule {
+  code: string;
+  label: string;
+}
+
+/**
+ * Politique de mot de passe renvoyée par `GET /api/auth/password-policy`.
+ * Elle est la source de vérité : le client affiche et applique exactement les règles du serveur.
+ */
+export interface PasswordPolicy {
+  minLength: number;
+  rules: PasswordPolicyRule[];
+}
+
 export interface Role {
   id: number;
   nom: string;

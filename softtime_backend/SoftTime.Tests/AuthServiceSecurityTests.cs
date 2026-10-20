@@ -81,6 +81,49 @@ public class AuthServiceSecurityTests
     }
 
     [Fact]
+    public async Task SaveUserAsync_NewUser_WithWeakPassword_ThrowsAndDoesNotCreateUser()
+    {
+        var userDto = new UserDto(0, 2, "Weak User", "weakuser", "M010", "password");
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(userDto));
+
+        Assert.Contains("règles de sécurité", ex.Message);
+        Assert.Empty(_uow.GetRepo<T_RESPONSABLE>().Items.Where(u => u.LOGIN == "weakuser"));
+    }
+
+    [Fact]
+    public async Task CreateAdminAsync_WithWeakPassword_ThrowsAndDoesNotCreateAccount()
+    {
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _auth.CreateAdminAsync(new AdminSetupDto("Admin User", "admin", "weakpass", null)));
+
+        Assert.Contains("règles de sécurité", ex.Message);
+        Assert.Empty(_uow.GetRepo<T_RESPONSABLE>().Items);
+    }
+
+    [Fact]
+    public async Task SaveUserAsync_ExistingUser_WithWeakNewPassword_ThrowsAndPreservesExistingHash()
+    {
+        var initialHash = _hasher.HashPassword(new T_RESPONSABLE(), "OldSecret!");
+        var user = new T_RESPONSABLE
+        {
+            IDRESPONSABLE = 12,
+            IDROLE = 2,
+            NOMRESPONSABLE = "User To Update",
+            LOGIN = "weakupdate",
+            PASSWORD = initialHash
+        };
+        _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
+
+        var updateDto = new UserDto(12, 2, "User To Update", "weakupdate", "M011", "azerty");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(updateDto));
+
+        var unchanged = _uow.GetRepo<T_RESPONSABLE>().Items.Single(u => u.IDRESPONSABLE == 12);
+        Assert.Equal(initialHash, unchanged.PASSWORD);
+    }
+
+    [Fact]
     public async Task SaveUserAsync_ExistingUser_PreservesPasswordWhenNotProvided()
     {
         var initialHash = _hasher.HashPassword(new T_RESPONSABLE(), "OriginalSecret!");

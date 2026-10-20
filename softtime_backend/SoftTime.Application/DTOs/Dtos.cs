@@ -27,6 +27,15 @@ public record AdminSetupDto(string Nom, string Login, string Password, string? E
 /// <summary>Résultat de la création du compte initial : indique si les identifiants ont pu être envoyés.</summary>
 public record AdminSetupResultDto(decimal UserId, string Login, bool EmailEnvoye, string Message);
 
+/// <summary>Une règle de la politique de mot de passe, avec son libellé prêt à afficher.</summary>
+public record PasswordPolicyRuleDto(string Code, string Label);
+
+/// <summary>
+/// Politique de mot de passe exposée au client : longueur minimale et règles affichables,
+/// pour que l'interface valide exactement comme le serveur.
+/// </summary>
+public record PasswordPolicyDto(int MinLength, IReadOnlyList<PasswordPolicyRuleDto> Rules);
+
 public record RoleDto(decimal Id, string Nom)
 {
     public RoleDto() : this(default, default!) { }

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using SoftTime.Api.Authorization;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
+using SoftTime.Application.Security;
 using SoftTime.Application.Services;
 
 namespace SoftTime.Api.Controllers;
@@ -56,6 +57,15 @@ public class AuthController : ControllerBase
     [ProducesResponseType(typeof(AdminSetupResultDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<AdminSetupResultDto>> CreateAdmin([FromBody] AdminSetupDto dto, CancellationToken ct)
         => Ok(await _auth.CreateAdminAsync(dto, ct));
+
+    /// <summary>
+    /// GET — Politique de mot de passe (anonyme) : règles et libellés utilisés par l'écran de
+    /// démarrage et l'écran Utilisateurs pour valider avant l'enregistrement.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("password-policy")]
+    [ProducesResponseType(typeof(PasswordPolicyDto), StatusCodes.Status200OK)]
+    public ActionResult<PasswordPolicyDto> GetPasswordPolicy() => Ok(PasswordPolicy.Describe());
 }
 
 [ApiController]

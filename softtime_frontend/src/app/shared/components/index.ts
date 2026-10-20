@@ -1,6 +1,7 @@
 export * from './soft-button';
 export * from './soft-card';
 export * from './soft-input';
+export * from './password-policy-hint';
 export * from './soft-select';
 export * from './soft-toggle';
 export * from './soft-badge';
