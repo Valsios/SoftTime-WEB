@@ -13,6 +13,8 @@ using SoftTime.Application.Serialization;
 using SoftTime.Application.Services;
 using SoftTime.Infrastructure;
 using SoftTime.Domain.Repositories;
+using Microsoft.AspNetCore.Identity;
+using SoftTime.Domain.Entities.SoftTime;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -126,6 +128,18 @@ using (var scope = app.Services.CreateScope())
     await PunchProcessingConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
     await HistoryArchiveConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
     await UserAccountConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
+
+    // Migration globale contrôlée des mots de passe en clair :
+    // Par défaut, la migration est assurée de manière fluide et isolée à la connexion de chaque utilisateur (AuthService.LoginAsync),
+    // éliminant tout risque de verrou concurrent (multi-instances / conteneurs) ou de dépassement de délai au démarrage.
+    // L'exécution batch au démarrage reste activable explicitement via la configuration "Security:MigrateLegacyPasswordsOnStartup" :
+    if (app.Configuration.GetValue<bool>("Security:MigrateLegacyPasswordsOnStartup", false))
+    {
+        await UserAccountConfiguration.MigrateLegacyPasswordsAsync(
+            scope.ServiceProvider.GetRequiredService<IUnitOfWork>(),
+            scope.ServiceProvider.GetRequiredService<IPasswordHasher<T_RESPONSABLE>>(),
+            CancellationToken.None);
+    }
 }
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseSwagger();
