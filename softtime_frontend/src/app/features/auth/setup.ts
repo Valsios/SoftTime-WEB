@@ -2,10 +2,17 @@ import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@ang
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ToastService } from '../../core/toast.service';
-import { AdminSetupRequest } from '../../shared/models';
+import { AdminSetupRequest, PasswordPolicy } from '../../shared/models';
 import { AuthService } from '../../shared/services/auth.service';
+import { PasswordPolicyService } from '../../shared/services/password-policy.service';
+import { PasswordPolicyHint } from '../../shared/components/password-policy-hint';
 import { SoftButton } from '../../shared/components/soft-button';
 import { SoftInput } from '../../shared/components/soft-input';
+import {
+  FALLBACK_PASSWORD_POLICY,
+  evaluatePasswordPolicy,
+  isPasswordCompliant,
+} from '../../shared/utils/password-policy';
 
 /**
  * Écran de démarrage initial : crée le premier compte administrateur d'une installation vierge.
@@ -15,7 +22,7 @@ import { SoftInput } from '../../shared/components/soft-input';
 @Component({
   selector: 'app-setup',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, SoftButton, SoftInput],
+  imports: [FormsModule, SoftButton, SoftInput, PasswordPolicyHint],
   template: `
     <div class="setup">
       <div class="setup__panel soft-fade-in">
@@ -31,14 +38,20 @@ import { SoftInput } from '../../shared/components/soft-input';
           <form (ngSubmit)="submit()">
             <soft-input label="Nom" placeholder="Nom de l'administrateur" [(ngModel)]="form.nom" name="nom" [required]="true"></soft-input>
             <soft-input label="Identifiant" placeholder="Identifiant de connexion" [(ngModel)]="form.login" name="login" [required]="true"></soft-input>
-            <soft-input label="Mot de passe" type="password" placeholder="••••••••" [(ngModel)]="form.password" name="password" [required]="true"></soft-input>
+            <div class="setup__password">
+              <soft-input label="Mot de passe" type="password" placeholder="••••••••" [(ngModel)]="form.password" name="password" [required]="true"></soft-input>
+              <password-policy-hint
+                [password]="form.password"
+                [policy]="policy()"
+              ></password-policy-hint>
+            </div>
             <soft-input label="E-mail (facultatif)" type="email" placeholder="admin@exemple.com" [(ngModel)]="form.email" name="email"></soft-input>
 
             <soft-button
               type="submit"
               [fullWidth]="true"
               [loading]="creating()"
-              [disabled]="!form.nom || !form.login || !form.password"
+              [disabled]="!form.nom || !form.login || !form.password || !passwordValid()"
             >
               Créer l'administrateur
             </soft-button>
@@ -97,6 +110,10 @@ import { SoftInput } from '../../shared/components/soft-input';
         flex-direction: column;
         gap: 16px;
       }
+      .setup__password {
+        display: grid;
+        gap: 8px;
+      }
       .setup__hint {
         margin: 18px 0 0;
         color: var(--text-muted);
@@ -109,13 +126,17 @@ import { SoftInput } from '../../shared/components/soft-input';
 })
 export class SetupPage implements OnInit {
   private readonly auth = inject(AuthService);
+  private readonly passwordPolicies = inject(PasswordPolicyService);
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
 
   readonly creating = signal(false);
+  readonly policy = signal<PasswordPolicy | null>(null);
   form: AdminSetupRequest = { nom: '', login: '', password: '', email: '' };
 
   ngOnInit(): void {
+    this.passwordPolicies.get().subscribe((policy) => this.policy.set(policy));
+
     // Un administrateur existe déjà : l'écran n'a plus lieu d'être.
     this.auth.isFirstRun().subscribe({
       next: (firstRun) => {
@@ -128,8 +149,18 @@ export class SetupPage implements OnInit {
     });
   }
 
+  passwordValid(): boolean {
+    return isPasswordCompliant(
+      evaluatePasswordPolicy(this.form.password ?? '', this.policy() ?? FALLBACK_PASSWORD_POLICY),
+    );
+  }
+
   submit(): void {
     if (this.creating()) return;
+    if (!this.passwordValid()) {
+      this.toast.warning('Choisissez un mot de passe conforme aux règles de sécurité.');
+      return;
+    }
     this.creating.set(true);
     this.auth.createAdmin({
       nom: this.form.nom,

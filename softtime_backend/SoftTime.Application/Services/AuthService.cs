@@ -183,6 +183,7 @@ public class AuthService
             throw new InvalidOperationException("L'identifiant est requis.");
         if (string.IsNullOrWhiteSpace(motDePasse))
             throw new InvalidOperationException("Le mot de passe est requis.");
+        PasswordPolicy.EnsureValid(motDePasse);
 
         var roles = await _uow.Repository<T_ROLE>().ListAsync(_ => true, cancellationToken);
         var role = roles.FirstOrDefault(r => string.Equals(r.NOMROLE?.Trim(), RoleAdministrateur, StringComparison.OrdinalIgnoreCase))
@@ -234,6 +235,7 @@ public class AuthService
         {
             if (string.IsNullOrWhiteSpace(dto.Password))
                 throw new InvalidOperationException("Le mot de passe est requis pour un nouvel utilisateur.");
+            PasswordPolicy.EnsureValid(dto.Password);
 
             entity = new T_RESPONSABLE
             {
@@ -271,6 +273,7 @@ public class AuthService
 
                 if (!isSame)
                 {
+                    PasswordPolicy.EnsureValid(dto.Password);
                     motDePasseModifie = true;
                     entity.PASSWORD = _passwordHasher.HashPassword(entity, dto.Password);
                 }
