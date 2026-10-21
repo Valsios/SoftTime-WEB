@@ -9,6 +9,9 @@ import {
   signal,
   TemplateRef,
 } from '@angular/core';
+
+/** Compteur statique pour générer un id unique par instance du composant. */
+let _dataTableInstanceCounter = 0;
 import { CommonModule } from '@angular/common';
 import { PageChangeEvent } from '../models/pagination.models';
 
@@ -211,14 +214,104 @@ const SERVER_PAGE_SIZES = [10, 25, 50, 100] as const;
          MODE SERVEUR (serverSide = true)
          Les données reçues dans [rows] représentent UNIQUEMENT la page courante.
          La pagination (Skip/Take) est effectuée par le backend.
-         [total] = nombre total d'éléments retourné par le backend (PagedResult.total).
-         (pageChange) est émis à chaque changement de page ou de taille de page.
+         [total]          = nombre total d'éléments (PagedResult.total).
+         [(serverPage)]   = page courante, liaison bidirectionnelle avec le parent.
+                            Le parent peut la remettre à 1 lors d'un filtre :
+                            [(serverPage)]="currentPage" [(serverPageSize)]="pageSize"
+                            (pageChange)="onPageChange($event)"
+         [(serverPageSize)] = taille de page, liaison bidirectionnelle.
+         (pageChange)     = émis à chaque navigation ou changement de taille.
          SÉLECTION : limitée à la page courante. Lorsque le backend renvoie une nouvelle
          page, les clés sélectionnées précédentes peuvent ne plus correspondre à des
          lignes visibles. Ce comportement est volontaire : la sélection inter-pages
          n'est pas gérée en mode serveur pour éviter des incohérences d'état.
          ===================================================================== -->
     @if (serverSide()) {
+      <!-- Barre de pagination TOUJOURS affichée en mode serveur (pas de clignotement).
+           Seul le corps du tableau est remplacé par le spinner pendant le chargement. -->
+      <div class="soft-pagination-wrap">
+        <div class="soft-pagination-info">{{ serverRangeInfo() }}</div>
+
+        <!-- Sélecteur de taille de page (options 10/25/50/100 uniquement).
+             id unique par instance via _instanceId. Utilise (change) natif (pas FormsModule). -->
+        <div class="soft-pagination-size">
+          <label [for]="pageSizeSelectId">Lignes par page&nbsp;:</label>
+          <select
+            [id]="pageSizeSelectId"
+            class="soft-select soft-select--sm"
+            (change)="onServerPageSizeChange($event)"
+          >
+            @for (size of pageSizes; track size) {
+              <option [value]="size" [selected]="size === serverPageSize()">{{ size }}</option>
+            }
+          </select>
+        </div>
+
+        @if (serverTotalPages() > 1) {
+          <nav class="soft-pagination-nav" aria-label="Pagination">
+            <button
+              type="button"
+              class="soft-page-btn"
+              [disabled]="serverPage() === 1"
+              (click)="serverGoToPage(1)"
+              aria-label="Première page"
+              title="Première page"
+            >
+              &laquo;
+            </button>
+            <button
+              type="button"
+              class="soft-page-btn"
+              [disabled]="serverPage() === 1"
+              (click)="serverGoToPage(serverPage() - 1)"
+              aria-label="Page précédente"
+              title="Page précédente"
+            >
+              &lsaquo;
+            </button>
+
+            @for (item of serverPaginationItems(); track $index) {
+              @if (item === '...') {
+                <span class="soft-page-ellipsis">&hellip;</span>
+              } @else {
+                <button
+                  type="button"
+                  class="soft-page-btn"
+                  [class.is-active]="item === serverPage()"
+                  [attr.aria-current]="item === serverPage() ? 'page' : null"
+                  (click)="serverGoToPage(item)"
+                  [attr.aria-label]="'Page ' + item"
+                >
+                  {{ item }}
+                </button>
+              }
+            }
+
+            <button
+              type="button"
+              class="soft-page-btn"
+              [disabled]="serverPage() === serverTotalPages()"
+              (click)="serverGoToPage(serverPage() + 1)"
+              aria-label="Page suivante"
+              title="Page suivante"
+            >
+              &rsaquo;
+            </button>
+            <button
+              type="button"
+              class="soft-page-btn"
+              [disabled]="serverPage() === serverTotalPages()"
+              (click)="serverGoToPage(serverTotalPages())"
+              aria-label="Dernière page"
+              title="Dernière page"
+            >
+              &raquo;
+            </button>
+          </nav>
+        }
+      </div>
+
+      <!-- Corps : spinner pendant le chargement, tableau sinon. La barre reste stable. -->
       @if (loading()) {
         <div class="soft-spinner-lg"></div>
       } @else {
@@ -321,89 +414,6 @@ const SERVER_PAGE_SIZES = [10, 25, 50, 100] as const;
             <p class="soft-table-card__empty">{{ emptyText() }}</p>
           }
         </div>
-
-        <!-- Barre de pagination serveur : compteur sur [total], sélecteur de taille 10/25/50/100 -->
-        <div class="soft-pagination-wrap">
-          <div class="soft-pagination-info">{{ serverRangeInfo() }}</div>
-
-          <!-- Sélecteur de taille de page (mode serveur uniquement, options 10/25/50/100).
-               Utilise (change) natif pour éviter la dépendance à FormsModule. -->
-          <div class="soft-pagination-size">
-            <label for="server-page-size">Lignes par page&nbsp;:</label>
-            <select
-              id="server-page-size"
-              class="soft-select soft-select--sm"
-              (change)="onServerPageSizeChange($event)"
-            >
-              @for (size of pageSizes; track size) {
-                <option [value]="size" [selected]="size === serverPageSize()">{{ size }}</option>
-              }
-            </select>
-          </div>
-
-          @if (serverTotalPages() > 1) {
-            <nav class="soft-pagination-nav" aria-label="Pagination">
-              <button
-                type="button"
-                class="soft-page-btn"
-                [disabled]="serverPage() === 1"
-                (click)="serverGoToPage(1)"
-                aria-label="Première page"
-                title="Première page"
-              >
-                &laquo;
-              </button>
-              <button
-                type="button"
-                class="soft-page-btn"
-                [disabled]="serverPage() === 1"
-                (click)="serverGoToPage(serverPage() - 1)"
-                aria-label="Page précédente"
-                title="Page précédente"
-              >
-                &lsaquo;
-              </button>
-
-              @for (item of serverPaginationItems(); track $index) {
-                @if (item === '...') {
-                  <span class="soft-page-ellipsis">&hellip;</span>
-                } @else {
-                  <button
-                    type="button"
-                    class="soft-page-btn"
-                    [class.is-active]="item === serverPage()"
-                    [attr.aria-current]="item === serverPage() ? 'page' : null"
-                    (click)="serverGoToPage(item)"
-                    [attr.aria-label]="'Page ' + item"
-                  >
-                    {{ item }}
-                  </button>
-                }
-              }
-
-              <button
-                type="button"
-                class="soft-page-btn"
-                [disabled]="serverPage() === serverTotalPages()"
-                (click)="serverGoToPage(serverPage() + 1)"
-                aria-label="Page suivante"
-                title="Page suivante"
-              >
-                &rsaquo;
-              </button>
-              <button
-                type="button"
-                class="soft-page-btn"
-                [disabled]="serverPage() === serverTotalPages()"
-                (click)="serverGoToPage(serverTotalPages())"
-                aria-label="Dernière page"
-                title="Dernière page"
-              >
-                &raquo;
-              </button>
-            </nav>
-          }
-        </div>
       }
     }
   `,
@@ -438,14 +448,35 @@ export class DataTable {
    * Active le mode serveur. Défaut false.
    * En mode serveur : [rows] contient uniquement la page courante reçue du backend,
    * [total] est le nombre total d'éléments, (pageChange) est émis à chaque navigation.
+   *
+   * Exemple de liaison dans une page :
+   *   <data-table
+   *     [serverSide]="true"
+   *     [rows]="rows()"
+   *     [total]="total()"
+   *     [loading]="loading()"
+   *     [(serverPage)]="currentPage"
+   *     [(serverPageSize)]="pageSize"
+   *     (pageChange)="onPageChange($event)"
+   *   ></data-table>
+   *
+   * Le parent peut remettre currentPage à 1 lors d'un filtre :
+   *   applyFilter() { this.currentPage.set(1); this.load(); }
    */
   readonly serverSide = input(false);
   /** Nombre total d'éléments retourné par le backend (PagedResult.total). Mode serveur uniquement. */
   readonly total = input(0);
-  /** Page courante initiale en mode serveur (1-based). Défaut 1. */
-  readonly page = input(1);
-  /** Taille de page initiale en mode serveur. Défaut 10. Options : 10/25/50/100. */
-  readonly serverInitialPageSize = input(10);
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Modèles bidirectionnels mode SERVEUR
+  // Permettent [(serverPage)]="..." et [(serverPageSize)]="..." depuis le parent.
+  // Le parent peut remettre serverPage à 1 lors d'un changement de filtre sans
+  // passer par (pageChange) : le tableau s'affiche alors sur la page 1.
+  // ──────────────────────────────────────────────────────────────────────────
+  /** Page courante (1-based). Liaison bidirectionnelle : [(serverPage)]="currentPage". */
+  readonly serverPage = model(1);
+  /** Taille de page active. Liaison bidirectionnelle : [(serverPageSize)]="pageSize". Options : 10/25/50/100. */
+  readonly serverPageSize = model(10);
 
   // ──────────────────────────────────────────────────────────────────────────
   // Output mode SERVEUR
@@ -454,11 +485,10 @@ export class DataTable {
   readonly pageChange = output<PageChangeEvent>();
 
   // ──────────────────────────────────────────────────────────────────────────
-  // État interne mode serveur
+  // Id unique par instance (évite les doublons d'id HTML entre plusieurs data-table sur la même page)
   // ──────────────────────────────────────────────────────────────────────────
   readonly pageSizes = SERVER_PAGE_SIZES;
-  readonly serverPage = signal<number>(1);
-  readonly serverPageSize = signal<number>(10);
+  readonly pageSizeSelectId = `data-table-page-size-${++_dataTableInstanceCounter}`;
 
   // ──────────────────────────────────────────────────────────────────────────
   // Signaux calculés — mode CLIENT (identiques à l'existant)
