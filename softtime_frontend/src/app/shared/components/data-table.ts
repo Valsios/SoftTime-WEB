@@ -1,5 +1,16 @@
-import { ChangeDetectionStrategy, Component, computed, contentChild, input, model, signal, TemplateRef } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  contentChild,
+  input,
+  model,
+  output,
+  signal,
+  TemplateRef,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { PageChangeEvent } from '../models/pagination.models';
 
 export interface Column {
   key: string;
@@ -9,124 +20,334 @@ export interface Column {
   format?: (value: unknown, row: Record<string, unknown>) => string;
 }
 
+/** Tailles de page proposées en mode serveur (pas d'option "tout" : règle non confirmée). */
+const SERVER_PAGE_SIZES = [10, 25, 50, 100] as const;
+
 @Component({
   selector: 'data-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CommonModule],
   template: `
-    @if (loading()) {
-      <div class="soft-spinner-lg"></div>
-    } @else {
-      <div class="soft-table-wrap">
-        <table class="soft-table">
-          <thead>
-            <tr>
-              @if (selectable()) {
-                <th class="soft-table__check">
-                  <input
-                    type="checkbox"
-                    [checked]="allSelected()"
-                    [indeterminate]="someSelected()"
-                    (change)="toggleAll($event)"
-                    aria-label="Tout sélectionner"
-                  />
-                </th>
-              }
-              @for (col of columns(); track col.key) {
-                <th [style.text-align]="col.align || 'left'">{{ col.label }}</th>
-              }
-              @if (actionsTpl()) {
-                <th style="text-align:right">Actions</th>
-              }
-            </tr>
-          </thead>
-          <tbody>
-            @for (row of paginatedRows(); track trackId(row, $index)) {
-              <tr [class.is-selected]="selectable() && isSelected(row)">
+    <!-- =====================================================================
+         MODE CLIENT (serverSide = false, par défaut)
+         Comportement strictement identique à l'existant : slice côté client,
+         taille de page = pageSize() (défaut 15), compteurs sur rows().length.
+         ===================================================================== -->
+    @if (!serverSide()) {
+      @if (loading()) {
+        <div class="soft-spinner-lg"></div>
+      } @else {
+        <div class="soft-table-wrap">
+          <table class="soft-table">
+            <thead>
+              <tr>
                 @if (selectable()) {
-                  <td class="soft-table__check">
+                  <th class="soft-table__check">
                     <input
                       type="checkbox"
-                      [checked]="isSelected(row)"
-                      (change)="toggleRow(row)"
-                      [attr.aria-label]="'Sélectionner ' + rowKey(row)"
+                      [checked]="allSelected()"
+                      [indeterminate]="someSelected()"
+                      (change)="toggleAll($event)"
+                      aria-label="Tout sélectionner"
                     />
-                  </td>
+                  </th>
                 }
                 @for (col of columns(); track col.key) {
-                  <td [style.text-align]="col.align || 'left'">
-                    {{ display(col, row) }}
-                  </td>
+                  <th [style.text-align]="col.align || 'left'">{{ col.label }}</th>
                 }
-                @if (actionsTpl(); as tpl) {
-                  <td style="text-align:right">
+                @if (actionsTpl()) {
+                  <th style="text-align:right">Actions</th>
+                }
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of paginatedRows(); track trackId(row, $index)) {
+                <tr [class.is-selected]="selectable() && isSelected(row)">
+                  @if (selectable()) {
+                    <td class="soft-table__check">
+                      <input
+                        type="checkbox"
+                        [checked]="isSelected(row)"
+                        (change)="toggleRow(row)"
+                        [attr.aria-label]="'Sélectionner ' + rowKey(row)"
+                      />
+                    </td>
+                  }
+                  @for (col of columns(); track col.key) {
+                    <td [style.text-align]="col.align || 'left'">
+                      {{ display(col, row) }}
+                    </td>
+                  }
+                  @if (actionsTpl(); as tpl) {
+                    <td style="text-align:right">
+                      <ng-container
+                        [ngTemplateOutlet]="tpl"
+                        [ngTemplateOutletContext]="{ $implicit: row }"
+                      ></ng-container>
+                    </td>
+                  }
+                </tr>
+              } @empty {
+                <tr>
+                  <td class="soft-table__empty" [attr.colspan]="colspan()">
+                    {{ emptyText() }}
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <div class="soft-table-cards">
+          @for (row of paginatedRows(); track trackId(row, $index)) {
+            <article class="soft-table-card" [class.is-selected]="selectable() && isSelected(row)">
+              @if (selectable()) {
+                <label class="soft-table-card__select">
+                  <input
+                    type="checkbox"
+                    [checked]="isSelected(row)"
+                    (change)="toggleRow(row)"
+                    [attr.aria-label]="'Sélectionner ' + rowKey(row)"
+                  />
+                  <span>Sélectionner</span>
+                </label>
+              }
+              @for (col of columns(); track col.key) {
+                <div class="soft-table-card__field">
+                  <span>{{ col.label }}</span>
+                  <strong [class.text-right]="col.align === 'right'" [class.text-center]="col.align === 'center'">
+                    {{ display(col, row) }}
+                  </strong>
+                </div>
+              }
+              @if (actionsTpl(); as tpl) {
+                <div class="soft-table-card__actions">
+                  <span>Actions</span>
+                  <div>
                     <ng-container
                       [ngTemplateOutlet]="tpl"
                       [ngTemplateOutletContext]="{ $implicit: row }"
                     ></ng-container>
-                  </td>
+                  </div>
+                </div>
+              }
+            </article>
+          } @empty {
+            <p class="soft-table-card__empty">{{ emptyText() }}</p>
+          }
+        </div>
+
+        @if (paginate() && rows().length > 0) {
+          <div class="soft-pagination-wrap">
+            <div class="soft-pagination-info">{{ rangeInfo() }}</div>
+            @if (totalPages() > 1) {
+              <nav class="soft-pagination-nav" aria-label="Pagination">
+                <button
+                  type="button"
+                  class="soft-page-btn"
+                  [disabled]="safeCurrentPage() === 1"
+                  (click)="goToPage(1)"
+                  aria-label="Première page"
+                  title="Première page"
+                >
+                  &laquo;
+                </button>
+                <button
+                  type="button"
+                  class="soft-page-btn"
+                  [disabled]="safeCurrentPage() === 1"
+                  (click)="goToPage(safeCurrentPage() - 1)"
+                  aria-label="Page précédente"
+                  title="Page précédente"
+                >
+                  &lsaquo;
+                </button>
+
+                @for (item of paginationItems(); track $index) {
+                  @if (item === '...') {
+                    <span class="soft-page-ellipsis">&hellip;</span>
+                  } @else {
+                    <button
+                      type="button"
+                      class="soft-page-btn"
+                      [class.is-active]="item === safeCurrentPage()"
+                      [attr.aria-current]="item === safeCurrentPage() ? 'page' : null"
+                      (click)="goToPage(item)"
+                      [attr.aria-label]="'Page ' + item"
+                    >
+                      {{ item }}
+                    </button>
+                  }
+                }
+
+                <button
+                  type="button"
+                  class="soft-page-btn"
+                  [disabled]="safeCurrentPage() === totalPages()"
+                  (click)="goToPage(safeCurrentPage() + 1)"
+                  aria-label="Page suivante"
+                  title="Page suivante"
+                >
+                  &rsaquo;
+                </button>
+                <button
+                  type="button"
+                  class="soft-page-btn"
+                  [disabled]="safeCurrentPage() === totalPages()"
+                  (click)="goToPage(totalPages())"
+                  aria-label="Dernière page"
+                  title="Dernière page"
+                >
+                  &raquo;
+                </button>
+              </nav>
+            }
+          </div>
+        }
+      }
+    }
+
+    <!-- =====================================================================
+         MODE SERVEUR (serverSide = true)
+         Les données reçues dans [rows] représentent UNIQUEMENT la page courante.
+         La pagination (Skip/Take) est effectuée par le backend.
+         [total] = nombre total d'éléments retourné par le backend (PagedResult.total).
+         (pageChange) est émis à chaque changement de page ou de taille de page.
+         SÉLECTION : limitée à la page courante. Lorsque le backend renvoie une nouvelle
+         page, les clés sélectionnées précédentes peuvent ne plus correspondre à des
+         lignes visibles. Ce comportement est volontaire : la sélection inter-pages
+         n'est pas gérée en mode serveur pour éviter des incohérences d'état.
+         ===================================================================== -->
+    @if (serverSide()) {
+      @if (loading()) {
+        <div class="soft-spinner-lg"></div>
+      } @else {
+        <div class="soft-table-wrap">
+          <table class="soft-table">
+            <thead>
+              <tr>
+                @if (selectable()) {
+                  <th class="soft-table__check">
+                    <input
+                      type="checkbox"
+                      [checked]="allSelected()"
+                      [indeterminate]="someSelected()"
+                      (change)="toggleAll($event)"
+                      aria-label="Tout sélectionner"
+                    />
+                  </th>
+                }
+                @for (col of columns(); track col.key) {
+                  <th [style.text-align]="col.align || 'left'">{{ col.label }}</th>
+                }
+                @if (actionsTpl()) {
+                  <th style="text-align:right">Actions</th>
                 }
               </tr>
-            } @empty {
-              <tr>
-                <td class="soft-table__empty" [attr.colspan]="colspan()">
-                  {{ emptyText() }}
-                </td>
-              </tr>
-            }
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              @for (row of rows(); track trackId(row, $index)) {
+                <tr [class.is-selected]="selectable() && isSelected(row)">
+                  @if (selectable()) {
+                    <td class="soft-table__check">
+                      <input
+                        type="checkbox"
+                        [checked]="isSelected(row)"
+                        (change)="toggleRow(row)"
+                        [attr.aria-label]="'Sélectionner ' + rowKey(row)"
+                      />
+                    </td>
+                  }
+                  @for (col of columns(); track col.key) {
+                    <td [style.text-align]="col.align || 'left'">
+                      {{ display(col, row) }}
+                    </td>
+                  }
+                  @if (actionsTpl(); as tpl) {
+                    <td style="text-align:right">
+                      <ng-container
+                        [ngTemplateOutlet]="tpl"
+                        [ngTemplateOutletContext]="{ $implicit: row }"
+                      ></ng-container>
+                    </td>
+                  }
+                </tr>
+              } @empty {
+                <tr>
+                  <td class="soft-table__empty" [attr.colspan]="colspan()">
+                    {{ emptyText() }}
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
 
-      <div class="soft-table-cards">
-        @for (row of paginatedRows(); track trackId(row, $index)) {
-          <article class="soft-table-card" [class.is-selected]="selectable() && isSelected(row)">
-            @if (selectable()) {
-              <label class="soft-table-card__select">
-                <input
-                  type="checkbox"
-                  [checked]="isSelected(row)"
-                  (change)="toggleRow(row)"
-                  [attr.aria-label]="'Sélectionner ' + rowKey(row)"
-                />
-                <span>Sélectionner</span>
-              </label>
-            }
-            @for (col of columns(); track col.key) {
-              <div class="soft-table-card__field">
-                <span>{{ col.label }}</span>
-                <strong [class.text-right]="col.align === 'right'" [class.text-center]="col.align === 'center'">
-                  {{ display(col, row) }}
-                </strong>
-              </div>
-            }
-            @if (actionsTpl(); as tpl) {
-              <div class="soft-table-card__actions">
-                <span>Actions</span>
-                <div>
-                  <ng-container
-                    [ngTemplateOutlet]="tpl"
-                    [ngTemplateOutletContext]="{ $implicit: row }"
-                  ></ng-container>
+        <div class="soft-table-cards">
+          @for (row of rows(); track trackId(row, $index)) {
+            <article class="soft-table-card" [class.is-selected]="selectable() && isSelected(row)">
+              @if (selectable()) {
+                <label class="soft-table-card__select">
+                  <input
+                    type="checkbox"
+                    [checked]="isSelected(row)"
+                    (change)="toggleRow(row)"
+                    [attr.aria-label]="'Sélectionner ' + rowKey(row)"
+                  />
+                  <span>Sélectionner</span>
+                </label>
+              }
+              @for (col of columns(); track col.key) {
+                <div class="soft-table-card__field">
+                  <span>{{ col.label }}</span>
+                  <strong [class.text-right]="col.align === 'right'" [class.text-center]="col.align === 'center'">
+                    {{ display(col, row) }}
+                  </strong>
                 </div>
-              </div>
-            }
-          </article>
-        } @empty {
-          <p class="soft-table-card__empty">{{ emptyText() }}</p>
-        }
-      </div>
+              }
+              @if (actionsTpl(); as tpl) {
+                <div class="soft-table-card__actions">
+                  <span>Actions</span>
+                  <div>
+                    <ng-container
+                      [ngTemplateOutlet]="tpl"
+                      [ngTemplateOutletContext]="{ $implicit: row }"
+                    ></ng-container>
+                  </div>
+                </div>
+              }
+            </article>
+          } @empty {
+            <p class="soft-table-card__empty">{{ emptyText() }}</p>
+          }
+        </div>
 
-      @if (paginate() && rows().length > 0) {
+        <!-- Barre de pagination serveur : compteur sur [total], sélecteur de taille 10/25/50/100 -->
         <div class="soft-pagination-wrap">
-          <div class="soft-pagination-info">{{ rangeInfo() }}</div>
-          @if (totalPages() > 1) {
+          <div class="soft-pagination-info">{{ serverRangeInfo() }}</div>
+
+          <!-- Sélecteur de taille de page (mode serveur uniquement, options 10/25/50/100).
+               Utilise (change) natif pour éviter la dépendance à FormsModule. -->
+          <div class="soft-pagination-size">
+            <label for="server-page-size">Lignes par page&nbsp;:</label>
+            <select
+              id="server-page-size"
+              class="soft-select soft-select--sm"
+              (change)="onServerPageSizeChange($event)"
+            >
+              @for (size of pageSizes; track size) {
+                <option [value]="size" [selected]="size === serverPageSize()">{{ size }}</option>
+              }
+            </select>
+          </div>
+
+          @if (serverTotalPages() > 1) {
             <nav class="soft-pagination-nav" aria-label="Pagination">
               <button
                 type="button"
                 class="soft-page-btn"
-                [disabled]="safeCurrentPage() === 1"
-                (click)="goToPage(1)"
+                [disabled]="serverPage() === 1"
+                (click)="serverGoToPage(1)"
                 aria-label="Première page"
                 title="Première page"
               >
@@ -135,24 +356,24 @@ export interface Column {
               <button
                 type="button"
                 class="soft-page-btn"
-                [disabled]="safeCurrentPage() === 1"
-                (click)="goToPage(safeCurrentPage() - 1)"
+                [disabled]="serverPage() === 1"
+                (click)="serverGoToPage(serverPage() - 1)"
                 aria-label="Page précédente"
                 title="Page précédente"
               >
                 &lsaquo;
               </button>
 
-              @for (item of paginationItems(); track $index) {
+              @for (item of serverPaginationItems(); track $index) {
                 @if (item === '...') {
                   <span class="soft-page-ellipsis">&hellip;</span>
                 } @else {
                   <button
                     type="button"
                     class="soft-page-btn"
-                    [class.is-active]="item === safeCurrentPage()"
-                    [attr.aria-current]="item === safeCurrentPage() ? 'page' : null"
-                    (click)="goToPage(item)"
+                    [class.is-active]="item === serverPage()"
+                    [attr.aria-current]="item === serverPage() ? 'page' : null"
+                    (click)="serverGoToPage(item)"
                     [attr.aria-label]="'Page ' + item"
                   >
                     {{ item }}
@@ -163,8 +384,8 @@ export interface Column {
               <button
                 type="button"
                 class="soft-page-btn"
-                [disabled]="safeCurrentPage() === totalPages()"
-                (click)="goToPage(safeCurrentPage() + 1)"
+                [disabled]="serverPage() === serverTotalPages()"
+                (click)="serverGoToPage(serverPage() + 1)"
                 aria-label="Page suivante"
                 title="Page suivante"
               >
@@ -173,8 +394,8 @@ export interface Column {
               <button
                 type="button"
                 class="soft-page-btn"
-                [disabled]="safeCurrentPage() === totalPages()"
-                (click)="goToPage(totalPages())"
+                [disabled]="serverPage() === serverTotalPages()"
+                (click)="serverGoToPage(serverTotalPages())"
                 aria-label="Dernière page"
                 title="Dernière page"
               >
@@ -188,6 +409,9 @@ export interface Column {
   `,
 })
 export class DataTable {
+  // ──────────────────────────────────────────────────────────────────────────
+  // Inputs communs (modes client ET serveur)
+  // ──────────────────────────────────────────────────────────────────────────
   readonly columns = input<Column[]>([]);
   readonly rows = input<Record<string, unknown>[]>([]);
   readonly loading = input(false);
@@ -198,10 +422,47 @@ export class DataTable {
   readonly actionsTpl =
     contentChild<TemplateRef<{ $implicit: Record<string, unknown> }>>('actions');
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // Inputs mode CLIENT uniquement
+  // ──────────────────────────────────────────────────────────────────────────
+  /** Active la pagination côté client. Défaut true, inchangé. */
   readonly paginate = input<boolean>(true);
+  /** Taille de page en mode client. Défaut 15, inchangé. */
   readonly pageSize = input<number>(15);
   readonly currentPage = signal<number>(1);
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // Inputs mode SERVEUR (ignorés lorsque serverSide = false)
+  // ──────────────────────────────────────────────────────────────────────────
+  /**
+   * Active le mode serveur. Défaut false.
+   * En mode serveur : [rows] contient uniquement la page courante reçue du backend,
+   * [total] est le nombre total d'éléments, (pageChange) est émis à chaque navigation.
+   */
+  readonly serverSide = input(false);
+  /** Nombre total d'éléments retourné par le backend (PagedResult.total). Mode serveur uniquement. */
+  readonly total = input(0);
+  /** Page courante initiale en mode serveur (1-based). Défaut 1. */
+  readonly page = input(1);
+  /** Taille de page initiale en mode serveur. Défaut 10. Options : 10/25/50/100. */
+  readonly serverInitialPageSize = input(10);
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Output mode SERVEUR
+  // ──────────────────────────────────────────────────────────────────────────
+  /** Émis lors de chaque changement de page ou de taille de page en mode serveur. */
+  readonly pageChange = output<PageChangeEvent>();
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // État interne mode serveur
+  // ──────────────────────────────────────────────────────────────────────────
+  readonly pageSizes = SERVER_PAGE_SIZES;
+  readonly serverPage = signal<number>(1);
+  readonly serverPageSize = signal<number>(10);
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Signaux calculés — mode CLIENT (identiques à l'existant)
+  // ──────────────────────────────────────────────────────────────────────────
   readonly totalRows = computed(() => this.rows().length);
   readonly totalPages = computed(() => {
     const size = this.pageSize();
@@ -244,6 +505,33 @@ export class DataTable {
     return this.getPaginationItems(current, total);
   });
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // Signaux calculés — mode SERVEUR
+  // ──────────────────────────────────────────────────────────────────────────
+  readonly serverTotalPages = computed(() => {
+    const t = this.total();
+    const s = this.serverPageSize();
+    if (s <= 0 || t <= 0) return 1;
+    return Math.max(1, Math.ceil(t / s));
+  });
+
+  readonly serverRangeInfo = computed(() => {
+    const t = this.total();
+    if (t === 0) return '0 résultat';
+    const s = this.serverPageSize();
+    const p = this.serverPage();
+    const start = (p - 1) * s + 1;
+    const end = Math.min(p * s, t);
+    return `Affichage de ${start} à ${end} sur ${t} résultat${t > 1 ? 's' : ''}`;
+  });
+
+  readonly serverPaginationItems = computed(() => {
+    return this.getPaginationItems(this.serverPage(), this.serverTotalPages());
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Méthodes — mode CLIENT (identiques à l'existant)
+  // ──────────────────────────────────────────────────────────────────────────
   private getPaginationItems(current: number, total: number): (number | '...')[] {
     if (total <= 7) {
       return Array.from({ length: total }, (_, i) => i + 1);
@@ -332,5 +620,23 @@ export class DataTable {
     return this.rows()
       .map((r) => this.rowKey(r))
       .filter((k) => !!k);
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Méthodes — mode SERVEUR
+  // ──────────────────────────────────────────────────────────────────────────
+  serverGoToPage(p: number | '...'): void {
+    if (typeof p !== 'number') return;
+    const target = Math.max(1, Math.min(p, this.serverTotalPages()));
+    this.serverPage.set(target);
+    this.pageChange.emit({ page: target, pageSize: this.serverPageSize() });
+  }
+
+  onServerPageSizeChange(event: Event): void {
+    const newSize = Number((event.target as HTMLSelectElement).value);
+    // Retour à la page 1 lors d'un changement de taille (comportement standard).
+    this.serverPageSize.set(newSize);
+    this.serverPage.set(1);
+    this.pageChange.emit({ page: 1, pageSize: newSize });
   }
 }

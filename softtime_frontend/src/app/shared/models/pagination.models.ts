@@ -1,4 +1,3 @@
-/**
 /** Paramètres standards d'une requête paginée côté serveur. */
 export interface PageQuery {
   page?: number | null;
