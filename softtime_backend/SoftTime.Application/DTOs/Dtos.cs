@@ -1,3 +1,5 @@
+global using SoftTime.Domain.Models;
+
 namespace SoftTime.Application.DTOs;
 
 public record LoginRequest(string Login, string Password)
@@ -468,9 +470,6 @@ public record OvertimeDetailDto(
 {
     public OvertimeDetailDto() : this(default, default, default, new List<OvertimeDetailDayDto>(), new List<OvertimeDetailWeekDto>(), default) { }
 }
-
-/// <summary>Page de résultats d'une liste massive (pointages, heures corrigées).</summary>
-public record PagedResult<T>(IReadOnlyList<T> Items, int Total, int Page, int PageSize, int TotalPages);
 
 public record PunchCountDto(string? Matricule, int Total);
 

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
-import { PunchUpdate, PeriodRequest } from '../../shared/models';
+import { PunchUpdate, PeriodRequest, PageChangeEvent } from '../../shared/models';
 import { PunchesService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, PeriodFilter } from '../../shared/components';
@@ -33,8 +33,8 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         [loading]="loading()"
         [serverSide]="true"
         [total]="total()"
-        [pageSize]="PAGE_SIZE"
-        [currentPage]="page()"
+        [serverPageSize]="pageSize"
+        [serverPage]="page()"
         (pageChange)="onPageChange($event)"
       >
         <ng-template #actions let-row>
@@ -68,7 +68,7 @@ export class PunchesPage {
   readonly processing = signal(false);
   readonly busy = signal(false);
   readonly modal = signal(false);
-  readonly PAGE_SIZE = 50;
+  pageSize = 50;
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly page = signal(1);
   readonly total = signal(0);
@@ -100,7 +100,7 @@ export class PunchesPage {
     this.svc.listPaged({
       ...this.lastFilter,
       page: this.page(),
-      pageSize: this.PAGE_SIZE,
+      pageSize: this.pageSize,
     }).subscribe({
       next: (r) => {
         if (seq !== this.requestSeq) return;
@@ -113,8 +113,9 @@ export class PunchesPage {
     });
   }
 
-  onPageChange(page: number): void {
-    this.page.set(page);
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
     this.loadPage();
   }
 

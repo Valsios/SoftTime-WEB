@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ToastService } from '../../core/toast.service';
-import { AuditConfig, AuditTypeOption } from '../../shared/models';
+import { AuditConfig, AuditTypeOption, PageChangeEvent } from '../../shared/models';
 import { AuditService } from '../../shared/services/reports.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, SoftSelect, SoftTabs, SoftToggle } from '../../shared/components';
@@ -29,8 +29,8 @@ import { asRow, fmtDate, today } from '../../shared/utils/date';
           [loading]="loadingConfig()"
           [serverSide]="true"
           [total]="configTotal()"
-          [pageSize]="PAGE_SIZE"
-          [currentPage]="configPage()"
+          [serverPageSize]="configPageSize"
+          [serverPage]="configPage()"
           (pageChange)="onConfigPageChange($event)"
         >
           <ng-template #actions let-row>
@@ -46,8 +46,8 @@ import { asRow, fmtDate, today } from '../../shared/utils/date';
           [loading]="loadingEvents()"
           [serverSide]="true"
           [total]="eventTotal()"
-          [pageSize]="PAGE_SIZE"
-          [currentPage]="eventPage()"
+          [serverPageSize]="eventPageSize"
+          [serverPage]="eventPage()"
           (pageChange)="onEventsPageChange($event)"
         ></data-table>
       </soft-card>
@@ -95,7 +95,8 @@ export class AuditPage implements OnInit {
   readonly saving = signal(false);
   readonly modal = signal(false);
   readonly editId = signal<number | null>(null);
-  readonly PAGE_SIZE = 50;
+  configPageSize = 50;
+  eventPageSize = 50;
   readonly configRows = signal<Record<string, unknown>[]>([]);
   readonly eventRows = signal<Record<string, unknown>[]>([]);
   readonly configPage = signal(1);
@@ -141,7 +142,7 @@ export class AuditPage implements OnInit {
   loadConfig(): void {
     const seq = ++this.configSeq;
     this.loadingConfig.set(true);
-    this.svc.configPaged(this.configPage(), this.PAGE_SIZE).subscribe({
+    this.svc.configPaged(this.configPage(), this.configPageSize).subscribe({
       next: (r) => {
         if (seq !== this.configSeq) return;
         this.configRows.set(r.items.map(asRow));
@@ -153,13 +154,15 @@ export class AuditPage implements OnInit {
     });
   }
 
-  onConfigPageChange(page: number): void {
-    this.configPage.set(page);
+  onConfigPageChange(event: PageChangeEvent): void {
+    this.configPage.set(event.page);
+    this.configPageSize = event.pageSize;
     this.loadConfig();
   }
 
-  onEventsPageChange(page: number): void {
-    this.eventPage.set(page);
+  onEventsPageChange(event: PageChangeEvent): void {
+    this.eventPage.set(event.page);
+    this.eventPageSize = event.pageSize;
     this.loadEvents();
   }
 
@@ -183,7 +186,7 @@ export class AuditPage implements OnInit {
     const fromDate = new Date();
     fromDate.setDate(fromDate.getDate() - 30);
     const from = fromDate.toISOString().slice(0, 10);
-    this.svc.eventsPaged({ from, to, page: this.eventPage(), pageSize: this.PAGE_SIZE }).subscribe({
+    this.svc.eventsPaged({ from, to, page: this.eventPage(), pageSize: this.eventPageSize }).subscribe({
       next: (r) => {
         if (seq !== this.eventSeq) return;
         this.eventRows.set(r.items.map(asRow));

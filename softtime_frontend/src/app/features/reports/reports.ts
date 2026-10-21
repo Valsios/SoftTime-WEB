@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ReportFilter } from '../../shared/models';
+import { ReportFilter, PageChangeEvent } from '../../shared/models';
 import { ReportsService } from '../../shared/services/reports.service';
 import {
   Column,
@@ -51,8 +51,8 @@ const REPORTS = [
         [loading]="loading()"
         [serverSide]="true"
         [total]="total()"
-        [pageSize]="PAGE_SIZE"
-        [currentPage]="page()"
+        [serverPageSize]="pageSize"
+        [serverPage]="page()"
         (pageChange)="onPageChange($event)"
       ></data-table>
     </soft-card>
@@ -63,7 +63,7 @@ export class ReportsPage {
   private readonly excel = inject(ExcelExportService);
 
   readonly loading = signal(false);
-  readonly PAGE_SIZE = 50;
+  pageSize = 50;
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly columns = signal<Column[]>([]);
   readonly page = signal(1);
@@ -79,8 +79,9 @@ export class ReportsPage {
     this.loadPage();
   }
 
-  onPageChange(page: number): void {
-    this.page.set(page);
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
     this.loadPage();
   }
 
@@ -98,7 +99,7 @@ export class ReportsPage {
     this.svc.paged(this.reportType, {
       ...this.lastFilter,
       page: this.page(),
-      pageSize: this.PAGE_SIZE,
+      pageSize: this.pageSize,
     }).subscribe({
       next: (r) => {
         if (seq !== this.requestSeq) return;

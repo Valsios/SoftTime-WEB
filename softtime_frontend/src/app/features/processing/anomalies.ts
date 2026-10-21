@@ -5,7 +5,7 @@ import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
 import { Droit } from '../../core/rights';
 import { FormsModule } from '@angular/forms';
-import { AnomalyUpdate, PeriodRequest } from '../../shared/models';
+import { AnomalyUpdate, PeriodRequest, PageChangeEvent } from '../../shared/models';
 import { AnomaliesService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import {
@@ -54,8 +54,8 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         trackKey="id"
         [serverSide]="true"
         [total]="total()"
-        [pageSize]="PAGE_SIZE"
-        [currentPage]="page()"
+        [serverPageSize]="pageSize"
+        [serverPage]="page()"
         (pageChange)="onPageChange($event)"
         [(selectedKeys)]="selectedKeys"
       >
@@ -106,7 +106,7 @@ export class AnomaliesPage {
 
   readonly loading = signal(false);
   readonly busy = signal(false);
-  readonly PAGE_SIZE = 50;
+  pageSize = 50;
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly page = signal(1);
   readonly total = signal(0);
@@ -136,8 +136,9 @@ export class AnomaliesPage {
     this.loadPage();
   }
 
-  onPageChange(page: number): void {
-    this.page.set(page);
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
     this.loadPage();
   }
 
@@ -145,7 +146,7 @@ export class AnomaliesPage {
     if (!this.lastFilter) return;
     const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.listPaged({ ...this.lastFilter, page: this.page(), pageSize: this.PAGE_SIZE }).subscribe({
+    this.svc.listPaged({ ...this.lastFilter, page: this.page(), pageSize: this.pageSize }).subscribe({
       next: (r) => {
         if (seq !== this.requestSeq) return;
         this.rows.set(r.items.map(asRow));

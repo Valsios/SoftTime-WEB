@@ -1,4 +1,11 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Linq.Expressions;
+using System.Threading;
+using System.Threading.Tasks;
+using SoftTime.Domain.Models;
+using SoftTime.Domain.Services;
 
 namespace SoftTime.Domain.Repositories;
 
@@ -14,22 +21,87 @@ public interface IRepository<T> where T : class
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Lit une page en laissant le fournisseur traduire le filtre, l'ordre et le découpage en SQL
-    /// (OFFSET/FETCH). À utiliser pour les listes massives : contrairement à <see cref="ListAsync"/>,
-    /// seules les lignes de la page sont matérialisées. Lecture seule : aucune entité n'est suivie
-    /// par le change tracker.
+    /// Exécute une pagination côté serveur sur une requête IQueryable ordonnée.
+    /// Sur EF Core, traduit en SQL (CountAsync + Skip/Take/ToListAsync) sans charger toute la liste.
+    /// Fournit une implémentation par défaut en mémoire pour les fakes / tests unitaires.
     /// </summary>
-    Task<List<T>> ListPagedAsync(
-        Expression<Func<T, bool>> predicate,
-        Func<IQueryable<T>, IOrderedQueryable<T>> orderBy,
-        int skip,
-        int take,
-        CancellationToken cancellationToken = default);
+    Task<PagedResult<TResult>> ToPagedAsync<TResult>(
+        IQueryable<TResult> query,
+        int? page,
+        int? pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
 
-    /// <summary>Compte les lignes correspondant au filtre, sans les matérialiser.</summary>
-    Task<int> CountAsync(
-        Expression<Func<T, bool>> predicate,
-        CancellationToken cancellationToken = default);
+        var list = query.ToList();
+        var total = list.Count;
+        var (pageNorm, taille) = PaginationHelper.CalculerPagination(page, pageSize);
+
+        if (total == 0)
+        {
+            return Task.FromResult(new PagedResult<TResult>(
+                Array.Empty<TResult>(),
+                0,
+                pageNorm,
+                taille,
+                1));
+        }
+
+        var items = list
+            .Skip(PaginationRules.Decalage(pageNorm, taille))
+            .Take(taille)
+            .ToList();
+
+        return Task.FromResult(new PagedResult<TResult>(
+            items,
+            total,
+            pageNorm,
+            taille,
+            PaginationRules.NombreDePages(total, taille)));
+    }
+
+    /// <summary>
+    /// Exécute une pagination côté serveur avec filtre, tri stable obligatoire et projection vers DTO.
+    /// </summary>
+    Task<PagedResult<TDto>> ToPagedAsync<TDto>(
+        Expression<Func<T, bool>>? predicate,
+        Func<IQueryable<T>, IOrderedQueryable<T>> orderBy,
+        Expression<Func<T, TDto>> selector,
+        int? page,
+        int? pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(orderBy);
+        ArgumentNullException.ThrowIfNull(selector);
+
+        IQueryable<T> query = Query();
+        if (predicate != null)
+            query = query.Where(predicate);
+
+        var ordered = orderBy(query);
+        var projected = ordered.Select(selector);
+        return ToPagedAsync(projected, page, pageSize, cancellationToken);
+    }
+
+    /// <summary>
+    /// Exécute une pagination côté serveur avec filtre et tri stable obligatoire sans projection.
+    /// </summary>
+    Task<PagedResult<T>> ToPagedAsync(
+        Expression<Func<T, bool>>? predicate,
+        Func<IQueryable<T>, IOrderedQueryable<T>> orderBy,
+        int? page,
+        int? pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(orderBy);
+
+        IQueryable<T> query = Query();
+        if (predicate != null)
+            query = query.Where(predicate);
+
+        var ordered = orderBy(query);
+        return ToPagedAsync(ordered, page, pageSize, cancellationToken);
+    }
 
     Task AddAsync(T entity, CancellationToken cancellationToken = default);
     Task AddRangeAsync(IEnumerable<T> entities, CancellationToken cancellationToken = default);

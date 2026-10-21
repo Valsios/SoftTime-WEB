@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
-import { PagedResult, ReportFilter } from '../../shared/models';
+import { PagedResult, ReportFilter, PageChangeEvent } from '../../shared/models';
 import { HistoryService } from '../../shared/services/reports.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import {
@@ -42,8 +42,8 @@ type Segment = 'pointages' | 'anomalies' | 'hs';
         [loading]="loading()"
         [serverSide]="true"
         [total]="total()"
-        [pageSize]="PAGE_SIZE"
-        [currentPage]="page()"
+        [serverPageSize]="pageSize"
+        [serverPage]="page()"
         (pageChange)="onPageChange($event)"
       >
         <ng-template #actions let-row>
@@ -61,7 +61,7 @@ export class HistoryPage {
 
   readonly loading = signal(false);
   readonly busy = signal(false);
-  readonly PAGE_SIZE = 50;
+  pageSize = 50;
   readonly activeTab = signal<string>('pointages');
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly page = signal(1);
@@ -118,8 +118,9 @@ export class HistoryPage {
     this.loadPage();
   }
 
-  onPageChange(page: number): void {
-    this.page.set(page);
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
     this.loadPage();
   }
 
@@ -128,7 +129,7 @@ export class HistoryPage {
     const filter: ReportFilter = {
       ...this.lastFilter,
       page: this.page(),
-      pageSize: this.PAGE_SIZE,
+      pageSize: this.pageSize,
     };
     const seq = ++this.requestSeq;
     this.loading.set(true);

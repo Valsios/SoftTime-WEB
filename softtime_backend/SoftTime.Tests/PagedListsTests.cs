@@ -97,8 +97,6 @@ public class PagedListsTests
         Assert.Equal(50, result.Items.Count);
         Assert.Equal(510, result.Items[0]);
         Assert.Equal(1000, result.Items[^1]);
-        Assert.Equal(1, repository.CountCalls);
-        Assert.Equal(1, repository.ListCalls);
     }
 
     [Fact]
@@ -118,7 +116,6 @@ public class PagedListsTests
         Assert.Equal(0, result.Total);
         Assert.Equal(1, result.Page);
         Assert.Equal(1, result.TotalPages);
-        Assert.Equal(0, repository.ListCalls);
     }
 
     [Fact]
@@ -150,9 +147,6 @@ public class PagedListsTests
 
         public FakeRepository(IEnumerable<T> items) => _items = items.ToList();
 
-        public int ListCalls { get; private set; }
-        public int CountCalls { get; private set; }
-
         public IQueryable<T> Query() => _items.AsQueryable();
 
         public Task<T?> GetByIdAsync(object id, CancellationToken cancellationToken = default)
@@ -167,27 +161,6 @@ public class PagedListsTests
             int take,
             CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
-
-        public Task<List<T>> ListPagedAsync(
-            Expression<Func<T, bool>> predicate,
-            Func<IQueryable<T>, IOrderedQueryable<T>> orderBy,
-            int skip,
-            int take,
-            CancellationToken cancellationToken = default)
-        {
-            ListCalls++;
-            var items = orderBy(_items.AsQueryable().Where(predicate))
-                .Skip(skip)
-                .Take(take)
-                .ToList();
-            return Task.FromResult(items);
-        }
-
-        public Task<int> CountAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default)
-        {
-            CountCalls++;
-            return Task.FromResult(_items.AsQueryable().Count(predicate));
-        }
 
         public Task AddAsync(T entity, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();

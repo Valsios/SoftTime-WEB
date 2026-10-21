@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
-import { PeriodRequest } from '../../shared/models';
+import { PeriodRequest, PageChangeEvent } from '../../shared/models';
 import { WeeklyValidationService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, PeriodFilter } from '../../shared/components';
@@ -34,8 +34,8 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         trackKey="matricule"
         [serverSide]="true"
         [total]="total()"
-        [pageSize]="PAGE_SIZE"
-        [currentPage]="page()"
+        [serverPageSize]="pageSize"
+        [serverPage]="page()"
         (pageChange)="onPageChange($event)"
         [(selectedKeys)]="selectedKeys"
       ></data-table>
@@ -51,7 +51,7 @@ export class WeeklyValidationPage {
 
   readonly loading = signal(false);
   readonly busy = signal(false);
-  readonly PAGE_SIZE = 50;
+  pageSize = 50;
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly page = signal(1);
   readonly total = signal(0);
@@ -77,8 +77,9 @@ export class WeeklyValidationPage {
     this.loadPage();
   }
 
-  onPageChange(page: number): void {
-    this.page.set(page);
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
     this.loadPage();
   }
 
@@ -86,7 +87,7 @@ export class WeeklyValidationPage {
     if (!this.lastFilter) return;
     const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.previewPaged({ ...this.lastFilter, page: this.page(), pageSize: this.PAGE_SIZE }).subscribe({
+    this.svc.previewPaged({ ...this.lastFilter, page: this.page(), pageSize: this.pageSize }).subscribe({
       next: (r) => {
         if (seq !== this.requestSeq) return;
         this.rows.set(r.items.map(asRow));

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
-import { PeriodRequest } from '../../shared/models';
+import { PeriodRequest, PageChangeEvent } from '../../shared/models';
 import { CanteenService } from '../../shared/services/reports.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, PeriodFilter } from '../../shared/components';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
@@ -30,8 +30,8 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         [loading]="totalsLoading()"
         [serverSide]="true"
         [total]="totalsTotal()"
-        [pageSize]="PAGE_SIZE"
-        [currentPage]="totalsPage()"
+        [serverPageSize]="totalsPageSize"
+        [serverPage]="totalsPage()"
         (pageChange)="onTotalsPageChange($event)"
       ></data-table>
     </soft-card>
@@ -48,8 +48,8 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         [loading]="anomaliesLoading()"
         [serverSide]="true"
         [total]="anomaliesTotal()"
-        [pageSize]="PAGE_SIZE"
-        [currentPage]="anomaliesPage()"
+        [serverPageSize]="anomaliesPageSize"
+        [serverPage]="anomaliesPage()"
         (pageChange)="onAnomaliesPageChange($event)"
       ></data-table>
     </soft-card>
@@ -67,7 +67,8 @@ export class CanteenPage {
 
   readonly busy = signal(false);
   readonly syncing = signal(false);
-  readonly PAGE_SIZE = 50;
+  totalsPageSize = 50;
+  anomaliesPageSize = 50;
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly anomalyRows = signal<Record<string, unknown>[]>([]);
   readonly totalsLoading = signal(false);
@@ -98,13 +99,15 @@ export class CanteenPage {
     this.reloadAllFromFirstPage();
   }
 
-  onTotalsPageChange(page: number): void {
-    this.totalsPage.set(page);
+  onTotalsPageChange(event: PageChangeEvent): void {
+    this.totalsPage.set(event.page);
+    this.totalsPageSize = event.pageSize;
     this.loadTotals();
   }
 
-  onAnomaliesPageChange(page: number): void {
-    this.anomaliesPage.set(page);
+  onAnomaliesPageChange(event: PageChangeEvent): void {
+    this.anomaliesPage.set(event.page);
+    this.anomaliesPageSize = event.pageSize;
     this.loadAnomalies();
   }
 
@@ -170,7 +173,7 @@ export class CanteenPage {
     if (!this.lastFilter) return;
     const seq = ++this.totalsSeq;
     this.totalsLoading.set(true);
-    this.svc.listPaged({ ...this.lastFilter, page: this.totalsPage(), pageSize: this.PAGE_SIZE }).subscribe({
+    this.svc.listPaged({ ...this.lastFilter, page: this.totalsPage(), pageSize: this.totalsPageSize }).subscribe({
       next: (r) => {
         if (seq !== this.totalsSeq) return;
         this.rows.set(r.items.map(asRow));
@@ -186,7 +189,7 @@ export class CanteenPage {
     if (!this.lastFilter) return;
     const seq = ++this.anomaliesSeq;
     this.anomaliesLoading.set(true);
-    this.svc.anomaliesPaged({ ...this.lastFilter, page: this.anomaliesPage(), pageSize: this.PAGE_SIZE }).subscribe({
+    this.svc.anomaliesPaged({ ...this.lastFilter, page: this.anomaliesPage(), pageSize: this.anomaliesPageSize }).subscribe({
       next: (r) => {
         if (seq !== this.anomaliesSeq) return;
         this.anomalyRows.set(r.items.map(asRow));

@@ -204,15 +204,6 @@ export interface HsExo {
   absence?: number | null;
 }
 
-/** Page de résultats d'une liste massive (pointages, heures corrigées). */
-export interface PagedResult<T> {
-  items: T[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
-}
-
 /** Jour détaillé du calcul des heures supplémentaires d'un salarié. */
 export interface OvertimeDetailDay {
   date?: string | null;

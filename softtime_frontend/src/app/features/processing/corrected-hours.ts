@@ -5,7 +5,7 @@ import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
 import { Droit } from '../../core/rights';
-import { CorrectedHour, PeriodRequest } from '../../shared/models';
+import { CorrectedHour, PeriodRequest, PageChangeEvent } from '../../shared/models';
 import { CorrectedHoursService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, PeriodFilter } from '../../shared/components';
@@ -34,8 +34,8 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         [loading]="loading()"
         [serverSide]="true"
         [total]="total()"
-        [pageSize]="PAGE_SIZE"
-        [currentPage]="page()"
+        [serverPageSize]="pageSize"
+        [serverPage]="page()"
         (pageChange)="onPageChange($event)"
       >
         <ng-template #actions let-row>
@@ -78,7 +78,7 @@ export class CorrectedHoursPage {
   readonly saving = signal(false);
   readonly modal = signal(false);
   readonly editId = signal<number | null>(null);
-  readonly PAGE_SIZE = 50;
+  pageSize = 50;
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly page = signal(1);
   readonly total = signal(0);
@@ -102,8 +102,9 @@ export class CorrectedHoursPage {
     this.loadPage();
   }
 
-  onPageChange(page: number): void {
-    this.page.set(page);
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
     this.loadPage();
   }
 
@@ -111,7 +112,7 @@ export class CorrectedHoursPage {
     if (!this.lastFilter) return;
     const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.listPaged({ ...this.lastFilter, page: this.page(), pageSize: this.PAGE_SIZE }).subscribe({
+    this.svc.listPaged({ ...this.lastFilter, page: this.page(), pageSize: this.pageSize }).subscribe({
       next: (r) => {
         if (seq !== this.requestSeq) return;
         this.rows.set(r.items.map(asRow));

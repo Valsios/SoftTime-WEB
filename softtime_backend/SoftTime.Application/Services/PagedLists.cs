@@ -1,5 +1,5 @@
 using System.Linq.Expressions;
-using SoftTime.Application.DTOs;
+using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
 
@@ -10,13 +10,11 @@ namespace SoftTime.Application.Services;
 /// <list type="bullet">
 /// <item><see cref="Page{T}(IReadOnlyList{T}, int?, int?)"/> : listes déjà calculées ou agrégées
 /// en mémoire. Le découpage intervient <b>après</b> l'agrégation, jamais avant.</item>
-/// <item><see cref="PageAsync{T,TDto}"/> : listes stockées. Le filtre, l'ordre et le
-/// <c>OFFSET/FETCH</c> sont délégués au fournisseur, et seules les lignes de la page sont
-/// matérialisées.</item>
+/// <item><see cref="PageAsync{T,TDto}"/> : listes stockées, déléguées à
+/// <see cref="IRepository{T}.ToPagedAsync{TResult}"/> (COUNT + OFFSET/FETCH SQL via EF Core).</item>
 /// </list>
-/// Dans les deux cas la page demandée est bornée à <c>[1, totalPages]</c> et la page effective est
-/// renvoyée dans <see cref="PagedResult{T}.Page"/>, afin qu'une page vidée par une suppression
-/// retombe sur la dernière page non vide au lieu d'un écran vide.
+/// Les deux méthodes bornent la page effective à <c>[1, totalPages]</c>, afin qu'une page vidée par
+/// une suppression retombe sur la dernière page non vide au lieu d'un écran vide.
 /// </summary>
 public static class PagedLists
 {
@@ -37,9 +35,9 @@ public static class PagedLists
     }
 
     /// <summary>
-    /// Page une source stockée : <c>COUNT(*)</c> puis <c>ORDER BY … OFFSET … FETCH</c> côté
-    /// fournisseur. <paramref name="predicate"/> doit être identique à celui de la liste non paginée
-    /// correspondante pour que <c>Total</c> et <c>Items</c> restent cohérents.
+    /// Page une source stockée via le noyau de pagination de la fondation. Le contrat
+    /// <c>ToPagedAsync</c> renvoie la page demandée, même hors bornes ; on la borne ici pour
+    /// préserver le comportement attendu par les grilles (page vidée après suppression).
     /// </summary>
     public static async Task<PagedResult<TDto>> PageAsync<T, TDto>(
         IRepository<T> repository,
@@ -56,23 +54,19 @@ public static class PagedLists
         ArgumentNullException.ThrowIfNull(orderBy);
         ArgumentNullException.ThrowIfNull(map);
 
-        var (pageDemandee, taille) = PaginationRules.Normaliser(page, pageSize);
-        var total = await repository.CountAsync(predicate, ct);
-        var totalPages = PaginationRules.NombreDePages(total, taille);
-        var pageEffective = Math.Min(pageDemandee, totalPages);
-        var entities = total == 0
-            ? new List<T>()
-            : await repository.ListPagedAsync(
-                predicate,
-                orderBy,
-                PaginationRules.Decalage(pageEffective, taille),
-                taille,
-                ct);
+        var result = await repository.ToPagedAsync(predicate, orderBy, page, pageSize, ct);
+
+        // Une page hors bornes (dernière ligne supprimée, page profonde) est rejouée sur la
+        // dernière page réelle : une seule requête supplémentaire, uniquement dans ce cas.
+        if (result.Total > 0 && result.Items.Count == 0 && result.Page > result.TotalPages)
+            result = await repository.ToPagedAsync(predicate, orderBy, result.TotalPages, result.PageSize, ct);
+
+        var pageEffective = result.Total == 0 ? 1 : result.Page;
         return new PagedResult<TDto>(
-            entities.Select(map).ToList(),
-            total,
+            result.Items.Select(map).ToList(),
+            result.Total,
             pageEffective,
-            taille,
-            totalPages);
+            result.PageSize,
+            result.TotalPages);
     }
 }

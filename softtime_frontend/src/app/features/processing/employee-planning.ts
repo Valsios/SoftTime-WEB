@@ -5,7 +5,7 @@ import { ToastService } from '../../core/toast.service';
 import { ConfirmService } from '../../core/confirm.service';
 import { SessionStore } from '../../core/session.store';
 import { Droit } from '../../core/rights';
-import { EmployeePlanning, PeriodRequest, PlanningEmployee } from '../../shared/models';
+import { EmployeePlanning, PeriodRequest, PlanningEmployee, PageChangeEvent } from '../../shared/models';
 import { EmployeePlanningService, ShiftsService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import {
@@ -70,8 +70,8 @@ import { asRow, fmtDate, monthStart, today } from '../../shared/utils/date';
           [loading]="loadingPeople()"
           [serverSide]="true"
           [total]="employeeTotal()"
-          [pageSize]="PAGE_SIZE"
-          [currentPage]="employeePage()"
+          [serverPageSize]="employeePageSize"
+          [serverPage]="employeePage()"
           (pageChange)="onEmployeePageChange($event)"
         >
           <ng-template #actions let-row>
@@ -87,8 +87,8 @@ import { asRow, fmtDate, monthStart, today } from '../../shared/utils/date';
           [loading]="loading()"
           [serverSide]="true"
           [total]="planningTotal()"
-          [pageSize]="PAGE_SIZE"
-          [currentPage]="planningPage()"
+          [serverPageSize]="planningPageSize"
+          [serverPage]="planningPage()"
           (pageChange)="onPlanningPageChange($event)"
         >
           <ng-template #actions let-row>
@@ -152,7 +152,8 @@ export class EmployeePlanningPage implements OnInit {
   readonly loadingPeople = signal(true);
   readonly saving = signal(false);
   readonly modal = signal(false);
-  readonly PAGE_SIZE = 50;
+  employeePageSize = 50;
+  planningPageSize = 50;
   readonly employeeRows = signal<Record<string, unknown>[]>([]);
   readonly planningRows = signal<Record<string, unknown>[]>([]);
   readonly employeePage = signal(1);
@@ -211,13 +212,15 @@ export class EmployeePlanningPage implements OnInit {
     this.loadPlanning();
   }
 
-  onEmployeePageChange(page: number): void {
-    this.employeePage.set(page);
+  onEmployeePageChange(event: PageChangeEvent): void {
+    this.employeePage.set(event.page);
+    this.employeePageSize = event.pageSize;
     this.loadEmployeeRows();
   }
 
-  onPlanningPageChange(page: number): void {
-    this.planningPage.set(page);
+  onPlanningPageChange(event: PageChangeEvent): void {
+    this.planningPage.set(event.page);
+    this.planningPageSize = event.pageSize;
     this.loadPlanning();
   }
 
@@ -243,7 +246,7 @@ export class EmployeePlanningPage implements OnInit {
       this.lastFilter.from,
       this.lastFilter.to,
       this.employeePage(),
-      this.PAGE_SIZE,
+      this.employeePageSize,
     ).subscribe({
       next: (r) => {
         if (seq !== this.employeeSeq) return;
@@ -263,7 +266,7 @@ export class EmployeePlanningPage implements OnInit {
       from: this.lastFilter.from,
       to: this.lastFilter.to,
       page: this.planningPage(),
-      pageSize: this.PAGE_SIZE,
+      pageSize: this.planningPageSize,
     }).subscribe({
       next: (r) => {
         if (seq !== this.planningSeq) return;

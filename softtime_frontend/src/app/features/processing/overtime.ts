@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
-import { OvertimeDetail, PeriodRequest } from '../../shared/models';
+import { OvertimeDetail, PeriodRequest, PageChangeEvent } from '../../shared/models';
 import { OvertimeService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftModal, PeriodFilter } from '../../shared/components';
@@ -30,8 +30,8 @@ import { SessionStore } from '../../core/session.store';
         [loading]="loading()"
         [serverSide]="true"
         [total]="total()"
-        [pageSize]="PAGE_SIZE"
-        [currentPage]="page()"
+        [serverPageSize]="pageSize"
+        [serverPage]="page()"
         (pageChange)="onPageChange($event)"
       >
         <ng-template #actions let-row>
@@ -81,7 +81,7 @@ export class OvertimePage {
 
   readonly busy = signal(false);
   readonly loading = signal(false);
-  readonly PAGE_SIZE = 50;
+  pageSize = 50;
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly page = signal(1);
   readonly total = signal(0);
@@ -135,8 +135,9 @@ export class OvertimePage {
     this.loadPage();
   }
 
-  onPageChange(page: number): void {
-    this.page.set(page);
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
     this.loadPage();
   }
 
@@ -144,7 +145,7 @@ export class OvertimePage {
     if (!this.lastFilter) return;
     const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.listPaged({ ...this.lastFilter, page: this.page(), pageSize: this.PAGE_SIZE }).subscribe({
+    this.svc.listPaged({ ...this.lastFilter, page: this.page(), pageSize: this.pageSize }).subscribe({
       next: (r) => {
         if (seq !== this.requestSeq) return;
         this.rows.set(r.items.map(asRow));
