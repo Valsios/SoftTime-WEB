@@ -15,6 +15,7 @@ import {
   PagedResult,
   PeriodRequest,
   PlanningEmployee,
+  PlanningEmployeeStat,
   PreprocessResult,
   Punch,
   PunchUpdate,
@@ -30,6 +31,12 @@ import {
 export class ShiftsService extends ApiService {
   list(): Observable<Shift[]> {
     return this.http.get<Shift[]>(this.url('/api/shifts'));
+  }
+  /** Catalogue paginé (le catalogue complet reste exposé pour l'export et les options). */
+  listPaged(page: number, pageSize: number): Observable<PagedResult<Shift>> {
+    return this.http.get<PagedResult<Shift>>(this.url('/api/shifts/paged'), {
+      params: this.params({ page, pageSize }),
+    });
   }
   create(dto: Shift): Observable<Shift> {
     return this.http.post<Shift>(this.url('/api/shifts'), dto);
@@ -53,6 +60,30 @@ export class EmployeePlanningService extends ApiService {
     return this.http.get<EmployeePlanning[]>(this.url('/api/employee-planning'), {
       params: this.params({ from, to, cardId }),
     });
+  }
+  /** Lignes de planning paginées (filtre date/carte côté serveur). */
+  listPaged(filter: PagedPeriodRequest): Observable<PagedResult<EmployeePlanning>> {
+    return this.http.get<PagedResult<EmployeePlanning>>(this.url('/api/employee-planning/paged'), {
+      params: this.params({ ...filter }),
+    });
+  }
+  /** Salariés + jours planifiés, complet (export). */
+  employeesStats(from: string, to: string): Observable<PlanningEmployeeStat[]> {
+    return this.http.get<PlanningEmployeeStat[]>(this.url('/api/employee-planning/employees/stats'), {
+      params: this.params({ from, to }),
+    });
+  }
+  /** Salariés + jours planifiés, paginé. */
+  employeesPaged(
+    from: string,
+    to: string,
+    page: number,
+    pageSize: number,
+  ): Observable<PagedResult<PlanningEmployeeStat>> {
+    return this.http.get<PagedResult<PlanningEmployeeStat>>(
+      this.url('/api/employee-planning/employees/paged'),
+      { params: this.params({ from, to, page, pageSize }) },
+    );
   }
   employees(): Observable<PlanningEmployee[]> {
     return this.http.get<PlanningEmployee[]>(this.url('/api/employee-planning/employees'));
@@ -132,6 +163,12 @@ export class AnomaliesService extends ApiService {
       params: this.params({ ...filter }),
     });
   }
+  /** Même liste, paginée (voir `PunchesService.listPaged`). */
+  listPaged(filter: PagedPeriodRequest): Observable<PagedResult<Anomaly>> {
+    return this.http.get<PagedResult<Anomaly>>(this.url('/api/anomalies/paged'), {
+      params: this.params({ ...filter }),
+    });
+  }
   get(id: number): Observable<Anomaly> {
     return this.http.get<Anomaly>(this.url(`/api/anomalies/${id}`));
   }
@@ -182,6 +219,14 @@ export class WeeklyValidationService extends ApiService {
   preview(req: PeriodRequest): Observable<WeeklyHs[]> {
     return this.http.post<WeeklyHs[]>(this.url('/api/weekly-validation/preview'), req);
   }
+  /** Aperçu paginé en lecture seule (aucune écriture par changement de page). */
+  previewPaged(filter: PagedPeriodRequest): Observable<PagedResult<WeeklyHs>> {
+    return this.http.post<PagedResult<WeeklyHs>>(
+      this.url('/api/weekly-validation/preview/paged'),
+      filter,
+      { params: this.params({ page: filter.page, pageSize: filter.pageSize }) },
+    );
+  }
   validate(req: WeeklyValidationRequest): Observable<void> {
     return this.http.post<void>(this.url('/api/weekly-validation/validate'), req);
   }
@@ -200,6 +245,12 @@ export class WeeklyValidationService extends ApiService {
 export class OvertimeService extends ApiService {
   list(req: PeriodRequest): Observable<HsExo[]> {
     return this.http.get<HsExo[]>(this.url('/api/overtime'), {
+      params: this.params({ ...req }),
+    });
+  }
+  /** Liste paginée des cumuls EXO/IMPO (la liste complète reste utilisée pour l'export). */
+  listPaged(req: PagedPeriodRequest): Observable<PagedResult<HsExo>> {
+    return this.http.get<PagedResult<HsExo>>(this.url('/api/overtime/paged'), {
       params: this.params({ ...req }),
     });
   }

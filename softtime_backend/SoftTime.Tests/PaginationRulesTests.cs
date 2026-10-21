@@ -42,6 +42,25 @@ public class PaginationRulesTests
         Assert.Equal((7, 25), PaginationRules.Normaliser(7, 25));
     }
 
+    [Fact]
+    public void Decalage_PageExtreme_DoesNotOverflow()
+        => Assert.Equal(int.MaxValue, PaginationRules.Decalage(int.MaxValue, 100));
+
+    [Theory]
+    [InlineData(0, 50)]
+    [InlineData(1, 0)]
+    [InlineData(-4, -10)]
+    public void Decalage_PageOrSizeInvalid_ReturnsZero(int page, int taille)
+        => Assert.Equal(0, PaginationRules.Decalage(page, taille));
+
+    [Fact]
+    public void PageEffective_EmptyTotal_ReturnsOne()
+        => Assert.Equal(1, PaginationRules.PageEffective(0, 5));
+
+    [Fact]
+    public void PageEffective_NonEmpty_ReturnsRequestedPage()
+        => Assert.Equal(5, PaginationRules.PageEffective(25, 5));
+
     [Theory]
     [InlineData(1, 50, 0)]
     [InlineData(2, 50, 50)]

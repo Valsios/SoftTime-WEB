@@ -5,7 +5,7 @@ import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
 import { Droit } from '../../core/rights';
 import { FormsModule } from '@angular/forms';
-import { AnomalyUpdate, PeriodRequest } from '../../shared/models';
+import { AnomalyUpdate, PeriodRequest, PageChangeEvent } from '../../shared/models';
 import { AnomaliesService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import {
@@ -45,12 +45,18 @@ import { asRow, fmtDate } from '../../shared/utils/date';
     </page-header>
     <period-filter (search)="onSearch($event)"></period-filter>
     <soft-card>
+      <p class="hint">La sélection est conservée entre les pages ; « tout sélectionner » porte sur la page affichée.</p>
       <data-table
         [columns]="columns"
         [rows]="rows()"
         [loading]="loading()"
         [selectable]="true"
         trackKey="id"
+        [serverSide]="true"
+        [total]="total()"
+        [serverPageSize]="pageSize"
+        [serverPage]="page()"
+        (pageChange)="onPageChange($event)"
         [(selectedKeys)]="selectedKeys"
       >
         <ng-template #actions let-row>
@@ -85,7 +91,8 @@ import { asRow, fmtDate } from '../../shared/utils/date';
   styles: [
     `.form-grid { display: grid; gap: 14px; }
      .toggles { display: flex; flex-wrap: wrap; gap: 18px; }
-     .toggles span { display: inline-flex; align-items: center; gap: 8px; }`,
+     .toggles span { display: inline-flex; align-items: center; gap: 8px; }
+     .hint { margin: 0 0 12px; color: var(--text-muted); font-size: 13px; }`,
   ],
 })
 export class AnomaliesPage {
@@ -99,12 +106,16 @@ export class AnomaliesPage {
 
   readonly loading = signal(false);
   readonly busy = signal(false);
+  pageSize = 50;
   readonly rows = signal<Record<string, unknown>[]>([]);
+  readonly page = signal(1);
+  readonly total = signal(0);
   readonly selectedKeys = signal<string[]>([]);
   readonly modal = signal(false);
 
   private editId: number | null = null;
   private lastFilter: PeriodRequest | null = null;
+  private requestSeq = 0;
   form: Partial<AnomalyUpdate> = {};
 
   readonly columns: Column[] = [
@@ -120,14 +131,30 @@ export class AnomaliesPage {
 
   onSearch(filter: PeriodRequest): void {
     this.lastFilter = filter;
+    this.selectedKeys.set([]);
+    this.page.set(1);
+    this.loadPage();
+  }
+
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
+    this.loadPage();
+  }
+
+  private loadPage(): void {
+    if (!this.lastFilter) return;
+    const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.list(filter).subscribe({
-      next: (items) => {
-        this.rows.set(items.map(asRow));
-        this.selectedKeys.set([]);
+    this.svc.listPaged({ ...this.lastFilter, page: this.page(), pageSize: this.pageSize }).subscribe({
+      next: (r) => {
+        if (seq !== this.requestSeq) return;
+        this.rows.set(r.items.map(asRow));
+        this.total.set(r.total);
+        this.page.set(r.page);
         this.loading.set(false);
       },
-      error: () => this.loading.set(false),
+      error: () => { if (seq === this.requestSeq) this.loading.set(false); },
     });
   }
 
@@ -176,6 +203,7 @@ export class AnomaliesPage {
       next: (r) => {
         this.busy.set(false);
         this.toast.success(r.message || `${r.correctionsCreees} correction(s) créée(s).`);
+        this.selectedKeys.set([]);
         this.refresh();
       },
       error: () => this.busy.set(false),
@@ -187,17 +215,29 @@ export class AnomaliesPage {
     this.svc.remove(row['id'] as number).subscribe({
       next: () => {
         this.toast.success('Supprimé.');
-        this.rows.update((r) => r.filter((x) => x['id'] !== row['id']));
+        this.selectedKeys.update((keys) => keys.filter((k) => k !== String(row['id'])));
+        this.refresh();
       },
     });
   }
 
   exportExcel(): void {
-    this.excel.download('anomalies', this.columns, this.rows());
+    if (!this.lastFilter) {
+      this.excel.download('anomalies', this.columns, this.rows());
+      return;
+    }
+    this.loading.set(true);
+    this.svc.list(this.lastFilter).subscribe({
+      next: (items) => {
+        this.loading.set(false);
+        this.excel.download('anomalies', this.columns, items.map(asRow));
+      },
+      error: () => this.loading.set(false),
+    });
   }
 
   private refresh(): void {
-    if (this.lastFilter) this.onSearch(this.lastFilter);
+    if (this.lastFilter) this.loadPage();
   }
 
   /** Ne transmet que les valeurs réellement saisies : un champ vide laisse la valeur en base inchangée. */

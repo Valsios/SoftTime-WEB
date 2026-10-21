@@ -133,6 +133,20 @@ public record AffectationDto(int Id, int CardPaieId, int CategoryId)
     public AffectationDto() : this(default, default, default) { }
 }
 
+public record AffectationRowDto(
+    int Id,
+    int CardPaieId,
+    int CategoryId,
+    string? Matricule,
+    string? Nom,
+    string? Prenom,
+    string? Departement,
+    string? Service);
+
+public record AffectationOptionsDto(
+    IReadOnlyList<string> Departements,
+    IReadOnlyList<string> Services);
+
 public record ToleranceDto(int Id, int CategoryId, int Tolerance, bool TypesTol, int? Sortie)
 {
     public ToleranceDto() : this(default, default, default, default, default) { }
@@ -188,6 +202,12 @@ public record EmployeePlanningDto(int Id, int CardPaieId, int? NoShift, DateTime
 public record PlanningEmployeeDto(int CardPaieId, string? Matricule, string? Nom, string? Prenom)
 {
     public PlanningEmployeeDto() : this(default, default, default, default) { }
+}
+
+/// <summary>Salarié + nombre de jours planifiés sur la période, pour la grille paginée du planning.</summary>
+public record PlanningEmployeeStatDto(int CardPaieId, string? Matricule, string? Nom, string? Prenom, int PlannedDays)
+{
+    public PlanningEmployeeStatDto() : this(default, default, default, default, default) { }
 }
 
 public record PunchDto(decimal Id, string? Matricule, DateTime? Date, TimeSpan? Heure, string? Type, DateTime? ImportDate)
@@ -464,8 +484,6 @@ public record OvertimeDetailDto(
 {
     public OvertimeDetailDto() : this(default, default, default, new List<OvertimeDetailDayDto>(), new List<OvertimeDetailWeekDto>(), default) { }
 }
-
-/// <summary>Page de résultats d'une liste paginée (voir SoftTime.Domain.Models.PagedResult&lt;T&gt;).</summary>
 
 public record PunchCountDto(string? Matricule, int Total);
 

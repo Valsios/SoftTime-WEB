@@ -5,7 +5,7 @@ import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
 import { Droit } from '../../core/rights';
-import { CardPaie, DepartementService } from '../../shared/models';
+import { CardPaie, DepartementService, PageChangeEvent } from '../../shared/models';
 import { CardPaieService, DepartementServiceService } from '../../shared/services/catalog.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal } from '../../shared/components';
@@ -26,7 +26,9 @@ import { asRow, fmtDate } from '../../shared/utils/date';
       <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter</soft-button>
     </page-header>
     <soft-card>
-      <data-table [columns]="columns" [rows]="rows()" [loading]="loading()">
+      <data-table [columns]="columns" [rows]="rows()" [loading]="loading()"
+        [serverSide]="true" [total]="total()" [serverPage]="page()" [serverPageSize]="pageSize"
+        (pageChange)="onPageChange($event)">
         <ng-template #actions let-row>
           <div class="soft-actions" style="justify-content: end">
             <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
@@ -69,6 +71,10 @@ export class CardPaiePage implements OnInit {
   readonly modal = signal(false);
   readonly editId = signal<number | null>(null);
   readonly rows = signal<Record<string, unknown>[]>([]);
+  readonly page = signal(1);
+  pageSize = 50;
+  readonly total = signal(0);
+  private requestSeq = 0;
   readonly autoMapping = signal(false);
   form: Partial<CardPaie> = {};
 
@@ -82,21 +88,31 @@ export class CardPaiePage implements OnInit {
     { key: 'date', label: 'Date', format: fmtDate },
   ];
 
-  ngOnInit(): void { this.load(); }
+  ngOnInit(): void { this.loadPage(); }
 
-  load(): void {
+  loadPage(): void {
+    const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.list().subscribe({
-      next: (items) => {
-        this.rows.set(items.map(asRow));
+    this.svc.listPaged(this.page(), this.pageSize).subscribe({
+      next: (r) => {
+        if (seq !== this.requestSeq) return;
+        this.rows.set(r.items.map(asRow));
+        this.total.set(r.total);
+        this.page.set(r.page);
         this.loading.set(false);
-        this.loadDepartements(items);
+        this.loadDepartements(r.items, seq);
       },
-      error: () => this.loading.set(false),
+      error: () => { if (seq === this.requestSeq) this.loading.set(false); },
     });
   }
 
-  private loadDepartements(items: CardPaie[]): void {
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
+    this.loadPage();
+  }
+
+  private loadDepartements(items: CardPaie[], seq: number): void {
     const matricules = items
       .map((i) => i.sageMatricule?.trim())
       .filter((m): m is string => !!m);
@@ -104,14 +120,15 @@ export class CardPaiePage implements OnInit {
 
     this.deptSvc.lookupBatch(matricules).subscribe({
       next: (results) => {
+        if (seq !== this.requestSeq) return;
         const byMat = new Map<string, DepartementService>(results.map((r) => [r.matricule.trim(), r]));
-        const merged = this.rows().map((row) => {
+        this.rows.update((rows) => rows.map((row) => {
           const mat = (row['sageMatricule'] as string | null)?.trim();
           const info = mat ? byMat.get(mat) : undefined;
           return { ...row, departement: info?.departement ?? null, service: info?.service ?? null };
-        });
-        this.rows.set(merged);
+        }));
       },
+      error: () => undefined,
     });
   }
 
@@ -122,29 +139,50 @@ export class CardPaiePage implements OnInit {
     const id = this.editId();
     const dto = this.form as CardPaie;
     const req = id ? this.svc.update(id, { ...dto, id }) : this.svc.create({ ...dto, id: 0 });
-    req.subscribe({ next: () => { this.saving.set(false); this.modal.set(false); this.toast.success('Enregistré.'); this.load(); }, error: () => this.saving.set(false) });
+    req.subscribe({ next: () => { this.saving.set(false); this.modal.set(false); this.toast.success('Enregistré.'); this.loadPage(); }, error: () => this.saving.set(false) });
   }
   async remove(row: Record<string, unknown>): Promise<void> {
     if (!(await this.confirm.ask('Supprimer cette correspondance ?'))) return;
-    this.svc.remove(row['id'] as number).subscribe({ next: () => { this.toast.success('Supprimé.'); this.load(); } });
+    this.svc.remove(row['id'] as number).subscribe({ next: () => { this.toast.success('Supprimé.'); this.loadPage(); } });
   }
   autoMap(): void {
     this.autoMapping.set(true);
     this.svc.autoMap().subscribe({
       next: (r) => this.toast.success(r.message ?? `${r.added} correspondance(s) ajoutée(s).`),
       error: (e) => { this.autoMapping.set(false); this.toast.error(e?.error?.error || 'Synchronisation impossible.'); },
-      complete: () => { this.autoMapping.set(false); this.load(); },
+      complete: () => { this.autoMapping.set(false); this.loadPage(); },
     });
   }
   exportExcel(): void {
-    this.excel.download('correspondances-paie', this.columns, this.rows());
+    this.svc.list().subscribe({
+      next: (items) => {
+        const matricules = items
+          .map((i) => i.sageMatricule?.trim())
+          .filter((m): m is string => !!m);
+        if (matricules.length === 0) {
+          this.excel.download('correspondances-paie', this.columns, items.map(asRow));
+          return;
+        }
+        this.deptSvc.lookupBatch(matricules).subscribe({
+          next: (results) => {
+            const byMat = new Map(results.map((r) => [r.matricule.trim(), r]));
+            const rows = items.map((item) => {
+              const info = item.sageMatricule ? byMat.get(item.sageMatricule.trim()) : undefined;
+              return { ...item, departement: info?.departement ?? null, service: info?.service ?? null };
+            });
+            this.excel.download('correspondances-paie', this.columns, rows.map(asRow));
+          },
+          error: () => this.excel.download('correspondances-paie', this.columns, items.map(asRow)),
+        });
+      },
+    });
   }
   onCsv(event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
     this.svc.importCsv(file).subscribe({
-      next: (r) => { this.toast.success(r.message || `${r.imported} importé(s).`); this.load(); },
+      next: (r) => { this.toast.success(r.message || `${r.imported} importé(s).`); this.loadPage(); },
     });
     input.value = '';
   }

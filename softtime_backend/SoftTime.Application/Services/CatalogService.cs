@@ -3,6 +3,7 @@ using AutoMapper;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.Sage;
 using SoftTime.Domain.Entities.SoftTime;
+using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
 using SoftTime.Application.Abstractions;
@@ -843,6 +844,47 @@ public class CatalogService
         return result;
     }
 
+    /// <summary>
+    /// Variante ciblée : ne charge que les mappings des connexions de la page courante, pour éviter
+    /// de relire toute la table à chaque page. Les champs sont limités aux mappings sélectionnés.
+    /// </summary>
+    private async Task<Dictionary<int, List<SourceEntityMappingDto>>> LoadMappingLookupAsync(
+        bool isSage, IReadOnlyCollection<int> connectionIds, CancellationToken ct)
+    {
+        if (connectionIds.Count == 0)
+            return new Dictionary<int, List<SourceEntityMappingDto>>();
+
+        var ids = connectionIds.Distinct().ToList();
+        var entities = isSage
+            ? await _uow.Repository<T_SOURCE_ENTITY_MAPPING>().ListAsync(
+                e => e.SageDbId.HasValue && ids.Contains(e.SageDbId.Value), ct)
+            : await _uow.Repository<T_SOURCE_ENTITY_MAPPING>().ListAsync(
+                e => e.PointeuseDbId.HasValue && ids.Contains(e.PointeuseDbId.Value), ct);
+        if (entities.Count == 0)
+            return new Dictionary<int, List<SourceEntityMappingDto>>();
+
+        var entityIds = entities.Select(e => e.Id).ToList();
+        var fields = await _uow.Repository<T_SOURCE_FIELD_MAPPING>().ListAsync(
+            f => entityIds.Contains(f.EntityMappingId), ct);
+        var fieldsByEntity = fields.GroupBy(f => f.EntityMappingId).ToDictionary(g => g.Key, g => g.ToList());
+
+        var result = new Dictionary<int, List<SourceEntityMappingDto>>();
+        foreach (var e in entities)
+        {
+            var key = isSage ? e.SageDbId : e.PointeuseDbId;
+            if (key is not int id) continue;
+            var dto = _mapper.Map<SourceEntityMappingDto>(e) with
+            {
+                Fields = (fieldsByEntity.TryGetValue(e.Id, out var fs) ? fs : new List<T_SOURCE_FIELD_MAPPING>())
+                    .Select(_mapper.Map<SourceFieldMappingDto>)
+                    .ToList()
+            };
+            if (!result.TryGetValue(id, out var list)) { list = new List<SourceEntityMappingDto>(); result[id] = list; }
+            list.Add(dto);
+        }
+        return result;
+    }
+
     private async Task<IReadOnlyList<string>> ValidateMappingColumnsAsync(string serveur, string nomBd, bool sqlAuth, string? login, string? password, IReadOnlyList<SourceEntityMappingDto> mappings, CancellationToken ct)
     {
         var missing = new List<string>();
@@ -910,6 +952,321 @@ public class CatalogService
             await _uow.SaveChangesAsync(ct);
         }
         return new CorrespondenceModeDto(active);
+    }
+
+    // ---------------------------------------------------------------- Listes paginées (Lot A)
+
+    public async Task<PagedResult<SageDbDto>> ListSagePagedAsync(
+        IReadOnlyCollection<string>? allowedNames, int? page, int? pageSize, CancellationToken ct = default)
+    {
+        await EnsureMappingSchemaAsync(ct);
+        await MigrateLegacyMappingsAsync(ct);
+
+        if (allowedNames is { Count: 0 })
+        {
+            var (_, taille) = PaginationRules.Normaliser(page, pageSize);
+            return new PagedResult<SageDbDto>(Array.Empty<SageDbDto>(), 0, 1, taille, 1);
+        }
+
+        System.Linq.Expressions.Expression<Func<T_BDD_SAGE, bool>> predicate = allowedNames is null
+            ? s => true
+            : s => s.NOM_BD != null && allowedNames.Contains(s.NOM_BD);
+        var result = await _uow.Repository<T_BDD_SAGE>().ToPagedAsync(
+            predicate, q => q.OrderBy(s => s.ID), page, pageSize, ct);
+        if (result.Total > 0 && result.Items.Count == 0 && result.Page > result.TotalPages)
+            result = await _uow.Repository<T_BDD_SAGE>().ToPagedAsync(
+                predicate, q => q.OrderBy(s => s.ID), result.TotalPages, result.PageSize, ct);
+        var mappings = await LoadMappingLookupAsync(true, result.Items.Select(s => s.ID).ToList(), ct);
+        var items = result.Items.Select(s => _mapper.Map<SageDbDto>(s) with
+        {
+            Mappings = mappings.TryGetValue(s.ID, out var m) ? m : Array.Empty<SourceEntityMappingDto>()
+        }).ToList();
+        var pageEffective = PaginationRules.PageEffective(result.Total, result.Page);
+        return new PagedResult<SageDbDto>(items, result.Total, pageEffective, result.PageSize, result.TotalPages);
+    }
+
+    public async Task<PagedResult<PointeuseDbDto>> ListPointeusePagedAsync(
+        IReadOnlyCollection<string>? allowedNames, int? page, int? pageSize, CancellationToken ct = default)
+    {
+        await EnsureMappingSchemaAsync(ct);
+        await MigrateLegacyMappingsAsync(ct);
+
+        if (allowedNames is { Count: 0 })
+        {
+            var (_, taille) = PaginationRules.Normaliser(page, pageSize);
+            return new PagedResult<PointeuseDbDto>(Array.Empty<PointeuseDbDto>(), 0, 1, taille, 1);
+        }
+
+        System.Linq.Expressions.Expression<Func<T_BDD_POINTEUSE, bool>> predicate = allowedNames is null
+            ? p => true
+            : p => p.NOM_BD != null && allowedNames.Contains(p.NOM_BD);
+        var result = await _uow.Repository<T_BDD_POINTEUSE>().ToPagedAsync(
+            predicate, q => q.OrderBy(p => p.ID), page, pageSize, ct);
+        if (result.Total > 0 && result.Items.Count == 0 && result.Page > result.TotalPages)
+            result = await _uow.Repository<T_BDD_POINTEUSE>().ToPagedAsync(
+                predicate, q => q.OrderBy(p => p.ID), result.TotalPages, result.PageSize, ct);
+        var mappings = await LoadMappingLookupAsync(false, result.Items.Select(p => p.ID).ToList(), ct);
+        var items = result.Items.Select(p => _mapper.Map<PointeuseDbDto>(p) with
+        {
+            Mappings = mappings.TryGetValue(p.ID, out var m) ? m : Array.Empty<SourceEntityMappingDto>()
+        }).ToList();
+        var pageEffective = PaginationRules.PageEffective(result.Total, result.Page);
+        return new PagedResult<PointeuseDbDto>(items, result.Total, pageEffective, result.PageSize, result.TotalPages);
+    }
+
+    public async Task<PagedResult<CardPaieDto>> ListCardsPagedAsync(
+        int? page, int? pageSize, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var sage = (_tenant.SageDb ?? string.Empty).Trim().ToLowerInvariant();
+        System.Linq.Expressions.Expression<Func<T_CARDPAIE, bool>> predicate = c =>
+            c.SAGE_BDD == null
+            || c.SAGE_BDD.Trim() == ""
+            || c.SAGE_BDD.Trim().ToLower() == sage;
+
+        return await PagedLists.PageAsync(
+            _uow.Repository<T_CARDPAIE>(),
+            predicate,
+            q => q.OrderBy(c => c.ID),
+            page,
+            pageSize,
+            c => _mapper.Map<CardPaieDto>(c),
+            ct);
+    }
+
+    public async Task<PagedResult<CategoryDto>> ListCategoriesPagedAsync(
+        int? page, int? pageSize, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var sage = _tenant.SageDb;
+        return await PagedLists.PageAsync(
+            _uow.Repository<T_CATEGORIE>(),
+            c => c.BDD_SAGE == sage,
+            q => q.OrderBy(c => c.IDCATEGORIE),
+            page,
+            pageSize,
+            c => _mapper.Map<CategoryDto>(c),
+            ct);
+    }
+
+    /// <summary>
+    /// Liste paginée des affectations. Sans filtre département/service, la page est découpée en SQL
+    /// puis enrichie (carte + département/service) pour les seuls matricules de la page. Avec un
+    /// filtre, le jeu complet est enrichi avant le découpage, comme pour une liste calculée.
+    /// </summary>
+    public async Task<PagedResult<AffectationRowDto>> ListAffectationsPagedAsync(
+        int? categoryId, string? departement, string? service, int? page, int? pageSize, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+
+        if (!string.IsNullOrWhiteSpace(departement) || !string.IsNullOrWhiteSpace(service))
+        {
+            var rows = await LoadAffectationRowsAsync(categoryId, ct);
+            return PagedLists.Page(ApplyAffectationFilters(rows, departement, service).ToList(), page, pageSize);
+        }
+
+        var sage = _tenant.SageDb;
+        System.Linq.Expressions.Expression<Func<T_CAT_SAL, bool>> predicate =
+            a => a.BDD_SAGE == sage && (!categoryId.HasValue || a.ID_CATEG == categoryId);
+        Func<IQueryable<T_CAT_SAL>, IOrderedQueryable<T_CAT_SAL>> order =
+            q => q.OrderBy(a => a.MATRICULE_SAGE).ThenBy(a => a.ID);
+        var result = await _uow.Repository<T_CAT_SAL>().ToPagedAsync(
+            predicate, order, page, pageSize, ct);
+        if (result.Total > 0 && result.Items.Count == 0 && result.Page > result.TotalPages)
+            result = await _uow.Repository<T_CAT_SAL>().ToPagedAsync(
+                predicate, order, result.TotalPages, result.PageSize, ct);
+        var cards = await LoadCardsAsync(result.Items.Select(a => a.MATRICULE_SAGE).ToList(), ct);
+        var matricules = cards.Values
+            .Select(c => c.SAGE_MATRICULE?.Trim())
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .Select(m => m!)
+            .ToList();
+        var deptByMat = await LoadDepartementServicesAsync(matricules, ct);
+        var items = result.Items.Select(a => ToAffectationRow(a, cards, deptByMat)).ToList();
+        var pageEffective = PaginationRules.PageEffective(result.Total, result.Page);
+        return new PagedResult<AffectationRowDto>(items, result.Total, pageEffective, result.PageSize, result.TotalPages);
+    }
+
+    /// <summary>Jeu complet enrichi, pour l'export Excel (jamais la page affichée).</summary>
+    public async Task<IReadOnlyList<AffectationRowDto>> ListAllAffectationsAsync(
+        int? categoryId, string? departement, string? service, CancellationToken ct = default)
+    {
+        var rows = await LoadAffectationRowsAsync(categoryId, ct);
+        return ApplyAffectationFilters(rows, departement, service).ToList();
+    }
+
+    /// <summary>Options des filtres département/service, calculées une fois au montage de l'écran.</summary>
+    public async Task<AffectationOptionsDto> GetAffectationOptionsAsync(CancellationToken ct = default)
+    {
+        var rows = await LoadAffectationRowsAsync(null, ct);
+        var departements = rows
+            .Select(r => r.Departement)
+            .Where(d => !string.IsNullOrWhiteSpace(d))
+            .Select(d => d!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(d => d, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var services = rows
+            .Select(r => r.Service)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return new AffectationOptionsDto(departements, services);
+    }
+
+    public async Task<PagedResult<ToleranceDto>> ListTolerancesPagedAsync(
+        int? categoryId, int? page, int? pageSize, CancellationToken ct = default)
+    {
+        return await PagedLists.PageAsync(
+            _uow.Repository<T_TOLERANCE>(),
+            t => !categoryId.HasValue || t.IDCATEGORIE == categoryId,
+            q => q.OrderBy(t => t.IDCATEGORIE).ThenBy(t => t.ID),
+            page,
+            pageSize,
+            t => new ToleranceDto(t.ID, t.IDCATEGORIE, t.TOLERANCE, t.TYPES_TOL, t.SORTIE),
+            ct);
+    }
+
+    public async Task<PagedResult<HolidayDto>> ListHolidaysPagedAsync(
+        int? page, int? pageSize, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var sage = _tenant.SageDb;
+        return await PagedLists.PageAsync(
+            _uow.Repository<T_FERIE>(),
+            f => f.BDD_SAGE == sage,
+            q => q.OrderBy(f => f.ID),
+            page,
+            pageSize,
+            f => _mapper.Map<HolidayDto>(f),
+            ct);
+    }
+
+    public async Task<PagedResult<MajorationDto>> ListMajorationsPagedAsync(
+        int? page, int? pageSize, CancellationToken ct = default)
+    {
+        return await PagedLists.PageAsync(
+            _uow.Repository<T_MAJORATION>(),
+            _ => true,
+            q => q.OrderBy(m => m.Cotation).ThenBy(m => m.ID),
+            page,
+            pageSize,
+            m => _mapper.Map<MajorationDto>(m),
+            ct);
+    }
+
+    public async Task<PagedResult<AbsenceCodeDto>> ListAbsenceCodesPagedAsync(
+        int? page, int? pageSize, CancellationToken ct = default)
+    {
+        return await PagedLists.PageAsync(
+            _uow.Repository<T_CODEABSENCE>(),
+            _ => true,
+            q => q.OrderBy(a => a.ID_ABSENCE),
+            page,
+            pageSize,
+            a => new AbsenceCodeDto(a.ID_ABSENCE, a.INTITULE_ABSENCE, a.NOT_PAY),
+            ct);
+    }
+
+    /// <summary>
+    /// Sept catégories ordonnées selon <see cref="OvertimeCodeKeys.Defaults"/> : l'ordre métier n'est
+    /// pas une colonne SQL, on pagine donc en mémoire après le tri (volume négligeable).
+    /// </summary>
+    public async Task<PagedResult<CodeConstanteDto>> ListCodeConstantesPagedAsync(
+        int? page, int? pageSize, CancellationToken ct = default)
+    {
+        var list = await ListCodeConstantesAsync(ct);
+        return PagedLists.Page(list, page, pageSize);
+    }
+
+    private async Task<List<AffectationRowDto>> LoadAffectationRowsAsync(
+        int? categoryId, CancellationToken ct)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var sage = _tenant.SageDb;
+        var affectations = await _uow.Repository<T_CAT_SAL>().ListAsync(
+            a => a.BDD_SAGE == sage && (!categoryId.HasValue || a.ID_CATEG == categoryId), ct);
+
+        var cards = await LoadCardsAsync(affectations.Select(a => a.MATRICULE_SAGE).ToList(), ct);
+        var matricules = cards.Values
+            .Select(c => c.SAGE_MATRICULE?.Trim())
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .Select(m => m!)
+            .ToList();
+        var deptByMat = await LoadDepartementServicesAsync(matricules, ct);
+        return affectations.Select(a => ToAffectationRow(a, cards, deptByMat)).ToList();
+    }
+
+    private async Task<Dictionary<int, T_CARDPAIE>> LoadCardsAsync(
+        IReadOnlyCollection<int> cardIds, CancellationToken ct)
+    {
+        var result = new Dictionary<int, T_CARDPAIE>();
+        foreach (var chunk in cardIds.Distinct().Chunk(500))
+        {
+            var ids = chunk.ToList();
+            var cards = await _uow.Repository<T_CARDPAIE>().ListAsync(c => ids.Contains(c.ID), ct);
+            foreach (var card in cards) result[card.ID] = card;
+        }
+        return result;
+    }
+
+    private async Task<Dictionary<string, DepartementServiceDto>> LoadDepartementServicesAsync(
+        IReadOnlyCollection<string> matricules, CancellationToken ct)
+    {
+        var result = new Dictionary<string, DepartementServiceDto>(StringComparer.OrdinalIgnoreCase);
+        foreach (var chunk in matricules
+                     .Where(m => !string.IsNullOrWhiteSpace(m))
+                     .Select(m => m.Trim())
+                     .Distinct(StringComparer.OrdinalIgnoreCase)
+                     .Chunk(2000))
+        {
+            try
+            {
+                var rows = await GetDepartementServiceBatchAsync(chunk, ct);
+                foreach (var row in rows) result[row.Matricule.Trim()] = row;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                // Source RH/paie indisponible : on laisse département/service vides plutôt que
+                // de faire échouer toute la page (même tolérance que l'ancien enrichissement front).
+            }
+        }
+        return result;
+    }
+
+    private static AffectationRowDto ToAffectationRow(
+        T_CAT_SAL affectation,
+        IReadOnlyDictionary<int, T_CARDPAIE> cards,
+        IReadOnlyDictionary<string, DepartementServiceDto> deptByMat)
+    {
+        cards.TryGetValue(affectation.MATRICULE_SAGE, out var card);
+        var matricule = card?.SAGE_MATRICULE?.Trim();
+        deptByMat.TryGetValue(matricule ?? string.Empty, out var dept);
+        return new AffectationRowDto(
+            affectation.ID,
+            affectation.MATRICULE_SAGE,
+            affectation.ID_CATEG,
+            matricule,
+            card?.SAGE_NOM,
+            card?.SAGE_PRENOM,
+            dept?.Departement,
+            dept?.Service);
+    }
+
+    private static IEnumerable<AffectationRowDto> ApplyAffectationFilters(
+        IEnumerable<AffectationRowDto> rows, string? departement, string? service)
+    {
+        var dept = string.IsNullOrWhiteSpace(departement) ? null : departement.Trim();
+        var serv = string.IsNullOrWhiteSpace(service) ? null : service.Trim();
+        return rows.Where(r =>
+            (dept is null || string.Equals(r.Departement, dept, StringComparison.OrdinalIgnoreCase))
+            && (serv is null || string.Equals(r.Service, serv, StringComparison.OrdinalIgnoreCase)));
     }
 
     public async Task<IReadOnlyList<CardPaieDto>> ListCardsAsync(CancellationToken ct = default)

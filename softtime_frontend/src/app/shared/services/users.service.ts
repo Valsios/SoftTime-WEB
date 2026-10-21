@@ -1,12 +1,17 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '../../core/api';
-import { DbAccess, DepartementService, DepartementServiceOptions, Droit, Privilege, Role, SageDb, User } from '../models';
+import { DbAccess, DepartementService, DepartementServiceOptions, Droit, PagedResult, Privilege, Role, SageDb, User } from '../models';
 
 @Injectable({ providedIn: 'root' })
 export class UsersService extends ApiService {
   list(): Observable<User[]> {
     return this.http.get<User[]>(this.url('/api/users'));
+  }
+  listPaged(page: number, pageSize: number): Observable<PagedResult<User>> {
+    return this.http.get<PagedResult<User>>(this.url('/api/users/paged'), {
+      params: this.params({ page, pageSize }),
+    });
   }
   get(id: number): Observable<User> {
     return this.http.get<User>(this.url(`/api/users/${id}`));
@@ -26,6 +31,11 @@ export class UsersService extends ApiService {
 export class RolesService extends ApiService {
   list(): Observable<Role[]> {
     return this.http.get<Role[]>(this.url('/api/roles'));
+  }
+  listPaged(page: number, pageSize: number): Observable<PagedResult<Role>> {
+    return this.http.get<PagedResult<Role>>(this.url('/api/roles/paged'), {
+      params: this.params({ page, pageSize }),
+    });
   }
   create(dto: Role): Observable<Role> {
     return this.http.post<Role>(this.url('/api/roles'), dto);
@@ -80,6 +90,11 @@ export class DbAccessService extends ApiService {
 export class SageDatabasesService extends ApiService {
   list(): Observable<SageDb[]> {
     return this.http.get<SageDb[]>(this.url('/api/sage-databases'));
+  }
+  listPaged(page: number, pageSize: number): Observable<PagedResult<SageDb>> {
+    return this.http.get<PagedResult<SageDb>>(this.url('/api/sage-databases/paged'), {
+      params: this.params({ page, pageSize }),
+    });
   }
   create(dto: SageDb): Observable<SageDb> {
     return this.http.post<SageDb>(this.url('/api/sage-databases'), dto);

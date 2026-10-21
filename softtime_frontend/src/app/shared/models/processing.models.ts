@@ -28,6 +28,11 @@ export interface PlanningEmployee {
   prenom?: string | null;
 }
 
+/** Salarié + nombre de jours planifiés sur la période (grille paginée du planning). */
+export interface PlanningEmployeeStat extends PlanningEmployee {
+  plannedDays: number;
+}
+
 export interface Punch {
   id: number;
   matricule?: string | null;
@@ -197,15 +202,6 @@ export interface HsExo {
   dim?: number | null;
   retard?: number | null;
   absence?: number | null;
-}
-
-/** Page de résultats d'une liste massive (pointages, heures corrigées). */
-export interface PagedResult<T> {
-  items: T[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
 }
 
 /** Jour détaillé du calcul des heures supplémentaires d'un salarié. */

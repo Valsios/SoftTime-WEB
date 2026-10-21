@@ -246,6 +246,26 @@ public class PaginationHelperTests
     }
 
     [Fact]
+    public async Task ToPagedAsync_PageExtreme_ReturnsEmptyAndKeepsTotals()
+    {
+        var repo = new InMemoryTestRepository();
+        for (int i = 1; i <= 25; i++)
+            repo.Items.Add(new TestEntity(i, "CatA", $"Item {i:D2}", i * 10));
+
+        var result = await repo.ToPagedAsync(
+            predicate: null,
+            orderBy: q => q.OrderBy(x => x.Id),
+            page: int.MaxValue,
+            pageSize: 10);
+
+        Assert.Equal(25, result.Total);
+        Assert.Equal(int.MaxValue, result.Page);
+        Assert.Equal(10, result.PageSize);
+        Assert.Equal(3, result.TotalPages);
+        Assert.Empty(result.Items);
+    }
+
+    [Fact]
     public async Task ToPagedAsync_SansOrderBy_LanceArgumentNullException()
     {
         var repo = new InMemoryTestRepository();

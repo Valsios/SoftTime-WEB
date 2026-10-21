@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
-import { OvertimeDetail, PeriodRequest } from '../../shared/models';
+import { OvertimeDetail, PeriodRequest, PageChangeEvent } from '../../shared/models';
 import { OvertimeService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftModal, PeriodFilter } from '../../shared/components';
@@ -24,7 +24,16 @@ import { SessionStore } from '../../core/session.store';
     <period-filter [autoSearch]="true" [showDepartement]="true" (search)="onSearch($event)"></period-filter>
 
     <soft-card>
-      <data-table [columns]="columns" [rows]="rows()" [loading]="busy()">
+      <data-table
+        [columns]="columns"
+        [rows]="rows()"
+        [loading]="loading()"
+        [serverSide]="true"
+        [total]="total()"
+        [serverPageSize]="pageSize"
+        [serverPage]="page()"
+        (pageChange)="onPageChange($event)"
+      >
         <ng-template #actions let-row>
           <soft-button size="sm" variant="ghost" (click)="openDetail(row)">Détail</soft-button>
         </ng-template>
@@ -71,11 +80,16 @@ export class OvertimePage {
   private readonly session = inject(SessionStore);
 
   readonly busy = signal(false);
+  readonly loading = signal(false);
+  pageSize = 50;
   readonly rows = signal<Record<string, unknown>[]>([]);
+  readonly page = signal(1);
+  readonly total = signal(0);
   readonly detailOpen = signal(false);
   readonly detailLoading = signal(false);
   readonly detail = signal<OvertimeDetail | null>(null);
   private lastFilter: PeriodRequest | null = null;
+  private requestSeq = 0;
 
   readonly currentDatabase = () => this.session.databases().find((db) => db.nomBd === this.session.activeSageDb());
   readonly isStandard = () => this.currentDatabase()?.typeBase !== 'AUTRE';
@@ -114,16 +128,32 @@ export class OvertimePage {
     this.lastFilter = filter;
     if (!this.validatePeriod(filter)) {
       this.rows.set([]);
+      this.total.set(0);
       return;
     }
-    if (this.busy()) return;
-    this.busy.set(true);
-    this.svc.list(filter).subscribe({
-      next: (items) => {
-        this.rows.set(items.map(asRow));
-        this.busy.set(false);
+    this.page.set(1);
+    this.loadPage();
+  }
+
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
+    this.loadPage();
+  }
+
+  private loadPage(): void {
+    if (!this.lastFilter) return;
+    const seq = ++this.requestSeq;
+    this.loading.set(true);
+    this.svc.listPaged({ ...this.lastFilter, page: this.page(), pageSize: this.pageSize }).subscribe({
+      next: (r) => {
+        if (seq !== this.requestSeq) return;
+        this.rows.set(r.items.map(asRow));
+        this.total.set(r.total);
+        this.page.set(r.page);
+        this.loading.set(false);
       },
-      error: () => this.busy.set(false),
+      error: () => { if (seq === this.requestSeq) this.loading.set(false); },
     });
   }
 
@@ -131,7 +161,12 @@ export class OvertimePage {
     if (this.busy() || !this.validatePeriod(this.lastFilter)) return;
     this.busy.set(true);
     this.svc.calculate(this.lastFilter).subscribe({
-      next: (items) => { this.rows.set(items.map(asRow)); this.busy.set(false); this.toast.success('Calcul terminé.'); },
+      next: () => {
+        this.busy.set(false);
+        this.toast.success('Calcul terminé.');
+        this.page.set(1);
+        this.loadPage();
+      },
       error: () => this.busy.set(false),
     });
   }
@@ -141,7 +176,7 @@ export class OvertimePage {
     if (!(await this.confirm.ask('Purger les HS de la période ?'))) return;
     this.busy.set(true);
     this.svc.purge(this.lastFilter).subscribe({
-      next: () => { this.busy.set(false); this.toast.success('HS purgées.'); this.rows.set([]); },
+      next: () => { this.busy.set(false); this.toast.success('HS purgées.'); this.rows.set([]); this.total.set(0); this.page.set(1); },
       error: () => this.busy.set(false),
     });
   }
@@ -161,7 +196,18 @@ export class OvertimePage {
   }
 
   exportExcel(): void {
-    this.excel.download('heures-supplementaires', this.columns, this.rows());
+    if (!this.lastFilter) {
+      this.excel.download('heures-supplementaires', this.columns, this.rows());
+      return;
+    }
+    this.loading.set(true);
+    this.svc.list(this.lastFilter).subscribe({
+      next: (items) => {
+        this.loading.set(false);
+        this.excel.download('heures-supplementaires', this.columns, items.map(asRow));
+      },
+      error: () => this.loading.set(false),
+    });
   }
 
   readonly dayColumns: Column[] = [

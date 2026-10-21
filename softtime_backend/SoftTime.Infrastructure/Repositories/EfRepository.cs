@@ -59,6 +59,17 @@ public class EfRepository<T> : IRepository<T> where T : class
                 1);
         }
 
+        var totalPages = PaginationRules.NombreDePages(total, taille);
+        if (pageNorm > totalPages)
+        {
+            return new PagedResult<TResult>(
+                Array.Empty<TResult>(),
+                total,
+                pageNorm,
+                taille,
+                totalPages);
+        }
+
         var items = await query
             .Skip(PaginationRules.Decalage(pageNorm, taille))
             .Take(taille)
@@ -69,7 +80,7 @@ public class EfRepository<T> : IRepository<T> where T : class
             total,
             pageNorm,
             taille,
-            PaginationRules.NombreDePages(total, taille));
+            totalPages);
     }
 
     public async Task<PagedResult<TDto>> ToPagedAsync<TDto>(

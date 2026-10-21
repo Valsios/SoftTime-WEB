@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
 import { Droit } from '../../core/rights';
-import { Majoration } from '../../shared/models';
+import { Majoration, PageChangeEvent } from '../../shared/models';
 import { MajorationsService } from '../../shared/services/catalog.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal } from '../../shared/components';
 import { asRow } from '../../shared/utils/date';
@@ -16,7 +16,9 @@ import { asRow } from '../../shared/utils/date';
   template: `
     <page-header title="Majorations" subtitle="Taux NUIT / DIMANCHE / FERIE"></page-header>
     <soft-card>
-      <data-table [columns]="columns" [rows]="rows()" [loading]="loading()">
+      <data-table [columns]="columns" [rows]="rows()" [loading]="loading()"
+        [serverSide]="true" [total]="total()" [serverPage]="page()" [serverPageSize]="pageSize"
+        (pageChange)="onPageChange($event)">
         <ng-template #actions let-row>
           <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
         </ng-template>
@@ -43,23 +45,43 @@ export class MajorationsPage implements OnInit {
   readonly modal = signal(false);
   readonly editId = signal<number | null>(null);
   readonly rows = signal<Record<string, unknown>[]>([]);
+  readonly page = signal(1);
+  pageSize = 50;
+  readonly total = signal(0);
+  private requestSeq = 0;
   form: Partial<Majoration> = {};
   readonly columns: Column[] = [
     { key: 'mojoration', label: 'Type' },
     { key: 'cotation', label: 'Cotation' },
   ];
 
-  ngOnInit(): void { this.load(); }
-  load(): void {
+  ngOnInit(): void { this.loadPage(); }
+  loadPage(): void {
+    const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.list().subscribe({ next: (items) => { this.rows.set(items.map(asRow)); this.loading.set(false); }, error: () => this.loading.set(false) });
+    this.svc.listPaged(this.page(), this.pageSize).subscribe({
+      next: (r) => {
+        if (seq !== this.requestSeq) return;
+        this.rows.set(r.items.map(asRow));
+        this.total.set(r.total);
+        this.page.set(r.page);
+        this.loading.set(false);
+      },
+      error: () => { if (seq === this.requestSeq) this.loading.set(false); },
+    });
+  }
+
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
+    this.loadPage();
   }
   openEdit(row: Record<string, unknown>): void { this.editId.set(row['id'] as number); this.form = { ...(row as unknown as Majoration) }; this.modal.set(true); }
   save(): void {
     this.saving.set(true);
     const id = this.editId()!;
     this.svc.update(id, { ...(this.form as Majoration), id }).subscribe({
-      next: () => { this.saving.set(false); this.modal.set(false); this.toast.success('Enregistré.'); this.load(); },
+      next: () => { this.saving.set(false); this.modal.set(false); this.toast.success('Enregistré.'); this.loadPage(); },
       error: () => this.saving.set(false),
     });
   }

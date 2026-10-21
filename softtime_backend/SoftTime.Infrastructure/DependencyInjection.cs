@@ -20,7 +20,13 @@ public static class DependencyInjection
                 // CommandTimeout relevé : les tables de pointages n'ont pas d'index couvrant le filtre
                 // (base + plage de dates), donc les rapports balayent tout le fichier. Sur un SQL Server
                 // dont le cache est froid, 30 s (défaut) suffisaient à faire échouer la page d'analyse.
-                sql => sql.EnableRetryOnFailure().CommandTimeout(120)));
+                // CompatibilityLevel 120 : la base est en niveau 100 et EF Core 8 traduit par défaut
+                // les Contains de collection en OPENJSON (niveau 130+). À 120, EF génère des listes IN,
+                // compatibles avec la base existante et avec les requêtes de pagination.
+                sql => sql
+                    .UseCompatibilityLevel(120)
+                    .EnableRetryOnFailure()
+                    .CommandTimeout(120)));
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddSingleton<ISageContextFactory, SageContextFactory>();
         services.AddSingleton<IPointeuseContextFactory, PointeuseContextFactory>();
@@ -30,6 +36,7 @@ public static class DependencyInjection
         services.AddScoped<IPayrollWriter, OtherPayrollWriter>();
         services.AddScoped<IExternalDiscoveryService, ExternalDiscoveryService>();
         services.AddScoped<IPunchAggregate, PunchAggregate>();
+        services.AddScoped<IPlanningStatisticsReader, PlanningStatisticsReader>();
         services.AddScoped<IEmailService, EmailService>();
         return services;
     }

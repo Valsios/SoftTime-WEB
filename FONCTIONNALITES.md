@@ -109,8 +109,12 @@ s'affiche « Semaine 27 (30/06 - 06/07/2025) » (année ISO, donc correcte au pa
   retard, congé, férié, absence), semaines EXO/IMPO (`T_HSSemaine`) et allocation enregistrée.
 - **Congés SAGE** : un jour de congé n'est plus compté comme absence dans le calcul de la semaine
   (`T_HS_VALIDER.ABSENCE`) ; les codes d'événement `0200` / `0300` et les dimanches sont exclus.
-- **Pointages** : la liste est paginée (50 par page, plafond 100). L'**Export Excel** recharge toute la
-  période, il n'est donc pas limité à la page affichée.
+- **Pagination** : les listes Traitement et Rapports sont paginées **côté serveur** (50 par page, plafond 100) :
+  pointages, heures corrigées, anomalies, shifts, validation semaine, planning, HS, historique, frais, cantine,
+  audit et les 6 états de rapports. L'**Export Excel** recharge le jeu complet via l'endpoint non paginé, il n'est
+  donc pas limité à la page affichée. La sélection est conservée entre les pages ; « tout sélectionner » porte sur
+  la page affichée. Voir `softtime_backend/migrations/add_pagination_performance_indexes.sql` (colonnes bornées +
+  index composites) et `benchmark_pagination.sql` (mesure avant/après).
 
 ---
 
