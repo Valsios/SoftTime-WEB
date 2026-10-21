@@ -816,9 +816,9 @@ button {
   background: rgba(11, 19, 50, 0.55);
   backdrop-filter: blur(8px);
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  padding: 60px 16px;
+  padding: 16px;
   z-index: var(--z-modal);
   animation: soft-fade var(--t-normal) var(--ease);
   overflow-y: auto;
@@ -891,20 +891,6 @@ button {
 }
 
 @media (max-width: 639px) {
-  .soft-modal__overlay {
-    align-items: flex-end;
-    padding: 0;
-  }
-
-  .soft-modal__panel,
-  .soft-modal__panel--sm,
-  .soft-modal__panel--lg,
-  .soft-modal__panel--xl {
-    max-width: none;
-    border-bottom-right-radius: 0;
-    border-bottom-left-radius: 0;
-  }
-
   .soft-modal__body {
     max-height: 70vh;
   }
