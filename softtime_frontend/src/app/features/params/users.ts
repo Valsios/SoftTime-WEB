@@ -5,7 +5,7 @@ import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
 import { Droit } from '../../core/rights';
-import { PasswordPolicy, Role, User } from '../../shared/models';
+import { PasswordPolicy, Role, User, PageChangeEvent } from '../../shared/models';
 import { CardPaieService } from '../../shared/services/catalog.service';
 import { PasswordPolicyService } from '../../shared/services/password-policy.service';
 import { RolesService, UsersService } from '../../shared/services/users.service';
@@ -36,7 +36,9 @@ import {
       <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter</soft-button>
     </page-header>
     <soft-card>
-      <data-table [columns]="columns" [rows]="rows()" [loading]="loading()">
+      <data-table [columns]="columns" [rows]="rows()" [loading]="loading()"
+        [serverSide]="true" [total]="total()" [serverPage]="page()" [serverPageSize]="pageSize"
+        (pageChange)="onPageChange($event)">
         <ng-template #actions let-row>
           <div class="soft-actions" style="justify-content: end">
             <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
@@ -98,6 +100,10 @@ export class UsersPage implements OnInit {
   readonly modal = signal(false);
   readonly editId = signal<number | null>(null);
   readonly rows = signal<Record<string, unknown>[]>([]);
+  readonly page = signal(1);
+  pageSize = 50;
+  readonly total = signal(0);
+  private requestSeq = 0;
   readonly roleOptions = signal<{ value: number; label: string }[]>([]);
   readonly matriculeOptions = signal<{ value: string; label: string }[]>([]);
   readonly policy = signal<PasswordPolicy | null>(null);
@@ -114,9 +120,13 @@ export class UsersPage implements OnInit {
 
   ngOnInit(): void {
     this.passwordPolicies.get().subscribe((policy) => this.policy.set(policy));
-    this.rolesSvc.list().subscribe((roles) =>
-      this.roleOptions.set(roles.map((r) => ({ value: r.id, label: r.nom }))),
-    );
+    this.rolesSvc.list().subscribe({
+      next: (roles) => {
+        this.roleOptions.set(roles.map((r) => ({ value: r.id, label: r.nom })));
+        this.loadPage();
+      },
+      error: () => this.loadPage(),
+    });
     this.cards.list().subscribe({
       next: (list) =>
         this.matriculeOptions.set(
@@ -126,26 +136,35 @@ export class UsersPage implements OnInit {
         ),
       error: () => undefined,
     });
-    this.load();
   }
 
-  load(): void {
+  loadPage(): void {
+    const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.list().subscribe({
-      next: (items) => {
+    this.svc.listPaged(this.page(), this.pageSize).subscribe({
+      next: (r) => {
+        if (seq !== this.requestSeq) return;
         const roles = this.roleOptions();
         this.rows.set(
-          items.map((u) =>
+          r.items.map((u) =>
             asRow({
               ...u,
-              roleName: roles.find((r) => Number(r.value) === Number(u.roleId))?.label ?? String(u.roleId ?? ''),
+              roleName: roles.find((role) => Number(role.value) === Number(u.roleId))?.label ?? String(u.roleId ?? ''),
             }),
           ),
         );
+        this.total.set(r.total);
+        this.page.set(r.page);
         this.loading.set(false);
       },
-      error: () => this.loading.set(false),
+      error: () => { if (seq === this.requestSeq) this.loading.set(false); },
     });
+  }
+
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
+    this.loadPage();
   }
 
   openCreate(): void { this.editId.set(null); this.form = { roleId: this.roleOptions()[0]?.value ?? 0 }; this.modal.set(true); }
@@ -179,11 +198,11 @@ export class UsersPage implements OnInit {
     const dto = this.form as User;
     this.saving.set(true);
     const req = id ? this.svc.update(id, { ...dto, id }) : this.svc.create({ ...dto, id: 0 });
-    req.subscribe({ next: () => { this.saving.set(false); this.modal.set(false); this.toast.success('Enregistré.'); this.load(); }, error: () => this.saving.set(false) });
+    req.subscribe({ next: () => { this.saving.set(false); this.modal.set(false); this.toast.success('Enregistré.'); this.loadPage(); }, error: () => this.saving.set(false) });
   }
 
   async remove(row: Record<string, unknown>): Promise<void> {
     if (!(await this.confirm.ask('Supprimer cet utilisateur ?'))) return;
-    this.svc.remove(row['id'] as number).subscribe({ next: () => { this.toast.success('Supprimé.'); this.load(); } });
+    this.svc.remove(row['id'] as number).subscribe({ next: () => { this.toast.success('Supprimé.'); this.loadPage(); } });
   }
 }

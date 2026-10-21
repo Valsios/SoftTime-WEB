@@ -55,6 +55,26 @@ export interface Affectation {
   categoryId: number;
 }
 
+/** Ligne enrichie renvoyée par l'endpoint paginé des affectations. */
+export interface AffectationRow extends Affectation {
+  matricule?: string | null;
+  nom?: string | null;
+  prenom?: string | null;
+  departement?: string | null;
+  service?: string | null;
+}
+
+export interface AffectationQuery {
+  categoryId?: number | null;
+  departement?: string | null;
+  service?: string | null;
+}
+
+export interface AffectationOptions {
+  departements: string[];
+  services: string[];
+}
+
 export interface Tolerance {
   id: number;
   categoryId: number;

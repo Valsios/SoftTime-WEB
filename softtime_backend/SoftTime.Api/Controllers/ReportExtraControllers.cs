@@ -16,6 +16,12 @@ public class ReportsController : ControllerBase
     private readonly ReportService _svc;
     public ReportsController(ReportService svc) => _svc = svc;
 
+    /// <summary>Types exposés par l'endpoint paginé générique (liste blanche).</summary>
+    private static readonly HashSet<string> PagedReportTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "pointage", "absences", "retards", "hs-recap", "heures-semaine", "heures-dimanche"
+    };
+
     [HttpGet("pointage")]
     public async Task<IActionResult> Pointage([FromQuery] ReportFilter filter, CancellationToken ct)
         => Ok(await _svc.PointageAsync(filter, ct));
@@ -40,6 +46,24 @@ public class ReportsController : ControllerBase
     public async Task<IActionResult> HeuresDimanche([FromQuery] ReportFilter filter, CancellationToken ct)
         => Ok(await _svc.HeuresDimancheAsync(filter, ct));
 
+    /// <summary>
+    /// Version paginée des 6 états (<c>pointage</c>, <c>absences</c>, <c>retards</c>,
+    /// <c>hs-recap</c>, <c>heures-semaine</c>, <c>heures-dimanche</c>).
+    /// </summary>
+    [HttpGet("{type}/paged")]
+    public async Task<IActionResult> Paged(
+        string type,
+        [FromQuery] ReportFilter filter,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
+        CancellationToken ct)
+    {
+        var normalized = type.Trim().ToLowerInvariant();
+        if (!PagedReportTypes.Contains(normalized))
+            return BadRequest($"Type de rapport inconnu : {type}.");
+        return Ok(await _svc.PagedAsync(normalized, filter, page, pageSize, ct));
+    }
+
     [HttpGet("leave")]
     public async Task<IActionResult> Leave([FromQuery] string matricule, [FromQuery] DateTime date, CancellationToken ct)
         => Ok(await _svc.GetLeaveAsync(matricule, date, ct));
@@ -59,10 +83,22 @@ public class CanteenController : ControllerBase
     public async Task<IActionResult> List([FromQuery] PeriodRequest request, CancellationToken ct)
         => Ok(await _svc.ListCanteenAsync(request, ct));
 
+    /// <summary>Même liste que <c>GET /api/canteen</c>, paginée.</summary>
+    [HttpGet("paged")]
+    public async Task<IActionResult> ListPaged(
+        [FromQuery] PeriodRequest request, [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
+        => Ok(await _svc.ListCanteenPagedAsync(request, page, pageSize, ct));
+
     /// <summary>Anomalies du calcul cantine : pointage contredisant une absence complète.</summary>
     [HttpGet("anomalies")]
     public async Task<IActionResult> Anomalies([FromQuery] PeriodRequest request, CancellationToken ct)
         => Ok(await _svc.ListCanteenAnomaliesAsync(request, ct));
+
+    /// <summary>Anomalies cantine paginées (calcul complet puis découpage de la page).</summary>
+    [HttpGet("anomalies/paged")]
+    public async Task<IActionResult> AnomaliesPaged(
+        [FromQuery] PeriodRequest request, [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
+        => Ok(await _svc.ListCanteenAnomaliesPagedAsync(request, page, pageSize, ct));
 
     [HttpPost("compute")]
     public async Task<IActionResult> Compute([FromBody] PeriodRequest request, CancellationToken ct)
@@ -93,6 +129,12 @@ public class TravelController : ControllerBase
     public async Task<IActionResult> List([FromQuery] PeriodRequest request, CancellationToken ct)
         => Ok(await _svc.ListTravelAsync(request, ct));
 
+    /// <summary>Même liste que <c>GET /api/travel-expenses</c>, paginée.</summary>
+    [HttpGet("paged")]
+    public async Task<IActionResult> ListPaged(
+        [FromQuery] PeriodRequest request, [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
+        => Ok(await _svc.ListTravelPagedAsync(request, page, pageSize, ct));
+
     [HttpPost("compute")]
     public async Task<IActionResult> Compute([FromBody] PeriodRequest request, CancellationToken ct)
         => Ok(await _svc.ComputeTravelAsync(request, ct));
@@ -119,6 +161,12 @@ public class AuditController : ControllerBase
     [HttpGet("config")]
     public async Task<IActionResult> GetConfig(CancellationToken ct) => Ok(await _svc.ListConfigAsync(ct));
 
+    /// <summary>Configuration d'audit paginée.</summary>
+    [HttpGet("config/paged")]
+    public async Task<IActionResult> GetConfigPaged(
+        [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
+        => Ok(await _svc.ListConfigPagedAsync(page, pageSize, ct));
+
     [HttpPost("config")]
     public async Task<IActionResult> CreateConfig([FromBody] AuditConfigDto dto, CancellationToken ct)
     {
@@ -141,6 +189,18 @@ public class AuditController : ControllerBase
         [FromQuery] string? action,
         CancellationToken ct)
         => Ok(await _svc.ListEventsAsync(from, to, table, action, ct));
+
+    /// <summary>Journal d'audit paginé (count + OFFSET/FETCH SQL sur le filtre complet).</summary>
+    [HttpGet("events/paged")]
+    public async Task<IActionResult> GetEventsPaged(
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        [FromQuery] string? table,
+        [FromQuery] string? action,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
+        CancellationToken ct)
+        => Ok(await _svc.ListEventsPagedAsync(from, to, table, action, page, pageSize, ct));
 
     [HttpGet("schema")]
     public async Task<IActionResult> GetSchema(CancellationToken ct)

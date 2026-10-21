@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
-import { PeriodRequest } from '../../shared/models';
+import { PeriodRequest, PageChangeEvent } from '../../shared/models';
 import { TravelService } from '../../shared/services/reports.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, PeriodFilter } from '../../shared/components';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
@@ -21,7 +21,16 @@ import { asRow, fmtDate } from '../../shared/utils/date';
     </page-header>
     <period-filter (search)="onSearch($event)"></period-filter>
     <soft-card>
-      <data-table [columns]="columns" [rows]="rows()" [loading]="busy()"></data-table>
+      <data-table
+        [columns]="columns"
+        [rows]="rows()"
+        [loading]="loading()"
+        [serverSide]="true"
+        [total]="total()"
+        [serverPageSize]="pageSize"
+        [serverPage]="page()"
+        (pageChange)="onPageChange($event)"
+      ></data-table>
     </soft-card>
   `,
 })
@@ -32,9 +41,14 @@ export class TravelPage {
   private readonly confirm = inject(ConfirmService);
 
   readonly busy = signal(false);
+  readonly loading = signal(false);
   readonly syncing = signal(false);
+  pageSize = 50;
   readonly rows = signal<Record<string, unknown>[]>([]);
+  readonly page = signal(1);
+  readonly total = signal(0);
   private lastFilter: PeriodRequest | null = null;
+  private requestSeq = 0;
 
   readonly columns: Column[] = [
     { key: 'matricule', label: 'Matricule' },
@@ -45,10 +59,29 @@ export class TravelPage {
 
   onSearch(filter: PeriodRequest): void {
     this.lastFilter = filter;
-    this.busy.set(true);
-    this.svc.list(filter).subscribe({
-      next: (items) => { this.rows.set(items.map(asRow)); this.busy.set(false); },
-      error: () => this.busy.set(false),
+    this.page.set(1);
+    this.loadPage();
+  }
+
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
+    this.loadPage();
+  }
+
+  private loadPage(): void {
+    if (!this.lastFilter) return;
+    const seq = ++this.requestSeq;
+    this.loading.set(true);
+    this.svc.listPaged({ ...this.lastFilter, page: this.page(), pageSize: this.pageSize }).subscribe({
+      next: (r) => {
+        if (seq !== this.requestSeq) return;
+        this.rows.set(r.items.map(asRow));
+        this.total.set(r.total);
+        this.page.set(r.page);
+        this.loading.set(false);
+      },
+      error: () => { if (seq === this.requestSeq) this.loading.set(false); },
     });
   }
 
@@ -57,11 +90,10 @@ export class TravelPage {
     this.busy.set(true);
     this.svc.compute(this.lastFilter).subscribe({
       next: () => {
+        this.busy.set(false);
         this.toast.success('Calcul terminé.');
-        this.svc.list(this.lastFilter!).subscribe({
-          next: (items) => { this.rows.set(items.map(asRow)); this.busy.set(false); },
-          error: () => this.busy.set(false),
-        });
+        this.page.set(1);
+        this.loadPage();
       },
       error: () => this.busy.set(false),
     });
@@ -80,6 +112,12 @@ export class TravelPage {
   }
 
   exportExcel(): void {
-    this.excel.download('frais-deplacement', this.columns, this.rows());
+    if (!this.lastFilter) {
+      this.excel.download('frais-deplacement', this.columns, this.rows());
+      return;
+    }
+    this.svc.list(this.lastFilter).subscribe({
+      next: (items) => this.excel.download('frais-deplacement', this.columns, items.map(asRow)),
+    });
   }
 }

@@ -38,29 +38,97 @@ public class ExtraService
     public async Task<IReadOnlyList<CanteenDto>> ListCanteenAsync(PeriodRequest request, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
+        var sageDb = _tenant.SageDb;
         var from = request.From.Date;
         var to = request.To.Date;
-        var list = await _uow.Repository<T_CANTINE>().ListAsync(c => c.NOM_BDD_SAGE == _tenant.SageDb, ct);
+        var matriculeFrom = request.MatriculeFrom;
+        var matriculeTo = request.MatriculeTo;
+        var list = await _uow.Repository<T_CANTINE>().ListAsync(
+            c => c.NOM_BDD_SAGE == sageDb
+                 && c.DATEDEB >= from
+                 && c.DATEFIN <= to
+                 && (string.IsNullOrEmpty(matriculeFrom)
+                     || (c.MATRICULE_SAGE != null && string.Compare(c.MATRICULE_SAGE, matriculeFrom) >= 0))
+                 && (string.IsNullOrEmpty(matriculeTo)
+                     || (c.MATRICULE_SAGE != null && string.Compare(c.MATRICULE_SAGE, matriculeTo) <= 0)), ct);
         return list
-            .Where(c => c.DATEDEB?.Date >= from && c.DATEFIN?.Date <= to
-                        && InMatriculeRange(c.MATRICULE_SAGE, request.MatriculeFrom, request.MatriculeTo))
             .OrderBy(c => c.MATRICULE_SAGE)
             .Select(c => new CanteenDto(c.IDCANTINE, c.MATRICULE_SAGE, c.DATEDEB, c.DATEFIN, c.TOTAL_CANTINE))
             .ToList();
     }
 
+    /// <summary>Liste paginée des cantines calculées (filtre SQL base + dates + matricule).</summary>
+    public async Task<PagedResult<CanteenDto>> ListCanteenPagedAsync(
+        PeriodRequest request, int? page, int? pageSize, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var sageDb = _tenant.SageDb;
+        var from = request.From.Date;
+        var to = request.To.Date;
+        var matriculeFrom = request.MatriculeFrom;
+        var matriculeTo = request.MatriculeTo;
+        return await PagedLists.PageAsync(
+            _uow.Repository<T_CANTINE>(),
+            c => c.NOM_BDD_SAGE == sageDb
+                 && c.DATEDEB >= from
+                 && c.DATEFIN <= to
+                 && (string.IsNullOrEmpty(matriculeFrom)
+                     || (c.MATRICULE_SAGE != null && string.Compare(c.MATRICULE_SAGE, matriculeFrom) >= 0))
+                 && (string.IsNullOrEmpty(matriculeTo)
+                     || (c.MATRICULE_SAGE != null && string.Compare(c.MATRICULE_SAGE, matriculeTo) <= 0)),
+            q => q.OrderBy(c => c.MATRICULE_SAGE).ThenBy(c => c.DATEDEB).ThenBy(c => c.IDCANTINE),
+            page,
+            pageSize,
+            c => new CanteenDto(c.IDCANTINE, c.MATRICULE_SAGE, c.DATEDEB, c.DATEFIN, c.TOTAL_CANTINE),
+            ct);
+    }
+
     public async Task<IReadOnlyList<TravelDto>> ListTravelAsync(PeriodRequest request, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
+        var sageDb = _tenant.SageDb;
         var from = request.From.Date;
         var to = request.To.Date;
-        var list = await _uow.Repository<T_FRAIS>().ListAsync(c => c.NOM_BDD_SAGE == _tenant.SageDb, ct);
+        var matriculeFrom = request.MatriculeFrom;
+        var matriculeTo = request.MatriculeTo;
+        var list = await _uow.Repository<T_FRAIS>().ListAsync(
+            c => c.NOM_BDD_SAGE == sageDb
+                 && c.DATEDEB >= from
+                 && c.DATEFIN <= to
+                 && (string.IsNullOrEmpty(matriculeFrom)
+                     || (c.MATRICULE_SAGE != null && string.Compare(c.MATRICULE_SAGE, matriculeFrom) >= 0))
+                 && (string.IsNullOrEmpty(matriculeTo)
+                     || (c.MATRICULE_SAGE != null && string.Compare(c.MATRICULE_SAGE, matriculeTo) <= 0)), ct);
         return list
-            .Where(c => c.DATEDEB?.Date >= from && c.DATEFIN?.Date <= to
-                        && InMatriculeRange(c.MATRICULE_SAGE, request.MatriculeFrom, request.MatriculeTo))
             .OrderBy(c => c.MATRICULE_SAGE)
             .Select(c => new TravelDto(c.IDPOINTAGE, c.MATRICULE_SAGE, c.DATEDEB, c.DATEFIN, c.TOTAL_POINT))
             .ToList();
+    }
+
+    /// <summary>Liste paginée des frais de déplacement (filtre SQL base + dates + matricule).</summary>
+    public async Task<PagedResult<TravelDto>> ListTravelPagedAsync(
+        PeriodRequest request, int? page, int? pageSize, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var sageDb = _tenant.SageDb;
+        var from = request.From.Date;
+        var to = request.To.Date;
+        var matriculeFrom = request.MatriculeFrom;
+        var matriculeTo = request.MatriculeTo;
+        return await PagedLists.PageAsync(
+            _uow.Repository<T_FRAIS>(),
+            c => c.NOM_BDD_SAGE == sageDb
+                 && c.DATEDEB >= from
+                 && c.DATEFIN <= to
+                 && (string.IsNullOrEmpty(matriculeFrom)
+                     || (c.MATRICULE_SAGE != null && string.Compare(c.MATRICULE_SAGE, matriculeFrom) >= 0))
+                 && (string.IsNullOrEmpty(matriculeTo)
+                     || (c.MATRICULE_SAGE != null && string.Compare(c.MATRICULE_SAGE, matriculeTo) <= 0)),
+            q => q.OrderBy(c => c.MATRICULE_SAGE).ThenBy(c => c.DATEDEB).ThenBy(c => c.IDPOINTAGE),
+            page,
+            pageSize,
+            c => new TravelDto(c.IDPOINTAGE, c.MATRICULE_SAGE, c.DATEDEB, c.DATEFIN, c.TOTAL_POINT),
+            ct);
     }
 
     public async Task<IReadOnlyList<CanteenDto>> ComputeCanteenAsync(PeriodRequest request, CancellationToken ct = default)
@@ -125,17 +193,6 @@ public class ExtraService
         return result.OrderBy(r => r.Matricule).ToList();
     }
 
-    private static bool InMatriculeRange(string? matricule, string? from, string? to)
-    {
-        if (string.IsNullOrEmpty(matricule))
-            return false;
-        if (!string.IsNullOrEmpty(from) && string.Compare(matricule, from, StringComparison.OrdinalIgnoreCase) < 0)
-            return false;
-        if (!string.IsNullOrEmpty(to) && string.Compare(matricule, to, StringComparison.OrdinalIgnoreCase) > 0)
-            return false;
-        return true;
-    }
-
     /// <summary>
     /// Anomalies du calcul cantine : jour où un pointage tombe dans la fenêtre du repas alors que
     /// les heures corrigées déclarent une absence complète (matin et après-midi).
@@ -158,16 +215,34 @@ public class ExtraService
             h.BDD_SAGE == sageDb
             && h.DATE_POINTAGE_IN != null
             && h.DATE_POINTAGE_IN >= from
-            && h.DATE_POINTAGE_IN < to.AddDays(1), ct);
+            && h.DATE_POINTAGE_IN < to.AddDays(1)
+            // Filtre métier poussé en SQL : seules les absences complètes peuvent contredire un pointage.
+            && h.ABSENCE_AM == true
+            && h.ABSENCE_PM == true
+            && (string.IsNullOrEmpty(request.MatriculeFrom)
+                || (h.MATRICULE_SAGE != null && string.Compare(h.MATRICULE_SAGE, request.MatriculeFrom) >= 0))
+            && (string.IsNullOrEmpty(request.MatriculeTo)
+                || (h.MATRICULE_SAGE != null && string.Compare(h.MATRICULE_SAGE, request.MatriculeTo) <= 0)), ct);
         var absences = corrections
-            .Where(h => CanteenRules.EstAbsenceComplete(h.ABSENCE_AM, h.ABSENCE_PM))
-            .Select(h => new CanteenDay(h.MATRICULE_SAGE ?? string.Empty, h.DATE_POINTAGE_IN!.Value.Date))
-            .Where(d => d.Matricule.Length > 0 && MatriculeRange.Contains(d.Matricule, request))
+            .Where(h => h.DATE_POINTAGE_IN.HasValue && !string.IsNullOrEmpty(h.MATRICULE_SAGE))
+            .Select(h => new CanteenDay(h.MATRICULE_SAGE!, h.DATE_POINTAGE_IN!.Value.Date))
+            .Where(d => MatriculeRange.Contains(d.Matricule, request))
             .ToList();
 
         return CanteenRules.DetecterAnomalies(joursPointes, absences)
             .Select(a => new CanteenAnomalyDto(a.Matricule, a.Date, a.Motif))
             .ToList();
+    }
+
+    /// <summary>
+    /// Anomalies cantine paginées : le calcul complet est fait côté serveur, puis la page est
+    /// découpée <b>après</b> agrégation (jamais un Skip/Take sur les sources).
+    /// </summary>
+    public async Task<PagedResult<CanteenAnomalyDto>> ListCanteenAnomaliesPagedAsync(
+        PeriodRequest request, int? page, int? pageSize, CancellationToken ct = default)
+    {
+        var rows = await ListCanteenAnomaliesAsync(request, ct);
+        return PagedLists.Page(rows, page, pageSize);
     }
 
     /// <summary>

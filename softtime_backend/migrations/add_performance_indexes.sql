@@ -1,6 +1,10 @@
 /* ============================================================================
    Index de performance — base EXISTANTE.
 
+   NOTE : ce script ne crée que des index sur les dates. Pour les index composites
+   (base SAGE + date + matricule) et le bornage des colonnes nvarchar(max), voir
+   migrations/add_pagination_performance_indexes.sql.
+
    Le filtre metier est toujours « base SAGE + plage de dates » (ou « base SAGE +
    matricule + plage de dates »). Sans index, chaque ecran scanne la table entiere :
    tableau de bord analytique, validation semaine, etats.

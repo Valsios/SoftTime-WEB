@@ -75,6 +75,43 @@ public class AuditService
             .ToList();
     }
 
+    /// <summary>Configuration d'audit paginée (petite table, mais contrat identique aux autres grilles).</summary>
+    public async Task<PagedResult<AuditConfigDto>> ListConfigPagedAsync(
+        int? page, int? pageSize, CancellationToken ct = default)
+        => await PagedLists.PageAsync(
+            _uow.Repository<suivi_TBLCLN>(),
+            _ => true,
+            q => q.OrderBy(c => c.Id),
+            page,
+            pageSize,
+            c => new AuditConfigDto(c.Id, c.TABLES, c.COLONNES, c.TYPES, c.ETATS, c.BASES),
+            ct);
+
+    /// <summary>
+    /// Journal d'audit paginé. Contrairement à <see cref="ListEventsAsync"/> (plafond 500 pour
+    /// l'export), le total et la page sont calculés en SQL sur le filtre complet.
+    /// </summary>
+    public async Task<PagedResult<AuditEventDto>> ListEventsPagedAsync(
+        DateTime? from, DateTime? to, string? table, string? action,
+        int? page, int? pageSize, CancellationToken ct = default)
+    {
+        var fromDate = from ?? DateTime.Today.AddDays(-30);
+        var toDate = to ?? DateTime.Today.AddDays(1);
+        var tableFiltre = string.IsNullOrWhiteSpace(table) ? null : table;
+        var actionFiltre = string.IsNullOrWhiteSpace(action) ? null : action;
+        return await PagedLists.PageAsync(
+            _uow.Repository<suivi_SUIVI>(),
+            e => e._DATETIMES >= fromDate
+                 && e._DATETIMES <= toDate
+                 && (tableFiltre == null || e._TABLES == tableFiltre)
+                 && (actionFiltre == null || e._ACTIONS == actionFiltre),
+            q => q.OrderByDescending(e => e._DATETIMES).ThenByDescending(e => e.Id),
+            page,
+            pageSize,
+            e => new AuditEventDto(e.Id, e._TABLES, e._COLONNES, e._USERS, e._ACTIONS, e._DATETIMES, e._NOUVEAUX, e._ANCIENS, e._BASES),
+            ct);
+    }
+
     public async Task<IReadOnlyList<object>> ListDiscoveredSchemaAsync(CancellationToken ct = default)
     {
         var list = await _uow.Repository<suivi_T>().ListAsync(_ => true, ct);

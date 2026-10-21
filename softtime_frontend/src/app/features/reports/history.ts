@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
-import { ReportFilter } from '../../shared/models';
+import { PagedResult, ReportFilter, PageChangeEvent } from '../../shared/models';
 import { HistoryService } from '../../shared/services/reports.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import {
@@ -20,6 +20,7 @@ type Segment = 'pointages' | 'anomalies' | 'hs';
 /**
  * Archives des suppressions : ce qui a été retiré des pointages, des anomalies et des calculs HS.
  * Le filtre de période porte sur la **date de suppression** de l'archive.
+ * Seul le segment actif est chargé, page par page.
  */
 @Component({
   selector: 'app-history',
@@ -31,11 +32,20 @@ type Segment = 'pointages' | 'anomalies' | 'hs';
       <soft-button variant="danger" [loading]="busy()" (click)="purgeAll()">Purger l'archive</soft-button>
     </page-header>
 
-    <soft-tabs [tabs]="tabs" [(activeTab)]="activeTab" />
+    <soft-tabs [tabs]="tabs" [(activeTab)]="activeTab" (activeTabChange)="onTabChange($event)" />
     <period-filter [autoSearch]="true" (search)="onSearch($event)"></period-filter>
 
     <soft-card>
-      <data-table [columns]="columns()" [rows]="rows()" [loading]="loading()">
+      <data-table
+        [columns]="columns()"
+        [rows]="rows()"
+        [loading]="loading()"
+        [serverSide]="true"
+        [total]="total()"
+        [serverPageSize]="pageSize"
+        [serverPage]="page()"
+        (pageChange)="onPageChange($event)"
+      >
         <ng-template #actions let-row>
           <soft-button size="sm" variant="danger" (click)="removeOne(row)">Supprimer</soft-button>
         </ng-template>
@@ -51,20 +61,16 @@ export class HistoryPage {
 
   readonly loading = signal(false);
   readonly busy = signal(false);
+  pageSize = 50;
   readonly activeTab = signal<string>('pointages');
+  readonly rows = signal<Record<string, unknown>[]>([]);
+  readonly page = signal(1);
+  readonly total = signal(0);
   readonly tabs = [
     { id: 'pointages', label: 'Pointages' },
     { id: 'anomalies', label: 'Anomalies' },
     { id: 'hs', label: 'Calculs HS' },
   ];
-
-  /** Les trois jeux sont chargés en même temps : le changement d'onglet est instantané. */
-  private readonly data = signal<Record<Segment, Record<string, unknown>[]>>({
-    pointages: [],
-    anomalies: [],
-    hs: [],
-  });
-  readonly rows = computed(() => this.data()[this.activeTab() as Segment] ?? []);
 
   private readonly columnsBySegment: Record<Segment, Column[]> = {
     pointages: [
@@ -97,29 +103,53 @@ export class HistoryPage {
   readonly columns = computed<Column[]>(() => this.columnsBySegment[this.activeTab() as Segment] ?? []);
 
   private lastFilter: ReportFilter | null = null;
+  private requestSeq = 0;
 
   onSearch(filter: ReportFilter): void {
     this.lastFilter = filter;
-    this.loading.set(true);
-    let pending = 3;
-    const done = () => {
-      if (--pending === 0) this.loading.set(false);
+    this.page.set(1);
+    this.loadPage();
+  }
+
+  onTabChange(tab: string): void {
+    this.activeTab.set(tab);
+    if (!this.lastFilter) return;
+    this.page.set(1);
+    this.loadPage();
+  }
+
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
+    this.loadPage();
+  }
+
+  private loadPage(): void {
+    if (!this.lastFilter) return;
+    const filter: ReportFilter = {
+      ...this.lastFilter,
+      page: this.page(),
+      pageSize: this.pageSize,
     };
-    this.svc.pointages(filter).subscribe({
-      next: (r) => this.setSegment('pointages', r),
-      error: done,
-      complete: done,
-    });
-    this.svc.anomalies(filter).subscribe({
-      next: (r) => this.setSegment('anomalies', r),
-      error: done,
-      complete: done,
-    });
-    this.svc.hs(filter).subscribe({
-      next: (r) => this.setSegment('hs', r),
-      error: done,
-      complete: done,
-    });
+    const seq = ++this.requestSeq;
+    this.loading.set(true);
+    const onError = () => { if (seq === this.requestSeq) this.loading.set(false); };
+    const segment = this.activeTab();
+    if (segment === 'pointages') {
+      this.svc.pointagesPaged(filter).subscribe({ next: (r) => this.applyPage(r, seq), error: onError });
+    } else if (segment === 'anomalies') {
+      this.svc.anomaliesPaged(filter).subscribe({ next: (r) => this.applyPage(r, seq), error: onError });
+    } else {
+      this.svc.hsPaged(filter).subscribe({ next: (r) => this.applyPage(r, seq), error: onError });
+    }
+  }
+
+  private applyPage<T extends object>(r: PagedResult<T>, seq: number): void {
+    if (seq !== this.requestSeq) return;
+    this.rows.set(r.items.map((item) => asRow(item)));
+    this.total.set(r.total);
+    this.page.set(r.page);
+    this.loading.set(false);
   }
 
   async removeOne(row: Record<string, unknown>): Promise<void> {
@@ -128,7 +158,7 @@ export class HistoryPage {
     this.svc.removeOne(segment, row['id'] as number).subscribe({
       next: () => {
         this.toast.success('Archive supprimée.');
-        this.setSegment(segment as Segment, this.rows().filter((x) => x['id'] !== row['id']));
+        this.loadPage();
       },
     });
   }
@@ -142,17 +172,33 @@ export class HistoryPage {
       next: (r) => {
         this.busy.set(false);
         this.toast.success(r.message || `${r.supprimees} archive(s) purgée(s).`);
-        if (this.lastFilter) this.onSearch(this.lastFilter);
+        this.page.set(1);
+        this.loadPage();
       },
       error: () => this.busy.set(false),
     });
   }
 
   exportExcel(): void {
-    this.excel.download(`historique-${this.activeTab()}`, this.columns(), this.rows());
-  }
-
-  private setSegment(segment: Segment, rows: readonly object[]): void {
-    this.data.update((d) => ({ ...d, [segment]: rows.map(asRow) }));
+    const filter = this.lastFilter;
+    const segment = this.activeTab();
+    const fileName = `historique-${segment}`;
+    if (!filter) {
+      this.excel.download(fileName, this.columns(), this.rows());
+      return;
+    }
+    if (segment === 'pointages') {
+      this.svc.pointages(filter).subscribe({
+        next: (items) => this.excel.download(fileName, this.columns(), items.map(asRow)),
+      });
+    } else if (segment === 'anomalies') {
+      this.svc.anomalies(filter).subscribe({
+        next: (items) => this.excel.download(fileName, this.columns(), items.map(asRow)),
+      });
+    } else {
+      this.svc.hs(filter).subscribe({
+        next: (items) => this.excel.download(fileName, this.columns(), items.map(asRow)),
+      });
+    }
   }
 }

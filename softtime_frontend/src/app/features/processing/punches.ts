@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
-import { PunchUpdate, PeriodRequest } from '../../shared/models';
+import { PunchUpdate, PeriodRequest, PageChangeEvent } from '../../shared/models';
 import { PunchesService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, PeriodFilter } from '../../shared/components';
@@ -27,20 +27,20 @@ import { asRow, fmtDate } from '../../shared/utils/date';
     <period-filter (search)="onSearch($event)"></period-filter>
 
     <soft-card>
-      <data-table [columns]="columns" [rows]="rows()" [loading]="loading()">
+      <data-table
+        [columns]="columns"
+        [rows]="rows()"
+        [loading]="loading()"
+        [serverSide]="true"
+        [total]="total()"
+        [serverPageSize]="pageSize"
+        [serverPage]="page()"
+        (pageChange)="onPageChange($event)"
+      >
         <ng-template #actions let-row>
           <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
         </ng-template>
       </data-table>
-      <div class="pager">
-        <span class="pager-info">{{ total() }} pointage(s) — page {{ page() }} / {{ totalPages() }}</span>
-        <soft-button variant="ghost" size="sm" [disabled]="page() <= 1 || loading()" (click)="goTo(page() - 1)">
-          Précédent
-        </soft-button>
-        <soft-button variant="ghost" size="sm" [disabled]="page() >= totalPages() || loading()" (click)="goTo(page() + 1)">
-          Suivant
-        </soft-button>
-      </div>
     </soft-card>
 
     <soft-modal [open]="modal()" title="Corriger le pointage" (closed)="modal.set(false)">
@@ -56,9 +56,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
       </div>
     </soft-modal>
   `,
-  styles: [`.file-btn { cursor: pointer; } .form-grid { display: grid; gap: 14px; }
-    .pager { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
-    .pager-info { margin-right: auto; color: var(--text-muted); font-size: 13px; font-weight: 500; }`],
+  styles: [`.file-btn { cursor: pointer; } .form-grid { display: grid; gap: 14px; }`],
 })
 export class PunchesPage {
   private readonly svc = inject(PunchesService);
@@ -70,12 +68,12 @@ export class PunchesPage {
   readonly processing = signal(false);
   readonly busy = signal(false);
   readonly modal = signal(false);
+  pageSize = 50;
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly page = signal(1);
-  readonly pageSize = signal(50);
   readonly total = signal(0);
-  readonly totalPages = signal(1);
   private lastFilter: PeriodRequest | null = null;
+  private requestSeq = 0;
   private editId: number | null = null;
   currentMatricule = '';
   form: PunchUpdate = {};
@@ -97,27 +95,27 @@ export class PunchesPage {
   /** Charge la page courante (liste paginée : une période peut compter des dizaines de milliers de lignes). */
   private loadPage(): void {
     if (!this.lastFilter) return;
+    const seq = ++this.requestSeq;
     this.loading.set(true);
     this.svc.listPaged({
       ...this.lastFilter,
       page: this.page(),
-      pageSize: this.pageSize(),
+      pageSize: this.pageSize,
     }).subscribe({
       next: (r) => {
+        if (seq !== this.requestSeq) return;
         this.rows.set(r.items.map(asRow));
         this.total.set(r.total);
-        this.totalPages.set(r.totalPages);
         this.page.set(r.page);
-        this.pageSize.set(r.pageSize);
         this.loading.set(false);
       },
-      error: () => this.loading.set(false),
+      error: () => { if (seq === this.requestSeq) this.loading.set(false); },
     });
   }
 
-  goTo(page: number): void {
-    if (page < 1 || page > this.totalPages()) return;
-    this.page.set(page);
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
     this.loadPage();
   }
 

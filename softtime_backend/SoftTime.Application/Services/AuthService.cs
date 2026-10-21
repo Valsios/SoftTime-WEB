@@ -4,6 +4,7 @@ using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Security;
 using SoftTime.Domain.Entities.SoftTime;
+using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain;
 
@@ -155,6 +156,17 @@ public class AuthService
             .Select(u => new UserDto(u.IDRESPONSABLE, u.IDROLE, u.NOMRESPONSABLE ?? string.Empty, u.LOGIN ?? string.Empty, u.MATRICULE, null) { Email = u.EMAIL })
             .ToList();
     }
+
+    public async Task<PagedResult<UserDto>> GetUsersPagedAsync(
+        int? page, int? pageSize, CancellationToken cancellationToken = default)
+        => await PagedLists.PageAsync(
+            _uow.Repository<T_RESPONSABLE>(),
+            _ => true,
+            q => q.OrderBy(u => u.NOMRESPONSABLE).ThenBy(u => u.LOGIN).ThenBy(u => u.IDRESPONSABLE),
+            page,
+            pageSize,
+            u => new UserDto(u.IDRESPONSABLE, u.IDROLE, u.NOMRESPONSABLE ?? string.Empty, u.LOGIN ?? string.Empty, u.MATRICULE, null) { Email = u.EMAIL },
+            cancellationToken);
 
     /// <summary>
     /// Installation vierge ? Portage de <c>is-first-run</c> du desktop, avec un critère plus sain :
@@ -313,6 +325,17 @@ public class AuthService
     public async Task<IReadOnlyList<RoleDto>> GetRolesAsync(CancellationToken cancellationToken = default)
         => (await _uow.Repository<T_ROLE>().ListAsync(_ => true, cancellationToken))
             .Select(r => new RoleDto(r.IDROLE, r.NOMROLE)).ToList();
+
+    public async Task<PagedResult<RoleDto>> GetRolesPagedAsync(
+        int? page, int? pageSize, CancellationToken cancellationToken = default)
+        => await PagedLists.PageAsync(
+            _uow.Repository<T_ROLE>(),
+            _ => true,
+            q => q.OrderBy(r => r.IDROLE),
+            page,
+            pageSize,
+            r => new RoleDto(r.IDROLE, r.NOMROLE),
+            cancellationToken);
 
     public async Task<RoleDto> SaveRoleAsync(RoleDto dto, CancellationToken cancellationToken = default)
     {
