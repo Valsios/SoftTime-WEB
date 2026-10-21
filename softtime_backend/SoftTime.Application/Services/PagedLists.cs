@@ -61,7 +61,7 @@ public static class PagedLists
         if (result.Total > 0 && result.Items.Count == 0 && result.Page > result.TotalPages)
             result = await repository.ToPagedAsync(predicate, orderBy, result.TotalPages, result.PageSize, ct);
 
-        var pageEffective = result.Total == 0 ? 1 : result.Page;
+        var pageEffective = PaginationRules.PageEffective(result.Total, result.Page);
         return new PagedResult<TDto>(
             result.Items.Select(map).ToList(),
             result.Total,

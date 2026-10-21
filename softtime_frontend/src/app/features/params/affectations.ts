@@ -5,19 +5,11 @@ import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
 import { Droit } from '../../core/rights';
-import { Affectation, CardPaie, Category, DepartementService } from '../../shared/models';
-import { AffectationsService, CardPaieService, CategoriesService, DepartementServiceService } from '../../shared/services/catalog.service';
+import { Affectation, PageChangeEvent } from '../../shared/models';
+import { AffectationsService, CategoriesService } from '../../shared/services/catalog.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, SoftSelect } from '../../shared/components';
 import { asRow } from '../../shared/utils/date';
-
-interface AffectationRow extends Affectation {
-  matricule?: string | null;
-  nom?: string | null;
-  prenom?: string | null;
-  departement?: string | null;
-  service?: string | null;
-}
 
 @Component({
   selector: 'app-affectations',
@@ -40,7 +32,7 @@ interface AffectationRow extends Affectation {
         name="filterCat"
         placeholder="Toutes"
         [options]="categoryOptions()"
-        (ngModelChange)="load()"
+        (ngModelChange)="onFilterChange()"
       ></soft-select>
 
       <soft-select
@@ -48,7 +40,7 @@ interface AffectationRow extends Affectation {
         [(ngModel)]="filterDept"
         name="filterDept"
         [options]="deptOptions()"
-        (ngModelChange)="applyFilters()"
+        (ngModelChange)="onFilterChange()"
       ></soft-select>
 
       <soft-select
@@ -56,12 +48,14 @@ interface AffectationRow extends Affectation {
         [(ngModel)]="filterService"
         name="filterServ"
         [options]="servOptions()"
-        (ngModelChange)="applyFilters()"
+        (ngModelChange)="onFilterChange()"
       ></soft-select>
     </div>
 
     <soft-card>
-      <data-table [columns]="columns" [rows]="rows()" [loading]="loading()">
+      <data-table [columns]="columns" [rows]="rows()" [loading]="loading()"
+        [serverSide]="true" [total]="total()" [serverPage]="page()" [serverPageSize]="pageSize"
+        (pageChange)="onPageChange($event)">
         <ng-template #actions let-row>
           <div class="soft-actions" style="justify-content: end">
             <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
@@ -87,8 +81,6 @@ interface AffectationRow extends Affectation {
 export class AffectationsPage implements OnInit {
   private readonly svc = inject(AffectationsService);
   private readonly catSvc = inject(CategoriesService);
-  private readonly cardSvc = inject(CardPaieService);
-  private readonly deptSvc = inject(DepartementServiceService);
   private readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
@@ -103,6 +95,10 @@ export class AffectationsPage implements OnInit {
   readonly modal = signal(false);
   readonly editId = signal<number | null>(null);
   readonly rows = signal<Record<string, unknown>[]>([]);
+  readonly page = signal(1);
+  pageSize = 50;
+  readonly total = signal(0);
+  private requestSeq = 0;
   readonly categoryOptions = signal<{ value: number; label: string }[]>([]);
   readonly deptOptions = signal<{ value: string; label: string }[]>([{ value: 'ALL', label: 'Tous' }]);
   readonly servOptions = signal<{ value: string; label: string }[]>([{ value: 'ALL', label: 'Tous' }]);
@@ -111,9 +107,6 @@ export class AffectationsPage implements OnInit {
   filterDept = 'ALL';
   filterService = 'ALL';
   form: Partial<Affectation> = {};
-
-  private cardsById = new Map<number, CardPaie>();
-  private enrichedRows: AffectationRow[] = [];
 
   readonly columns: Column[] = [
     { key: 'matricule', label: 'Matricule' },
@@ -128,67 +121,51 @@ export class AffectationsPage implements OnInit {
     this.catSvc.list().subscribe((cats) =>
       this.categoryOptions.set(cats.map((c) => ({ value: c.id, label: c.intitule ?? `Cat. ${c.id}` }))),
     );
-    this.cardSvc.list().subscribe((cards) => {
-      this.cardsById = new Map(cards.map((c) => [c.id, c]));
-      this.load();
+    this.svc.options().subscribe({
+      next: (options) => {
+        this.deptOptions.set([
+          { value: 'ALL', label: 'Tous' },
+          ...options.departements.map((d) => ({ value: d, label: d })),
+        ]);
+        this.servOptions.set([
+          { value: 'ALL', label: 'Tous' },
+          ...options.services.map((s) => ({ value: s, label: s })),
+        ]);
+      },
     });
+    this.loadPage();
   }
 
-  load(): void {
+  loadPage(): void {
+    const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.list(this.filterCategoryId ?? undefined).subscribe({
-      next: (items) => {
-        const enriched: AffectationRow[] = items.map((a) => {
-          const card = this.cardsById.get(a.cardPaieId);
-          return {
-            ...a,
-            matricule: card?.sageMatricule?.trim() ?? null,
-            nom: card?.sageNom ?? null,
-            prenom: card?.sagePrenom ?? null,
-          };
-        });
-        this.loadDepartements(enriched);
+    this.svc.listPaged({
+      categoryId: this.filterCategoryId,
+      departement: this.filterDept === 'ALL' ? null : this.filterDept,
+      service: this.filterService === 'ALL' ? null : this.filterService,
+      page: this.page(),
+      pageSize: this.pageSize,
+    }).subscribe({
+      next: (r) => {
+        if (seq !== this.requestSeq) return;
+        this.rows.set(r.items.map(asRow));
+        this.total.set(r.total);
+        this.page.set(r.page);
+        this.loading.set(false);
       },
-      error: () => this.loading.set(false),
+      error: () => { if (seq === this.requestSeq) this.loading.set(false); },
     });
   }
 
-  private loadDepartements(items: AffectationRow[]): void {
-    const matricules = items.map((r) => r.matricule).filter((m): m is string => !!m);
-    if (matricules.length === 0) {
-      this.finish(items);
-      return;
-    }
-    this.deptSvc.lookupBatch(matricules).subscribe({
-      next: (results: DepartementService[]) => {
-        const map = new Map(results.map((r) => [r.matricule.trim(), r]));
-        const withDept = items.map((r) => {
-          const ds = r.matricule ? map.get(r.matricule) : undefined;
-          return { ...r, departement: ds?.departement ?? null, service: ds?.service ?? null };
-        });
-        this.finish(withDept);
-      },
-      error: () => this.finish(items),
-    });
+  onFilterChange(): void {
+    this.page.set(1);
+    this.loadPage();
   }
 
-  private finish(items: AffectationRow[]): void {
-    this.enrichedRows = items;
-    const depts = Array.from(new Set(items.map((r) => r.departement).filter((d): d is string => !!d))).sort();
-    const servs = Array.from(new Set(items.map((r) => r.service).filter((s): s is string => !!s))).sort();
-    this.deptOptions.set([{ value: 'ALL', label: 'Tous' }, ...depts.map((d) => ({ value: d, label: d }))]);
-    this.servOptions.set([{ value: 'ALL', label: 'Tous' }, ...servs.map((s) => ({ value: s, label: s }))]);
-    this.applyFilters();
-    this.loading.set(false);
-  }
-
-  applyFilters(): void {
-    const filtered = this.enrichedRows.filter(
-      (r) =>
-        (this.filterDept === 'ALL' || r.departement === this.filterDept) &&
-        (this.filterService === 'ALL' || r.service === this.filterService),
-    );
-    this.rows.set(filtered.map(asRow));
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
+    this.loadPage();
   }
 
   openCreate(): void { this.editId.set(null); this.form = { cardPaieId: 0, categoryId: this.categoryOptions()[0]?.value ?? 0 }; this.modal.set(true); }
@@ -198,21 +175,27 @@ export class AffectationsPage implements OnInit {
     const id = this.editId();
     const dto = this.form as Affectation;
     const req = id ? this.svc.update(id, { ...dto, id }) : this.svc.create({ ...dto, id: 0 });
-    req.subscribe({ next: () => { this.saving.set(false); this.modal.set(false); this.toast.success('Enregistré.'); this.load(); }, error: () => this.saving.set(false) });
+    req.subscribe({ next: () => { this.saving.set(false); this.modal.set(false); this.toast.success('Enregistré.'); this.loadPage(); }, error: () => this.saving.set(false) });
   }
   async remove(row: Record<string, unknown>): Promise<void> {
     if (!(await this.confirm.ask('Supprimer cette affectation ?'))) return;
-    this.svc.remove(row['id'] as number).subscribe({ next: () => { this.toast.success('Supprimé.'); this.load(); } });
+    this.svc.remove(row['id'] as number).subscribe({ next: () => { this.toast.success('Supprimé.'); this.loadPage(); } });
   }
   exportExcel(): void {
-    this.excel.download('affectations', this.columns, this.rows());
+    this.svc.listAll({
+      categoryId: this.filterCategoryId,
+      departement: this.filterDept === 'ALL' ? null : this.filterDept,
+      service: this.filterService === 'ALL' ? null : this.filterService,
+    }).subscribe({
+      next: (rows) => this.excel.download('affectations', this.columns, rows.map(asRow)),
+    });
   }
   onFile(event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
     this.svc.importExcel(file).subscribe({
-      next: (r) => { this.toast.success(r.message || `${r.imported} importé(s).`); this.load(); },
+      next: (r) => { this.toast.success(r.message || `${r.imported} importé(s).`); this.loadPage(); },
     });
     input.value = '';
   }

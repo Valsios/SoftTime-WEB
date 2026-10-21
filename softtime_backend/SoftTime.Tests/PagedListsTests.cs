@@ -138,6 +138,38 @@ public class PagedListsTests
         Assert.Equal(new[] { 22, 24 }, result.Items);
     }
 
+    [Fact]
+    public void Page_PageExtreme_ClampsToLastPage()
+    {
+        var result = PagedLists.Page(Enumerable.Range(1, 25).ToList(), page: int.MaxValue, pageSize: 10);
+
+        Assert.Equal(3, result.Page);
+        Assert.Equal(3, result.TotalPages);
+        Assert.Equal(5, result.Items.Count);
+        Assert.Equal(21, result.Items[0]);
+        Assert.Equal(25, result.Items[^1]);
+    }
+
+    [Fact]
+    public async Task PageAsync_PageExtreme_ClampsToLastPage()
+    {
+        var repository = new FakeRepository<Item>(
+            Enumerable.Range(1, 25).Select(i => new Item(i)).ToList());
+
+        var result = await PagedLists.PageAsync(
+            repository,
+            _ => true,
+            q => q.OrderBy(x => x.Value),
+            page: int.MaxValue,
+            pageSize: 10,
+            map: x => x.Value);
+
+        Assert.Equal(25, result.Total);
+        Assert.Equal(3, result.Page);
+        Assert.Equal(3, result.TotalPages);
+        Assert.Equal(new[] { 21, 22, 23, 24, 25 }, result.Items);
+    }
+
     private sealed record Item(int Value);
 
     /// <summary>Dépôt en mémoire : vérifie la logique de pagination sans dépendre d'EF.</summary>

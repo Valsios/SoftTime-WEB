@@ -47,6 +47,17 @@ public interface IRepository<T> where T : class
                 1));
         }
 
+        var totalPages = PaginationRules.NombreDePages(total, taille);
+        if (pageNorm > totalPages)
+        {
+            return Task.FromResult(new PagedResult<TResult>(
+                Array.Empty<TResult>(),
+                total,
+                pageNorm,
+                taille,
+                totalPages));
+        }
+
         var items = list
             .Skip(PaginationRules.Decalage(pageNorm, taille))
             .Take(taille)
@@ -57,7 +68,7 @@ public interface IRepository<T> where T : class
             total,
             pageNorm,
             taille,
-            PaginationRules.NombreDePages(total, taille)));
+            totalPages));
     }
 
     /// <summary>

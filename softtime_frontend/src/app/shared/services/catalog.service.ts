@@ -5,6 +5,9 @@ import { SessionStore } from '../../core/session.store';
 import {
   AbsenceCode,
   Affectation,
+  AffectationOptions,
+  AffectationQuery,
+  AffectationRow,
   CardPaie,
   Category,
   ClockParam,
@@ -13,6 +16,7 @@ import {
   Holiday,
   ImportResult,
   Majoration,
+  PagedResult,
   PointeuseDb,
   SageConstantOption,
   Tolerance,
@@ -28,6 +32,11 @@ export class PointeuseDatabasesService extends ApiService {
 
   list(): Observable<PointeuseDb[]> {
     return this.http.get<PointeuseDb[]>(this.url('/api/pointeuse-databases'));
+  }
+  listPaged(page: number, pageSize: number): Observable<PagedResult<PointeuseDb>> {
+    return this.http.get<PagedResult<PointeuseDb>>(this.url('/api/pointeuse-databases/paged'), {
+      params: this.params({ page, pageSize }),
+    });
   }
   refresh(): Observable<PointeuseDb[]> {
     return this.list().pipe(
@@ -104,6 +113,11 @@ export class CardPaieService extends ApiService {
   list(): Observable<CardPaie[]> {
     return this.http.get<CardPaie[]>(this.url('/api/cardpaie'));
   }
+  listPaged(page: number, pageSize: number): Observable<PagedResult<CardPaie>> {
+    return this.http.get<PagedResult<CardPaie>>(this.url('/api/cardpaie/paged'), {
+      params: this.params({ page, pageSize }),
+    });
+  }
   create(dto: CardPaie): Observable<CardPaie> {
     return this.http.post<CardPaie>(this.url('/api/cardpaie'), dto);
   }
@@ -128,6 +142,11 @@ export class CategoriesService extends ApiService {
   list(): Observable<Category[]> {
     return this.http.get<Category[]>(this.url('/api/categories'));
   }
+  listPaged(page: number, pageSize: number): Observable<PagedResult<Category>> {
+    return this.http.get<PagedResult<Category>>(this.url('/api/categories/paged'), {
+      params: this.params({ page, pageSize }),
+    });
+  }
   create(dto: Category): Observable<Category> {
     return this.http.post<Category>(this.url('/api/categories'), dto);
   }
@@ -145,6 +164,19 @@ export class AffectationsService extends ApiService {
     return this.http.get<Affectation[]>(this.url('/api/affectations'), {
       params: this.params({ categoryId }),
     });
+  }
+  listPaged(query: AffectationQuery & { page: number; pageSize: number }): Observable<PagedResult<AffectationRow>> {
+    return this.http.get<PagedResult<AffectationRow>>(this.url('/api/affectations/paged'), {
+      params: this.params({ ...query }),
+    });
+  }
+  listAll(query?: AffectationQuery): Observable<AffectationRow[]> {
+    return this.http.get<AffectationRow[]>(this.url('/api/affectations/all'), {
+      params: this.params({ ...(query ?? {}) }),
+    });
+  }
+  options(): Observable<AffectationOptions> {
+    return this.http.get<AffectationOptions>(this.url('/api/affectations/options'));
   }
   create(dto: Affectation): Observable<Affectation> {
     return this.http.post<Affectation>(this.url('/api/affectations'), dto);
@@ -169,6 +201,11 @@ export class TolerancesService extends ApiService {
       params: this.params({ categoryId }),
     });
   }
+  listPaged(page: number, pageSize: number, categoryId?: number): Observable<PagedResult<Tolerance>> {
+    return this.http.get<PagedResult<Tolerance>>(this.url('/api/tolerances/paged'), {
+      params: this.params({ page, pageSize, categoryId }),
+    });
+  }
   create(dto: Tolerance): Observable<Tolerance> {
     return this.http.post<Tolerance>(this.url('/api/tolerances'), dto);
   }
@@ -184,6 +221,11 @@ export class TolerancesService extends ApiService {
 export class HolidaysService extends ApiService {
   list(): Observable<Holiday[]> {
     return this.http.get<Holiday[]>(this.url('/api/holidays'));
+  }
+  listPaged(page: number, pageSize: number): Observable<PagedResult<Holiday>> {
+    return this.http.get<PagedResult<Holiday>>(this.url('/api/holidays/paged'), {
+      params: this.params({ page, pageSize }),
+    });
   }
   create(dto: Holiday): Observable<Holiday> {
     return this.http.post<Holiday>(this.url('/api/holidays'), dto);
@@ -204,6 +246,11 @@ export class MajorationsService extends ApiService {
   list(): Observable<Majoration[]> {
     return this.http.get<Majoration[]>(this.url('/api/majorations'));
   }
+  listPaged(page: number, pageSize: number): Observable<PagedResult<Majoration>> {
+    return this.http.get<PagedResult<Majoration>>(this.url('/api/majorations/paged'), {
+      params: this.params({ page, pageSize }),
+    });
+  }
   update(id: number, dto: Majoration): Observable<Majoration> {
     return this.http.put<Majoration>(this.url(`/api/majorations/${id}`), dto);
   }
@@ -213,6 +260,11 @@ export class MajorationsService extends ApiService {
 export class AbsenceCodesService extends ApiService {
   list(): Observable<AbsenceCode[]> {
     return this.http.get<AbsenceCode[]>(this.url('/api/absence-codes'));
+  }
+  listPaged(page: number, pageSize: number): Observable<PagedResult<AbsenceCode>> {
+    return this.http.get<PagedResult<AbsenceCode>>(this.url('/api/absence-codes/paged'), {
+      params: this.params({ page, pageSize }),
+    });
   }
   create(dto: AbsenceCode): Observable<AbsenceCode> {
     return this.http.post<AbsenceCode>(this.url('/api/absence-codes'), dto);
@@ -237,6 +289,11 @@ export class DepartementServiceService extends ApiService {
 export class CodeConstantesService extends ApiService {
   list(): Observable<CodeConstante[]> {
     return this.http.get<CodeConstante[]>(this.url('/api/code-constantes'));
+  }
+  listPaged(page: number, pageSize: number): Observable<PagedResult<CodeConstante>> {
+    return this.http.get<PagedResult<CodeConstante>>(this.url('/api/code-constantes/paged'), {
+      params: this.params({ page, pageSize }),
+    });
   }
   update(id: number, dto: CodeConstante): Observable<CodeConstante> {
     return this.http.put<CodeConstante>(this.url(`/api/code-constantes/${id}`), dto);

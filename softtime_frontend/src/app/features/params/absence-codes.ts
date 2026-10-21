@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
 import { Droit } from '../../core/rights';
-import { AbsenceCode } from '../../shared/models';
+import { AbsenceCode, PageChangeEvent } from '../../shared/models';
 import { AbsenceCodesService } from '../../shared/services/catalog.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, SoftToggle } from '../../shared/components';
 import { asRow } from '../../shared/utils/date';
@@ -19,7 +19,9 @@ import { asRow } from '../../shared/utils/date';
       <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter</soft-button>
     </page-header>
     <soft-card>
-      <data-table [columns]="columns" [rows]="rows()" [loading]="loading()">
+      <data-table [columns]="columns" [rows]="rows()" [loading]="loading()"
+        [serverSide]="true" [total]="total()" [serverPage]="page()" [serverPageSize]="pageSize"
+        (pageChange)="onPageChange($event)">
         <ng-template #actions let-row>
           <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
         </ng-template>
@@ -51,16 +53,36 @@ export class AbsenceCodesPage implements OnInit {
   readonly modal = signal(false);
   readonly editId = signal<number | null>(null);
   readonly rows = signal<Record<string, unknown>[]>([]);
+  readonly page = signal(1);
+  pageSize = 50;
+  readonly total = signal(0);
+  private requestSeq = 0;
   form: Partial<AbsenceCode> = {};
   readonly columns: Column[] = [
     { key: 'intitule', label: 'Intitulé' },
     { key: 'notPay', label: 'Non payé', format: (v) => (v ? 'Oui' : 'Non') },
   ];
 
-  ngOnInit(): void { this.load(); }
-  load(): void {
+  ngOnInit(): void { this.loadPage(); }
+  loadPage(): void {
+    const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.list().subscribe({ next: (items) => { this.rows.set(items.map(asRow)); this.loading.set(false); }, error: () => this.loading.set(false) });
+    this.svc.listPaged(this.page(), this.pageSize).subscribe({
+      next: (r) => {
+        if (seq !== this.requestSeq) return;
+        this.rows.set(r.items.map(asRow));
+        this.total.set(r.total);
+        this.page.set(r.page);
+        this.loading.set(false);
+      },
+      error: () => { if (seq === this.requestSeq) this.loading.set(false); },
+    });
+  }
+
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
+    this.loadPage();
   }
   openCreate(): void { this.editId.set(null); this.form = { notPay: false }; this.modal.set(true); }
   openEdit(row: Record<string, unknown>): void { this.editId.set(row['id'] as number); this.form = { ...(row as unknown as AbsenceCode) }; this.modal.set(true); }
@@ -69,9 +91,9 @@ export class AbsenceCodesPage implements OnInit {
     const id = this.editId();
     const dto = this.form as AbsenceCode;
     const req = id ? this.svc.update(id, { ...dto, id }) : this.svc.create({ ...dto, id: 0 });
-    req.subscribe({ next: () => { this.saving.set(false); this.modal.set(false); this.toast.success('Enregistré.'); this.load(); }, error: () => this.saving.set(false) });
+    req.subscribe({ next: () => { this.saving.set(false); this.modal.set(false); this.toast.success('Enregistré.'); this.loadPage(); }, error: () => this.saving.set(false) });
   }
   syncSage(): void {
-    this.svc.syncSage().subscribe({ next: () => { this.toast.success('Synchronisation SAGE terminée.'); this.load(); } });
+    this.svc.syncSage().subscribe({ next: () => { this.toast.success('Synchronisation SAGE terminée.'); this.loadPage(); } });
   }
 }

@@ -3,7 +3,7 @@ import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
 import { Droit } from '../../core/rights';
-import { SageDb } from '../../shared/models';
+import { SageDb, PageChangeEvent } from '../../shared/models';
 import { SageDatabasesService } from '../../shared/services/users.service';
 import { AuthService } from '../../shared/services/auth.service';
 import {
@@ -27,7 +27,9 @@ import { asRow } from '../../shared/utils/date';
       }
     </page-header>
     <soft-card>
-      <data-table [columns]="columns" [rows]="rows()" [loading]="loading()">
+      <data-table [columns]="columns" [rows]="rows()" [loading]="loading()"
+        [serverSide]="true" [total]="total()" [serverPage]="page()" [serverPageSize]="pageSize"
+        (pageChange)="onPageChange($event)">
         <ng-template #actions let-row>
           <div class="soft-actions">
             @if (canUpdate(row)) {
@@ -64,6 +66,10 @@ export class SageDatabasesPage implements OnInit {
   readonly modal = signal(false);
   readonly editId = signal<number | null>(null);
   readonly rows = signal<Record<string, unknown>[]>([]);
+  readonly page = signal(1);
+  pageSize = 50;
+  readonly total = signal(0);
+  private requestSeq = 0;
   readonly form = signal<Partial<SageDb>>({});
   readonly columns: Column[] = [
     { key: 'id', label: 'ID' },
@@ -74,7 +80,7 @@ export class SageDatabasesPage implements OnInit {
   ];
 
   ngOnInit(): void {
-    this.load();
+    this.loadPage();
   }
 
   canCreate(): boolean {
@@ -83,15 +89,6 @@ export class SageDatabasesPage implements OnInit {
       return this.session.hasRight(Droit.Databases);
     }
     return perms.some((p) => p.startsWith('SAGE:') && p.endsWith(':CREATE')) || perms.includes('SAGE:CREATE');
-  }
-
-  canRead(nomBd?: string | null): boolean {
-    if (!nomBd) return true;
-    const perms = this.session.permissions();
-    if (!perms || perms.length === 0) {
-      return this.session.hasRight(Droit.Databases);
-    }
-    return perms.includes(`SAGE:${nomBd}:READ`);
   }
 
   canUpdate(row: Record<string, unknown>): boolean {
@@ -112,16 +109,25 @@ export class SageDatabasesPage implements OnInit {
     return perms.includes(`SAGE:${nom}:DELETE`);
   }
 
-  load(): void {
+  loadPage(): void {
+    const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.list().subscribe({
-      next: (items) => {
-        const visible = items.filter((d) => this.canRead(d.nomBd));
-        this.rows.set(visible.map(asRow));
+    this.svc.listPaged(this.page(), this.pageSize).subscribe({
+      next: (r) => {
+        if (seq !== this.requestSeq) return;
+        this.rows.set(r.items.map(asRow));
+        this.total.set(r.total);
+        this.page.set(r.page);
         this.loading.set(false);
       },
-      error: () => this.loading.set(false),
+      error: () => { if (seq === this.requestSeq) this.loading.set(false); },
     });
+  }
+
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
+    this.loadPage();
   }
 
   openCreate(): void {
@@ -171,7 +177,7 @@ export class SageDatabasesPage implements OnInit {
             : "Base enregistrée. Pour qu'elle apparaisse dans le menu en haut, accordez l'accès dans « Accès bases ».",
         );
         this.auth.refreshMe().subscribe();
-        this.load();
+        this.loadPage();
       },
       error: (e) => {
         this.saving.set(false);
@@ -190,7 +196,7 @@ export class SageDatabasesPage implements OnInit {
       next: () => {
         this.toast.success('Supprimé.');
         this.auth.refreshMe().subscribe();
-        this.load();
+        this.loadPage();
       },
     });
   }

@@ -40,6 +40,20 @@ public class SageDatabasesController : ControllerBase
         return Ok(list);
     }
 
+    [HttpGet("paged")]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
+    {
+        IReadOnlyCollection<string>? allowed = null;
+        if (_user.UserId is decimal uid)
+        {
+            var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
+            if (p.IsCustomized)
+                allowed = DatabasePermissionNames.Read(p.GrantedPermissions, "SAGE");
+        }
+        return Ok(await _svc.ListSagePagedAsync(allowed, page, pageSize, ct));
+    }
+
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] SageDbDto dto, CancellationToken ct)
     {
@@ -181,6 +195,20 @@ public class PointeuseDatabasesController : ControllerBase
         return Ok(list);
     }
 
+    [HttpGet("paged")]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
+    {
+        IReadOnlyCollection<string>? allowed = null;
+        if (_user.UserId is decimal uid)
+        {
+            var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
+            if (p.IsCustomized)
+                allowed = DatabasePermissionNames.Read(p.GrantedPermissions, "POINTEUSE");
+        }
+        return Ok(await _svc.ListPointeusePagedAsync(allowed, page, pageSize, ct));
+    }
+
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] PointeuseDbDto dto, CancellationToken ct)
     {
@@ -309,6 +337,11 @@ public class CardPaieController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListCardsAsync(ct));
 
+    [HttpGet("paged")]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
+        => Ok(await _svc.ListCardsPagedAsync(page, pageSize, ct));
+
     [HttpPost]
     [RequireDroit(Droit.Parameters)]
     public async Task<IActionResult> Create([FromBody] CardPaieDto dto, CancellationToken ct)
@@ -378,6 +411,11 @@ public class CategoriesController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListCategoriesAsync(ct));
 
+    [HttpGet("paged")]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
+        => Ok(await _svc.ListCategoriesPagedAsync(page, pageSize, ct));
+
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CategoryDto dto, CancellationToken ct)
         => Ok(await _svc.SaveCategoryAsync(dto with { Id = 0 }, ct));
@@ -407,6 +445,28 @@ public class AffectationsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] int? categoryId, CancellationToken ct)
         => Ok(await _svc.ListAffectationsAsync(categoryId, ct));
+
+    [HttpGet("paged")]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] int? categoryId,
+        [FromQuery] string? departement,
+        [FromQuery] string? service,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
+        CancellationToken ct)
+        => Ok(await _svc.ListAffectationsPagedAsync(categoryId, departement, service, page, pageSize, ct));
+
+    [HttpGet("options")]
+    public async Task<IActionResult> GetOptions(CancellationToken ct)
+        => Ok(await _svc.GetAffectationOptionsAsync(ct));
+
+    [HttpGet("all")]
+    public async Task<IActionResult> GetAllRows(
+        [FromQuery] int? categoryId,
+        [FromQuery] string? departement,
+        [FromQuery] string? service,
+        CancellationToken ct)
+        => Ok(await _svc.ListAllAffectationsAsync(categoryId, departement, service, ct));
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] AffectationDto dto, CancellationToken ct)
@@ -446,6 +506,11 @@ public class TolerancesController : ControllerBase
     public async Task<IActionResult> GetAll([FromQuery] int? categoryId, CancellationToken ct)
         => Ok(await _svc.ListTolerancesAsync(categoryId, ct));
 
+    [HttpGet("paged")]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] int? categoryId, [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
+        => Ok(await _svc.ListTolerancesPagedAsync(categoryId, page, pageSize, ct));
+
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] ToleranceDto dto, CancellationToken ct)
         => Ok(await _svc.SaveToleranceAsync(dto with { Id = 0 }, ct));
@@ -474,6 +539,11 @@ public class HolidaysController : ControllerBase
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListHolidaysAsync(ct));
+
+    [HttpGet("paged")]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
+        => Ok(await _svc.ListHolidaysPagedAsync(page, pageSize, ct));
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] HolidayDto dto, CancellationToken ct)
@@ -511,6 +581,11 @@ public class MajorationsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListMajorationsAsync(ct));
 
+    [HttpGet("paged")]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
+        => Ok(await _svc.ListMajorationsPagedAsync(page, pageSize, ct));
+
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] MajorationDto dto, CancellationToken ct)
         => Ok(await _svc.SaveMajorationAsync(dto with { Id = id }, ct));
@@ -528,6 +603,11 @@ public class AbsenceCodesController : ControllerBase
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListAbsenceCodesAsync(ct));
+
+    [HttpGet("paged")]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
+        => Ok(await _svc.ListAbsenceCodesPagedAsync(page, pageSize, ct));
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] AbsenceCodeDto dto, CancellationToken ct)
@@ -558,6 +638,11 @@ public class CodeConstantesController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListCodeConstantesAsync(ct));
 
+    [HttpGet("paged")]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
+        => Ok(await _svc.ListCodeConstantesPagedAsync(page, pageSize, ct));
+
     [HttpGet("sage-options")]
     public async Task<IActionResult> SageOptions(CancellationToken ct) => Ok(await _svc.ListSageConstantOptionsAsync(ct));
 
@@ -571,4 +656,24 @@ public class CodeConstantesController : ControllerBase
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] CodeConstanteDto dto, CancellationToken ct)
         => Ok(await _svc.SaveCodeConstanteAsync(dto with { Id = id }, ct));
+}
+
+/// <summary>
+/// Extrait les noms de bases autorisées à partir des permissions détaillées
+/// (<c>SAGE:{nom}:READ</c> / <c>POINTEUSE:{nom}:READ</c>).
+/// </summary>
+internal static class DatabasePermissionNames
+{
+    public static IReadOnlyCollection<string> Read(IEnumerable<string> permissions, string system)
+    {
+        var prefix = system + ":";
+        return permissions
+            .Where(p => p.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                        && p.EndsWith(":READ", StringComparison.OrdinalIgnoreCase))
+            .Select(p => p.Split(':'))
+            .Where(parts => parts.Length == 3)
+            .Select(parts => parts[1])
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
 }

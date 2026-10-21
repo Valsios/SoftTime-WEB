@@ -575,6 +575,39 @@ public class AuthServiceSecurityTests
         Assert.Equal(md5Hash, user.PASSWORD);
     }
 
+    [Fact]
+    public async Task GetUsersPagedAsync_ReturnsRequestedPageOrderedByName()
+    {
+        _uow.GetRepo<T_RESPONSABLE>().Items.AddRange(new[]
+        {
+            new T_RESPONSABLE { IDRESPONSABLE = 1, IDROLE = 1, NOMRESPONSABLE = "Zoe", LOGIN = "zoe" },
+            new T_RESPONSABLE { IDRESPONSABLE = 2, IDROLE = 2, NOMRESPONSABLE = "Alice", LOGIN = "alice" },
+            new T_RESPONSABLE { IDRESPONSABLE = 3, IDROLE = 2, NOMRESPONSABLE = "Bob", LOGIN = "bob" },
+        });
+
+        var result = await _auth.GetUsersPagedAsync(1, 2);
+
+        Assert.Equal(3, result.Total);
+        Assert.Equal(2, result.Items.Count);
+        Assert.Equal("Alice", result.Items[0].Nom);
+        Assert.Equal("Bob", result.Items[1].Nom);
+        Assert.Equal(1, result.Page);
+        Assert.Equal(2, result.PageSize);
+        Assert.Equal(2, result.TotalPages);
+    }
+
+    [Fact]
+    public async Task GetRolesPagedAsync_ReturnsRequestedPage()
+    {
+        var result = await _auth.GetRolesPagedAsync(1, 1);
+
+        Assert.Equal(2, result.Total);
+        Assert.Single(result.Items);
+        Assert.Equal("Administrateur", result.Items[0].Nom);
+        Assert.Equal(1, result.Page);
+        Assert.Equal(2, result.TotalPages);
+    }
+
     #region In-Memory Test Doubles
 
     private sealed class InMemoryRepository<T> : IRepository<T> where T : class

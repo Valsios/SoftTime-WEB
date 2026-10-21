@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, effect, inject, signal } from '@ang
 import { FormsModule } from '@angular/forms';
 import { SessionStore } from '../../core/session.store';
 import { ToastService } from '../../core/toast.service';
-import { CodeConstante } from '../../shared/models';
+import { CodeConstante, PageChangeEvent } from '../../shared/models';
 import { CodeConstantesService } from '../../shared/services/catalog.service';
 import { SageDatabasesService } from '../../shared/services/users.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, SoftSelect } from '../../shared/components';
@@ -15,7 +15,9 @@ import { asRow } from '../../shared/utils/date';
   template: `
     <page-header title="Configuration Code Constante" [subtitle]="isOther() ? 'Codes constantes de la base RH / paie AUTRE active' : 'Mapping types HS → CodeConstante SAGE'"></page-header>
     <soft-card>
-      <data-table [columns]="columns" [rows]="rows()" [loading]="loading()">
+      <data-table [columns]="columns" [rows]="rows()" [loading]="loading()"
+        [serverSide]="true" [total]="total()" [serverPage]="page()" [serverPageSize]="pageSize"
+        (pageChange)="onPageChange($event)">
         <ng-template #actions let-row>
           <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
         </ng-template>
@@ -58,6 +60,10 @@ export class CodeConstantesPage {
   readonly modal = signal(false);
   readonly editId = signal<number | null>(null);
   readonly rows = signal<Record<string, unknown>[]>([]);
+  readonly page = signal(1);
+  pageSize = 50;
+  readonly total = signal(0);
+  private requestSeq = 0;
   readonly sageOptions = signal<{ value: string; label: string }[]>([]);
   readonly otherTableOptions = signal<{ value: string; label: string }[]>([]);
   readonly otherCodeOptions = signal<{ value: string; label: string }[]>([]);
@@ -79,6 +85,8 @@ export class CodeConstantesPage {
   private loadActiveDatabaseConfiguration(): void {
     this.modal.set(false);
     this.rows.set([]);
+    this.page.set(1);
+    this.total.set(0);
     this.sageOptions.set([]);
     this.otherTableOptions.set([]);
     this.otherCodeOptions.set([]);
@@ -101,7 +109,7 @@ export class CodeConstantesPage {
       },
       error: () => { this.hasSageList.set(false); this.sageOptions.set([]); },
     });
-    this.load();
+    this.loadPage();
   }
 
   private loadOtherConfiguration(): void {
@@ -109,15 +117,28 @@ export class CodeConstantesPage {
       next: (tables) => this.otherTableOptions.set(tables.map((value) => ({ value, label: value }))),
       error: (error) => this.toast.warning(error?.error?.title || error?.error || 'Configurez d’abord la source de code constante dans Bases RH / paie.'),
     });
-    this.load();
+    this.loadPage();
   }
 
-  load(): void {
+  loadPage(): void {
+    const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.list().subscribe({
-      next: (items) => { this.rows.set(items.map(asRow)); this.loading.set(false); },
-      error: () => this.loading.set(false),
+    this.svc.listPaged(this.page(), this.pageSize).subscribe({
+      next: (r) => {
+        if (seq !== this.requestSeq) return;
+        this.rows.set(r.items.map(asRow));
+        this.total.set(r.total);
+        this.page.set(r.page);
+        this.loading.set(false);
+      },
+      error: () => { if (seq === this.requestSeq) this.loading.set(false); },
     });
+  }
+
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
+    this.loadPage();
   }
 
   openEdit(row: Record<string, unknown>): void {
@@ -168,7 +189,7 @@ export class CodeConstantesPage {
         this.saving.set(false);
         this.modal.set(false);
         this.toast.success('Enregistré.');
-        this.load();
+        this.loadPage();
       },
       error: (error) => {
         this.saving.set(false);
