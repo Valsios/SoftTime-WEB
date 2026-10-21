@@ -1,6 +1,13 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Linq.Expressions;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
+using SoftTime.Domain.Services;
 using SoftTime.Infrastructure.Persistence;
 
 namespace SoftTime.Infrastructure.Repositories;
@@ -30,6 +37,77 @@ public class EfRepository<T> : IRepository<T> where T : class
         int take,
         CancellationToken cancellationToken = default)
         => _set.Where(predicate).OrderByDescending(orderByDescending).Take(take).ToListAsync(cancellationToken);
+
+    public async Task<PagedResult<TResult>> ToPagedAsync<TResult>(
+        IQueryable<TResult> query,
+        int? page,
+        int? pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var total = await query.CountAsync(cancellationToken);
+        var (pageNorm, taille) = PaginationHelper.CalculerPagination(page, pageSize);
+
+        if (total == 0)
+        {
+            return new PagedResult<TResult>(
+                Array.Empty<TResult>(),
+                0,
+                pageNorm,
+                taille,
+                1);
+        }
+
+        var items = await query
+            .Skip(PaginationRules.Decalage(pageNorm, taille))
+            .Take(taille)
+            .ToListAsync(cancellationToken);
+
+        return new PagedResult<TResult>(
+            items,
+            total,
+            pageNorm,
+            taille,
+            PaginationRules.NombreDePages(total, taille));
+    }
+
+    public async Task<PagedResult<TDto>> ToPagedAsync<TDto>(
+        Expression<Func<T, bool>>? predicate,
+        Func<IQueryable<T>, IOrderedQueryable<T>> orderBy,
+        Expression<Func<T, TDto>> selector,
+        int? page,
+        int? pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(orderBy);
+        ArgumentNullException.ThrowIfNull(selector);
+
+        IQueryable<T> query = _set.AsNoTracking();
+        if (predicate != null)
+            query = query.Where(predicate);
+
+        var ordered = orderBy(query);
+        var projected = ordered.Select(selector);
+        return await ToPagedAsync(projected, page, pageSize, cancellationToken);
+    }
+
+    public async Task<PagedResult<T>> ToPagedAsync(
+        Expression<Func<T, bool>>? predicate,
+        Func<IQueryable<T>, IOrderedQueryable<T>> orderBy,
+        int? page,
+        int? pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(orderBy);
+
+        IQueryable<T> query = _set.AsNoTracking();
+        if (predicate != null)
+            query = query.Where(predicate);
+
+        var ordered = orderBy(query);
+        return await ToPagedAsync(ordered, page, pageSize, cancellationToken);
+    }
 
     public async Task AddAsync(T entity, CancellationToken cancellationToken = default)
         => await _set.AddAsync(entity, cancellationToken);
