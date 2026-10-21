@@ -23,7 +23,16 @@ import { asRow, fmtDate, today } from '../../shared/utils/date';
 
     @if (activeTab() === 'config') {
       <soft-card padding="md">
-        <data-table [columns]="configColumns" [rows]="configRows()" [loading]="loadingConfig()">
+        <data-table
+          [columns]="configColumns"
+          [rows]="configRows()"
+          [loading]="loadingConfig()"
+          [serverSide]="true"
+          [total]="configTotal()"
+          [pageSize]="PAGE_SIZE"
+          [currentPage]="configPage()"
+          (pageChange)="onConfigPageChange($event)"
+        >
           <ng-template #actions let-row>
             <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
           </ng-template>
@@ -31,7 +40,16 @@ import { asRow, fmtDate, today } from '../../shared/utils/date';
       </soft-card>
     } @else {
       <soft-card padding="md">
-        <data-table [columns]="eventColumns" [rows]="eventRows()" [loading]="loadingEvents()"></data-table>
+        <data-table
+          [columns]="eventColumns"
+          [rows]="eventRows()"
+          [loading]="loadingEvents()"
+          [serverSide]="true"
+          [total]="eventTotal()"
+          [pageSize]="PAGE_SIZE"
+          [currentPage]="eventPage()"
+          (pageChange)="onEventsPageChange($event)"
+        ></data-table>
       </soft-card>
     }
 
@@ -77,8 +95,15 @@ export class AuditPage implements OnInit {
   readonly saving = signal(false);
   readonly modal = signal(false);
   readonly editId = signal<number | null>(null);
+  readonly PAGE_SIZE = 50;
   readonly configRows = signal<Record<string, unknown>[]>([]);
   readonly eventRows = signal<Record<string, unknown>[]>([]);
+  readonly configPage = signal(1);
+  readonly configTotal = signal(0);
+  readonly eventPage = signal(1);
+  readonly eventTotal = signal(0);
+  private configSeq = 0;
+  private eventSeq = 0;
   readonly rawTypeOptions = signal<AuditTypeOption[]>([]);
   readonly typeOptions = signal<AuditTypeOption[]>([]);
   readonly loadTypeError = signal<string | null>(null);
@@ -108,11 +133,33 @@ export class AuditPage implements OnInit {
   ];
 
   ngOnInit(): void {
-    this.svc.config().subscribe({
-      next: (items) => { this.configRows.set(items.map(asRow)); this.loadingConfig.set(false); },
-      error: () => this.loadingConfig.set(false),
-    });
+    this.loadConfig();
     this.loadTypes();
+    this.loadEvents();
+  }
+
+  loadConfig(): void {
+    const seq = ++this.configSeq;
+    this.loadingConfig.set(true);
+    this.svc.configPaged(this.configPage(), this.PAGE_SIZE).subscribe({
+      next: (r) => {
+        if (seq !== this.configSeq) return;
+        this.configRows.set(r.items.map(asRow));
+        this.configTotal.set(r.total);
+        this.configPage.set(r.page);
+        this.loadingConfig.set(false);
+      },
+      error: () => { if (seq === this.configSeq) this.loadingConfig.set(false); },
+    });
+  }
+
+  onConfigPageChange(page: number): void {
+    this.configPage.set(page);
+    this.loadConfig();
+  }
+
+  onEventsPageChange(page: number): void {
+    this.eventPage.set(page);
     this.loadEvents();
   }
 
@@ -130,14 +177,21 @@ export class AuditPage implements OnInit {
   }
 
   loadEvents(): void {
+    const seq = ++this.eventSeq;
     this.loadingEvents.set(true);
     const to = today();
     const fromDate = new Date();
     fromDate.setDate(fromDate.getDate() - 30);
     const from = fromDate.toISOString().slice(0, 10);
-    this.svc.events({ from, to }).subscribe({
-      next: (items) => { this.eventRows.set(items.map(asRow)); this.loadingEvents.set(false); },
-      error: () => this.loadingEvents.set(false),
+    this.svc.eventsPaged({ from, to, page: this.eventPage(), pageSize: this.PAGE_SIZE }).subscribe({
+      next: (r) => {
+        if (seq !== this.eventSeq) return;
+        this.eventRows.set(r.items.map(asRow));
+        this.eventTotal.set(r.total);
+        this.eventPage.set(r.page);
+        this.loadingEvents.set(false);
+      },
+      error: () => { if (seq === this.eventSeq) this.loadingEvents.set(false); },
     });
   }
 
@@ -187,11 +241,7 @@ export class AuditPage implements OnInit {
         this.saving.set(false);
         this.modal.set(false);
         this.toast.success('Enregistré.');
-        this.loadingConfig.set(true);
-        this.svc.config().subscribe({
-          next: (items) => { this.configRows.set(items.map(asRow)); this.loadingConfig.set(false); },
-          error: () => this.loadingConfig.set(false),
-        });
+        this.loadConfig();
       },
       error: () => this.saving.set(false),
     });
@@ -199,9 +249,17 @@ export class AuditPage implements OnInit {
 
   exportExcel(): void {
     if (this.activeTab() === 'config') {
-      this.excel.download('audit-config', this.configColumns, this.configRows());
+      this.svc.config().subscribe({
+        next: (items) => this.excel.download('audit-config', this.configColumns, items.map(asRow)),
+      });
     } else {
-      this.excel.download('audit-evenements', this.eventColumns, this.eventRows());
+      const to = today();
+      const fromDate = new Date();
+      fromDate.setDate(fromDate.getDate() - 30);
+      const from = fromDate.toISOString().slice(0, 10);
+      this.svc.events({ from, to }).subscribe({
+        next: (items) => this.excel.download('audit-evenements', this.eventColumns, items.map(asRow)),
+      });
     }
   }
 }

@@ -128,5 +128,80 @@ public class SoftTimeDbContext : DbContext
             e.Property(x => x.PERMISSION_CODE).HasMaxLength(128);
             e.HasIndex(x => new { x.IDRESPONSABLE, x.PERMISSION_CODE }).IsUnique();
         });
+
+        // Longueurs des colonnes de filtre, alignées sur migrations/add_pagination_performance_indexes.sql.
+        // La source de vérité reste le SQL : ces annotations documentent le modèle et dimensionnent
+        // les paramètres EF, sans modifier une base existante.
+        modelBuilder.Entity<T_POINTAGE>(e =>
+        {
+            e.Property(x => x.NOM_BDD_SAGE).HasMaxLength(128);
+            e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
+        });
+        modelBuilder.Entity<T_HEURECORRIGER>(e =>
+        {
+            e.Property(x => x.BDD_SAGE).HasMaxLength(128);
+            e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
+        });
+        modelBuilder.Entity<T_HEUREANOMALIE>(e =>
+        {
+            e.Property(x => x.BDD_SAGE).HasMaxLength(128);
+            e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
+        });
+        modelBuilder.Entity<T_CANTINE>(e =>
+        {
+            e.Property(x => x.NOM_BDD_SAGE).HasMaxLength(128);
+            e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
+        });
+        modelBuilder.Entity<T_FRAIS>(e =>
+        {
+            e.Property(x => x.NOM_BDD_SAGE).HasMaxLength(128);
+            e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
+        });
+        modelBuilder.Entity<T_PLANNING_SAL>(e => e.Property(x => x.BDD_SAGE).HasMaxLength(128));
+        modelBuilder.Entity<T_CARDPAIE>(e =>
+        {
+            e.Property(x => x.SAGE_BDD).HasMaxLength(128);
+            e.Property(x => x.SAGE_MATRICULE).HasMaxLength(64);
+        });
+        modelBuilder.Entity<T_HS_VALIDER>(e =>
+        {
+            e.Property(x => x.BDD_SAGE).HasMaxLength(128);
+            e.Property(x => x.MATRICULES).HasMaxLength(64);
+        });
+        modelBuilder.Entity<T_HSExoImp>(e =>
+        {
+            e.Property(x => x.BDD_SAGE).HasMaxLength(128);
+            e.Property(x => x.Matricule).HasMaxLength(64);
+        });
+        modelBuilder.Entity<T_HSSemaine>(e =>
+        {
+            e.Property(x => x.BDD_SAGE).HasMaxLength(128);
+            e.Property(x => x.Matricule).HasMaxLength(64);
+        });
+        modelBuilder.Entity<T_HEUREDIMANCHE>(e =>
+        {
+            e.Property(x => x.BDD_SAGE).HasMaxLength(128);
+            e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
+        });
+        modelBuilder.Entity<T_HISTORIQUE_POINTAGE>(e =>
+        {
+            e.Property(x => x.NOM_BDD_SAGE).HasMaxLength(128);
+            e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
+        });
+        modelBuilder.Entity<T_HISTORIQUE_ANOMALIE>(e =>
+        {
+            e.Property(x => x.BDD_SAGE).HasMaxLength(128);
+            e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
+        });
+        modelBuilder.Entity<T_HISTORIQUE_HS>(e =>
+        {
+            e.Property(x => x.BDD_SAGE).HasMaxLength(128);
+            e.Property(x => x.MATRICULE).HasMaxLength(64);
+        });
+        modelBuilder.Entity<suivi_SUIVI>(e =>
+        {
+            e.Property(x => x._TABLES).HasMaxLength(128);
+            e.Property(x => x._ACTIONS).HasMaxLength(128);
+        });
     }
 }

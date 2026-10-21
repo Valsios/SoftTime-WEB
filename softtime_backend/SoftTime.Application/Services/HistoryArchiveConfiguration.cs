@@ -15,9 +15,9 @@ public static class HistoryArchiveConfiguration
             CREATE TABLE dbo.T_HISTORIQUE_POINTAGE (
                 ID                 int IDENTITY(1,1) NOT NULL PRIMARY KEY,
                 POINTAGE_ID        decimal(18,0) NULL,
-                NOM_BDD_SAGE       nvarchar(max) NULL,
+                NOM_BDD_SAGE       nvarchar(128) NULL,
                 NOM_BDD_POINTEUSE  nvarchar(max) NULL,
-                MATRICULE_SAGE     nvarchar(max) NULL,
+                MATRICULE_SAGE     nvarchar(64) NULL,
                 DATE_POINTAGE      datetime2 NULL,
                 HEURE_POINTAGE     time NULL,
                 DATE_IMPORTATION   datetime2 NULL,
@@ -25,7 +25,7 @@ public static class HistoryArchiveConfiguration
                 TYPE_POINTAGE      nvarchar(max) NULL,
                 DATE_SUPPRESSION   datetime2 NOT NULL
             );
-            CREATE INDEX IX_HIST_POINTAGE_Date ON dbo.T_HISTORIQUE_POINTAGE (DATE_SUPPRESSION);
+            CREATE INDEX IX_HIST_POINTAGE_Pagination ON dbo.T_HISTORIQUE_POINTAGE (NOM_BDD_SAGE, DATE_SUPPRESSION);
         END;
 
         IF OBJECT_ID(N'dbo.T_HISTORIQUE_ANOMALIE', N'U') IS NULL
@@ -33,9 +33,9 @@ public static class HistoryArchiveConfiguration
             CREATE TABLE dbo.T_HISTORIQUE_ANOMALIE (
                 ID                 int IDENTITY(1,1) NOT NULL PRIMARY KEY,
                 ANOMALIE_ID        decimal(18,0) NULL,
-                BDD_SAGE           nvarchar(max) NULL,
+                BDD_SAGE           nvarchar(128) NULL,
                 BDD_POINTEUSE      nvarchar(max) NULL,
-                MATRICULE_SAGE     nvarchar(max) NULL,
+                MATRICULE_SAGE     nvarchar(64) NULL,
                 DATE_POINTAGE_IN   datetime2 NULL,
                 DATE_POINTAGE_OUT  datetime2 NULL,
                 H1                 time NULL,
@@ -52,7 +52,7 @@ public static class HistoryArchiveConfiguration
                 INTITULE_ABSENCE   nvarchar(max) NULL,
                 DATE_SUPPRESSION   datetime2 NOT NULL
             );
-            CREATE INDEX IX_HIST_ANOMALIE_Date ON dbo.T_HISTORIQUE_ANOMALIE (DATE_SUPPRESSION);
+            CREATE INDEX IX_HIST_ANOMALIE_Pagination ON dbo.T_HISTORIQUE_ANOMALIE (BDD_SAGE, DATE_SUPPRESSION);
         END;
 
         IF OBJECT_ID(N'dbo.T_HISTORIQUE_HS', N'U') IS NULL
@@ -60,7 +60,7 @@ public static class HistoryArchiveConfiguration
             CREATE TABLE dbo.T_HISTORIQUE_HS (
                 ID                int IDENTITY(1,1) NOT NULL PRIMARY KEY,
                 HS_ID             int NULL,
-                MATRICULE         nvarchar(max) NULL,
+                MATRICULE         nvarchar(64) NULL,
                 NUM_SAL           int NULL,
                 EXO130            decimal(18,2) NULL,
                 EXO150            decimal(18,2) NULL,
@@ -73,11 +73,11 @@ public static class HistoryArchiveConfiguration
                 DIM               decimal(18,2) NULL,
                 RETARD            decimal(18,2) NULL,
                 ABSENCE           decimal(18,2) NULL,
-                BDD_SAGE          nvarchar(max) NULL,
+                BDD_SAGE          nvarchar(128) NULL,
                 BDD_POINTEUSE     nvarchar(max) NULL,
                 DATE_SUPPRESSION  datetime2 NOT NULL
             );
-            CREATE INDEX IX_HIST_HS_Date ON dbo.T_HISTORIQUE_HS (DATE_SUPPRESSION);
+            CREATE INDEX IX_HIST_HS_Pagination ON dbo.T_HISTORIQUE_HS (BDD_SAGE, DATE_SUPPRESSION);
         END;
         """, ct);
 }

@@ -25,7 +25,16 @@ import { asRow } from '../../shared/utils/date';
       <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter</soft-button>
     </page-header>
     <soft-card>
-      <data-table [columns]="columns" [rows]="rows()" [loading]="loading()">
+      <data-table
+        [columns]="columns"
+        [rows]="rows()"
+        [loading]="loading()"
+        [serverSide]="true"
+        [total]="total()"
+        [pageSize]="PAGE_SIZE"
+        [currentPage]="page()"
+        (pageChange)="onPageChange($event)"
+      >
         <ng-template #actions let-row>
           <div class="soft-actions" style="justify-content: end">
             <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
@@ -65,7 +74,11 @@ export class ShiftsPage implements OnInit {
   readonly saving = signal(false);
   readonly modal = signal(false);
   readonly editId = signal<number | null>(null);
+  readonly PAGE_SIZE = 50;
   readonly rows = signal<Record<string, unknown>[]>([]);
+  readonly page = signal(1);
+  readonly total = signal(0);
+  private requestSeq = 0;
   form: Partial<Shift> = {};
   readonly columns: Column[] = [
     { key: 'noShift', label: 'N°' },
@@ -75,11 +88,30 @@ export class ShiftsPage implements OnInit {
     { key: 'hd', label: 'Départ' },
   ];
 
-  ngOnInit(): void { this.load(); }
-  load(): void {
+  ngOnInit(): void { this.loadPage(); }
+
+  private loadPage(): void {
+    const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.list().subscribe({ next: (items) => { this.rows.set(items.map(asRow)); this.loading.set(false); }, error: () => this.loading.set(false) });
+    this.svc.listPaged(this.page(), this.PAGE_SIZE).subscribe({
+      next: (r) => {
+        if (seq !== this.requestSeq) return;
+        this.rows.set(r.items.map(asRow));
+        this.total.set(r.total);
+        this.page.set(r.page);
+        this.loading.set(false);
+      },
+      error: () => { if (seq === this.requestSeq) this.loading.set(false); },
+    });
   }
+
+  onPageChange(page: number): void {
+    this.page.set(page);
+    this.loadPage();
+  }
+
+  private reload(): void { this.loadPage(); }
+
   openCreate(): void { this.editId.set(null); this.form = {}; this.modal.set(true); }
   openEdit(row: Record<string, unknown>): void { this.editId.set(row['id'] as number); this.form = { ...(row as unknown as Shift) }; this.modal.set(true); }
   save(): void {
@@ -87,21 +119,23 @@ export class ShiftsPage implements OnInit {
     const id = this.editId();
     const dto = this.form as Shift;
     const req = id ? this.svc.update(id, { ...dto, id }) : this.svc.create({ ...dto, id: 0 });
-    req.subscribe({ next: () => { this.saving.set(false); this.modal.set(false); this.toast.success('Enregistré.'); this.load(); }, error: () => this.saving.set(false) });
+    req.subscribe({ next: () => { this.saving.set(false); this.modal.set(false); this.toast.success('Enregistré.'); this.reload(); }, error: () => this.saving.set(false) });
   }
   async remove(row: Record<string, unknown>): Promise<void> {
     if (!(await this.confirm.ask('Supprimer ce shift ?'))) return;
-    this.svc.remove(row['id'] as number).subscribe({ next: () => { this.toast.success('Supprimé.'); this.load(); } });
+    this.svc.remove(row['id'] as number).subscribe({ next: () => { this.toast.success('Supprimé.'); this.reload(); } });
   }
   exportExcel(): void {
-    this.excel.download('shifts', this.columns, this.rows());
+    this.svc.list().subscribe({
+      next: (items) => this.excel.download('shifts', this.columns, items.map(asRow)),
+    });
   }
   onFile(event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
     this.svc.importExcel(file).subscribe({
-      next: (r) => { this.toast.success(r.message || `${r.imported} importé(s).`); this.load(); },
+      next: (r) => { this.toast.success(r.message || `${r.imported} importé(s).`); this.reload(); },
     });
     input.value = '';
   }

@@ -158,6 +158,89 @@ public class HistoryArchiveService
             .ToList();
     }
 
+    // ---------------------------------------------------------------- Consultation paginée
+
+    /// <summary>Archive des pointages paginée (filtre SQL date + matricule, tri date de suppression).</summary>
+    public async Task<PagedResult<HistoryPointageDto>> ListPointagesPagedAsync(
+        PeriodRequest filter, int? page, int? pageSize, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var sageDb = _tenant.SageDb;
+        var from = filter.From;
+        var to = filter.To;
+        var matriculeFrom = filter.MatriculeFrom;
+        var matriculeTo = filter.MatriculeTo;
+        return await PagedLists.PageAsync(
+            _uow.Repository<T_HISTORIQUE_POINTAGE>(),
+            h => h.NOM_BDD_SAGE == sageDb
+                 && h.DATE_SUPPRESSION >= from
+                 && h.DATE_SUPPRESSION <= to
+                 && (string.IsNullOrEmpty(matriculeFrom)
+                     || (h.MATRICULE_SAGE != null && string.Compare(h.MATRICULE_SAGE, matriculeFrom) >= 0))
+                 && (string.IsNullOrEmpty(matriculeTo)
+                     || (h.MATRICULE_SAGE != null && string.Compare(h.MATRICULE_SAGE, matriculeTo) <= 0)),
+            q => q.OrderByDescending(h => h.DATE_SUPPRESSION).ThenByDescending(h => h.ID),
+            page,
+            pageSize,
+            h => new HistoryPointageDto(h.ID, h.MATRICULE_SAGE, h.DATE_POINTAGE, h.HEURE_POINTAGE,
+                h.TYPE_POINTAGE, h.DATE_SUPPRESSION),
+            ct);
+    }
+
+    /// <summary>Archive des anomalies paginée (filtre SQL date + matricule).</summary>
+    public async Task<PagedResult<HistoryAnomalieDto>> ListAnomaliesPagedAsync(
+        PeriodRequest filter, int? page, int? pageSize, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var sageDb = _tenant.SageDb;
+        var from = filter.From;
+        var to = filter.To;
+        var matriculeFrom = filter.MatriculeFrom;
+        var matriculeTo = filter.MatriculeTo;
+        return await PagedLists.PageAsync(
+            _uow.Repository<T_HISTORIQUE_ANOMALIE>(),
+            h => h.BDD_SAGE == sageDb
+                 && h.DATE_SUPPRESSION >= from
+                 && h.DATE_SUPPRESSION <= to
+                 && (string.IsNullOrEmpty(matriculeFrom)
+                     || (h.MATRICULE_SAGE != null && string.Compare(h.MATRICULE_SAGE, matriculeFrom) >= 0))
+                 && (string.IsNullOrEmpty(matriculeTo)
+                     || (h.MATRICULE_SAGE != null && string.Compare(h.MATRICULE_SAGE, matriculeTo) <= 0)),
+            q => q.OrderByDescending(h => h.DATE_SUPPRESSION).ThenByDescending(h => h.ID),
+            page,
+            pageSize,
+            h => new HistoryAnomalieDto(h.ID, h.MATRICULE_SAGE, h.DATE_POINTAGE_IN, h.DATE_POINTAGE_OUT,
+                h.HENTREE, h.HSORTIE, h.ABS_AM, h.ABS_PM, h.INTITULE_ABSENCE, h.DATE_SUPPRESSION),
+            ct);
+    }
+
+    /// <summary>Archive des calculs HS paginée (filtre SQL date + matricule).</summary>
+    public async Task<PagedResult<HistoryHsDto>> ListHsPagedAsync(
+        PeriodRequest filter, int? page, int? pageSize, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var sageDb = _tenant.SageDb;
+        var from = filter.From;
+        var to = filter.To;
+        var matriculeFrom = filter.MatriculeFrom;
+        var matriculeTo = filter.MatriculeTo;
+        return await PagedLists.PageAsync(
+            _uow.Repository<T_HISTORIQUE_HS>(),
+            h => h.BDD_SAGE == sageDb
+                 && h.DATE_SUPPRESSION >= from
+                 && h.DATE_SUPPRESSION <= to
+                 && (string.IsNullOrEmpty(matriculeFrom)
+                     || (h.MATRICULE != null && string.Compare(h.MATRICULE, matriculeFrom) >= 0))
+                 && (string.IsNullOrEmpty(matriculeTo)
+                     || (h.MATRICULE != null && string.Compare(h.MATRICULE, matriculeTo) <= 0)),
+            q => q.OrderByDescending(h => h.DATE_SUPPRESSION).ThenByDescending(h => h.ID),
+            page,
+            pageSize,
+            h => new HistoryHsDto(h.ID, h.MATRICULE, h.PERIODE_DEBUT, h.PERIODE_FIN,
+                h.EXO130, h.EXO150, h.I130, h.I150, h.DATE_SUPPRESSION),
+            ct);
+    }
+
     // ---------------------------------------------------------------- Purge de l'archive
 
     public async Task<int> DeletePointagesAsync(decimal id, CancellationToken ct = default)

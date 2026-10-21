@@ -612,6 +612,26 @@ public class AuthServiceSecurityTests
             return Task.FromResult(Items.Where(func).OrderByDescending(orderFunc).Take(take).ToList());
         }
 
+        public Task<List<T>> ListPagedAsync(
+            Expression<Func<T, bool>> predicate,
+            Func<IQueryable<T>, IOrderedQueryable<T>> orderBy,
+            int skip,
+            int take,
+            CancellationToken cancellationToken = default)
+        {
+            var func = predicate.Compile();
+            var items = orderBy(Items.Where(func).AsQueryable()).Skip(skip).Take(take).ToList();
+            return Task.FromResult(items);
+        }
+
+        public Task<int> CountAsync(
+            Expression<Func<T, bool>> predicate,
+            CancellationToken cancellationToken = default)
+        {
+            var func = predicate.Compile();
+            return Task.FromResult(Items.Count(func));
+        }
+
         public Task AddAsync(T entity, CancellationToken cancellationToken = default)
         {
             if (entity is T_RESPONSABLE r && r.IDRESPONSABLE == 0)

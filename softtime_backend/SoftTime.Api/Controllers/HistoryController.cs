@@ -57,4 +57,22 @@ public class HistoryController : ControllerBase
     [HttpDelete("hs")]
     public async Task<IActionResult> PurgeHs(CancellationToken ct)
         => Ok(await _svc.DeleteAllHsAsync(ct));
+
+    /// <summary>Archive des pointages paginée (page bornée, total serveur).</summary>
+    [HttpGet("pointages/paged")]
+    public async Task<IActionResult> PointagesPaged(
+        [FromQuery] PeriodRequest filter, [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
+        => Ok(await _svc.ListPointagesPagedAsync(filter, page, pageSize, ct));
+
+    /// <summary>Archive des anomalies paginée.</summary>
+    [HttpGet("anomalies/paged")]
+    public async Task<IActionResult> AnomaliesPaged(
+        [FromQuery] PeriodRequest filter, [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
+        => Ok(await _svc.ListAnomaliesPagedAsync(filter, page, pageSize, ct));
+
+    /// <summary>Archive des calculs HS paginée.</summary>
+    [HttpGet("hs/paged")]
+    public async Task<IActionResult> HsPaged(
+        [FromQuery] PeriodRequest filter, [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
+        => Ok(await _svc.ListHsPagedAsync(filter, page, pageSize, ct));
 }

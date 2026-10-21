@@ -37,6 +37,7 @@ const REPORTS = [
         label="Type de rapport"
         [(ngModel)]="reportType"
         name="reportType"
+        (ngModelChange)="onTypeChange($event)"
         [options]="reportOptions"
       ></soft-select>
     </div>
@@ -44,7 +45,16 @@ const REPORTS = [
     <period-filter [showBranche]="true" (search)="onSearch($event)"></period-filter>
 
     <soft-card>
-      <data-table [columns]="columns()" [rows]="rows()" [loading]="loading()"></data-table>
+      <data-table
+        [columns]="columns()"
+        [rows]="rows()"
+        [loading]="loading()"
+        [serverSide]="true"
+        [total]="total()"
+        [pageSize]="PAGE_SIZE"
+        [currentPage]="page()"
+        (pageChange)="onPageChange($event)"
+      ></data-table>
     </soft-card>
   `,
 })
@@ -53,22 +63,53 @@ export class ReportsPage {
   private readonly excel = inject(ExcelExportService);
 
   readonly loading = signal(false);
+  readonly PAGE_SIZE = 50;
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly columns = signal<Column[]>([]);
+  readonly page = signal(1);
+  readonly total = signal(0);
   reportType: string = 'pointage';
   readonly reportOptions = REPORTS.map((r) => ({ value: r.id, label: r.label }));
+  private lastFilter: ReportFilter | null = null;
+  private requestSeq = 0;
 
   onSearch(filter: ReportFilter): void {
+    this.lastFilter = filter;
+    this.page.set(1);
+    this.loadPage();
+  }
+
+  onPageChange(page: number): void {
+    this.page.set(page);
+    this.loadPage();
+  }
+
+  onTypeChange(type: string): void {
+    this.reportType = type;
+    this.columns.set([]);
+    this.page.set(1);
+    if (this.lastFilter) this.loadPage();
+  }
+
+  private loadPage(): void {
+    if (!this.lastFilter) return;
+    const seq = ++this.requestSeq;
     this.loading.set(true);
-    const fn = this.resolve(this.reportType);
-    fn.call(this.svc, filter).subscribe({
-      next: (items) => {
-        const rows = items as Record<string, unknown>[];
+    this.svc.paged(this.reportType, {
+      ...this.lastFilter,
+      page: this.page(),
+      pageSize: this.PAGE_SIZE,
+    }).subscribe({
+      next: (r) => {
+        if (seq !== this.requestSeq) return;
+        const rows = r.items as Record<string, unknown>[];
         this.rows.set(rows);
-        this.columns.set(this.inferColumns(rows));
+        if (!this.columns().length) this.columns.set(this.inferColumns(rows));
+        this.total.set(r.total);
+        this.page.set(r.page);
         this.loading.set(false);
       },
-      error: () => this.loading.set(false),
+      error: () => { if (seq === this.requestSeq) this.loading.set(false); },
     });
   }
 
@@ -93,6 +134,17 @@ export class ReportsPage {
   }
 
   exportExcel(): void {
-    this.excel.download(`rapport-${this.reportType}`, this.columns(), this.rows());
+    if (!this.lastFilter) {
+      this.excel.download(`rapport-${this.reportType}`, this.columns(), this.rows());
+      return;
+    }
+    const filter = this.lastFilter;
+    const fn = this.resolve(this.reportType);
+    fn.call(this.svc, filter).subscribe({
+      next: (items) => {
+        const rows = items as Record<string, unknown>[];
+        this.excel.download(`rapport-${this.reportType}`, this.inferColumns(rows), rows);
+      },
+    });
   }
 }

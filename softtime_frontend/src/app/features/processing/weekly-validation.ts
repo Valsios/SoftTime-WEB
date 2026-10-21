@@ -22,16 +22,26 @@ import { asRow, fmtDate } from '../../shared/utils/date';
     <period-filter searchLabel="Calculer" (search)="preview($event)"></period-filter>
 
     <soft-card>
+      <p class="hint">
+        {{ selectedKeys().length }} salarié(s) sélectionné(s) — la sélection est conservée entre les pages ;
+        « tout sélectionner » porte sur la page affichée.
+      </p>
       <data-table
         [columns]="columns"
         [rows]="rows()"
         [loading]="loading()"
         [selectable]="true"
         trackKey="matricule"
+        [serverSide]="true"
+        [total]="total()"
+        [pageSize]="PAGE_SIZE"
+        [currentPage]="page()"
+        (pageChange)="onPageChange($event)"
         [(selectedKeys)]="selectedKeys"
       ></data-table>
     </soft-card>
   `,
+  styles: [`.hint { margin: 0 0 12px; color: var(--text-muted); font-size: 13px; }`],
 })
 export class WeeklyValidationPage {
   private readonly svc = inject(WeeklyValidationService);
@@ -41,9 +51,13 @@ export class WeeklyValidationPage {
 
   readonly loading = signal(false);
   readonly busy = signal(false);
+  readonly PAGE_SIZE = 50;
   readonly rows = signal<Record<string, unknown>[]>([]);
+  readonly page = signal(1);
+  readonly total = signal(0);
   readonly selectedKeys = signal<string[]>([]);
   private lastFilter: PeriodRequest | null = null;
+  private requestSeq = 0;
 
   readonly columns: Column[] = [
     { key: 'matricule', label: 'Matricule' },
@@ -58,14 +72,29 @@ export class WeeklyValidationPage {
 
   preview(filter: PeriodRequest): void {
     this.lastFilter = filter;
+    this.selectedKeys.set([]);
+    this.page.set(1);
+    this.loadPage();
+  }
+
+  onPageChange(page: number): void {
+    this.page.set(page);
+    this.loadPage();
+  }
+
+  private loadPage(): void {
+    if (!this.lastFilter) return;
+    const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.preview(filter).subscribe({
-      next: (items) => {
-        this.rows.set(items.filter((i) => !i.validated).map(asRow));
-        this.selectedKeys.set([]);
+    this.svc.previewPaged({ ...this.lastFilter, page: this.page(), pageSize: this.PAGE_SIZE }).subscribe({
+      next: (r) => {
+        if (seq !== this.requestSeq) return;
+        this.rows.set(r.items.map(asRow));
+        this.total.set(r.total);
+        this.page.set(r.page);
         this.loading.set(false);
       },
-      error: () => this.loading.set(false),
+      error: () => { if (seq === this.requestSeq) this.loading.set(false); },
     });
   }
 
@@ -90,14 +119,28 @@ export class WeeklyValidationPage {
       next: () => {
         this.busy.set(false);
         this.toast.success(ok ? 'Lignes sélectionnées validées.' : 'Validation annulée pour la sélection.');
-        this.preview(this.lastFilter!);
+        this.selectedKeys.set([]);
+        this.loadPage();
       },
       error: () => this.busy.set(false),
     });
   }
 
   exportExcel(): void {
-    this.excel.download('validation-semaine', this.columns, this.rows());
+    if (!this.lastFilter) {
+      this.excel.download('validation-semaine', this.columns, this.rows());
+      return;
+    }
+    this.loading.set(true);
+    this.svc.preview(this.lastFilter).subscribe({
+      next: (items) => {
+        this.loading.set(false);
+        // Le backend ne renvoie déjà que les non-validées ; filtre conservé par sécurité.
+        const rows = items.filter((i) => !i.validated).map(asRow);
+        this.excel.download('validation-semaine', this.columns, rows);
+      },
+      error: () => this.loading.set(false),
+    });
   }
 
   /** Purge la validation de la semaine : supprime T_HS_VALIDER et déverrouille les heures corrigées. */
@@ -113,7 +156,7 @@ export class WeeklyValidationPage {
       next: (r) => {
         this.busy.set(false);
         this.toast.success(r.message);
-        this.preview(this.lastFilter!);
+        this.loadPage();
       },
       error: () => this.busy.set(false),
     });

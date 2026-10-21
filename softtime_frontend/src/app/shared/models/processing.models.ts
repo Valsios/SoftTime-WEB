@@ -28,6 +28,11 @@ export interface PlanningEmployee {
   prenom?: string | null;
 }
 
+/** Salarié + nombre de jours planifiés sur la période (grille paginée du planning). */
+export interface PlanningEmployeeStat extends PlanningEmployee {
+  plannedDays: number;
+}
+
 export interface Punch {
   id: number;
   matricule?: string | null;

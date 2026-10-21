@@ -31,6 +31,22 @@ public class EfRepository<T> : IRepository<T> where T : class
         CancellationToken cancellationToken = default)
         => _set.Where(predicate).OrderByDescending(orderByDescending).Take(take).ToListAsync(cancellationToken);
 
+    public Task<List<T>> ListPagedAsync(
+        Expression<Func<T, bool>> predicate,
+        Func<IQueryable<T>, IOrderedQueryable<T>> orderBy,
+        int skip,
+        int take,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _set.AsNoTracking().Where(predicate);
+        return orderBy(query).Skip(skip).Take(take).ToListAsync(cancellationToken);
+    }
+
+    public Task<int> CountAsync(
+        Expression<Func<T, bool>> predicate,
+        CancellationToken cancellationToken = default)
+        => _set.AsNoTracking().CountAsync(predicate, cancellationToken);
+
     public async Task AddAsync(T entity, CancellationToken cancellationToken = default)
         => await _set.AddAsync(entity, cancellationToken);
 

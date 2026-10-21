@@ -109,6 +109,20 @@ export interface ReportFilter {
   from: string;
   to: string;
   branche?: string | null;
+  /** Numéro de page (1-based), uniquement pour les états paginés. */
+  page?: number;
+  /** Taille de page, plafonnée à 100 par le serveur. */
+  pageSize?: number;
+}
+
+/** Filtre du journal d'audit (dates facultatives, défaut = 30 derniers jours côté serveur). */
+export interface AuditEventFilter {
+  from?: string;
+  to?: string;
+  table?: string;
+  action?: string;
+  page?: number;
+  pageSize?: number;
 }
 
 /** Generic report rows are returned as untyped records by the backend. */

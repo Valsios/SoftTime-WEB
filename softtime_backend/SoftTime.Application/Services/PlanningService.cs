@@ -1,3 +1,5 @@
+using System.Linq.Expressions;
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
@@ -9,18 +11,40 @@ public class PlanningService
 {
     private readonly IUnitOfWork _uow;
     private readonly TenantConnectionService _tenant;
+    private readonly IPlanningStatisticsReader _planningStats;
 
-    public PlanningService(IUnitOfWork uow, TenantConnectionService tenant)
+    public PlanningService(IUnitOfWork uow, TenantConnectionService tenant, IPlanningStatisticsReader planningStats)
     {
         _uow = uow;
         _tenant = tenant;
+        _planningStats = planningStats;
     }
 
     public async Task<IReadOnlyList<ShiftDto>> ListShiftsAsync(CancellationToken ct = default)
     {
         var list = await _uow.Repository<T_PLANNING>().ListAsync(_ => true, ct);
-        return list.Select(s => new ShiftDto(s.IDPLANNING, s.NoSHIFT, s.HA, s.PAUSE, s.HD, s.Intitule)).ToList();
+        return list.Select(ToShiftDto).ToList();
     }
+
+    /// <summary>
+    /// Liste paginée du catalogue des shifts. Le catalogue reste petit, mais l'endpoint suit le
+    /// même contrat que les autres listes (page bornée, total serveur) pour éviter un découpage
+    /// côté client.
+    /// </summary>
+    public async Task<PagedResult<ShiftDto>> ListShiftsPagedAsync(int? page, int? pageSize, CancellationToken ct = default)
+        => await PagedLists.PageAsync(
+            _uow.Repository<T_PLANNING>(),
+            _ => true,
+            q => q.OrderBy(s => s.NoSHIFT)
+                  .ThenBy(s => s.Intitule)
+                  .ThenBy(s => s.IDPLANNING),
+            page,
+            pageSize,
+            ToShiftDto,
+            ct);
+
+    private static ShiftDto ToShiftDto(T_PLANNING s) => new(
+        s.IDPLANNING, s.NoSHIFT, s.HA, s.PAUSE, s.HD, s.Intitule);
 
     public async Task<ShiftDto> SaveShiftAsync(ShiftDto dto, CancellationToken ct = default)
     {
@@ -95,6 +119,81 @@ public class PlanningService
             .ThenBy(p => p.DateP)
             .ToList();
     }
+
+    /// <summary>
+    /// Liste paginée des lignes de planning. Le filtre date/carte est traduit en SQL ; les cartes
+    /// (petite table) sont chargées une fois pour exposer matricule/nom/prénom.
+    /// </summary>
+    public async Task<PagedResult<EmployeePlanningDto>> ListEmployeePlanningPagedAsync(
+        DateTime from, DateTime to, int? cardId, int? page, int? pageSize, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var sageDb = _tenant.SageDb;
+        var start = from.Date;
+        var end = to.Date.AddDays(1);
+        var cards = (await _uow.Repository<T_CARDPAIE>().ListAsync(EmployeeCardPredicate(sageDb), ct))
+            .ToDictionary(c => c.ID);
+
+        return await PagedLists.PageAsync(
+            _uow.Repository<T_PLANNING_SAL>(),
+            p => p.DateP >= start
+                 && p.DateP < end
+                 && (p.BDD_SAGE == null || p.BDD_SAGE.Trim() == "" || p.BDD_SAGE.Trim() == sageDb)
+                 && (!cardId.HasValue || p.IDSAL == cardId.Value),
+            q => q.OrderBy(p => p.IDSAL).ThenBy(p => p.DateP).ThenBy(p => p.ID),
+            page,
+            pageSize,
+            p =>
+            {
+                cards.TryGetValue(p.IDSAL, out var card);
+                return new EmployeePlanningDto(
+                    p.ID, p.IDSAL, p.NoSHIFT, p.DateP, p.HA, p.Pause, p.HD, p.OffP,
+                    card?.SAGE_MATRICULE, card?.SAGE_NOM, card?.SAGE_PRENOM);
+            },
+            ct);
+    }
+
+    /// <summary>Complet (export) : salariés + nombre de jours planifiés sur la période.</summary>
+    public async Task<IReadOnlyList<PlanningEmployeeStatDto>> ListEmployeeStatsAsync(
+        DateTime from, DateTime to, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var sageDb = _tenant.SageDb;
+        var counts = (await _planningStats.CountPlannedDaysAsync(sageDb, from, to, ct))
+            .ToDictionary(x => x.CardPaieId, x => x.PlannedDays);
+        var cards = await _uow.Repository<T_CARDPAIE>().ListAsync(EmployeeCardPredicate(sageDb), ct);
+        return cards
+            .Where(c => MatchesSage(c.SAGE_BDD))
+            .OrderBy(c => c.SAGE_MATRICULE)
+            .ThenBy(c => c.SAGE_NOM)
+            .Select(c => new PlanningEmployeeStatDto(
+                c.ID, c.SAGE_MATRICULE, c.SAGE_NOM, c.SAGE_PRENOM, counts.GetValueOrDefault(c.ID)))
+            .ToList();
+    }
+
+    /// <summary>Grille paginée des salariés avec leur nombre de jours planifiés.</summary>
+    public async Task<PagedResult<PlanningEmployeeStatDto>> ListEmployeeStatsPagedAsync(
+        DateTime from, DateTime to, int? page, int? pageSize, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var sageDb = _tenant.SageDb;
+        var counts = (await _planningStats.CountPlannedDaysAsync(sageDb, from, to, ct))
+            .ToDictionary(x => x.CardPaieId, x => x.PlannedDays);
+
+        return await PagedLists.PageAsync(
+            _uow.Repository<T_CARDPAIE>(),
+            EmployeeCardPredicate(sageDb),
+            q => q.OrderBy(c => c.SAGE_MATRICULE).ThenBy(c => c.SAGE_NOM).ThenBy(c => c.ID),
+            page,
+            pageSize,
+            c => new PlanningEmployeeStatDto(
+                c.ID, c.SAGE_MATRICULE, c.SAGE_NOM, c.SAGE_PRENOM, counts.GetValueOrDefault(c.ID)),
+            ct);
+    }
+
+    /// <summary>Filtre tenant des cartes : <c>SAGE_BDD</c> null/vide est accepté (lignes héritées).</summary>
+    private static Expression<Func<T_CARDPAIE, bool>> EmployeeCardPredicate(string sageDb)
+        => c => c.SAGE_BDD == null || c.SAGE_BDD.Trim() == "" || c.SAGE_BDD.Trim() == sageDb;
 
     public async Task SaveEmployeePlanningAsync(IReadOnlyCollection<EmployeePlanningDto> rows, CancellationToken ct = default)
     {

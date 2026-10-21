@@ -34,6 +34,20 @@ public class OvertimeService
         return await ComputeWeekAsync(request, persistNonValidated: true, ct);
     }
 
+    /// <summary>
+    /// Aperçu paginé de la validation semaine. Lecture seule : contrairement à
+    /// <see cref="PreviewWeekAsync"/>, ne persiste pas les lignes non validées, afin de ne pas
+    /// écrire à chaque changement de page. Les lignes déjà validées sont exclues par le calcul.
+    /// </summary>
+    public async Task<PagedResult<WeeklyHsDto>> PreviewWeekPagedAsync(
+        PeriodRequest request, int? page, int? pageSize, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        EnsureMondayToSunday(request);
+        var rows = await ComputeWeekAsync(request, persistNonValidated: false, ct);
+        return PagedLists.Page(rows, page, pageSize);
+    }
+
     public async Task ValidateWeekAsync(WeeklyValidationRequest request, bool validate, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
@@ -122,11 +136,78 @@ public class OvertimeService
             .ToList();
     }
 
+    /// <summary>
+    /// Liste paginée des cumuls EXO/IMPO. Le filtre est traduit en SQL ; le filtre
+    /// branche/département est résolu via les cartes cibles (même sémantique que
+    /// <see cref="ListExoAsync"/>). L'endpoint non paginé reste utilisé pour l'export.
+    /// </summary>
+    public async Task<PagedResult<HsExoDto>> ListExoPagedAsync(
+        PeriodRequest request, int? page, int? pageSize, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        EnsureMaxOneMonth(request);
+        var sageDb = _tenant.SageDb;
+        var from = request.From.Date;
+        var to = request.To.Date;
+        var matriculeFrom = request.MatriculeFrom;
+        var matriculeTo = request.MatriculeTo;
+        var repo = _uow.Repository<T_HSExoImp>();
+
+        static HsExoDto Map(T_HSExoImp h) => new(
+            h.OID, h.Matricule, h.NumSal, h.EXO130, h.EXO150, h.I130, h.I150,
+            h.FERIE, h.NUIT, h.DIM, h.RETARD, h.ABSENCE);
+
+        if (string.IsNullOrEmpty(request.Departement) && string.IsNullOrEmpty(request.Branche))
+        {
+            return await PagedLists.PageAsync(
+                repo,
+                h => h.BDD_SAGE == sageDb
+                     && h.PeriodeDebut <= to
+                     && h.PeriodeFin >= from
+                     && (string.IsNullOrEmpty(matriculeFrom) || string.Compare(h.Matricule, matriculeFrom) >= 0)
+                     && (string.IsNullOrEmpty(matriculeTo) || string.Compare(h.Matricule, matriculeTo) <= 0),
+                q => q.OrderBy(h => h.Matricule).ThenBy(h => h.OID),
+                page,
+                pageSize,
+                Map,
+                ct);
+        }
+
+        var cards = await TargetCards(request, ct);
+        var targetMatricules = cards
+            .Select(c => c.SAGE_MATRICULE)
+            .Where(m => !string.IsNullOrEmpty(m))
+            .Select(m => m!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return await PagedLists.PageAsync(
+            repo,
+            h => h.BDD_SAGE == sageDb
+                 && h.PeriodeDebut <= to
+                 && h.PeriodeFin >= from
+                 && (string.IsNullOrEmpty(matriculeFrom) || string.Compare(h.Matricule, matriculeFrom) >= 0)
+                 && (string.IsNullOrEmpty(matriculeTo) || string.Compare(h.Matricule, matriculeTo) <= 0)
+                 && targetMatricules.Contains(h.Matricule!),
+            q => q.OrderBy(h => h.Matricule).ThenBy(h => h.OID),
+            page,
+            pageSize,
+            Map,
+            ct);
+    }
+
     public async Task<IReadOnlyList<HsExoDto>> CalculateExoImpoAsync(PeriodRequest request, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         EnsureMaxOneMonth(request);
-        var cards = await TargetCards(request, ct);
+        var sageDb = _tenant.SageDb;
+        var from = request.From.Date;
+        var to = request.To.Date;
+
+        var cards = (await TargetCards(request, ct))
+            .OrderBy(c => c.SAGE_MATRICULE, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
         var numSalByMat = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         try
         {
@@ -139,27 +220,59 @@ public class OvertimeService
             }
         }
         catch { /* SAGE optional for preview */ }
-        var result = new List<HsExoDto>();
+
+        // Chargements groupés : une requête par table, pas une par salarié (N+1).
+        var weeksByMatricule = (await _uow.Repository<T_HSSemaine>().ListAsync(
+                h => h.BDD_SAGE == sageDb && h.PeriodeDebut >= from && h.PeriodeDebut <= to, ct))
+            .Where(h => !string.IsNullOrEmpty(h.Matricule))
+            .GroupBy(h => h.Matricule!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+        var validatedByMatricule = (await _uow.Repository<T_HS_VALIDER>().ListAsync(
+                h => h.BDD_SAGE == sageDb && h.DATE_DEB >= from && h.DATE_FIN <= to, ct))
+            .Where(h => !string.IsNullOrEmpty(h.MATRICULES))
+            .GroupBy(h => h.MATRICULES!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.DATE_DEB).ToList(), StringComparer.OrdinalIgnoreCase);
+
+        var exoRepo = _uow.Repository<T_HSExoImp>();
+        var existingExoByMatricule = (await exoRepo.ListAsync(
+                h => h.BDD_SAGE == sageDb && h.PeriodeDebut == from && h.PeriodeFin == to, ct))
+            .Where(h => !string.IsNullOrEmpty(h.Matricule))
+            .GroupBy(h => h.Matricule!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+        var newWeeks = new List<T_HSSemaine>();
+        var newExo = new List<T_HSExoImp>();
+        var oldExo = new List<T_HSExoImp>();
+
         foreach (var card in cards)
         {
-            var weeks = await _uow.Repository<T_HSSemaine>().ListAsync(h =>
-                h.Matricule == card.SAGE_MATRICULE
-                && h.PeriodeDebut >= request.From.Date
-                && h.PeriodeDebut <= request.To.Date
-                && h.BDD_SAGE == _tenant.SageDb, ct);
+            var mat = card.SAGE_MATRICULE ?? string.Empty;
+            var weeks = weeksByMatricule.GetValueOrDefault(mat) ?? new List<T_HSSemaine>();
+            var validated = validatedByMatricule.GetValueOrDefault(mat) ?? new List<T_HS_VALIDER>();
+
             List<HsWeekSplit> splits;
             if (weeks.Count == 0)
             {
-                var validated = await _uow.Repository<T_HS_VALIDER>().ListAsync(h =>
-                    h.MATRICULES == card.SAGE_MATRICULE && h.BDD_SAGE == _tenant.SageDb
-                    && h.DATE_DEB >= request.From && h.DATE_FIN <= request.To, ct);
                 splits = new List<HsWeekSplit>();
                 var i = 1;
-                foreach (var w in validated.OrderBy(x => x.DATE_DEB))
+                foreach (var w in validated)
                 {
                     var split = OvertimeRules.SplitWeekly(w.HS ?? 0);
                     splits.Add(split);
-                    await UpsertHsSemaine(card.SAGE_MATRICULE ?? string.Empty, i++, w.DATE_DEB ?? request.From, w.DATE_FIN ?? request.To, request.From, request.To, split, ct);
+                    newWeeks.Add(new T_HSSemaine
+                    {
+                        Matricule = card.SAGE_MATRICULE ?? string.Empty,
+                        TotalHeure = split.Hs,
+                        HS = split.Hs,
+                        HS1 = split.Hs1,
+                        HS2 = split.Hs2,
+                        PeriodeDebut = from,
+                        PeriodeFin = to,
+                        Semaine = i++,
+                        BDD_SAGE = sageDb,
+                        BDD_POINTEUSE = _tenant.PointeuseDb
+                    });
                 }
             }
             else
@@ -168,22 +281,22 @@ public class OvertimeService
                     .Select(w => new HsWeekSplit { Hs = w.HS ?? 0, Hs1 = w.HS1 ?? 0, Hs2 = w.HS2 ?? 0 })
                     .ToList();
             }
+
             var exo = OvertimeRules.AllocateExempt(splits);
-            var validatedWeeks = await _uow.Repository<T_HS_VALIDER>().ListAsync(h =>
-                h.MATRICULES == card.SAGE_MATRICULE && h.BDD_SAGE == _tenant.SageDb
-                && h.DATE_DEB >= request.From && h.DATE_FIN <= request.To, ct);
-            var nuit = validatedWeeks.Sum(x => x.NUIT ?? 0);
-            var dim = validatedWeeks.Sum(x => x.DIMANCHE ?? 0);
-            var ferie = validatedWeeks.Sum(x => x.FERIES ?? 0);
-            var retard = validatedWeeks.Sum(x => x.RETARD ?? 0);
-            var repo = _uow.Repository<T_HSExoImp>();
-            var old = await repo.ListAsync(h => h.Matricule == card.SAGE_MATRICULE && h.PeriodeDebut == request.From.Date && h.PeriodeFin == request.To.Date && h.BDD_SAGE == _tenant.SageDb, ct);
-            repo.RemoveRange(old);
+            var nuit = validated.Sum(x => x.NUIT ?? 0);
+            var dim = validated.Sum(x => x.DIMANCHE ?? 0);
+            var ferie = validated.Sum(x => x.FERIES ?? 0);
+            var retard = validated.Sum(x => x.RETARD ?? 0);
+
+            if (existingExoByMatricule.TryGetValue(mat, out var olds))
+                oldExo.AddRange(olds);
+
             int? numSal = null;
             var matKey = card.SAGE_MATRICULE?.Trim();
             if (!string.IsNullOrEmpty(matKey) && numSalByMat.TryGetValue(matKey, out var n))
                 numSal = n;
-            var entity = new T_HSExoImp
+
+            newExo.Add(new T_HSExoImp
             {
                 Matricule = card.SAGE_MATRICULE,
                 NumSal = numSal,
@@ -191,20 +304,29 @@ public class OvertimeService
                 EXO150 = exo.Exo150,
                 I130 = exo.Impo130,
                 I150 = exo.Impo150,
-                PeriodeDebut = request.From.Date,
-                PeriodeFin = request.To.Date,
+                PeriodeDebut = from,
+                PeriodeFin = to,
                 NUIT = nuit,
                 DIM = dim,
                 FERIE = ferie,
                 RETARD = retard,
-                BDD_SAGE = _tenant.SageDb,
+                BDD_SAGE = sageDb,
                 BDD_POINTEUSE = _tenant.PointeuseDb
-            };
-            await repo.AddAsync(entity, ct);
-            result.Add(new HsExoDto(entity.OID, entity.Matricule, entity.NumSal, entity.EXO130, entity.EXO150, entity.I130, entity.I150, entity.FERIE, entity.NUIT, entity.DIM, entity.RETARD, entity.ABSENCE));
+            });
         }
+
+        if (oldExo.Count > 0)
+            exoRepo.RemoveRange(oldExo);
+        if (newExo.Count > 0)
+            await exoRepo.AddRangeAsync(newExo, ct);
+        if (newWeeks.Count > 0)
+            await _uow.Repository<T_HSSemaine>().AddRangeAsync(newWeeks, ct);
         await _uow.SaveChangesAsync(ct);
-        return result;
+
+        return newExo
+            .Select(e => new HsExoDto(e.OID, e.Matricule, e.NumSal, e.EXO130, e.EXO150, e.I130, e.I150,
+                e.FERIE, e.NUIT, e.DIM, e.RETARD, e.ABSENCE))
+            .ToList();
     }
 
     public async Task PurgeHsAsync(PeriodRequest request, CancellationToken ct = default)
@@ -320,26 +442,51 @@ public class OvertimeService
 
     private async Task<List<WeeklyHsDto>> ComputeWeekAsync(PeriodRequest request, bool persistNonValidated, CancellationToken ct)
     {
-        var cards = await TargetCards(request, ct);
-        var feries = await _uow.Repository<T_FERIE>().ListAsync(f => f.BDD_SAGE == _tenant.SageDb, ct);
-        var cats = await _uow.Repository<T_CATEGORIE>().ListAsync(c => c.BDD_SAGE == _tenant.SageDb, ct);
-        var affect = await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == _tenant.SageDb, ct);
+        var from = request.From.Date;
+        var to = request.To.Date;
+        var sageDb = _tenant.SageDb;
+
+        // Chargements groupés : le calcul ne doit pas faire une requête par salarié (N+1).
+        var cards = (await TargetCards(request, ct))
+            .OrderBy(c => c.SAGE_MATRICULE, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var feries = await _uow.Repository<T_FERIE>().ListAsync(f => f.BDD_SAGE == sageDb, ct);
+        var cats = await _uow.Repository<T_CATEGORIE>().ListAsync(c => c.BDD_SAGE == sageDb, ct);
+        var affect = await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == sageDb, ct);
         var tols = await _uow.Repository<T_TOLERANCE>().ListAsync(_ => true, ct);
         var leaves = await _leaves.LoadAsync(ct);
         var hsRepo = _uow.Repository<T_HS_VALIDER>();
+
+        var existingByMatricule = (await hsRepo.ListAsync(
+                x => x.BDD_SAGE == sageDb && x.DATE_DEB == from, ct))
+            .Where(x => !string.IsNullOrEmpty(x.MATRICULES))
+            .GroupBy(x => x.MATRICULES!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        var hoursByMatricule = (await _uow.Repository<T_HEURECORRIGER>().ListAsync(
+                h => h.BDD_SAGE == sageDb
+                     && h.MATRICULE_SAGE != null
+                     && h.DATE_POINTAGE_IN >= from
+                     && h.DATE_POINTAGE_IN <= to, ct))
+            .GroupBy(h => h.MATRICULE_SAGE!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+        var planningByCard = (await _uow.Repository<T_PLANNING_SAL>().ListAsync(
+                p => p.BDD_SAGE == sageDb && p.DateP >= from && p.DateP <= to, ct))
+            .GroupBy(p => p.IDSAL)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         var result = new List<WeeklyHsDto>();
         foreach (var card in cards)
         {
-            var existing = (await hsRepo.ListAsync(x =>
-                x.MATRICULES == card.SAGE_MATRICULE && x.DATE_DEB == request.From.Date && x.BDD_SAGE == _tenant.SageDb, ct)).FirstOrDefault();
+            existingByMatricule.TryGetValue(card.SAGE_MATRICULE ?? string.Empty, out var existing);
             if (existing?.VALIDATION_HS == true)
                 continue;
 
-            var hours = await _uow.Repository<T_HEURECORRIGER>().ListAsync(h =>
-                h.MATRICULE_SAGE == card.SAGE_MATRICULE && h.BDD_SAGE == _tenant.SageDb
-                && h.DATE_POINTAGE_IN >= request.From.Date && h.DATE_POINTAGE_IN <= request.To.Date, ct);
-            var planning = await _uow.Repository<T_PLANNING_SAL>().ListAsync(p =>
-                p.IDSAL == card.ID && p.BDD_SAGE == _tenant.SageDb && p.DateP >= request.From.Date && p.DateP <= request.To.Date, ct);
+            var hours = hoursByMatricule.GetValueOrDefault(card.SAGE_MATRICULE ?? string.Empty)
+                        ?? new List<T_HEURECORRIGER>();
+            var planning = planningByCard.GetValueOrDefault(card.ID)
+                           ?? new List<T_PLANNING_SAL>();
             var aff = affect.FirstOrDefault(a => a.MATRICULE_SAGE == card.ID);
             var cat = aff == null ? null : cats.FirstOrDefault(c => c.IDCATEGORIE == aff.ID_CATEG);
             var weeklyNeed = cat?.HEURESEMAINE ?? 40;
@@ -454,26 +601,6 @@ public class OvertimeService
             && (string.IsNullOrEmpty(request.MatriculeFrom) || string.Compare(c.SAGE_MATRICULE, request.MatriculeFrom) >= 0)
             && (string.IsNullOrEmpty(request.MatriculeTo) || string.Compare(c.SAGE_MATRICULE, request.MatriculeTo) <= 0), ct);
         return cards;
-    }
-
-    private async Task UpsertHsSemaine(string matricule, int noSem, DateTime debutSem, DateTime finSem, DateTime debutPeriode, DateTime finPeriode, HsWeekSplit split, CancellationToken ct)
-    {
-        var repo = _uow.Repository<T_HSSemaine>();
-        var old = await repo.ListAsync(h => h.Matricule == matricule && h.Semaine == noSem && h.PeriodeDebut == debutPeriode.Date && h.BDD_SAGE == _tenant.SageDb, ct);
-        repo.RemoveRange(old);
-        await repo.AddAsync(new T_HSSemaine
-        {
-            Matricule = matricule,
-            TotalHeure = split.Hs,
-            HS = split.Hs,
-            HS1 = split.Hs1,
-            HS2 = split.Hs2,
-            PeriodeDebut = debutPeriode.Date,
-            PeriodeFin = finPeriode.Date,
-            Semaine = noSem,
-            BDD_SAGE = _tenant.SageDb,
-            BDD_POINTEUSE = _tenant.PointeuseDb
-        }, ct);
     }
 
     /// <summary>

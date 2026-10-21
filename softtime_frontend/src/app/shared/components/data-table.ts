@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, contentChild, input, model, signal, TemplateRef } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, contentChild, input, model, output, TemplateRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 export interface Column {
@@ -117,7 +117,7 @@ export interface Column {
         }
       </div>
 
-      @if (paginate() && rows().length > 0) {
+      @if (paginate() && totalRows() > 0) {
         <div class="soft-pagination-wrap">
           <div class="soft-pagination-info">{{ rangeInfo() }}</div>
           @if (totalPages() > 1) {
@@ -200,9 +200,19 @@ export class DataTable {
 
   readonly paginate = input<boolean>(true);
   readonly pageSize = input<number>(15);
-  readonly currentPage = signal<number>(1);
+  /**
+   * Mode serveur : `rows` ne contient que la page courante et `total` porte le total filtré.
+   * Sans ce mode (défaut), le composant découpe `rows` côté client.
+   */
+  readonly serverSide = input<boolean>(false);
+  readonly total = input<number | null>(null);
+  readonly currentPage = model<number>(1);
+  readonly pageChange = output<number>();
 
-  readonly totalRows = computed(() => this.rows().length);
+  readonly totalRows = computed(() => {
+    if (!this.serverSide()) return this.rows().length;
+    return Math.max(0, this.total() ?? this.rows().length);
+  });
   readonly totalPages = computed(() => {
     const size = this.pageSize();
     if (size <= 0) return 1;
@@ -219,6 +229,7 @@ export class DataTable {
 
   readonly paginatedRows = computed(() => {
     const all = this.rows();
+    if (this.serverSide()) return all;
     if (!this.paginate()) return all;
     const size = this.pageSize();
     if (size <= 0) return all;
@@ -277,6 +288,7 @@ export class DataTable {
     if (typeof p !== 'number') return;
     const target = Math.max(1, Math.min(p, this.totalPages()));
     this.currentPage.set(target);
+    this.pageChange.emit(target);
   }
 
   colspan(): number {

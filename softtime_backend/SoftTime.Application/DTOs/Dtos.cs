@@ -188,6 +188,12 @@ public record PlanningEmployeeDto(int CardPaieId, string? Matricule, string? Nom
     public PlanningEmployeeDto() : this(default, default, default, default) { }
 }
 
+/// <summary>Salarié + nombre de jours planifiés sur la période, pour la grille paginée du planning.</summary>
+public record PlanningEmployeeStatDto(int CardPaieId, string? Matricule, string? Nom, string? Prenom, int PlannedDays)
+{
+    public PlanningEmployeeStatDto() : this(default, default, default, default, default) { }
+}
+
 public record PunchDto(decimal Id, string? Matricule, DateTime? Date, TimeSpan? Heure, string? Type, DateTime? ImportDate)
 {
     public PunchDto() : this(default, default, default, default, default, default) { }

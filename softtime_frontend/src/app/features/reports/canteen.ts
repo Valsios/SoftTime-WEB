@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
-import { CanteenAnomaly, PeriodRequest } from '../../shared/models';
+import { PeriodRequest } from '../../shared/models';
 import { CanteenService } from '../../shared/services/reports.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, PeriodFilter } from '../../shared/components';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
@@ -24,16 +24,34 @@ import { asRow, fmtDate } from '../../shared/utils/date';
 
     <soft-card>
       <h2 class="section-title">Totaux cantine</h2>
-      <data-table [columns]="columns" [rows]="rows()" [loading]="busy()"></data-table>
+      <data-table
+        [columns]="columns"
+        [rows]="rows()"
+        [loading]="totalsLoading()"
+        [serverSide]="true"
+        [total]="totalsTotal()"
+        [pageSize]="PAGE_SIZE"
+        [currentPage]="totalsPage()"
+        (pageChange)="onTotalsPageChange($event)"
+      ></data-table>
     </soft-card>
 
     <soft-card>
-      <h2 class="section-title">Anomalies ({{ anomalies().length }})</h2>
+      <h2 class="section-title">Anomalies ({{ anomaliesTotal() }})</h2>
       <p class="muted">
         Un pointage tombe dans la fenêtre du repas un jour déclaré en absence complète (matin et
         après-midi) : le total du jour est à revoir avant synchronisation.
       </p>
-      <data-table [columns]="anomalyColumns" [rows]="anomalyRows()" [loading]="busy()"></data-table>
+      <data-table
+        [columns]="anomalyColumns"
+        [rows]="anomalyRows()"
+        [loading]="anomaliesLoading()"
+        [serverSide]="true"
+        [total]="anomaliesTotal()"
+        [pageSize]="PAGE_SIZE"
+        [currentPage]="anomaliesPage()"
+        (pageChange)="onAnomaliesPageChange($event)"
+      ></data-table>
     </soft-card>
   `,
   styles: [`
@@ -49,9 +67,18 @@ export class CanteenPage {
 
   readonly busy = signal(false);
   readonly syncing = signal(false);
+  readonly PAGE_SIZE = 50;
   readonly rows = signal<Record<string, unknown>[]>([]);
-  readonly anomalies = signal<CanteenAnomaly[]>([]);
+  readonly anomalyRows = signal<Record<string, unknown>[]>([]);
+  readonly totalsLoading = signal(false);
+  readonly anomaliesLoading = signal(false);
+  readonly totalsPage = signal(1);
+  readonly totalsTotal = signal(0);
+  readonly anomaliesPage = signal(1);
+  readonly anomaliesTotal = signal(0);
   private lastFilter: PeriodRequest | null = null;
+  private totalsSeq = 0;
+  private anomaliesSeq = 0;
 
   readonly columns: Column[] = [
     { key: 'matricule', label: 'Matricule' },
@@ -66,11 +93,19 @@ export class CanteenPage {
     { key: 'motif', label: 'Motif' },
   ];
 
-  readonly anomalyRows = () => this.anomalies().map(asRow);
-
   onSearch(filter: PeriodRequest): void {
     this.lastFilter = filter;
-    this.load(filter);
+    this.reloadAllFromFirstPage();
+  }
+
+  onTotalsPageChange(page: number): void {
+    this.totalsPage.set(page);
+    this.loadTotals();
+  }
+
+  onAnomaliesPageChange(page: number): void {
+    this.anomaliesPage.set(page);
+    this.loadAnomalies();
   }
 
   calculate(): void {
@@ -78,8 +113,9 @@ export class CanteenPage {
     this.busy.set(true);
     this.svc.compute(this.lastFilter).subscribe({
       next: () => {
+        this.busy.set(false);
         this.toast.success('Calcul terminé.');
-        this.load(this.lastFilter!);
+        this.reloadAllFromFirstPage();
       },
       error: () => this.busy.set(false),
     });
@@ -93,8 +129,9 @@ export class CanteenPage {
     this.busy.set(true);
     this.svc.purge(this.lastFilter).subscribe({
       next: (r) => {
+        this.busy.set(false);
         this.toast.success(r.message);
-        this.load(this.lastFilter!);
+        this.reloadAllFromFirstPage();
       },
       error: () => this.busy.set(false),
     });
@@ -113,20 +150,51 @@ export class CanteenPage {
   }
 
   exportExcel(): void {
-    this.excel.download('cantine', this.columns, this.rows());
+    if (!this.lastFilter) {
+      this.excel.download('cantine', this.columns, this.rows());
+      return;
+    }
+    this.svc.list(this.lastFilter).subscribe({
+      next: (items) => this.excel.download('cantine', this.columns, items.map(asRow)),
+    });
   }
 
-  private load(filter: PeriodRequest): void {
-    this.busy.set(true);
-    this.svc.list(filter).subscribe({
-      next: (items) => {
-        this.rows.set(items.map(asRow));
-        this.svc.anomalies(filter).subscribe({
-          next: (items) => { this.anomalies.set(items); this.busy.set(false); },
-          error: () => this.busy.set(false),
-        });
+  private reloadAllFromFirstPage(): void {
+    this.totalsPage.set(1);
+    this.anomaliesPage.set(1);
+    this.loadTotals();
+    this.loadAnomalies();
+  }
+
+  private loadTotals(): void {
+    if (!this.lastFilter) return;
+    const seq = ++this.totalsSeq;
+    this.totalsLoading.set(true);
+    this.svc.listPaged({ ...this.lastFilter, page: this.totalsPage(), pageSize: this.PAGE_SIZE }).subscribe({
+      next: (r) => {
+        if (seq !== this.totalsSeq) return;
+        this.rows.set(r.items.map(asRow));
+        this.totalsTotal.set(r.total);
+        this.totalsPage.set(r.page);
+        this.totalsLoading.set(false);
       },
-      error: () => this.busy.set(false),
+      error: () => { if (seq === this.totalsSeq) this.totalsLoading.set(false); },
+    });
+  }
+
+  private loadAnomalies(): void {
+    if (!this.lastFilter) return;
+    const seq = ++this.anomaliesSeq;
+    this.anomaliesLoading.set(true);
+    this.svc.anomaliesPaged({ ...this.lastFilter, page: this.anomaliesPage(), pageSize: this.PAGE_SIZE }).subscribe({
+      next: (r) => {
+        if (seq !== this.anomaliesSeq) return;
+        this.anomalyRows.set(r.items.map(asRow));
+        this.anomaliesTotal.set(r.total);
+        this.anomaliesPage.set(r.page);
+        this.anomaliesLoading.set(false);
+      },
+      error: () => { if (seq === this.anomaliesSeq) this.anomaliesLoading.set(false); },
     });
   }
 }

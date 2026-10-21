@@ -172,7 +172,7 @@ GO
 IF OBJECT_ID(N'dbo.T_CARDPAIE', N'U') IS NULL
 CREATE TABLE dbo.T_CARDPAIE (
     ID                int           IDENTITY(1,1) NOT NULL,
-    SAGE_MATRICULE    nvarchar(max) NULL,
+    SAGE_MATRICULE    nvarchar(64)  NULL,
     BRANCHE           nvarchar(max) NULL,
     SAGE_NOM          nvarchar(max) NULL,
     SAGE_PRENOM       nvarchar(max) NULL,
@@ -180,7 +180,7 @@ CREATE TABLE dbo.T_CARDPAIE (
     POINTEUSE_NOM     nvarchar(max) NULL,
     SAGE_SERVEUR      nvarchar(max) NULL,
     POINTEUSE_SERVEUR nvarchar(max) NULL,
-    SAGE_BDD          nvarchar(max) NULL,
+    SAGE_BDD          nvarchar(128) NULL,
     POINTEUSE_BDD     nvarchar(max) NULL,
     DATE              datetime2     NULL,
     ORIGINE           nvarchar(max) NOT NULL CONSTRAINT DF_T_CARDPAIE_ORIGINE DEFAULT (N'AUTO'),
@@ -236,8 +236,8 @@ GO
 IF OBJECT_ID(N'dbo.T_POINTAGE', N'U') IS NULL
 CREATE TABLE dbo.T_POINTAGE (
     IDPOINTAGE         decimal(18,0) IDENTITY(1,1) NOT NULL,  -- IDENTITY ⇒ échelle 0 obligatoire
-    NOM_BDD_SAGE       nvarchar(max) NULL,
-    MATRICULE_SAGE     nvarchar(max) NULL,
+    NOM_BDD_SAGE       nvarchar(128) NULL,
+    MATRICULE_SAGE     nvarchar(64)  NULL,
     DATE_POINTAGE      datetime2     NULL,
     HEURE_POINTAGE     time          NULL,
     DATE_IMPORTATION   datetime2     NULL,
@@ -251,9 +251,9 @@ GO
 IF OBJECT_ID(N'dbo.T_HEURECORRIGER', N'U') IS NULL
 CREATE TABLE dbo.T_HEURECORRIGER (
     ID                    decimal(18,0) IDENTITY(1,1) NOT NULL,  -- IDENTITY ⇒ échelle 0 obligatoire
-    BDD_SAGE              nvarchar(max) NULL,
+    BDD_SAGE              nvarchar(128) NULL,
     BDD_POINTEUSE         nvarchar(max) NULL,
-    MATRICULE_SAGE        nvarchar(max) NULL,
+    MATRICULE_SAGE        nvarchar(64)  NULL,
     DATE_POINTAGE_IN      datetime2     NULL,
     DATE_POINTAGE_OUT     datetime2     NULL,
     HENTREE               time          NULL,
@@ -283,12 +283,12 @@ GO
 IF OBJECT_ID(N'dbo.T_HEUREANOMALIE', N'U') IS NULL
 CREATE TABLE dbo.T_HEUREANOMALIE (
     ID               decimal(18,0) IDENTITY(1,1) NOT NULL,  -- IDENTITY ⇒ échelle 0 obligatoire
-    MATRICULE_SAGE   nvarchar(max) NULL,
+    MATRICULE_SAGE   nvarchar(64)  NULL,
     DATE_POINTAGE_IN datetime2     NULL,
     DATE_POINTAGE_OUT datetime2    NULL,
     H1               time          NULL,
     H2               time          NULL,
-    BDD_SAGE         nvarchar(max) NULL,
+    BDD_SAGE         nvarchar(128) NULL,
     BDD_POINTEUSE    nvarchar(max) NULL,
     HENTREE          time          NULL,
     HSORTIE          time          NULL,
@@ -307,9 +307,9 @@ GO
 IF OBJECT_ID(N'dbo.T_HEUREDIMANCHE', N'U') IS NULL
 CREATE TABLE dbo.T_HEUREDIMANCHE (
     ID            int           IDENTITY(1,1) NOT NULL,
-    BDD_SAGE      nvarchar(max) NULL,
+    BDD_SAGE      nvarchar(128) NULL,
     BDD_POINTEUSE nvarchar(max) NULL,
-    MATRICULE_SAGE nvarchar(max) NULL,
+    MATRICULE_SAGE nvarchar(64) NULL,
     Date_Dim      datetime2     NULL,
     HeureDebut    time          NULL,
     HeureFin      time          NULL,
@@ -324,9 +324,9 @@ GO
 IF OBJECT_ID(N'dbo.T_HS_VALIDER', N'U') IS NULL
 CREATE TABLE dbo.T_HS_VALIDER (
     ID            int           IDENTITY(1,1) NOT NULL,
-    BDD_SAGE      nvarchar(max) NULL,
+    BDD_SAGE      nvarchar(128) NULL,
     BDD_POINTAGE  nvarchar(max) NULL,
-    MATRICULES    nvarchar(max) NULL,
+    MATRICULES    nvarchar(64)  NULL,
     DATE_DEB      datetime2     NULL,
     DATE_FIN      datetime2     NULL,
     HT            decimal(18,2) NULL,
@@ -344,7 +344,7 @@ GO
 IF OBJECT_ID(N'dbo.T_HSExoImp', N'U') IS NULL
 CREATE TABLE dbo.T_HSExoImp (
     OID           int           IDENTITY(1,1) NOT NULL,
-    Matricule     nvarchar(max) NULL,
+    Matricule     nvarchar(64)  NULL,
     NumSal        int           NULL,
     EXO130        decimal(18,2) NULL,
     EXO150        decimal(18,2) NULL,
@@ -357,7 +357,7 @@ CREATE TABLE dbo.T_HSExoImp (
     DIM           decimal(18,2) NULL,
     RETARD        decimal(18,2) NULL,
     ABSENCE       decimal(18,2) NULL,
-    BDD_SAGE      nvarchar(max) NULL,
+    BDD_SAGE      nvarchar(128) NULL,
     BDD_POINTEUSE nvarchar(max) NULL,
     CONSTRAINT PK_T_HSExoImp PRIMARY KEY (OID)
 );
@@ -366,7 +366,7 @@ GO
 IF OBJECT_ID(N'dbo.T_HSSemaine', N'U') IS NULL
 CREATE TABLE dbo.T_HSSemaine (
     OID           int           IDENTITY(1,1) NOT NULL,
-    Matricule     nvarchar(max) NULL,
+    Matricule     nvarchar(64)  NULL,
     SalNum        int           NULL,
     TotalHeure    decimal(18,2) NULL,
     HS            decimal(18,2) NULL,
@@ -375,7 +375,7 @@ CREATE TABLE dbo.T_HSSemaine (
     PeriodeDebut  datetime2     NULL,
     PeriodeFin    datetime2     NULL,
     Semaine       int           NULL,
-    BDD_SAGE      nvarchar(max) NULL,
+    BDD_SAGE      nvarchar(128) NULL,
     BDD_POINTEUSE nvarchar(max) NULL,
     CONSTRAINT PK_T_HSSemaine PRIMARY KEY (OID)
 );
@@ -440,7 +440,7 @@ CREATE TABLE dbo.T_PLANNING_SAL (
     [Pause]       time      NULL,
     HD            datetime2 NULL,
     OffP          bit       NULL,
-    BDD_SAGE      nvarchar(max) NULL,
+    BDD_SAGE      nvarchar(128) NULL,
     BDD_POINTEUSE nvarchar(max) NULL,
     CONSTRAINT PK_T_PLANNING_SAL PRIMARY KEY (ID)
 );
@@ -564,9 +564,9 @@ GO
 IF OBJECT_ID(N'dbo.T_FRAIS', N'U') IS NULL
 CREATE TABLE dbo.T_FRAIS (
     IDPOINTAGE        int       IDENTITY(1,1) NOT NULL,
-    NOM_BDD_SAGE      nvarchar(max) NULL,
+    NOM_BDD_SAGE      nvarchar(128) NULL,
     NOM_BDD_POINTEUSE nvarchar(max) NULL,
-    MATRICULE_SAGE    nvarchar(max) NULL,
+    MATRICULE_SAGE    nvarchar(64)  NULL,
     DATEDEB           datetime2 NULL,
     DATEFIN           datetime2 NULL,
     TOTAL_POINT       int       NULL,
@@ -577,9 +577,9 @@ GO
 IF OBJECT_ID(N'dbo.T_CANTINE', N'U') IS NULL
 CREATE TABLE dbo.T_CANTINE (
     IDCANTINE         int       IDENTITY(1,1) NOT NULL,
-    NOM_BDD_SAGE      nvarchar(max) NULL,
+    NOM_BDD_SAGE      nvarchar(128) NULL,
     NOM_BDD_POINTEUSE nvarchar(max) NULL,
-    MATRICULE_SAGE    nvarchar(max) NULL,
+    MATRICULE_SAGE    nvarchar(64)  NULL,
     DATEDEB           datetime2 NULL,
     DATEFIN           datetime2 NULL,
     TOTAL_CANTINE     int       NULL,
@@ -593,10 +593,10 @@ GO
 IF OBJECT_ID(N'dbo.suivi_SUIVI', N'U') IS NULL
 CREATE TABLE dbo.suivi_SUIVI (
     Id         int           IDENTITY(1,1) NOT NULL,
-    [_TABLES]   nvarchar(max) NULL,
+    [_TABLES]   nvarchar(128) NULL,
     [_COLONNES] nvarchar(max) NULL,
     [_USERS]    nvarchar(max) NULL,
-    [_ACTIONS]  nvarchar(max) NULL,
+    [_ACTIONS]  nvarchar(128) NULL,
     [_DATETIMES] datetime2   NULL,
     [_NOUVEAUX] nvarchar(max) NULL,
     [_ANCIENS]  nvarchar(max) NULL,
@@ -698,9 +698,9 @@ IF OBJECT_ID(N'dbo.T_HISTORIQUE_POINTAGE', N'U') IS NULL
 CREATE TABLE dbo.T_HISTORIQUE_POINTAGE (
     ID                 int           IDENTITY(1,1) NOT NULL,
     POINTAGE_ID        decimal(18,0) NULL,
-    NOM_BDD_SAGE       nvarchar(max) NULL,
+    NOM_BDD_SAGE       nvarchar(128) NULL,
     NOM_BDD_POINTEUSE  nvarchar(max) NULL,
-    MATRICULE_SAGE     nvarchar(max) NULL,
+    MATRICULE_SAGE     nvarchar(64)  NULL,
     DATE_POINTAGE      datetime2     NULL,
     HEURE_POINTAGE     time          NULL,
     DATE_IMPORTATION   datetime2     NULL,
@@ -715,9 +715,9 @@ IF OBJECT_ID(N'dbo.T_HISTORIQUE_ANOMALIE', N'U') IS NULL
 CREATE TABLE dbo.T_HISTORIQUE_ANOMALIE (
     ID                 int           IDENTITY(1,1) NOT NULL,
     ANOMALIE_ID        decimal(18,0) NULL,
-    BDD_SAGE           nvarchar(max) NULL,
+    BDD_SAGE           nvarchar(128) NULL,
     BDD_POINTEUSE      nvarchar(max) NULL,
-    MATRICULE_SAGE     nvarchar(max) NULL,
+    MATRICULE_SAGE     nvarchar(64)  NULL,
     DATE_POINTAGE_IN   datetime2     NULL,
     DATE_POINTAGE_OUT  datetime2     NULL,
     H1                 time          NULL,
@@ -741,7 +741,7 @@ IF OBJECT_ID(N'dbo.T_HISTORIQUE_HS', N'U') IS NULL
 CREATE TABLE dbo.T_HISTORIQUE_HS (
     ID                int           IDENTITY(1,1) NOT NULL,
     HS_ID             int           NULL,
-    MATRICULE         nvarchar(max) NULL,
+    MATRICULE         nvarchar(64)  NULL,
     NUM_SAL           int           NULL,
     EXO130            decimal(18,2) NULL,
     EXO150            decimal(18,2) NULL,
@@ -754,7 +754,7 @@ CREATE TABLE dbo.T_HISTORIQUE_HS (
     DIM               decimal(18,2) NULL,
     RETARD            decimal(18,2) NULL,
     ABSENCE           decimal(18,2) NULL,
-    BDD_SAGE          nvarchar(max) NULL,
+    BDD_SAGE          nvarchar(128) NULL,
     BDD_POINTEUSE     nvarchar(max) NULL,
     DATE_SUPPRESSION  datetime2     NOT NULL,
     CONSTRAINT PK_T_HISTORIQUE_HS PRIMARY KEY (ID)
@@ -804,19 +804,43 @@ IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_PLANNING_SAL_CAR
         ADD CONSTRAINT FK_PLANNING_SAL_CARDPAIE FOREIGN KEY (IDSAL) REFERENCES dbo.T_CARDPAIE (ID);
 */
 
-/*  Index de performance (facultatifs, aucun impact sur EF). Décommentez si besoin.
+/*  Index de pagination (voir migrations/add_pagination_performance_indexes.sql pour la mise à
+    niveau d'une base existante). Les colonnes de filtre sont bornées ci-dessus, elles sont donc
+    indexables. L'ordre des colonnes suit le filtre (base SAGE) puis l'ordre de pagination. */
 
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_T_POINTAGE_Scope') 
-    CREATE INDEX IX_T_POINTAGE_Scope ON dbo.T_POINTAGE (NOM_BDD_SAGE, MATRICULE_SAGE, DATE_POINTAGE);
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_T_HEURECORRIGER_Scope')
-    CREATE INDEX IX_T_HEURECORRIGER_Scope ON dbo.T_HEURECORRIGER (BDD_SAGE, MATRICULE_SAGE, DATE_POINTAGE_IN);
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_T_CARDPAIE_Scope')
-    CREATE INDEX IX_T_CARDPAIE_Scope ON dbo.T_CARDPAIE (SAGE_BDD, SAGE_MATRICULE);
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_T_HS_VALIDER_Scope')
-    CREATE INDEX IX_T_HS_VALIDER_Scope ON dbo.T_HS_VALIDER (BDD_SAGE, MATRICULES, DATE_DEB);
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_T_HSExoImp_Scope')
-    CREATE INDEX IX_T_HSExoImp_Scope ON dbo.T_HSExoImp (BDD_SAGE, PeriodeDebut, PeriodeFin);
-*/
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_T_POINTAGE_Pagination' AND object_id = OBJECT_ID(N'dbo.T_POINTAGE'))
+    CREATE INDEX IX_T_POINTAGE_Pagination ON dbo.T_POINTAGE (NOM_BDD_SAGE, DATE_POINTAGE, HEURE_POINTAGE, MATRICULE_SAGE);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_T_HEURECORRIGER_Pagination' AND object_id = OBJECT_ID(N'dbo.T_HEURECORRIGER'))
+    CREATE INDEX IX_T_HEURECORRIGER_Pagination ON dbo.T_HEURECORRIGER (BDD_SAGE, DATE_POINTAGE_IN, MATRICULE_SAGE);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_T_HEUREANOMALIE_Pagination' AND object_id = OBJECT_ID(N'dbo.T_HEUREANOMALIE'))
+    CREATE INDEX IX_T_HEUREANOMALIE_Pagination ON dbo.T_HEUREANOMALIE (BDD_SAGE, DATE_POINTAGE_IN, MATRICULE_SAGE);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_T_CANTINE_Pagination' AND object_id = OBJECT_ID(N'dbo.T_CANTINE'))
+    CREATE INDEX IX_T_CANTINE_Pagination ON dbo.T_CANTINE (NOM_BDD_SAGE, DATEDEB, DATEFIN, MATRICULE_SAGE);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_T_FRAIS_Pagination' AND object_id = OBJECT_ID(N'dbo.T_FRAIS'))
+    CREATE INDEX IX_T_FRAIS_Pagination ON dbo.T_FRAIS (NOM_BDD_SAGE, DATEDEB, DATEFIN, MATRICULE_SAGE);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_T_PLANNING_SAL_Pagination' AND object_id = OBJECT_ID(N'dbo.T_PLANNING_SAL'))
+    CREATE INDEX IX_T_PLANNING_SAL_Pagination ON dbo.T_PLANNING_SAL (BDD_SAGE, DateP, IDSAL);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_T_CARDPAIE_Pagination' AND object_id = OBJECT_ID(N'dbo.T_CARDPAIE'))
+    CREATE INDEX IX_T_CARDPAIE_Pagination ON dbo.T_CARDPAIE (SAGE_BDD, SAGE_MATRICULE, ID);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_T_HS_VALIDER_Pagination' AND object_id = OBJECT_ID(N'dbo.T_HS_VALIDER'))
+    CREATE INDEX IX_T_HS_VALIDER_Pagination ON dbo.T_HS_VALIDER (BDD_SAGE, DATE_DEB, DATE_FIN, MATRICULES);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_T_HSExoImp_Pagination' AND object_id = OBJECT_ID(N'dbo.T_HSExoImp'))
+    CREATE INDEX IX_T_HSExoImp_Pagination ON dbo.T_HSExoImp (BDD_SAGE, PeriodeDebut, PeriodeFin, Matricule);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_T_HSSemaine_Pagination' AND object_id = OBJECT_ID(N'dbo.T_HSSemaine'))
+    CREATE INDEX IX_T_HSSemaine_Pagination ON dbo.T_HSSemaine (BDD_SAGE, PeriodeDebut, PeriodeFin, Matricule);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_T_HEUREDIMANCHE_Pagination' AND object_id = OBJECT_ID(N'dbo.T_HEUREDIMANCHE'))
+    CREATE INDEX IX_T_HEUREDIMANCHE_Pagination ON dbo.T_HEUREDIMANCHE (BDD_SAGE, Date_Dim, MATRICULE_SAGE);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_T_HISTORIQUE_POINTAGE_Pagination' AND object_id = OBJECT_ID(N'dbo.T_HISTORIQUE_POINTAGE'))
+    CREATE INDEX IX_T_HISTORIQUE_POINTAGE_Pagination ON dbo.T_HISTORIQUE_POINTAGE (NOM_BDD_SAGE, DATE_SUPPRESSION);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_T_HISTORIQUE_ANOMALIE_Pagination' AND object_id = OBJECT_ID(N'dbo.T_HISTORIQUE_ANOMALIE'))
+    CREATE INDEX IX_T_HISTORIQUE_ANOMALIE_Pagination ON dbo.T_HISTORIQUE_ANOMALIE (BDD_SAGE, DATE_SUPPRESSION);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_T_HISTORIQUE_HS_Pagination' AND object_id = OBJECT_ID(N'dbo.T_HISTORIQUE_HS'))
+    CREATE INDEX IX_T_HISTORIQUE_HS_Pagination ON dbo.T_HISTORIQUE_HS (BDD_SAGE, DATE_SUPPRESSION);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_suivi_SUIVI_Date' AND object_id = OBJECT_ID(N'dbo.suivi_SUIVI'))
+    CREATE INDEX IX_suivi_SUIVI_Date ON dbo.suivi_SUIVI ([_DATETIMES]);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_suivi_SUIVI_Filtres' AND object_id = OBJECT_ID(N'dbo.suivi_SUIVI'))
+    CREATE INDEX IX_suivi_SUIVI_Filtres ON dbo.suivi_SUIVI ([_TABLES], [_ACTIONS], [_DATETIMES]);
+GO
 
 /* =====================================================================================
    15. DONNÉES DE DÉMARRAGE

@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
@@ -24,31 +25,45 @@ public class TimekeepingService
     public async Task<IReadOnlyList<PunchDto>> ListPunchesAsync(PeriodRequest filter, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var list = await _uow.Repository<T_POINTAGE>().ListAsync(p =>
-            p.NOM_BDD_SAGE == _tenant.SageDb
-            && p.DATE_POINTAGE >= filter.From.Date
-            && p.DATE_POINTAGE <= filter.To.Date.AddDays(1)
-            && (string.IsNullOrEmpty(filter.MatriculeFrom) || string.Compare(p.MATRICULE_SAGE, filter.MatriculeFrom) >= 0)
-            && (string.IsNullOrEmpty(filter.MatriculeTo) || string.Compare(p.MATRICULE_SAGE, filter.MatriculeTo) <= 0), ct);
-        return list.Select(p => new PunchDto(p.IDPOINTAGE, p.MATRICULE_SAGE, p.DATE_POINTAGE, p.HEURE_POINTAGE, p.TYPE_POINTAGE, p.DATE_IMPORTATION)).ToList();
+        var list = await _uow.Repository<T_POINTAGE>().ListAsync(PunchPredicate(filter, _tenant.SageDb), ct);
+        return list.Select(ToPunchDto).ToList();
     }
 
     /// <summary>
-    /// Liste paginée des pointages. Variante de <see cref="ListPunchesAsync"/> destinée aux périodes
-    /// massives (plusieurs dizaines de milliers de lignes) : l'endpoint non paginé reste inchangé,
-    /// car l'export Excel du client s'appuie sur la grille complète.
+    /// Liste paginée des pointages. Le filtre, l'ordre et le découpage sont délégués à SQL
+    /// (<c>COUNT(*)</c> + <c>ORDER BY … OFFSET/FETCH</c>) : seules les lignes de la page sont
+    /// matérialisées. L'endpoint non paginé reste inchangé pour l'export Excel.
     /// </summary>
     public async Task<PagedResult<PunchDto>> ListPunchesPagedAsync(PeriodRequest filter, int? page, int? pageSize, CancellationToken ct = default)
     {
-        var all = await ListPunchesAsync(filter, ct);
-        var ordonnees = all.OrderBy(p => p.Date).ThenBy(p => p.Heure).ThenBy(p => p.Matricule).ToList();
-        var (pageNormalisee, taille) = PaginationRules.Normaliser(page, pageSize);
-        return new PagedResult<PunchDto>(
-            ordonnees.Skip(PaginationRules.Decalage(pageNormalisee, taille)).Take(taille).ToList(),
-            ordonnees.Count,
-            pageNormalisee,
-            taille,
-            PaginationRules.NombreDePages(ordonnees.Count, taille));
+        await _tenant.EnsureAuthorizedAsync(ct);
+        return await PagedLists.PageAsync(
+            _uow.Repository<T_POINTAGE>(),
+            PunchPredicate(filter, _tenant.SageDb),
+            q => q.OrderBy(p => p.DATE_POINTAGE)
+                  .ThenBy(p => p.HEURE_POINTAGE)
+                  .ThenBy(p => p.MATRICULE_SAGE)
+                  .ThenBy(p => p.IDPOINTAGE),
+            page,
+            pageSize,
+            ToPunchDto,
+            ct);
+    }
+
+    private static PunchDto ToPunchDto(T_POINTAGE p) => new(
+        p.IDPOINTAGE, p.MATRICULE_SAGE, p.DATE_POINTAGE, p.HEURE_POINTAGE, p.TYPE_POINTAGE, p.DATE_IMPORTATION);
+
+    private static Expression<Func<T_POINTAGE, bool>> PunchPredicate(PeriodRequest filter, string sageDb)
+    {
+        var from = filter.From.Date;
+        var toInclusive = filter.To.Date.AddDays(1);
+        var matriculeFrom = filter.MatriculeFrom;
+        var matriculeTo = filter.MatriculeTo;
+        return p => p.NOM_BDD_SAGE == sageDb
+            && p.DATE_POINTAGE >= from
+            && p.DATE_POINTAGE <= toInclusive
+            && (string.IsNullOrEmpty(matriculeFrom) || string.Compare(p.MATRICULE_SAGE, matriculeFrom) >= 0)
+            && (string.IsNullOrEmpty(matriculeTo) || string.Compare(p.MATRICULE_SAGE, matriculeTo) <= 0);
     }
 
     /// <summary>
@@ -296,11 +311,33 @@ public class TimekeepingService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         // Les anomalies sans date (importées sans date exploitable) ne doivent pas rester invisibles.
-        var list = await _uow.Repository<T_HEUREANOMALIE>().ListAsync(a =>
-            a.BDD_SAGE == _tenant.SageDb
-            && (a.DATE_POINTAGE_IN == null
-                || (a.DATE_POINTAGE_IN >= filter.From && a.DATE_POINTAGE_IN <= filter.To)), ct);
+        var list = await _uow.Repository<T_HEUREANOMALIE>().ListAsync(AnomalyPredicate(filter, _tenant.SageDb), ct);
         return list.Select(MapAnomaly).ToList();
+    }
+
+    /// <summary>Liste paginée des anomalies ; les anomalies sans date restent incluses.</summary>
+    public async Task<PagedResult<AnomalyDto>> ListAnomaliesPagedAsync(PeriodRequest filter, int? page, int? pageSize, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        return await PagedLists.PageAsync(
+            _uow.Repository<T_HEUREANOMALIE>(),
+            AnomalyPredicate(filter, _tenant.SageDb),
+            q => q.OrderBy(a => a.DATE_POINTAGE_IN)
+                  .ThenBy(a => a.MATRICULE_SAGE)
+                  .ThenBy(a => a.ID),
+            page,
+            pageSize,
+            MapAnomaly,
+            ct);
+    }
+
+    private static Expression<Func<T_HEUREANOMALIE, bool>> AnomalyPredicate(PeriodRequest filter, string sageDb)
+    {
+        var from = filter.From;
+        var to = filter.To;
+        return a => a.BDD_SAGE == sageDb
+            && (a.DATE_POINTAGE_IN == null
+                || (a.DATE_POINTAGE_IN >= from && a.DATE_POINTAGE_IN <= to));
     }
 
     public async Task<AnomalyDto?> GetAnomalyAsync(decimal id, CancellationToken ct = default)
@@ -461,30 +498,40 @@ public class TimekeepingService
     public async Task<IReadOnlyList<CorrectedHourDto>> ListCorrectionsAsync(PeriodRequest filter, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var list = await _uow.Repository<T_HEURECORRIGER>().ListAsync(a =>
-            a.BDD_SAGE == _tenant.SageDb
-            && a.DATE_POINTAGE_IN >= filter.From
-            && a.DATE_POINTAGE_IN <= filter.To
-            && (string.IsNullOrEmpty(filter.MatriculeFrom) || string.Compare(a.MATRICULE_SAGE, filter.MatriculeFrom) >= 0)
-            && (string.IsNullOrEmpty(filter.MatriculeTo) || string.Compare(a.MATRICULE_SAGE, filter.MatriculeTo) <= 0), ct);
+        var list = await _uow.Repository<T_HEURECORRIGER>().ListAsync(CorrectionPredicate(filter, _tenant.SageDb), ct);
         return list.Select(MapCorrection).ToList();
     }
 
     /// <summary>
-    /// Liste paginée des heures corrigées (voir <see cref="ListPunchesPagedAsync"/> : l'endpoint
-    /// non paginé reste inchangé pour ne pas tronquer l'export Excel du client).
+    /// Liste paginée des heures corrigées (pagination SQL, voir <see cref="ListPunchesPagedAsync"/> :
+    /// l'endpoint non paginé reste inchangé pour ne pas tronquer l'export Excel du client).
     /// </summary>
     public async Task<PagedResult<CorrectedHourDto>> ListCorrectionsPagedAsync(PeriodRequest filter, int? page, int? pageSize, CancellationToken ct = default)
     {
-        var all = await ListCorrectionsAsync(filter, ct);
-        var ordonnees = all.OrderBy(c => c.DateIn).ThenBy(c => c.Matricule).ToList();
-        var (pageNormalisee, taille) = PaginationRules.Normaliser(page, pageSize);
-        return new PagedResult<CorrectedHourDto>(
-            ordonnees.Skip(PaginationRules.Decalage(pageNormalisee, taille)).Take(taille).ToList(),
-            ordonnees.Count,
-            pageNormalisee,
-            taille,
-            PaginationRules.NombreDePages(ordonnees.Count, taille));
+        await _tenant.EnsureAuthorizedAsync(ct);
+        return await PagedLists.PageAsync(
+            _uow.Repository<T_HEURECORRIGER>(),
+            CorrectionPredicate(filter, _tenant.SageDb),
+            q => q.OrderBy(a => a.DATE_POINTAGE_IN)
+                  .ThenBy(a => a.MATRICULE_SAGE)
+                  .ThenBy(a => a.ID),
+            page,
+            pageSize,
+            MapCorrection,
+            ct);
+    }
+
+    private static Expression<Func<T_HEURECORRIGER, bool>> CorrectionPredicate(PeriodRequest filter, string sageDb)
+    {
+        var from = filter.From;
+        var to = filter.To;
+        var matriculeFrom = filter.MatriculeFrom;
+        var matriculeTo = filter.MatriculeTo;
+        return a => a.BDD_SAGE == sageDb
+            && a.DATE_POINTAGE_IN >= from
+            && a.DATE_POINTAGE_IN <= to
+            && (string.IsNullOrEmpty(matriculeFrom) || string.Compare(a.MATRICULE_SAGE, matriculeFrom) >= 0)
+            && (string.IsNullOrEmpty(matriculeTo) || string.Compare(a.MATRICULE_SAGE, matriculeTo) <= 0);
     }
 
     public async Task<CorrectedHourDto> SaveCorrectionAsync(CorrectedHourDto dto, CancellationToken ct = default)

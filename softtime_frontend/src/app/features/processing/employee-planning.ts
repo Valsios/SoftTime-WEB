@@ -64,7 +64,16 @@ import { asRow, fmtDate, monthStart, today } from '../../shared/utils/date';
 
     @if (activeTab() === 'employees') {
       <soft-card padding="md">
-        <data-table [columns]="employeeColumns" [rows]="employeeRows()" [loading]="loadingPeople()">
+        <data-table
+          [columns]="employeeColumns"
+          [rows]="employeeRows()"
+          [loading]="loadingPeople()"
+          [serverSide]="true"
+          [total]="employeeTotal()"
+          [pageSize]="PAGE_SIZE"
+          [currentPage]="employeePage()"
+          (pageChange)="onEmployeePageChange($event)"
+        >
           <ng-template #actions let-row>
             <soft-button *ngIf="canCreate()" size="sm" (click)="openCreate(row)">Planifier</soft-button>
           </ng-template>
@@ -72,7 +81,16 @@ import { asRow, fmtDate, monthStart, today } from '../../shared/utils/date';
       </soft-card>
     } @else {
       <soft-card padding="md">
-        <data-table [columns]="planningColumns" [rows]="planningRows()" [loading]="loading()">
+        <data-table
+          [columns]="planningColumns"
+          [rows]="planningRows()"
+          [loading]="loading()"
+          [serverSide]="true"
+          [total]="planningTotal()"
+          [pageSize]="PAGE_SIZE"
+          [currentPage]="planningPage()"
+          (pageChange)="onPlanningPageChange($event)"
+        >
           <ng-template #actions let-row>
             <div class="soft-actions" style="justify-content: end">
               <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
@@ -134,12 +152,19 @@ export class EmployeePlanningPage implements OnInit {
   readonly loadingPeople = signal(true);
   readonly saving = signal(false);
   readonly modal = signal(false);
+  readonly PAGE_SIZE = 50;
   readonly employeeRows = signal<Record<string, unknown>[]>([]);
   readonly planningRows = signal<Record<string, unknown>[]>([]);
+  readonly employeePage = signal(1);
+  readonly employeeTotal = signal(0);
+  readonly planningPage = signal(1);
+  readonly planningTotal = signal(0);
   readonly employeeOptions = signal<{ value: number; label: string }[]>([]);
   readonly shiftOptions = signal<{ value: number; label: string }[]>([]);
   private employees: PlanningEmployee[] = [];
   private lastFilter: PeriodRequest = { from: monthStart(), to: today() };
+  private employeeSeq = 0;
+  private planningSeq = 0;
   form: Partial<EmployeePlanning> = {};
   readonly activeTab = signal('employees');
   readonly tabs = [
@@ -174,16 +199,29 @@ export class EmployeePlanningPage implements OnInit {
         ),
     });
     this.loadEmployees();
+    this.loadEmployeeRows();
     this.loadPlanning();
   }
 
   onSearch(filter: PeriodRequest): void {
     this.lastFilter = filter;
+    this.employeePage.set(1);
+    this.planningPage.set(1);
+    this.loadEmployeeRows();
+    this.loadPlanning();
+  }
+
+  onEmployeePageChange(page: number): void {
+    this.employeePage.set(page);
+    this.loadEmployeeRows();
+  }
+
+  onPlanningPageChange(page: number): void {
+    this.planningPage.set(page);
     this.loadPlanning();
   }
 
   loadEmployees(): void {
-    this.loadingPeople.set(true);
     this.svc.employees().subscribe({
       next: (items) => {
         this.employees = items;
@@ -193,40 +231,49 @@ export class EmployeePlanningPage implements OnInit {
             label: `${e.matricule ?? e.cardPaieId} — ${[e.nom, e.prenom].filter(Boolean).join(' ')}`.trim(),
           })),
         );
-        this.refreshEmployeeRows();
+      },
+    });
+  }
+
+  /** Grille des salariés : le nombre de jours planifiés est calculé côté serveur. */
+  private loadEmployeeRows(): void {
+    const seq = ++this.employeeSeq;
+    this.loadingPeople.set(true);
+    this.svc.employeesPaged(
+      this.lastFilter.from,
+      this.lastFilter.to,
+      this.employeePage(),
+      this.PAGE_SIZE,
+    ).subscribe({
+      next: (r) => {
+        if (seq !== this.employeeSeq) return;
+        this.employeeRows.set(r.items.map(asRow));
+        this.employeeTotal.set(r.total);
+        this.employeePage.set(r.page);
         this.loadingPeople.set(false);
       },
-      error: () => this.loadingPeople.set(false),
+      error: () => { if (seq === this.employeeSeq) this.loadingPeople.set(false); },
     });
   }
 
   loadPlanning(): void {
+    const seq = ++this.planningSeq;
     this.loading.set(true);
-    this.svc.list(this.lastFilter.from, this.lastFilter.to).subscribe({
-      next: (items) => {
-        this.planningRows.set(items.map(asRow));
-        this.refreshEmployeeRows();
+    this.svc.listPaged({
+      from: this.lastFilter.from,
+      to: this.lastFilter.to,
+      page: this.planningPage(),
+      pageSize: this.PAGE_SIZE,
+    }).subscribe({
+      next: (r) => {
+        if (seq !== this.planningSeq) return;
+        this.planningRows.set(r.items.map(asRow));
+        this.planningTotal.set(r.total);
+        this.planningPage.set(r.page);
         this.loading.set(false);
       },
-      error: () => this.loading.set(false),
+      error: () => { if (seq === this.planningSeq) this.loading.set(false); },
     });
-  }
-
-  private refreshEmployeeRows(): void {
-    const counts = new Map<number, number>();
-    for (const row of this.planningRows()) {
-      const id = Number(row['cardPaieId']);
-      counts.set(id, (counts.get(id) ?? 0) + 1);
-    }
-    this.employeeRows.set(
-      this.employees.map((e) => ({
-        cardPaieId: e.cardPaieId,
-        matricule: e.matricule,
-        nom: e.nom,
-        prenom: e.prenom,
-        plannedDays: counts.get(e.cardPaieId) ?? 0,
-      })),
-    );
   }
 
   openCreate(row?: Record<string, unknown>): void {
@@ -267,6 +314,7 @@ export class EmployeePlanningPage implements OnInit {
         this.modal.set(false);
         this.toast.success('Planning enregistré.');
         this.loadPlanning();
+        this.loadEmployeeRows();
       },
       error: () => this.saving.set(false),
     });
@@ -278,15 +326,20 @@ export class EmployeePlanningPage implements OnInit {
       next: () => {
         this.toast.success('Supprimé.');
         this.loadPlanning();
+        this.loadEmployeeRows();
       },
     });
   }
 
   exportExcel(): void {
     if (this.activeTab() === 'employees') {
-      this.excel.download('salaries-planning', this.employeeColumns, this.employeeRows());
+      this.svc.employeesStats(this.lastFilter.from, this.lastFilter.to).subscribe({
+        next: (items) => this.excel.download('salaries-planning', this.employeeColumns, items.map(asRow)),
+      });
     } else {
-      this.excel.download('lignes-planning', this.planningColumns, this.planningRows());
+      this.svc.list(this.lastFilter.from, this.lastFilter.to).subscribe({
+        next: (items) => this.excel.download('lignes-planning', this.planningColumns, items.map(asRow)),
+      });
     }
   }
 
@@ -299,6 +352,7 @@ export class EmployeePlanningPage implements OnInit {
         this.toast.success(r.message || `${r.imported} ligne(s) importée(s).`);
         this.activeTab.set('planning');
         this.loadPlanning();
+        this.loadEmployeeRows();
       },
     });
     input.value = '';
@@ -314,6 +368,7 @@ export class EmployeePlanningPage implements OnInit {
         this.toast.success(r.message || `${r.imported} jour(s) généré(s).`);
         this.activeTab.set('planning');
         this.loadPlanning();
+        this.loadEmployeeRows();
       },
     });
     input.value = '';
@@ -329,6 +384,7 @@ export class EmployeePlanningPage implements OnInit {
         this.toast.success(r.message || `${r.imported} jour(s) généré(s).`);
         this.activeTab.set('planning');
         this.loadPlanning();
+        this.loadEmployeeRows();
       },
     });
     input.value = '';
