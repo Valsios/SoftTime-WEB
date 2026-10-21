@@ -227,91 +227,7 @@ const SERVER_PAGE_SIZES = [10, 25, 50, 100] as const;
          n'est pas gérée en mode serveur pour éviter des incohérences d'état.
          ===================================================================== -->
     @if (serverSide()) {
-      <!-- Barre de pagination TOUJOURS affichée en mode serveur (pas de clignotement).
-           Seul le corps du tableau est remplacé par le spinner pendant le chargement. -->
-      <div class="soft-pagination-wrap">
-        <div class="soft-pagination-info">{{ serverRangeInfo() }}</div>
-
-        <!-- Sélecteur de taille de page (options 10/25/50/100 uniquement).
-             id unique par instance via _instanceId. Utilise (change) natif (pas FormsModule). -->
-        <div class="soft-pagination-size">
-          <label [for]="pageSizeSelectId">Lignes par page&nbsp;:</label>
-          <select
-            [id]="pageSizeSelectId"
-            class="soft-select soft-select--sm"
-            (change)="onServerPageSizeChange($event)"
-          >
-            @for (size of pageSizes; track size) {
-              <option [value]="size" [selected]="size === serverPageSize()">{{ size }}</option>
-            }
-          </select>
-        </div>
-
-        @if (serverTotalPages() > 1) {
-          <nav class="soft-pagination-nav" aria-label="Pagination">
-            <button
-              type="button"
-              class="soft-page-btn"
-              [disabled]="serverPage() === 1"
-              (click)="serverGoToPage(1)"
-              aria-label="Première page"
-              title="Première page"
-            >
-              &laquo;
-            </button>
-            <button
-              type="button"
-              class="soft-page-btn"
-              [disabled]="serverPage() === 1"
-              (click)="serverGoToPage(serverPage() - 1)"
-              aria-label="Page précédente"
-              title="Page précédente"
-            >
-              &lsaquo;
-            </button>
-
-            @for (item of serverPaginationItems(); track $index) {
-              @if (item === '...') {
-                <span class="soft-page-ellipsis">&hellip;</span>
-              } @else {
-                <button
-                  type="button"
-                  class="soft-page-btn"
-                  [class.is-active]="item === serverPage()"
-                  [attr.aria-current]="item === serverPage() ? 'page' : null"
-                  (click)="serverGoToPage(item)"
-                  [attr.aria-label]="'Page ' + item"
-                >
-                  {{ item }}
-                </button>
-              }
-            }
-
-            <button
-              type="button"
-              class="soft-page-btn"
-              [disabled]="serverPage() === serverTotalPages()"
-              (click)="serverGoToPage(serverPage() + 1)"
-              aria-label="Page suivante"
-              title="Page suivante"
-            >
-              &rsaquo;
-            </button>
-            <button
-              type="button"
-              class="soft-page-btn"
-              [disabled]="serverPage() === serverTotalPages()"
-              (click)="serverGoToPage(serverTotalPages())"
-              aria-label="Dernière page"
-              title="Dernière page"
-            >
-              &raquo;
-            </button>
-          </nav>
-        }
-      </div>
-
-      <!-- Corps : spinner pendant le chargement, tableau sinon. La barre reste stable. -->
+      <!-- Corps : spinner pendant le chargement, tableau sinon. -->
       @if (loading()) {
         <div class="soft-spinner-lg"></div>
       } @else {
@@ -415,6 +331,89 @@ const SERVER_PAGE_SIZES = [10, 25, 50, 100] as const;
           }
         </div>
       }
+
+      <!-- Barre de pagination TOUJOURS affichée en mode serveur (pas de clignotement),
+           placée APRÈS le corps du tableau comme en mode client. -->
+      <div class="soft-pagination-wrap">
+        <div class="soft-pagination-info">{{ serverRangeInfo() }}</div>
+
+        <!-- Sélecteur de taille de page (options 10/25/50/100 uniquement).
+             id unique par instance via pageSizeSelectId. Utilise (change) natif (pas FormsModule). -->
+        <div class="soft-pagination-size">
+          <label [for]="pageSizeSelectId">Lignes par page&nbsp;:</label>
+          <select
+            [id]="pageSizeSelectId"
+            (change)="onServerPageSizeChange($event)"
+          >
+            @for (size of pageSizes; track size) {
+              <option [value]="size" [selected]="size === serverPageSize()">{{ size }}</option>
+            }
+          </select>
+        </div>
+
+        @if (serverTotalPages() > 1) {
+          <nav class="soft-pagination-nav" aria-label="Pagination">
+            <button
+              type="button"
+              class="soft-page-btn"
+              [disabled]="serverPage() === 1"
+              (click)="serverGoToPage(1)"
+              aria-label="Première page"
+              title="Première page"
+            >
+              &laquo;
+            </button>
+            <button
+              type="button"
+              class="soft-page-btn"
+              [disabled]="serverPage() === 1"
+              (click)="serverGoToPage(serverPage() - 1)"
+              aria-label="Page précédente"
+              title="Page précédente"
+            >
+              &lsaquo;
+            </button>
+
+            @for (item of serverPaginationItems(); track $index) {
+              @if (item === '...') {
+                <span class="soft-page-ellipsis">&hellip;</span>
+              } @else {
+                <button
+                  type="button"
+                  class="soft-page-btn"
+                  [class.is-active]="item === serverPage()"
+                  [attr.aria-current]="item === serverPage() ? 'page' : null"
+                  (click)="serverGoToPage(item)"
+                  [attr.aria-label]="'Page ' + item"
+                >
+                  {{ item }}
+                </button>
+              }
+            }
+
+            <button
+              type="button"
+              class="soft-page-btn"
+              [disabled]="serverPage() === serverTotalPages()"
+              (click)="serverGoToPage(serverPage() + 1)"
+              aria-label="Page suivante"
+              title="Page suivante"
+            >
+              &rsaquo;
+            </button>
+            <button
+              type="button"
+              class="soft-page-btn"
+              [disabled]="serverPage() === serverTotalPages()"
+              (click)="serverGoToPage(serverTotalPages())"
+              aria-label="Dernière page"
+              title="Dernière page"
+            >
+              &raquo;
+            </button>
+          </nav>
+        }
+      </div>
     }
   `,
 })
