@@ -20,20 +20,16 @@ public static class PunchPairingRules
     /// <summary>
     /// Mode simple : 0 pointage → rien, 1 pointage → orphelin (anomalie),
     /// 2 pointages ou plus → une paire du premier au dernier pointage.
+    /// Délègue à <see cref="SimpleDayRules"/> avec les options historiques ; le pré-traitement
+    /// utilise <see cref="SimpleDayRules"/> directement pour activer le mode strict.
     /// </summary>
     public static PunchPairingResult PairSimpleDay(IReadOnlyList<PunchMoment> points)
     {
-        var ordered = Order(points);
-        if (ordered.Count == 0)
-            return PunchPairingResult.Empty;
-        if (ordered.Count == 1)
-            return new PunchPairingResult { Unpaired = ordered };
-
-        var premier = ordered[0];
-        var dernier = ordered[^1];
+        var resultat = SimpleDayRules.Pair(points, SimpleDayOptions.ParDefaut);
         return new PunchPairingResult
         {
-            Pairs = new[] { new PunchPair(premier.Date, premier.Heure, dernier.Date, dernier.Heure) }
+            Pairs = resultat.Pairs,
+            Unpaired = resultat.Unpaired
         };
     }
 

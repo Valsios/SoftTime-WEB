@@ -232,18 +232,20 @@ public class TimekeepingService
             p.NOM_BDD_SAGE == _tenant.SageDb && p.DATE_POINTAGE >= from && p.DATE_POINTAGE < to, ct);
         var imported = 0;
         var skipped = 0;
+        var duplicates = 0;
+        var unknownBadges = 0;
         foreach (var punch in punches)
         {
             var user = users.FirstOrDefault(u => u.UserId == punch.UserId);
             if (user?.Badge is not string badge || !badgeMap.TryGetValue(badge.Trim(), out var card))
-            { skipped++; continue; }
+            { skipped++; unknownBadges++; continue; }
             var dup = existing.Any(e =>
                 e.MATRICULE_SAGE == card.SAGE_MATRICULE
                 && e.DATE_POINTAGE.HasValue && e.DATE_POINTAGE.Value.Date == punch.CheckTime.Date
                 && e.HEURE_POINTAGE.HasValue && e.HEURE_POINTAGE.Value.Hours == punch.CheckTime.Hour
                 && e.HEURE_POINTAGE.Value.Minutes == punch.CheckTime.Minute);
             if (dup && clock.MULTIPOINT != true)
-            { skipped++; continue; }
+            { skipped++; duplicates++; continue; }
             await repo.AddAsync(new T_POINTAGE
             {
                 NOM_BDD_SAGE = _tenant.SageDb,
@@ -258,13 +260,17 @@ public class TimekeepingService
             imported++;
         }
         await _uow.SaveChangesAsync(ct);
-        var message = ambiguousBadges.Count == 0
-            ? "Import pointeuse terminé."
-            : $"Import pointeuse terminé. {ambiguousBadges.Count} badge(s) associé(s) à plusieurs salariés ont été ignorés : "
-              + string.Join(", ", ambiguousBadges.Take(10))
-              + (ambiguousBadges.Count > 10 ? ", …" : string.Empty)
-              + ". Corrigez les correspondances paie en double pour importer ces pointages.";
-        return new ImportResultDto(imported, skipped, message);
+        var message = "Import pointeuse terminé.";
+        if (unknownBadges > 0)
+            message += $" {unknownBadges} pointage(s) sans badge associé ignoré(s).";
+        if (duplicates > 0)
+            message += $" {duplicates} doublon(s) ignoré(s).";
+        if (ambiguousBadges.Count > 0)
+            message += $" {ambiguousBadges.Count} badge(s) associé(s) à plusieurs salariés ont été ignorés : "
+                       + string.Join(", ", ambiguousBadges.Take(10))
+                       + (ambiguousBadges.Count > 10 ? ", …" : string.Empty)
+                       + " Corrigez les correspondances paie en double pour importer ces pointages.";
+        return new ImportResultDto(imported, skipped, message, duplicates, unknownBadges);
     }
 
     public async Task<ImportResultDto> ImportPunchesExcelAsync(IReadOnlyList<Dictionary<string, string>> rows, CancellationToken ct = default)
@@ -273,6 +279,7 @@ public class TimekeepingService
         var repo = _uow.Repository<T_POINTAGE>();
         var imported = 0;
         var skipped = 0;
+        var duplicates = 0;
         foreach (var row in rows)
         {
             var matr = ExcelCells.Get(row, "Matricule", "MATRICULE", "Matricule SAGE");
@@ -289,6 +296,7 @@ public class TimekeepingService
             if (dup)
             {
                 skipped++;
+                duplicates++;
                 continue;
             }
             await repo.AddAsync(new T_POINTAGE
@@ -304,7 +312,10 @@ public class TimekeepingService
             imported++;
         }
         await _uow.SaveChangesAsync(ct);
-        return new ImportResultDto(imported, skipped, "Import Excel pointages terminé.");
+        var message = duplicates > 0
+            ? $"Import Excel pointages terminé. {duplicates} doublon(s) ignoré(s)."
+            : "Import Excel pointages terminé.";
+        return new ImportResultDto(imported, skipped, message, duplicates);
     }
 
     public async Task<IReadOnlyList<AnomalyDto>> ListAnomaliesAsync(PeriodRequest filter, CancellationToken ct = default)
@@ -493,7 +504,7 @@ public class TimekeepingService
     private static AnomalyDto MapAnomaly(T_HEUREANOMALIE a) => new(
         a.ID, a.MATRICULE_SAGE, a.DATE_POINTAGE_IN, a.DATE_POINTAGE_OUT, a.H1, a.H2,
         a.HENTREE, a.HPS, a.HPE, a.HSORTIE,
-        a.ABS_AM, a.ABS_PM, a.FERIES, a.FERIES_AM, a.FERIES_PM, a.INTITULE_ABSENCE);
+        a.ABS_AM, a.ABS_PM, a.FERIES, a.FERIES_AM, a.FERIES_PM, a.INTITULE_ABSENCE, a.MOTIF);
 
     public async Task<IReadOnlyList<CorrectedHourDto>> ListCorrectionsAsync(PeriodRequest filter, CancellationToken ct = default)
     {

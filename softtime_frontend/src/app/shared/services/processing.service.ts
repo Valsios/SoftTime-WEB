@@ -140,9 +140,14 @@ export class PunchesService extends ApiService {
     form.append('file', file);
     return this.http.post<ImportResult>(this.url('/api/punches/import-excel'), form);
   }
-  /** Pré-traitement : pointages → heures corrigées (T_HEURECORRIGER) + anomalies. */
-  preprocess(req: PeriodRequest): Observable<PreprocessResult> {
-    return this.http.post<PreprocessResult>(this.url('/api/punches/preprocess'), req);
+  /**
+   * Pré-traitement : pointages → heures corrigées (T_HEURECORRIGER) + anomalies.
+   * `dryRun` = true calcule et renvoie les actions prévues sans rien écrire (simulation).
+   */
+  preprocess(req: PeriodRequest, dryRun = false): Observable<PreprocessResult> {
+    return this.http.post<PreprocessResult>(this.url('/api/punches/preprocess'), req, {
+      params: dryRun ? this.params({ dryRun: true }) : undefined,
+    });
   }
   /** Corrige un pointage importé (refusé si la semaine est validée). */
   update(id: number, dto: PunchUpdate): Observable<Punch> {

@@ -44,4 +44,10 @@ public class T_HEUREANOMALIE
 
     public string? INTITULE_ABSENCE { get; set; }
 
+    /// <summary>
+    /// Raison de l'anomalie (voir <c>PunchAnomalyMotifs</c>) : aucun pointage, pointage unique,
+    /// pointages incohérents, durée implausible, hors planning. <c>NULL</c> = ligne héritée.
+    /// </summary>
+    public string? MOTIF { get; set; }
+
 }

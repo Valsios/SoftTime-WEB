@@ -269,7 +269,7 @@ public class CatalogService
     public async Task<ClockParamDto> GetClockAsync(CancellationToken ct = default)
     {
         var row = (await _uow.Repository<T_CLOCK>().ListAsync(_ => true, ct)).FirstOrDefault();
-        return row == null ? new ClockParamDto(0, false) : new ClockParamDto(row.IDPOINT, row.MULTIPOINT);
+        return row == null ? new ClockParamDto(0, false) : MapClock(row);
     }
 
     public async Task<ClockParamDto> SaveClockAsync(ClockParamDto dto, CancellationToken ct = default)
@@ -279,16 +279,44 @@ public class CatalogService
         if (row == null)
         {
             row = new T_CLOCK { MULTIPOINT = dto.MultiPoint };
+            AppliquerParametres(dto, row);
             await repo.AddAsync(row, ct);
         }
         else
         {
             row.MULTIPOINT = dto.MultiPoint;
+            AppliquerParametres(dto, row);
             repo.Update(row);
         }
         await _uow.SaveChangesAsync(ct);
-        return new ClockParamDto(row.IDPOINT, row.MULTIPOINT);
+        return MapClock(row);
     }
+
+    /// <summary>
+    /// N'affecte que les paramètres réellement fournis : un client qui n'envoie que
+    /// <c>multiPoint</c> ne remet pas les autres réglages à zéro.
+    /// </summary>
+    private static void AppliquerParametres(ClockParamDto dto, T_CLOCK row)
+    {
+        if (dto.SimpleStrict.HasValue) row.SIMPLE_STRICT = dto.SimpleStrict;
+        if (dto.SimpleHpSpe.HasValue) row.SIMPLE_HPSPE = dto.SimpleHpSpe;
+        if (dto.DureeMinJour.HasValue) row.DUREE_MIN_JOUR = dto.DureeMinJour;
+        if (dto.DureeMaxJour.HasValue) row.DUREE_MAX_JOUR = dto.DureeMaxJour;
+        if (dto.FiltrePointeuse.HasValue) row.FILTRE_POINTEUSE = dto.FiltrePointeuse;
+        if (dto.AnomalieHorsPlanning.HasValue) row.ANOMALIE_HORS_PLANNING = dto.AnomalieHorsPlanning;
+        if (dto.SimpleNuit.HasValue) row.SIMPLE_NUIT = dto.SimpleNuit;
+    }
+
+    private static ClockParamDto MapClock(T_CLOCK row) => new(
+        row.IDPOINT,
+        row.MULTIPOINT,
+        row.SIMPLE_STRICT,
+        row.SIMPLE_HPSPE,
+        row.DUREE_MIN_JOUR,
+        row.DUREE_MAX_JOUR,
+        row.FILTRE_POINTEUSE,
+        row.ANOMALIE_HORS_PLANNING,
+        row.SIMPLE_NUIT);
 
     public async Task<DepartementServiceDto> GetDepartementServiceAsync(string matricule, CancellationToken ct = default)
     {

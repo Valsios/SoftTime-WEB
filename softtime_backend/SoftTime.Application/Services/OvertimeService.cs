@@ -455,6 +455,17 @@ public class OvertimeService
         var affect = await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == sageDb, ct);
         var tols = await _uow.Repository<T_TOLERANCE>().ListAsync(_ => true, ct);
         var leaves = await _leaves.LoadAsync(ct);
+        var clock = (await _uow.Repository<T_CLOCK>().ListAsync(_ => true, ct)).FirstOrDefault();
+        var modeStrict = clock?.SIMPLE_STRICT == true;
+        var deduirePausePointee = clock?.SIMPLE_HPSPE == true;
+        // Jours en attente d'arbitrage : en mode strict ils ne comptent ni comme travaillés ni
+        // comme absents, pour ne pas gonfler l'absentéisme avant traitement des anomalies.
+        var anomaliesParCle = (await _uow.Repository<T_HEUREANOMALIE>().ListAsync(
+                a => a.BDD_SAGE == sageDb && a.DATE_POINTAGE_IN >= from && a.DATE_POINTAGE_IN <= to, ct))
+            .Where(a => a.DATE_POINTAGE_IN.HasValue && !string.IsNullOrEmpty(a.MATRICULE_SAGE))
+            .GroupBy(a => MatriculeIdentity.Cle(a.MATRICULE_SAGE))
+            .ToDictionary(g => g.Key, g => g.Select(a => a.DATE_POINTAGE_IN!.Value.Date).ToHashSet(),
+                StringComparer.OrdinalIgnoreCase);
         var hsRepo = _uow.Repository<T_HS_VALIDER>();
 
         var existingByMatricule = (await hsRepo.ListAsync(
@@ -494,6 +505,9 @@ public class OvertimeService
             var conges = leaves.TryGetValue(MatriculeIdentity.Cle(card.SAGE_MATRICULE), out var joursConge)
                 ? joursConge
                 : new List<LeaveDay>();
+            var joursAnomalie = anomaliesParCle.TryGetValue(MatriculeIdentity.Cle(card.SAGE_MATRICULE), out var joursA)
+                ? joursA
+                : null;
             decimal ht = 0, nuit = 0, dim = 0, ferieH = 0, retard = 0, absence = 0;
             foreach (var day in Enumerable.Range(0, 7).Select(i => request.From.Date.AddDays(i)))
             {
@@ -503,16 +517,16 @@ public class OvertimeService
                 // Un jour de congé SAGE n'est pas une absence : le desktop le traitait aussi à part
                 // (Calcul_HSService : IsConge => la journée est réputée travaillée, jamais absente).
                 var estConge = LeaveRules.EstConge(conges, day);
+                var aAnomalieJour = joursAnomalie?.Contains(day) == true;
                 if (corr?.HENTREE != null && corr.HSORTIE != null)
                 {
                     var start = corr.HENTREE.Value;
                     if (plan?.HA != null && start < plan.HA.Value.TimeOfDay)
                         start = plan.HA.Value.TimeOfDay;
-                    var worked = corr.HSORTIE.Value - start - pause;
-                    if (worked < TimeSpan.Zero) worked = TimeSpan.Zero;
+                    var worked = HeuresTravaillees(corr, start, pause, deduirePausePointee);
                     ht += (decimal)worked.TotalHours;
                     if (OvertimeRules.EstPlageNuit(start, corr.HSORTIE.Value))
-                        nuit += (decimal)Math.Max(0, worked.TotalHours);
+                        nuit += (decimal)worked.TotalHours;
                     if (day.DayOfWeek == DayOfWeek.Sunday)
                         dim += (decimal)worked.TotalHours;
                     if (isFerie)
@@ -520,18 +534,28 @@ public class OvertimeService
                     if (corr.RETARD.HasValue)
                         retard += (decimal)corr.RETARD.Value.TotalHours;
                 }
-                else if (!estConge && plan is { OffP: not true, HA: not null, HD: not null })
+                else if (JourneeRules.EstAbsence(
+                             jourPlanifie: plan is { OffP: not true, HA: not null, HD: not null },
+                             estConge: estConge,
+                             aCorrection: false,
+                             aAnomalie: aAnomalieJour,
+                             modeStrict: modeStrict))
                 {
-                    var abs = plan.HD.Value.TimeOfDay - plan.HA.Value.TimeOfDay - pause;
-                    if (abs > TimeSpan.Zero)
-                        absence += (decimal)abs.TotalHours;
+                    // Fin de vacation normalisée : un poste de nuit se termine le lendemain.
+                    var fin = JourneeRules.NormaliserFin(plan!.HA, plan.HD);
+                    if (fin is { } finVacation)
+                    {
+                        var abs = finVacation - plan.HA!.Value - pause;
+                        if (abs > TimeSpan.Zero)
+                            absence += (decimal)abs.TotalHours;
+                    }
                 }
                 if (corr?.RETARD == null && plan?.HA != null && corr?.HENTREE != null)
                 {
                     var tol = tols.FirstOrDefault(t => cat != null && t.IDCATEGORIE == cat.IDCATEGORIE && t.TYPES_TOL == false);
-                    var allowed = plan.HA.Value.TimeOfDay.Add(TimeSpan.FromMinutes(tol?.TOLERANCE ?? 0));
-                    if (corr.HENTREE > allowed)
-                        retard += (decimal)(corr.HENTREE.Value - allowed).TotalHours;
+                    var calcule = RetardRules.Calculer(corr.HENTREE, plan.HA.Value.TimeOfDay, tol?.TOLERANCE ?? 0);
+                    if (calcule is { } retardCalcule && retardCalcule > TimeSpan.Zero)
+                        retard += (decimal)retardCalcule.TotalHours;
                 }
             }
             var hs = Math.Max(0, ht - weeklyNeed);
@@ -576,6 +600,26 @@ public class OvertimeService
         }
         await _uow.SaveChangesAsync(ct);
         return result;
+    }
+
+    /// <summary>
+    /// Durée nette d'une correction : tient compte d'une sortie le lendemain (poste de nuit) et,
+    /// quand <c>SIMPLE_HPSPE</c> est actif, de la pause réellement pointée (<c>HPE − HPS</c>) au
+    /// lieu de la pause de la catégorie.
+    /// </summary>
+    private static TimeSpan HeuresTravaillees(
+        T_HEURECORRIGER corr, TimeSpan entree, TimeSpan pauseCategorie, bool deduirePausePointee)
+    {
+        var dateIn = corr.DATE_POINTAGE_IN?.Date ?? DateTime.MinValue.Date;
+        var dateOut = corr.DATE_POINTAGE_OUT?.Date ?? dateIn;
+        if (dateOut < dateIn)
+            dateOut = dateIn;
+        var duree = (dateOut + corr.HSORTIE!.Value) - (dateIn + entree);
+        var pause = pauseCategorie;
+        if (deduirePausePointee && corr.HPS is { } hps && corr.HPE is { } hpe && hpe > hps)
+            pause = hpe - hps;
+        var net = duree - pause;
+        return net < TimeSpan.Zero ? TimeSpan.Zero : net;
     }
 
     private static void EnsureMondayToSunday(PeriodRequest request)
@@ -642,6 +686,8 @@ public class OvertimeService
             var categorie = categories.FirstOrDefault(c => affectations.Any(a => a.ID_CATEG == c.IDCATEGORIE));
             pause = categorie?.PAUSE ?? TimeSpan.Zero;
         }
+        var clock = (await _uow.Repository<T_CLOCK>().ListAsync(_ => true, ct)).FirstOrDefault();
+        var deduirePausePointee = clock?.SIMPLE_HPSPE == true;
 
         var joursDetail = new List<OvertimeDetailDayDto>();
         for (var day = debut; day <= fin; day = day.AddDays(1))
@@ -654,10 +700,8 @@ public class OvertimeService
             var heuresNuit = TimeSpan.Zero;
             if (jourTravaille)
             {
-                heures = sortie!.Value - entree!.Value - pause;
-                if (heures < TimeSpan.Zero)
-                    heures = TimeSpan.Zero;
-                if (OvertimeRules.EstPlageNuit(entree.Value, sortie.Value))
+                heures = HeuresTravaillees(corr!, entree!.Value, pause, deduirePausePointee);
+                if (OvertimeRules.EstPlageNuit(entree.Value, sortie!.Value))
                     heuresNuit = heures;
             }
             joursDetail.Add(new OvertimeDetailDayDto(

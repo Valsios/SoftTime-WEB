@@ -197,10 +197,14 @@ public class PunchesController : ControllerBase
     public async Task<IActionResult> ImportClock([FromBody] ImportPunchesRequest request, CancellationToken ct)
         => Ok(await _svc.ImportFromClockAsync(request, ct));
 
-    /// <summary>Pré-traitement : pointages → heures corrigées (T_HEURECORRIGER) + anomalies.</summary>
+    /// <summary>
+    /// Pré-traitement : pointages → heures corrigées (T_HEURECORRIGER) + anomalies.
+    /// <paramref name="dryRun"/> = true calcule et renvoie les actions prévues sans rien écrire.
+    /// </summary>
     [HttpPost("preprocess")]
-    public async Task<IActionResult> Preprocess([FromBody] PeriodRequest request, CancellationToken ct)
-        => Ok(await _processing.ProcessAsync(request, ct));
+    public async Task<IActionResult> Preprocess(
+        [FromBody] PeriodRequest request, [FromQuery] bool dryRun = false, CancellationToken ct = default)
+        => Ok(await _processing.ProcessAsync(request, dryRun, ct));
 
     /// <summary>Corrige un pointage importé (refusé si la semaine est validée).</summary>
     [HttpPut("{id}")]

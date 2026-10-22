@@ -146,6 +146,7 @@ public class SoftTimeDbContext : DbContext
         {
             e.Property(x => x.BDD_SAGE).HasMaxLength(128);
             e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
+            e.Property(x => x.MOTIF).HasMaxLength(30);
         });
         modelBuilder.Entity<T_CANTINE>(e =>
         {

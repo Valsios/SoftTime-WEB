@@ -19,6 +19,20 @@ export interface PointeuseDb {
 export interface ClockParam {
   id: number;
   multiPoint?: boolean | null;
+  /** Mode simple fiable : appariement durci (2 ou 4 pointages) et anomalies motivées. */
+  simpleStrict?: boolean | null;
+  /** Déduire la pause réellement pointée (HPS/HPE) au lieu de la pause de la catégorie. */
+  simpleHpSpe?: boolean | null;
+  /** Durée minimale plausible d'une journée (minutes) ; absent ou 0 = pas de contrôle. */
+  dureeMinJour?: number | null;
+  /** Durée maximale plausible d'une journée (minutes) ; absent ou 0 = pas de contrôle. */
+  dureeMaxJour?: number | null;
+  /** Ne retenir que les pointages de la base pointeuse active. */
+  filtrePointeuse?: boolean | null;
+  /** Signaler en anomalie les pointages hors planning (week-end, jour Off). */
+  anomalieHorsPlanning?: boolean | null;
+  /** Regrouper les pointages par vacation pour les postes de nuit. */
+  simpleNuit?: boolean | null;
 }
 
 export interface CorrespondenceMode {

@@ -72,6 +72,15 @@ public class DashboardService
             .ToHashSet();
         // Congés SAGE du tenant, charges une seule fois pour toute la periode (LOT 9).
         var congesParCle = await _leaves.LoadAsync(ct);
+        var clock = (await _uow.Repository<T_CLOCK>().ListAsync(_ => true, ct)).FirstOrDefault();
+        var modeStrict = clock?.SIMPLE_STRICT == true;
+        // Jours en attente d'arbitrage : en mode strict ils ne comptent pas comme absences.
+        var anomaliesParCle = (await _uow.Repository<T_HEUREANOMALIE>().ListAsync(
+                a => a.BDD_SAGE == sageDb && a.DATE_POINTAGE_IN >= from && a.DATE_POINTAGE_IN <= to, ct))
+            .Where(a => a.DATE_POINTAGE_IN.HasValue && !string.IsNullOrEmpty(a.MATRICULE_SAGE))
+            .GroupBy(a => Cle(a.MATRICULE_SAGE))
+            .ToDictionary(g => g.Key, g => g.Select(a => a.DATE_POINTAGE_IN!.Value.Date).ToHashSet(),
+                StringComparer.OrdinalIgnoreCase);
 
         var corrections = await _uow.Repository<T_HEURECORRIGER>().ListAsync(
             h => h.BDD_SAGE == sageDb && h.DATE_POINTAGE_IN >= from && h.DATE_POINTAGE_IN <= to, ct);
@@ -108,6 +117,7 @@ public class DashboardService
             correctionsParCle.TryGetValue(cle, out var lignes);
             lignes ??= new List<T_HEURECORRIGER>();
             var conges = congesParCle.TryGetValue(cle, out var joursConge) ? joursConge : new List<LeaveDay>();
+            var joursAnomalie = anomaliesParCle.TryGetValue(cle, out var joursA) ? joursA : null;
 
             // Absences explicites : l'absence est portée par l'heure corrigée.
             foreach (var ligne in lignes.Where(h => h.ABSENCE_AM == true || h.ABSENCE_PM == true))
@@ -126,8 +136,14 @@ public class DashboardService
                 if (!DashboardRules.CompteDansPresenceTheorique(EstNonTravaille(jour, feries), LeaveRules.EstConge(conges, jour)))
                     continue;
                 joursPlanifies++;
-                // Jour planifie sans heure corrigee = absence probable.
-                if (!lignes.Any(h => h.DATE_POINTAGE_IN?.Date == jour))
+                // Jour planifie sans heure corrigee = absence probable (jamais un jour de conge, et
+                // pas un jour en attente d'arbitrage lorsque le mode strict est actif).
+                if (JourneeRules.EstAbsence(
+                        jourPlanifie: true,
+                        estConge: false,
+                        aCorrection: lignes.Any(h => h.DATE_POINTAGE_IN?.Date == jour),
+                        aAnomalie: joursAnomalie?.Contains(jour) == true,
+                        modeStrict: modeStrict))
                     absences.Add((cle, jour));
             }
 
@@ -163,9 +179,9 @@ public class DashboardService
                 if (plan?.HA is null)
                     continue;
                 var tolerance = ToleranceEntree(carte.ID, categorieParCarte, tolerances);
-                var autorise = plan.HA.Value.TimeOfDay.Add(TimeSpan.FromMinutes(tolerance));
-                if (ligne.HENTREE.Value > autorise)
-                    retards.Add((cle, jour, (int)(ligne.HENTREE.Value - autorise).TotalMinutes));
+                var calcule = RetardRules.Calculer(ligne.HENTREE, plan.HA.Value.TimeOfDay, tolerance);
+                if (calcule is { } retardCalcule && retardCalcule > TimeSpan.Zero)
+                    retards.Add((cle, jour, (int)retardCalcule.TotalMinutes));
             }
         }
 

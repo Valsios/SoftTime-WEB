@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
-import { PunchUpdate, PeriodRequest, PageChangeEvent } from '../../shared/models';
+import { PunchUpdate, PeriodRequest, PageChangeEvent, PreprocessAction } from '../../shared/models';
 import { PunchesService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, PeriodFilter } from '../../shared/components';
@@ -16,6 +16,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
     <page-header title="Pointages" subtitle="Liste, import et traitement des pointages">
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
       <soft-button variant="secondary" (click)="importClock()">Import pointeuse</soft-button>
+      <soft-button variant="secondary" [loading]="simulating()" (click)="simulate()">Simuler</soft-button>
       <soft-button [loading]="processing()" (click)="preprocess()">Traiter les pointages</soft-button>
       <soft-button variant="danger" [loading]="busy()" (click)="purge()">Purger la période</soft-button>
       <label class="file-btn">
@@ -55,8 +56,37 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         <soft-button [loading]="busy()" (click)="saveEdit()">Enregistrer</soft-button>
       </div>
     </soft-modal>
+
+    <soft-modal [open]="simulationModal()" title="Simulation du traitement" (closed)="simulationModal.set(false)">
+      <p class="hint">{{ simulationMessage() }}</p>
+      <table class="sim">
+        <thead>
+          <tr><th>Type</th><th>Matricule</th><th>Jour</th><th>Motif</th><th>Entrée</th><th>Sortie</th></tr>
+        </thead>
+        <tbody>
+          @for (action of simulationRows(); track action.key) {
+            <tr>
+              <td>{{ action.type }}</td>
+              <td>{{ action.matricule ?? '' }}</td>
+              <td>{{ action.jour ?? '' }}</td>
+              <td>{{ action.motif ?? '' }}</td>
+              <td>{{ action.entree ?? '' }}</td>
+              <td>{{ action.sortie ?? '' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+      <div footer>
+        <soft-button variant="ghost" (click)="simulationModal.set(false)">Fermer</soft-button>
+      </div>
+    </soft-modal>
   `,
-  styles: [`.file-btn { cursor: pointer; } .form-grid { display: grid; gap: 14px; }`],
+  styles: [
+    `.file-btn { cursor: pointer; } .form-grid { display: grid; gap: 14px; }
+     .hint { margin: 0 0 12px; color: var(--text-muted); font-size: 13px; }
+     .sim { width: 100%; border-collapse: collapse; font-size: 13px; }
+     .sim th, .sim td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }`,
+  ],
 })
 export class PunchesPage {
   private readonly svc = inject(PunchesService);
@@ -68,6 +98,10 @@ export class PunchesPage {
   readonly processing = signal(false);
   readonly busy = signal(false);
   readonly modal = signal(false);
+  readonly simulating = signal(false);
+  readonly simulationModal = signal(false);
+  readonly simulationMessage = signal('');
+  readonly simulationRows = signal<(PreprocessAction & { key: string })[]>([]);
   pageSize = 50;
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly page = signal(1);
@@ -142,6 +176,27 @@ export class PunchesPage {
         this.onSearch(this.lastFilter!);
       },
       error: () => this.processing.set(false),
+    });
+  }
+
+  /** Simulation : affiche ce que le traitement écrirait, sans rien enregistrer. */
+  simulate(): void {
+    if (!this.lastFilter) { this.toast.warning('Lancez d\'abord une recherche.'); return; }
+    this.simulating.set(true);
+    this.svc.preprocess(this.lastFilter, true).subscribe({
+      next: (r) => {
+        this.simulating.set(false);
+        this.simulationMessage.set(r.message);
+        this.simulationRows.set((r.details ?? []).map((action, index) => ({
+          ...action,
+          key: `${index}-${action.type}-${action.matricule}-${action.jour}`,
+          jour: action.jour ? action.jour.slice(0, 10) : action.jour,
+          entree: action.entree ? action.entree.slice(0, 5) : action.entree,
+          sortie: action.sortie ? action.sortie.slice(0, 5) : action.sortie,
+        })));
+        this.simulationModal.set(true);
+      },
+      error: () => this.simulating.set(false),
     });
   }
 

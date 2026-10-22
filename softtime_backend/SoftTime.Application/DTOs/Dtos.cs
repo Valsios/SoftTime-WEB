@@ -101,7 +101,16 @@ public record SourceEntityMappingDto(int Id, string? SystemType, int? SageDbId, 
     public SourceEntityMappingDto() : this(default, default, default, default, default!, default, Array.Empty<SourceFieldMappingDto>()) { }
 }
 
-public record ClockParamDto(int Id, bool? MultiPoint)
+public record ClockParamDto(
+    int Id,
+    bool? MultiPoint,
+    bool? SimpleStrict = null,
+    bool? SimpleHpSpe = null,
+    int? DureeMinJour = null,
+    int? DureeMaxJour = null,
+    bool? FiltrePointeuse = null,
+    bool? AnomalieHorsPlanning = null,
+    bool? SimpleNuit = null)
 {
     public ClockParamDto() : this(default, default) { }
 }
@@ -220,18 +229,36 @@ public record ImportPunchesRequest(string? MatriculeFrom, string? MatriculeTo, D
     public ImportPunchesRequest() : this(default, default, default, default) { }
 }
 
-public record ImportResultDto(int Imported, int Skipped, string Message)
+public record ImportResultDto(int Imported, int Skipped, string Message, int Duplicates = 0, int UnknownBadges = 0)
 {
     public ImportResultDto() : this(default, default, default!) { }
 }
 
 /// <summary>Résultat du pré-traitement des pointages (pointage → heures corrigées + anomalies).</summary>
-public record PreprocessPunchesResultDto(int CorrectionsCreees, int AnomaliesCreees, int JoursIgnores, string Message)
+public record PreprocessPunchesResultDto(
+    int CorrectionsCreees,
+    int AnomaliesCreees,
+    int JoursIgnores,
+    string Message,
+    bool DryRun = false,
+    int PointagesEcartes = 0,
+    int AnomaliesSupprimees = 0,
+    IReadOnlyList<PreprocessActionDto>? Details = null,
+    bool DetailsTronques = false)
 {
     public PreprocessPunchesResultDto() : this(default, default, default, default!) { }
 }
 
-public record AnomalyDto(decimal Id, string? Matricule, DateTime? DateIn, DateTime? DateOut, TimeSpan? H1, TimeSpan? H2, TimeSpan? HEntree, TimeSpan? HPs, TimeSpan? HPe, TimeSpan? HSortie, bool? AbsAm, bool? AbsPm, bool? Feries, bool? FeriesAm, bool? FeriesPm, string? IntituleAbsence)
+/// <summary>Action prévue par le pré-traitement, renvoyée par la simulation (dry-run).</summary>
+public record PreprocessActionDto(
+    string Type,
+    string? Matricule,
+    DateTime? Jour,
+    string? Motif,
+    TimeSpan? Entree,
+    TimeSpan? Sortie);
+
+public record AnomalyDto(decimal Id, string? Matricule, DateTime? DateIn, DateTime? DateOut, TimeSpan? H1, TimeSpan? H2, TimeSpan? HEntree, TimeSpan? HPs, TimeSpan? HPe, TimeSpan? HSortie, bool? AbsAm, bool? AbsPm, bool? Feries, bool? FeriesAm, bool? FeriesPm, string? IntituleAbsence, string? Motif = null)
 {
     public AnomalyDto() : this(default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default) { }
 }

@@ -73,14 +73,16 @@ public class ReportService
     }
 
     /// <summary>
-    /// État retards : complet + écriture de <c>T_impr_RET</c> pour l'export/impression.
+    /// État retards : complet + écriture de <c>T_impr_RET</c> pour l'export/impression. Le retard est
+    /// la valeur saisie quand elle existe ; sinon il est recalculé (planning + tolérance d'entrée)
+    /// avec la même règle que la validation semaine et le tableau de bord.
     /// </summary>
     public async Task<IReadOnlyList<object>> RetardsAsync(ReportFilter filter, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var list = await _uow.Repository<T_HEURECORRIGER>().ListAsync(RetardPredicate(filter, _tenant.SageDb), ct);
-        await WriteRetardsPrintAsync(list, ct);
-        return list.Select(ToRetardRow).ToList();
+        var lignes = await BuildRetardsAsync(filter, ct);
+        await WriteRetardsPrintAsync(lignes, ct);
+        return lignes.Select(ToRetardRow).ToList();
     }
 
     /// <summary>État retards paginé, sans écriture de la table d'impression.</summary>
@@ -88,16 +90,8 @@ public class ReportService
         ReportFilter filter, int? page, int? pageSize, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        return await PagedLists.PageAsync(
-            _uow.Repository<T_HEURECORRIGER>(),
-            RetardPredicate(filter, _tenant.SageDb),
-            q => q.OrderBy(h => h.DATE_POINTAGE_IN)
-                  .ThenBy(h => h.MATRICULE_SAGE)
-                  .ThenBy(h => h.ID),
-            page,
-            pageSize,
-            ToRetardRow,
-            ct);
+        var lignes = await BuildRetardsAsync(filter, ct);
+        return PagedLists.Page(lignes.Select(ToRetardRow).ToList(), page, pageSize);
     }
 
     public async Task<IReadOnlyList<HsExoDto>> HsRecapAsync(ReportFilter filter, CancellationToken ct = default)
@@ -237,16 +231,86 @@ public class ReportService
             && (string.IsNullOrEmpty(matriculeTo) || string.Compare(h.MATRICULE_SAGE, matriculeTo) <= 0);
     }
 
-    private static Expression<Func<T_HEURECORRIGER, bool>> RetardPredicate(ReportFilter filter, string sageDb)
+    /// <summary>
+    /// Construit les lignes de l'état retards : valeur <c>RETARD</c> saisie prioritaire, sinon règle
+    /// planning + tolérance d'entrée (<see cref="RetardRules"/>).
+    /// </summary>
+    private async Task<List<RetardLigne>> BuildRetardsAsync(ReportFilter filter, CancellationToken ct)
     {
-        var from = filter.From;
-        var to = filter.To;
-        return h => h.BDD_SAGE == sageDb
-            && h.RETARD != null
-            && h.RETARD > TimeSpan.Zero
-            && h.DATE_POINTAGE_IN >= from
-            && h.DATE_POINTAGE_IN <= to;
+        var sageDb = _tenant.SageDb;
+        var from = filter.From.Date;
+        var to = filter.To.Date;
+        var matriculeFrom = filter.MatriculeFrom;
+        var matriculeTo = filter.MatriculeTo;
+
+        var cartes = (await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == sageDb, ct))
+            .Where(c => string.IsNullOrEmpty(matriculeFrom)
+                        || string.Compare(c.SAGE_MATRICULE, matriculeFrom, StringComparison.Ordinal) >= 0)
+            .Where(c => string.IsNullOrEmpty(matriculeTo)
+                        || string.Compare(c.SAGE_MATRICULE, matriculeTo, StringComparison.Ordinal) <= 0)
+            .ToList();
+        if (cartes.Count == 0)
+            return new List<RetardLigne>();
+
+        var cles = cartes
+            .GroupBy(c => MatriculeIdentity.Cle(c.SAGE_MATRICULE), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        var categorieParCarte = (await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == sageDb, ct))
+            .GroupBy(a => a.MATRICULE_SAGE)
+            .ToDictionary(g => g.Key, g => g.First().ID_CATEG);
+        var tolerances = await _uow.Repository<T_TOLERANCE>().ListAsync(_ => true, ct);
+        var planning = (await _uow.Repository<T_PLANNING_SAL>().ListAsync(
+                p => p.BDD_SAGE == sageDb && p.DateP >= from && p.DateP <= to, ct))
+            .Where(p => p.DateP.HasValue)
+            .ToLookup(p => p.IDSAL);
+        var corrections = (await _uow.Repository<T_HEURECORRIGER>().ListAsync(
+                h => h.BDD_SAGE == sageDb && h.DATE_POINTAGE_IN >= from && h.DATE_POINTAGE_IN <= to, ct))
+            .Where(h => h.DATE_POINTAGE_IN.HasValue
+                        && cles.ContainsKey(MatriculeIdentity.Cle(h.MATRICULE_SAGE)))
+            .ToList();
+
+        var lignes = new List<RetardLigne>();
+        foreach (var correction in corrections)
+        {
+            var jour = correction.DATE_POINTAGE_IN!.Value.Date;
+            if (correction.RETARD is { } saisi)
+            {
+                if (saisi > TimeSpan.Zero)
+                    lignes.Add(new RetardLigne(correction.MATRICULE_SAGE, jour, correction.HENTREE, saisi));
+                continue;
+            }
+            if (correction.HENTREE is not { } entree)
+                continue;
+            var carte = cles[MatriculeIdentity.Cle(correction.MATRICULE_SAGE)];
+            var plan = planning[carte.ID].FirstOrDefault(p => p.DateP!.Value.Date == jour);
+            if (plan?.HA is null)
+                continue;
+            var tolerance = ToleranceEntree(carte.ID, categorieParCarte, tolerances);
+            var calcule = RetardRules.Calculer(entree, plan.HA.Value.TimeOfDay, tolerance);
+            if (calcule is { } retard && retard > TimeSpan.Zero)
+                lignes.Add(new RetardLigne(correction.MATRICULE_SAGE, jour, entree, retard));
+        }
+
+        return lignes
+            .OrderBy(l => l.Date)
+            .ThenBy(l => l.Matricule, StringComparer.Ordinal)
+            .ToList();
     }
+
+    /// <summary>Tolérance d'entrée de la catégorie du salarié (TYPES_TOL = false), comme la semaine.</summary>
+    private static int ToleranceEntree(
+        int carteId,
+        IReadOnlyDictionary<int, int> categorieParCarte,
+        IReadOnlyList<T_TOLERANCE> tolerances)
+    {
+        if (!categorieParCarte.TryGetValue(carteId, out var idCategorie))
+            return 0;
+        return tolerances
+            .FirstOrDefault(t => t.IDCATEGORIE == idCategorie && t.TYPES_TOL == false)?.TOLERANCE ?? 0;
+    }
+
+    /// <summary>Ligne de l'état retards (retard saisi ou recalculé).</summary>
+    private sealed record RetardLigne(string? Matricule, DateTime? Date, TimeSpan? HEntree, TimeSpan? Retard);
 
     private static Expression<Func<T_HSExoImp, bool>> HsRecapPredicate(ReportFilter filter, string sageDb)
     {
@@ -314,7 +378,7 @@ public class ReportService
         await _uow.SaveChangesAsync(ct);
     }
 
-    private async Task WriteRetardsPrintAsync(IReadOnlyList<T_HEURECORRIGER> list, CancellationToken ct)
+    private async Task WriteRetardsPrintAsync(IReadOnlyList<RetardLigne> list, CancellationToken ct)
     {
         var print = _uow.Repository<T_impr_RET>();
         var old = await print.ListAsync(_ => true, ct);
@@ -325,10 +389,10 @@ public class ReportService
             {
                 BDD_SAGE = _tenant.SageDb,
                 BDD_POINTEUSE = _tenant.PointeuseDb,
-                MATRICULES = h.MATRICULE_SAGE,
-                DATE_POINTAGE = h.DATE_POINTAGE_IN?.ToString("dd/MM/yyyy"),
-                HEURE_ENTREE = h.HENTREE,
-                RETARDS = h.RETARD
+                MATRICULES = h.Matricule,
+                DATE_POINTAGE = h.Date?.ToString("dd/MM/yyyy"),
+                HEURE_ENTREE = h.HEntree,
+                RETARDS = h.Retard
             }, ct);
         }
         await _uow.SaveChangesAsync(ct);
@@ -348,12 +412,12 @@ public class ReportService
         h.INTITULE_ABSENCE
     };
 
-    private static object ToRetardRow(T_HEURECORRIGER h) => new
+    private static object ToRetardRow(RetardLigne h) => new
     {
-        h.MATRICULE_SAGE,
-        h.DATE_POINTAGE_IN,
-        h.HENTREE,
-        h.RETARD
+        MATRICULE_SAGE = h.Matricule,
+        DATE_POINTAGE_IN = h.Date,
+        HENTREE = h.HEntree,
+        RETARD = h.Retard
     };
 
     private static HsExoDto ToHsExoDto(T_HSExoImp h) => new(

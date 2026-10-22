@@ -76,6 +76,20 @@ export interface ImportResult {
   imported: number;
   skipped: number;
   message: string;
+  /** Doublons ignorés (même matricule, même minute). */
+  duplicates?: number;
+  /** Pointages dont le badge n'est associé à aucun salarié. */
+  unknownBadges?: number;
+}
+
+/** Action prévue par le pré-traitement (simulation uniquement). */
+export interface PreprocessAction {
+  type: string;
+  matricule?: string | null;
+  jour?: string | null;
+  motif?: string | null;
+  entree?: string | null;
+  sortie?: string | null;
 }
 
 /** Résultat du pré-traitement des pointages (pointage → heures corrigées + anomalies). */
@@ -84,6 +98,14 @@ export interface PreprocessResult {
   anomaliesCreees: number;
   joursIgnores: number;
   message: string;
+  /** true = simulation : aucune écriture n'a été effectuée. */
+  dryRun?: boolean;
+  /** Pointages écartés par le filtre « base pointeuse active ». */
+  pointagesEcartes?: number;
+  /** Anomalies devenues sans objet (jour redevenu cohérent, jour de congé). */
+  anomaliesSupprimees?: number;
+  details?: PreprocessAction[] | null;
+  detailsTronques?: boolean;
 }
 
 export interface Anomaly {
@@ -103,6 +125,8 @@ export interface Anomaly {
   feriesAm?: boolean | null;
   feriesPm?: boolean | null;
   intituleAbsence?: string | null;
+  /** AUCUN_POINTAGE, POINTAGE_UNIQUE, POINTAGES_INCOHERENTS, DUREE, HORS_PLANNING. */
+  motif?: string | null;
 }
 
 /** Arbitrage d'une anomalie : les champs absents (undefined) restent inchangés côté serveur. */

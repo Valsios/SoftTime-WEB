@@ -88,8 +88,8 @@ s'affiche « Semaine 27 (30/06 - 06/07/2025) » (année ISO, donc correcte au pa
 - **Assiduité** : top 5 des salariés les plus et les moins ponctuels de la période (matricule, nom,
   ponctualité, jours pointés, retards, absences).
 - Les périodes sans événement sont affichées à 0 : tableaux et courbes restent alignés.
-- Les absences « planifiées sans pointage » n'excluent pas encore les congés SAGE (LOT 9) : le taux
-  d'absentéisme est donc une borne haute.
+- Les absences « planifiées sans pointage » excluent désormais les congés SAGE (même règle que la
+  validation semaine) : un jour de congé n'est ni une présence théorique ni une absence.
 - Regroupement et taux sont calculés par `PeriodGrouping` / `DashboardRules` (SoftTime.Domain) et
   couverts par des tests unitaires.
 
@@ -115,6 +115,35 @@ s'affiche « Semaine 27 (30/06 - 06/07/2025) » (année ISO, donc correcte au pa
   donc pas limité à la page affichée. La sélection est conservée entre les pages ; « tout sélectionner » porte sur
   la page affichée. Voir `softtime_backend/migrations/add_pagination_performance_indexes.sql` (colonnes bornées +
   index composites) et `benchmark_pagination.sql` (mesure avant/après).
+
+---
+
+## 6 bis. Mode de pointage (`Paramètres pointeuse`)
+
+Le pré-traitement (« Traiter les pointages ») lit ses réglages dans `T_CLOCK`. **Tous les réglages
+sont désactivés par défaut** : l'absence de valeur reproduit le comportement historique.
+
+| Réglage | Effet |
+|---|---|
+| **Multi-pointeuse** (`MULTIPOINT`) | Paires multiples avec un seuil de 15 minutes. Désactivé = mode simple : premier → dernier pointage. |
+| **Mode strict** (`SIMPLE_STRICT`) | Mode simple uniquement : dédoublonne les badges (≤ 60 s), n'accepte que 2 pointages ou 4 pointages (entrée / pause / reprise / sortie), motive les autres cas en anomalie, ne compte plus un jour en attente d'arbitrage comme une absence et ne crée pas d'anomalie un jour de congé SAGE. |
+| **Déduire la pause pointée** (`SIMPLE_HPSPE`) | Le calcul des heures déduit `HPE − HPS` au lieu de la pause de la catégorie. Modifie les heures calculées. |
+| **Durée min / max** (`DUREE_MIN_JOUR`, `DUREE_MAX_JOUR`) | Bornes plausibles en minutes ; en mode strict, une journée hors bornes devient une anomalie `DUREE`. 0 ou vide = pas de contrôle. |
+| **Filtrer la base pointeuse** (`FILTRE_POINTEUSE`) | Ne retient que les pointages de la base active (les lignes sans base renseignée restent prises en compte). |
+| **Anomalies hors planning** (`ANOMALIE_HORS_PLANNING`) | Un pointage un week-end ou un jour non planifié devient une anomalie, pour les salariés ayant un planning sur la période. |
+| **Postes de nuit** (`SIMPLE_NUIT`) | Regroupe les pointages par vacation (sortie le lendemain) au lieu de la date calendaire. |
+
+Chaque anomalie porte un **motif** (`T_HEUREANOMALIE.MOTIF`) : `AUCUN_POINTAGE`,
+`POINTAGE_UNIQUE`, `POINTAGES_INCOHERENTS`, `DUREE`, `HORS_PLANNING`. L'écran d'arbitrage affiche en
+plus les pointages bruts du jour concerné.
+
+**Simulation** : `POST /api/punches/preprocess?dryRun=true` (bouton « Simuler ») calcule et renvoie
+les corrections et anomalies qui seraient écrites, sans rien persister. À utiliser avant d'activer un
+réglage sur une période existante.
+
+Le retard est calculé par une règle unique (`RetardRules`) partagée par la validation semaine, le
+tableau de bord et l'état retards ; la valeur `RETARD` saisie reste prioritaire. Une sortie le
+lendemain (`DATE_POINTAGE_OUT`) est prise en compte dans le calcul des heures.
 
 ---
 

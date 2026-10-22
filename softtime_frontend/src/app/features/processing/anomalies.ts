@@ -6,7 +6,7 @@ import { SessionStore } from '../../core/session.store';
 import { Droit } from '../../core/rights';
 import { FormsModule } from '@angular/forms';
 import { AnomalyUpdate, PeriodRequest, PageChangeEvent } from '../../shared/models';
-import { AnomaliesService } from '../../shared/services/processing.service';
+import { AnomaliesService, PunchesService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import {
   Column,
@@ -20,6 +20,15 @@ import {
   PeriodFilter,
 } from '../../shared/components';
 import { asRow, fmtDate } from '../../shared/utils/date';
+
+/** Libellés des motifs renvoyés par le pré-traitement (T_HEUREANOMALIE.MOTIF). */
+const MOTIFS: Record<string, string> = {
+  AUCUN_POINTAGE: 'Aucun pointage',
+  POINTAGE_UNIQUE: 'Pointage unique',
+  POINTAGES_INCOHERENTS: 'Pointages incohérents',
+  DUREE: 'Durée implausible',
+  HORS_PLANNING: 'Hors planning',
+};
 
 @Component({
   selector: 'app-anomalies',
@@ -82,6 +91,12 @@ import { asRow, fmtDate } from '../../shared/utils/date';
           <span><soft-toggle [(ngModel)]="form.feriesPm"></soft-toggle> Férié après-midi</span>
         </div>
       </div>
+      @if (pointagesJour().length > 0) {
+        <div class="punches">
+          <strong>Pointages du jour</strong>
+          <span>{{ pointagesJour().join(' · ') }}</span>
+        </div>
+      }
       <div footer>
         <soft-button variant="ghost" (click)="modal.set(false)">Annuler</soft-button>
         <soft-button [loading]="busy()" (click)="save()">Enregistrer</soft-button>
@@ -92,11 +107,13 @@ import { asRow, fmtDate } from '../../shared/utils/date';
     `.form-grid { display: grid; gap: 14px; }
      .toggles { display: flex; flex-wrap: wrap; gap: 18px; }
      .toggles span { display: inline-flex; align-items: center; gap: 8px; }
+     .punches { display: flex; gap: 10px; align-items: baseline; margin-top: 14px; font-size: 13px; }
      .hint { margin: 0 0 12px; color: var(--text-muted); font-size: 13px; }`,
   ],
 })
 export class AnomaliesPage {
   private readonly svc = inject(AnomaliesService);
+  private readonly punches = inject(PunchesService);
   private readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
@@ -112,6 +129,8 @@ export class AnomaliesPage {
   readonly total = signal(0);
   readonly selectedKeys = signal<string[]>([]);
   readonly modal = signal(false);
+  /** Heures des pointages bruts du jour, affichées pour aider l'arbitrage. */
+  readonly pointagesJour = signal<string[]>([]);
 
   private editId: number | null = null;
   private lastFilter: PeriodRequest | null = null;
@@ -127,6 +146,7 @@ export class AnomaliesPage {
     { key: 'hPe', label: 'Fin pause' },
     { key: 'hSortie', label: 'H. sortie' },
     { key: 'intituleAbsence', label: 'Absence' },
+    { key: 'motif', label: 'Motif', format: (v) => (typeof v === 'string' ? (MOTIFS[v] ?? v) : '') },
   ];
 
   onSearch(filter: PeriodRequest): void {
@@ -173,7 +193,31 @@ export class AnomaliesPage {
       feriesPm: (row['feriesPm'] as boolean) ?? false,
       intituleAbsence: (row['intituleAbsence'] as string) ?? '',
     };
+    this.loadPointages(row);
     this.modal.set(true);
+  }
+
+  /** Pointages bruts du jour concerné : ils rendent l'anomalie arbitrable sans changer d'écran. */
+  private loadPointages(row: Record<string, unknown>): void {
+    this.pointagesJour.set([]);
+    const jour = this.toDateInput(row['dateIn']);
+    if (!jour) return;
+    const cle = this.cleMatricule(row['matricule']);
+    this.punches.list({ from: jour, to: jour }).subscribe({
+      next: (items) => this.pointagesJour.set(
+        items
+          .filter((p) => this.cleMatricule(p.matricule) === cle)
+          .map((p) => this.toTimeInput(p.heure) ?? '')
+          .filter((heure) => heure.length > 0)
+          .slice(0, 20)),
+    });
+  }
+
+  /** Clé canonique de matricule (zéros de remplissage ignorés), comme côté serveur. */
+  private cleMatricule(value: unknown): string {
+    const texte = typeof value === 'string' ? value.trim() : '';
+    const nombre = Number(texte);
+    return texte.length > 0 && Number.isFinite(nombre) ? String(nombre) : texte.toUpperCase();
   }
 
   save(): void {
