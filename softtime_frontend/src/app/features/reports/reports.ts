@@ -43,6 +43,26 @@ const ABSENCE_COLUMNS: Column[] = [
   { key: 'motif', label: 'Motif', format: (v: unknown) => String(v ?? '-') },
 ];
 
+const ABSENCE_EXPORT_COLUMNS: Column[] = [
+  { key: 'matricule', label: 'Matricule' },
+  { key: 'nom', label: 'Nom', format: (v: unknown) => (v != null ? String(v) : '') },
+  { key: 'prenom', label: 'Prénom', format: (v: unknown) => (v != null ? String(v) : '') },
+  { key: 'departement', label: 'Département', format: (v: unknown) => (v != null ? String(v) : '') },
+  {
+    key: 'date',
+    label: 'Date',
+    format: (v: unknown) => (typeof v === 'string' ? fmtDate(v) : (v != null ? String(v) : '')),
+  },
+  { key: 'periode', label: 'Période' },
+  {
+    key: 'dureeHeures',
+    label: 'Durée (h)',
+    format: (v: unknown) => (v != null && v !== '' ? String(v) : ''),
+  },
+  { key: 'type', label: 'Type' },
+  { key: 'motif', label: 'Motif', format: (v: unknown) => (v != null ? String(v) : '') },
+];
+
 @Component({
   selector: 'app-reports',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -170,7 +190,8 @@ export class ReportsPage {
     fn.call(this.svc, filter).subscribe({
       next: (items) => {
         const rows = items as Record<string, unknown>[];
-        this.excel.download(`rapport-${this.reportType}`, this.inferColumns(rows), rows);
+        const cols = this.reportType === 'absences' ? ABSENCE_EXPORT_COLUMNS : this.inferColumns(rows);
+        this.excel.download(`rapport-${this.reportType}`, cols, rows);
       },
     });
   }
