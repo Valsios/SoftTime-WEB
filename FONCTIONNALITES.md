@@ -67,6 +67,17 @@ L’accès est filtré par **rôle** (6 droits) et par **société SAGE** active
 - **Protections** : les corrections `ORIGINE = MANUEL` et les semaines validées ne sont jamais écrasées ; seules les corrections `ORIGINE = AUTO` sont purgées puis régénérées.
 - **Import** : dédoublonnage systématique (pointeuse et Excel, dans les deux modes), puis pré-traitement enchaîné depuis l’écran Pointages. Les pointages bruts restent dans `T_POINTAGE`.
 
+**Valeurs enregistrées pour le planning salarié** (alignées sur le desktop) :
+
+- `DateP` = date de début du shift, toujours à minuit.
+- `HA` = `DateP` + heure d’entrée ; `HD` = `DateP` + heure de sortie si la sortie est après l’entrée, sinon **lendemain** (poste de nuit). Exemple : `17:00 → 07:00` donne `HD = J+1 07:00`.
+- `Pause` = `00:00:00` si aucune pause n’est définie.
+- `OffP = true` : `HA`/`HD` à `NULL`, `Pause = 00:00:00`.
+- Import Excel : une cellule `OFF` crée une ligne off ; une cellule vide est ignorée.
+- La saisie manuelle, l’import Excel et la génération CSV utilisent la même règle de report de nuit.
+- La clé web reste `IDSAL` (carte salarié) avec `NoSHIFT` ; le desktop utilise `IDCATSAL`. Les valeurs temporelles sont alignées, pas la structure de clé.
+- Les bases existantes peuvent être réparées avec [`migrations/fix_planning_sal_night.sql`](softtime_backend/migrations/fix_planning_sal_night.sql) (sauvegarde préalable).
+
 ---
 
 ## 5. États (rapports)

@@ -101,17 +101,28 @@ public class EmployeePlanningController : ControllerBase
         => Ok(await _svc.ListEmployeeStatsPagedAsync(from, to, page, pageSize, ct));
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] List<EmployeePlanningDto> rows, CancellationToken ct)
-    {
-        await _svc.SaveEmployeePlanningAsync(rows, ct);
-        return NoContent();
-    }
+    public Task<IActionResult> Create([FromBody] List<EmployeePlanningDto> rows, CancellationToken ct)
+        => SavePlanningAsync(rows, ct);
 
     [HttpPut]
-    public async Task<IActionResult> Update([FromBody] List<EmployeePlanningDto> rows, CancellationToken ct)
+    public Task<IActionResult> Update([FromBody] List<EmployeePlanningDto> rows, CancellationToken ct)
+        => SavePlanningAsync(rows, ct);
+
+    /// <summary>
+    /// Une ligne incohérente (date manquante, shift inconnu, heures absentes) est une erreur de
+    /// saisie : elle doit remonter en 400, pas en 500.
+    /// </summary>
+    private async Task<IActionResult> SavePlanningAsync(List<EmployeePlanningDto> rows, CancellationToken ct)
     {
-        await _svc.SaveEmployeePlanningAsync(rows, ct);
-        return NoContent();
+        try
+        {
+            await _svc.SaveEmployeePlanningAsync(rows, ct);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 
     [HttpDelete("{id:int}")]

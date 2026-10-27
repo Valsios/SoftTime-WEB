@@ -156,3 +156,10 @@ internal sealed class FakeExternalSourceService : IExternalSourceService
     public Task<IReadOnlyList<ExternalPunch>> GetPunchesAsync(T_BDD_POINTEUSE row, DateTime from, DateTime to, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<ExternalPunch>>(Punches.ToList());
 }
+
+internal sealed class FakePlanningStatisticsReader : IPlanningStatisticsReader
+{
+    public Task<IReadOnlyList<PlanningDayCount>> CountPlannedDaysAsync(
+        string sageDb, DateTime from, DateTime to, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<PlanningDayCount>>(Array.Empty<PlanningDayCount>());
+}
