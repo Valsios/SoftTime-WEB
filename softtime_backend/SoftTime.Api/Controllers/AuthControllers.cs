@@ -76,7 +76,12 @@ public class AuthController : ControllerBase
 public class UsersController : ControllerBase
 {
     private readonly AuthService _auth;
-    public UsersController(AuthService auth) => _auth = auth;
+    private readonly ICurrentUser _user;
+    public UsersController(AuthService auth, ICurrentUser user)
+    {
+        _auth = auth;
+        _user = user;
+    }
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _auth.GetUsersAsync(ct));
@@ -91,16 +96,26 @@ public class UsersController : ControllerBase
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] UserDto dto, CancellationToken ct)
-        => Ok(await _auth.SaveUserAsync(dto with { Id = 0 }, ct));
+    {
+        if (_user.UserId is not decimal currentUserId)
+            return Unauthorized();
+        return Ok(await _auth.SaveUserAsync(currentUserId, dto with { Id = 0 }, ct));
+    }
 
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(decimal id, [FromBody] UserDto dto, CancellationToken ct)
-        => Ok(await _auth.SaveUserAsync(dto with { Id = id }, ct));
+    {
+        if (_user.UserId is not decimal currentUserId)
+            return Unauthorized();
+        return Ok(await _auth.SaveUserAsync(currentUserId, dto with { Id = id }, ct));
+    }
 
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(decimal id, CancellationToken ct)
     {
-        await _auth.DeleteUserAsync(id, ct);
+        if (_user.UserId is not decimal currentUserId)
+            return Unauthorized();
+        await _auth.DeleteUserAsync(currentUserId, id, ct);
         return NoContent();
     }
 }

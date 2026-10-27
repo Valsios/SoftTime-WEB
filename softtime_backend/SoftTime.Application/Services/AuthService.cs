@@ -6,6 +6,7 @@ using SoftTime.Application.Security;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
+using SoftTime.Domain.Services;
 using SoftTime.Domain;
 
 namespace SoftTime.Application.Services;
@@ -237,10 +238,76 @@ public class AuthService
             await repo.AddAsync(new T_DROIT_ROLE { IDROLE = roleId, IDDROIT = droit.IDDROIT }, cancellationToken);
     }
 
+    public async Task<UserDto> SaveUserAsync(decimal currentUserId, UserDto dto, CancellationToken cancellationToken = default)
+    {
+        var repo = _uow.Repository<T_RESPONSABLE>();
+        var caller = await repo.GetByIdAsync(currentUserId, cancellationToken);
+        if (caller == null)
+            throw new InvalidOperationException("Utilisateur appelant introuvable.");
+
+        var callerRole = await _uow.Repository<T_ROLE>().GetByIdAsync(caller.IDROLE, cancellationToken);
+        if (callerRole == null)
+            throw new InvalidOperationException("Utilisateur appelant introuvable.");
+
+        var callerIsAdmin = AdminRules.IsAdmin(caller.IDROLE, callerRole.NOMROLE);
+
+        var targetRole = await _uow.Repository<T_ROLE>().GetByIdAsync(dto.RoleId, cancellationToken);
+        var targetRoleIsAdmin = AdminRules.IsAdmin(dto.RoleId, targetRole?.NOMROLE);
+
+        T_RESPONSABLE? entity = null;
+        if (dto.Id == 0)
+        {
+            if (targetRoleIsAdmin && !callerIsAdmin)
+                throw new InvalidOperationException("Seul un administrateur peut attribuer le rôle Administrateur.");
+        }
+        else
+        {
+            entity = await repo.GetByIdAsync(dto.Id, cancellationToken) ?? throw new KeyNotFoundException();
+
+            if (dto.Id == currentUserId && entity.IDROLE != dto.RoleId)
+                throw new InvalidOperationException("Vous ne pouvez pas modifier votre propre rôle.");
+
+            var existingRole = await _uow.Repository<T_ROLE>().GetByIdAsync(entity.IDROLE, cancellationToken);
+            var existingIsAdmin = AdminRules.IsAdmin(entity.IDROLE, existingRole?.NOMROLE);
+
+            if (existingIsAdmin && !callerIsAdmin)
+                throw new InvalidOperationException("Seul un administrateur peut modifier un compte administrateur.");
+
+            if (targetRoleIsAdmin && !callerIsAdmin)
+                throw new InvalidOperationException("Seul un administrateur peut attribuer le rôle Administrateur.");
+
+            if (entity.IDROLE == AdminRules.AdminRoleId && dto.RoleId != AdminRules.AdminRoleId)
+            {
+                var otherAdmins = await repo.ListAsync(u => u.IDROLE == AdminRules.AdminRoleId && u.IDRESPONSABLE != entity.IDRESPONSABLE, cancellationToken);
+                if (otherAdmins.Count == 0)
+                    throw new InvalidOperationException("Impossible de rétrograder le dernier administrateur.");
+            }
+        }
+
+        return await ExecuteSaveUserInternalAsync(entity, dto, cancellationToken);
+    }
+
+    /// <summary>Réservé aux tests : le code de production doit transmettre l'identité de l'appelant.</summary>
     public async Task<UserDto> SaveUserAsync(UserDto dto, CancellationToken cancellationToken = default)
     {
         var repo = _uow.Repository<T_RESPONSABLE>();
-        T_RESPONSABLE entity;
+        T_RESPONSABLE? entity = null;
+        if (dto.Id != 0)
+        {
+            entity = await repo.GetByIdAsync(dto.Id, cancellationToken) ?? throw new KeyNotFoundException();
+            if (entity.IDROLE == AdminRules.AdminRoleId && dto.RoleId != AdminRules.AdminRoleId)
+            {
+                var otherAdmins = await repo.ListAsync(u => u.IDROLE == AdminRules.AdminRoleId && u.IDRESPONSABLE != entity.IDRESPONSABLE, cancellationToken);
+                if (otherAdmins.Count == 0)
+                    throw new InvalidOperationException("Impossible de rétrograder le dernier administrateur.");
+            }
+        }
+        return await ExecuteSaveUserInternalAsync(entity, dto, cancellationToken);
+    }
+
+    private async Task<UserDto> ExecuteSaveUserInternalAsync(T_RESPONSABLE? entity, UserDto dto, CancellationToken cancellationToken)
+    {
+        var repo = _uow.Repository<T_RESPONSABLE>();
         var loginModifie = false;
         var motDePasseModifie = false;
         if (dto.Id == 0)
@@ -262,7 +329,7 @@ public class AuthService
         }
         else
         {
-            entity = await repo.GetByIdAsync(dto.Id, cancellationToken) ?? throw new KeyNotFoundException();
+            entity ??= await repo.GetByIdAsync(dto.Id, cancellationToken) ?? throw new KeyNotFoundException();
             loginModifie = !string.Equals((entity.LOGIN ?? string.Empty).Trim(), (dto.Login ?? string.Empty).Trim(), StringComparison.Ordinal);
 
             if (!string.IsNullOrWhiteSpace(dto.Password))
@@ -305,19 +372,60 @@ public class AuthService
         }
         await _uow.SaveChangesAsync(cancellationToken);
 
-        // Notification best-effort : le service journalise et n'échoue jamais la requête.
+        // Notification best-effort : le service journalise et n'Ã©choue jamais la requÃªte.
         if (dto.Id == 0)
             await _email.SendUserCredentialsAsync(entity.EMAIL, entity.LOGIN, dto.Password, entity.NOMRESPONSABLE, null, cancellationToken);
         else if (loginModifie || motDePasseModifie)
             await _email.SendUserUpdateAsync(entity.EMAIL, entity.LOGIN, motDePasseModifie ? dto.Password : null, entity.NOMRESPONSABLE, null, loginModifie, motDePasseModifie, cancellationToken);
 
-        return new UserDto(entity.IDRESPONSABLE, entity.IDROLE, entity.NOMRESPONSABLE, entity.LOGIN, entity.MATRICULE, null) { Email = entity.EMAIL };
+        return new UserDto(entity.IDRESPONSABLE, entity.IDROLE, entity.NOMRESPONSABLE, entity.LOGIN ?? string.Empty, entity.MATRICULE, null) { Email = entity.EMAIL };
     }
 
+    public async Task DeleteUserAsync(decimal currentUserId, decimal id, CancellationToken cancellationToken = default)
+    {
+        var repo = _uow.Repository<T_RESPONSABLE>();
+        var caller = await repo.GetByIdAsync(currentUserId, cancellationToken);
+        if (caller == null)
+            throw new InvalidOperationException("Utilisateur appelant introuvable.");
+
+        var callerRole = await _uow.Repository<T_ROLE>().GetByIdAsync(caller.IDROLE, cancellationToken);
+        if (callerRole == null)
+            throw new InvalidOperationException("Utilisateur appelant introuvable.");
+
+        var callerIsAdmin = AdminRules.IsAdmin(caller.IDROLE, callerRole.NOMROLE);
+
+        if (currentUserId == id)
+            throw new InvalidOperationException("Vous ne pouvez pas supprimer votre propre compte.");
+
+        var entity = await repo.GetByIdAsync(id, cancellationToken) ?? throw new KeyNotFoundException();
+        var targetRole = await _uow.Repository<T_ROLE>().GetByIdAsync(entity.IDROLE, cancellationToken);
+        var targetIsAdmin = AdminRules.IsAdmin(entity.IDROLE, targetRole?.NOMROLE);
+
+        if (targetIsAdmin && !callerIsAdmin)
+            throw new InvalidOperationException("Seul un administrateur peut supprimer un compte administrateur.");
+
+        if (entity.IDROLE == AdminRules.AdminRoleId)
+        {
+            var otherAdmins = await repo.ListAsync(u => u.IDROLE == AdminRules.AdminRoleId && u.IDRESPONSABLE != entity.IDRESPONSABLE, cancellationToken);
+            if (otherAdmins.Count == 0)
+                throw new InvalidOperationException("Impossible de supprimer le dernier administrateur.");
+        }
+
+        repo.Remove(entity);
+        await _uow.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>Réservé aux tests : le code de production doit transmettre l'identité de l'appelant.</summary>
     public async Task DeleteUserAsync(decimal id, CancellationToken cancellationToken = default)
     {
         var repo = _uow.Repository<T_RESPONSABLE>();
         var entity = await repo.GetByIdAsync(id, cancellationToken) ?? throw new KeyNotFoundException();
+        if (entity.IDROLE == AdminRules.AdminRoleId)
+        {
+            var otherAdmins = await repo.ListAsync(u => u.IDROLE == AdminRules.AdminRoleId && u.IDRESPONSABLE != entity.IDRESPONSABLE, cancellationToken);
+            if (otherAdmins.Count == 0)
+                throw new InvalidOperationException("Impossible de supprimer le dernier administrateur.");
+        }
         repo.Remove(entity);
         await _uow.SaveChangesAsync(cancellationToken);
     }
