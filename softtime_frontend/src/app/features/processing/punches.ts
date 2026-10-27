@@ -127,12 +127,20 @@ export class PunchesPage {
       matriculeFrom: this.lastFilter.matriculeFrom,
       matriculeTo: this.lastFilter.matriculeTo,
     }).subscribe({
-      next: (r) => { this.toast.success(r.message || `${r.imported} importé(s).`); this.onSearch(this.lastFilter!); },
+      next: (r) => {
+        this.toast.success(r.message || `${r.imported} importé(s).`);
+        // Le desktop enchaîne import et pré-traitement : on reproduit ce parcours.
+        this.runPreprocess();
+      },
     });
   }
 
-  /** Prétraitement : transforme les pointages en heures corrigées + anomalies à arbitrer. */
+  /** Pré-traitement : transforme les pointages en heures corrigées + anomalies à arbitrer. */
   preprocess(): void {
+    this.runPreprocess();
+  }
+
+  private runPreprocess(): void {
     if (!this.lastFilter) { this.toast.warning('Lancez d\'abord une recherche.'); return; }
     this.processing.set(true);
     this.svc.preprocess(this.lastFilter).subscribe({
@@ -141,7 +149,7 @@ export class PunchesPage {
         this.toast.success(r.message || `${r.correctionsCreees} correction(s) créée(s).`);
         this.onSearch(this.lastFilter!);
       },
-      error: () => this.processing.set(false),
+      error: () => { this.processing.set(false); this.refresh(); },
     });
   }
 
@@ -150,7 +158,11 @@ export class PunchesPage {
     const file = input.files?.[0];
     if (!file) return;
     this.svc.importExcel(file).subscribe({
-      next: (r) => { this.toast.success(r.message || `${r.imported} importé(s).`); if (this.lastFilter) this.onSearch(this.lastFilter); },
+      next: (r) => {
+        this.toast.success(r.message || `${r.imported} importé(s).`);
+        if (this.lastFilter) this.runPreprocess();
+        else this.refresh();
+      },
     });
     input.value = '';
   }

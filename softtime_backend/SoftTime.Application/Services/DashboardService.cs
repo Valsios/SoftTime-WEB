@@ -142,30 +142,42 @@ public class DashboardService
             }
 
             // Retards : la valeur saisie prime, sinon règle planning + tolérance d'entrée
-            // (identique à OvertimeService.ComputeWeekAsync).
-            foreach (var ligne in lignes.Where(h => h.DATE_POINTAGE_IN.HasValue))
+            // (identique à OvertimeService.ComputeWeekAsync). On raisonne par journée pour ne pas
+            // compter l'entrée d'une deuxième paire (après-midi) comme un retard.
+            foreach (var groupeJour in lignes
+                         .Where(h => h.DATE_POINTAGE_IN.HasValue)
+                         .GroupBy(h => h.DATE_POINTAGE_IN!.Value.Date))
             {
-                var jour = ligne.DATE_POINTAGE_IN!.Value.Date;
+                var jour = groupeJour.Key;
                 if (EstNonTravaille(jour, feries))
                     continue;
 
-                if (ligne.RETARD.HasValue)
+                var retardsExplicites = groupeJour.Where(h => h.RETARD.HasValue).ToList();
+                if (retardsExplicites.Count > 0)
                 {
-                    var minutes = (int)ligne.RETARD.Value.TotalMinutes;
+                    var minutes = retardsExplicites
+                        .Select(h => (int)h.RETARD!.Value.TotalMinutes)
+                        .Max();
                     if (minutes > 0)
                         retards.Add((cle, jour, minutes));
                     continue;
                 }
 
-                if (ligne.HENTREE is null)
+                var entrees = groupeJour
+                    .Where(h => h.HENTREE.HasValue)
+                    .Select(h => h.HENTREE!.Value)
+                    .ToList();
+                if (entrees.Count == 0)
                     continue;
+
                 var plan = planning[carte.ID].FirstOrDefault(p => p.DateP?.Date == jour);
                 if (plan?.HA is null)
                     continue;
                 var tolerance = ToleranceEntree(carte.ID, categorieParCarte, tolerances);
                 var autorise = plan.HA.Value.TimeOfDay.Add(TimeSpan.FromMinutes(tolerance));
-                if (ligne.HENTREE.Value > autorise)
-                    retards.Add((cle, jour, (int)(ligne.HENTREE.Value - autorise).TotalMinutes));
+                var premiereEntree = entrees.Min();
+                if (premiereEntree > autorise)
+                    retards.Add((cle, jour, (int)(premiereEntree - autorise).TotalMinutes));
             }
         }
 
