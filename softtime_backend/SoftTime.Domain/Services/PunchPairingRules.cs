@@ -4,13 +4,15 @@ namespace SoftTime.Domain.Services;
 
 /// <summary>
 /// Règles d'appariement entrée/sortie portées depuis l'application desktop
-/// (Services/Traitements/ImportationPointageService.cs) :
+/// (<c>Frm_Import.importa</c>) :
 /// <list type="bullet">
 ///   <item>mode simple (<c>MULTIPOINT = false</c>) : 1er pointage = entrée, dernier = sortie ;</item>
-///   <item>mode multi-pointage : appariement avec un seuil de 15 minutes entre deux pointages.</item>
+///   <item>mode multi-pointage : appariement avec un seuil de 15 minutes entre deux pointages,
+///     dernier pointage forcé en sortie, puis règle de parité pair → corrections, impair → anomalies.</item>
 /// </list>
 /// Classe pure (aucune dépendance EF) afin d'être testable unitairement, sur le modèle de
-/// <see cref="OvertimeRules"/>.
+/// <see cref="OvertimeRules"/>. Le regroupement des pointages par journée de travail (et la gestion
+/// des postes de nuit) est assuré par <see cref="PunchDayGrouping"/>.
 /// </summary>
 public static class PunchPairingRules
 {

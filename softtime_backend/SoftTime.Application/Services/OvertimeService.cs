@@ -498,40 +498,63 @@ public class OvertimeService
             foreach (var day in Enumerable.Range(0, 7).Select(i => request.From.Date.AddDays(i)))
             {
                 var plan = planning.FirstOrDefault(p => p.DateP == day);
-                var corr = hours.FirstOrDefault(h => h.DATE_POINTAGE_IN.HasValue && h.DATE_POINTAGE_IN.Value.Date == day);
+                var correctionsDuJour = hours
+                    .Where(h => h.DATE_POINTAGE_IN.HasValue && h.DATE_POINTAGE_IN.Value.Date == day)
+                    .OrderBy(h => h.HENTREE)
+                    .ToList();
                 var isFerie = feries.Any(f => f.DATE.HasValue && f.DATE.Value.Date == day);
                 // Un jour de congé SAGE n'est pas une absence : le desktop le traitait aussi à part
                 // (Calcul_HSService : IsConge => la journée est réputée travaillée, jamais absente).
                 var estConge = LeaveRules.EstConge(conges, day);
-                if (corr?.HENTREE != null && corr.HSORTIE != null)
+
+                var paires = correctionsDuJour
+                    .Where(h => h.HENTREE.HasValue && h.HSORTIE.HasValue)
+                    .Select(h => new PunchPair(
+                        h.DATE_POINTAGE_IN!.Value.Date,
+                        h.HENTREE!.Value,
+                        (h.DATE_POINTAGE_OUT ?? h.DATE_POINTAGE_IN)!.Value.Date,
+                        h.HSORTIE!.Value))
+                    .ToList();
+                if (plan?.HA != null && paires.Count > 0)
                 {
-                    var start = corr.HENTREE.Value;
-                    if (plan?.HA != null && start < plan.HA.Value.TimeOfDay)
-                        start = plan.HA.Value.TimeOfDay;
-                    var worked = corr.HSORTIE.Value - start - pause;
-                    if (worked < TimeSpan.Zero) worked = TimeSpan.Zero;
-                    ht += (decimal)worked.TotalHours;
-                    if (OvertimeRules.EstPlageNuit(start, corr.HSORTIE.Value))
-                        nuit += (decimal)Math.Max(0, worked.TotalHours);
+                    var heurePlanifiee = plan.HA.Value.TimeOfDay;
+                    paires = paires
+                        .Select(p => p.EntreeDate.Date == day && p.EntreeHeure < heurePlanifiee
+                            ? p with { EntreeHeure = heurePlanifiee }
+                            : p)
+                        .ToList();
+                }
+
+                if (paires.Count > 0)
+                {
+                    // Plusieurs paires le même jour (pause déjeuner) : on somme leurs durées.
+                    var synthese = CorrectionDayRules.Summarize(paires, pause);
+                    var heuresJour = synthese.HeuresTravaillees;
+                    ht += (decimal)heuresJour.TotalHours;
+                    nuit += (decimal)synthese.HeuresNuit.TotalHours;
                     if (day.DayOfWeek == DayOfWeek.Sunday)
-                        dim += (decimal)worked.TotalHours;
+                        dim += (decimal)heuresJour.TotalHours;
                     if (isFerie)
-                        ferieH += (decimal)worked.TotalHours;
-                    if (corr.RETARD.HasValue)
-                        retard += (decimal)corr.RETARD.Value.TotalHours;
+                        ferieH += (decimal)heuresJour.TotalHours;
+
+                    var retardExplicite = correctionsDuJour.FirstOrDefault(h => h.RETARD.HasValue)?.RETARD;
+                    if (retardExplicite.HasValue)
+                    {
+                        retard += (decimal)retardExplicite.Value.TotalHours;
+                    }
+                    else if (plan?.HA != null && synthese.Entree.HasValue)
+                    {
+                        var tol = tols.FirstOrDefault(t => cat != null && t.IDCATEGORIE == cat.IDCATEGORIE && t.TYPES_TOL == false);
+                        var allowed = plan.HA.Value.TimeOfDay.Add(TimeSpan.FromMinutes(tol?.TOLERANCE ?? 0));
+                        if (synthese.Entree.Value > allowed)
+                            retard += (decimal)(synthese.Entree.Value - allowed).TotalHours;
+                    }
                 }
                 else if (!estConge && plan is { OffP: not true, HA: not null, HD: not null })
                 {
                     var abs = plan.HD.Value.TimeOfDay - plan.HA.Value.TimeOfDay - pause;
                     if (abs > TimeSpan.Zero)
                         absence += (decimal)abs.TotalHours;
-                }
-                if (corr?.RETARD == null && plan?.HA != null && corr?.HENTREE != null)
-                {
-                    var tol = tols.FirstOrDefault(t => cat != null && t.IDCATEGORIE == cat.IDCATEGORIE && t.TYPES_TOL == false);
-                    var allowed = plan.HA.Value.TimeOfDay.Add(TimeSpan.FromMinutes(tol?.TOLERANCE ?? 0));
-                    if (corr.HENTREE > allowed)
-                        retard += (decimal)(corr.HENTREE.Value - allowed).TotalHours;
                 }
             }
             var hs = Math.Max(0, ht - weeklyNeed);
@@ -646,20 +669,24 @@ public class OvertimeService
         var joursDetail = new List<OvertimeDetailDayDto>();
         for (var day = debut; day <= fin; day = day.AddDays(1))
         {
-            var corr = corrections.FirstOrDefault(h => h.DATE_POINTAGE_IN!.Value.Date == day);
-            var entree = corr?.HENTREE;
-            var sortie = corr?.HSORTIE;
-            var jourTravaille = entree.HasValue && sortie.HasValue;
-            var heures = TimeSpan.Zero;
-            var heuresNuit = TimeSpan.Zero;
-            if (jourTravaille)
-            {
-                heures = sortie!.Value - entree!.Value - pause;
-                if (heures < TimeSpan.Zero)
-                    heures = TimeSpan.Zero;
-                if (OvertimeRules.EstPlageNuit(entree.Value, sortie.Value))
-                    heuresNuit = heures;
-            }
+            var correctionsDuJour = corrections
+                .Where(h => h.DATE_POINTAGE_IN.HasValue && h.DATE_POINTAGE_IN.Value.Date == day)
+                .ToList();
+            var paires = correctionsDuJour
+                .Where(h => h.HENTREE.HasValue && h.HSORTIE.HasValue)
+                .Select(h => new PunchPair(
+                    h.DATE_POINTAGE_IN!.Value.Date,
+                    h.HENTREE!.Value,
+                    (h.DATE_POINTAGE_OUT ?? h.DATE_POINTAGE_IN)!.Value.Date,
+                    h.HSORTIE!.Value))
+                .ToList();
+            var synthese = CorrectionDayRules.Summarize(paires, pause);
+            var entree = synthese.Entree;
+            var sortie = synthese.Sortie;
+            var jourTravaille = synthese.NombrePaires > 0;
+            var heures = synthese.HeuresTravaillees;
+            var heuresNuit = synthese.HeuresNuit;
+            var retard = correctionsDuJour.FirstOrDefault(h => h.RETARD.HasValue)?.RETARD;
             joursDetail.Add(new OvertimeDetailDayDto(
                 day,
                 entree,
@@ -669,9 +696,9 @@ public class OvertimeService
                 Math.Round((decimal)heuresNuit.TotalHours, 2),
                 day.DayOfWeek == DayOfWeek.Sunday,
                 feries.Any(f => f.DATE.HasValue && f.DATE.Value.Date == day),
-                corr?.RETARD,
-                corr?.ABSENCE_AM == true,
-                corr?.ABSENCE_PM == true,
+                retard,
+                correctionsDuJour.Any(h => h.ABSENCE_AM == true),
+                correctionsDuJour.Any(h => h.ABSENCE_PM == true),
                 LeaveRules.EstConge(conges, day),
                 jourTravaille));
         }

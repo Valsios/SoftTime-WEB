@@ -58,6 +58,15 @@ L’accès est filtré par **rôle** (6 droits) et par **société SAGE** active
 | **Validation semaine** | Calcul HT/HS lundi–dimanche, valider ou annuler. |
 | **Heures supp.** | Calcul EXO/IMPO (plafond), purge, **sync SAGE** (`T_CUMSAL`). |
 
+**Règles de pré-traitement des pointages** (portage de `Frm_Import.importa` du desktop) :
+
+- **Mono-pointage** (`T_CLOCK.MULTIPOINT = false`) : regroupement par jour calendaire ; premier pointage = entrée, dernier = sortie. `0` pointage sur un jour ouvré → anomalie d’absence ; `1` → anomalie `H1`/`H2` ; `≥ 2` → correction.
+- **Multi-pointage** : journée simple = pointages du jour ; poste de nuit = pointages rattachés au jour d’entrée jusqu’à la sortie planifiée, les pointages de sortie étant consommés pour ne pas être retraités le lendemain ; appariement avec seuil de 15 minutes, dernier pointage forcé en sortie ; nombre pair → corrections, impair → une anomalie par jour.
+- **Fériés** : lus dans `T_FERIE` (synchronisé depuis SAGE `EtatJour = 1`). Un férié travaillé produit une correction avec `FERIER`, `FERIER_AM` et `FERIER_PM`.
+- **Jours non travaillés** (samedi/dimanche, `OffP`, férié) : sans pointage → rien ; avec pointage → correction (travail exceptionnel).
+- **Protections** : les corrections `ORIGINE = MANUEL` et les semaines validées ne sont jamais écrasées ; seules les corrections `ORIGINE = AUTO` sont purgées puis régénérées.
+- **Import** : dédoublonnage systématique (pointeuse et Excel, dans les deux modes), puis pré-traitement enchaîné depuis l’écran Pointages. Les pointages bruts restent dans `T_POINTAGE`.
+
 ---
 
 ## 5. États (rapports)
