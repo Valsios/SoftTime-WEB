@@ -250,6 +250,7 @@ public class AuthService
             throw new InvalidOperationException("Utilisateur appelant introuvable.");
 
         var callerIsAdmin = AdminRules.IsAdmin(caller.IDROLE, callerRole.NOMROLE);
+        var callerIsSuperAdmin = AdminRules.IsSuperAdmin(caller.IDROLE);
 
         var targetRole = await _uow.Repository<T_ROLE>().GetByIdAsync(dto.RoleId, cancellationToken);
         var targetRoleIsAdmin = AdminRules.IsAdmin(dto.RoleId, targetRole?.NOMROLE);
@@ -257,8 +258,15 @@ public class AuthService
         T_RESPONSABLE? entity = null;
         if (dto.Id == 0)
         {
-            if (targetRoleIsAdmin && !callerIsAdmin)
+            if (dto.RoleId == AdminRules.AdminRoleId)
+            {
+                if (!callerIsSuperAdmin)
+                    throw new InvalidOperationException("Seul un super-administrateur peut attribuer le rôle Administrateur.");
+            }
+            else if (targetRoleIsAdmin && !callerIsAdmin)
+            {
                 throw new InvalidOperationException("Seul un administrateur peut attribuer le rôle Administrateur.");
+            }
         }
         else
         {
@@ -270,11 +278,25 @@ public class AuthService
             var existingRole = await _uow.Repository<T_ROLE>().GetByIdAsync(entity.IDROLE, cancellationToken);
             var existingIsAdmin = AdminRules.IsAdmin(entity.IDROLE, existingRole?.NOMROLE);
 
-            if (existingIsAdmin && !callerIsAdmin)
+            if (entity.IDROLE == AdminRules.AdminRoleId)
+            {
+                if (!callerIsSuperAdmin)
+                    throw new InvalidOperationException("Seul un super-administrateur peut modifier un compte administrateur.");
+            }
+            else if (existingIsAdmin && !callerIsAdmin)
+            {
                 throw new InvalidOperationException("Seul un administrateur peut modifier un compte administrateur.");
+            }
 
-            if (targetRoleIsAdmin && !callerIsAdmin)
+            if (dto.RoleId == AdminRules.AdminRoleId)
+            {
+                if (!callerIsSuperAdmin)
+                    throw new InvalidOperationException("Seul un super-administrateur peut attribuer le rôle Administrateur.");
+            }
+            else if (targetRoleIsAdmin && !callerIsAdmin)
+            {
                 throw new InvalidOperationException("Seul un administrateur peut attribuer le rôle Administrateur.");
+            }
 
             if (entity.IDROLE == AdminRules.AdminRoleId && dto.RoleId != AdminRules.AdminRoleId)
             {
@@ -372,7 +394,7 @@ public class AuthService
         }
         await _uow.SaveChangesAsync(cancellationToken);
 
-        // Notification best-effort : le service journalise et n'Ã©choue jamais la requÃªte.
+        // Notification best-effort : le service journalise et n'échoue jamais la requête.
         if (dto.Id == 0)
             await _email.SendUserCredentialsAsync(entity.EMAIL, entity.LOGIN, dto.Password, entity.NOMRESPONSABLE, null, cancellationToken);
         else if (loginModifie || motDePasseModifie)
@@ -393,6 +415,7 @@ public class AuthService
             throw new InvalidOperationException("Utilisateur appelant introuvable.");
 
         var callerIsAdmin = AdminRules.IsAdmin(caller.IDROLE, callerRole.NOMROLE);
+        var callerIsSuperAdmin = AdminRules.IsSuperAdmin(caller.IDROLE);
 
         if (currentUserId == id)
             throw new InvalidOperationException("Vous ne pouvez pas supprimer votre propre compte.");
@@ -401,8 +424,15 @@ public class AuthService
         var targetRole = await _uow.Repository<T_ROLE>().GetByIdAsync(entity.IDROLE, cancellationToken);
         var targetIsAdmin = AdminRules.IsAdmin(entity.IDROLE, targetRole?.NOMROLE);
 
-        if (targetIsAdmin && !callerIsAdmin)
+        if (entity.IDROLE == AdminRules.AdminRoleId)
+        {
+            if (!callerIsSuperAdmin)
+                throw new InvalidOperationException("Seul un super-administrateur peut supprimer un compte administrateur.");
+        }
+        else if (targetIsAdmin && !callerIsAdmin)
+        {
             throw new InvalidOperationException("Seul un administrateur peut supprimer un compte administrateur.");
+        }
 
         if (entity.IDROLE == AdminRules.AdminRoleId)
         {

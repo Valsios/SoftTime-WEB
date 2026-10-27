@@ -154,10 +154,10 @@ public class AdminRulesAndSafeguardsTests
         var user = new T_RESPONSABLE { IDRESPONSABLE = 2, IDROLE = 2, LOGIN = "user", NOMRESPONSABLE = "User" };
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
 
-        // Un utilisateur non-admin tente de créer un admin
+        // Un utilisateur non-admin tente de créer un super-admin (rôle 1)
         var createDto = new UserDto(0, 1, "Nouvel Admin", "newadmin", null, "ValidP@ss123!");
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(currentUserId: 2, createDto));
-        Assert.Equal("Seul un administrateur peut attribuer le rôle Administrateur.", ex.Message);
+        Assert.Equal("Seul un super-administrateur peut attribuer le rôle Administrateur.", ex.Message);
     }
 
     [Fact]
@@ -168,10 +168,10 @@ public class AdminRulesAndSafeguardsTests
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(admin);
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
 
-        // L'utilisateur tente de modifier le mot de passe de l'admin
+        // L'utilisateur tente de modifier le mot de passe du super-admin (rôle 1)
         var updateDto = new UserDto(1, 1, "Admin Hacké", "admin", null, "NewPass123!@");
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(currentUserId: 2, updateDto));
-        Assert.Equal("Seul un administrateur peut modifier un compte administrateur.", ex.Message);
+        Assert.Equal("Seul un super-administrateur peut modifier un compte administrateur.", ex.Message);
     }
 
     [Fact]
@@ -183,20 +183,133 @@ public class AdminRulesAndSafeguardsTests
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.DeleteUserAsync(currentUserId: 2, id: 1));
-        Assert.Equal("Seul un administrateur peut supprimer un compte administrateur.", ex.Message);
+        Assert.Equal("Seul un super-administrateur peut supprimer un compte administrateur.", ex.Message);
     }
 
     [Fact]
-    public async Task SaveUserAsync_Admin_AssigningAdminRole_Succeeds()
+    public async Task NonAdmin_CustomAdminRoleOperations_ThrowsInvalidOperationException()
     {
-        var admin = new T_RESPONSABLE { IDRESPONSABLE = 1, IDROLE = 1, LOGIN = "admin", NOMRESPONSABLE = "Admin" };
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(admin);
+        var user = new T_RESPONSABLE { IDRESPONSABLE = 2, IDROLE = 2, LOGIN = "user", NOMRESPONSABLE = "User" };
+        var customAdmin = new T_RESPONSABLE { IDRESPONSABLE = 3, IDROLE = 3, LOGIN = "customadmin", NOMRESPONSABLE = "Custom Admin" };
+        _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
+        _uow.GetRepo<T_RESPONSABLE>().Items.Add(customAdmin);
 
+        // Attribution d'un rôle personnalisé admin (rôle 3) par un non-admin
+        var createDto = new UserDto(0, 3, "New Custom Admin", "newcustom", null, "ValidP@ss123!");
+        var exCreate = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(currentUserId: 2, createDto));
+        Assert.Equal("Seul un administrateur peut attribuer le rôle Administrateur.", exCreate.Message);
+
+        // Modification d'un compte rôle personnalisé admin par un non-admin
+        var updateDto = new UserDto(3, 3, "Custom Admin Modifié", "customadmin", null, null);
+        var exMod = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(currentUserId: 2, updateDto));
+        Assert.Equal("Seul un administrateur peut modifier un compte administrateur.", exMod.Message);
+
+        // Suppression d'un compte rôle personnalisé admin par un non-admin
+        var exDel = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.DeleteUserAsync(currentUserId: 2, id: 3));
+        Assert.Equal("Seul un administrateur peut supprimer un compte administrateur.", exDel.Message);
+    }
+
+    [Fact]
+    public async Task SaveUserAsync_CustomAdmin_CannotAssignRole1_CreationAndModification()
+    {
+        var customAdmin = new T_RESPONSABLE { IDRESPONSABLE = 3, IDROLE = 3, LOGIN = "customadmin", NOMRESPONSABLE = "Custom Admin" };
+        var ordinaryUser = new T_RESPONSABLE { IDRESPONSABLE = 4, IDROLE = 2, LOGIN = "user4", NOMRESPONSABLE = "User 4" };
+        _uow.GetRepo<T_RESPONSABLE>().Items.Add(customAdmin);
+        _uow.GetRepo<T_RESPONSABLE>().Items.Add(ordinaryUser);
+
+        // Création avec rôle 1 par un admin personnalisé
+        var createDto = new UserDto(0, 1, "New SuperAdmin", "newsuper", null, "ValidP@ss123!");
+        var exCreate = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(currentUserId: 3, createDto));
+        Assert.Equal("Seul un super-administrateur peut attribuer le rôle Administrateur.", exCreate.Message);
+
+        // Modification avec rôle 1 par un admin personnalisé
+        var updateDto = new UserDto(4, 1, "User 4 Promu", "user4", null, null);
+        var exUpdate = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(currentUserId: 3, updateDto));
+        Assert.Equal("Seul un super-administrateur peut attribuer le rôle Administrateur.", exUpdate.Message);
+    }
+
+    [Fact]
+    public async Task CustomAdmin_CannotModifyOrDeleteRole1Account_EvenIfAnotherSuperAdminExists()
+    {
+        var admin1 = new T_RESPONSABLE { IDRESPONSABLE = 1, IDROLE = 1, LOGIN = "admin1", NOMRESPONSABLE = "Admin 1" };
+        var admin2 = new T_RESPONSABLE { IDRESPONSABLE = 2, IDROLE = 1, LOGIN = "admin2", NOMRESPONSABLE = "Admin 2" };
+        var customAdmin = new T_RESPONSABLE { IDRESPONSABLE = 3, IDROLE = 3, LOGIN = "customadmin", NOMRESPONSABLE = "Custom Admin" };
+        _uow.GetRepo<T_RESPONSABLE>().Items.Add(admin1);
+        _uow.GetRepo<T_RESPONSABLE>().Items.Add(admin2);
+        _uow.GetRepo<T_RESPONSABLE>().Items.Add(customAdmin);
+
+        // Tentative de modification du compte rôle 1
+        var updateDto = new UserDto(1, 1, "Admin 1 Renommé", "admin1", null, null);
+        var exMod = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(currentUserId: 3, updateDto));
+        Assert.Equal("Seul un super-administrateur peut modifier un compte administrateur.", exMod.Message);
+
+        // Tentative de suppression du compte rôle 1
+        var exDel = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.DeleteUserAsync(currentUserId: 3, id: 1));
+        Assert.Equal("Seul un super-administrateur peut supprimer un compte administrateur.", exDel.Message);
+    }
+
+    [Fact]
+    public async Task CustomAdmin_CanCreateModifyAndDeleteOrdinaryAccount()
+    {
+        var customAdmin = new T_RESPONSABLE { IDRESPONSABLE = 3, IDROLE = 3, LOGIN = "customadmin", NOMRESPONSABLE = "Custom Admin" };
+        _uow.GetRepo<T_RESPONSABLE>().Items.Add(customAdmin);
+
+        // Création compte ordinaire (rôle 2)
+        var createDto = new UserDto(0, 2, "Employé 1", "employe1", null, "ValidP@ss123!");
+        var created = await _auth.SaveUserAsync(currentUserId: 3, createDto);
+        Assert.Equal(2, created.RoleId);
+        Assert.Equal("employe1", created.Login);
+
+        // Modification compte ordinaire (rôle 2)
+        var updateDto = new UserDto(created.Id, 2, "Employé 1 Modifié", "employe1_mod", null, null);
+        var updated = await _auth.SaveUserAsync(currentUserId: 3, updateDto);
+        Assert.Equal("Employé 1 Modifié", updated.Nom);
+
+        // Suppression compte ordinaire
+        await _auth.DeleteUserAsync(currentUserId: 3, id: created.Id);
+        Assert.Null(await _uow.GetRepo<T_RESPONSABLE>().GetByIdAsync(created.Id));
+    }
+
+    [Fact]
+    public async Task OrdinaryUser_CanCreateModifyAndDeleteOrdinaryAccount_NonRegression()
+    {
+        var ordinaryCaller = new T_RESPONSABLE { IDRESPONSABLE = 2, IDROLE = 2, LOGIN = "user2", NOMRESPONSABLE = "User 2" };
+        _uow.GetRepo<T_RESPONSABLE>().Items.Add(ordinaryCaller);
+
+        // Création compte ordinaire
+        var createDto = new UserDto(0, 2, "Employé 2", "employe2", null, "ValidP@ss123!");
+        var created = await _auth.SaveUserAsync(currentUserId: 2, createDto);
+        Assert.Equal(2, created.RoleId);
+        Assert.Equal("employe2", created.Login);
+
+        // Modification compte ordinaire
+        var updateDto = new UserDto(created.Id, 2, "Employé 2 Modifié", "employe2_mod", null, null);
+        var updated = await _auth.SaveUserAsync(currentUserId: 2, updateDto);
+        Assert.Equal("Employé 2 Modifié", updated.Nom);
+
+        // Suppression compte ordinaire
+        await _auth.DeleteUserAsync(currentUserId: 2, id: created.Id);
+        Assert.Null(await _uow.GetRepo<T_RESPONSABLE>().GetByIdAsync(created.Id));
+    }
+
+    [Fact]
+    public async Task SuperAdmin_CanAssignRole1()
+    {
+        var superAdmin = new T_RESPONSABLE { IDRESPONSABLE = 1, IDROLE = 1, LOGIN = "admin", NOMRESPONSABLE = "Admin" };
+        _uow.GetRepo<T_RESPONSABLE>().Items.Add(superAdmin);
+
+        // Création d'un nouvel administrateur rôle 1
         var createDto = new UserDto(0, 1, "Admin 2", "admin2", null, "ValidP@ss123!");
-        var result = await _auth.SaveUserAsync(currentUserId: 1, createDto);
+        var created = await _auth.SaveUserAsync(currentUserId: 1, createDto);
+        Assert.Equal(1, created.RoleId);
+        Assert.Equal("admin2", created.Login);
 
-        Assert.Equal(1, result.RoleId);
-        Assert.Equal("admin2", result.Login);
+        // Promotion d'un compte ordinaire vers le rôle 1
+        var user = new T_RESPONSABLE { IDRESPONSABLE = 10, IDROLE = 2, LOGIN = "user10", NOMRESPONSABLE = "User 10" };
+        _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
+        var updateDto = new UserDto(10, 1, "User 10 Promu", "user10", null, null);
+        var promoted = await _auth.SaveUserAsync(currentUserId: 1, updateDto);
+        Assert.Equal(1, promoted.RoleId);
     }
 
     #endregion
@@ -233,9 +346,9 @@ public class AdminRulesAndSafeguardsTests
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(superAdmin);
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(customAdmin);
 
-        // Tenter de rétrograder le seul superAdmin (IDROLE = 1) vers rôle 2
+        // Tenter de rétrograder le seul superAdmin (IDROLE = 1) vers rôle 2 via la surcharge sans appelant
         var updateDto = new UserDto(1, 2, "Super Admin", "superadmin", null, null);
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(currentUserId: 2, updateDto));
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(updateDto));
         Assert.Equal("Impossible de rétrograder le dernier administrateur.", ex.Message);
     }
 
