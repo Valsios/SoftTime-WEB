@@ -106,6 +106,46 @@ public class RolePermissionsTests
         Assert.Contains("SAGE:DATABASE_TEST:READ", perms.GrantedPermissions);
     }
 
+    [Fact]
+    public async Task SaveRoleDetailedPermissionsAsync_AdminPaieRole_ThrowsInvalidOperationException()
+    {
+        // Rôle "Admin Paie" (IDROLE = 4 != 1)
+        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 4, NOMROLE = "Admin Paie" });
+        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 30, IDROLE = 4, LOGIN = "adminpaie", NOMRESPONSABLE = "Admin Paie User" });
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 30, targetRoleId: 3, new[] { "PARAMS:USERS" }));
+        Assert.Equal("Seul un administrateur peut modifier les permissions d'un rôle.", ex.Message);
+    }
+
+    [Fact]
+    public async Task SaveRoleDetailedPermissionsAsync_NullList_ThrowsInvalidOperationException()
+    {
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, null!));
+        Assert.Equal("La liste des permissions ne peut pas être nulle.", ex.Message);
+    }
+
+    [Fact]
+    public async Task SaveRoleDetailedPermissionsAsync_CaseInsensitiveDuplicates_SavedAsSingleUpperCaseRow()
+    {
+        await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { "params:users", "PARAMS:USERS" });
+
+        var perms = await _uow.GetRepo<T_ROLE_PERMISSION>().ListAsync(p => p.IDROLE == 3);
+        Assert.Single(perms);
+        Assert.Equal("PARAMS:USERS", perms[0].PERMISSION_CODE);
+    }
+
+    [Fact]
+    public async Task SaveRoleDetailedPermissionsAsync_CodeWithSpaces_TrimmedAndAccepted()
+    {
+        await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { "  params:users  " });
+
+        var perms = await _uow.GetRepo<T_ROLE_PERMISSION>().ListAsync(p => p.IDROLE == 3);
+        Assert.Single(perms);
+        Assert.Equal("PARAMS:USERS", perms[0].PERMISSION_CODE);
+    }
+
     #endregion
 
     #region C2 — Synchronisation exacte des portes
@@ -160,6 +200,32 @@ public class RolePermissionsTests
         Assert.Empty(res.GrantedPermissions);
     }
 
+    [Fact]
+    public async Task GetRoleDetailedPermissionsAsync_UnconfiguredRole_WithParametersGate_ReturnsParamsCodes_IsConfiguredFalse()
+    {
+        // Rôle 3 jamais configuré (aucune ligne T_ROLE_PERMISSION) mais ayant la porte Paramètres
+        _uow.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = 3, IDDROIT = Rights.Parameters });
+
+        var res = await _auth.GetRoleDetailedPermissionsAsync(3);
+        Assert.False(res.IsConfigured);
+        Assert.Contains("PARAMS:USERS", res.GrantedPermissions);
+        Assert.Contains("PARAMS:ROLES", res.GrantedPermissions);
+        Assert.DoesNotContain("PROC:SHIFTS", res.GrantedPermissions);
+    }
+
+    [Fact]
+    public async Task GetRoleDetailedPermissionsAsync_ConfiguredRole_ReturnsConfiguredPermissions_IsConfiguredTrue()
+    {
+        // Rôle 3 ayant la porte Paramètres et configuré avec PROC:SHIFTS
+        _uow.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = 3, IDDROIT = Rights.Parameters });
+        _uow.GetRepo<T_ROLE_PERMISSION>().Items.Add(new T_ROLE_PERMISSION { IDROLE = 3, PERMISSION_CODE = "PROC:SHIFTS", IS_GRANTED = true });
+
+        var res = await _auth.GetRoleDetailedPermissionsAsync(3);
+        Assert.True(res.IsConfigured);
+        Assert.Single(res.GrantedPermissions);
+        Assert.Contains("PROC:SHIFTS", res.GrantedPermissions);
+    }
+
     #endregion
 
     #region C4 — Journalisation atomique (un seul SaveChangesAsync)
@@ -178,6 +244,22 @@ public class RolePermissionsTests
         Assert.Equal("UPDATE_ROLE_PERMS", audit[0].ACTION);
         Assert.Equal("admin", audit[0].LOGIN_OPERATEUR);
         Assert.Equal("PARAMS:USERS", audit[0].PERMS_APRES);
+    }
+
+    [Fact]
+    public async Task EcrireAuditDroitAsync_LongLoginAndTargetName_SafelyTruncatedWithoutException()
+    {
+        var longLogin = new string('A', 150);
+        var longRoleName = new string('B', 150);
+        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 5, NOMROLE = longRoleName });
+        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 40, IDROLE = 1, LOGIN = longLogin, NOMRESPONSABLE = "Admin" });
+
+        await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 40, targetRoleId: 5, new[] { "PARAMS:USERS" });
+
+        var audit = await _uow.GetRepo<T_AUDIT_DROIT>().ListAsync(a => a.TYPE_CIBLE == "ROLE" && a.ID_CIBLE == 5);
+        Assert.Single(audit);
+        Assert.Equal(100, audit[0].LOGIN_OPERATEUR.Length);
+        Assert.Equal(100, audit[0].NOM_CIBLE?.Length);
     }
 
     #endregion

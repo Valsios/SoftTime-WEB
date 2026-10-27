@@ -73,6 +73,103 @@ public class AuthService
         return portes;
     }
 
+    private static List<string> BuildDefaultPermissionsList(
+        HashSet<int> rights,
+        IEnumerable<T_BDD_SAGE> sageDbs,
+        IEnumerable<T_BDD_POINTEUSE> pointeuseDbs)
+    {
+        var defaults = new List<string>();
+        var sageList = sageDbs as IReadOnlyCollection<T_BDD_SAGE> ?? sageDbs.ToList();
+
+        if (sageList.Count > 0 || rights.Contains(Rights.Databases))
+        {
+            defaults.Add("SAGE:CREATE");
+        }
+
+        foreach (var s in sageList)
+        {
+            var name = s.NOM_BD ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            defaults.Add($"SAGE:{name}:READ");
+            defaults.Add($"SAGE:{name}:UPDATE");
+            defaults.Add($"SAGE:{name}:DELETE");
+        }
+
+        if (rights.Contains(Rights.Databases))
+        {
+            defaults.Add("POINTEUSE:CREATE");
+            foreach (var p in pointeuseDbs)
+            {
+                var name = p.NOM_BD ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(name)) continue;
+                defaults.Add($"POINTEUSE:{name}:READ");
+                defaults.Add($"POINTEUSE:{name}:UPDATE");
+                defaults.Add($"POINTEUSE:{name}:DELETE");
+            }
+        }
+
+        if (rights.Contains(Rights.Parameters))
+        {
+            defaults.AddRange(new[]
+            {
+                "PARAMS:USERS", "PARAMS:USERS:CREATE", "PARAMS:USERS:UPDATE", "PARAMS:USERS:DELETE",
+                "PARAMS:ROLES", "PARAMS:ROLES:CREATE", "PARAMS:ROLES:UPDATE", "PARAMS:ROLES:DELETE",
+                "PARAMS:PRIVILEGES",
+                "PARAMS:DB_ACCESS",
+                "PARAMS:CLOCK_PARAMS",
+                "PARAMS:CORRESPONDENCE",
+                "PARAMS:CARDPAIE", "PARAMS:CARDPAIE:CREATE", "PARAMS:CARDPAIE:UPDATE", "PARAMS:CARDPAIE:DELETE",
+                "PARAMS:CATEGORIES", "PARAMS:CATEGORIES:CREATE", "PARAMS:CATEGORIES:UPDATE", "PARAMS:CATEGORIES:DELETE",
+                "PARAMS:AFFECTATIONS", "PARAMS:AFFECTATIONS:CREATE", "PARAMS:AFFECTATIONS:UPDATE", "PARAMS:AFFECTATIONS:DELETE",
+                "PARAMS:TOLERANCES", "PARAMS:TOLERANCES:CREATE", "PARAMS:TOLERANCES:UPDATE",
+                "PARAMS:HOLIDAYS", "PARAMS:HOLIDAYS:CREATE", "PARAMS:HOLIDAYS:UPDATE", "PARAMS:HOLIDAYS:DELETE",
+                "PARAMS:MAJORATIONS", "PARAMS:MAJORATIONS:UPDATE",
+                "PARAMS:CODE_CONSTANTES",
+                "PARAMS:ABSENCE_CODES", "PARAMS:ABSENCE_CODES:CREATE", "PARAMS:ABSENCE_CODES:UPDATE"
+            });
+        }
+
+        if (rights.Contains(Rights.Processing))
+        {
+            defaults.AddRange(new[]
+            {
+                "PROC:SHIFTS", "PROC:SHIFTS:CREATE", "PROC:SHIFTS:UPDATE", "PROC:SHIFTS:DELETE",
+                "PROC:EMPLOYEE_PLANNING", "PROC:EMPLOYEE_PLANNING:CREATE", "PROC:EMPLOYEE_PLANNING:UPDATE", "PROC:EMPLOYEE_PLANNING:DELETE",
+                "PROC:PUNCHES",
+                "PROC:ANOMALIES", "PROC:ANOMALIES:DELETE",
+                "PROC:CORRECTED_HOURS", "PROC:CORRECTED_HOURS:CREATE", "PROC:CORRECTED_HOURS:UPDATE", "PROC:CORRECTED_HOURS:DELETE",
+                "PROC:WEEKLY_VALIDATION",
+                "PROC:OVERTIME"
+            });
+        }
+
+        if (rights.Contains(Rights.Other))
+        {
+            defaults.AddRange(new[]
+            {
+                "OTHER:CANTEEN", "OTHER:TRAVEL_EXPENSES"
+            });
+        }
+
+        if (rights.Contains(Rights.Traceability))
+        {
+            defaults.Add("TRACE:AUDIT");
+        }
+
+        if (rights.Contains(Rights.Reports))
+        {
+            defaults.Add("REPORTS:REPORTS");
+        }
+
+        return defaults;
+    }
+
+    private static string? Truncate(string? value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+        return value.Length <= maxLength ? value : value.Substring(0, maxLength);
+    }
+
     private async Task EcrireAuditDroitAsync(
         decimal idOperateur, string loginOperateur,
         string typeCible, decimal idCible, string? nomCible,
@@ -86,11 +183,11 @@ public class AuthService
         {
             DATE_ACTION = DateTime.UtcNow,
             ID_OPERATEUR = idOperateur,
-            LOGIN_OPERATEUR = loginOperateur,
-            TYPE_CIBLE = typeCible,
+            LOGIN_OPERATEUR = Truncate(loginOperateur, 100) ?? string.Empty,
+            TYPE_CIBLE = Truncate(typeCible, 20) ?? string.Empty,
             ID_CIBLE = idCible,
-            NOM_CIBLE = nomCible,
-            ACTION = action,
+            NOM_CIBLE = Truncate(nomCible, 100),
+            ACTION = Truncate(action, 50) ?? string.Empty,
             PERMS_AVANT = avant,
             PERMS_APRES = apres
         }, cancellationToken);
@@ -670,87 +767,7 @@ public class AuthService
             : await _uow.Repository<T_BDD_SAGE>().ListAsync(s => sageIds.Contains(s.ID), cancellationToken);
         var pointeuseDbs = await _uow.Repository<T_BDD_POINTEUSE>().ListAsync(_ => true, cancellationToken);
 
-        var defaults = new List<string>();
-
-        if (sageDbs.Count > 0 || rights.Contains(Rights.Databases))
-        {
-            defaults.Add("SAGE:CREATE");
-        }
-
-        foreach (var s in sageDbs)
-        {
-            var name = s.NOM_BD ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(name)) continue;
-            defaults.Add($"SAGE:{name}:READ");
-            defaults.Add($"SAGE:{name}:UPDATE");
-            defaults.Add($"SAGE:{name}:DELETE");
-        }
-
-        if (rights.Contains(Rights.Databases))
-        {
-            defaults.Add("POINTEUSE:CREATE");
-            foreach (var p in pointeuseDbs)
-            {
-                var name = p.NOM_BD ?? string.Empty;
-                if (string.IsNullOrWhiteSpace(name)) continue;
-                defaults.Add($"POINTEUSE:{name}:READ");
-                defaults.Add($"POINTEUSE:{name}:UPDATE");
-                defaults.Add($"POINTEUSE:{name}:DELETE");
-            }
-        }
-
-        if (rights.Contains(Rights.Parameters))
-        {
-            defaults.AddRange(new[]
-            {
-                "PARAMS:USERS", "PARAMS:USERS:CREATE", "PARAMS:USERS:UPDATE", "PARAMS:USERS:DELETE",
-                "PARAMS:ROLES", "PARAMS:ROLES:CREATE", "PARAMS:ROLES:UPDATE", "PARAMS:ROLES:DELETE",
-                "PARAMS:PRIVILEGES",
-                "PARAMS:DB_ACCESS",
-                "PARAMS:CLOCK_PARAMS",
-                "PARAMS:CORRESPONDENCE",
-                "PARAMS:CARDPAIE", "PARAMS:CARDPAIE:CREATE", "PARAMS:CARDPAIE:UPDATE", "PARAMS:CARDPAIE:DELETE",
-                "PARAMS:CATEGORIES", "PARAMS:CATEGORIES:CREATE", "PARAMS:CATEGORIES:UPDATE", "PARAMS:CATEGORIES:DELETE",
-                "PARAMS:AFFECTATIONS", "PARAMS:AFFECTATIONS:CREATE", "PARAMS:AFFECTATIONS:UPDATE", "PARAMS:AFFECTATIONS:DELETE",
-                "PARAMS:TOLERANCES", "PARAMS:TOLERANCES:CREATE", "PARAMS:TOLERANCES:UPDATE",
-                "PARAMS:HOLIDAYS", "PARAMS:HOLIDAYS:CREATE", "PARAMS:HOLIDAYS:UPDATE", "PARAMS:HOLIDAYS:DELETE",
-                "PARAMS:MAJORATIONS", "PARAMS:MAJORATIONS:UPDATE",
-                "PARAMS:CODE_CONSTANTES",
-                "PARAMS:ABSENCE_CODES", "PARAMS:ABSENCE_CODES:CREATE", "PARAMS:ABSENCE_CODES:UPDATE"
-            });
-        }
-
-        if (rights.Contains(Rights.Processing))
-        {
-            defaults.AddRange(new[]
-            {
-                "PROC:SHIFTS", "PROC:SHIFTS:CREATE", "PROC:SHIFTS:UPDATE", "PROC:SHIFTS:DELETE",
-                "PROC:EMPLOYEE_PLANNING", "PROC:EMPLOYEE_PLANNING:CREATE", "PROC:EMPLOYEE_PLANNING:UPDATE", "PROC:EMPLOYEE_PLANNING:DELETE",
-                "PROC:PUNCHES",
-                "PROC:ANOMALIES", "PROC:ANOMALIES:DELETE",
-                "PROC:CORRECTED_HOURS", "PROC:CORRECTED_HOURS:CREATE", "PROC:CORRECTED_HOURS:UPDATE", "PROC:CORRECTED_HOURS:DELETE",
-                "PROC:WEEKLY_VALIDATION",
-                "PROC:OVERTIME"
-            });
-        }
-
-        if (rights.Contains(Rights.Other))
-        {
-            defaults.AddRange(new[]
-            {
-                "OTHER:CANTEEN", "OTHER:TRAVEL_EXPENSES"
-            });
-        }
-
-        if (rights.Contains(Rights.Traceability))
-        {
-            defaults.Add("TRACE:AUDIT");
-        }
-
-        if (rights.Contains(Rights.Reports))
-        {
-            defaults.Add("REPORTS:REPORTS");
-        }
+        var defaults = BuildDefaultPermissionsList(rights, sageDbs, pointeuseDbs);
 
         if (customList.Count > 0)
         {
@@ -882,13 +899,36 @@ public class AuthService
         await _uow.SaveChangesAsync(cancellationToken);
     }
 
+    private async Task<List<string>> ComputeDefaultPermissionsForRoleAsync(decimal roleId, CancellationToken cancellationToken)
+    {
+        var rolePrivileges = await _uow.Repository<T_DROIT_ROLE>().ListAsync(p => p.IDROLE == roleId, cancellationToken);
+        var rights = rolePrivileges.Select(p => (int)p.IDDROIT).ToHashSet();
+        var isAdmin = roleId == AdminRules.AdminRoleId;
+        if (isAdmin)
+        {
+            rights = new HashSet<int> { Rights.Databases, Rights.Parameters, Rights.Processing, Rights.Other, Rights.Traceability, Rights.Reports };
+        }
+
+        var sageDbs = (isAdmin || rights.Contains(Rights.Databases))
+            ? await _uow.Repository<T_BDD_SAGE>().ListAsync(_ => true, cancellationToken)
+            : (IReadOnlyCollection<T_BDD_SAGE>)Array.Empty<T_BDD_SAGE>();
+        var pointeuseDbs = (isAdmin || rights.Contains(Rights.Databases))
+            ? await _uow.Repository<T_BDD_POINTEUSE>().ListAsync(_ => true, cancellationToken)
+            : (IReadOnlyCollection<T_BDD_POINTEUSE>)Array.Empty<T_BDD_POINTEUSE>();
+
+        return BuildDefaultPermissionsList(rights, sageDbs, pointeuseDbs);
+    }
+
     public async Task<RoleDetailedPermissionsDto> GetRoleDetailedPermissionsAsync(decimal roleId, CancellationToken cancellationToken = default)
     {
         var roleList = await _uow.Repository<T_ROLE_PERMISSION>().ListAsync(
             p => p.IDROLE == roleId && p.IS_GRANTED, cancellationToken);
 
         if (roleList.Count == 0)
-            return new RoleDetailedPermissionsDto(roleId, Array.Empty<string>(), false);
+        {
+            var defaultPerms = await ComputeDefaultPermissionsForRoleAsync(roleId, cancellationToken);
+            return new RoleDetailedPermissionsDto(roleId, defaultPerms, false);
+        }
 
         var perms = roleList
             .Where(p => p.PERMISSION_CODE != EmptyRolePermissionsMarker)
@@ -901,13 +941,16 @@ public class AuthService
 
     public async Task SaveRoleDetailedPermissionsAsync(decimal currentUserId, decimal targetRoleId, IReadOnlyCollection<string> permissions, CancellationToken cancellationToken = default)
     {
+        if (permissions == null)
+            throw new InvalidOperationException("La liste des permissions ne peut pas être nulle.");
+
         var caller = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(currentUserId, cancellationToken)
             ?? throw new InvalidOperationException("Utilisateur appelant introuvable.");
 
         var callerRole = await _uow.Repository<T_ROLE>().GetByIdAsync(caller.IDROLE, cancellationToken)
             ?? throw new InvalidOperationException("Utilisateur appelant introuvable.");
 
-        if (!AdminRules.IsAdmin(caller.IDROLE, callerRole.NOMROLE))
+        if (!AdminRules.IsSuperAdmin(caller.IDROLE))
             throw new InvalidOperationException("Seul un administrateur peut modifier les permissions d'un rôle.");
 
         if (targetRoleId == AdminRules.AdminRoleId)
@@ -916,8 +959,22 @@ public class AuthService
         var targetRole = await _uow.Repository<T_ROLE>().GetByIdAsync(targetRoleId, cancellationToken)
             ?? throw new KeyNotFoundException("Rôle cible introuvable.");
 
-        var invalidCodes = permissions
-            .Where(p => !string.IsNullOrWhiteSpace(p) && p != EmptyRolePermissionsMarker && !IsKnownPermissionCode(p))
+        var normalizedPermissions = permissions
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => p.Trim())
+            .Select(p =>
+            {
+                if (p.StartsWith("SAGE:", StringComparison.OrdinalIgnoreCase) ||
+                    p.StartsWith("POINTEUSE:", StringComparison.OrdinalIgnoreCase))
+                    return p;
+                return p.ToUpperInvariant();
+            })
+            .Where(p => p != EmptyRolePermissionsMarker)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var invalidCodes = normalizedPermissions
+            .Where(p => !IsKnownPermissionCode(p))
             .ToList();
         if (invalidCodes.Count > 0)
             throw new InvalidOperationException($"Codes de permission inconnus : {string.Join(", ", invalidCodes)}.");
@@ -931,22 +988,17 @@ public class AuthService
 
         rpRepo.RemoveRange(existing);
 
-        var toSaveList = permissions
-            .Where(p => !string.IsNullOrWhiteSpace(p) && p != EmptyRolePermissionsMarker)
-            .Distinct()
-            .ToList();
-
-        foreach (var p in toSaveList)
+        foreach (var p in normalizedPermissions)
         {
             await rpRepo.AddAsync(new T_ROLE_PERMISSION
             {
                 IDROLE = targetRoleId,
-                PERMISSION_CODE = p.Trim(),
+                PERMISSION_CODE = p,
                 IS_GRANTED = true
             }, cancellationToken);
         }
 
-        if (toSaveList.Count == 0)
+        if (normalizedPermissions.Count == 0)
         {
             await rpRepo.AddAsync(new T_ROLE_PERMISSION
             {
@@ -960,7 +1012,7 @@ public class AuthService
         var existingDroits = await droitRepo.ListAsync(d => d.IDROLE == targetRoleId, cancellationToken);
         droitRepo.RemoveRange(existingDroits);
 
-        var portesDeduites = DeduirePortes(toSaveList);
+        var portesDeduites = DeduirePortes(normalizedPermissions);
         foreach (var porte in portesDeduites)
         {
             await droitRepo.AddAsync(new T_DROIT_ROLE { IDROLE = targetRoleId, IDDROIT = porte }, cancellationToken);
@@ -970,7 +1022,7 @@ public class AuthService
             currentUserId, caller.LOGIN ?? string.Empty,
             "ROLE", targetRoleId, targetRole.NOMROLE,
             "UPDATE_ROLE_PERMS",
-            permsAvant, toSaveList,
+            permsAvant, normalizedPermissions,
             cancellationToken);
 
         await _uow.SaveChangesAsync(cancellationToken);

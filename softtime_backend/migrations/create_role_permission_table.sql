@@ -1,6 +1,6 @@
 /* =====================================================================================
    Lot B — Droits par rôle (T_ROLE_PERMISSION) et journal d'audit (T_AUDIT_DROIT)
-   Script idempotent — ne s'exécute pas automatiquement, jouer manuellement si besoin.
+   Script idempotent — exécuté automatiquement au démarrage par EnsureStorageAsync (RolePermissionConfiguration) ou jouable manuellement si besoin.
    ===================================================================================== */
 
 -- INSTALLATION
