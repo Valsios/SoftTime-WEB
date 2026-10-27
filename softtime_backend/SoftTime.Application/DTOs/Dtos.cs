@@ -17,6 +17,9 @@ public record UserDto(decimal Id, decimal RoleId, string Nom, string Login, stri
     /// <summary>Adresse d'envoi des identifiants (facultative).</summary>
     public string? Email { get; init; }
 
+    /// <summary>Si vrai et que le rôle change, réinitialise les droits personnalisés de l'utilisateur (défaut false).</summary>
+    public bool ResetPermissions { get; init; } = false;
+
     public UserDto() : this(default, default, default!, default!, default, default) { }
 }
 
@@ -552,3 +555,32 @@ public record SaveUserDetailedPermissionsRequest(
 {
     public SaveUserDetailedPermissionsRequest() : this(0, Array.Empty<string>()) { }
 }
+
+public record RoleDetailedPermissionsDto(
+    decimal RoleId,
+    IReadOnlyList<string> GrantedPermissions,
+    bool IsConfigured
+)
+{
+    public RoleDetailedPermissionsDto() : this(0, Array.Empty<string>(), false) { }
+}
+
+public record SaveRoleDetailedPermissionsRequest(
+    IReadOnlyList<string> GrantedPermissions
+)
+{
+    public SaveRoleDetailedPermissionsRequest() : this(Array.Empty<string>()) { }
+}
+
+public record AuditDroitDto(
+    int Id,
+    DateTime DateAction,
+    decimal IdOperateur,
+    string LoginOperateur,
+    string TypeCible,
+    decimal IdCible,
+    string? NomCible,
+    string Action,
+    string? PermsAvant,
+    string? PermsApres
+);

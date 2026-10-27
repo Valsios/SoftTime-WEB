@@ -195,6 +195,48 @@ public class PrivilegesController : ControllerBase
         await _auth.SaveUserDetailedPermissionsAsync(currentUserId, userId, request.GrantedPermissions, ct);
         return NoContent();
     }
+
+    [HttpGet("role/{roleId}")]
+    public async Task<IActionResult> GetRolePermissions(decimal roleId, CancellationToken ct)
+        => Ok(await _auth.GetRoleDetailedPermissionsAsync(roleId, ct));
+
+    [HttpPut("role/{roleId}")]
+    public async Task<IActionResult> SaveRolePermissions(decimal roleId, [FromBody] SaveRoleDetailedPermissionsRequest request, CancellationToken ct)
+    {
+        if (_user.UserId is not decimal currentUserId)
+            return Unauthorized();
+        await _auth.SaveRoleDetailedPermissionsAsync(currentUserId, roleId, request.GrantedPermissions, ct);
+        return NoContent();
+    }
+
+    [HttpPost("user/{userId}/reset")]
+    public async Task<IActionResult> ResetUserPermissions(decimal userId, CancellationToken ct)
+    {
+        if (_user.UserId is not decimal currentUserId)
+            return Unauthorized();
+        await _auth.ResetUserDetailedPermissionsAsync(currentUserId, userId, ct);
+        return NoContent();
+    }
+}
+
+[ApiController]
+[Authorize]
+[RequireDroit(Droit.Traceability)]
+[Route("api/privileges/audit")]
+[Tags("Privileges")]
+public class AuditDroitController : ControllerBase
+{
+    private readonly AuthService _auth;
+    public AuditDroitController(AuthService auth) => _auth = auth;
+
+    [HttpGet]
+    public async Task<IActionResult> Get(
+        [FromQuery] string? typeCible,
+        [FromQuery] decimal? idCible,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        CancellationToken ct)
+        => Ok(await _auth.GetAuditDroitsAsync(typeCible, idCible, from, to, ct));
 }
 
 [ApiController]

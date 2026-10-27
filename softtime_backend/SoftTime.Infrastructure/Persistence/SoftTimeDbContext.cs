@@ -50,6 +50,8 @@ public class SoftTimeDbContext : DbContext
     public DbSet<T_SOURCE_ENTITY_MAPPING> T_SOURCE_ENTITY_MAPPING => Set<T_SOURCE_ENTITY_MAPPING>();
     public DbSet<T_SOURCE_FIELD_MAPPING> T_SOURCE_FIELD_MAPPING => Set<T_SOURCE_FIELD_MAPPING>();
     public DbSet<T_USER_PERMISSION> T_USER_PERMISSION => Set<T_USER_PERMISSION>();
+    public DbSet<T_ROLE_PERMISSION> T_ROLE_PERMISSION => Set<T_ROLE_PERMISSION>();
+    public DbSet<T_AUDIT_DROIT> T_AUDIT_DROIT => Set<T_AUDIT_DROIT>();
     public DbSet<T_HISTORIQUE_POINTAGE> T_HISTORIQUE_POINTAGE => Set<T_HISTORIQUE_POINTAGE>();
     public DbSet<T_HISTORIQUE_ANOMALIE> T_HISTORIQUE_ANOMALIE => Set<T_HISTORIQUE_ANOMALIE>();
     public DbSet<T_HISTORIQUE_HS> T_HISTORIQUE_HS => Set<T_HISTORIQUE_HS>();
@@ -127,6 +129,27 @@ public class SoftTimeDbContext : DbContext
             e.Property(x => x.IDRESPONSABLE).HasPrecision(18, 0);
             e.Property(x => x.PERMISSION_CODE).HasMaxLength(128);
             e.HasIndex(x => new { x.IDRESPONSABLE, x.PERMISSION_CODE }).IsUnique();
+        });
+
+        modelBuilder.Entity<T_ROLE_PERMISSION>(e =>
+        {
+            e.ToTable("T_ROLE_PERMISSION");
+            e.HasKey(x => x.ID);
+            e.Property(x => x.IDROLE).HasPrecision(18, 0);
+            e.Property(x => x.PERMISSION_CODE).HasMaxLength(128);
+            e.HasIndex(x => new { x.IDROLE, x.PERMISSION_CODE }).IsUnique();
+        });
+
+        modelBuilder.Entity<T_AUDIT_DROIT>(e =>
+        {
+            e.ToTable("T_AUDIT_DROIT");
+            e.HasKey(x => x.ID);
+            e.Property(x => x.ID_OPERATEUR).HasPrecision(18, 0);
+            e.Property(x => x.ID_CIBLE).HasPrecision(18, 0);
+            e.Property(x => x.LOGIN_OPERATEUR).HasMaxLength(100);
+            e.Property(x => x.TYPE_CIBLE).HasMaxLength(20);
+            e.Property(x => x.NOM_CIBLE).HasMaxLength(100);
+            e.Property(x => x.ACTION).HasMaxLength(50);
         });
 
         // Longueurs des colonnes de filtre, alignées sur migrations/add_pagination_performance_indexes.sql.

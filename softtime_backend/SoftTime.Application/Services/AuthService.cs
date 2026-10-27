@@ -16,6 +16,85 @@ public class AuthService
     /// <summary>Rôle d'administration attendu lors du démarrage initial (voir le script de base saine).</summary>
     public const string RoleAdministrateur = "Administrateur";
     private const string EmptyPermissionsMarker = "__SOFTTIME_EMPTY_CUSTOM_PERMISSIONS__";
+    private const string EmptyRolePermissionsMarker = "__SOFTTIME_EMPTY_ROLE_PERMISSIONS__";
+
+    private static readonly HashSet<string> KnownStaticPermissions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "PARAMS:USERS", "PARAMS:USERS:CREATE", "PARAMS:USERS:UPDATE", "PARAMS:USERS:DELETE",
+        "PARAMS:ROLES", "PARAMS:ROLES:CREATE", "PARAMS:ROLES:UPDATE", "PARAMS:ROLES:DELETE",
+        "PARAMS:PRIVILEGES", "PARAMS:DB_ACCESS", "PARAMS:CLOCK_PARAMS", "PARAMS:CORRESPONDENCE",
+        "PARAMS:CARDPAIE", "PARAMS:CARDPAIE:CREATE", "PARAMS:CARDPAIE:UPDATE", "PARAMS:CARDPAIE:DELETE",
+        "PARAMS:CATEGORIES", "PARAMS:CATEGORIES:CREATE", "PARAMS:CATEGORIES:UPDATE", "PARAMS:CATEGORIES:DELETE",
+        "PARAMS:AFFECTATIONS", "PARAMS:AFFECTATIONS:CREATE", "PARAMS:AFFECTATIONS:UPDATE", "PARAMS:AFFECTATIONS:DELETE",
+        "PARAMS:TOLERANCES", "PARAMS:TOLERANCES:CREATE", "PARAMS:TOLERANCES:UPDATE",
+        "PARAMS:HOLIDAYS", "PARAMS:HOLIDAYS:CREATE", "PARAMS:HOLIDAYS:UPDATE", "PARAMS:HOLIDAYS:DELETE",
+        "PARAMS:MAJORATIONS", "PARAMS:MAJORATIONS:UPDATE",
+        "PARAMS:CODE_CONSTANTES",
+        "PARAMS:ABSENCE_CODES", "PARAMS:ABSENCE_CODES:CREATE", "PARAMS:ABSENCE_CODES:UPDATE",
+        "PROC:SHIFTS", "PROC:SHIFTS:CREATE", "PROC:SHIFTS:UPDATE", "PROC:SHIFTS:DELETE",
+        "PROC:EMPLOYEE_PLANNING", "PROC:EMPLOYEE_PLANNING:CREATE", "PROC:EMPLOYEE_PLANNING:UPDATE", "PROC:EMPLOYEE_PLANNING:DELETE",
+        "PROC:PUNCHES",
+        "PROC:ANOMALIES", "PROC:ANOMALIES:DELETE",
+        "PROC:CORRECTED_HOURS", "PROC:CORRECTED_HOURS:CREATE", "PROC:CORRECTED_HOURS:UPDATE", "PROC:CORRECTED_HOURS:DELETE",
+        "PROC:WEEKLY_VALIDATION", "PROC:OVERTIME",
+        "OTHER:CANTEEN", "OTHER:TRAVEL_EXPENSES",
+        "TRACE:AUDIT",
+        "REPORTS:REPORTS"
+    };
+
+    private static bool IsKnownPermissionCode(string code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return false;
+        if (code.StartsWith("SAGE:", StringComparison.OrdinalIgnoreCase) ||
+            code.StartsWith("POINTEUSE:", StringComparison.OrdinalIgnoreCase))
+            return true;
+        return KnownStaticPermissions.Contains(code);
+    }
+
+    private static HashSet<decimal> DeduirePortes(IEnumerable<string> permCodes)
+    {
+        var portes = new HashSet<decimal>();
+        foreach (var code in permCodes)
+        {
+            if (code.StartsWith("SAGE:", StringComparison.OrdinalIgnoreCase) ||
+                code.StartsWith("POINTEUSE:", StringComparison.OrdinalIgnoreCase))
+                portes.Add(Rights.Databases);
+            else if (code.StartsWith("PARAMS:", StringComparison.OrdinalIgnoreCase))
+                portes.Add(Rights.Parameters);
+            else if (code.StartsWith("PROC:", StringComparison.OrdinalIgnoreCase))
+                portes.Add(Rights.Processing);
+            else if (code.StartsWith("OTHER:", StringComparison.OrdinalIgnoreCase))
+                portes.Add(Rights.Other);
+            else if (code.StartsWith("TRACE:", StringComparison.OrdinalIgnoreCase))
+                portes.Add(Rights.Traceability);
+            else if (code.StartsWith("REPORTS:", StringComparison.OrdinalIgnoreCase))
+                portes.Add(Rights.Reports);
+        }
+        return portes;
+    }
+
+    private async Task EcrireAuditDroitAsync(
+        decimal idOperateur, string loginOperateur,
+        string typeCible, decimal idCible, string? nomCible,
+        string action,
+        IEnumerable<string>? permsAvant, IEnumerable<string>? permsApres,
+        CancellationToken cancellationToken)
+    {
+        var avant = permsAvant == null ? null : string.Join(",", permsAvant);
+        var apres = permsApres == null ? null : string.Join(",", permsApres);
+        await _uow.Repository<T_AUDIT_DROIT>().AddAsync(new T_AUDIT_DROIT
+        {
+            DATE_ACTION = DateTime.UtcNow,
+            ID_OPERATEUR = idOperateur,
+            LOGIN_OPERATEUR = loginOperateur,
+            TYPE_CIBLE = typeCible,
+            ID_CIBLE = idCible,
+            NOM_CIBLE = nomCible,
+            ACTION = action,
+            PERMS_AVANT = avant,
+            PERMS_APRES = apres
+        }, cancellationToken);
+    }
 
     private readonly IUnitOfWork _uow;
     private readonly ITokenService _tokens;
@@ -304,6 +383,23 @@ public class AuthService
                 if (otherAdmins.Count == 0)
                     throw new InvalidOperationException("Impossible de rétrograder le dernier administrateur.");
             }
+
+            if (entity.IDROLE != dto.RoleId && dto.ResetPermissions)
+            {
+                var permRepo = _uow.Repository<T_USER_PERMISSION>();
+                var existingPerms = await permRepo.ListAsync(p => p.IDRESPONSABLE == entity.IDRESPONSABLE, cancellationToken);
+                var permsAvant = existingPerms
+                    .Where(p => p.PERMISSION_CODE != EmptyPermissionsMarker)
+                    .Select(p => p.PERMISSION_CODE)
+                    .ToList();
+                permRepo.RemoveRange(existingPerms);
+                await EcrireAuditDroitAsync(
+                    currentUserId, caller.LOGIN ?? string.Empty,
+                    "USER", entity.IDRESPONSABLE, entity.NOMRESPONSABLE,
+                    "RESET_USER_PERMS",
+                    permsAvant, null,
+                    cancellationToken);
+            }
         }
 
         return await ExecuteSaveUserInternalAsync(entity, dto, cancellationToken);
@@ -498,6 +594,16 @@ public class AuthService
     {
         var repo = _uow.Repository<T_ROLE>();
         var entity = await repo.GetByIdAsync(id, cancellationToken) ?? throw new KeyNotFoundException();
+
+        // C5 — Nettoyage à la suppression d'un rôle
+        var rpRepo = _uow.Repository<T_ROLE_PERMISSION>();
+        var rolePerms = await rpRepo.ListAsync(p => p.IDROLE == id, cancellationToken);
+        rpRepo.RemoveRange(rolePerms);
+
+        var droitRepo = _uow.Repository<T_DROIT_ROLE>();
+        var droits = await droitRepo.ListAsync(d => d.IDROLE == id, cancellationToken);
+        droitRepo.RemoveRange(droits);
+
         repo.Remove(entity);
         await _uow.SaveChangesAsync(cancellationToken);
     }
@@ -662,6 +768,24 @@ public class AuthService
             return new UserDetailedPermissionsDto(userId, perms.Distinct().ToList(), true);
         }
 
+        // B2 — Droits effectifs : droits du rôle si configurés
+        var roleCustomPerms = await _uow.Repository<T_ROLE_PERMISSION>().ListAsync(
+            p => p.IDROLE == user.IDROLE && p.IS_GRANTED, cancellationToken);
+        if (roleCustomPerms.Count > 0)
+        {
+            var rolePerms = roleCustomPerms
+                .Where(p => p.PERMISSION_CODE != EmptyRolePermissionsMarker)
+                .Select(p => p.PERMISSION_CODE)
+                .Distinct()
+                .ToList();
+            if (isAdmin)
+            {
+                rolePerms.AddRange(defaults);
+                rolePerms = rolePerms.Distinct().ToList();
+            }
+            return new UserDetailedPermissionsDto(userId, rolePerms, false);
+        }
+
         return new UserDetailedPermissionsDto(userId, defaults.Distinct().ToList(), false);
     }
 
@@ -720,6 +844,10 @@ public class AuthService
 
         var repo = _uow.Repository<T_USER_PERMISSION>();
         var existing = await repo.ListAsync(p => p.IDRESPONSABLE == targetUserId, cancellationToken);
+        var permsAvant = existing
+            .Where(p => p.PERMISSION_CODE != EmptyPermissionsMarker)
+            .Select(p => p.PERMISSION_CODE)
+            .ToList();
         repo.RemoveRange(existing);
 
         foreach (var p in toSaveList.Distinct())
@@ -744,7 +872,164 @@ public class AuthService
             }, cancellationToken);
         }
 
+        await EcrireAuditDroitAsync(
+            currentUserId, caller.LOGIN ?? string.Empty,
+            "USER", targetUserId, target.NOMRESPONSABLE,
+            "UPDATE_USER_PERMS",
+            permsAvant, toSaveList,
+            cancellationToken);
+
         await _uow.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<RoleDetailedPermissionsDto> GetRoleDetailedPermissionsAsync(decimal roleId, CancellationToken cancellationToken = default)
+    {
+        var roleList = await _uow.Repository<T_ROLE_PERMISSION>().ListAsync(
+            p => p.IDROLE == roleId && p.IS_GRANTED, cancellationToken);
+
+        if (roleList.Count == 0)
+            return new RoleDetailedPermissionsDto(roleId, Array.Empty<string>(), false);
+
+        var perms = roleList
+            .Where(p => p.PERMISSION_CODE != EmptyRolePermissionsMarker)
+            .Select(p => p.PERMISSION_CODE)
+            .Distinct()
+            .ToList();
+
+        return new RoleDetailedPermissionsDto(roleId, perms, true);
+    }
+
+    public async Task SaveRoleDetailedPermissionsAsync(decimal currentUserId, decimal targetRoleId, IReadOnlyCollection<string> permissions, CancellationToken cancellationToken = default)
+    {
+        var caller = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(currentUserId, cancellationToken)
+            ?? throw new InvalidOperationException("Utilisateur appelant introuvable.");
+
+        var callerRole = await _uow.Repository<T_ROLE>().GetByIdAsync(caller.IDROLE, cancellationToken)
+            ?? throw new InvalidOperationException("Utilisateur appelant introuvable.");
+
+        if (!AdminRules.IsAdmin(caller.IDROLE, callerRole.NOMROLE))
+            throw new InvalidOperationException("Seul un administrateur peut modifier les permissions d'un rôle.");
+
+        if (targetRoleId == AdminRules.AdminRoleId)
+            throw new InvalidOperationException("Les privilèges du rôle Administrateur ne sont pas modifiables.");
+
+        var targetRole = await _uow.Repository<T_ROLE>().GetByIdAsync(targetRoleId, cancellationToken)
+            ?? throw new KeyNotFoundException("Rôle cible introuvable.");
+
+        var invalidCodes = permissions
+            .Where(p => !string.IsNullOrWhiteSpace(p) && p != EmptyRolePermissionsMarker && !IsKnownPermissionCode(p))
+            .ToList();
+        if (invalidCodes.Count > 0)
+            throw new InvalidOperationException($"Codes de permission inconnus : {string.Join(", ", invalidCodes)}.");
+
+        var rpRepo = _uow.Repository<T_ROLE_PERMISSION>();
+        var existing = await rpRepo.ListAsync(p => p.IDROLE == targetRoleId, cancellationToken);
+        var permsAvant = existing
+            .Where(p => p.PERMISSION_CODE != EmptyRolePermissionsMarker)
+            .Select(p => p.PERMISSION_CODE)
+            .ToList();
+
+        rpRepo.RemoveRange(existing);
+
+        var toSaveList = permissions
+            .Where(p => !string.IsNullOrWhiteSpace(p) && p != EmptyRolePermissionsMarker)
+            .Distinct()
+            .ToList();
+
+        foreach (var p in toSaveList)
+        {
+            await rpRepo.AddAsync(new T_ROLE_PERMISSION
+            {
+                IDROLE = targetRoleId,
+                PERMISSION_CODE = p.Trim(),
+                IS_GRANTED = true
+            }, cancellationToken);
+        }
+
+        if (toSaveList.Count == 0)
+        {
+            await rpRepo.AddAsync(new T_ROLE_PERMISSION
+            {
+                IDROLE = targetRoleId,
+                PERMISSION_CODE = EmptyRolePermissionsMarker,
+                IS_GRANTED = true
+            }, cancellationToken);
+        }
+
+        var droitRepo = _uow.Repository<T_DROIT_ROLE>();
+        var existingDroits = await droitRepo.ListAsync(d => d.IDROLE == targetRoleId, cancellationToken);
+        droitRepo.RemoveRange(existingDroits);
+
+        var portesDeduites = DeduirePortes(toSaveList);
+        foreach (var porte in portesDeduites)
+        {
+            await droitRepo.AddAsync(new T_DROIT_ROLE { IDROLE = targetRoleId, IDDROIT = porte }, cancellationToken);
+        }
+
+        await EcrireAuditDroitAsync(
+            currentUserId, caller.LOGIN ?? string.Empty,
+            "ROLE", targetRoleId, targetRole.NOMROLE,
+            "UPDATE_ROLE_PERMS",
+            permsAvant, toSaveList,
+            cancellationToken);
+
+        await _uow.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task ResetUserDetailedPermissionsAsync(decimal currentUserId, decimal targetUserId, CancellationToken cancellationToken = default)
+    {
+        var caller = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(currentUserId, cancellationToken)
+            ?? throw new UnauthorizedAccessException("Utilisateur connecté introuvable.");
+
+        var target = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(targetUserId, cancellationToken)
+            ?? throw new KeyNotFoundException("Utilisateur cible introuvable.");
+
+        var callerRole = await _uow.Repository<T_ROLE>().GetByIdAsync(caller.IDROLE, cancellationToken);
+        var callerIsAdmin = AdminRules.IsAdmin(caller.IDROLE, callerRole?.NOMROLE);
+
+        if (currentUserId == targetUserId && !callerIsAdmin)
+        {
+            throw new InvalidOperationException("Un utilisateur ne peut pas modifier ses propres privilèges sans droit d'administration.");
+        }
+
+        var repo = _uow.Repository<T_USER_PERMISSION>();
+        var existing = await repo.ListAsync(p => p.IDRESPONSABLE == targetUserId, cancellationToken);
+        var permsAvant = existing
+            .Where(p => p.PERMISSION_CODE != EmptyPermissionsMarker)
+            .Select(p => p.PERMISSION_CODE)
+            .ToList();
+
+        repo.RemoveRange(existing);
+
+        await EcrireAuditDroitAsync(
+            currentUserId, caller.LOGIN ?? string.Empty,
+            "USER", targetUserId, target.NOMRESPONSABLE,
+            "RESET_USER_PERMS",
+            permsAvant, null,
+            cancellationToken);
+
+        await _uow.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<AuditDroitDto>> GetAuditDroitsAsync(
+        string? typeCible, decimal? idCible, DateTime? from, DateTime? to,
+        CancellationToken cancellationToken = default)
+    {
+        var fromDate = from ?? DateTime.UtcNow.AddDays(-30);
+        var toDate = to ?? DateTime.UtcNow.AddDays(1);
+        var list = await _uow.Repository<T_AUDIT_DROIT>().ListLatestAsync(
+            a => a.DATE_ACTION >= fromDate
+                 && a.DATE_ACTION <= toDate
+                 && (string.IsNullOrEmpty(typeCible) || a.TYPE_CIBLE == typeCible)
+                 && (!idCible.HasValue || a.ID_CIBLE == idCible.Value),
+            a => (DateTime?)a.DATE_ACTION,
+            take: 500,
+            cancellationToken);
+
+        return list.Select(a => new AuditDroitDto(
+            a.ID, a.DATE_ACTION, a.ID_OPERATEUR, a.LOGIN_OPERATEUR,
+            a.TYPE_CIBLE, a.ID_CIBLE, a.NOM_CIBLE,
+            a.ACTION, a.PERMS_AVANT, a.PERMS_APRES)).ToList();
     }
 }
 
