@@ -3,11 +3,20 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
-import { PointeuseDb, SageDb, User } from '../../shared/models';
+import { PointeuseDb, Role, SageDb, User } from '../../shared/models';
 import { PointeuseDatabasesService } from '../../shared/services/catalog.service';
-import { PrivilegesService, SageDatabasesService, UsersService } from '../../shared/services/users.service';
+import { PrivilegesService, RolesService, SageDatabasesService, UsersService } from '../../shared/services/users.service';
 import { AuthService } from '../../shared/services/auth.service';
 import { Icon } from '../../shared/components/icon';
+import {
+  buildRoleImpactMessage,
+  canEditRolePermissions,
+  countUsersOfRole,
+  extractErrorMessage,
+  isAdminRole,
+} from './privileges.logic';
+
+type PrivilegesMode = 'user' | 'role';
 
 interface FeatureItem {
   code: string;
@@ -45,7 +54,7 @@ interface FeatureCategory {
         <button
           type="button"
           class="sw-btn-primary"
-          [disabled]="saving() || !selectedUserId()"
+          [disabled]="saving() || !hasTarget() || permissionsLocked()"
           (click)="save()"
         >
           @if (saving()) {
@@ -59,7 +68,45 @@ interface FeatureCategory {
       </div>
     </header>
 
+    <!-- Sélecteur de mode : par utilisateur ou par rôle -->
+    <section class="sw-card" aria-label="Mode de configuration">
+      <div class="sw-bulk-actions">
+        <button
+          type="button"
+          class="sw-btn-sm"
+          [class.sw-btn-primary]="mode() === 'user'"
+          [attr.aria-pressed]="mode() === 'user'"
+          (click)="setMode('user')"
+        >
+          Par utilisateur
+        </button>
+        <button
+          type="button"
+          class="sw-btn-sm"
+          [class.sw-btn-primary]="mode() === 'role'"
+          [attr.aria-pressed]="mode() === 'role'"
+          (click)="setMode('role')"
+        >
+          Par rôle
+        </button>
+      </div>
+    </section>
+
+    @if (adminLocked()) {
+      <section class="sw-card" aria-label="Verrou administrateur">
+        <p class="sw-empty-hint">
+          Les privilèges de l'administrateur sont gérés par le serveur et ne sont pas modifiables.
+        </p>
+      </section>
+    }
+    @if (roleEditLocked()) {
+      <section class="sw-card" aria-label="Modification réservée">
+        <p class="sw-empty-hint">Seul un administrateur peut modifier les droits d'un rôle.</p>
+      </section>
+    }
+
     <!-- Carte Sélecteur d'utilisateur - Conforme Charte Softwell §7.1 N°5 & §8.4 -->
+    @if (mode() === 'user') {
     <section class="sw-card sw-user-select-card" aria-label="Sélection de l'utilisateur">
       <div class="sw-user-selector-bar">
         <div class="sw-user-selector-field">
@@ -97,13 +144,13 @@ interface FeatureCategory {
         </div>
 
         <div class="sw-bulk-actions">
-          <button type="button" class="sw-btn-sm" (click)="toggleAll(true)">
+          <button type="button" class="sw-btn-sm" [disabled]="permissionsLocked()" (click)="toggleAll(true)">
             Tout cocher
           </button>
           <button
             type="button"
             class="sw-btn-sm"
-            [disabled]="isTargetAdmin()"
+            [disabled]="permissionsLocked()"
             (click)="toggleAll(false)"
             [title]="isTargetAdmin() ? 'Les bases et droits cles restent obligatoires pour un administrateur' : 'Tout decocher'"
           >
@@ -112,9 +159,48 @@ interface FeatureCategory {
         </div>
       </div>
     </section>
+    }
+
+    @if (mode() === 'role') {
+    <section class="sw-card sw-user-select-card" aria-label="Sélection du rôle">
+      <div class="sw-user-selector-bar">
+        <div class="sw-user-selector-field">
+          <label class="sw-field-label" for="swRoleSelect">
+            Rôle à configurer <span class="sw-req">*</span>
+          </label>
+          <div class="sw-select-wrap">
+            <select
+              id="swRoleSelect"
+              class="sw-select"
+              [ngModel]="selectedRoleId()"
+              (ngModelChange)="onRoleChange($event)"
+            >
+              @for (opt of roleOptions(); track opt.value) {
+                <option [value]="opt.value">{{ opt.label }}</option>
+              }
+            </select>
+          </div>
+        </div>
+
+        <div class="sw-user-status-badges">
+          <span class="sw-badge sw-badge-role">
+            <app-icon name="shield" [size]="14"></app-icon>
+            Rôle : {{ selectedRoleLabel() }}
+          </span>
+        </div>
+      </div>
+
+      @if (!isRoleConfigured()) {
+        <p class="sw-empty-hint">
+          Ce rôle n'a pas encore de configuration détaillée : les droits affichés sont déduits de ses grandes portes
+          actuelles.
+        </p>
+      }
+    </section>
+    }
 
     <!-- Conteneur des permissions par catégorie -->
-    <div class="sw-permissions-container" *ngIf="selectedUserId">
+    <div class="sw-permissions-container" *ngIf="hasTarget()">
       <!-- Section 1 : Bases RH / Paie (Charte §7.1 N°8 & §8.4) -->
       <section class="sw-card sw-perm-card" [class.is-collapsed]="isCollapsed('SAGE')">
         <div class="sw-perm-card-header">
@@ -130,11 +216,11 @@ interface FeatureCategory {
           </div>
 
           <div class="sw-card-bulk-actions">
-            <label class="sw-check-label sw-header-check-label" [class.is-disabled]="isMandatory('SAGE:CREATE')">
+            <label class="sw-check-label sw-header-check-label" [class.is-disabled]="isReadOnly('SAGE:CREATE')">
               <input
                 type="checkbox"
                 [checked]="has('SAGE:CREATE')"
-                [disabled]="isMandatory('SAGE:CREATE')"
+                [disabled]="isReadOnly('SAGE:CREATE')"
                 (change)="toggle('SAGE:CREATE', $event)"
               />
               <span>Ajouter une base</span>
@@ -144,8 +230,8 @@ interface FeatureCategory {
                 </span>
               }
             </label>
-            <button type="button" class="sw-btn-xs" (click)="toggleGroup('SAGE', true)">Tout cocher</button>
-            <button type="button" class="sw-btn-xs" (click)="toggleGroup('SAGE', false)" [disabled]="isTargetAdmin()">Tout décocher</button>
+            <button type="button" class="sw-btn-xs" [disabled]="permissionsLocked()" (click)="toggleGroup('SAGE', true)">Tout cocher</button>
+            <button type="button" class="sw-btn-xs" (click)="toggleGroup('SAGE', false)" [disabled]="permissionsLocked()">Tout décocher</button>
             <button
               type="button"
               class="sw-btn-icon-collapse"
@@ -171,11 +257,11 @@ interface FeatureCategory {
                     </div>
 
                     <div class="sw-actions-toggles">
-                      <label class="sw-check-label" [class.is-disabled]="isMandatory('SAGE:' + db.nomBd + ':READ')">
+                      <label class="sw-check-label" [class.is-disabled]="isReadOnly('SAGE:' + db.nomBd + ':READ')">
                         <input
                           type="checkbox"
                           [checked]="has('SAGE:' + db.nomBd + ':READ')"
-                          [disabled]="isMandatory('SAGE:' + db.nomBd + ':READ')"
+                          [disabled]="isReadOnly('SAGE:' + db.nomBd + ':READ')"
                           (change)="toggle('SAGE:' + db.nomBd + ':READ', $event)"
                         />
                         <span>Consulter</span>
@@ -184,11 +270,11 @@ interface FeatureCategory {
                         }
                       </label>
 
-                      <label class="sw-check-label" [class.is-disabled]="isMandatory('SAGE:' + db.nomBd + ':UPDATE')">
+                      <label class="sw-check-label" [class.is-disabled]="isReadOnly('SAGE:' + db.nomBd + ':UPDATE')">
                         <input
                           type="checkbox"
                           [checked]="has('SAGE:' + db.nomBd + ':UPDATE')"
-                          [disabled]="isMandatory('SAGE:' + db.nomBd + ':UPDATE')"
+                          [disabled]="isReadOnly('SAGE:' + db.nomBd + ':UPDATE')"
                           (change)="toggle('SAGE:' + db.nomBd + ':UPDATE', $event)"
                         />
                         <span>Modifier</span>
@@ -197,11 +283,11 @@ interface FeatureCategory {
                         }
                       </label>
 
-                      <label class="sw-check-label" [class.is-disabled]="isMandatory('SAGE:' + db.nomBd + ':DELETE')">
+                      <label class="sw-check-label" [class.is-disabled]="isReadOnly('SAGE:' + db.nomBd + ':DELETE')">
                         <input
                           type="checkbox"
                           [checked]="has('SAGE:' + db.nomBd + ':DELETE')"
-                          [disabled]="isMandatory('SAGE:' + db.nomBd + ':DELETE')"
+                          [disabled]="isReadOnly('SAGE:' + db.nomBd + ':DELETE')"
                           (change)="toggle('SAGE:' + db.nomBd + ':DELETE', $event)"
                         />
                         <span>Supprimer</span>
@@ -233,11 +319,11 @@ interface FeatureCategory {
           </div>
 
           <div class="sw-card-bulk-actions">
-            <label class="sw-check-label sw-header-check-label" [class.is-disabled]="isMandatory('POINTEUSE:CREATE')">
+            <label class="sw-check-label sw-header-check-label" [class.is-disabled]="isReadOnly('POINTEUSE:CREATE')">
               <input
                 type="checkbox"
                 [checked]="has('POINTEUSE:CREATE')"
-                [disabled]="isMandatory('POINTEUSE:CREATE')"
+                [disabled]="isReadOnly('POINTEUSE:CREATE')"
                 (change)="toggle('POINTEUSE:CREATE', $event)"
               />
               <span>Ajouter une base</span>
@@ -247,8 +333,8 @@ interface FeatureCategory {
                 </span>
               }
             </label>
-            <button type="button" class="sw-btn-xs" (click)="toggleGroup('POINTEUSE', true)">Tout cocher</button>
-            <button type="button" class="sw-btn-xs" (click)="toggleGroup('POINTEUSE', false)" [disabled]="isTargetAdmin()">Tout décocher</button>
+            <button type="button" class="sw-btn-xs" [disabled]="permissionsLocked()" (click)="toggleGroup('POINTEUSE', true)">Tout cocher</button>
+            <button type="button" class="sw-btn-xs" (click)="toggleGroup('POINTEUSE', false)" [disabled]="permissionsLocked()">Tout décocher</button>
             <button
               type="button"
               class="sw-btn-icon-collapse"
@@ -274,11 +360,11 @@ interface FeatureCategory {
                     </div>
 
                     <div class="sw-actions-toggles">
-                      <label class="sw-check-label" [class.is-disabled]="isMandatory('POINTEUSE:' + db.nomBd + ':READ')">
+                      <label class="sw-check-label" [class.is-disabled]="isReadOnly('POINTEUSE:' + db.nomBd + ':READ')">
                         <input
                           type="checkbox"
                           [checked]="has('POINTEUSE:' + db.nomBd + ':READ')"
-                          [disabled]="isMandatory('POINTEUSE:' + db.nomBd + ':READ')"
+                          [disabled]="isReadOnly('POINTEUSE:' + db.nomBd + ':READ')"
                           (change)="toggle('POINTEUSE:' + db.nomBd + ':READ', $event)"
                         />
                         <span>Consulter</span>
@@ -287,11 +373,11 @@ interface FeatureCategory {
                         }
                       </label>
 
-                      <label class="sw-check-label" [class.is-disabled]="isMandatory('POINTEUSE:' + db.nomBd + ':UPDATE')">
+                      <label class="sw-check-label" [class.is-disabled]="isReadOnly('POINTEUSE:' + db.nomBd + ':UPDATE')">
                         <input
                           type="checkbox"
                           [checked]="has('POINTEUSE:' + db.nomBd + ':UPDATE')"
-                          [disabled]="isMandatory('POINTEUSE:' + db.nomBd + ':UPDATE')"
+                          [disabled]="isReadOnly('POINTEUSE:' + db.nomBd + ':UPDATE')"
                           (change)="toggle('POINTEUSE:' + db.nomBd + ':UPDATE', $event)"
                         />
                         <span>Modifier</span>
@@ -300,11 +386,11 @@ interface FeatureCategory {
                         }
                       </label>
 
-                      <label class="sw-check-label" [class.is-disabled]="isMandatory('POINTEUSE:' + db.nomBd + ':DELETE')">
+                      <label class="sw-check-label" [class.is-disabled]="isReadOnly('POINTEUSE:' + db.nomBd + ':DELETE')">
                         <input
                           type="checkbox"
                           [checked]="has('POINTEUSE:' + db.nomBd + ':DELETE')"
-                          [disabled]="isMandatory('POINTEUSE:' + db.nomBd + ':DELETE')"
+                          [disabled]="isReadOnly('POINTEUSE:' + db.nomBd + ':DELETE')"
                           (change)="toggle('POINTEUSE:' + db.nomBd + ':DELETE', $event)"
                         />
                         <span>Supprimer</span>
@@ -337,8 +423,8 @@ interface FeatureCategory {
             </div>
 
             <div class="sw-card-bulk-actions">
-              <button type="button" class="sw-btn-xs" (click)="toggleGroup(cat.key, true)">Tout cocher</button>
-              <button type="button" class="sw-btn-xs" (click)="toggleGroup(cat.key, false)">Tout décocher</button>
+              <button type="button" class="sw-btn-xs" [disabled]="permissionsLocked()" (click)="toggleGroup(cat.key, true)">Tout cocher</button>
+              <button type="button" class="sw-btn-xs" [disabled]="permissionsLocked()" (click)="toggleGroup(cat.key, false)">Tout décocher</button>
               <button
                 type="button"
                 class="sw-btn-icon-collapse"
@@ -355,11 +441,11 @@ interface FeatureCategory {
               <div class="sw-perm-rows-list">
                 @for (item of cat.items; track item.code) {
                   <div class="sw-perm-row">
-                    <label class="sw-check-label sw-item-access-check" [class.is-disabled]="isMandatory(item.code)">
+                    <label class="sw-check-label sw-item-access-check" [class.is-disabled]="isReadOnly(item.code)">
                       <input
                         type="checkbox"
                         [checked]="has(item.code)"
-                        [disabled]="isMandatory(item.code)"
+                        [disabled]="isReadOnly(item.code)"
                         (change)="toggle(item.code, $event)"
                       />
                       <strong class="sw-perm-item-title">{{ item.label }}</strong>
@@ -373,11 +459,11 @@ interface FeatureCategory {
                     @if (item.canCreate || item.canUpdate || item.canDelete) {
                       <div class="sw-actions-toggles">
                         @if (item.canCreate) {
-                          <label class="sw-check-label" [class.is-disabled]="isMandatory(item.code + ':CREATE')">
+                          <label class="sw-check-label" [class.is-disabled]="isReadOnly(item.code + ':CREATE')">
                             <input
                               type="checkbox"
                               [checked]="has(item.code + ':CREATE')"
-                              [disabled]="isMandatory(item.code + ':CREATE')"
+                              [disabled]="isReadOnly(item.code + ':CREATE')"
                               (change)="toggle(item.code + ':CREATE', $event)"
                             />
                             <span>Ajouter</span>
@@ -387,11 +473,11 @@ interface FeatureCategory {
                           </label>
                         }
                         @if (item.canUpdate) {
-                          <label class="sw-check-label" [class.is-disabled]="isMandatory(item.code + ':UPDATE')">
+                          <label class="sw-check-label" [class.is-disabled]="isReadOnly(item.code + ':UPDATE')">
                             <input
                               type="checkbox"
                               [checked]="has(item.code + ':UPDATE')"
-                              [disabled]="isMandatory(item.code + ':UPDATE')"
+                              [disabled]="isReadOnly(item.code + ':UPDATE')"
                               (change)="toggle(item.code + ':UPDATE', $event)"
                             />
                             <span>Modifier</span>
@@ -401,11 +487,11 @@ interface FeatureCategory {
                           </label>
                         }
                         @if (item.canDelete) {
-                          <label class="sw-check-label" [class.is-disabled]="isMandatory(item.code + ':DELETE')">
+                          <label class="sw-check-label" [class.is-disabled]="isReadOnly(item.code + ':DELETE')">
                             <input
                               type="checkbox"
                               [checked]="has(item.code + ':DELETE')"
-                              [disabled]="isMandatory(item.code + ':DELETE')"
+                              [disabled]="isReadOnly(item.code + ':DELETE')"
                               (change)="toggle(item.code + ':DELETE', $event)"
                             />
                             <span>Supprimer</span>
@@ -953,6 +1039,7 @@ interface FeatureCategory {
 })
 export class PrivilegesPage implements OnInit {
   private readonly usersSvc = inject(UsersService);
+  private readonly rolesSvc = inject(RolesService);
   private readonly privSvc = inject(PrivilegesService);
   private readonly sageSvc = inject(SageDatabasesService);
   private readonly pointeuseSvc = inject(PointeuseDatabasesService);
@@ -965,11 +1052,27 @@ export class PrivilegesPage implements OnInit {
   readonly sageDbs = signal<SageDb[]>([]);
   readonly pointeuseDbs = signal<PointeuseDb[]>([]);
 
+  readonly mode = signal<PrivilegesMode>('user');
   readonly selectedUserId = signal<number | null>(null);
   readonly selectedUser = computed(() => {
     const id = this.selectedUserId();
     return this.users().find((u) => u.id === id) ?? null;
   });
+  readonly roles = signal<Role[]>([]);
+  readonly selectedRoleId = signal<number | null>(null);
+  readonly isRoleConfigured = signal(true);
+  readonly permissionsLoading = signal(false);
+  readonly permissionsLoaded = signal(false);
+  private permissionsRequestId = 0;
+  readonly roleOptions = computed(() => this.roles().map((role) => ({ value: role.id, label: role.nom })));
+  readonly selectedRoleLabel = computed(() => {
+    const id = this.selectedRoleId();
+    const role = this.roles().find((item) => item.id === id);
+    return role?.nom ?? (id ? `Rôle #${id}` : '—');
+  });
+  readonly hasTarget = computed(() =>
+    this.mode() === 'user' ? this.selectedUserId() !== null : this.selectedRoleId() !== null,
+  );
 
   readonly grantedPermissions = signal<Set<string>>(new Set());
   readonly isCustomized = signal(false);
@@ -1059,6 +1162,53 @@ export class PrivilegesPage implements OnInit {
         this.loadUserPermissions(users[0].id);
       }
     });
+
+    this.rolesSvc.list().subscribe({
+      next: (roles) => {
+        this.roles.set(roles);
+        if (roles.length && this.selectedRoleId() === null) {
+          this.selectedRoleId.set(roles[0].id);
+        }
+      },
+      error: () => this.toast.error('Impossible de charger la liste des rôles.'),
+    });
+  }
+
+  setMode(mode: PrivilegesMode): void {
+    if (this.mode() === mode) return;
+    this.mode.set(mode);
+    if (mode === 'role') {
+      const roleId = this.selectedRoleId();
+      if (roleId) this.loadRolePermissions(roleId);
+    } else {
+      const userId = this.selectedUserId();
+      if (userId) this.loadUserPermissions(userId);
+    }
+  }
+
+  onRoleChange(roleId: unknown): void {
+    const id = Number(roleId);
+    if (!id) return;
+    this.selectedRoleId.set(id);
+    this.loadRolePermissions(id);
+  }
+
+  private loadRolePermissions(roleId: number): void {
+    const requestId = this.beginPermissionsLoad();
+    this.privSvc.getRolePermissions(roleId).subscribe({
+      next: (res) => {
+        if (requestId !== this.permissionsRequestId) return;
+        this.permissionsLoading.set(false);
+        this.permissionsLoaded.set(true);
+        this.grantedPermissions.set(new Set(res.grantedPermissions ?? []));
+        this.isRoleConfigured.set(res.isConfigured);
+      },
+      error: () => {
+        if (requestId !== this.permissionsRequestId) return;
+        this.permissionsLoading.set(false);
+        this.toast.error('Impossible de charger les privilèges de ce rôle.');
+      },
+    });
   }
 
   onUserChange(userId: unknown): void {
@@ -1069,18 +1219,47 @@ export class PrivilegesPage implements OnInit {
   }
 
   private loadUserPermissions(userId: number): void {
+    const requestId = this.beginPermissionsLoad();
     this.privSvc.byUser(userId).subscribe({
       next: (res) => {
+        if (requestId !== this.permissionsRequestId) return;
+        this.permissionsLoading.set(false);
+        this.permissionsLoaded.set(true);
         this.grantedPermissions.set(new Set(res.grantedPermissions ?? []));
         this.isCustomized.set(res.isCustomized);
       },
       error: () => {
+        if (requestId !== this.permissionsRequestId) return;
+        this.permissionsLoading.set(false);
         this.toast.error('Impossible de charger les privilèges de cet utilisateur.');
       },
     });
   }
 
-  readonly isTargetAdmin = computed(() => this.selectedUser()?.roleId === 1);
+  private beginPermissionsLoad(): number {
+    this.permissionsRequestId += 1;
+    this.permissionsLoading.set(true);
+    this.permissionsLoaded.set(false);
+    this.grantedPermissions.set(new Set());
+    this.isCustomized.set(false);
+    this.isRoleConfigured.set(true);
+    return this.permissionsRequestId;
+  }
+
+  readonly adminLocked = computed(() =>
+    this.mode() === 'role' ? isAdminRole(this.selectedRoleId()) : isAdminRole(this.selectedUser()?.roleId),
+  );
+  readonly roleEditLocked = computed(
+    () => this.mode() === 'role' && !canEditRolePermissions(this.session.session()?.roleId, this.selectedRoleId()),
+  );
+  readonly permissionsLocked = computed(
+    () => this.adminLocked() || this.roleEditLocked() || this.permissionsLoading() || !this.permissionsLoaded(),
+  );
+  readonly isTargetAdmin = this.adminLocked;
+
+  isReadOnly(code: string): boolean {
+    return this.permissionsLocked() || this.isMandatory(code);
+  }
 
   isMandatory(code: string): boolean {
     if (!this.isTargetAdmin()) return false;
@@ -1114,11 +1293,13 @@ export class PrivilegesPage implements OnInit {
   }
 
   has(code: string): boolean {
+    if (this.adminLocked()) return true;
     if (this.isMandatory(code)) return true;
     return this.grantedPermissions().has(code);
   }
 
   toggle(code: string, event: Event): void {
+    if (this.permissionsLocked()) return;
     if (this.isMandatory(code)) {
       (event.target as HTMLInputElement).checked = true;
       this.toast.info('Cette permission est obligatoire pour un compte administrateur.');
@@ -1184,6 +1365,7 @@ export class PrivilegesPage implements OnInit {
   }
 
   toggleGroup(prefix: string, enable: boolean): void {
+    if (this.permissionsLocked()) return;
     if (!enable && this.isTargetAdmin() && (prefix === 'SAGE' || prefix === 'POINTEUSE')) {
       this.toast.info("L'accès aux bases ne peut pas être retiré à un administrateur.");
       return;
@@ -1238,6 +1420,7 @@ export class PrivilegesPage implements OnInit {
   }
 
   toggleAll(enable: boolean): void {
+    if (this.permissionsLocked()) return;
     if (!enable) {
       if (this.isTargetAdmin()) {
         const next = new Set<string>();
@@ -1281,6 +1464,11 @@ export class PrivilegesPage implements OnInit {
   }
 
   save(): void {
+    if (this.permissionsLocked()) return;
+    if (this.mode() === 'role') {
+      this.saveRole();
+      return;
+    }
     const userId = this.selectedUserId();
     if (!userId) return;
 
@@ -1299,9 +1487,16 @@ export class PrivilegesPage implements OnInit {
 
     this.saving.set(true);
     const perms = Array.from(this.grantedPermissions());
+    const requestId = this.permissionsRequestId;
+    const target = this.selectedUser();
+    const targetName = target ? `${target.nom} (${target.login})` : `Utilisateur #${userId}`;
     this.privSvc.saveUserPermissions(userId, perms).subscribe({
       next: () => {
         this.saving.set(false);
+        if (this.saveTargetChanged('user', userId, requestId)) {
+          this.toast.success(`Droits enregistrés pour ${targetName}.`);
+          return;
+        }
         this.isCustomized.set(true);
         if (currentSessionUser && currentSessionUser.userId === userId) {
           this.session.setPermissions(perms, true);
@@ -1311,8 +1506,51 @@ export class PrivilegesPage implements OnInit {
       },
       error: (e) => {
         this.saving.set(false);
+        if (this.saveTargetChanged('user', userId, requestId)) {
+          this.toast.error(`Échec pour ${targetName} : ${extractErrorMessage(e)}`);
+          return;
+        }
         const err = e?.error?.message || e?.error?.title || e?.error || "Erreur lors de l'enregistrement.";
         this.toast.error(err);
+      },
+    });
+  }
+
+  private saveTargetChanged(mode: PrivilegesMode, targetId: number, requestId: number): boolean {
+    if (this.permissionsRequestId !== requestId || this.mode() !== mode) return true;
+    return mode === 'role' ? this.selectedRoleId() !== targetId : this.selectedUserId() !== targetId;
+  }
+
+  private saveRole(): void {
+    const roleId = this.selectedRoleId();
+    if (!roleId) return;
+    if (!canEditRolePermissions(this.session.session()?.roleId, roleId)) return;
+    if (isAdminRole(roleId)) return;
+
+    const count = countUsersOfRole(this.users(), roleId);
+    if (!window.confirm(`${buildRoleImpactMessage(count)}\n\nConfirmer l'enregistrement ?`)) return;
+
+    this.saving.set(true);
+    const perms = Array.from(this.grantedPermissions());
+    const requestId = this.permissionsRequestId;
+    const targetName = this.selectedRoleLabel();
+    this.privSvc.saveRolePermissions(roleId, perms).subscribe({
+      next: () => {
+        this.saving.set(false);
+        if (this.saveTargetChanged('role', roleId, requestId)) {
+          this.toast.success(`Droits enregistrés pour ${targetName}.`);
+          return;
+        }
+        this.loadRolePermissions(roleId);
+        this.toast.success('Droits du rôle enregistrés.');
+      },
+      error: (err: unknown) => {
+        this.saving.set(false);
+        if (this.saveTargetChanged('role', roleId, requestId)) {
+          this.toast.error(`Échec pour ${targetName} : ${extractErrorMessage(err)}`);
+          return;
+        }
+        this.toast.error(extractErrorMessage(err));
       },
     });
   }
