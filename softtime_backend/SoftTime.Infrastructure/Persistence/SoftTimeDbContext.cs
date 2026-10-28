@@ -21,6 +21,7 @@ public class SoftTimeDbContext : DbContext
     public DbSet<T_HEURECORRIGER> T_HEURECORRIGER => Set<T_HEURECORRIGER>();
     public DbSet<T_HEUREANOMALIE> T_HEUREANOMALIE => Set<T_HEUREANOMALIE>();
     public DbSet<suivi_SUIVI> suivi_SUIVI => Set<suivi_SUIVI>();
+    public DbSet<suivi_JOURNAL> suivi_JOURNAL => Set<suivi_JOURNAL>();
     public DbSet<suivi_T> suivi_T => Set<suivi_T>();
     public DbSet<suivi_TBLCLN> suivi_TBLCLN => Set<suivi_TBLCLN>();
     public DbSet<T_FRAIS> T_FRAIS => Set<T_FRAIS>();
@@ -202,6 +203,22 @@ public class SoftTimeDbContext : DbContext
         {
             e.Property(x => x._TABLES).HasMaxLength(128);
             e.Property(x => x._ACTIONS).HasMaxLength(128);
+        });
+        modelBuilder.Entity<suivi_JOURNAL>(e =>
+        {
+            e.Property(x => x.DATE_UTC).HasColumnType("datetime2");
+            e.Property(x => x.TABLES).HasMaxLength(128);
+            e.Property(x => x.CLES).HasMaxLength(450);
+            e.Property(x => x.COLONNES).HasMaxLength(128);
+            e.Property(x => x.ACTIONS).HasMaxLength(32);
+            e.Property(x => x.USERS).HasMaxLength(256);
+            e.Property(x => x.BASE_SAGE).HasMaxLength(128);
+            e.Property(x => x.BASE_POINTEUSE).HasMaxLength(128);
+            e.Property(x => x.SOURCE).HasMaxLength(64);
+            e.HasIndex(x => new { x.DATE_UTC, x.Id }).HasDatabaseName("IX_suivi_JOURNAL_Date").IsDescending(true, true);
+            e.HasIndex(x => new { x.BASE_SAGE, x.DATE_UTC, x.Id }).HasDatabaseName("IX_suivi_JOURNAL_Base_Date").IsDescending(false, true, true);
+            e.HasIndex(x => new { x.TABLES, x.ACTIONS, x.DATE_UTC, x.Id }).HasDatabaseName("IX_suivi_JOURNAL_Table_Action_Date").IsDescending(false, false, true, true);
+            e.HasIndex(x => new { x.CORRELATIONS, x.Id }).HasDatabaseName("IX_suivi_JOURNAL_Correlation");
         });
     }
 }
