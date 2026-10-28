@@ -240,20 +240,31 @@ public class AuthService
     public async Task<UserDto> SaveUserAsync(UserDto dto, CancellationToken cancellationToken = default)
     {
         var repo = _uow.Repository<T_RESPONSABLE>();
+        var nom = (dto.Nom ?? string.Empty).Trim();
+        var login = (dto.Login ?? string.Empty).Trim();
+
+        if (nom.Length == 0)
+            throw new FieldValidationException("nom", "Le nom est obligatoire.");
+        if (login.Length == 0)
+            throw new FieldValidationException("login", "Le login est obligatoire.");
+        if (dto.RoleId <= 0)
+            throw new FieldValidationException("roleId", "Le rôle est obligatoire.");
+
         T_RESPONSABLE entity;
         var loginModifie = false;
         var motDePasseModifie = false;
         if (dto.Id == 0)
         {
+            await EnsureLoginAvailableAsync(repo, login, dto.Id, cancellationToken);
             if (string.IsNullOrWhiteSpace(dto.Password))
-                throw new InvalidOperationException("Le mot de passe est requis pour un nouvel utilisateur.");
-            PasswordPolicy.EnsureValid(dto.Password);
+                throw new FieldValidationException("password", "Le mot de passe est obligatoire pour un nouvel utilisateur.");
+            EnsurePasswordPolicy(dto.Password);
 
             entity = new T_RESPONSABLE
             {
                 IDROLE = dto.RoleId,
-                NOMRESPONSABLE = dto.Nom,
-                LOGIN = dto.Login,
+                NOMRESPONSABLE = nom,
+                LOGIN = login,
                 PASSWORD = _passwordHasher.HashPassword(null!, dto.Password),
                 MATRICULE = dto.Matricule,
                 EMAIL = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim()
@@ -263,7 +274,11 @@ public class AuthService
         else
         {
             entity = await repo.GetByIdAsync(dto.Id, cancellationToken) ?? throw new KeyNotFoundException();
-            loginModifie = !string.Equals((entity.LOGIN ?? string.Empty).Trim(), (dto.Login ?? string.Empty).Trim(), StringComparison.Ordinal);
+            loginModifie = !string.Equals((entity.LOGIN ?? string.Empty).Trim(), login, StringComparison.Ordinal);
+            // Ne pas bloquer la modification d'un compte historique dont le login serait déjà dupliqué :
+            // l'unicité n'est vérifiée que lorsqu'un nouveau login est choisi.
+            if (!string.Equals((entity.LOGIN ?? string.Empty).Trim(), login, StringComparison.OrdinalIgnoreCase))
+                await EnsureLoginAvailableAsync(repo, login, dto.Id, cancellationToken);
 
             if (!string.IsNullOrWhiteSpace(dto.Password))
             {
@@ -285,7 +300,7 @@ public class AuthService
 
                 if (!isSame)
                 {
-                    PasswordPolicy.EnsureValid(dto.Password);
+                    EnsurePasswordPolicy(dto.Password);
                     motDePasseModifie = true;
                     entity.PASSWORD = _passwordHasher.HashPassword(entity, dto.Password);
                 }
@@ -297,8 +312,8 @@ public class AuthService
             }
 
             entity.IDROLE = dto.RoleId;
-            entity.NOMRESPONSABLE = dto.Nom;
-            entity.LOGIN = dto.Login;
+            entity.NOMRESPONSABLE = nom;
+            entity.LOGIN = login;
             entity.MATRICULE = dto.Matricule;
             entity.EMAIL = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim();
             repo.Update(entity);
@@ -312,6 +327,26 @@ public class AuthService
             await _email.SendUserUpdateAsync(entity.EMAIL, entity.LOGIN, motDePasseModifie ? dto.Password : null, entity.NOMRESPONSABLE, null, loginModifie, motDePasseModifie, cancellationToken);
 
         return new UserDto(entity.IDRESPONSABLE, entity.IDROLE, entity.NOMRESPONSABLE, entity.LOGIN, entity.MATRICULE, null) { Email = entity.EMAIL };
+    }
+
+    /// <summary>Valide le mot de passe et rattache l'erreur au champ « password » du formulaire.</summary>
+    private static void EnsurePasswordPolicy(string? password)
+    {
+        var validation = PasswordPolicy.Validate(password);
+        if (!validation.IsValid)
+            throw new FieldValidationException("password", validation.ErrorMessage);
+    }
+
+    /// <summary>Refuse un login déjà porté par un autre compte (comparaison sans casse ni espaces).</summary>
+    private static async Task EnsureLoginAvailableAsync(
+        IRepository<T_RESPONSABLE> repo,
+        string login,
+        decimal id,
+        CancellationToken cancellationToken)
+    {
+        var autres = await repo.ListAsync(u => u.IDRESPONSABLE != id, cancellationToken);
+        if (autres.Any(u => string.Equals((u.LOGIN ?? string.Empty).Trim(), login, StringComparison.OrdinalIgnoreCase)))
+            throw new FieldValidationException("login", "Ce login est déjà utilisé. Choisissez-en un autre.");
     }
 
     public async Task DeleteUserAsync(decimal id, CancellationToken cancellationToken = default)

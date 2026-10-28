@@ -15,7 +15,7 @@ let uid = 0;
     <div class="soft-field" [class.soft-field--error]="!!error()">
       @if (label()) {
         <label class="soft-field__label" [attr.for]="id">
-          {{ label() }}@if (required()) {<span class="soft-field__req">*</span>}
+          {{ label() }}@if (required()) {<span class="soft-field__req" aria-hidden="true">*</span>}
         </label>
       }
       <div class="soft-field__input">
@@ -26,6 +26,9 @@ let uid = 0;
           [placeholder]="placeholder()"
           [required]="required()"
           [disabled]="disabled()"
+          [attr.aria-required]="required() ? 'true' : null"
+          [attr.aria-invalid]="error() ? 'true' : null"
+          [attr.aria-describedby]="describedBy()"
           [value]="value()"
           (input)="onInput($event)"
           (blur)="onTouched()"
@@ -44,10 +47,10 @@ let uid = 0;
         }
       </div>
       @if (hint() && !error()) {
-        <span class="soft-field__hint">{{ hint() }}</span>
+        <span class="soft-field__hint" [id]="hintId">{{ hint() }}</span>
       }
       @if (error()) {
-        <span class="soft-field__error">{{ error() }}</span>
+        <span class="soft-field__error" [id]="errorId">{{ error() }}</span>
       }
     </div>
   `,
@@ -89,6 +92,8 @@ let uid = 0;
 })
 export class SoftInput implements ControlValueAccessor {
   readonly id = `soft-input-${++uid}`;
+  readonly hintId = `${this.id}-hint`;
+  readonly errorId = `${this.id}-error`;
   readonly label = input('');
   readonly type = input<'text' | 'email' | 'password' | 'number' | 'date' | 'time'>('text');
   readonly placeholder = input('');
@@ -100,6 +105,12 @@ export class SoftInput implements ControlValueAccessor {
   readonly disabled = signal(false);
   readonly revealed = signal(false);
 
+  readonly describedBy = computed(() => {
+    if (this.error()) return this.errorId;
+    if (this.hint()) return this.hintId;
+    return null;
+  });
+
   readonly inputType = computed(() =>
     this.type() === 'password' && this.revealed() ? 'text' : this.type(),
   );
@@ -109,6 +120,7 @@ export class SoftInput implements ControlValueAccessor {
 
   onInput(event: Event): void {
     const raw = (event.target as HTMLInputElement).value;
+    if (this.type() === 'password' && raw === '') this.revealed.set(false);
     this.value.set(raw);
     this.onChange(this.type() === 'number' ? (raw === '' ? null : Number(raw)) : raw);
   }
@@ -118,7 +130,10 @@ export class SoftInput implements ControlValueAccessor {
   }
 
   writeValue(v: unknown): void {
-    this.value.set(v === null || v === undefined ? '' : String(v));
+    const next = v === null || v === undefined ? '' : String(v);
+    // Le modèle a été réinitialisé (ouverture d'un formulaire) : on masque à nouveau la saisie.
+    if (next !== this.value()) this.revealed.set(false);
+    this.value.set(next);
   }
   registerOnChange(fn: (v: unknown) => void): void {
     this.onChange = fn;
