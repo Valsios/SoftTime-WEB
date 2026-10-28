@@ -6,7 +6,8 @@
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "check:theme": "node scripts/theme-check.mjs"
   },
   "private": true,
   "packageManager": "npm@11.13.0",
