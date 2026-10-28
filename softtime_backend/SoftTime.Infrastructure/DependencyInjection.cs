@@ -23,6 +23,7 @@ public static class DependencyInjection
         services.TryAddScoped<ICurrentUser, EmptyCurrentUser>();
         services.AddSingleton(AuditJournalOptions.From(configuration));
         services.AddScoped<AuditJournalSaveChangesInterceptor>();
+        services.AddScoped<IAuditTrail, AuditTrail>();
         services.AddDbContext<SoftTimeDbContext>((serviceProvider, options) =>
             options.UseSqlServer(
                 configuration.GetConnectionString("SoftTime"),

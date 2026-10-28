@@ -23,8 +23,21 @@ public class OvertimeService
     private readonly PayrollWriterResolver _payrollWriters;
     private readonly HistoryArchiveService _history;
     private readonly SageLeaveCalendar _leaves;
+    private readonly ICurrentUser? _user;
 
     public OvertimeService(IUnitOfWork uow, TenantConnectionService tenant, IExternalSourceService externalSource, PayrollWriterResolver payrollWriters, HistoryArchiveService history, SageLeaveCalendar leaves)
+        : this(uow, tenant, externalSource, payrollWriters, history, leaves, null)
+    {
+    }
+
+    public OvertimeService(
+        IUnitOfWork uow,
+        TenantConnectionService tenant,
+        IExternalSourceService externalSource,
+        PayrollWriterResolver payrollWriters,
+        HistoryArchiveService history,
+        SageLeaveCalendar leaves,
+        ICurrentUser? user)
     {
         _uow = uow;
         _tenant = tenant;
@@ -32,6 +45,7 @@ public class OvertimeService
         _payrollWriters = payrollWriters;
         _history = history;
         _leaves = leaves;
+        _user = user;
     }
 
     public async Task<IReadOnlyList<WeeklyHsDto>> PreviewWeekAsync(PeriodRequest request, CancellationToken ct = default)
@@ -443,7 +457,8 @@ public class OvertimeService
             .Select(h => new HsExoDto(h.OID, h.Matricule, h.NumSal, h.EXO130, h.EXO150, h.I130, h.I150,
                 h.FERIE, h.NUIT, h.DIM, h.RETARD, h.ABSENCE))
             .ToList();
-        return await _payrollWriters.Resolve(sageRow).WriteAsync(sageRow, dtos, ct);
+        var auditContext = new PayrollSyncContext(request.From.Date, request.To.Date, _user?.Login, Guid.NewGuid());
+        return await _payrollWriters.Resolve(sageRow).WriteAsync(sageRow, dtos, auditContext, ct);
     }
 
     /// <summary>

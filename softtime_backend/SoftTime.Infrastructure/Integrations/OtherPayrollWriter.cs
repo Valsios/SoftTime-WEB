@@ -16,11 +16,13 @@ public sealed class OtherPayrollWriter : IPayrollWriter
     };
     private readonly IUnitOfWork _uow;
     private readonly TenantConnectionService _tenant;
+    private readonly IAuditTrail _auditTrail;
 
-    public OtherPayrollWriter(IUnitOfWork uow, TenantConnectionService tenant)
+    public OtherPayrollWriter(IUnitOfWork uow, TenantConnectionService tenant, IAuditTrail auditTrail)
     {
         _uow = uow;
         _tenant = tenant;
+        _auditTrail = auditTrail;
     }
 
     public bool CanHandle(T_BDD_SAGE database) => string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase);
@@ -31,15 +33,16 @@ public sealed class OtherPayrollWriter : IPayrollWriter
         return new PayrollWriteResultDto(database.NOM_BD ?? string.Empty, "AUTRE", 0, 0, "Configuration d'écriture valide.");
     }
 
-    public async Task<PayrollWriteResultDto> WriteAsync(T_BDD_SAGE database, IReadOnlyList<HsExoDto> rows, CancellationToken ct = default)
+    public async Task<PayrollWriteResultDto> WriteAsync(T_BDD_SAGE database, IReadOnlyList<HsExoDto> rows, PayrollSyncContext auditContext, CancellationToken ct = default)
     {
         var plan = await PreflightAsync(database, rows, ct); // aucune écriture avant la fin du préflight
         await using var connection = new SqlConnection(await _tenant.GetSageConnectionAsync(ct));
         await connection.OpenAsync(ct);
         await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(ct);
+        var categoryCounts = PayrollWritingConfiguration.Categories.ToDictionary(category => category, _ => 0, StringComparer.Ordinal);
+        var updates = 0;
         try
         {
-            var updates = 0;
             foreach (var row in rows)
             foreach (var category in PayrollWritingConfiguration.Categories)
             {
@@ -47,17 +50,31 @@ public sealed class OtherPayrollWriter : IPayrollWriter
                 if (affected != 1)
                     throw new InvalidOperationException($"La synchronisation a été annulée : {affected} ligne(s) mise(s) à jour pour le matricule {row.Matricule} et la catégorie {category}; une seule ligne était attendue.");
                 updates++;
+                categoryCounts[category] += affected;
             }
             await transaction.CommitAsync(ct);
+            await WriteAuditAsync(database, plan, auditContext, categoryCounts, "SUCCES", ct);
             return new PayrollWriteResultDto(database.NOM_BD ?? string.Empty, "AUTRE", rows.Count, updates,
                 "Synchronisation des heures supplémentaires terminée.");
         }
         catch
         {
             await transaction.RollbackAsync(ct);
+            await WriteAuditAsync(database, plan, auditContext, categoryCounts, "ECHEC", ct);
             throw;
         }
     }
+
+    private Task WriteAuditAsync(
+        T_BDD_SAGE database,
+        WritePlan plan,
+        PayrollSyncContext context,
+        IReadOnlyDictionary<string, int> categories,
+        string status,
+        CancellationToken ct)
+        => _auditTrail.WritePayrollSyncAsync(new PayrollSyncAudit(
+            $"{plan.Schema}.{plan.Table}", database.NOM_BD, context.PeriodFrom, context.PeriodTo,
+            categories.Values.Sum(), categories, status, context.UserLogin, "SYNC_PAIE:AUTRE", context.Correlation), ct);
 
     private async Task<WritePlan> PreflightAsync(T_BDD_SAGE database, IReadOnlyList<HsExoDto> rows, CancellationToken ct)
     {

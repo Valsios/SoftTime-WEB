@@ -7,18 +7,32 @@ namespace SoftTime.Infrastructure.Integrations;
 
 public class SagePayrollWriter : ISagePayrollWriter
 {
-    public async Task SyncOvertimeAsync(string sageConnectionString, T_CST[] constants, int numSal, OvertimeSageCodes codes, decimal exo130, decimal exo150, decimal i130, decimal i150, decimal ferie, decimal nuit, decimal dim, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(string sageConnectionString, T_CST[] constants, int numSal, OvertimeSageCodes codes, decimal exo130, decimal exo150, decimal i130, decimal i150, decimal ferie, decimal nuit, decimal dim, CancellationToken cancellationToken = default)
     {
         short Op(string code) => constants.First(c => c.CodeConstante.Trim() == code).CodeOperande1
             ?? throw new InvalidOperationException($"Constante SAGE {code} introuvable.");
 
-        await UpdateCumulAsync(sageConnectionString, numSal, Op(codes.Exo130), exo130, cancellationToken);
-        await UpdateCumulAsync(sageConnectionString, numSal, Op(codes.Exo150), exo150, cancellationToken);
-        await UpdateCumulAsync(sageConnectionString, numSal, Op(codes.I130), i130, cancellationToken);
-        await UpdateCumulAsync(sageConnectionString, numSal, Op(codes.I150), i150, cancellationToken);
-        await UpdateCumulAsync(sageConnectionString, numSal, Op(codes.Ferie), ferie, cancellationToken);
-        await UpdateCumulAsync(sageConnectionString, numSal, Op(codes.Dim), dim, cancellationToken);
-        await UpdateCumulAsync(sageConnectionString, numSal, Op(codes.Nuit), nuit, cancellationToken);
+        var updates = new Dictionary<string, int>(StringComparer.Ordinal);
+        async Task WriteAsync(string category, short operand, decimal value)
+        {
+            try
+            {
+                updates[category] = await UpdateCumulAsync(sageConnectionString, numSal, operand, value, cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                throw new PayrollSyncWriteException(exception, updates.Values.Sum(), updates);
+            }
+        }
+
+        await WriteAsync("Exo130", Op(codes.Exo130), exo130);
+        await WriteAsync("Exo150", Op(codes.Exo150), exo150);
+        await WriteAsync("I130", Op(codes.I130), i130);
+        await WriteAsync("I150", Op(codes.I150), i150);
+        await WriteAsync("Ferie", Op(codes.Ferie), ferie);
+        await WriteAsync("Dimanche", Op(codes.Dim), dim);
+        await WriteAsync("Nuit", Op(codes.Nuit), nuit);
+        return updates;
     }
 
     public async Task<int> UpdateCumulAsync(string connectionString, int numSal, short opCst, decimal value, CancellationToken cancellationToken = default)
