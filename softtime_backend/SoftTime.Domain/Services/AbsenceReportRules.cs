@@ -19,6 +19,11 @@ public sealed record AbsenceReportRow(
 /// Règles pures de calcul du rapport des absences.
 /// Détermine les absences constatées (Congé SAGE, Arbitrée GTA, Non justifiée)
 /// en croisant les plannings, les pointages/corrections et les congés SAGE.
+///
+/// Mêmes invariants que le tableau de bord analytique : un jour de repos planifié (<c>OffP</c>,
+/// shift sans heures), un week-end, un férié ou un congé ne sont jamais des absences, et aucun
+/// jour futur n'est produit. Le tableau de bord réutilise d'ailleurs
+/// <see cref="EstNonJustifiee"/> et <see cref="CalculerDureeHeures"/> pour rester aligné.
 /// </summary>
 public static class AbsenceReportRules
 {
@@ -34,30 +39,15 @@ public static class AbsenceReportRules
         IReadOnlySet<DateTime> feries,
         DateTime from,
         DateTime to,
-        DateTime dateDuJour,
-        DateTime? dernierJourTraite,
-        IReadOnlyList<T_PLANNING>? shifts = null)
+        DateTime dateDuJour)
     {
         var debut = from.Date;
-        var finDemande = to.Date;
         var hier = dateDuJour.Date.AddDays(-1);
 
-        // Dictionnaire des shifts connus (pour distinguer les shifts trouvés sans heures / repos)
-        var shiftsConnus = shifts?
-            .Where(s => s.NoSHIFT.HasValue)
-            .GroupBy(s => s.NoSHIFT!.Value)
-            .ToDictionary(g => g.Key, g => g.First());
-
-        // Plafond général : aucun jour futur, jamais après hier
-        var finGenerale = finDemande < hier ? finDemande : hier;
-        if (debut > finGenerale)
+        // Aucun jour futur : la période demandée est plafonnée à la veille.
+        var fin = to.Date < hier ? to.Date : hier;
+        if (debut > fin)
             return Array.Empty<AbsenceReportRow>();
-
-        // Plafond pour "Non justifiée" : jamais après dernierJourTraite (C2 & C3)
-        // Si dernierJourTraite est null, aucune absence non justifiée n'est produite
-        DateTime? finNonJustifiee = dernierJourTraite.HasValue
-            ? (finGenerale < dernierJourTraite.Value.Date ? finGenerale : dernierJourTraite.Value.Date)
-            : null;
 
         // C11 : Toutes les cartes de même clé matricule sont mappées par leur IDSAL
         var cleParIdSal = new Dictionary<int, string>();
@@ -70,51 +60,47 @@ public static class AbsenceReportRules
                 continue;
 
             cleParIdSal[carte.ID] = cle;
-            if (!cartesParCle.ContainsKey(cle))
+            if (!cartesParCle.TryGetValue(cle, out var existante) || carte.ID < existante.ID)
                 cartesParCle[cle] = carte;
         }
 
         if (cartesParCle.Count == 0)
             return Array.Empty<AbsenceReportRow>();
 
-        // C11 : Plannings de TOUTES les cartes de même clé matricule pris en compte.
-        // Si deux plannings tombent le même (clé, jour), conservation déterministe du plus petit ID.
+        // C11 : plannings de TOUTES les cartes de même clé pris en compte. Une ligne de travail
+        // prime sur une ligne OFF, puis le plus petit ID l'emporte (choix déterministe).
         var planningsParCleEtDate = new Dictionary<(string Cle, DateTime Date), T_PLANNING_SAL>();
-        foreach (var p in plannings)
+        foreach (var plan in plannings)
         {
-            if (p.DateP is not DateTime dateP || p.OffP == true)
+            if (plan.DateP is not DateTime dateP)
                 continue;
-            if (!cleParIdSal.TryGetValue(p.IDSAL, out var cle))
+            if (!cleParIdSal.TryGetValue(plan.IDSAL, out var cle))
                 continue;
 
             var jour = dateP.Date;
-            if (jour >= debut && jour <= finGenerale)
-            {
-                var key = (cle, jour);
-                if (!planningsParCleEtDate.TryGetValue(key, out var existant) || p.ID < existant.ID)
-                {
-                    planningsParCleEtDate[key] = p;
-                }
-            }
+            if (jour < debut || jour > fin)
+                continue;
+
+            var key = (cle, jour);
+            if (!planningsParCleEtDate.TryGetValue(key, out var existant) || PrimeSur(plan, existant))
+                planningsParCleEtDate[key] = plan;
         }
 
-        // C10 (PERFORMANCE) : Dictionnaire clé-matricule -> dates planifiées précalculé UNE fois avant la boucle
+        // C10 (PERFORMANCE) : dates réellement planifiées (jour travaillé avec heures) précalculées
+        // une seule fois avant la boucle. Un jour OFF ou sans heures n'est jamais une absence.
         var datesPlanifieesParCle = new Dictionary<string, List<DateTime>>(StringComparer.OrdinalIgnoreCase);
-        if (finNonJustifiee.HasValue)
+        foreach (var kvp in planningsParCleEtDate)
         {
-            foreach (var kvp in planningsParCleEtDate)
+            var (cle, jour) = kvp.Key;
+            if (EstJourOff(kvp.Value) || CalculerDureeHeures(kvp.Value) is null)
+                continue;
+
+            if (!datesPlanifieesParCle.TryGetValue(cle, out var liste))
             {
-                var (cle, jour) = kvp.Key;
-                if (jour >= debut && jour <= finNonJustifiee.Value)
-                {
-                    if (!datesPlanifieesParCle.TryGetValue(cle, out var liste))
-                    {
-                        liste = new List<DateTime>();
-                        datesPlanifieesParCle[cle] = liste;
-                    }
-                    liste.Add(jour);
-                }
+                liste = new List<DateTime>();
+                datesPlanifieesParCle[cle] = liste;
             }
+            liste.Add(jour);
         }
 
         // Corrections indexées par clé matricule pour les salariés retenus
@@ -162,26 +148,26 @@ public static class AbsenceReportRules
             // Dates candidates pour ce salarié
             var datesCandidates = new HashSet<DateTime>();
 
-            // 1. Congés SAGE dans [debut, finGenerale]
+            // 1. Congés SAGE dans [debut, fin]
             foreach (var c in congesSalarie)
             {
                 var j = c.Date.Date;
-                if (j >= debut && j <= finGenerale)
+                if (j >= debut && j <= fin)
                     datesCandidates.Add(j);
             }
 
-            // 2. Corrections arbitrées GTA dans [debut, finGenerale]
+            // 2. Corrections arbitrées GTA dans [debut, fin]
             foreach (var h in corrsSalarie)
             {
                 if (h.DATE_POINTAGE_IN is DateTime d && (h.ABSENCE_AM == true || h.ABSENCE_PM == true))
                 {
                     var j = d.Date;
-                    if (j >= debut && j <= finGenerale)
+                    if (j >= debut && j <= fin)
                         datesCandidates.Add(j);
                 }
             }
 
-            // 3. Plannings du salarié dans [debut, finNonJustifiee] via dictionnaire précalculé (C10)
+            // 3. Plannings travaillés du salarié dans [debut, fin]
             if (datesPlanifieesParCle.TryGetValue(cle, out var datesPlan))
             {
                 foreach (var j in datesPlan)
@@ -191,20 +177,25 @@ public static class AbsenceReportRules
             foreach (var jour in datesCandidates.OrderBy(d => d))
             {
                 // C3 : Pour TOUS les types, week-ends et fériés sont exclus
-                if (EstNonTravaille(jour, feries))
+                var estNonTravaille = EstNonTravaille(jour, feries);
+                if (estNonTravaille)
                     continue;
 
                 planningsParCleEtDate.TryGetValue((cle, jour), out var planDuJour);
+                var estConge = congesParJour.TryGetValue(jour, out var conge);
 
-                // Priorité 1 : Congé SAGE (C3 : jour <= finGenerale ; C12 : somme des valeurs)
-                if (congesParJour.TryGetValue(jour, out var conge))
+                // Priorité 0 : jour de repos planifié (planning OFF) -> aucune ligne, quel que soit
+                // le type. Un repos n'est ni une absence ni une journée attendue.
+                if (EstJourOff(planDuJour))
+                    continue;
+
+                // Priorité 1 : Congé SAGE (C12 : somme des valeurs)
+                if (estConge)
                 {
                     var periode = conge.Valeur >= 1m ? "Journée" : "Demi-journée";
                     var dureeTheorique = CalculerDureeHeures(planDuJour);
                     if (dureeTheorique.HasValue)
-                    {
                         dureeTheorique = Math.Round(dureeTheorique.Value * conge.Valeur, 2);
-                    }
 
                     resultats.Add(new AbsenceReportRow(
                         Matricule: matriculeAffiche,
@@ -220,7 +211,7 @@ public static class AbsenceReportRules
                     continue;
                 }
 
-                // Priorité 2 : Arbitrée GTA (C3 : jour <= finGenerale ; C4 : périodes AM/PM)
+                // Priorité 2 : Arbitrée GTA (C4 : périodes AM/PM)
                 if (corrsParJour.TryGetValue(jour, out var corrsDuJour))
                 {
                     var arb = corrsDuJour.FirstOrDefault(h => h.ABSENCE_AM == true || h.ABSENCE_PM == true);
@@ -238,9 +229,7 @@ public static class AbsenceReportRules
 
                         var dureeTheorique = CalculerDureeHeures(planDuJour);
                         if (dureeTheorique.HasValue && (periode == "Matin" || periode == "Après-midi"))
-                        {
                             dureeTheorique = Math.Round(dureeTheorique.Value * 0.5m, 2);
-                        }
 
                         resultats.Add(new AbsenceReportRow(
                             Matricule: matriculeAffiche,
@@ -257,36 +246,21 @@ public static class AbsenceReportRules
                     }
                 }
 
-                // Priorité 3 : Non justifiée (C2 & C3 : jour <= finNonJustifiee)
-                if (finNonJustifiee.HasValue && jour <= finNonJustifiee.Value && planDuJour != null)
+                // Priorité 3 : Non justifiée (jour planifié avec heures, sans aucun pointage)
+                var aPointage = corrsParJour.ContainsKey(jour);
+                if (EstNonJustifiee(estNonTravaille: false, estConge: false, planDuJour, aPointage))
                 {
-                    var aPointageOuCorrection = corrsParJour.ContainsKey(jour);
-                    if (!aPointageOuCorrection)
-                    {
-                        // Règle repos : si le planning référence un shift trouvé dont HA et HD sont NULL,
-                        // c'est un jour de repos planifié (ex: Pause) -> ne pas générer de ligne "Non justifiée".
-                        // Si le shift est introuvable dans T_PLANNING, la ligne est conservée (durée nulle).
-                        var estReposPlanifie = planDuJour.NoSHIFT.HasValue
-                            && shiftsConnus != null
-                            && shiftsConnus.TryGetValue(planDuJour.NoSHIFT.Value, out var defShift)
-                            && defShift.HA == null && defShift.HD == null;
-
-                        if (!estReposPlanifie)
-                        {
-                            var dureeTheorique = CalculerDureeHeures(planDuJour);
-                            resultats.Add(new AbsenceReportRow(
-                                Matricule: matriculeAffiche,
-                                Nom: nomAffiche,
-                                Prenom: prenomAffiche,
-                                Departement: deptAffiche,
-                                Date: jour,
-                                Periode: "Journée",
-                                DureeHeures: dureeTheorique,
-                                Type: TypeNonJustifiee,
-                                Motif: null
-                            ));
-                        }
-                    }
+                    resultats.Add(new AbsenceReportRow(
+                        Matricule: matriculeAffiche,
+                        Nom: nomAffiche,
+                        Prenom: prenomAffiche,
+                        Departement: deptAffiche,
+                        Date: jour,
+                        Periode: "Journée",
+                        DureeHeures: CalculerDureeHeures(planDuJour),
+                        Type: TypeNonJustifiee,
+                        Motif: null
+                    ));
                 }
             }
         }
@@ -299,6 +273,25 @@ public static class AbsenceReportRules
 
     public static bool EstNonTravaille(DateTime jour, IReadOnlySet<DateTime> feries) =>
         jour.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || feries.Contains(jour.Date);
+
+    /// <summary>Jour de repos planifié : la ligne de planning est explicitement marquée OFF.</summary>
+    public static bool EstJourOff(T_PLANNING_SAL? plan) => plan?.OffP == true;
+
+    /// <summary>
+    /// Règle partagée avec le tableau de bord : un jour est une absence non justifiée quand il est
+    /// ouvré, non férié, non couvert par un congé, réellement planifié avec des heures, et sans
+    /// aucune heure corrigée (aucun pointage).
+    /// </summary>
+    public static bool EstNonJustifiee(
+        bool estNonTravaille,
+        bool estConge,
+        T_PLANNING_SAL? plan,
+        bool aPointage)
+        => !estNonTravaille
+           && !estConge
+           && !aPointage
+           && !EstJourOff(plan)
+           && CalculerDureeHeures(plan) is not null;
 
     public static decimal? CalculerDureeHeures(T_PLANNING_SAL? plan)
     {
@@ -328,5 +321,16 @@ public static class AbsenceReportRules
             return null;
 
         return Math.Round((decimal)duree.TotalHours, 2);
+    }
+
+    /// <summary>Une ligne de travail prime sur une ligne OFF ; à défaut le plus petit ID gagne.</summary>
+    private static bool PrimeSur(T_PLANNING_SAL candidat, T_PLANNING_SAL existant)
+    {
+        var candidatOff = EstJourOff(candidat);
+        var existantOff = EstJourOff(existant);
+        if (candidatOff != existantOff)
+            return !candidatOff;
+
+        return candidat.ID < existant.ID;
     }
 }

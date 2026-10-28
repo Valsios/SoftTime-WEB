@@ -269,6 +269,9 @@ public class OvertimeService
             var splits = semaines.Select(w => OvertimeRules.SplitWeekly(w.HS ?? 0)).ToList();
             var numSal = numSalByMat.TryGetValue(cle, out var n) ? n : (int?)null;
 
+            // PeriodeDebut/PeriodeFin portent la PÉRIODE du calcul (clé de la purge, de la liste et de
+            // la synchro paie, et compatibilité desktop) ; les bornes lundi → dimanche de chaque semaine
+            // sont déduites à la lecture du détail (voir ConstruireSemainesDetail).
             var rang = 1;
             foreach (var split in splits)
             {
@@ -594,13 +597,19 @@ public class OvertimeService
             }
         }
 
-        var semaines = (await _uow.Repository<T_HSSemaine>().ListAsync(h =>
+        // T_HSSemaine.PeriodeDebut/PeriodeFin portent la PÉRIODE du calcul (clé de la purge, de la
+        // liste et de la synchro paie, et sémantique du desktop) : les bornes de chaque semaine sont
+        // déduites des semaines validées, sinon les colonnes Début/Fin afficheraient la période.
+        var lignesSemaine = (await _uow.Repository<T_HSSemaine>().ListAsync(h =>
                 h.BDD_SAGE == _tenant.SageDb && h.Matricule == matriculeCarte, ct))
             .Where(h => h.PeriodeDebut.HasValue && h.PeriodeFin.HasValue
                         && h.PeriodeDebut!.Value.Date <= fin && h.PeriodeFin!.Value.Date >= debut)
-            .OrderBy(h => h.Semaine)
-            .Select(h => new OvertimeDetailWeekDto(h.Semaine, h.PeriodeDebut, h.PeriodeFin, h.HS ?? 0, h.HS1 ?? 0, h.HS2 ?? 0))
+            .OrderBy(h => h.PeriodeDebut)
+            .ThenBy(h => h.Semaine)
+            .ThenBy(h => h.OID)
             .ToList();
+        var semainesValidees = await ChargerSemainesValideesAsync(matriculeCarte, lignesSemaine, ct);
+        var semaines = ConstruireSemainesDetail(lignesSemaine, semainesValidees);
 
         var exo = (await _uow.Repository<T_HSExoImp>().ListAsync(h =>
                 h.BDD_SAGE == _tenant.SageDb && h.Matricule == matriculeCarte
@@ -610,6 +619,90 @@ public class OvertimeService
             .FirstOrDefault();
 
         return new OvertimeDetailDto(matriculeCarte, debut, fin, joursDetail, semaines, exo);
+    }
+
+    /// <summary>
+    /// Semaines validées du salarié nécessaires pour retrouver les bornes réelles des semaines de
+    /// <c>T_HSSemaine</c>. La borne basse reprend celle du calcul EXO/IMPO (période − 6 jours) pour
+    /// inclure une première semaine qui commence avant le mois sélectionné.
+    /// </summary>
+    private async Task<List<T_HS_VALIDER>> ChargerSemainesValideesAsync(
+        string matricule, IReadOnlyList<T_HSSemaine> lignes, CancellationToken ct)
+    {
+        var debuts = lignes
+            .Where(h => h.PeriodeDebut.HasValue)
+            .Select(h => h.PeriodeDebut!.Value.Date)
+            .ToList();
+        var fins = lignes
+            .Where(h => h.PeriodeFin.HasValue)
+            .Select(h => h.PeriodeFin!.Value.Date)
+            .ToList();
+        if (debuts.Count == 0 || fins.Count == 0)
+            return new List<T_HS_VALIDER>();
+
+        var borneBasse = debuts.Min().AddDays(-6);
+        var borneHaute = fins.Max();
+        var sageDb = _tenant.SageDb;
+
+        var semaines = await _uow.Repository<T_HS_VALIDER>().ListAsync(v =>
+            v.BDD_SAGE == sageDb
+            && v.VALIDATION_HS == true
+            && v.DATE_DEB != null
+            && v.DATE_DEB >= borneBasse
+            && v.DATE_DEB <= borneHaute, ct);
+
+        return semaines
+            .Where(v => v.DATE_DEB.HasValue && MatriculeIdentity.MemeSalarie(v.MATRICULES, matricule))
+            .GroupBy(v => v.DATE_DEB!.Value.Date)
+            .Select(g => g.OrderBy(v => v.ID).First())
+            .OrderBy(v => v.DATE_DEB)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Bornes de chaque semaine affichée dans le détail. <c>T_HSSemaine.Semaine</c> est le rang de la
+    /// semaine parmi les semaines validées de la période : on le résout dans ces semaines
+    /// (<c>T_HS_VALIDER.DATE_DEB/DATE_FIN</c>, lundi → dimanche). Si les données ne concordent plus
+    /// (validation ajoutée ou purgée après le calcul), on retombe sur la période stockée plutôt que
+    /// d'afficher des dates décalées.
+    /// </summary>
+    private static List<OvertimeDetailWeekDto> ConstruireSemainesDetail(
+        IReadOnlyList<T_HSSemaine> lignes, IReadOnlyList<T_HS_VALIDER> semainesValidees)
+    {
+        var resultat = new List<OvertimeDetailWeekDto>(lignes.Count);
+
+        foreach (var groupe in lignes.GroupBy(h => (Debut: h.PeriodeDebut?.Date, Fin: h.PeriodeFin?.Date)))
+        {
+            var lignesGroupe = groupe.ToList();
+            var candidates = groupe.Key.Debut.HasValue && groupe.Key.Fin.HasValue
+                ? semainesValidees
+                    .Where(v => v.DATE_DEB.HasValue
+                                && v.DATE_DEB.Value.Date >= groupe.Key.Debut.Value.AddDays(-6)
+                                && v.DATE_DEB.Value.Date <= groupe.Key.Fin.Value)
+                    .ToList()
+                : new List<T_HS_VALIDER>();
+
+            var coherent = candidates.Count == lignesGroupe.Count
+                           && lignesGroupe.All(h => h.Semaine is int rang && rang >= 1 && rang <= candidates.Count);
+
+            foreach (var ligne in lignesGroupe)
+            {
+                DateTime? debutSemaine = groupe.Key.Debut;
+                DateTime? finSemaine = groupe.Key.Fin;
+
+                if (coherent && ligne.Semaine is int rang)
+                {
+                    var semaine = candidates[rang - 1];
+                    debutSemaine = semaine.DATE_DEB!.Value.Date;
+                    finSemaine = (semaine.DATE_FIN ?? semaine.DATE_DEB!.Value.AddDays(6)).Date;
+                }
+
+                resultat.Add(new OvertimeDetailWeekDto(
+                    ligne.Semaine, debutSemaine, finSemaine, ligne.HS ?? 0, ligne.HS1 ?? 0, ligne.HS2 ?? 0));
+            }
+        }
+
+        return resultat;
     }
 
     // ------------------------------------------------------------------ contexte du calcul

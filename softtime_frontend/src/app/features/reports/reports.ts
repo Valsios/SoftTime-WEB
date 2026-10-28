@@ -12,7 +12,7 @@ import {
   SoftButton,
 } from '../../shared/components';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
-import { fmtDate } from '../../shared/utils/date';
+import { fmtDate, fmtHeure } from '../../shared/utils/date';
 
 const REPORTS = [
   { id: 'pointage', label: 'État pointage' },
@@ -33,14 +33,11 @@ const ABSENCE_COLUMNS: Column[] = [
     label: 'Date',
     format: (v: unknown) => (typeof v === 'string' ? fmtDate(v) : String(v ?? '')),
   },
-  { key: 'periode', label: 'Période' },
   {
     key: 'dureeHeures',
     label: 'Durée (h)',
     format: (v: unknown) => (v != null && v !== '' ? `${v} h` : '-'),
   },
-  { key: 'type', label: 'Type' },
-  { key: 'motif', label: 'Motif', format: (v: unknown) => String(v ?? '-') },
 ];
 
 const ABSENCE_EXPORT_COLUMNS: Column[] = [
@@ -53,14 +50,61 @@ const ABSENCE_EXPORT_COLUMNS: Column[] = [
     label: 'Date',
     format: (v: unknown) => (typeof v === 'string' ? fmtDate(v) : (v != null ? String(v) : '')),
   },
-  { key: 'periode', label: 'Période' },
   {
     key: 'dureeHeures',
     label: 'Durée (h)',
     format: (v: unknown) => (v != null && v !== '' ? String(v) : ''),
   },
-  { key: 'type', label: 'Type' },
-  { key: 'motif', label: 'Motif', format: (v: unknown) => (v != null ? String(v) : '') },
+];
+
+const RETARD_COLUMNS: Column[] = [
+  { key: 'matricule', label: 'Matricule' },
+  { key: 'nom', label: 'Nom', format: (v: unknown) => String(v ?? '') },
+  { key: 'prenom', label: 'Prénom', format: (v: unknown) => String(v ?? '') },
+  { key: 'departement', label: 'Département', format: (v: unknown) => String(v ?? '') },
+  {
+    key: 'date',
+    label: 'Date',
+    format: (v: unknown) => (typeof v === 'string' ? fmtDate(v) : String(v ?? '')),
+  },
+  { key: 'heureEntree', label: "Heure d'entrée", format: (v: unknown) => fmtHeure(v) || '-' },
+  { key: 'heurePrevue', label: 'Heure prévue', format: (v: unknown) => fmtHeure(v) || '-' },
+  {
+    key: 'toleranceMinutes',
+    label: 'Tolérance (min)',
+    align: 'right',
+    format: (v: unknown) => (v != null ? String(v) : ''),
+  },
+  {
+    key: 'minutesRetard',
+    label: 'Retard (min)',
+    align: 'right',
+    format: (v: unknown) => (v != null ? String(v) : ''),
+  },
+];
+
+const RETARD_EXPORT_COLUMNS: Column[] = [
+  { key: 'matricule', label: 'Matricule' },
+  { key: 'nom', label: 'Nom', format: (v: unknown) => (v != null ? String(v) : '') },
+  { key: 'prenom', label: 'Prénom', format: (v: unknown) => (v != null ? String(v) : '') },
+  { key: 'departement', label: 'Département', format: (v: unknown) => (v != null ? String(v) : '') },
+  {
+    key: 'date',
+    label: 'Date',
+    format: (v: unknown) => (typeof v === 'string' ? fmtDate(v) : (v != null ? String(v) : '')),
+  },
+  { key: 'heureEntree', label: "Heure d'entrée", format: (v: unknown) => fmtHeure(v) },
+  { key: 'heurePrevue', label: 'Heure prévue', format: (v: unknown) => fmtHeure(v) },
+  {
+    key: 'toleranceMinutes',
+    label: 'Tolérance (min)',
+    format: (v: unknown) => (v != null && v !== '' ? String(v) : ''),
+  },
+  {
+    key: 'minutesRetard',
+    label: 'Retard (min)',
+    format: (v: unknown) => (v != null && v !== '' ? String(v) : ''),
+  },
 ];
 
 @Component({
@@ -148,6 +192,8 @@ export class ReportsPage {
         if (!this.columns().length) {
           if (this.reportType === 'absences') {
             this.columns.set(ABSENCE_COLUMNS);
+          } else if (this.reportType === 'retards') {
+            this.columns.set(RETARD_COLUMNS);
           } else {
             this.columns.set(this.inferColumns(rows));
           }
@@ -190,7 +236,12 @@ export class ReportsPage {
     fn.call(this.svc, filter).subscribe({
       next: (items) => {
         const rows = items as Record<string, unknown>[];
-        const cols = this.reportType === 'absences' ? ABSENCE_EXPORT_COLUMNS : this.inferColumns(rows);
+        const cols =
+          this.reportType === 'absences'
+            ? ABSENCE_EXPORT_COLUMNS
+            : this.reportType === 'retards'
+              ? RETARD_EXPORT_COLUMNS
+              : this.inferColumns(rows);
         this.excel.download(`rapport-${this.reportType}`, cols, rows);
       },
     });

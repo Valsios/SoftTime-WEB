@@ -310,4 +310,61 @@ public class OvertimeServiceTests
         Assert.Equal(8m, ligne.Exo130);
         Assert.Equal(2m, ligne.Exo150);
     }
+
+    // ------------------------------------------------------------------ détail
+
+    [Fact]
+    public async Task Detail_ExposeLesBornesReellesDesSemaines()
+    {
+        // Période 01/05 → 31/05/2025 : la première semaine validée commence avant le mois (28/04).
+        var contexte = new Contexte();
+        var debutPeriode = new DateTime(2025, 5, 1);
+        var finPeriode = new DateTime(2025, 5, 31);
+        var semaine1 = new DateTime(2025, 4, 28);
+        var semaine2 = new DateTime(2025, 5, 5);
+        contexte.SemaineValidee(semaine1, 0m);
+        contexte.SemaineValidee(semaine2, 11.21m);
+        await contexte.Service.CalculateExoImpoAsync(new PeriodRequest(null, null, debutPeriode, finPeriode, null));
+
+        var detail = await contexte.Service.DetailAsync("001", debutPeriode, finPeriode);
+
+        Assert.Equal(2, detail.Semaines.Count);
+        Assert.Equal(1, detail.Semaines[0].Semaine!.Value);
+        Assert.Equal(semaine1, detail.Semaines[0].Debut!.Value);
+        Assert.Equal(semaine1.AddDays(6), detail.Semaines[0].Fin!.Value);
+        Assert.Equal(2, detail.Semaines[1].Semaine!.Value);
+        Assert.Equal(semaine2, detail.Semaines[1].Debut!.Value);
+        Assert.Equal(semaine2.AddDays(6), detail.Semaines[1].Fin!.Value);
+        Assert.Equal(11.21m, detail.Semaines[1].Hs);
+        Assert.Equal(8m, detail.Semaines[1].Hs1);
+        Assert.Equal(3.21m, detail.Semaines[1].Hs2);
+    }
+
+    [Fact]
+    public async Task Detail_RepliSurLaPeriodeSiLesSemainesNeConcordentPas()
+    {
+        // Ligne héritée (aucune semaine validée correspondante) : on affiche la période stockée.
+        var contexte = new Contexte();
+        var debut = new DateTime(2025, 5, 1);
+        var fin = new DateTime(2025, 5, 31);
+        contexte.Repartition.Add(new T_HSSemaine
+        {
+            Matricule = "001",
+            PeriodeDebut = debut,
+            PeriodeFin = fin,
+            Semaine = 2,
+            HS = 3m,
+            HS1 = 3m,
+            HS2 = 0m,
+            BDD_SAGE = "SAGE_TEST",
+            BDD_POINTEUSE = "PTE_TEST"
+        });
+
+        var detail = await contexte.Service.DetailAsync("001", debut, fin);
+
+        var semaine = Assert.Single(detail.Semaines);
+        Assert.Equal(2, semaine.Semaine!.Value);
+        Assert.Equal(debut, semaine.Debut!.Value);
+        Assert.Equal(fin, semaine.Fin!.Value);
+    }
 }
