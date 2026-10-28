@@ -5,7 +5,32 @@ namespace SoftTime.Infrastructure.Persistence;
 
 public class SoftTimeDbContext : DbContext
 {
+    private readonly AuditJournalSaveChangesInterceptor? _auditJournal;
+
     public SoftTimeDbContext(DbContextOptions<SoftTimeDbContext> options) : base(options) { }
+
+    public SoftTimeDbContext(
+        DbContextOptions<SoftTimeDbContext> options,
+        AuditJournalSaveChangesInterceptor auditJournal) : base(options)
+        => _auditJournal = auditJournal;
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+        => _auditJournal?.SaveChanges(this, acceptAllChangesOnSuccess)
+           ?? base.SaveChanges(acceptAllChangesOnSuccess);
+
+    public override Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default)
+        => _auditJournal?.SaveChangesAsync(this, acceptAllChangesOnSuccess, cancellationToken)
+           ?? base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+
+    internal int SaveChangesWithoutAudit(bool acceptAllChangesOnSuccess)
+        => base.SaveChanges(acceptAllChangesOnSuccess);
+
+    internal Task<int> SaveChangesWithoutAuditAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken)
+        => base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
 
     public DbSet<T_ROLE> T_ROLE => Set<T_ROLE>();
     public DbSet<T_RESPONSABLE> T_RESPONSABLE => Set<T_RESPONSABLE>();

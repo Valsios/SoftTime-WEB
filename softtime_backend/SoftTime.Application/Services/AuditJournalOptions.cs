@@ -6,13 +6,18 @@ public sealed class AuditJournalOptions
 {
     public const int DefaultDetailThreshold = 200;
 
+    public bool Enabled { get; init; } = true;
+
     public int DetailThreshold { get; init; } = DefaultDetailThreshold;
 
     public static AuditJournalOptions From(IConfiguration configuration)
     {
-        var raw = configuration["AuditJournal:DetailThreshold"];
-        return int.TryParse(raw, out var threshold) && threshold > 0
-            ? new AuditJournalOptions { DetailThreshold = threshold }
-            : new AuditJournalOptions();
+        var rawThreshold = configuration["AuditJournal:DetailThreshold"];
+        var threshold = int.TryParse(rawThreshold, out var configuredThreshold) && configuredThreshold > 0
+            ? configuredThreshold
+            : DefaultDetailThreshold;
+        var enabled = !bool.TryParse(configuration["AuditJournal:Enabled"], out var configuredEnabled)
+            || configuredEnabled;
+        return new AuditJournalOptions { Enabled = enabled, DetailThreshold = threshold };
     }
 }

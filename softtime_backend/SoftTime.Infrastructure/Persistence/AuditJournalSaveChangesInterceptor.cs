@@ -36,29 +36,70 @@ public sealed class AuditJournalSaveChangesInterceptor : SaveChangesInterceptor
         _options = options;
     }
 
-    public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
+    /// <summary>
+    /// Sauvegarde métier et audit dans une transaction commune. Les insertions sont différées
+    /// jusqu'à ce que SQL Server ait matérialisé les clés d'identité.
+    /// </summary>
+    public int SaveChanges(SoftTimeDbContext context, bool acceptAllChangesOnSuccess)
     {
-        CaptureChanges(eventData.Context);
-        return result;
+        if (!_options.Enabled)
+            return context.SaveChangesWithoutAudit(acceptAllChangesOnSuccess);
+
+        var batch = PrepareBatch(context);
+        if (batch.IsEmpty)
+            return context.SaveChangesWithoutAudit(acceptAllChangesOnSuccess);
+
+        if (context.Database.CurrentTransaction is not null)
+            return PersistWithinTransaction(context, batch, acceptAllChangesOnSuccess);
+
+        return context.Database.CreateExecutionStrategy().Execute(() =>
+        {
+            using var transaction = context.Database.BeginTransaction();
+            try
+            {
+                var result = PersistWithinTransaction(context, batch, acceptAllChangesOnSuccess);
+                transaction.Commit();
+                return result;
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
+        });
     }
 
-    public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
-        DbContextEventData eventData,
-        InterceptionResult<int> result,
-        CancellationToken cancellationToken = default)
+    public async Task<int> SaveChangesAsync(
+        SoftTimeDbContext context,
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken)
     {
-        CaptureChanges(eventData.Context);
-        return ValueTask.FromResult(result);
-    }
+        if (!_options.Enabled)
+            return await context.SaveChangesWithoutAuditAsync(acceptAllChangesOnSuccess, cancellationToken);
 
-    public override int SavedChanges(SaveChangesCompletedEventData eventData, int result)
-    {
-        _capturedEntities.Clear();
-        return result;
-    }
+        var batch = PrepareBatch(context);
+        if (batch.IsEmpty)
+            return await context.SaveChangesWithoutAuditAsync(acceptAllChangesOnSuccess, cancellationToken);
 
-    public override void SaveChangesFailed(DbContextErrorEventData eventData)
-        => _capturedEntities.Clear();
+        if (context.Database.CurrentTransaction is not null)
+            return await PersistWithinTransactionAsync(context, batch, acceptAllChangesOnSuccess, cancellationToken);
+
+        return await context.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+            try
+            {
+                var result = await PersistWithinTransactionAsync(context, batch, acceptAllChangesOnSuccess, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return result;
+            }
+            catch
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                throw;
+            }
+        });
+    }
 
     /// <summary>Construit les entrées de journal sans exécuter de sauvegarde distincte.</summary>
     public int CaptureChanges(DbContext? context)
@@ -86,13 +127,76 @@ public sealed class AuditJournalSaveChangesInterceptor : SaveChangesInterceptor
 
             foreach (var entry in group)
             {
-                journal.AddRange(CreateDetails(group.Key, entry, correlation));
+                journal.AddRange(CreateDetails(group.Key, entry, correlation, entry.State));
                 _capturedEntities.Add(entry.Entity);
             }
         }
 
         context.Set<suivi_JOURNAL>().AddRange(journal);
         return journal.Count;
+    }
+
+    private AuditBatch PrepareBatch(SoftTimeDbContext context)
+    {
+        var entries = context.ChangeTracker.Entries().Where(IsAuditable).ToList();
+        if (entries.Count == 0)
+            return AuditBatch.Empty;
+
+        var correlation = Guid.NewGuid();
+        var beforeSave = new List<suivi_JOURNAL>();
+        var deferredAdditions = new List<DeferredAddition>();
+        foreach (var group in entries.GroupBy(TableName, StringComparer.OrdinalIgnoreCase))
+        {
+            if (group.Count() > _options.DetailThreshold)
+            {
+                beforeSave.Add(CreateSummary(group.Key, group, correlation));
+                continue;
+            }
+
+            foreach (var entry in group)
+            {
+                if (entry.State == EntityState.Added)
+                    deferredAdditions.Add(new DeferredAddition(group.Key, entry, correlation));
+                else
+                    beforeSave.AddRange(CreateDetails(group.Key, entry, correlation, entry.State));
+            }
+        }
+
+        return new AuditBatch(beforeSave, deferredAdditions);
+    }
+
+    private int PersistWithinTransaction(SoftTimeDbContext context, AuditBatch batch, bool acceptAllChangesOnSuccess)
+    {
+        context.Set<suivi_JOURNAL>().AddRange(batch.BeforeSave);
+        var result = context.SaveChangesWithoutAudit(acceptAllChangesOnSuccess);
+        WriteDeferredAdditions(context, batch);
+        if (batch.DeferredAdditions.Count > 0)
+            context.SaveChangesWithoutAudit(acceptAllChangesOnSuccess);
+        return result;
+    }
+
+    private async Task<int> PersistWithinTransactionAsync(
+        SoftTimeDbContext context,
+        AuditBatch batch,
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken)
+    {
+        context.Set<suivi_JOURNAL>().AddRange(batch.BeforeSave);
+        var result = await context.SaveChangesWithoutAuditAsync(acceptAllChangesOnSuccess, cancellationToken);
+        WriteDeferredAdditions(context, batch);
+        if (batch.DeferredAdditions.Count > 0)
+            await context.SaveChangesWithoutAuditAsync(acceptAllChangesOnSuccess, cancellationToken);
+        return result;
+    }
+
+    private void WriteDeferredAdditions(SoftTimeDbContext context, AuditBatch batch)
+    {
+        if (batch.DeferredAdditions.Count == 0)
+            return;
+
+        var journal = batch.DeferredAdditions.SelectMany(addition =>
+            CreateDetails(addition.Table, addition.Entry, addition.Correlation, EntityState.Added));
+        context.Set<suivi_JOURNAL>().AddRange(journal);
     }
 
     private bool IsAuditable(EntityEntry entry)
@@ -102,19 +206,23 @@ public sealed class AuditJournalSaveChangesInterceptor : SaveChangesInterceptor
     private static string TableName(EntityEntry entry)
         => entry.Metadata.GetTableName() ?? entry.Metadata.ClrType.Name;
 
-    private IEnumerable<suivi_JOURNAL> CreateDetails(string table, EntityEntry entry, Guid correlation)
+    private IEnumerable<suivi_JOURNAL> CreateDetails(
+        string table,
+        EntityEntry entry,
+        Guid correlation,
+        EntityState state)
     {
-        var action = ActionFor(entry.State);
-        foreach (var property in ChangedProperties(entry))
+        var action = ActionFor(state);
+        foreach (var property in ChangedProperties(entry, state))
         {
             var masked = IsSensitive(property.Metadata.Name);
             yield return CreateEntry(
                 table,
-                KeyFor(entry),
+                KeyFor(entry, state),
                 property.Metadata.GetColumnName() ?? property.Metadata.Name,
                 action,
-                masked ? "********" : OldValueFor(property, entry.State),
-                masked ? "********" : NewValueFor(property, entry.State),
+                masked ? "********" : OldValueFor(property, state),
+                masked ? "********" : NewValueFor(property, state),
                 correlation);
         }
     }
@@ -135,12 +243,12 @@ public sealed class AuditJournalSaveChangesInterceptor : SaveChangesInterceptor
             correlation);
     }
 
-    private IEnumerable<PropertyEntry> ChangedProperties(EntityEntry entry)
+    private IEnumerable<PropertyEntry> ChangedProperties(EntityEntry entry, EntityState state)
     {
         var primaryKey = entry.Metadata.FindPrimaryKey()?.Properties.ToHashSet() ?? [];
         return entry.Properties.Where(property =>
             !primaryKey.Contains(property.Metadata)
-            && (entry.State != EntityState.Modified || (property.IsModified && ValuesDiffer(property))));
+            && (state != EntityState.Modified || (property.IsModified && ValuesDiffer(property))));
     }
 
     private static bool ValuesDiffer(PropertyEntry property)
@@ -151,7 +259,7 @@ public sealed class AuditJournalSaveChangesInterceptor : SaveChangesInterceptor
             : !comparer.Equals(property.OriginalValue, property.CurrentValue);
     }
 
-    private static string? KeyFor(EntityEntry entry)
+    private static string? KeyFor(EntityEntry entry, EntityState state)
     {
         var key = entry.Metadata.FindPrimaryKey();
         if (key is null)
@@ -159,7 +267,7 @@ public sealed class AuditJournalSaveChangesInterceptor : SaveChangesInterceptor
         return string.Join(";", key.Properties.Select(property =>
         {
             var value = entry.Property(property.Name);
-            var source = entry.State == EntityState.Deleted ? value.OriginalValue : value.CurrentValue;
+            var source = state == EntityState.Deleted ? value.OriginalValue : value.CurrentValue;
             return $"{property.GetColumnName() ?? property.Name}={Format(source)}";
         }));
     }
@@ -216,4 +324,14 @@ public sealed class AuditJournalSaveChangesInterceptor : SaveChangesInterceptor
             CORRELATIONS = correlation,
             SOURCE = "EF:SoftTimeDbContext"
         };
+
+    private sealed record DeferredAddition(string Table, EntityEntry Entry, Guid Correlation);
+
+    private sealed record AuditBatch(
+        List<suivi_JOURNAL> BeforeSave,
+        List<DeferredAddition> DeferredAdditions)
+    {
+        public static AuditBatch Empty { get; } = new([], []);
+        public bool IsEmpty => BeforeSave.Count == 0 && DeferredAdditions.Count == 0;
+    }
 }
