@@ -96,6 +96,54 @@
   --text-secondary: var(--neutral-600);
   --text-muted: var(--neutral-500);
 
+  /* Jetons sémantiques — les valeurs clair reprennent strictement la charte existante. */
+  --surface-0: var(--neutral-50);
+  --surface-1: #ffffff;
+  --surface-2: var(--navy-50);
+  --surface-3: var(--neutral-100);
+  --border-subtle: var(--neutral-200);
+  --border-control: var(--color-line-input);
+  --border-strong: var(--color-navy-700);
+  --text-primary: var(--neutral-800);
+  --text-disabled: var(--neutral-500);
+  --accent: var(--color-navy-700);
+  --accent-hover: var(--color-navy-800);
+  --focus-ring: var(--color-navy-700);
+  --sidebar-focus-ring: #cad9fb;
+  --sidebar-brand-text: #ffffff;
+  --sidebar-brand-sub: rgba(255, 255, 255, 0.6);
+  --sidebar-border: rgba(0, 0, 0, 0.15);
+  --sidebar-brand-border: rgba(255, 255, 255, 0.08);
+  --sidebar-text-hover: #ffffff;
+  --text-on-gold: var(--color-navy-950);
+  --scrollbar-thumb: var(--neutral-300);
+  --scrollbar-thumb-hover: var(--neutral-500);
+  --toggle-track: var(--neutral-300);
+  --border-hover: var(--neutral-300);
+  --card-hover-bg: var(--app-surface);
+  --thead-bg: var(--surface-light);
+  --focus-glow: rgba(46, 66, 123, 0.1);
+  --bar-default: var(--primary-500);
+  --badge-orange-bg: var(--gold-100);
+  --badge-orange-text: var(--gold-700);
+  --badge-orange-border: var(--gold-200);
+  --spinner-track: rgba(255, 255, 255, 0.4);
+  --spinner-head: #ffffff;
+  --text-on-accent: #ffffff;
+  --overlay: rgba(11, 19, 50, 0.55);
+  --chart-1: #2e427b;
+  --chart-2: #aa9e39;
+  --chart-3: #047857;
+  --chart-4: #bc9c22;
+  --chart-5: #575d8f;
+  --chart-6: #b45309;
+  --chart-7: #aeb091;
+  --chart-8: #be123c;
+  --chart-9: #455d9c;
+  --chart-10: #819ad6;
+  --chart-11: #e1c340;
+  --chart-12: #18244f;
+
   /* Statuts certifiés WCAG 2.2 AA (§4.4 & §4.5) */
   --success: #047857;          /* emerald-700 */
   --success-bg: #ecfdf5;       /* emerald-50 */
@@ -167,29 +215,99 @@
 
 /* ---- Mode sombre sobre harmonisé ---- */
 :root[data-theme='dark'] {
-  --softtime: #819ad6;
-  --softtime-light: rgba(46, 66, 123, 0.22);
-  --softtime-dark: #a9bdee;
-  --softtime-glow: rgba(129, 154, 214, 0.25);
+  color-scheme: dark;
+  --surface-0: #0b1332;
+  --surface-1: #0e162e;
+  --surface-2: #141e3c;
+  --surface-3: #18244f;
+  --border-subtle: #34436a;
+  --border-control: #7389c4;
+  --border-strong: #a9bdee;
+  --text-primary: #e7ebf7;
+  --text-secondary: #c6d1ef;
+  --text-disabled: #8d9bc2;
+  --accent: #a9bdee;
+  --accent-hover: #cad9fb;
+  --focus-ring: #c4d0ff;
+  --sidebar-focus-ring: #c4d0ff;
+  --sidebar-brand-text: var(--text-primary);
+  --sidebar-brand-sub: var(--text-secondary);
+  --sidebar-border: var(--border-subtle);
+  --sidebar-brand-border: var(--border-subtle);
+  --sidebar-text-hover: var(--text-primary);
+  --scrollbar-thumb: var(--border-control);
+  --scrollbar-thumb-hover: var(--border-strong);
+  --toggle-track: var(--border-control);
+  --border-hover: var(--border-control);
+  --card-hover-bg: var(--surface-2);
+  --thead-bg: var(--surface-2);
+  --focus-glow: var(--softtime-glow);
+  --bar-default: var(--chart-1);
+  --badge-orange-bg: var(--warning-bg);
+  --badge-orange-text: var(--warning);
+  --badge-orange-border: var(--warning-border);
+  --spinner-track: rgba(11, 19, 50, 0.4);
+  --spinner-head: var(--text-on-accent);
+  --text-on-accent: #0b1332;
+  --success: #62d8a5;
+  --success-bg: #153d30;
+  --success-border: #348a68;
+  --warning: #ffd08a;
+  --warning-bg: #4a3312;
+  --warning-border: #a86f24;
+  --danger: #ff9aaa;
+  --danger-bg: #4a2029;
+  --danger-border: #a95064;
+  --info: #9dbdff;
+  --info-bg: #1f3458;
+  --info-border: #527cc2;
+  --overlay: rgba(5, 9, 28, 0.72);
+  --chart-1: var(--accent);
+  --chart-2: #ffd166;
+  --chart-3: var(--success);
+  --chart-4: #d6a84a;
+  --chart-5: #9fafe0;
+  --chart-6: var(--warning);
+  --chart-7: #b6c99c;
+  --chart-8: var(--danger);
+  --chart-9: var(--info);
+  --chart-10: var(--accent-hover);
+  --chart-11: #ffe08a;
+  --chart-12: var(--border-strong);
 
-  --app-bg: #070b18;
-  --app-surface: #0e162e;
-  --app-surface-soft: #141e3c;
-  --surface-light: #141e3c;
-  --surface-dark: #18244f;
-  --app-border: rgba(202, 217, 251, 0.16);
-  --color-border: rgba(202, 217, 251, 0.16);
-  --color-border-input: #5f77b9;
-  --border-light: rgba(202, 217, 251, 0.10);
-  --app-text: #f4f7fe;
-  --app-text-strong: #ffffff;
-  --text-secondary: #cad9fb;
-  --text-muted: #819ad6;
-
-  --success-bg: rgba(4, 120, 87, 0.22);
-  --warning-bg: rgba(180, 83, 9, 0.22);
-  --danger-bg: rgba(190, 18, 60, 0.22);
-  --info-bg: rgba(46, 66, 123, 0.25);
+  --softtime: var(--accent);
+  --softtime-light: var(--surface-2);
+  --softtime-dark: var(--text-primary);
+  --softtime-glow: rgba(169, 189, 238, 0.25);
+  --app-bg: var(--surface-0);
+  --app-surface: var(--surface-1);
+  --app-surface-soft: var(--surface-2);
+  --surface-light: var(--surface-2);
+  --surface-dark: var(--surface-3);
+  --app-border: var(--border-subtle);
+  --color-border: var(--border-subtle);
+  --color-border-input: var(--border-control);
+  --border-light: var(--border-subtle);
+  --app-text: var(--text-primary);
+  --app-text-strong: var(--text-primary);
+  --text-muted: var(--text-disabled);
+  --sidebar-bg: var(--surface-3);
+  --sidebar-hover: #22315e;
+  --sidebar-active-bg: #2a3b70;
+  --sidebar-active-color: var(--text-primary);
+  --sidebar-text: var(--text-primary);
+  --sidebar-text-muted: var(--text-secondary);
+  --navy-50: var(--surface-2);
+  --navy-100: #26355f;
+  --navy-200: var(--border-control);
+  --navy-300: var(--border-strong);
+  --navy-400: var(--accent);
+  --navy-500: var(--accent);
+  --navy-600: var(--accent);
+  --navy-700: var(--accent);
+  --navy-800: var(--accent-hover);
+  --navy-900: var(--text-primary);
+  --navy-950: var(--text-primary);
 }
 
 /* ---- Reset & Base ---- */
@@ -226,13 +344,13 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 a {
-  color: var(--navy-700);
+  color: var(--accent);
   text-decoration: none;
   transition: color var(--t-fast) var(--ease);
 }
 
 a:hover {
-  color: var(--navy-800);
+  color: var(--accent-hover);
 }
 
 button {
@@ -254,11 +372,11 @@ button {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--neutral-300);
+  background: var(--scrollbar-thumb);
   border-radius: var(--radius-full);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--neutral-500);
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* ============================================================================
@@ -290,7 +408,7 @@ button {
 }
 
 .soft-btn:focus-visible {
-  outline: 3px solid var(--navy-700);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -317,19 +435,19 @@ button {
 }
 
 .soft-btn--primary {
-  background: var(--navy-700);
-  color: #ffffff;
+  background: var(--accent);
+  color: var(--text-on-accent);
   box-shadow: var(--shadow-xs);
 }
 
 .soft-btn--primary:hover:not(:disabled) {
-  background: var(--navy-800);
+  background: var(--accent-hover);
 }
 
 .soft-btn--secondary {
   background: var(--app-surface);
   border-color: var(--color-border);
-  color: var(--neutral-800);
+  color: var(--text-primary);
 }
 
 :root[data-theme='dark'] .soft-btn--secondary {
@@ -338,19 +456,19 @@ button {
 
 .soft-btn--secondary:hover:not(:disabled) {
   background: var(--surface-dark);
-  border-color: var(--neutral-300);
+  border-color: var(--border-hover);
   color: var(--navy-950);
 }
 
 .soft-btn--accent {
   background: var(--gold-400);
-  color: var(--navy-950);
+  color: var(--text-on-gold);
   font-weight: 700;
 }
 
 .soft-btn--accent:hover:not(:disabled) {
   background: var(--gold-300);
-  color: var(--navy-950);
+  color: var(--text-on-gold);
 }
 
 .soft-btn--danger {
@@ -376,8 +494,8 @@ button {
 .soft-btn__spinner {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.4);
-  border-top-color: #ffffff;
+  border: 2px solid var(--spinner-track);
+  border-top-color: var(--spinner-head);
   border-radius: 50%;
   animation: soft-spin 0.7s linear infinite;
 }
@@ -408,7 +526,8 @@ button {
 
 .soft-card--interactive:hover {
   box-shadow: var(--shadow-md);
-  border-color: var(--neutral-300);
+  border-color: var(--border-hover);
+  background: var(--card-hover-bg);
 }
 
 .soft-card--pad-sm { padding: var(--space-md); }
@@ -465,10 +584,10 @@ button {
 
 .soft-input:focus,
 .soft-select > select:focus {
-  outline: 3px solid var(--navy-700);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
-  border-color: var(--navy-700);
-  box-shadow: 0 0 0 4px rgba(46, 66, 123, 0.1);
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 4px var(--focus-glow);
 }
 
 .soft-input:disabled {
@@ -533,7 +652,7 @@ button {
 .soft-toggle__track {
   position: absolute;
   inset: 0;
-  background: var(--neutral-300);
+  background: var(--toggle-track);
   border-radius: var(--radius-full);
   transition: background var(--t-fast) var(--ease);
 }
@@ -551,7 +670,7 @@ button {
 }
 
 .soft-toggle input:checked + .soft-toggle__track {
-  background: var(--navy-700);
+  background: var(--accent);
 }
 
 .soft-toggle input:checked + .soft-toggle__track .soft-toggle__thumb {
@@ -571,12 +690,12 @@ button {
   line-height: 1.4;
 }
 
-.soft-badge--primary { background: var(--navy-50); color: var(--navy-700); border-color: var(--navy-200); }
+.soft-badge--primary { background: var(--info-bg); color: var(--info); border-color: var(--info-border); }
 .soft-badge--success { background: var(--success-bg); color: var(--success); border-color: var(--success-border); }
 .soft-badge--warning { background: var(--warning-bg); color: var(--warning); border-color: var(--warning-border); }
 .soft-badge--danger  { background: var(--danger-bg); color: var(--danger); border-color: var(--danger-border); }
-.soft-badge--info    { background: var(--navy-50); color: var(--navy-700); border-color: var(--navy-200); }
-.soft-badge--orange  { background: var(--gold-100); color: var(--gold-700); border-color: var(--gold-200); }
+.soft-badge--info    { background: var(--info-bg); color: var(--info); border-color: var(--info-border); }
+.soft-badge--orange  { background: var(--badge-orange-bg); color: var(--badge-orange-text); border-color: var(--badge-orange-border); }
 .soft-badge--muted   { background: var(--surface-dark); color: var(--text-secondary); border-color: var(--color-border); }
 
 /* Compteur Softwell (§8.3) */
@@ -586,7 +705,7 @@ button {
   justify-content: center;
   border-radius: var(--radius-sm);
   background: var(--gold-300);
-  color: var(--navy-950);
+  color: var(--text-on-gold);
   font-size: 12px;
   font-weight: 700;
   padding: 2px 8px;
@@ -613,7 +732,7 @@ button {
 }
 
 .soft-table thead th {
-  background: var(--surface-light);
+  background: var(--thead-bg);
   border-bottom: 1px solid var(--color-border);
   text-align: left;
   text-transform: uppercase;
@@ -637,11 +756,12 @@ button {
 }
 
 .soft-table tbody tr:hover {
-  background: var(--navy-50);
+  background: var(--surface-2);
 }
 
 .soft-table tbody tr.is-selected {
-  background: var(--navy-50);
+  background: var(--info-bg);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .soft-table__check {
@@ -654,7 +774,7 @@ button {
 .soft-table__check input {
   width: 18px;
   height: 18px;
-  accent-color: var(--navy-700);
+  accent-color: var(--accent);
   cursor: pointer;
 }
 
@@ -686,7 +806,8 @@ button {
 
   .soft-table-card.is-selected {
     border-color: var(--navy-300);
-    background: var(--navy-50);
+    background: var(--info-bg);
+    box-shadow: inset 3px 0 0 var(--accent);
   }
 
   .soft-table-card__field,
@@ -719,7 +840,7 @@ button {
     width: 18px;
     height: 18px;
     margin: 0;
-    accent-color: var(--navy-700);
+    accent-color: var(--accent);
   }
 
   .soft-table-card__actions > div {
@@ -804,13 +925,13 @@ button {
 
 .soft-page-btn:hover:not(:disabled):not(.is-active) {
   background: var(--surface-dark);
-  border-color: var(--neutral-300);
+  border-color: var(--border-hover);
 }
 
 .soft-page-btn.is-active {
-  background: var(--navy-700);
-  color: #ffffff;
-  border-color: var(--navy-700);
+  background: var(--accent);
+  color: var(--text-on-accent);
+  border-color: var(--accent);
   font-weight: 700;
 }
 
@@ -834,7 +955,7 @@ button {
 .soft-modal__overlay {
   position: fixed;
   inset: 0;
-  background: rgba(11, 19, 50, 0.55);
+  background: var(--overlay);
   backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
@@ -947,7 +1068,7 @@ button {
   background: var(--app-surface);
   box-shadow: var(--shadow-lg);
   border: 1px solid var(--color-border);
-  border-left: 5px solid var(--navy-700);
+  border-left: 5px solid var(--accent);
   animation: soft-slide-in var(--t-normal) var(--ease);
   color: var(--app-text);
   font-size: 14px;
@@ -964,7 +1085,7 @@ button {
   border-left-color: var(--warning);
 }
 .soft-toast--info {
-  border-left-color: var(--navy-700);
+  border-left-color: var(--info);
 }
 
 /* ---- En-têtes de page (§7.1 N°3) ---- */
@@ -1011,7 +1132,7 @@ button {
   width: 36px;
   height: 36px;
   border: 3px solid var(--app-border);
-  border-top-color: var(--navy-700);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: soft-spin 0.8s linear infinite;
   margin: 40px auto;

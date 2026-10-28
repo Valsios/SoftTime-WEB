@@ -84,7 +84,7 @@ let uid = 0;
         background: var(--surface-light);
       }
       .soft-field__reveal:focus-visible {
-        outline: 2px solid var(--primary-500);
+        outline: 2px solid var(--focus-ring);
         outline-offset: 1px;
       }
     `,

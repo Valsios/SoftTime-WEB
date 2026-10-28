@@ -146,11 +146,11 @@ const ENTITY_LABELS: Record<string, string> = {
     `
       .stepper__head { display: flex; gap: 20px; list-style: none; margin: 0 0 20px; padding: 0 0 14px; border-bottom: 1px solid var(--color-border); }
       .stepper__item { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 13.5px; font-weight: 600; }
-      .stepper__item.is-active { color: var(--navy-700); font-weight: 700; }
+      .stepper__item.is-active { color: var(--accent); font-weight: 700; }
       .stepper__item.is-done { color: var(--success); }
       .stepper__num { display: inline-flex; width: 24px; height: 24px; border-radius: 50%; align-items: center; justify-content: center;
         background: var(--surface-dark); border: 1px solid var(--color-border); color: var(--app-text); font-size: 12px; font-weight: 700; }
-      .stepper__item.is-active .stepper__num { background: var(--navy-700); border-color: var(--navy-700); color: #fff; }
+      .stepper__item.is-active .stepper__num { background: var(--accent); border-color: var(--accent); color: var(--text-on-accent); }
       .stepper__item.is-done .stepper__num { background: var(--success-bg); border-color: var(--success); color: var(--success); }
       .form-grid { display: grid; gap: 16px; margin-top: 16px; }
       .toggle-row { display: flex; align-items: center; justify-content: space-between; font-weight: 600; font-size: 14px; color: var(--app-text); }

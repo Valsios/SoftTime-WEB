@@ -7,18 +7,18 @@
  * composants maison de `shared/components`.
  */
 export const CHART_COLORS = [
-  '#2E427B', // Marine Softwell (navy-700)
-  '#AA9E39', // Or Softwell (gold-400)
-  '#047857', // Emerald-700 (Succès)
-  '#BC9C22', // Or chaud (complémentaire)
-  '#575D8F', // Ardoise (complémentaire)
-  '#B45309', // Amber-700 (Avertissement)
-  '#AEB091', // Sauge (complémentaire)
-  '#BE123C', // Rose-700 (Danger)
-  '#455D9C', // Navy-600
-  '#819AD6', // Navy-400
-  '#E1C340', // Or clair (gold-300)
-  '#18244F', // Marine profond (navy-900)
+  'var(--chart-1)',
+  'var(--chart-2)',
+  'var(--chart-3)',
+  'var(--chart-4)',
+  'var(--chart-5)',
+  'var(--chart-6)',
+  'var(--chart-7)',
+  'var(--chart-8)',
+  'var(--chart-9)',
+  'var(--chart-10)',
+  'var(--chart-11)',
+  'var(--chart-12)',
 ];
 
 /** Un point d'un graphique de répartition. */

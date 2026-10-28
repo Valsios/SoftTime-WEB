@@ -84,7 +84,7 @@ import { ChartFormatter, ChartPoint } from './chart.util';
 })
 export class SoftBarChart {
   readonly items = input<ChartPoint[]>([]);
-  readonly color = input('var(--primary-500)');
+  readonly color = input('var(--bar-default)');
   readonly emptyText = input('Aucune donnée sur la période.');
   readonly format = input<ChartFormatter>((value) => String(value ?? 0));
 
