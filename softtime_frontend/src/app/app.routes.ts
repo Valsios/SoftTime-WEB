@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { authGuard, droitGuard } from './core/guards';
+import { authGuard, droitGuard, privilegesLeaveGuard } from './core/guards';
 import { Droit } from './core/rights';
 
 export const routes: Routes = [
@@ -59,6 +59,7 @@ export const routes: Routes = [
       {
         path: 'privileges',
         canActivate: [droitGuard],
+        canDeactivate: [privilegesLeaveGuard],
         data: { droit: Droit.Parameters, permission: 'PARAMS:PRIVILEGES' },
         loadComponent: () => import('./features/params/privileges').then((m) => m.PrivilegesPage),
       },

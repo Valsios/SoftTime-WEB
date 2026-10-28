@@ -38,6 +38,15 @@ export interface User {
   password?: string | null;
   /** Adresse d'envoi des identifiants (facultative). */
   email?: string | null;
+  /** Demande de remise à zéro des droits personnalisés de l'utilisateur. */
+  resetPermissions?: boolean;
+}
+
+/** Droits détaillés d'un rôle (`GET /api/privileges/role/{roleId}`). */
+export interface RoleDetailedPermissions {
+  roleId: number;
+  grantedPermissions: string[];
+  isConfigured: boolean;
 }
 
 /** Création du premier compte administrateur (installation vierge). */

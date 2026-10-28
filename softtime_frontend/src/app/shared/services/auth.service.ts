@@ -3,11 +3,13 @@ import { Observable, tap } from 'rxjs';
 import { ApiService } from '../../core/api';
 import { SessionStore } from '../../core/session.store';
 import { AdminSetupRequest, AdminSetupResult, LoginRequest, LoginResponse } from '../models';
+import { PrivilegesDraftService } from './privileges-draft.service';
 import { inject } from '@angular/core';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService extends ApiService {
   private readonly session = inject(SessionStore);
+  private readonly draft = inject(PrivilegesDraftService);
 
   login(body: LoginRequest): Observable<LoginResponse> {
     return this.http
@@ -43,6 +45,7 @@ export class AuthService extends ApiService {
   }
 
   logout(): void {
+    this.draft.clearAll();
     this.session.clear();
   }
 }
