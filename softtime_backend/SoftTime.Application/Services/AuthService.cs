@@ -973,6 +973,12 @@ public class AuthService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        var tooLongCodes = normalizedPermissions
+            .Where(p => p.Length > 128)
+            .ToList();
+        if (tooLongCodes.Count > 0)
+            throw new InvalidOperationException($"Code de permission trop long (128 caractères maximum) : {string.Join(", ", tooLongCodes)}.");
+
         var invalidCodes = normalizedPermissions
             .Where(p => !IsKnownPermissionCode(p))
             .ToList();

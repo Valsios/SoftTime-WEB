@@ -146,6 +146,32 @@ public class RolePermissionsTests
         Assert.Equal("PARAMS:USERS", perms[0].PERMISSION_CODE);
     }
 
+    [Fact]
+    public async Task SaveRoleDetailedPermissionsAsync_CodeLongerThan128Chars_ThrowsInvalidOperationException()
+    {
+        var longCode = "SAGE:" + new string('A', 124);
+        Assert.Equal(129, longCode.Length);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { longCode }));
+
+        Assert.Contains("128", ex.Message);
+        Assert.Contains("caractères", ex.Message);
+    }
+
+    [Fact]
+    public async Task SaveRoleDetailedPermissionsAsync_CodeExactly128Chars_IsAccepted()
+    {
+        var validCode = "SAGE:" + new string('A', 123);
+        Assert.Equal(128, validCode.Length);
+
+        await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { validCode });
+
+        var perms = await _uow.GetRepo<T_ROLE_PERMISSION>().ListAsync(p => p.IDROLE == 3);
+        Assert.Single(perms);
+        Assert.Equal(validCode, perms[0].PERMISSION_CODE);
+    }
+
     #endregion
 
     #region C2 — Synchronisation exacte des portes
@@ -226,6 +252,43 @@ public class RolePermissionsTests
         Assert.Contains("PROC:SHIFTS", res.GrantedPermissions);
     }
 
+    [Fact]
+    public async Task SaveRoleDetailedPermissionsAsync_RoundTrip_ParametersGate_GatesUnchanged()
+    {
+        // Rôle 3 avec la porte Paramètres, jamais configuré
+        _uow.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = 3, IDDROIT = Rights.Parameters });
+
+        var initial = await _auth.GetRoleDetailedPermissionsAsync(3);
+        Assert.False(initial.IsConfigured);
+        Assert.NotEmpty(initial.GrantedPermissions);
+
+        await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, initial.GrantedPermissions);
+
+        var portesApres = await _uow.GetRepo<T_DROIT_ROLE>().ListAsync(d => d.IDROLE == 3);
+        Assert.Single(portesApres);
+        Assert.Equal(Rights.Parameters, (int)portesApres[0].IDDROIT);
+    }
+
+    [Fact]
+    public async Task SaveRoleDetailedPermissionsAsync_RoundTrip_DatabasesProcessingReportsGates_GatesUnchanged()
+    {
+        // Rôle 3 avec les portes Databases + Processing + Reports, jamais configuré
+        _uow.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = 3, IDDROIT = Rights.Databases });
+        _uow.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = 3, IDDROIT = Rights.Processing });
+        _uow.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = 3, IDDROIT = Rights.Reports });
+
+        var initial = await _auth.GetRoleDetailedPermissionsAsync(3);
+        Assert.False(initial.IsConfigured);
+        Assert.NotEmpty(initial.GrantedPermissions);
+
+        await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, initial.GrantedPermissions);
+
+        var portesApres = await _uow.GetRepo<T_DROIT_ROLE>().ListAsync(d => d.IDROLE == 3);
+        var gateIds = portesApres.Select(p => (int)p.IDDROIT).OrderBy(x => x).ToList();
+        var expectedGates = new[] { Rights.Databases, Rights.Processing, Rights.Reports }.OrderBy(x => x).ToList();
+        Assert.Equal(expectedGates, gateIds);
+    }
+
     #endregion
 
     #region C4 — Journalisation atomique (un seul SaveChangesAsync)
@@ -260,6 +323,47 @@ public class RolePermissionsTests
         Assert.Single(audit);
         Assert.Equal(100, audit[0].LOGIN_OPERATEUR.Length);
         Assert.Equal(100, audit[0].NOM_CIBLE?.Length);
+    }
+
+    [Fact]
+    public async Task SaveUserAsync_RoleChangeWithResetPermissions_SingleSaveChangesAsync_AuditResetPresent()
+    {
+        // Utilisateur 2 (actuellement IDROLE = 2) a des permissions personnalisées
+        _uow.GetRepo<T_USER_PERMISSION>().Items.Add(new T_USER_PERMISSION
+        {
+            ID = 1,
+            IDRESPONSABLE = 2,
+            PERMISSION_CODE = "PARAMS:USERS",
+            IS_GRANTED = true
+        });
+
+        var dto = new UserDto(2, 3, "Simple User", "user", null, null)
+        {
+            ResetPermissions = true
+        };
+
+        _uow.ResetSaveChangesCount();
+
+        await _auth.SaveUserAsync(currentUserId: 1, dto);
+
+        // M3 : un seul SaveChangesAsync
+        Assert.Equal(1, _uow.SaveChangesCount);
+
+        // L'audit RESET_USER_PERMS est bien présent
+        var audits = await _uow.GetRepo<T_AUDIT_DROIT>().ListAsync(
+            a => a.TYPE_CIBLE == "USER" && a.ID_CIBLE == 2 && a.ACTION == "RESET_USER_PERMS");
+        Assert.Single(audits);
+        Assert.Equal("admin", audits[0].LOGIN_OPERATEUR);
+        Assert.Equal("PARAMS:USERS", audits[0].PERMS_AVANT);
+        Assert.Null(audits[0].PERMS_APRES);
+
+        // Vérification que les permissions ont été nettoyées
+        var permsAfter = await _uow.GetRepo<T_USER_PERMISSION>().ListAsync(p => p.IDRESPONSABLE == 2);
+        Assert.Empty(permsAfter);
+
+        // Vérification que le rôle a bien été mis à jour
+        var userAfter = await _uow.GetRepo<T_RESPONSABLE>().GetByIdAsync(2);
+        Assert.Equal(3, userAfter!.IDROLE);
     }
 
     #endregion
