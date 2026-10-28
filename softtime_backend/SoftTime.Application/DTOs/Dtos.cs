@@ -462,9 +462,10 @@ public record OvertimeDetailDayDto(
     bool AbsenceAm,
     bool AbsencePm,
     bool Conge,
-    bool JourTravaille)
+    bool JourTravaille,
+    decimal HeuresReelles)
 {
-    public OvertimeDetailDayDto() : this(default, default, default, default, default, default, default, default, default, default, default, default, default) { }
+    public OvertimeDetailDayDto() : this(default, default, default, default, default, default, default, default, default, default, default, default, default, default) { }
 }
 
 /// <summary>Semaine du calcul EXO/IMPO d'un salarié (répartition 130 % / 150 %).</summary>

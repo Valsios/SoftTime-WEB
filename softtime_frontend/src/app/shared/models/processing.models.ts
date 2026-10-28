@@ -209,6 +209,7 @@ export interface OvertimeDetailDay {
   date?: string | null;
   entree?: string | null;
   sortie?: string | null;
+  /** Heures retenues (après arrondis et pause manquante) : base du calcul hebdomadaire. */
   heuresTravaillees: number;
   heuresSupJournalieres: number;
   heuresNuit: number;
@@ -219,6 +220,8 @@ export interface OvertimeDetailDay {
   absencePm: boolean;
   conge: boolean;
   jourTravaille: boolean;
+  /** Heures réellement pointées, avant arrondi et déduction de la pause. */
+  heuresReelles: number;
 }
 
 /** Semaine du calcul EXO/IMPO d'un salarié. */

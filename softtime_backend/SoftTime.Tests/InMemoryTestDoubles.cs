@@ -123,14 +123,17 @@ internal sealed class FakeCurrentUser : ICurrentUser
     public bool HasRight(int droit) => true;
 }
 
-/// <summary>Source externe factice : seuls les pointages et les badges sont utilisés par l'import.</summary>
+/// <summary>Source externe factice : pointages, badges, salariés (civilité) et événements SAGE.</summary>
 internal sealed class FakeExternalSourceService : IExternalSourceService
 {
     public List<ExternalPunchUser> Users { get; } = new();
     public List<ExternalPunch> Punches { get; } = new();
+    public List<ExternalEmployee> Employees { get; } = new();
+    public List<ExternalEvent> Events { get; } = new();
+    public List<ExternalEmployeeEvent> EmployeeEvents { get; } = new();
 
     public Task<IReadOnlyList<ExternalEmployee>> GetEmployeesAsync(T_BDD_SAGE row, CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<ExternalEmployee>>(Array.Empty<ExternalEmployee>());
+        => Task.FromResult<IReadOnlyList<ExternalEmployee>>(Employees.ToList());
 
     public Task<IReadOnlyList<ExternalAffectation>> GetAffectationsAsync(T_BDD_SAGE row, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<ExternalAffectation>>(Array.Empty<ExternalAffectation>());
@@ -145,10 +148,10 @@ internal sealed class FakeExternalSourceService : IExternalSourceService
         => Task.FromResult<IReadOnlyList<ExternalConstant>>(Array.Empty<ExternalConstant>());
 
     public Task<IReadOnlyList<ExternalEvent>> GetEventsAsync(T_BDD_SAGE row, CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<ExternalEvent>>(Array.Empty<ExternalEvent>());
+        => Task.FromResult<IReadOnlyList<ExternalEvent>>(Events.ToList());
 
     public Task<IReadOnlyList<ExternalEmployeeEvent>> GetEmployeeEventsAsync(T_BDD_SAGE row, CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<ExternalEmployeeEvent>>(Array.Empty<ExternalEmployeeEvent>());
+        => Task.FromResult<IReadOnlyList<ExternalEmployeeEvent>>(EmployeeEvents.ToList());
 
     public Task<IReadOnlyList<ExternalPunchUser>> GetPunchUsersAsync(T_BDD_POINTEUSE row, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<ExternalPunchUser>>(Users.ToList());

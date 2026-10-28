@@ -167,7 +167,7 @@ public static class ApiCatalog
         E("CorrectedHours", "PUT", "/api/corrected-hours/{id}", "Modifier correction"),
         E("CorrectedHours", "DELETE", "/api/corrected-hours/{id}", "Supprimer correction"),
         E("CorrectedHours", "POST", "/api/corrected-hours/import-excel", "Import Excel corrections"),
-        E("WeeklyValidation", "POST", "/api/weekly-validation/preview", "Calcul HT/HS semaine (lundi-dimanche)"),
+        E("WeeklyValidation", "POST", "/api/weekly-validation/preview", "Calcul HT/HS semaine lundi-dimanche (mode T_CLOCK multi ou 2 pointages)"),
         E("WeeklyValidation", "POST", "/api/weekly-validation/preview/paged?page=&pageSize=", "Calcul HT/HS semaine paginé (lecture seule, max 100)"),
         E("WeeklyValidation", "POST", "/api/weekly-validation/validate", "Valider la semaine"),
         E("WeeklyValidation", "POST", "/api/weekly-validation/unvalidate", "Annuler validation"),

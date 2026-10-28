@@ -67,6 +67,31 @@ L’accès est filtré par **rôle** (6 droits) et par **société SAGE** active
 - **Protections** : les corrections `ORIGINE = MANUEL` et les semaines validées ne sont jamais écrasées ; seules les corrections `ORIGINE = AUTO` sont purgées puis régénérées.
 - **Import** : dédoublonnage systématique (pointeuse et Excel, dans les deux modes), puis pré-traitement enchaîné depuis l’écran Pointages. Les pointages bruts restent dans `T_POINTAGE`.
 
+**Calcul des heures supplémentaires — validation semaine** (portage de `Frm_Validations.calculHSSemaine`, synthèse `SYNTHESE_CALCUL_HS.md` §4) :
+
+- **Deux modes** selon `T_CLOCK.MULTIPOINT` (aucune ligne `T_CLOCK` ⇒ multi-pointage, mode de référence) :
+  - **multi-pointage** : `HS = total hebdomadaire crédité − HEURESEMAINE` (catégorie, 40 h par défaut) ;
+  - **2 pointages** : `HS = Σ max(0, heures du jour − prévu au planning)` ; le samedi est intégralement en HS.
+- **Arrivées / sorties** : entrée en avance non payée (`max(entrée, HA)`) ; sortie arrondie **vers le bas** au pas
+  `T_TOLERANCES.SORTIE` (multi) ou à la demi-heure inférieure (mono).
+- **Pause** : `T_PLANNING_SAL.Pause` → `T_CATEGORIE.PAUSE` → 30 min. En multi, seule la part **manquante** est
+  déduite et seulement au-delà de 5 h travaillées ; en mono elle est toujours déduite.
+- **Nuit** : 22:00 → 05:00. Dimanche et férié ont leurs propres compteurs ; une heure ne reçoit qu'**une**
+  majoration, la `T_MAJORATION.Cotation` la plus forte l'emporte.
+- **Crédits** : un férié non travaillé crédite la journée (`HEURESEMAINE / 5`) ; un congé SAGE crédite la journée
+  (ou la demi-journée) ; le 8 mars crédite la journée des salariées (`T_SAL.Civilite` renseignée et ≠ 0).
+- **Absence** : jour planifié non chômé sans aucune heure corrigée, hors congé et hors férié → `(HD − HA) − pause`.
+- **Validation** : seules les lignes cochées passent `VALIDATION_HS = true` et verrouillent `VALIDER_HS` ; une
+  semaine validée reste affichée (elle n'est plus recalculée) et peut être annulée, voire purgée.
+- **Ventilation** : `T_HSSemaine` est reconstruit à chaque calcul à partir des semaines **validées** —
+  8 h à 130 %, au-delà à 150 %.
+- **Exonération** : `T_HSExoImp` agrège les semaines validées de la période (max. un mois), plafond de 20 h
+  exonérées consommé d'abord sur le 130 %, et reporte `NUIT`, `DIM`, `FERIE`, `RETARD` et `ABSENCE`.
+- **Écarts assumés vs desktop** : pas d'écriture dans `T_HS_NONVALIDER` (`T_HS_VALIDER` est la source unique) ;
+  l'exonération n'agrège que les semaines validées (`VALIDATION_HS`) ; nuit / dimanche / férié ne se cumulent
+  pas ; congés et fériés exclus de l'absence ; civilité nulle ⇒ règle du 8 mars non appliquée ; l'arrondi de
+  sortie est un vrai plancher (le desktop retirait un pas de trop sur les multiples exacts).
+
 **Valeurs enregistrées pour le planning salarié** (alignées sur le desktop) :
 
 - `DateP` = date de début du shift, toujours à minuit.
