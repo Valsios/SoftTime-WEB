@@ -107,12 +107,29 @@ L’accès est filtré par **rôle** (6 droits) et par **société SAGE** active
 
 ## 5. États (rapports)
 
-Période + plage de matricules, export Excel :
+Période + plage de matricules + branche, export Excel. Les états sont **calculés** (aucune table
+tampon n'est lue) et partagent leurs règles avec le tableau de bord analytique.
 
-- État pointage, absences, retards  
-- Récap HS EXO/IMPO  
-- Heures par semaine, heures dimanche  
-- Congé SAGE du jour  
+- État pointage, récap HS EXO/IMPO, heures par semaine, heures dimanche : lecture directe.
+- **État absences** (`AbsenceReportRules`) — n'affiche **que les absences non justifiées** : une
+  ligne par salarié et par jour, plafonné à la veille (aucun jour futur). Colonnes : matricule, nom,
+  prénom, département, date, durée.
+  - `Non justifiée` = jour planifié **avec heures** et **sans aucun pointage** (aucune heure
+    corrigée ce jour-là) ; durée = `(HD − HA − pause)`.
+  - **N'apparaissent pas** dans l'état (ils servent seulement à exclure le jour) : `Congé SAGE`
+    (`T_GHRSAL` hors codes `0200` / `0300`), `Arbitrée GTA` (correction portant `ABSENCE_AM` /
+    `ABSENCE_PM`, donc absence déclarée), samedi/dimanche, férié (`T_FERIE`), **jour de planning OFF**
+    (`OffP = true`) et shift sans heures (`HA`/`HD` nuls, `HA = HD`).
+- **État retards** (`RetardReportRules`) — une ligne par salarié et par jour :
+  - seul le **début de journée** est contrôlé : première entrée du jour comparée à `HA` du planning
+    + `T_TOLERANCES.TOLERANCE` de la catégorie (`TYPES_TOL = false`) ; la branche après-midi du
+    desktop (`HPE` / 13:30) n'est pas portée et une absence du matin (`ABSENCE_AM`) annule le
+    retard (pas de retard « de midi ») ;
+  - `T_HEURECORRIGER.RETARD` saisi reste prioritaire ; retard **jamais négatif** ; sans planning ou
+    sur un jour OFF, aucun retard calculé ; week-end, férié et jours futurs exclus ;
+  - mono et multi-pointage donnent le même résultat (regroupement par jour, seule la première
+    entrée compte, une ligne par jour).
+- Congé SAGE du jour.
 
 ---
 
@@ -133,8 +150,12 @@ s'affiche « Semaine 27 (30/06 - 06/07/2025) » (année ISO, donc correcte au pa
 - **Assiduité** : top 5 des salariés les plus et les moins ponctuels de la période (matricule, nom,
   ponctualité, jours pointés, retards, absences).
 - Les périodes sans événement sont affichées à 0 : tableaux et courbes restent alignés.
-- Les absences « planifiées sans pointage » n'excluent pas encore les congés SAGE (LOT 9) : le taux
-  d'absentéisme est donc une borne haute.
+- **Absences et retards** : mêmes règles et mêmes fonctions que les états (`AbsenceReportRules`,
+  `RetardReportRules`) — un jour de congé, férié, week-end, OFF ou sans heures n'est jamais une
+  absence ; un retard se mesure sur la première entrée du jour et une absence du matin l'annule.
+  Aucun événement futur n'est compté (plafond à la veille). Le tableau de bord compte en revanche
+  aussi les absences **déclarées** (`ABSENCE_AM` / `ABSENCE_PM`) dans ses jours d'absence, alors que
+  l'état des absences ne montre que les journées planifiées non pointées.
 - Regroupement et taux sont calculés par `PeriodGrouping` / `DashboardRules` (SoftTime.Domain) et
   couverts par des tests unitaires.
 

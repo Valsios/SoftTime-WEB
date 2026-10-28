@@ -58,94 +58,30 @@ public class ReportService
     }
 
     /// <summary>
-    /// État absences : croisement planning / corrections / congés SAGE / fériés.
-    /// Retourne des <see cref="AbsenceReportRow"/> calculés par <see cref="AbsenceReportRules"/>.
+    /// État des absences <b>non justifiées</b> : croisement planning / corrections / congés SAGE /
+    /// fériés. Les règles (<see cref="AbsenceReportRules"/>) calculent les trois natures d'absence,
+    /// mais l'état n'affiche que les journées planifiées sans aucun pointage. Les congés SAGE, les
+    /// jours fériés, les week-ends, les jours OFF et les absences déclarées
+    /// (<c>ABSENCE_AM</c> / <c>ABSENCE_PM</c>) servent uniquement à exclure le jour.
     /// </summary>
     public async Task<IReadOnlyList<AbsenceReportRow>> AbsencesAsync(ReportFilter filter, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var sageDb = _tenant.SageDb;
-        var from = filter.From.Date;
-        var to = filter.To.Date;
-        var dateDuJour = DateTime.Today;
-        var hier = dateDuJour.AddDays(-1);
-        var finGenerale = to < hier ? to : hier;
-
-        if (from > finGenerale)
+        var ctx = await ChargerContexteAsync(filter, ct);
+        if (ctx is null)
             return Array.Empty<AbsenceReportRow>();
 
-        var borneFinExclusive = finGenerale.AddDays(1);
-
-        // 1. Cartes filtrées par tenant SAGE, plage de matricules (MatriculeRange) et Branche (C5)
-        var periodRequest = new PeriodRequest(filter.MatriculeFrom?.Trim(), filter.MatriculeTo?.Trim(), filter.From, filter.To, filter.Branche);
-        var cartes = (await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == sageDb, ct))
-            .Where(c => MatriculeRange.Contains(c.SAGE_MATRICULE?.Trim(), periodRequest))
-            .Where(c => string.IsNullOrWhiteSpace(filter.Branche)
-                        || string.Equals(c.BRANCHE, filter.Branche, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        if (cartes.Count == 0)
-            return Array.Empty<AbsenceReportRow>();
-
-        var idsalSet = cartes.Select(c => c.ID).ToHashSet();
-        var clesCartes = cartes
-            .Select(c => MatriculeIdentity.Cle(c.SAGE_MATRICULE))
-            .Where(c => !string.IsNullOrEmpty(c))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        // 2. Fériés de la base SAGE
-        var feries = (await _uow.Repository<T_FERIE>().ListAsync(f => f.BDD_SAGE == sageDb, ct))
-            .Where(f => f.DATE.HasValue)
-            .Select(f => f.DATE!.Value.Date)
-            .ToHashSet();
-
-        // 3. Congés SAGE chargés une seule fois pour le tenant (C6 : log warning si indisponible)
-        Dictionary<string, List<LeaveDay>> conges = new(StringComparer.OrdinalIgnoreCase);
-        try
-        {
-            conges = await _leaves.LoadAsync(ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger.LogWarning(ex, "Impossible de charger les congés SAGE pour le rapport d'absence (base: {SageDb}).", sageDb);
-        }
-
-        // 4. Corrections de la plage [From, finGenerale] restreintes aux salariés retenus (C5)
-        var corrections = (await _uow.Repository<T_HEURECORRIGER>().ListAsync(h =>
-            h.BDD_SAGE == sageDb
-            && h.DATE_POINTAGE_IN >= from && h.DATE_POINTAGE_IN < borneFinExclusive, ct))
-            .Where(h => clesCartes.Contains(MatriculeIdentity.Cle(h.MATRICULE_SAGE)))
-            .ToList();
-
-        // C2 : dernierJourTraite = max des dates lues dans [From, finGenerale] (null si aucune)
-        DateTime? dernierJourTraite = corrections
-            .Where(h => h.DATE_POINTAGE_IN.HasValue)
-            .Select(h => (DateTime?)h.DATE_POINTAGE_IN!.Value.Date)
-            .Max();
-
-        // 5. Plannings de la plage [From, finGenerale] restreints aux salariés retenus (C5)
-        var plannings = (await _uow.Repository<T_PLANNING_SAL>().ListAsync(p =>
-            p.BDD_SAGE == sageDb
-            && p.DateP >= from && p.DateP < borneFinExclusive
-            && p.OffP != true, ct))
-            .Where(p => idsalSet.Contains(p.IDSAL))
-            .ToList();
-
-        // 6. Définitions des shifts (pour identifier les shifts sans heures / repos)
-        var shifts = await _uow.Repository<T_PLANNING>().ListAsync(_ => true, ct);
-
-        // 7. Rapprochement et dédoublonnage pur via AbsenceReportRules
         return AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            corrections,
-            conges,
-            feries,
-            from,
-            to,
-            dateDuJour,
-            dernierJourTraite,
-            shifts);
+                ctx.Plannings,
+                ctx.Cartes,
+                ctx.Corrections,
+                ctx.Conges,
+                ctx.Feries,
+                filter.From.Date,
+                filter.To.Date,
+                DateTime.Today)
+            .Where(r => r.Type == AbsenceReportRules.TypeNonJustifiee)
+            .ToList();
     }
 
     /// <summary>
@@ -161,14 +97,15 @@ public class ReportService
     }
 
     /// <summary>
-    /// État retards : complet + écriture de <c>T_impr_RET</c> pour l'export/impression.
+    /// État retards : calcul complet (première entrée du jour vs planning + tolérance, comme le
+    /// tableau de bord) puis écriture de <c>T_impr_RET</c> pour l'impression.
     /// </summary>
-    public async Task<IReadOnlyList<object>> RetardsAsync(ReportFilter filter, CancellationToken ct = default)
+    public async Task<IReadOnlyList<RetardReportRow>> RetardsAsync(ReportFilter filter, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var list = await _uow.Repository<T_HEURECORRIGER>().ListAsync(RetardPredicate(filter, _tenant.SageDb), ct);
-        await WriteRetardsPrintAsync(list, ct);
-        return list.Select(ToRetardRow).ToList();
+        var rows = await CalculerRetardsAsync(filter, ct);
+        await WriteRetardsPrintAsync(rows, ct);
+        return rows;
     }
 
     /// <summary>État retards paginé, sans écriture de la table d'impression.</summary>
@@ -176,16 +113,27 @@ public class ReportService
         ReportFilter filter, int? page, int? pageSize, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        return await PagedLists.PageAsync(
-            _uow.Repository<T_HEURECORRIGER>(),
-            RetardPredicate(filter, _tenant.SageDb),
-            q => q.OrderBy(h => h.DATE_POINTAGE_IN)
-                  .ThenBy(h => h.MATRICULE_SAGE)
-                  .ThenBy(h => h.ID),
-            page,
-            pageSize,
-            ToRetardRow,
-            ct);
+        var rows = await CalculerRetardsAsync(filter, ct);
+        return PagedLists.Page(rows.Cast<object>().ToList(), page, pageSize);
+    }
+
+    /// <summary>Retards calculés de la période et du périmètre (mêmes règles que le dashboard).</summary>
+    private async Task<IReadOnlyList<RetardReportRow>> CalculerRetardsAsync(ReportFilter filter, CancellationToken ct)
+    {
+        var ctx = await ChargerContexteAsync(filter, ct);
+        if (ctx is null)
+            return Array.Empty<RetardReportRow>();
+
+        return RetardReportRules.Calculer(
+            ctx.Cartes,
+            ctx.Corrections,
+            ctx.Plannings,
+            ctx.CategorieParCarte,
+            ctx.Tolerances,
+            ctx.Feries,
+            filter.From.Date,
+            filter.To.Date,
+            DateTime.Today);
     }
 
     public async Task<IReadOnlyList<HsExoDto>> HsRecapAsync(ReportFilter filter, CancellationToken ct = default)
@@ -325,16 +273,90 @@ public class ReportService
             && (string.IsNullOrEmpty(matriculeTo) || string.Compare(h.MATRICULE_SAGE, matriculeTo) <= 0);
     }
 
-    private static Expression<Func<T_HEURECORRIGER, bool>> RetardPredicate(ReportFilter filter, string sageDb)
+    /// <summary>
+    /// Contexte partagé par l'état des absences et l'état des retards : cartes filtrées (base SAGE,
+    /// plage de matricules, branche), fériés, congés SAGE, corrections, plannings, affectations de
+    /// catégorie et tolérances. La fenêtre est plafonnée à la veille : aucun état ne fabrique
+    /// d'événement futur, exactement comme le tableau de bord.
+    /// </summary>
+    private async Task<ReportContext?> ChargerContexteAsync(ReportFilter filter, CancellationToken ct)
     {
-        var from = filter.From;
-        var to = filter.To;
-        return h => h.BDD_SAGE == sageDb
-            && h.RETARD != null
-            && h.RETARD > TimeSpan.Zero
-            && h.DATE_POINTAGE_IN >= from
-            && h.DATE_POINTAGE_IN <= to;
+        var sageDb = _tenant.SageDb;
+        var from = filter.From.Date;
+        var hier = DateTime.Today.AddDays(-1);
+        var fin = filter.To.Date < hier ? filter.To.Date : hier;
+        if (from > fin)
+            return null;
+
+        var borneFinExclusive = fin.AddDays(1);
+
+        // 1. Cartes filtrées par tenant SAGE, plage de matricules (MatriculeRange) et Branche (C5)
+        var periodRequest = new PeriodRequest(filter.MatriculeFrom?.Trim(), filter.MatriculeTo?.Trim(), filter.From, filter.To, filter.Branche);
+        var cartes = (await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == sageDb, ct))
+            .Where(c => MatriculeRange.Contains(c.SAGE_MATRICULE?.Trim(), periodRequest))
+            .Where(c => string.IsNullOrWhiteSpace(filter.Branche)
+                        || string.Equals(c.BRANCHE, filter.Branche, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (cartes.Count == 0)
+            return null;
+
+        var idsalSet = cartes.Select(c => c.ID).ToHashSet();
+        var clesCartes = cartes
+            .Select(c => MatriculeIdentity.Cle(c.SAGE_MATRICULE))
+            .Where(c => !string.IsNullOrEmpty(c))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // 2. Fériés de la base SAGE
+        var feries = (await _uow.Repository<T_FERIE>().ListAsync(f => f.BDD_SAGE == sageDb, ct))
+            .Where(f => f.DATE.HasValue)
+            .Select(f => f.DATE!.Value.Date)
+            .ToHashSet();
+
+        // 3. Congés SAGE chargés une seule fois pour le tenant (C6 : log warning si indisponible)
+        Dictionary<string, List<LeaveDay>> conges = new(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            conges = await _leaves.LoadAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Impossible de charger les congés SAGE pour les rapports (base: {SageDb}).", sageDb);
+        }
+
+        // 4. Corrections de la plage [from, veille] restreintes aux salariés retenus (C5)
+        var corrections = (await _uow.Repository<T_HEURECORRIGER>().ListAsync(h =>
+            h.BDD_SAGE == sageDb
+            && h.DATE_POINTAGE_IN >= from && h.DATE_POINTAGE_IN < borneFinExclusive, ct))
+            .Where(h => clesCartes.Contains(MatriculeIdentity.Cle(h.MATRICULE_SAGE)))
+            .ToList();
+
+        // 5. Plannings de la plage [from, veille]. Les jours OFF sont conservés ici : ils sont
+        // interprétés par les règles (un jour OFF n'est jamais une absence ni un retard).
+        var plannings = (await _uow.Repository<T_PLANNING_SAL>().ListAsync(p =>
+            p.BDD_SAGE == sageDb
+            && p.DateP >= from && p.DateP < borneFinExclusive, ct))
+            .Where(p => idsalSet.Contains(p.IDSAL))
+            .ToList();
+
+        // 6. Catégorie du salarié (T_CAT_SAL référence T_CARDPAIE.ID) et tolérances de catégorie
+        var categorieParCarte = (await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == sageDb, ct))
+            .GroupBy(a => a.MATRICULE_SAGE)
+            .ToDictionary(g => g.Key, g => g.First().ID_CATEG);
+        var tolerances = await _uow.Repository<T_TOLERANCE>().ListAsync(_ => true, ct);
+
+        return new ReportContext(cartes, feries, conges, corrections, plannings, categorieParCarte, tolerances);
     }
+
+    /// <summary>Données chargées une fois pour les états calculés (absences et retards).</summary>
+    private sealed record ReportContext(
+        IReadOnlyList<T_CARDPAIE> Cartes,
+        IReadOnlySet<DateTime> Feries,
+        IReadOnlyDictionary<string, List<LeaveDay>> Conges,
+        IReadOnlyList<T_HEURECORRIGER> Corrections,
+        IReadOnlyList<T_PLANNING_SAL> Plannings,
+        IReadOnlyDictionary<int, int> CategorieParCarte,
+        IReadOnlyList<T_TOLERANCE> Tolerances);
 
     private static Expression<Func<T_HSExoImp, bool>> HsRecapPredicate(ReportFilter filter, string sageDb)
     {
@@ -363,21 +385,25 @@ public class ReportService
         return h => h.BDD_SAGE == sageDb && h.Date_Dim >= from && h.Date_Dim <= to;
     }
 
-    private async Task WriteRetardsPrintAsync(IReadOnlyList<T_HEURECORRIGER> list, CancellationToken ct)
+    /// <summary>
+    /// Recopie les retards calculés dans la table tampon d'impression <c>T_impr_RET</c>
+    /// (équivalent du bouton « Générer état » du desktop). La table est purgée avant réinsertion.
+    /// </summary>
+    private async Task WriteRetardsPrintAsync(IReadOnlyList<RetardReportRow> rows, CancellationToken ct)
     {
         var print = _uow.Repository<T_impr_RET>();
         var old = await print.ListAsync(_ => true, ct);
         print.RemoveRange(old);
-        foreach (var h in list)
+        foreach (var row in rows)
         {
             await print.AddAsync(new T_impr_RET
             {
                 BDD_SAGE = _tenant.SageDb,
                 BDD_POINTEUSE = _tenant.PointeuseDb,
-                MATRICULES = h.MATRICULE_SAGE,
-                DATE_POINTAGE = h.DATE_POINTAGE_IN?.ToString("dd/MM/yyyy"),
-                HEURE_ENTREE = h.HENTREE,
-                RETARDS = h.RETARD
+                MATRICULES = row.Matricule,
+                DATE_POINTAGE = row.Date.ToString("dd/MM/yyyy"),
+                HEURE_ENTREE = row.HeureEntree,
+                RETARDS = TimeSpan.FromMinutes(row.MinutesRetard)
             }, ct);
         }
         await _uow.SaveChangesAsync(ct);
@@ -387,14 +413,6 @@ public class ReportService
         a.ID, a.MATRICULE_SAGE, a.DATE_POINTAGE_IN, a.DATE_POINTAGE_OUT, a.HENTREE, a.HPS, a.HPE, a.HSORTIE,
         a.ABSENCE_AM, a.ABSENCE_PM, a.INTITULE_ABSENCE, a.RETARD, a.FERIER, a.FERIER_AM, a.FERIER_PM,
         a.VALIDER_CORRECTION, a.VALIDER_HS, a.HS, a.M_NUIT, a.M_DIMANCHE, a.M_FERIES);
-
-    private static object ToRetardRow(T_HEURECORRIGER h) => new
-    {
-        h.MATRICULE_SAGE,
-        h.DATE_POINTAGE_IN,
-        h.HENTREE,
-        h.RETARD
-    };
 
     private static HsExoDto ToHsExoDto(T_HSExoImp h) => new(
         h.OID, h.Matricule, h.NumSal, h.EXO130, h.EXO150, h.I130, h.I150,
