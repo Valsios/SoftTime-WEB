@@ -1,8 +1,12 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Services;
+using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
+using SoftTime.Domain.Entities.Sage;
 using SoftTime.Domain.Repositories;
+using SoftTime.Infrastructure.Integrations;
 using SoftTime.Infrastructure.Persistence;
 
 namespace SoftTime.Tests;
@@ -13,7 +17,7 @@ public class AuditTrailTests
     public async Task Writes_a_non_sensitive_payroll_summary_with_counts()
     {
         var uow = new InMemoryUnitOfWork();
-        var trail = new AuditTrail(uow, new FakeCompanyContext(), new AuditJournalOptions(), new RecordingLogger<AuditTrail>());
+        var trail = new AuditTrail(new ScopeFactory(uow), new AuditJournalOptions(), new RecordingLogger<AuditTrail>());
 
         await trail.WritePayrollSyncAsync(Audit("SUCCES", new Dictionary<string, int>
         {
@@ -38,7 +42,7 @@ public class AuditTrailTests
     public async Task Writes_failure_summary_without_individual_data()
     {
         var uow = new InMemoryUnitOfWork();
-        var trail = new AuditTrail(uow, new FakeCompanyContext(), new AuditJournalOptions(), new RecordingLogger<AuditTrail>());
+        var trail = new AuditTrail(new ScopeFactory(uow), new AuditJournalOptions(), new RecordingLogger<AuditTrail>());
 
         await trail.WritePayrollSyncAsync(Audit("ECHEC", new Dictionary<string, int> { ["Exo130"] = 3 }));
 
@@ -52,7 +56,7 @@ public class AuditTrailTests
     public async Task Disabled_audit_writes_nothing()
     {
         var uow = new InMemoryUnitOfWork();
-        var trail = new AuditTrail(uow, new FakeCompanyContext(), new AuditJournalOptions { Enabled = false }, new RecordingLogger<AuditTrail>());
+        var trail = new AuditTrail(new ScopeFactory(uow), new AuditJournalOptions { Enabled = false }, new RecordingLogger<AuditTrail>());
 
         await trail.WritePayrollSyncAsync(Audit("SUCCES", new Dictionary<string, int>()));
 
@@ -63,7 +67,7 @@ public class AuditTrailTests
     public async Task Journal_failure_is_logged_and_does_not_throw()
     {
         var logger = new RecordingLogger<AuditTrail>();
-        var trail = new AuditTrail(new FailingUnitOfWork(), new FakeCompanyContext(), new AuditJournalOptions(), logger);
+        var trail = new AuditTrail(new ScopeFactory(new FailingUnitOfWork()), new AuditJournalOptions(), logger);
 
         var exception = await Record.ExceptionAsync(() => trail.WritePayrollSyncAsync(Audit("SUCCES", new Dictionary<string, int>())));
 
@@ -72,8 +76,84 @@ public class AuditTrailTests
     }
 
     private static PayrollSyncAudit Audit(string status, IReadOnlyDictionary<string, int> categories)
-        => new("T_CUMSAL", "SAGE_TEST", new DateTime(2026, 1, 1), new DateTime(2026, 1, 31),
-            categories.Values.Sum(), categories, status, "admin", "SYNC_PAIE:STANDARD", Guid.NewGuid());
+        => new("T_CUMSAL", "SAGE_TEST", new DateTime(2026, 1, 1), new DateTime(2026, 1, 31), 2,
+            categories.Values.Sum(), 0, categories, status, "admin", "SYNC_PAIE:STANDARD", Guid.NewGuid());
+
+    [Fact]
+    public async Task Standard_writer_writes_success_summary_with_exact_counts()
+    {
+        var audit = new CapturingAuditTrail();
+        var writer = new TestStandardWriter(new SuccessfulSageWriter(), audit);
+
+        await writer.WriteAsync(Database(), Rows(), Context());
+
+        var summary = Assert.Single(audit.Entries);
+        Assert.Equal("SUCCES", summary.Status);
+        Assert.Equal(7, summary.UpdatedRows);
+        Assert.Equal(1, summary.Employees);
+        Assert.All(summary.UpdatesByCategory.Values, value => Assert.Equal(1, value));
+    }
+
+    [Fact]
+    public async Task Standard_writer_writes_exact_partial_failure_and_rethrows_original_exception()
+    {
+        var original = new InvalidOperationException("missing operand");
+        var audit = new CapturingAuditTrail();
+        var writer = new TestStandardWriter(new FailingSageWriter(original, 3), audit);
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() => writer.WriteAsync(Database(), Rows(), Context()));
+
+        Assert.Same(original, thrown);
+        var summary = Assert.Single(audit.Entries);
+        Assert.Equal("ECHEC", summary.Status);
+        Assert.Equal(3, summary.UpdatedRows);
+    }
+
+    [Fact]
+    public async Task Standard_writer_writes_failure_even_when_request_is_cancelled()
+    {
+        var audit = new CapturingAuditTrail();
+        var writer = new TestStandardWriter(new CancelledSageWriter(), audit);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => writer.WriteAsync(Database(), Rows(), Context(), cancellation.Token));
+
+        Assert.Equal("ECHEC", Assert.Single(audit.Entries).Status);
+        Assert.Equal(CancellationToken.None, audit.Tokens.Single());
+    }
+
+    [Fact]
+    public async Task Standard_writer_is_not_masked_when_the_journal_write_fails()
+    {
+        var logger = new RecordingLogger<AuditTrail>();
+        var audit = new AuditTrail(new ScopeFactory(new FailingUnitOfWork()), new AuditJournalOptions(), logger);
+        var writer = new TestStandardWriter(new SuccessfulSageWriter(), audit);
+
+        var result = await writer.WriteAsync(Database(), Rows(), Context());
+
+        Assert.Equal(1, result.EmployeesUpdated);
+        Assert.Equal(7, result.CategoriesUpdated);
+        Assert.NotEmpty(logger.Messages);
+    }
+
+    [Fact]
+    public async Task Standard_writer_records_zero_updates_when_a_sage_constant_is_missing()
+    {
+        var audit = new CapturingAuditTrail();
+        var writer = new TestStandardWriter(new SagePayrollWriter(), audit);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => writer.WriteAsync(Database(), Rows(), Context()));
+
+        Assert.Contains("Constante SAGE HS01 introuvable", exception.Message);
+        var summary = Assert.Single(audit.Entries);
+        Assert.Equal("ECHEC", summary.Status);
+        Assert.Equal(0, summary.UpdatedRows);
+    }
+
+    private static T_BDD_SAGE Database() => new() { NOM_BD = "SAGE_TEST", TYPE_BASE = "STANDARD" };
+    private static IReadOnlyList<HsExoDto> Rows() => [new HsExoDto(1, null, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0)];
+    private static PayrollSyncContext Context() => new(new DateTime(2026, 1, 1), new DateTime(2026, 1, 31), "admin", Guid.NewGuid());
 
     private sealed class FailingUnitOfWork : IUnitOfWork
     {
@@ -97,5 +177,61 @@ public class AuditTrailTests
         public bool IsEnabled(LogLevel logLevel) => true;
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
             => Messages.Add(formatter(state, exception));
+    }
+
+    private sealed class ScopeFactory(IUnitOfWork uow) : IServiceScopeFactory
+    {
+        public IServiceScope CreateScope() => new Scope(uow);
+        private sealed class Scope(IUnitOfWork uow) : IServiceScope, IServiceProvider
+        {
+            public IServiceProvider ServiceProvider => this;
+            public object? GetService(Type serviceType) => serviceType == typeof(IUnitOfWork) ? uow : null;
+            public void Dispose() { }
+        }
+    }
+
+    private sealed class CapturingAuditTrail : IAuditTrail
+    {
+        public List<PayrollSyncAudit> Entries { get; } = [];
+        public List<CancellationToken> Tokens { get; } = [];
+        public Task WritePayrollSyncAsync(PayrollSyncAudit audit, CancellationToken cancellationToken = default)
+        {
+            Entries.Add(audit);
+            Tokens.Add(cancellationToken);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class TestStandardWriter : StandardPayrollWriter
+    {
+        public TestStandardWriter(ISagePayrollWriter sageWriter, IAuditTrail auditTrail)
+            : base(sageWriter, null!, null!, null!, auditTrail) { }
+
+        protected override Task<StandardPayrollInput> GetInputAsync(CancellationToken ct)
+            => Task.FromResult(new StandardPayrollInput("test", [], new OvertimeSageCodes()));
+    }
+
+    private sealed class SuccessfulSageWriter : ISagePayrollWriter
+    {
+        public Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(string connection, T_CST[] constants, int number, OvertimeSageCodes codes, decimal exo130, decimal exo150, decimal i130, decimal i150, decimal ferie, decimal nuit, decimal dim, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyDictionary<string, int>>(PayrollWritingConfiguration.Categories.ToDictionary(category => category, _ => 1));
+        public Task<int> UpdateCumulAsync(string connection, int number, short operand, decimal value, CancellationToken ct = default) => Task.FromResult(1);
+    }
+
+    private sealed class FailingSageWriter(Exception exception, int completed) : ISagePayrollWriter
+    {
+        public Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(string connection, T_CST[] constants, int number, OvertimeSageCodes codes, decimal exo130, decimal exo150, decimal i130, decimal i150, decimal ferie, decimal nuit, decimal dim, CancellationToken ct = default)
+        {
+            var categories = PayrollWritingConfiguration.Categories.Take(completed).ToDictionary(category => category, _ => 1);
+            throw new PayrollSyncWriteException(exception, completed, categories);
+        }
+        public Task<int> UpdateCumulAsync(string connection, int number, short operand, decimal value, CancellationToken ct = default) => Task.FromResult(0);
+    }
+
+    private sealed class CancelledSageWriter : ISagePayrollWriter
+    {
+        public Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(string connection, T_CST[] constants, int number, OvertimeSageCodes codes, decimal exo130, decimal exo150, decimal i130, decimal i150, decimal ferie, decimal nuit, decimal dim, CancellationToken ct = default)
+            => throw new OperationCanceledException(ct);
+        public Task<int> UpdateCumulAsync(string connection, int number, short operand, decimal value, CancellationToken ct = default) => Task.FromResult(0);
     }
 }

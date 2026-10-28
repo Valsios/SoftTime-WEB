@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
@@ -10,19 +11,16 @@ namespace SoftTime.Infrastructure.Persistence;
 /// <summary>Persiste les synthèses d'opérations SQL externes dans le journal applicatif.</summary>
 public sealed class AuditTrail : IAuditTrail
 {
-    private readonly IUnitOfWork _uow;
-    private readonly ICompanyContext _company;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly AuditJournalOptions _options;
     private readonly ILogger<AuditTrail> _logger;
 
     public AuditTrail(
-        IUnitOfWork uow,
-        ICompanyContext company,
+        IServiceScopeFactory scopeFactory,
         AuditJournalOptions options,
         ILogger<AuditTrail> logger)
     {
-        _uow = uow;
-        _company = company;
+        _scopeFactory = scopeFactory;
         _options = options;
         _logger = logger;
     }
@@ -38,21 +36,24 @@ public sealed class AuditTrail : IAuditTrail
                 .OrderBy(pair => pair.Key, StringComparer.Ordinal)
                 .Select(pair => $"{pair.Key}={pair.Value}"));
             var summary = $"Statut={audit.Status}; Période={audit.PeriodFrom:yyyy-MM-dd}..{audit.PeriodTo:yyyy-MM-dd}; "
-                + $"LignesMisesÀJour={audit.UpdatedRows}; Catégories={categoryCounts}";
+                + $"Salariés={audit.Employees}; LignesMisesÀJour={audit.UpdatedRows}; "
+                + (audit.CancelledRows > 0 ? $"LignesAnnulées={audit.CancelledRows}; " : string.Empty)
+                + $"Catégories={categoryCounts}";
 
-            await _uow.Repository<suivi_JOURNAL>().AddAsync(new suivi_JOURNAL
+            using var scope = _scopeFactory.CreateScope();
+            var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            await uow.Repository<suivi_JOURNAL>().AddAsync(new suivi_JOURNAL
             {
                 DATE_UTC = DateTime.UtcNow,
                 TABLES = audit.TargetTable,
                 ACTIONS = "SYNC_PAIE",
                 NOUVEAUX = summary,
                 USERS = string.IsNullOrWhiteSpace(audit.UserLogin) ? "SYSTEME:OvertimeService" : audit.UserLogin,
-                BASE_SAGE = audit.SageDatabase ?? _company.SageDatabase,
-                BASE_POINTEUSE = _company.PointeuseDatabase,
+                BASE_SAGE = audit.SageDatabase,
                 CORRELATIONS = audit.Correlation,
                 SOURCE = audit.Source
             }, cancellationToken);
-            await _uow.SaveChangesAsync(cancellationToken);
+            await uow.SaveChangesAsync(cancellationToken);
         }
         catch (Exception exception)
         {

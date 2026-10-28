@@ -53,14 +53,14 @@ public sealed class OtherPayrollWriter : IPayrollWriter
                 categoryCounts[category] += affected;
             }
             await transaction.CommitAsync(ct);
-            await WriteAuditAsync(database, plan, auditContext, categoryCounts, "SUCCES", ct);
+            await WriteAuditAsync(database, plan, auditContext, rows.Count, categoryCounts.Values.Sum(), 0, categoryCounts, "SUCCES", ct);
             return new PayrollWriteResultDto(database.NOM_BD ?? string.Empty, "AUTRE", rows.Count, updates,
                 "Synchronisation des heures supplémentaires terminée.");
         }
         catch
         {
-            await transaction.RollbackAsync(ct);
-            await WriteAuditAsync(database, plan, auditContext, categoryCounts, "ECHEC", ct);
+            await transaction.RollbackAsync(CancellationToken.None);
+            await WriteAuditAsync(database, plan, auditContext, rows.Count, 0, updates, categoryCounts, "ECHEC", CancellationToken.None);
             throw;
         }
     }
@@ -69,12 +69,15 @@ public sealed class OtherPayrollWriter : IPayrollWriter
         T_BDD_SAGE database,
         WritePlan plan,
         PayrollSyncContext context,
+        int employees,
+        int updatedRows,
+        int cancelledRows,
         IReadOnlyDictionary<string, int> categories,
         string status,
         CancellationToken ct)
         => _auditTrail.WritePayrollSyncAsync(new PayrollSyncAudit(
             $"{plan.Schema}.{plan.Table}", database.NOM_BD, context.PeriodFrom, context.PeriodTo,
-            categories.Values.Sum(), categories, status, context.UserLogin, "SYNC_PAIE:AUTRE", context.Correlation), ct);
+            employees, updatedRows, cancelledRows, categories, status, context.UserLogin, "SYNC_PAIE:AUTRE", context.Correlation), ct);
 
     private async Task<WritePlan> PreflightAsync(T_BDD_SAGE database, IReadOnlyList<HsExoDto> rows, CancellationToken ct)
     {
