@@ -1,21 +1,23 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { catchError, forkJoin, of } from 'rxjs';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
 import { Droit } from '../../core/rights';
-import { Affectation, PageChangeEvent } from '../../shared/models';
-import { AffectationsService, CategoriesService } from '../../shared/services/catalog.service';
+import { Affectation, CardPaie, Category, PageChangeEvent } from '../../shared/models';
+import { AffectationsService, CardPaieService, CategoriesService } from '../../shared/services/catalog.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
-import { Column, DataTable, ImportTemplatesModal, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, SoftSelect } from '../../shared/components';
+import { Column, DataTable, ImportTemplatesModal, PageHeader, SoftButton, SoftCard, SoftModal, SoftSelect } from '../../shared/components';
 import { asRow } from '../../shared/utils/date';
 import { toastImportResult } from '../../shared/utils/import-result';
+import { cardEmployeeLabel } from '../../shared/utils/labels';
 
 @Component({
   selector: 'app-affectations',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, SoftSelect, ImportTemplatesModal],
+  imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftSelect, ImportTemplatesModal],
   template: `
     <page-header title="Affectations" subtitle="Salariés par catégorie">
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
@@ -69,7 +71,15 @@ import { toastImportResult } from '../../shared/utils/import-result';
 
     <soft-modal [open]="modal()" title="Affectation" (closed)="modal.set(false)">
       <div class="form-grid">
-        <soft-input label="Card paie ID" type="number" [(ngModel)]="form.cardPaieId" name="cardPaieId"></soft-input>
+        <soft-select
+          label="Salarié"
+          [required]="true"
+          [(ngModel)]="form.cardPaieId"
+          name="cardPaieId"
+          placeholder="Sélectionner un salarié"
+          [options]="cardOptions()"
+          [hint]="cardOptions().length ? '' : 'Aucun salarié disponible : vérifiez les correspondances paie.'"
+        ></soft-select>
         <soft-select label="Catégorie" [(ngModel)]="form.categoryId" name="categoryId" [options]="categoryOptions()"></soft-select>
       </div>
       <div footer>
@@ -88,6 +98,7 @@ import { toastImportResult } from '../../shared/utils/import-result';
 export class AffectationsPage implements OnInit {
   private readonly svc = inject(AffectationsService);
   private readonly catSvc = inject(CategoriesService);
+  private readonly cards = inject(CardPaieService);
   private readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
@@ -109,6 +120,8 @@ export class AffectationsPage implements OnInit {
   readonly total = signal(0);
   private requestSeq = 0;
   readonly categoryOptions = signal<{ value: number; label: string }[]>([]);
+  readonly cardOptions = signal<{ value: number; label: string }[]>([]);
+  private readonly categoryLabels = new Map<number, string>();
   readonly deptOptions = signal<{ value: string; label: string }[]>([{ value: 'ALL', label: 'Tous' }]);
   readonly servOptions = signal<{ value: string; label: string }[]>([{ value: 'ALL', label: 'Tous' }]);
 
@@ -123,13 +136,10 @@ export class AffectationsPage implements OnInit {
     { key: 'prenom', label: 'Prénom' },
     { key: 'departement', label: 'Département' },
     { key: 'service', label: 'Service' },
-    { key: 'categoryId', label: 'Catégorie' },
+    { key: 'categoryName', label: 'Catégorie' },
   ];
 
   ngOnInit(): void {
-    this.catSvc.list().subscribe((cats) =>
-      this.categoryOptions.set(cats.map((c) => ({ value: c.id, label: c.intitule ?? `Cat. ${c.id}` }))),
-    );
     this.svc.options().subscribe({
       next: (options) => {
         this.deptOptions.set([
@@ -142,7 +152,25 @@ export class AffectationsPage implements OnInit {
         ]);
       },
     });
-    this.loadPage();
+
+    forkJoin({
+      categories: this.catSvc.list().pipe(catchError(() => of<Category[]>([]))),
+      cards: this.cards.list().pipe(catchError(() => of<CardPaie[]>([]))),
+    }).subscribe(({ categories, cards }) => {
+      const categoryEntries = categories.map((category) => ({
+        id: category.id,
+        label: category.intitule ?? `Catégorie #${category.id}`,
+      }));
+      this.categoryOptions.set(categoryEntries.map((entry) => ({ value: entry.id, label: entry.label })));
+      for (const entry of categoryEntries) this.categoryLabels.set(entry.id, entry.label);
+
+      const cardEntries = cards
+        .map((card) => ({ id: card.id, label: cardEmployeeLabel(card) }))
+        .sort((a, b) => a.label.localeCompare(b.label, 'fr', { numeric: true }));
+      this.cardOptions.set(cardEntries.map((entry) => ({ value: entry.id, label: entry.label })));
+
+      this.loadPage();
+    });
   }
 
   loadPage(): void {
@@ -157,7 +185,14 @@ export class AffectationsPage implements OnInit {
     }).subscribe({
       next: (r) => {
         if (seq !== this.requestSeq) return;
-        this.rows.set(r.items.map(asRow));
+        this.rows.set(
+          r.items.map((affectation) =>
+            asRow({
+              ...affectation,
+              categoryName: this.categoryLabels.get(affectation.categoryId) ?? '—',
+            }),
+          ),
+        );
         this.total.set(r.total);
         this.page.set(r.page);
         this.loading.set(false);
@@ -178,8 +213,22 @@ export class AffectationsPage implements OnInit {
   }
 
   openCreate(): void { this.editId.set(null); this.form = { cardPaieId: 0, categoryId: this.categoryOptions()[0]?.value ?? 0 }; this.modal.set(true); }
-  openEdit(row: Record<string, unknown>): void { this.editId.set(row['id'] as number); this.form = { cardPaieId: row['cardPaieId'] as number, categoryId: row['categoryId'] as number, id: row['id'] as number }; this.modal.set(true); }
+  openEdit(row: Record<string, unknown>): void {
+    this.ensureCardOption(row['cardPaieId'] as number);
+    this.ensureCategoryOption(row['categoryId'] as number);
+    this.editId.set(row['id'] as number);
+    this.form = { cardPaieId: row['cardPaieId'] as number, categoryId: row['categoryId'] as number, id: row['id'] as number };
+    this.modal.set(true);
+  }
   save(): void {
+    if (!this.form.cardPaieId) {
+      this.toast.error('Sélectionnez un salarié.');
+      return;
+    }
+    if (!this.form.categoryId) {
+      this.toast.error('Sélectionnez une catégorie.');
+      return;
+    }
     this.saving.set(true);
     const id = this.editId();
     const dto = this.form as Affectation;
@@ -196,8 +245,28 @@ export class AffectationsPage implements OnInit {
       departement: this.filterDept === 'ALL' ? null : this.filterDept,
       service: this.filterService === 'ALL' ? null : this.filterService,
     }).subscribe({
-      next: (rows) => this.excel.download('affectations', this.columns, rows.map(asRow)),
+      next: (rows) => this.excel.download(
+        'affectations',
+        this.columns,
+        rows.map((affectation) =>
+          asRow({
+            ...affectation,
+            categoryName: this.categoryLabels.get(affectation.categoryId) ?? '—',
+          }),
+        ),
+      ),
     });
+  }
+
+  /** Conserve les valeurs courantes même si la carte ou la catégorie n'est plus dans la liste chargée. */
+  private ensureCardOption(id: number | null | undefined): void {
+    if (!id || this.cardOptions().some((option) => Number(option.value) === id)) return;
+    this.cardOptions.update((options) => [{ value: id, label: 'Salarié introuvable' }, ...options]);
+  }
+
+  private ensureCategoryOption(id: number | null | undefined): void {
+    if (!id || this.categoryOptions().some((option) => Number(option.value) === id)) return;
+    this.categoryOptions.update((options) => [{ value: id, label: 'Catégorie introuvable' }, ...options]);
   }
   onFile(event: Event): void {
     const input = event.target as HTMLInputElement;

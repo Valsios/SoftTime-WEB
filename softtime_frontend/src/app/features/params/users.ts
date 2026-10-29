@@ -213,7 +213,6 @@ export class UsersPage implements OnInit {
   });
 
   readonly columns: Column[] = [
-    { key: 'id', label: 'ID' },
     { key: 'nom', label: 'Nom' },
     { key: 'login', label: 'Login' },
     { key: 'email', label: 'E-mail' },

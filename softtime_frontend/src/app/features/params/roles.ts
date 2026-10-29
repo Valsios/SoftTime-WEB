@@ -59,7 +59,7 @@ export class RolesPage implements OnInit {
   readonly total = signal(0);
   private requestSeq = 0;
   form: Partial<Role> = {};
-  readonly columns: Column[] = [{ key: 'id', label: 'ID' }, { key: 'nom', label: 'Nom' }];
+  readonly columns: Column[] = [{ key: 'nom', label: 'Nom' }];
 
   ngOnInit(): void { this.loadPage(); }
   loadPage(): void {
