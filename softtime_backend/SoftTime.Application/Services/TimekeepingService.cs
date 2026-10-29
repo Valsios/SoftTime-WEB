@@ -47,6 +47,12 @@ public class TimekeepingService
             page,
             pageSize,
             ToPunchDto,
+            filter.Search,
+            new Expression<Func<T_POINTAGE, string?>>[]
+            {
+                p => p.MATRICULE_SAGE,
+                p => p.TYPE_POINTAGE,
+            },
             ct);
     }
 
@@ -372,6 +378,12 @@ public class TimekeepingService
             page,
             pageSize,
             MapAnomaly,
+            filter.Search,
+            new Expression<Func<T_HEUREANOMALIE, string?>>[]
+            {
+                a => a.MATRICULE_SAGE,
+                a => a.INTITULE_ABSENCE,
+            },
             ct);
     }
 
@@ -562,6 +574,12 @@ public class TimekeepingService
             page,
             pageSize,
             MapCorrection,
+            filter.Search,
+            new Expression<Func<T_HEURECORRIGER, string?>>[]
+            {
+                a => a.MATRICULE_SAGE,
+                a => a.INTITULE_ABSENCE,
+            },
             ct);
     }
 

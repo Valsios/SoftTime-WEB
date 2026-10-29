@@ -158,6 +158,8 @@ export interface PeriodRequest {
   to: string;
   branche?: string | null;
   departement?: string | null;
+  /** Terme de recherche du tableau. */
+  search?: string | null;
   /** Numéro de page (1-based), uniquement pour les listes paginées. */
   page?: number;
   /** Taille de page, plafonnée à 100 par le serveur. */

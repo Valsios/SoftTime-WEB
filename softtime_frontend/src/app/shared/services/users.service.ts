@@ -8,9 +8,9 @@ export class UsersService extends ApiService {
   list(): Observable<User[]> {
     return this.http.get<User[]>(this.url('/api/users'));
   }
-  listPaged(page: number, pageSize: number): Observable<PagedResult<User>> {
+  listPaged(page: number, pageSize: number, search?: string | null): Observable<PagedResult<User>> {
     return this.http.get<PagedResult<User>>(this.url('/api/users/paged'), {
-      params: this.params({ page, pageSize }),
+      params: this.params({ page, pageSize, search }),
     });
   }
   get(id: number): Observable<User> {
@@ -32,9 +32,9 @@ export class RolesService extends ApiService {
   list(): Observable<Role[]> {
     return this.http.get<Role[]>(this.url('/api/roles'));
   }
-  listPaged(page: number, pageSize: number): Observable<PagedResult<Role>> {
+  listPaged(page: number, pageSize: number, search?: string | null): Observable<PagedResult<Role>> {
     return this.http.get<PagedResult<Role>>(this.url('/api/roles/paged'), {
-      params: this.params({ page, pageSize }),
+      params: this.params({ page, pageSize, search }),
     });
   }
   create(dto: Role): Observable<Role> {
@@ -91,9 +91,9 @@ export class SageDatabasesService extends ApiService {
   list(): Observable<SageDb[]> {
     return this.http.get<SageDb[]>(this.url('/api/sage-databases'));
   }
-  listPaged(page: number, pageSize: number): Observable<PagedResult<SageDb>> {
+  listPaged(page: number, pageSize: number, search?: string | null): Observable<PagedResult<SageDb>> {
     return this.http.get<PagedResult<SageDb>>(this.url('/api/sage-databases/paged'), {
-      params: this.params({ page, pageSize }),
+      params: this.params({ page, pageSize, search }),
     });
   }
   create(dto: SageDb): Observable<SageDb> {

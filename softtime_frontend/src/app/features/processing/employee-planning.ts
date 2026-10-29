@@ -76,6 +76,8 @@ import { toastImportResult } from '../../shared/utils/import-result';
           [total]="employeeTotal()"
           [serverPageSize]="employeePageSize"
           [serverPage]="employeePage()"
+          [(searchTerm)]="employeeSearch"
+          (searchSubmit)="onEmployeeSearch($event)"
           (pageChange)="onEmployeePageChange($event)"
         >
           <ng-template #actions let-row>
@@ -93,6 +95,8 @@ import { toastImportResult } from '../../shared/utils/import-result';
           [total]="planningTotal()"
           [serverPageSize]="planningPageSize"
           [serverPage]="planningPage()"
+          [(searchTerm)]="planningSearch"
+          (searchSubmit)="onPlanningSearch($event)"
           (pageChange)="onPlanningPageChange($event)"
         >
           <ng-template #actions let-row>
@@ -176,6 +180,8 @@ export class EmployeePlanningPage implements OnInit {
   readonly employeeTotal = signal(0);
   readonly planningPage = signal(1);
   readonly planningTotal = signal(0);
+  readonly employeeSearch = signal('');
+  readonly planningSearch = signal('');
   readonly employeeOptions = signal<{ value: number; label: string }[]>([]);
   readonly shiftOptions = signal<{ value: number; label: string }[]>([]);
   private employees: PlanningEmployee[] = [];
@@ -240,6 +246,18 @@ export class EmployeePlanningPage implements OnInit {
     this.loadPlanning();
   }
 
+  onEmployeeSearch(term: string): void {
+    this.employeeSearch.set(term);
+    this.employeePage.set(1);
+    this.loadEmployeeRows();
+  }
+
+  onPlanningSearch(term: string): void {
+    this.planningSearch.set(term);
+    this.planningPage.set(1);
+    this.loadPlanning();
+  }
+
   loadEmployees(): void {
     this.svc.employees().subscribe({
       next: (items) => {
@@ -263,6 +281,7 @@ export class EmployeePlanningPage implements OnInit {
       this.lastFilter.to,
       this.employeePage(),
       this.employeePageSize,
+      this.employeeSearch(),
     ).subscribe({
       next: (r) => {
         if (seq !== this.employeeSeq) return;
@@ -281,6 +300,7 @@ export class EmployeePlanningPage implements OnInit {
     this.svc.listPaged({
       from: this.lastFilter.from,
       to: this.lastFilter.to,
+      search: this.planningSearch(),
       page: this.planningPage(),
       pageSize: this.planningPageSize,
     }).subscribe({
@@ -353,11 +373,11 @@ export class EmployeePlanningPage implements OnInit {
   exportExcel(): void {
     if (this.activeTab() === 'employees') {
       this.svc.employeesStats(this.lastFilter.from, this.lastFilter.to).subscribe({
-        next: (items) => this.excel.download('salaries-planning', this.employeeColumns, items.map(asRow)),
+        next: (items) => this.excel.download('salaries-planning', this.employeeColumns, items.map(asRow), 'Données', this.employeeSearch()),
       });
     } else {
       this.svc.list(this.lastFilter.from, this.lastFilter.to).subscribe({
-        next: (items) => this.excel.download('lignes-planning', this.planningColumns, items.map(asRow)),
+        next: (items) => this.excel.download('lignes-planning', this.planningColumns, items.map(asRow), 'Données', this.planningSearch()),
       });
     }
   }

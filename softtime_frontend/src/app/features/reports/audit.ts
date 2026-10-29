@@ -31,6 +31,8 @@ import { asRow, fmtDate, today } from '../../shared/utils/date';
           [total]="configTotal()"
           [serverPageSize]="configPageSize"
           [serverPage]="configPage()"
+          [(searchTerm)]="configSearch"
+          (searchSubmit)="onConfigSearch($event)"
           (pageChange)="onConfigPageChange($event)"
         >
           <ng-template #actions let-row>
@@ -48,6 +50,8 @@ import { asRow, fmtDate, today } from '../../shared/utils/date';
           [total]="eventTotal()"
           [serverPageSize]="eventPageSize"
           [serverPage]="eventPage()"
+          [(searchTerm)]="eventSearch"
+          (searchSubmit)="onEventsSearch($event)"
           (pageChange)="onEventsPageChange($event)"
         ></data-table>
       </soft-card>
@@ -103,6 +107,8 @@ export class AuditPage implements OnInit {
   readonly configTotal = signal(0);
   readonly eventPage = signal(1);
   readonly eventTotal = signal(0);
+  readonly configSearch = signal('');
+  readonly eventSearch = signal('');
   private configSeq = 0;
   private eventSeq = 0;
   readonly rawTypeOptions = signal<AuditTypeOption[]>([]);
@@ -142,7 +148,7 @@ export class AuditPage implements OnInit {
   loadConfig(): void {
     const seq = ++this.configSeq;
     this.loadingConfig.set(true);
-    this.svc.configPaged(this.configPage(), this.configPageSize).subscribe({
+    this.svc.configPaged(this.configPage(), this.configPageSize, this.configSearch()).subscribe({
       next: (r) => {
         if (seq !== this.configSeq) return;
         this.configRows.set(r.items.map(asRow));
@@ -160,9 +166,21 @@ export class AuditPage implements OnInit {
     this.loadConfig();
   }
 
+  onConfigSearch(term: string): void {
+    this.configSearch.set(term);
+    this.configPage.set(1);
+    this.loadConfig();
+  }
+
   onEventsPageChange(event: PageChangeEvent): void {
     this.eventPage.set(event.page);
     this.eventPageSize = event.pageSize;
+    this.loadEvents();
+  }
+
+  onEventsSearch(term: string): void {
+    this.eventSearch.set(term);
+    this.eventPage.set(1);
     this.loadEvents();
   }
 
@@ -186,7 +204,13 @@ export class AuditPage implements OnInit {
     const fromDate = new Date();
     fromDate.setDate(fromDate.getDate() - 30);
     const from = fromDate.toISOString().slice(0, 10);
-    this.svc.eventsPaged({ from, to, page: this.eventPage(), pageSize: this.eventPageSize }).subscribe({
+    this.svc.eventsPaged({
+      from,
+      to,
+      search: this.eventSearch(),
+      page: this.eventPage(),
+      pageSize: this.eventPageSize,
+    }).subscribe({
       next: (r) => {
         if (seq !== this.eventSeq) return;
         this.eventRows.set(r.items.map(asRow));
@@ -253,7 +277,7 @@ export class AuditPage implements OnInit {
   exportExcel(): void {
     if (this.activeTab() === 'config') {
       this.svc.config().subscribe({
-        next: (items) => this.excel.download('audit-config', this.configColumns, items.map(asRow)),
+        next: (items) => this.excel.download('audit-config', this.configColumns, items.map(asRow), 'Données', this.configSearch()),
       });
     } else {
       const to = today();
@@ -261,7 +285,7 @@ export class AuditPage implements OnInit {
       fromDate.setDate(fromDate.getDate() - 30);
       const from = fromDate.toISOString().slice(0, 10);
       this.svc.events({ from, to }).subscribe({
-        next: (items) => this.excel.download('audit-evenements', this.eventColumns, items.map(asRow)),
+        next: (items) => this.excel.download('audit-evenements', this.eventColumns, items.map(asRow), 'Données', this.eventSearch()),
       });
     }
   }

@@ -22,6 +22,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
     <soft-card>
       <data-table [columns]="columns" [rows]="rows()" [loading]="loading()"
         [serverSide]="true" [total]="total()" [serverPage]="page()" [serverPageSize]="pageSize"
+        [(searchTerm)]="tableSearch" (searchSubmit)="onTableSearch($event)"
         (pageChange)="onPageChange($event)">
         <ng-template #actions let-row>
           <div class="soft-actions" style="justify-content: end">
@@ -62,6 +63,7 @@ export class HolidaysPage implements OnInit {
   readonly page = signal(1);
   pageSize = 50;
   readonly total = signal(0);
+  readonly tableSearch = signal('');
   private requestSeq = 0;
   form: Partial<Holiday> = {};
   readonly columns: Column[] = [
@@ -73,7 +75,7 @@ export class HolidaysPage implements OnInit {
   loadPage(): void {
     const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.listPaged(this.page(), this.pageSize).subscribe({
+    this.svc.listPaged(this.page(), this.pageSize, this.tableSearch()).subscribe({
       next: (r) => {
         if (seq !== this.requestSeq) return;
         this.rows.set(r.items.map(asRow));
@@ -88,6 +90,12 @@ export class HolidaysPage implements OnInit {
   onPageChange(event: PageChangeEvent): void {
     this.page.set(event.page);
     this.pageSize = event.pageSize;
+    this.loadPage();
+  }
+
+  onTableSearch(term: string): void {
+    this.tableSearch.set(term);
+    this.page.set(1);
     this.loadPage();
   }
   openCreate(): void { this.editId.set(null); this.form = {}; this.modal.set(true); }

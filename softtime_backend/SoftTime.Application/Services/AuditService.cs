@@ -77,34 +77,54 @@ public class AuditService
 
     /// <summary>Configuration d'audit paginée (petite table, mais contrat identique aux autres grilles).</summary>
     public async Task<PagedResult<AuditConfigDto>> ListConfigPagedAsync(
-        int? page, int? pageSize, CancellationToken ct = default)
-        => await PagedLists.PageAsync(
+        int? page, int? pageSize, string? search = null, CancellationToken ct = default)
+    {
+        var searchPredicate = SearchExpression.For<suivi_TBLCLN>(
+            search, c => c.TABLES, c => c.COLONNES, c => c.BASES);
+        System.Linq.Expressions.Expression<Func<suivi_TBLCLN, bool>> predicate = _ => true;
+        if (searchPredicate is not null)
+            predicate = SearchExpression.AndAlso(predicate, searchPredicate);
+        return await PagedLists.PageAsync(
             _uow.Repository<suivi_TBLCLN>(),
-            _ => true,
+            predicate,
             q => q.OrderBy(c => c.Id),
             page,
             pageSize,
             c => new AuditConfigDto(c.Id, c.TABLES, c.COLONNES, c.TYPES, c.ETATS, c.BASES),
             ct);
+    }
 
     /// <summary>
     /// Journal d'audit paginé. Contrairement à <see cref="ListEventsAsync"/> (plafond 500 pour
     /// l'export), le total et la page sont calculés en SQL sur le filtre complet.
     /// </summary>
     public async Task<PagedResult<AuditEventDto>> ListEventsPagedAsync(
-        DateTime? from, DateTime? to, string? table, string? action,
+        DateTime? from, DateTime? to, string? table, string? action, string? search,
         int? page, int? pageSize, CancellationToken ct = default)
     {
         var fromDate = from ?? DateTime.Today.AddDays(-30);
         var toDate = to ?? DateTime.Today.AddDays(1);
         var tableFiltre = string.IsNullOrWhiteSpace(table) ? null : table;
         var actionFiltre = string.IsNullOrWhiteSpace(action) ? null : action;
-        return await PagedLists.PageAsync(
-            _uow.Repository<suivi_SUIVI>(),
+        var searchPredicate = SearchExpression.For<suivi_SUIVI>(
+            search,
+            e => e._TABLES,
+            e => e._COLONNES,
+            e => e._USERS,
+            e => e._ACTIONS,
+            e => e._NOUVEAUX,
+            e => e._ANCIENS,
+            e => e._BASES);
+        System.Linq.Expressions.Expression<Func<suivi_SUIVI, bool>> predicate =
             e => e._DATETIMES >= fromDate
                  && e._DATETIMES <= toDate
                  && (tableFiltre == null || e._TABLES == tableFiltre)
-                 && (actionFiltre == null || e._ACTIONS == actionFiltre),
+                 && (actionFiltre == null || e._ACTIONS == actionFiltre);
+        if (searchPredicate is not null)
+            predicate = SearchExpression.AndAlso(predicate, searchPredicate);
+        return await PagedLists.PageAsync(
+            _uow.Repository<suivi_SUIVI>(),
+            predicate,
             q => q.OrderByDescending(e => e._DATETIMES).ThenByDescending(e => e.Id),
             page,
             pageSize,

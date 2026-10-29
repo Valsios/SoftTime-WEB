@@ -1,17 +1,22 @@
 import { Injectable } from '@angular/core';
 import { Column } from '../components';
 import { ApiService } from '../../core/api';
+import { matchesSearch } from '../utils/search';
 
 @Injectable({ providedIn: 'root' })
 export class ExcelExportService extends ApiService {
-  download(fileName: string, columns: Column[], rows: Record<string, unknown>[], sheetName = 'Données'): void {
+  download(fileName: string, columns: Column[], rows: Record<string, unknown>[], sheetName = 'Données', search?: string): void {
+    const filteredRows = search?.trim()
+      ? rows.filter((row) =>
+          matchesSearch(
+            search,
+            columns.map((column) => this.formatValue(column, row)),
+          ),
+        )
+      : rows;
     const headers = columns.map((c) => c.label);
-    const data = rows.map((row) =>
-      columns.map((c) => {
-        const raw = row[c.key];
-        if (c.format) return c.format(raw, row);
-        return raw == null ? '' : String(raw);
-      }),
+    const data = filteredRows.map((row) =>
+      columns.map((c) => this.formatValue(c, row)),
     );
     this.http
       .post(
@@ -27,5 +32,11 @@ export class ExcelExportService extends ApiService {
         a.click();
         URL.revokeObjectURL(url);
       });
+  }
+
+  private formatValue(column: Column, row: Record<string, unknown>): string {
+    const raw = row[column.key];
+    if (column.format) return column.format(raw, row);
+    return raw == null ? '' : String(raw);
   }
 }

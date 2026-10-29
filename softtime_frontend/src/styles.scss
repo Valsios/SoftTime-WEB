@@ -565,7 +565,7 @@ button {
 }
 
 .soft-input,
-.soft-select > select {
+.soft-select select {
   width: 100%;
   height: 44px;
   border: 1px solid var(--color-border-input);
@@ -583,7 +583,7 @@ button {
 }
 
 .soft-input:focus,
-.soft-select > select:focus {
+.soft-select select:focus {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
   border-color: var(--border-strong);
@@ -597,23 +597,35 @@ button {
 }
 
 .soft-field--error .soft-input,
-.soft-field--error .soft-select > select {
+.soft-field--error .soft-select select {
   border-color: var(--danger);
   outline-color: var(--danger);
   box-shadow: 0 0 0 4px rgba(190, 18, 60, 0.1);
 }
 
 .soft-select {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.soft-select__control {
   position: relative;
 }
 
-.soft-select > select {
+.soft-select__filter {
+  height: 38px;
+  padding: 7px 12px;
+  font-size: 13px;
+}
+
+.soft-select select {
   appearance: none;
   padding-right: 36px;
   cursor: pointer;
 }
 
-.soft-select::after {
+.soft-select__control::after {
   content: '';
   position: absolute;
   right: 14px;
@@ -629,7 +641,7 @@ button {
 /* Sur mobile (§5.3), taille minimale 16px pour éviter le zoom iOS */
 @media (max-width: 639px) {
   .soft-input,
-  .soft-select > select {
+  .soft-select select {
     font-size: 16px;
   }
 }

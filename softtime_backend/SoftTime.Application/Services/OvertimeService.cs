@@ -53,7 +53,10 @@ public class OvertimeService
         await _tenant.EnsureAuthorizedAsync(ct);
         EnsureMondayToSunday(request);
         var rows = await ComputeWeekAsync(request, persistNonValidated: false, ct);
-        return PagedLists.Page(rows, page, pageSize);
+        var filtered = rows
+            .Where(row => SearchText.Matches(request.Search, row.Matricule))
+            .ToList();
+        return PagedLists.Page(filtered, page, pageSize);
     }
 
     /// <summary>
@@ -179,6 +182,8 @@ public class OvertimeService
                 page,
                 pageSize,
                 Map,
+                request.Search,
+                new System.Linq.Expressions.Expression<Func<T_HSExoImp, string?>>[] { h => h.Matricule },
                 ct);
         }
 
@@ -202,6 +207,8 @@ public class OvertimeService
             page,
             pageSize,
             Map,
+            request.Search,
+            new System.Linq.Expressions.Expression<Func<T_HSExoImp, string?>>[] { h => h.Matricule },
             ct);
     }
 
