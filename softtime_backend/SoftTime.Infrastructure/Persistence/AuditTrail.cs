@@ -12,15 +12,18 @@ namespace SoftTime.Infrastructure.Persistence;
 public sealed class AuditTrail : IAuditTrail
 {
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ICompanyContext _company;
     private readonly AuditJournalOptions _options;
     private readonly ILogger<AuditTrail> _logger;
 
     public AuditTrail(
         IServiceScopeFactory scopeFactory,
+        ICompanyContext company,
         AuditJournalOptions options,
         ILogger<AuditTrail> logger)
     {
         _scopeFactory = scopeFactory;
+        _company = company;
         _options = options;
         _logger = logger;
     }
@@ -39,6 +42,8 @@ public sealed class AuditTrail : IAuditTrail
                 + $"Salariés={audit.Employees}; LignesMisesÀJour={audit.UpdatedRows}; "
                 + (audit.CancelledRows > 0 ? $"LignesAnnulées={audit.CancelledRows}; " : string.Empty)
                 + $"Catégories={categoryCounts}";
+            var sageDatabase = audit.SageDatabase ?? _company.SageDatabase;
+            var pointeuseDatabase = _company.PointeuseDatabase;
 
             using var scope = _scopeFactory.CreateScope();
             var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
@@ -49,7 +54,8 @@ public sealed class AuditTrail : IAuditTrail
                 ACTIONS = "SYNC_PAIE",
                 NOUVEAUX = summary,
                 USERS = string.IsNullOrWhiteSpace(audit.UserLogin) ? "SYSTEME:OvertimeService" : audit.UserLogin,
-                BASE_SAGE = audit.SageDatabase,
+                BASE_SAGE = sageDatabase,
+                BASE_POINTEUSE = pointeuseDatabase,
                 CORRELATIONS = audit.Correlation,
                 SOURCE = audit.Source
             }, cancellationToken);

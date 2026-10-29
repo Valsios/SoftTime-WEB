@@ -1,5 +1,6 @@
 using System.Data;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Services;
@@ -17,12 +18,14 @@ public sealed class OtherPayrollWriter : IPayrollWriter
     private readonly IUnitOfWork _uow;
     private readonly TenantConnectionService _tenant;
     private readonly IAuditTrail _auditTrail;
+    private readonly ILogger<OtherPayrollWriter> _logger;
 
-    public OtherPayrollWriter(IUnitOfWork uow, TenantConnectionService tenant, IAuditTrail auditTrail)
+    public OtherPayrollWriter(IUnitOfWork uow, TenantConnectionService tenant, IAuditTrail auditTrail, ILogger<OtherPayrollWriter> logger)
     {
         _uow = uow;
         _tenant = tenant;
         _auditTrail = auditTrail;
+        _logger = logger;
     }
 
     public bool CanHandle(T_BDD_SAGE database) => string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase);
@@ -53,14 +56,29 @@ public sealed class OtherPayrollWriter : IPayrollWriter
                 categoryCounts[category] += affected;
             }
             await transaction.CommitAsync(ct);
-            await WriteAuditAsync(database, plan, auditContext, rows.Count, categoryCounts.Values.Sum(), 0, categoryCounts, "SUCCES", ct);
+            await WriteAuditAsync(database, plan, auditContext, rows.Count, categoryCounts.Values.Sum(), 0, categoryCounts, "SUCCES", CancellationToken.None);
             return new PayrollWriteResultDto(database.NOM_BD ?? string.Empty, "AUTRE", rows.Count, updates,
                 "Synchronisation des heures supplémentaires terminée.");
         }
         catch
         {
-            await transaction.RollbackAsync(CancellationToken.None);
-            await WriteAuditAsync(database, plan, auditContext, rows.Count, 0, updates, categoryCounts, "ECHEC", CancellationToken.None);
+            try
+            {
+                await transaction.RollbackAsync(CancellationToken.None);
+            }
+            catch (Exception rollbackException)
+            {
+                _logger.LogError(rollbackException, "Échec du rollback de la synchronisation de paie AUTRE.");
+            }
+
+            try
+            {
+                await WriteAuditAsync(database, plan, auditContext, rows.Count, 0, updates, categoryCounts, "ECHEC", CancellationToken.None);
+            }
+            catch (Exception auditException)
+            {
+                _logger.LogError(auditException, "Impossible d'écrire la synthèse d'échec de synchronisation de paie AUTRE.");
+            }
             throw;
         }
     }

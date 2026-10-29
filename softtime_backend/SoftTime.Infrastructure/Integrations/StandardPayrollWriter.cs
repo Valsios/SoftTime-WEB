@@ -70,7 +70,7 @@ public class StandardPayrollWriter : IPayrollWriter
         }
 
         var written = rows.Count(h => h.NumSal.HasValue);
-        await WriteAuditAsync(database, auditContext, written, categoryCounts.Values.Sum(), categoryCounts, "SUCCES", ct);
+        await WriteAuditAsync(database, auditContext, written, categoryCounts.Values.Sum(), categoryCounts, "SUCCES", CancellationToken.None);
         return new PayrollWriteResultDto(database.NOM_BD ?? string.Empty, "STANDARD", written, categoryCounts.Values.Sum(),
             "Synchronisation des heures supplémentaires vers SAGE terminée.");
     }
