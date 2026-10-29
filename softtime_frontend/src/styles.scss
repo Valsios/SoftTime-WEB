@@ -613,10 +613,121 @@ button {
   position: relative;
 }
 
-.soft-select__filter {
-  height: 38px;
-  padding: 7px 12px;
+.soft-combobox {
+  position: relative;
+}
+
+.soft-combobox__control {
+  position: relative;
+}
+
+.soft-combobox__input {
+  padding-right: 76px;
+  cursor: text;
+}
+
+.soft-combobox__clear,
+.soft-combobox__chevron {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.soft-combobox__clear {
+  right: 40px;
+  width: 24px;
+  height: 24px;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.soft-combobox__chevron {
+  right: 8px;
+  width: 28px;
+  height: 28px;
+}
+
+.soft-combobox__clear:hover,
+.soft-combobox__chevron:hover:not(:disabled) {
+  color: var(--app-text);
+  background: var(--surface-light);
+}
+
+.soft-combobox__clear:focus-visible,
+.soft-combobox__chevron:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.soft-combobox__chevron:disabled {
+  cursor: not-allowed;
+}
+
+.soft-combobox__panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: var(--z-dropdown);
+  max-height: 240px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--app-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.soft-combobox__panel.is-drop-up {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+.soft-combobox__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--app-text);
+  font-size: 14px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.soft-combobox__option:hover,
+.soft-combobox__option.is-active {
+  background: var(--surface-light);
+}
+
+.soft-combobox__option.is-selected {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.soft-combobox__check {
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent);
   font-size: 13px;
+}
+
+.soft-combobox__empty {
+  padding: 12px 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
 }
 
 .soft-select select {
