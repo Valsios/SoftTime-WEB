@@ -68,6 +68,7 @@ export interface AffectationQuery {
   categoryId?: number | null;
   departement?: string | null;
   service?: string | null;
+  search?: string | null;
 }
 
 export interface AffectationOptions {

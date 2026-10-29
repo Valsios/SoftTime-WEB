@@ -6,6 +6,7 @@ using SoftTime.Application.Security;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
+using SoftTime.Domain.Services;
 using SoftTime.Domain;
 
 namespace SoftTime.Application.Services;
@@ -158,15 +159,43 @@ public class AuthService
     }
 
     public async Task<PagedResult<UserDto>> GetUsersPagedAsync(
-        int? page, int? pageSize, CancellationToken cancellationToken = default)
-        => await PagedLists.PageAsync(
+        int? page, int? pageSize, string? search = null, CancellationToken cancellationToken = default)
+    {
+        decimal[] roleIds = Array.Empty<decimal>();
+        if (SearchText.Terms(search).Count > 0)
+        {
+            roleIds = (await _uow.Repository<T_ROLE>().ListAsync(_ => true, cancellationToken))
+                .Where(role => SearchText.Matches(search, role.NOMROLE))
+                .Select(role => role.IDROLE)
+                .ToArray();
+        }
+
+        var searchPredicate = SearchExpression.For<T_RESPONSABLE>(
+            search,
+            u => u.NOMRESPONSABLE,
+            u => u.LOGIN,
+            u => u.EMAIL,
+            u => u.MATRICULE);
+        System.Linq.Expressions.Expression<Func<T_RESPONSABLE, bool>> predicate =
+            searchPredicate ?? (_ => true);
+        if (roleIds.Length > 0)
+        {
+            System.Linq.Expressions.Expression<Func<T_RESPONSABLE, bool>> rolePredicate =
+                user => roleIds.Contains(user.IDROLE);
+            predicate = searchPredicate is null
+                ? rolePredicate
+                : SearchExpression.OrElse(searchPredicate, rolePredicate);
+        }
+
+        return await PagedLists.PageAsync(
             _uow.Repository<T_RESPONSABLE>(),
-            _ => true,
+            predicate,
             q => q.OrderBy(u => u.NOMRESPONSABLE).ThenBy(u => u.LOGIN).ThenBy(u => u.IDRESPONSABLE),
             page,
             pageSize,
             u => new UserDto(u.IDRESPONSABLE, u.IDROLE, u.NOMRESPONSABLE ?? string.Empty, u.LOGIN ?? string.Empty, u.MATRICULE, null) { Email = u.EMAIL },
             cancellationToken);
+    }
 
     /// <summary>
     /// Installation vierge ? Portage de <c>is-first-run</c> du desktop, avec un critère plus sain :
@@ -362,7 +391,7 @@ public class AuthService
             .Select(r => new RoleDto(r.IDROLE, r.NOMROLE)).ToList();
 
     public async Task<PagedResult<RoleDto>> GetRolesPagedAsync(
-        int? page, int? pageSize, CancellationToken cancellationToken = default)
+        int? page, int? pageSize, string? search = null, CancellationToken cancellationToken = default)
         => await PagedLists.PageAsync(
             _uow.Repository<T_ROLE>(),
             _ => true,
@@ -370,6 +399,8 @@ public class AuthService
             page,
             pageSize,
             r => new RoleDto(r.IDROLE, r.NOMROLE),
+            search,
+            new System.Linq.Expressions.Expression<Func<T_ROLE, string?>>[] { r => r.NOMROLE },
             cancellationToken);
 
     public async Task<RoleDto> SaveRoleAsync(RoleDto dto, CancellationToken cancellationToken = default)

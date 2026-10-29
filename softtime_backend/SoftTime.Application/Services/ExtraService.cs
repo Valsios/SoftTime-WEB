@@ -80,6 +80,8 @@ public class ExtraService
             page,
             pageSize,
             c => new CanteenDto(c.IDCANTINE, c.MATRICULE_SAGE, c.DATEDEB, c.DATEFIN, c.TOTAL_CANTINE),
+            request.Search,
+            new System.Linq.Expressions.Expression<Func<T_CANTINE, string?>>[] { c => c.MATRICULE_SAGE },
             ct);
     }
 
@@ -128,6 +130,8 @@ public class ExtraService
             page,
             pageSize,
             c => new TravelDto(c.IDPOINTAGE, c.MATRICULE_SAGE, c.DATEDEB, c.DATEFIN, c.TOTAL_POINT),
+            request.Search,
+            new System.Linq.Expressions.Expression<Func<T_FRAIS, string?>>[] { c => c.MATRICULE_SAGE },
             ct);
     }
 
@@ -242,7 +246,10 @@ public class ExtraService
         PeriodRequest request, int? page, int? pageSize, CancellationToken ct = default)
     {
         var rows = await ListCanteenAnomaliesAsync(request, ct);
-        return PagedLists.Page(rows, page, pageSize);
+        return PagedLists.Page(
+            rows.Where(row => SearchText.Matches(request.Search, row.Matricule, row.Motif)).ToList(),
+            page,
+            pageSize);
     }
 
     /// <summary>

@@ -3,6 +3,8 @@ import {
   Component,
   computed,
   contentChild,
+  DestroyRef,
+  inject,
   input,
   model,
   output,
@@ -14,6 +16,7 @@ import {
 let _dataTableInstanceCounter = 0;
 import { CommonModule } from '@angular/common';
 import { PageChangeEvent } from '../models/pagination.models';
+import { matchesSearch, searchTerms } from '../utils/search';
 
 export interface Column {
   key: string;
@@ -31,6 +34,29 @@ const SERVER_PAGE_SIZES = [10, 25, 50, 100] as const;
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CommonModule],
   template: `
+    @if (searchable()) {
+      <div class="soft-table-search">
+        <input
+          class="soft-input soft-table-search__input"
+          type="search"
+          [value]="searchTerm()"
+          [placeholder]="searchPlaceholder()"
+          [attr.aria-label]="searchPlaceholder()"
+          (input)="onSearchInput($event)"
+          (keydown)="onSearchKeydown($event)"
+        />
+        @if (searchTerm()) {
+          <button
+            type="button"
+            class="soft-table-search__clear"
+            (click)="clearSearch()"
+            aria-label="Effacer la recherche"
+          >
+            Effacer
+          </button>
+        }
+      </div>
+    }
     <!-- =====================================================================
          MODE CLIENT (serverSide = false, par défaut)
          Comportement strictement identique à l'existant : slice côté client,
@@ -93,7 +119,7 @@ const SERVER_PAGE_SIZES = [10, 25, 50, 100] as const;
               } @empty {
                 <tr>
                   <td class="soft-table__empty" [attr.colspan]="colspan()">
-                    {{ emptyText() }}
+                    {{ emptyMessage() }}
                   </td>
                 </tr>
               }
@@ -136,7 +162,7 @@ const SERVER_PAGE_SIZES = [10, 25, 50, 100] as const;
               }
             </article>
           } @empty {
-            <p class="soft-table-card__empty">{{ emptyText() }}</p>
+            <p class="soft-table-card__empty">{{ emptyMessage() }}</p>
           }
         </div>
 
@@ -284,7 +310,7 @@ const SERVER_PAGE_SIZES = [10, 25, 50, 100] as const;
               } @empty {
                 <tr>
                   <td class="soft-table__empty" [attr.colspan]="colspan()">
-                    {{ emptyText() }}
+                    {{ emptyMessage() }}
                   </td>
                 </tr>
               }
@@ -327,7 +353,7 @@ const SERVER_PAGE_SIZES = [10, 25, 50, 100] as const;
               }
             </article>
           } @empty {
-            <p class="soft-table-card__empty">{{ emptyText() }}</p>
+            <p class="soft-table-card__empty">{{ emptyMessage() }}</p>
           }
         </div>
       }
@@ -416,6 +442,37 @@ const SERVER_PAGE_SIZES = [10, 25, 50, 100] as const;
       </div>
     }
   `,
+  styles: [
+    `
+      .soft-table-search {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+      .soft-table-search__input {
+        max-width: 360px;
+      }
+      .soft-table-search__clear {
+        border: 0;
+        background: transparent;
+        color: var(--text-secondary);
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        padding: 4px 2px;
+      }
+      .soft-table-search__clear:hover {
+        color: var(--app-text);
+        text-decoration: underline;
+      }
+      .soft-table-search__clear:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+        border-radius: var(--radius-sm);
+      }
+    `,
+  ],
 })
 export class DataTable {
   // ──────────────────────────────────────────────────────────────────────────
@@ -430,6 +487,22 @@ export class DataTable {
   readonly selectedKeys = model<string[]>([]);
   readonly actionsTpl =
     contentChild<TemplateRef<{ $implicit: Record<string, unknown> }>>('actions');
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Recherche (modes client ET serveur)
+  // ──────────────────────────────────────────────────────────────────────────
+  readonly searchable = input(true);
+  readonly searchPlaceholder = input('Rechercher…');
+  readonly searchEmptyText = input('Aucun résultat pour cette recherche.');
+  readonly searchTerm = model('');
+  readonly searchSubmit = output<string>();
+
+  private readonly destroyRef = inject(DestroyRef);
+  private searchTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor() {
+    this.destroyRef.onDestroy(() => this.cancelSearchTimer());
+  }
 
   // ──────────────────────────────────────────────────────────────────────────
   // Inputs mode CLIENT uniquement
@@ -492,7 +565,12 @@ export class DataTable {
   // ──────────────────────────────────────────────────────────────────────────
   // Signaux calculés — mode CLIENT (identiques à l'existant)
   // ──────────────────────────────────────────────────────────────────────────
-  readonly totalRows = computed(() => this.rows().length);
+  readonly filteredRows = computed(() => {
+    if (this.serverSide()) return this.rows();
+    return this.filterRowsLocally(this.rows(), this.searchTerm());
+  });
+
+  readonly totalRows = computed(() => this.filteredRows().length);
   readonly totalPages = computed(() => {
     const size = this.pageSize();
     if (size <= 0) return 1;
@@ -508,13 +586,21 @@ export class DataTable {
   });
 
   readonly paginatedRows = computed(() => {
-    const all = this.rows();
+    const all = this.filteredRows();
     if (!this.paginate()) return all;
     const size = this.pageSize();
     if (size <= 0) return all;
     const page = this.safeCurrentPage();
     const start = (page - 1) * size;
     return all.slice(start, start + size);
+  });
+
+  readonly emptyMessage = computed(() => {
+    if (!this.searchTerm().trim()) return this.emptyText();
+    if (this.serverSide()) {
+      return this.total() === 0 ? this.searchEmptyText() : this.emptyText();
+    }
+    return this.filteredRows().length === 0 ? this.searchEmptyText() : this.emptyText();
   });
 
   readonly rangeInfo = computed(() => {
@@ -557,6 +643,69 @@ export class DataTable {
   readonly serverPaginationItems = computed(() => {
     return this.getPaginationItems(this.serverPage(), this.serverTotalPages());
   });
+
+  onSearchInput(event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    this.searchTerm.set(value);
+    if (!this.serverSide()) {
+      this.currentPage.set(1);
+      return;
+    }
+    this.scheduleSearchSubmit();
+  }
+
+  onSearchKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      this.submitSearchNow();
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.clearSearch();
+    }
+  }
+
+  clearSearch(): void {
+    this.cancelSearchTimer();
+    this.searchTerm.set('');
+    if (!this.serverSide()) this.currentPage.set(1);
+    this.searchSubmit.emit('');
+  }
+
+  private scheduleSearchSubmit(): void {
+    this.cancelSearchTimer();
+    this.searchTimer = setTimeout(() => this.emitSearch(), 300);
+  }
+
+  private submitSearchNow(): void {
+    this.cancelSearchTimer();
+    this.emitSearch();
+  }
+
+  private emitSearch(): void {
+    this.searchTimer = null;
+    this.searchSubmit.emit(this.searchTerm().trim());
+  }
+
+  private cancelSearchTimer(): void {
+    if (this.searchTimer === null) return;
+    clearTimeout(this.searchTimer);
+    this.searchTimer = null;
+  }
+
+  private filterRowsLocally(
+    rows: Record<string, unknown>[],
+    search: string,
+  ): Record<string, unknown>[] {
+    if (searchTerms(search).length === 0) return rows;
+    return rows.filter((row) =>
+      matchesSearch(
+        search,
+        this.columns().map((column) => this.display(column, row)),
+      ),
+    );
+  }
 
   // ──────────────────────────────────────────────────────────────────────────
   // Méthodes — mode CLIENT (identiques à l'existant)
@@ -646,7 +795,7 @@ export class DataTable {
   }
 
   private rowKeys(): string[] {
-    return this.rows()
+    return this.filteredRows()
       .map((r) => this.rowKey(r))
       .filter((k) => !!k);
   }

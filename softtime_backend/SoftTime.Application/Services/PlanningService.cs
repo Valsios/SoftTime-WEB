@@ -31,7 +31,8 @@ public class PlanningService
     /// même contrat que les autres listes (page bornée, total serveur) pour éviter un découpage
     /// côté client.
     /// </summary>
-    public async Task<PagedResult<ShiftDto>> ListShiftsPagedAsync(int? page, int? pageSize, CancellationToken ct = default)
+    public async Task<PagedResult<ShiftDto>> ListShiftsPagedAsync(
+        int? page, int? pageSize, string? search = null, CancellationToken ct = default)
         => await PagedLists.PageAsync(
             _uow.Repository<T_PLANNING>(),
             _ => true,
@@ -41,6 +42,8 @@ public class PlanningService
             page,
             pageSize,
             ToShiftDto,
+            search,
+            new Expression<Func<T_PLANNING, string?>>[] { s => s.Intitule },
             ct);
 
     private static ShiftDto ToShiftDto(T_PLANNING s) => new(
@@ -125,7 +128,8 @@ public class PlanningService
     /// (petite table) sont chargées une fois pour exposer matricule/nom/prénom.
     /// </summary>
     public async Task<PagedResult<EmployeePlanningDto>> ListEmployeePlanningPagedAsync(
-        DateTime from, DateTime to, int? cardId, int? page, int? pageSize, CancellationToken ct = default)
+        DateTime from, DateTime to, int? cardId, int? page, int? pageSize,
+        string? search = null, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageDb = _tenant.SageDb;
@@ -133,13 +137,23 @@ public class PlanningService
         var end = to.Date.AddDays(1);
         var cards = (await _uow.Repository<T_CARDPAIE>().ListAsync(EmployeeCardPredicate(sageDb), ct))
             .ToDictionary(c => c.ID);
+        var hasSearch = SearchText.Terms(search).Count > 0;
+        var cardIds = hasSearch
+            ? cards.Values
+                .Where(c => SearchText.Matches(search, c.SAGE_MATRICULE, c.SAGE_NOM, c.SAGE_PRENOM))
+                .Select(c => c.ID)
+                .ToArray()
+            : Array.Empty<int>();
+        if (hasSearch && cardIds.Length == 0)
+            return PagedLists.Page(Array.Empty<EmployeePlanningDto>(), page, pageSize);
 
         return await PagedLists.PageAsync(
             _uow.Repository<T_PLANNING_SAL>(),
             p => p.DateP >= start
                  && p.DateP < end
                  && (p.BDD_SAGE == null || p.BDD_SAGE.Trim() == "" || p.BDD_SAGE.Trim() == sageDb)
-                 && (!cardId.HasValue || p.IDSAL == cardId.Value),
+                 && (!cardId.HasValue || p.IDSAL == cardId.Value)
+                 && (!hasSearch || cardIds.Contains(p.IDSAL)),
             q => q.OrderBy(p => p.IDSAL).ThenBy(p => p.DateP).ThenBy(p => p.ID),
             page,
             pageSize,
@@ -173,7 +187,8 @@ public class PlanningService
 
     /// <summary>Grille paginée des salariés avec leur nombre de jours planifiés.</summary>
     public async Task<PagedResult<PlanningEmployeeStatDto>> ListEmployeeStatsPagedAsync(
-        DateTime from, DateTime to, int? page, int? pageSize, CancellationToken ct = default)
+        DateTime from, DateTime to, int? page, int? pageSize,
+        string? search = null, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageDb = _tenant.SageDb;
@@ -188,6 +203,13 @@ public class PlanningService
             pageSize,
             c => new PlanningEmployeeStatDto(
                 c.ID, c.SAGE_MATRICULE, c.SAGE_NOM, c.SAGE_PRENOM, counts.GetValueOrDefault(c.ID)),
+            search,
+            new Expression<Func<T_CARDPAIE, string?>>[]
+            {
+                c => c.SAGE_MATRICULE,
+                c => c.SAGE_NOM,
+                c => c.SAGE_PRENOM,
+            },
             ct);
     }
 

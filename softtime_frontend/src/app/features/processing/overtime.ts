@@ -32,6 +32,8 @@ import { SessionStore } from '../../core/session.store';
         [total]="total()"
         [serverPageSize]="pageSize"
         [serverPage]="page()"
+        [(searchTerm)]="tableSearch"
+        (searchSubmit)="onTableSearch($event)"
         (pageChange)="onPageChange($event)"
       >
         <ng-template #actions let-row>
@@ -85,6 +87,7 @@ export class OvertimePage {
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly page = signal(1);
   readonly total = signal(0);
+  readonly tableSearch = signal('');
   readonly detailOpen = signal(false);
   readonly detailLoading = signal(false);
   readonly detail = signal<OvertimeDetail | null>(null);
@@ -141,11 +144,22 @@ export class OvertimePage {
     this.loadPage();
   }
 
+  onTableSearch(term: string): void {
+    this.tableSearch.set(term);
+    this.page.set(1);
+    this.loadPage();
+  }
+
   private loadPage(): void {
     if (!this.lastFilter) return;
     const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.listPaged({ ...this.lastFilter, page: this.page(), pageSize: this.pageSize }).subscribe({
+    this.svc.listPaged({
+      ...this.lastFilter,
+      search: this.tableSearch(),
+      page: this.page(),
+      pageSize: this.pageSize,
+    }).subscribe({
       next: (r) => {
         if (seq !== this.requestSeq) return;
         this.rows.set(r.items.map(asRow));
@@ -197,7 +211,7 @@ export class OvertimePage {
 
   exportExcel(): void {
     if (!this.lastFilter) {
-      this.excel.download('heures-supplementaires', this.columns, this.rows());
+      this.excel.download('heures-supplementaires', this.columns, this.rows(), 'Données', this.tableSearch());
       return;
     }
     this.loading.set(true);

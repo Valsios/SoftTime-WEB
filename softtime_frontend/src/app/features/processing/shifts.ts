@@ -35,6 +35,8 @@ import { toastImportResult } from '../../shared/utils/import-result';
         [total]="total()"
         [serverPageSize]="pageSize"
         [serverPage]="page()"
+        [(searchTerm)]="tableSearch"
+        (searchSubmit)="onTableSearch($event)"
         (pageChange)="onPageChange($event)"
       >
         <ng-template #actions let-row>
@@ -87,6 +89,7 @@ export class ShiftsPage implements OnInit {
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly page = signal(1);
   readonly total = signal(0);
+  readonly tableSearch = signal('');
   private requestSeq = 0;
   form: Partial<Shift> = {};
   readonly columns: Column[] = [
@@ -102,7 +105,7 @@ export class ShiftsPage implements OnInit {
   private loadPage(): void {
     const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.listPaged(this.page(), this.pageSize).subscribe({
+    this.svc.listPaged(this.page(), this.pageSize, this.tableSearch()).subscribe({
       next: (r) => {
         if (seq !== this.requestSeq) return;
         this.rows.set(r.items.map(asRow));
@@ -117,6 +120,12 @@ export class ShiftsPage implements OnInit {
   onPageChange(event: PageChangeEvent): void {
     this.page.set(event.page);
     this.pageSize = event.pageSize;
+    this.loadPage();
+  }
+
+  onTableSearch(term: string): void {
+    this.tableSearch.set(term);
+    this.page.set(1);
     this.loadPage();
   }
 
@@ -137,7 +146,7 @@ export class ShiftsPage implements OnInit {
   }
   exportExcel(): void {
     this.svc.list().subscribe({
-      next: (items) => this.excel.download('shifts', this.columns, items.map(asRow)),
+      next: (items) => this.excel.download('shifts', this.columns, items.map(asRow), 'Données', this.tableSearch()),
     });
   }
   onFile(event: Event): void {

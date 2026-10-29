@@ -69,4 +69,27 @@ public static class PagedLists
             result.PageSize,
             result.TotalPages);
     }
+
+    /// <summary>
+    /// Variante avec recherche serveur : le prédicat métier est combiné au prédicat de recherche
+    /// avant la pagination SQL, afin que le total et les pages portent sur toutes les données.
+    /// </summary>
+    public static async Task<PagedResult<TDto>> PageAsync<T, TDto>(
+        IRepository<T> repository,
+        Expression<Func<T, bool>> predicate,
+        Func<IQueryable<T>, IOrderedQueryable<T>> orderBy,
+        int? page,
+        int? pageSize,
+        Func<T, TDto> map,
+        string? search,
+        Expression<Func<T, string?>>[] searchFields,
+        CancellationToken ct = default)
+        where T : class
+    {
+        var searchPredicate = SearchExpression.For(search, searchFields);
+        var combined = searchPredicate is null
+            ? predicate
+            : SearchExpression.AndAlso(predicate, searchPredicate);
+        return await PageAsync(repository, combined, orderBy, page, pageSize, map, ct);
+    }
 }

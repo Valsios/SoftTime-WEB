@@ -30,6 +30,7 @@ import { toastImportResult } from '../../shared/utils/import-result';
     <soft-card>
       <data-table [columns]="columns" [rows]="rows()" [loading]="loading()"
         [serverSide]="true" [total]="total()" [serverPage]="page()" [serverPageSize]="pageSize"
+        [(searchTerm)]="tableSearch" (searchSubmit)="onTableSearch($event)"
         (pageChange)="onPageChange($event)">
         <ng-template #actions let-row>
           <div class="soft-actions" style="justify-content: end">
@@ -83,6 +84,7 @@ export class CardPaiePage implements OnInit {
   readonly page = signal(1);
   pageSize = 50;
   readonly total = signal(0);
+  readonly tableSearch = signal('');
   private requestSeq = 0;
   readonly autoMapping = signal(false);
   form: Partial<CardPaie> = {};
@@ -102,7 +104,7 @@ export class CardPaiePage implements OnInit {
   loadPage(): void {
     const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.listPaged(this.page(), this.pageSize).subscribe({
+    this.svc.listPaged(this.page(), this.pageSize, this.tableSearch()).subscribe({
       next: (r) => {
         if (seq !== this.requestSeq) return;
         this.rows.set(r.items.map(asRow));
@@ -118,6 +120,12 @@ export class CardPaiePage implements OnInit {
   onPageChange(event: PageChangeEvent): void {
     this.page.set(event.page);
     this.pageSize = event.pageSize;
+    this.loadPage();
+  }
+
+  onTableSearch(term: string): void {
+    this.tableSearch.set(term);
+    this.page.set(1);
     this.loadPage();
   }
 
@@ -169,7 +177,7 @@ export class CardPaiePage implements OnInit {
           .map((i) => i.sageMatricule?.trim())
           .filter((m): m is string => !!m);
         if (matricules.length === 0) {
-          this.excel.download('correspondances-paie', this.columns, items.map(asRow));
+          this.excel.download('correspondances-paie', this.columns, items.map(asRow), 'Données', this.tableSearch());
           return;
         }
         this.deptSvc.lookupBatch(matricules).subscribe({
@@ -179,9 +187,9 @@ export class CardPaiePage implements OnInit {
               const info = item.sageMatricule ? byMat.get(item.sageMatricule.trim()) : undefined;
               return { ...item, departement: info?.departement ?? null, service: info?.service ?? null };
             });
-            this.excel.download('correspondances-paie', this.columns, rows.map(asRow));
+            this.excel.download('correspondances-paie', this.columns, rows.map(asRow), 'Données', this.tableSearch());
           },
-          error: () => this.excel.download('correspondances-paie', this.columns, items.map(asRow)),
+          error: () => this.excel.download('correspondances-paie', this.columns, items.map(asRow), 'Données', this.tableSearch()),
         });
       },
     });

@@ -137,6 +137,8 @@ const RETARD_EXPORT_COLUMNS: Column[] = [
         [total]="total()"
         [serverPageSize]="pageSize"
         [serverPage]="page()"
+        [(searchTerm)]="tableSearch"
+        (searchSubmit)="onTableSearch($event)"
         (pageChange)="onPageChange($event)"
       ></data-table>
     </soft-card>
@@ -152,6 +154,7 @@ export class ReportsPage {
   readonly columns = signal<Column[]>([]);
   readonly page = signal(1);
   readonly total = signal(0);
+  readonly tableSearch = signal('');
   reportType: string = 'pointage';
   readonly reportOptions = REPORTS.map((r) => ({ value: r.id, label: r.label }));
   private lastFilter: ReportFilter | null = null;
@@ -169,9 +172,16 @@ export class ReportsPage {
     this.loadPage();
   }
 
+  onTableSearch(term: string): void {
+    this.tableSearch.set(term);
+    this.page.set(1);
+    this.loadPage();
+  }
+
   onTypeChange(type: string): void {
     this.reportType = type;
     this.columns.set([]);
+    this.tableSearch.set('');
     this.page.set(1);
     if (this.lastFilter) this.loadPage();
   }
@@ -182,6 +192,7 @@ export class ReportsPage {
     this.loading.set(true);
     this.svc.paged(this.reportType, {
       ...this.lastFilter,
+      search: this.tableSearch(),
       page: this.page(),
       pageSize: this.pageSize,
     }).subscribe({
@@ -228,7 +239,7 @@ export class ReportsPage {
 
   exportExcel(): void {
     if (!this.lastFilter) {
-      this.excel.download(`rapport-${this.reportType}`, this.columns(), this.rows());
+      this.excel.download(`rapport-${this.reportType}`, this.columns(), this.rows(), 'Données', this.tableSearch());
       return;
     }
     const filter = this.lastFilter;
@@ -242,7 +253,7 @@ export class ReportsPage {
             : this.reportType === 'retards'
               ? RETARD_EXPORT_COLUMNS
               : this.inferColumns(rows);
-        this.excel.download(`rapport-${this.reportType}`, cols, rows);
+        this.excel.download(`rapport-${this.reportType}`, cols, rows, 'Données', this.tableSearch());
       },
     });
   }

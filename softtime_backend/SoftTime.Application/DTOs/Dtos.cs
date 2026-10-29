@@ -421,9 +421,9 @@ public record CorrectedHourDto(decimal Id, string? Matricule, DateTime? DateIn, 
     public CorrectedHourDto() : this(default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default) { }
 }
 
-public record PeriodRequest(string? MatriculeFrom, string? MatriculeTo, DateTime From, DateTime To, string? Branche, string? Departement = null)
+public record PeriodRequest(string? MatriculeFrom, string? MatriculeTo, DateTime From, DateTime To, string? Branche, string? Departement = null, string? Search = null)
 {
-    public PeriodRequest() : this(default, default, default, default, default, default) { }
+    public PeriodRequest() : this(default, default, default, default, default, default, default) { }
 }
 
 public record WeeklyValidationRequest(
@@ -529,7 +529,7 @@ public record ExcelExportRequest(string FileName, string SheetName, List<string>
     public ExcelExportRequest() : this("export.xlsx", "Données", new List<string>(), new List<List<string?>>()) { }
 }
 
-public record ReportFilter(string? MatriculeFrom, string? MatriculeTo, DateTime From, DateTime To, string? Branche)
+public record ReportFilter(string? MatriculeFrom, string? MatriculeTo, DateTime From, DateTime To, string? Branche, string? Search = null)
 {
     public ReportFilter() : this(default, default, default, default, default) { }
 }

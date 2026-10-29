@@ -44,6 +44,8 @@ type Segment = 'pointages' | 'anomalies' | 'hs';
         [total]="total()"
         [serverPageSize]="pageSize"
         [serverPage]="page()"
+        [(searchTerm)]="tableSearch"
+        (searchSubmit)="onTableSearch($event)"
         (pageChange)="onPageChange($event)"
       >
         <ng-template #actions let-row>
@@ -66,6 +68,7 @@ export class HistoryPage {
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly page = signal(1);
   readonly total = signal(0);
+  readonly tableSearch = signal('');
   readonly tabs = [
     { id: 'pointages', label: 'Pointages' },
     { id: 'anomalies', label: 'Anomalies' },
@@ -113,6 +116,7 @@ export class HistoryPage {
 
   onTabChange(tab: string): void {
     this.activeTab.set(tab);
+    this.tableSearch.set('');
     if (!this.lastFilter) return;
     this.page.set(1);
     this.loadPage();
@@ -124,10 +128,17 @@ export class HistoryPage {
     this.loadPage();
   }
 
+  onTableSearch(term: string): void {
+    this.tableSearch.set(term);
+    this.page.set(1);
+    this.loadPage();
+  }
+
   private loadPage(): void {
     if (!this.lastFilter) return;
     const filter: ReportFilter = {
       ...this.lastFilter,
+      search: this.tableSearch(),
       page: this.page(),
       pageSize: this.pageSize,
     };
@@ -184,20 +195,20 @@ export class HistoryPage {
     const segment = this.activeTab();
     const fileName = `historique-${segment}`;
     if (!filter) {
-      this.excel.download(fileName, this.columns(), this.rows());
+      this.excel.download(fileName, this.columns(), this.rows(), 'Données', this.tableSearch());
       return;
     }
     if (segment === 'pointages') {
       this.svc.pointages(filter).subscribe({
-        next: (items) => this.excel.download(fileName, this.columns(), items.map(asRow)),
+        next: (items) => this.excel.download(fileName, this.columns(), items.map(asRow), 'Données', this.tableSearch()),
       });
     } else if (segment === 'anomalies') {
       this.svc.anomalies(filter).subscribe({
-        next: (items) => this.excel.download(fileName, this.columns(), items.map(asRow)),
+        next: (items) => this.excel.download(fileName, this.columns(), items.map(asRow), 'Données', this.tableSearch()),
       });
     } else {
       this.svc.hs(filter).subscribe({
-        next: (items) => this.excel.download(fileName, this.columns(), items.map(asRow)),
+        next: (items) => this.excel.download(fileName, this.columns(), items.map(asRow), 'Données', this.tableSearch()),
       });
     }
   }

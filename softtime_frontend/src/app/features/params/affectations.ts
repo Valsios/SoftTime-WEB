@@ -59,6 +59,7 @@ import { cardEmployeeLabel } from '../../shared/utils/labels';
     <soft-card>
       <data-table [columns]="columns" [rows]="rows()" [loading]="loading()"
         [serverSide]="true" [total]="total()" [serverPage]="page()" [serverPageSize]="pageSize"
+        [(searchTerm)]="tableSearch" (searchSubmit)="onTableSearch($event)"
         (pageChange)="onPageChange($event)">
         <ng-template #actions let-row>
           <div class="soft-actions" style="justify-content: end">
@@ -118,6 +119,7 @@ export class AffectationsPage implements OnInit {
   readonly page = signal(1);
   pageSize = 50;
   readonly total = signal(0);
+  readonly tableSearch = signal('');
   private requestSeq = 0;
   readonly categoryOptions = signal<{ value: number; label: string }[]>([]);
   readonly cardOptions = signal<{ value: number; label: string }[]>([]);
@@ -180,6 +182,7 @@ export class AffectationsPage implements OnInit {
       categoryId: this.filterCategoryId,
       departement: this.filterDept === 'ALL' ? null : this.filterDept,
       service: this.filterService === 'ALL' ? null : this.filterService,
+      search: this.tableSearch(),
       page: this.page(),
       pageSize: this.pageSize,
     }).subscribe({
@@ -209,6 +212,12 @@ export class AffectationsPage implements OnInit {
   onPageChange(event: PageChangeEvent): void {
     this.page.set(event.page);
     this.pageSize = event.pageSize;
+    this.loadPage();
+  }
+
+  onTableSearch(term: string): void {
+    this.tableSearch.set(term);
+    this.page.set(1);
     this.loadPage();
   }
 
@@ -254,6 +263,8 @@ export class AffectationsPage implements OnInit {
             categoryName: this.categoryLabels.get(affectation.categoryId) ?? '—',
           }),
         ),
+        'Données',
+        this.tableSearch(),
       ),
     });
   }

@@ -205,18 +205,38 @@ public class ReportService
     }
 
     /// <summary>Dispatcher du endpoint générique <c>GET /api/reports/{type}/paged</c>.</summary>
-    public Task<PagedResult<object>> PagedAsync(
+    public async Task<PagedResult<object>> PagedAsync(
         string type, ReportFilter filter, int? page, int? pageSize, CancellationToken ct = default)
-        => type switch
+    {
+        if (SearchText.Terms(filter.Search).Count > 0)
         {
-            "pointage" => PointagePagedAsync(filter, page, pageSize, ct),
-            "absences" => AbsencesPagedAsync(filter, page, pageSize, ct),
-            "retards" => RetardsPagedAsync(filter, page, pageSize, ct),
-            "hs-recap" => HsRecapPagedAsync(filter, page, pageSize, ct),
-            "heures-semaine" => HeuresSemainePagedAsync(filter, page, pageSize, ct),
-            "heures-dimanche" => HeuresDimanchePagedAsync(filter, page, pageSize, ct),
+            IReadOnlyList<object> rows = type switch
+            {
+                "pointage" => (await PointageAsync(filter, ct)).Cast<object>().ToList(),
+                "absences" => (await AbsencesAsync(filter, ct)).Cast<object>().ToList(),
+                "retards" => (await CalculerRetardsAsync(filter, ct)).Cast<object>().ToList(),
+                "hs-recap" => (await HsRecapAsync(filter, ct)).Cast<object>().ToList(),
+                "heures-semaine" => (await HeuresParSemaineAsync(filter, ct)).ToList(),
+                "heures-dimanche" => (await HeuresDimancheAsync(filter, ct)).ToList(),
+                _ => throw new ArgumentException($"Type de rapport inconnu : {type}.")
+            };
+            var filtered = rows
+                .Where(row => SearchText.MatchesObject(filter.Search, row))
+                .ToList();
+            return PagedLists.Page(filtered, page, pageSize);
+        }
+
+        return type switch
+        {
+            "pointage" => await PointagePagedAsync(filter, page, pageSize, ct),
+            "absences" => await AbsencesPagedAsync(filter, page, pageSize, ct),
+            "retards" => await RetardsPagedAsync(filter, page, pageSize, ct),
+            "hs-recap" => await HsRecapPagedAsync(filter, page, pageSize, ct),
+            "heures-semaine" => await HeuresSemainePagedAsync(filter, page, pageSize, ct),
+            "heures-dimanche" => await HeuresDimanchePagedAsync(filter, page, pageSize, ct),
             _ => throw new ArgumentException($"Type de rapport inconnu : {type}.")
         };
+    }
 
     // ---------------------------------------------------------------- Congés
 

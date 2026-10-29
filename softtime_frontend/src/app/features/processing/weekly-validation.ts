@@ -38,6 +38,8 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         [total]="total()"
         [serverPageSize]="pageSize"
         [serverPage]="page()"
+        [(searchTerm)]="tableSearch"
+        (searchSubmit)="onTableSearch($event)"
         (pageChange)="onPageChange($event)"
         [(selectedKeys)]="selectedKeys"
       ></data-table>
@@ -59,6 +61,7 @@ export class WeeklyValidationPage {
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly page = signal(1);
   readonly total = signal(0);
+  readonly tableSearch = signal('');
   readonly selectedKeys = signal<string[]>([]);
   private lastFilter: PeriodRequest | null = null;
   private requestSeq = 0;
@@ -103,11 +106,23 @@ export class WeeklyValidationPage {
     this.loadPage();
   }
 
+  onTableSearch(term: string): void {
+    this.tableSearch.set(term);
+    this.selectedKeys.set([]);
+    this.page.set(1);
+    this.loadPage();
+  }
+
   private loadPage(): void {
     if (!this.lastFilter) return;
     const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.previewPaged({ ...this.lastFilter, page: this.page(), pageSize: this.pageSize }).subscribe({
+    this.svc.previewPaged({
+      ...this.lastFilter,
+      search: this.tableSearch(),
+      page: this.page(),
+      pageSize: this.pageSize,
+    }).subscribe({
       next: (r) => {
         if (seq !== this.requestSeq) return;
         this.rows.set(r.items.map(asRow));
@@ -149,7 +164,7 @@ export class WeeklyValidationPage {
 
   exportExcel(): void {
     if (!this.lastFilter) {
-      this.excel.download('validation-semaine', this.columns, this.rows());
+      this.excel.download('validation-semaine', this.columns, this.rows(), 'Données', this.tableSearch());
       return;
     }
     this.loading.set(true);
@@ -157,7 +172,7 @@ export class WeeklyValidationPage {
       next: (items) => {
         this.loading.set(false);
         // L'export reprend exactement la grille, y compris les semaines déjà validées.
-        this.excel.download('validation-semaine', this.columns, items.map(asRow));
+        this.excel.download('validation-semaine', this.columns, items.map(asRow), 'Données', this.tableSearch());
       },
       error: () => this.loading.set(false),
     });

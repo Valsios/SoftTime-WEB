@@ -109,6 +109,8 @@ export interface ReportFilter {
   from: string;
   to: string;
   branche?: string | null;
+  /** Terme de recherche du tableau. */
+  search?: string | null;
   /** Numéro de page (1-based), uniquement pour les états paginés. */
   page?: number;
   /** Taille de page, plafonnée à 100 par le serveur. */
@@ -121,6 +123,7 @@ export interface AuditEventFilter {
   to?: string;
   table?: string;
   action?: string;
+  search?: string;
   page?: number;
   pageSize?: number;
 }

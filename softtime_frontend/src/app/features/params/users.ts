@@ -57,6 +57,7 @@ const MESSAGES_REQUIS: FieldErrors = {
     <soft-card>
       <data-table [columns]="columns" [rows]="rows()" [loading]="loading()"
         [serverSide]="true" [total]="total()" [serverPage]="page()" [serverPageSize]="pageSize"
+        [(searchTerm)]="tableSearch" (searchSubmit)="onTableSearch($event)"
         (pageChange)="onPageChange($event)">
         <ng-template #actions let-row>
           <div class="soft-actions" style="justify-content: end">
@@ -174,6 +175,7 @@ export class UsersPage implements OnInit {
   readonly roleOptions = signal<{ value: number; label: string }[]>([]);
   readonly matriculeOptions = signal<{ value: string; label: string }[]>([]);
   readonly policy = signal<PasswordPolicy | null>(null);
+  readonly tableSearch = signal('');
   form: Partial<User> = {};
 
   readonly submitted = signal(false);
@@ -243,7 +245,7 @@ export class UsersPage implements OnInit {
   loadPage(): void {
     const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.listPaged(this.page(), this.pageSize).subscribe({
+    this.svc.listPaged(this.page(), this.pageSize, this.tableSearch()).subscribe({
       next: (r) => {
         if (seq !== this.requestSeq) return;
         const roles = this.roleOptions();
@@ -266,6 +268,12 @@ export class UsersPage implements OnInit {
   onPageChange(event: PageChangeEvent): void {
     this.page.set(event.page);
     this.pageSize = event.pageSize;
+    this.loadPage();
+  }
+
+  onTableSearch(term: string): void {
+    this.tableSearch.set(term);
+    this.page.set(1);
     this.loadPage();
   }
 
@@ -390,7 +398,7 @@ export class UsersPage implements OnInit {
     setTimeout(() => {
       const panel = this.modalHost()?.nativeElement;
       const invalid = panel?.querySelector(
-        '.soft-field--error .soft-input, .soft-field--error .soft-select > select',
+        '.soft-field--error .soft-input, .soft-field--error .soft-select select',
       );
       invalid?.focus();
     });
