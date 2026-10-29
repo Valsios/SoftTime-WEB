@@ -77,3 +77,13 @@ export function diffPermissions(
     count: added.length + removed.length,
   };
 }
+
+/** Résout le nom d'un rôle dans la liste chargée, avec repli « Rôle #<id> » si introuvable. */
+export function resolveRoleLabel(
+  roles: { id: number; nom: string }[],
+  roleId: number | null | undefined,
+): string {
+  if (roleId === null || roleId === undefined) return '—';
+  const role = roles.find((r) => r.id === roleId);
+  return role?.nom?.trim() ? role.nom : `Rôle #${roleId}`;
+}

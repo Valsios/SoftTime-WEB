@@ -6,6 +6,7 @@ import {
   diffPermissions,
   extractErrorMessage,
   isAdminRole,
+  resolveRoleLabel,
 } from './privileges.logic';
 
 describe('privileges.logic', () => {
@@ -79,5 +80,24 @@ describe('privileges.logic', () => {
     expect(diff.added).toEqual(['A', 'Y']);
     expect(diff.removed).toEqual(['M', 'Z']);
     expect(diff.count).toBe(4);
+  });
+
+  it('resolveRoleLabel : rôle trouvé', () => {
+    const roles = [
+      { id: 1, nom: 'Administrateur' },
+      { id: 2, nom: 'Responsable RH' },
+    ];
+    expect(resolveRoleLabel(roles, 1)).toBe('Administrateur');
+    expect(resolveRoleLabel(roles, 2)).toBe('Responsable RH');
+  });
+
+  it('resolveRoleLabel : rôle introuvable', () => {
+    const roles = [{ id: 1, nom: 'Administrateur' }];
+    expect(resolveRoleLabel(roles, 10034)).toBe('Rôle #' + 10034);
+  });
+
+  it('resolveRoleLabel : liste vide', () => {
+    expect(resolveRoleLabel([], 5)).toBe('Rôle #' + 5);
+    expect(resolveRoleLabel([], null)).toBe('—');
   });
 });

@@ -13,9 +13,10 @@ import {
   buildRoleImpactMessage,
   canEditRolePermissions,
   countUsersOfRole,
-  extractErrorMessage,
   diffPermissions,
+  extractErrorMessage,
   isAdminRole,
+  resolveRoleLabel,
 } from './privileges.logic';
 
 type PrivilegesMode = 'user' | 'role';
@@ -104,12 +105,12 @@ interface FeatureCategory {
     }
 
     <!-- Sélecteur de mode : par utilisateur ou par rôle -->
-    <section class="sw-card" aria-label="Mode de configuration">
-      <div class="sw-bulk-actions">
+    <section class="sw-card sw-mode-card" aria-label="Mode de configuration">
+      <div class="sw-segmented" role="group" aria-label="Mode de configuration">
         <button
           type="button"
-          class="sw-btn-sm"
-          [class.sw-btn-primary]="mode() === 'user'"
+          class="sw-segment-btn"
+          [class.is-active]="mode() === 'user'"
           [attr.aria-pressed]="mode() === 'user'"
           (click)="setMode('user')"
         >
@@ -117,8 +118,8 @@ interface FeatureCategory {
         </button>
         <button
           type="button"
-          class="sw-btn-sm"
-          [class.sw-btn-primary]="mode() === 'role'"
+          class="sw-segment-btn"
+          [class.is-active]="mode() === 'role'"
           [attr.aria-pressed]="mode() === 'role'"
           (click)="setMode('role')"
         >
@@ -127,111 +128,104 @@ interface FeatureCategory {
       </div>
     </section>
 
-    @if (adminLocked()) {
-      <section class="sw-card" aria-label="Verrou administrateur">
-        <p class="sw-empty-hint">
-          Les privilèges de l'administrateur sont gérés par le serveur et ne sont pas modifiables.
-        </p>
-      </section>
-    }
     @if (roleEditLocked()) {
       <section class="sw-card" aria-label="Modification réservée">
         <p class="sw-empty-hint">Seul un administrateur peut modifier les droits d'un rôle.</p>
       </section>
     }
 
-    <!-- Carte Sélecteur d'utilisateur - Conforme Charte Softwell §7.1 N°5 & §8.4 -->
-    @if (mode() === 'user') {
-    <section class="sw-card sw-user-select-card" aria-label="Sélection de l'utilisateur">
+    <!-- Barre de sélection compacte -->
+    <section class="sw-card sw-user-select-card" [attr.aria-label]="mode() === 'user' ? 'Utilisateur à configurer' : 'Rôle à configurer'">
       <div class="sw-user-selector-bar">
-        <div class="sw-user-selector-field">
-          <label class="sw-field-label" for="swUserSelect">
-            Utilisateur à configurer <span class="sw-req">*</span>
-          </label>
-          <div class="sw-select-wrap">
-            <select
-              id="swUserSelect"
-              class="sw-select"
-              [ngModel]="selectedUserId()"
-              (ngModelChange)="onUserChange($event)"
-            >
-              @for (opt of userOptions(); track opt.value) {
-                <option [value]="opt.value">{{ opt.label }}</option>
-              }
-            </select>
+        @if (mode() === 'user') {
+          <div class="sw-user-selector-field">
+            <label class="sw-field-label" for="swUserSelect">
+              Utilisateur à configurer <span class="sw-req">*</span>
+            </label>
+            <div class="sw-select-wrap">
+              <select
+                id="swUserSelect"
+                class="sw-select"
+                [ngModel]="selectedUserId()"
+                (ngModelChange)="onUserChange($event)"
+              >
+                @for (opt of userOptions(); track opt.value) {
+                  <option [value]="opt.value">{{ opt.label }}</option>
+                }
+              </select>
+            </div>
           </div>
-        </div>
 
-        <div class="sw-user-status-badges" *ngIf="selectedUser() as u">
-          <span class="sw-badge sw-badge-role">
-            <app-icon name="shield" [size]="14"></app-icon>
-            Rôle : {{ getRoleLabel(u.roleId) }}
-          </span>
-          <span class="sw-badge" [class.sw-badge-custom]="isCustomized()" [class.sw-badge-default]="!isCustomized()">
-            {{ isCustomized() ? 'Permissions personnalisées' : 'Permissions par défaut (Rôle)' }}
-          </span>
-          @if (isTargetAdmin()) {
-            <span class="sw-badge sw-badge-admin-shield" title="Règle d'inviolabilité : un administrateur conserve l'accès complet à toutes les bases et fonctionnalités vitales.">
+          <div class="sw-user-status-badges" *ngIf="selectedUser() as u">
+            <span class="sw-badge sw-badge-role">
               <app-icon name="shield" [size]="14"></app-icon>
-              Bases et gestion verrouillées
+              Rôle : {{ getRoleLabel(u.roleId) }}
             </span>
-          }
-        </div>
-
-        <div class="sw-bulk-actions">
-          <button type="button" class="sw-btn-sm" [disabled]="permissionsLocked()" (click)="toggleAll(true)">
-            Tout cocher
-          </button>
-          <button
-            type="button"
-            class="sw-btn-sm"
-            [disabled]="permissionsLocked()"
-            (click)="toggleAll(false)"
-            [title]="isTargetAdmin() ? 'Les bases et droits cles restent obligatoires pour un administrateur' : 'Tout decocher'"
-          >
-            Tout décocher
-          </button>
-        </div>
-      </div>
-    </section>
-    }
-
-    @if (mode() === 'role') {
-    <section class="sw-card sw-user-select-card" aria-label="Sélection du rôle">
-      <div class="sw-user-selector-bar">
-        <div class="sw-user-selector-field">
-          <label class="sw-field-label" for="swRoleSelect">
-            Rôle à configurer <span class="sw-req">*</span>
-          </label>
-          <div class="sw-select-wrap">
-            <select
-              id="swRoleSelect"
-              class="sw-select"
-              [ngModel]="selectedRoleId()"
-              (ngModelChange)="onRoleChange($event)"
-            >
-              @for (opt of roleOptions(); track opt.value) {
-                <option [value]="opt.value">{{ opt.label }}</option>
-              }
-            </select>
+            <span class="sw-badge" [class.sw-badge-custom]="adminLocked() || isCustomized()" [class.sw-badge-default]="!adminLocked() && !isCustomized()">
+              {{ adminLocked() ? 'Tous les droits' : (isCustomized() ? 'Permissions personnalisées' : 'Permissions par défaut (Rôle)') }}
+            </span>
           </div>
-        </div>
 
-        <div class="sw-user-status-badges">
-          <span class="sw-badge sw-badge-role">
-            <app-icon name="shield" [size]="14"></app-icon>
-            Rôle : {{ selectedRoleLabel() }}
-          </span>
-        </div>
+          @if (!adminLocked()) {
+            <div class="sw-bulk-actions">
+              <button type="button" class="sw-btn-sm" [disabled]="permissionsLocked()" (click)="toggleAll(true)">
+                Tout cocher
+              </button>
+              <button
+                type="button"
+                class="sw-btn-sm"
+                [disabled]="permissionsLocked()"
+                (click)="toggleAll(false)"
+                title="Tout décocher"
+              >
+                Tout décocher
+              </button>
+            </div>
+          }
+        } @else {
+          <div class="sw-user-selector-field">
+            <label class="sw-field-label" for="swRoleSelect">
+              Rôle à configurer <span class="sw-req">*</span>
+            </label>
+            <div class="sw-select-wrap">
+              <select
+                id="swRoleSelect"
+                class="sw-select"
+                [ngModel]="selectedRoleId()"
+                (ngModelChange)="onRoleChange($event)"
+              >
+                @for (opt of roleOptions(); track opt.value) {
+                  <option [value]="opt.value">{{ opt.label }}</option>
+                }
+              </select>
+            </div>
+          </div>
+
+          <div class="sw-user-status-badges">
+            <span class="sw-badge sw-badge-role">
+              <app-icon name="shield" [size]="14"></app-icon>
+              Rôle : {{ selectedRoleLabel() }}
+            </span>
+            @if (adminLocked()) {
+              <span class="sw-badge sw-badge-custom">Tous les droits</span>
+            }
+          </div>
+        }
       </div>
 
-      @if (!isRoleConfigured()) {
+        @if (mode() === 'role' && !isRoleConfigured() && !adminLocked()) {
         <p class="sw-empty-hint">
           Ce rôle n'a pas encore de configuration détaillée : les droits affichés sont déduits de ses grandes portes
           actuelles.
         </p>
       }
     </section>
+
+    @if (adminLocked()) {
+      <div class="sw-admin-banner" role="status">
+        <app-icon name="shield" [size]="16"></app-icon>
+        <span>Droits complets garantis par le serveur. Non modifiables.</span>
+      </div>
     }
 
     <!-- Conteneur des permissions par catégorie -->
@@ -682,6 +676,47 @@ interface FeatureCategory {
         box-shadow: 0 1px 2px rgba(11, 19, 50, 0.04);
       }
 
+      .sw-mode-card {
+        padding: 12px 16px;
+        margin-bottom: 16px;
+      }
+
+      .sw-segmented {
+        display: flex;
+        border: 1px solid var(--app-border);
+        background: var(--app-surface-soft);
+        border-radius: var(--radius-md);
+        padding: 3px;
+        gap: 3px;
+        max-width: 380px;
+      }
+
+      .sw-segment-btn {
+        flex: 1;
+        min-height: 36px;
+        padding: 6px 16px;
+        border: none;
+        border-radius: var(--radius-sm);
+        background: none;
+        color: var(--app-text);
+        font-family: var(--font-sans);
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all var(--t-fast) var(--ease);
+        text-align: center;
+      }
+
+      .sw-segment-btn:hover:not(.is-active) {
+        color: var(--app-text-strong);
+      }
+
+      .sw-segment-btn.is-active {
+        background: var(--softtime);
+        color: var(--app-surface);
+        box-shadow: var(--shadow-xs);
+      }
+
       .sw-user-select-card {
         padding: 20px 24px;
         margin-bottom: 24px;
@@ -690,9 +725,27 @@ interface FeatureCategory {
       .sw-user-selector-bar {
         display: flex;
         align-items: flex-end;
-        justify-content: space-between;
         flex-wrap: wrap;
-        gap: 20px;
+        gap: 16px;
+      }
+
+      .sw-user-selector-bar .sw-bulk-actions {
+        margin-left: auto;
+      }
+
+      .sw-admin-banner {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        margin-top: -12px;
+        margin-bottom: 24px;
+        background: var(--app-surface-soft);
+        border-left: 3px solid var(--color-gold-400);
+        border-radius: var(--radius-sm);
+        color: var(--app-text);
+        font-size: 13px;
+        font-weight: 500;
       }
 
       .sw-user-selector-field {
@@ -1072,6 +1125,8 @@ interface FeatureCategory {
         padding: 12px 24px;
         margin-top: 16px;
         margin-bottom: 16px;
+        background: var(--app-surface);
+        border-color: var(--app-border);
       }
 
       .sw-draft-bar-content {
@@ -1083,20 +1138,20 @@ interface FeatureCategory {
 
       .sw-draft-bar-title {
         font-weight: 600;
-        color: #0B1332;
+        color: var(--app-text-strong);
       }
 
       .sw-draft-bar-text {
-        color: #5B6B8A;
+        color: var(--text-secondary);
       }
 
       .sw-draft-bar-warning {
-        color: #AA9E39;
+        color: var(--warning);
         font-weight: 500;
       }
 
       .sw-draft-bar-others {
-        color: #5B6B8A;
+        color: var(--text-secondary);
         font-style: italic;
       }
 
@@ -1726,15 +1781,6 @@ export class PrivilegesPage implements OnInit {
   }
 
   getRoleLabel(roleId: number): string {
-    switch (roleId) {
-      case 1:
-        return 'Administrateur';
-      case 2:
-        return 'Responsable RH';
-      case 3:
-        return 'Opérateur';
-      default:
-        return `Rôle #${roleId}`;
-    }
+    return resolveRoleLabel(this.roles(), roleId);
   }
 }
