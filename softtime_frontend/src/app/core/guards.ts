@@ -25,5 +25,5 @@ export const droitGuard: CanActivateFn = (route) => {
 export const privilegesLeaveGuard: CanDeactivateFn<unknown> = () => {
   const draft = inject(PrivilegesDraftService);
   if (!draft.hasDirty()) return true;
-  return window.confirm('Des modifications de droits ne sont pas enregistrées. Quitter la page quand même ?');
+  return window.confirm("Des modifications de droits ne sont pas enregistrées. Elles seront conservées en brouillon jusqu'à votre déconnexion. Quitter la page ?");
 };

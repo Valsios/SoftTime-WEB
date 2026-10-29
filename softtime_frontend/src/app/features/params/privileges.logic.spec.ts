@@ -3,6 +3,7 @@ import {
   buildRoleImpactMessage,
   canEditRolePermissions,
   countUsersOfRole,
+  diffPermissions,
   extractErrorMessage,
   isAdminRole,
 } from './privileges.logic';
@@ -43,5 +44,40 @@ describe('privileges.logic', () => {
     expect(extractErrorMessage({ message: 'Message technique' })).toBe('Message technique');
     expect(extractErrorMessage(null)).toBe('Enregistrement refusé par le serveur.');
     expect(extractErrorMessage({})).toBe('Enregistrement refusé par le serveur.');
+  });
+
+  it('diffPermissions : permissions identiques', () => {
+    const diff = diffPermissions(['A', 'B'], ['B', 'A']);
+    expect(diff.added).toEqual([]);
+    expect(diff.removed).toEqual([]);
+    expect(diff.count).toBe(0);
+  });
+
+  it('diffPermissions : ajouts seuls', () => {
+    const diff = diffPermissions(['A'], ['A', 'C', 'B']);
+    expect(diff.added).toEqual(['B', 'C']);
+    expect(diff.removed).toEqual([]);
+    expect(diff.count).toBe(2);
+  });
+
+  it('diffPermissions : retraits seuls', () => {
+    const diff = diffPermissions(['A', 'B', 'C'], ['B']);
+    expect(diff.added).toEqual([]);
+    expect(diff.removed).toEqual(['A', 'C']);
+    expect(diff.count).toBe(2);
+  });
+
+  it('diffPermissions : mélange ajouts et retraits', () => {
+    const diff = diffPermissions(['A', 'B'], ['B', 'C']);
+    expect(diff.added).toEqual(['C']);
+    expect(diff.removed).toEqual(['A']);
+    expect(diff.count).toBe(2);
+  });
+
+  it('diffPermissions : listes renvoyées toujours triées', () => {
+    const diff = diffPermissions(['Z', 'K', 'M'], ['A', 'K', 'Y']);
+    expect(diff.added).toEqual(['A', 'Y']);
+    expect(diff.removed).toEqual(['M', 'Z']);
+    expect(diff.count).toBe(4);
   });
 });

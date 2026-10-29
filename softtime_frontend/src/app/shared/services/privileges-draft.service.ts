@@ -18,6 +18,7 @@ export class PrivilegesDraftService {
   private readonly session = inject(SessionStore);
   private readonly drafts = new Map<string, PrivilegesDraftState>();
   private lastUserId: number | null;
+  private activeTarget: { mode: PrivilegesDraftMode; targetId: number } | null = null;
 
   constructor() {
     this.lastUserId = this.session.session()?.userId ?? null;
@@ -50,12 +51,70 @@ export class PrivilegesDraftService {
     return state;
   }
 
+  refreshBaseline(
+    mode: PrivilegesDraftMode,
+    targetId: number,
+    serverPermissions: Iterable<string>,
+  ): { baseline: Set<string>; working: Set<string>; dirty: boolean; serverChanged: boolean } {
+    const newBaseline = new Set(serverPermissions);
+    const existing = this.get(mode, targetId);
+    if (!existing) {
+      const state = this.loadBaseline(mode, targetId, newBaseline);
+      return {
+        baseline: new Set(state.baseline),
+        working: new Set(state.working),
+        dirty: false,
+        serverChanged: false,
+      };
+    }
+
+    const isModified = !this.samePermissions(existing.baseline, existing.working);
+    if (!isModified) {
+      existing.baseline = newBaseline;
+      existing.working = new Set(newBaseline);
+      return {
+        baseline: new Set(existing.baseline),
+        working: new Set(existing.working),
+        dirty: false,
+        serverChanged: false,
+      };
+    }
+
+    const serverChanged = !this.samePermissions(existing.baseline, newBaseline);
+    existing.baseline = newBaseline;
+    return {
+      baseline: new Set(existing.baseline),
+      working: new Set(existing.working),
+      dirty: true,
+      serverChanged,
+    };
+  }
+
   get(mode: PrivilegesDraftMode, targetId: number): PrivilegesDraftState | undefined {
     return this.drafts.get(this.key(mode, targetId));
   }
 
+  setActive(mode: PrivilegesDraftMode, targetId: number): void {
+    this.activeTarget = { mode, targetId };
+  }
+
+  getActive(): { mode: PrivilegesDraftMode; targetId: number } | null {
+    return this.activeTarget ? { ...this.activeTarget } : null;
+  }
+
+  dirtyTargets(): { mode: PrivilegesDraftMode; targetId: number }[] {
+    const result: { mode: PrivilegesDraftMode; targetId: number }[] = [];
+    for (const draft of this.drafts.values()) {
+      if (!this.samePermissions(draft.baseline, draft.working)) {
+        result.push({ mode: draft.mode, targetId: draft.targetId });
+      }
+    }
+    return result;
+  }
+
   update(mode: PrivilegesDraftMode, targetId: number, permissions: Iterable<string>): void {
-    const draft = this.getRequired(mode, targetId);
+    const draft = this.get(mode, targetId);
+    if (!draft) return;
     draft.working = new Set(permissions);
   }
 
@@ -64,9 +123,14 @@ export class PrivilegesDraftService {
     draft.working = new Set(draft.baseline);
   }
 
-  markSaved(mode: PrivilegesDraftMode, targetId: number): void {
-    const draft = this.getRequired(mode, targetId);
-    draft.baseline = new Set(draft.working);
+  markSaved(mode: PrivilegesDraftMode, targetId: number, savedPermissions?: Iterable<string>): void {
+    const draft = this.get(mode, targetId);
+    if (!draft) return;
+    if (savedPermissions !== undefined) {
+      draft.baseline = new Set(savedPermissions);
+    } else {
+      draft.baseline = new Set(draft.working);
+    }
   }
 
   clearTarget(mode: PrivilegesDraftMode, targetId: number): void {
@@ -75,6 +139,7 @@ export class PrivilegesDraftService {
 
   clearAll(): void {
     this.drafts.clear();
+    this.activeTarget = null;
   }
 
   /**

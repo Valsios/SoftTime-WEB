@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, HostListener, inject, OnInit, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ToastService } from '../../core/toast.service';
@@ -6,6 +6,7 @@ import { SessionStore } from '../../core/session.store';
 import { PointeuseDb, Role, SageDb, User } from '../../shared/models';
 import { PointeuseDatabasesService } from '../../shared/services/catalog.service';
 import { PrivilegesService, RolesService, SageDatabasesService, UsersService } from '../../shared/services/users.service';
+import { PrivilegesDraftService } from '../../shared/services/privileges-draft.service';
 import { AuthService } from '../../shared/services/auth.service';
 import { Icon } from '../../shared/components/icon';
 import {
@@ -13,6 +14,7 @@ import {
   canEditRolePermissions,
   countUsersOfRole,
   extractErrorMessage,
+  diffPermissions,
   isAdminRole,
 } from './privileges.logic';
 
@@ -67,6 +69,39 @@ interface FeatureCategory {
         </button>
       </div>
     </header>
+
+    @if (isDirty()) {
+      <section class="sw-card sw-draft-bar" role="status" aria-label="Modifications non enregistrées">
+        <div class="sw-draft-bar-content">
+          <strong class="sw-draft-bar-title">Modifications non enregistrées</strong>
+          <span class="sw-draft-bar-text">{{ changesCount() }} modification(s) non enregistrée(s)</span>
+          @if (serverChangedWarning()) {
+            <span class="sw-draft-bar-warning">Les droits ont changé sur le serveur depuis votre dernière modification.</span>
+          }
+          @if (otherDirtyCount() > 0) {
+            <span class="sw-draft-bar-others">Brouillons en attente pour {{ otherDirtyCount() }} autre(s) cible(s).</span>
+          }
+        </div>
+        <div class="sw-draft-bar-actions">
+          <button
+            type="button"
+            class="sw-btn-sm"
+            [disabled]="saving()"
+            (click)="discardChanges()"
+          >
+            Annuler
+          </button>
+          <button
+            type="button"
+            class="sw-btn-sm sw-btn-primary"
+            [disabled]="saving() || permissionsLocked()"
+            (click)="save()"
+          >
+            Enregistrer
+          </button>
+        </div>
+      </section>
+    }
 
     <!-- Sélecteur de mode : par utilisateur ou par rôle -->
     <section class="sw-card" aria-label="Mode de configuration">
@@ -1026,6 +1061,51 @@ interface FeatureCategory {
         margin-left: 2px;
       }
 
+      .sw-draft-bar {
+        position: sticky;
+        bottom: 0;
+        z-index: 20;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 12px 24px;
+        margin-top: 16px;
+        margin-bottom: 16px;
+      }
+
+      .sw-draft-bar-content {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 16px;
+      }
+
+      .sw-draft-bar-title {
+        font-weight: 600;
+        color: #0B1332;
+      }
+
+      .sw-draft-bar-text {
+        color: #5B6B8A;
+      }
+
+      .sw-draft-bar-warning {
+        color: #AA9E39;
+        font-weight: 500;
+      }
+
+      .sw-draft-bar-others {
+        color: #5B6B8A;
+        font-style: italic;
+      }
+
+      .sw-draft-bar-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
       .sw-lock-dot {
         display: inline-block;
         width: 6px;
@@ -1046,6 +1126,7 @@ export class PrivilegesPage implements OnInit {
   private readonly session = inject(SessionStore);
   private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
+  private readonly draft = inject(PrivilegesDraftService);
 
   readonly users = signal<User[]>([]);
   readonly userOptions = signal<{ value: number; label: string }[]>([]);
@@ -1077,6 +1158,26 @@ export class PrivilegesPage implements OnInit {
   readonly grantedPermissions = signal<Set<string>>(new Set());
   readonly isCustomized = signal(false);
   readonly saving = signal(false);
+  readonly baseline = signal<Set<string>>(new Set());
+  readonly loadedTarget = signal<{ mode: PrivilegesMode; id: number } | null>(null);
+  readonly serverChangedWarning = signal(false);
+  readonly otherDirtyCount = signal(0);
+
+  readonly diff = computed(() => diffPermissions(this.baseline(), this.grantedPermissions()));
+  readonly changesCount = computed(() => this.diff().count);
+  readonly isDirty = computed(() => this.changesCount() > 0 && !this.permissionsLocked());
+
+  private readonly syncDraftEffect = effect(() => {
+    const t = this.loadedTarget();
+    const perms = this.grantedPermissions();
+    if (!t || !this.permissionsLoaded()) return;
+    untracked(() => {
+      this.draft.update(t.mode, t.id, perms);
+      this.otherDirtyCount.set(
+        this.draft.dirtyTargets().filter((d) => !(d.mode === t.mode && d.targetId === t.id)).length,
+      );
+    });
+  });
 
   readonly featureCategories: FeatureCategory[] = [
     {
@@ -1151,6 +1252,16 @@ export class PrivilegesPage implements OnInit {
   }
 
   ngOnInit(): void {
+    const active = this.draft.getActive();
+    let activeUserId: number | null = null;
+    if (active) {
+      this.mode.set(active.mode);
+      if (active.mode === 'role') {
+        this.selectedRoleId.set(active.targetId);
+      } else {
+        activeUserId = active.targetId;
+      }
+    }
     this.sageSvc.list().subscribe((dbs) => this.sageDbs.set(dbs));
     this.pointeuseSvc.list().subscribe((dbs) => this.pointeuseDbs.set(dbs));
 
@@ -1158,16 +1269,31 @@ export class PrivilegesPage implements OnInit {
       this.users.set(users);
       this.userOptions.set(users.map((u) => ({ value: u.id, label: `${u.nom} (${u.login})` })));
       if (users.length) {
-        this.selectedUserId.set(users[0].id);
-        this.loadUserPermissions(users[0].id);
+        if (this.mode() === 'user') {
+          const targetUser = (activeUserId !== null ? users.find((u) => u.id === activeUserId) : null) ?? users[0];
+          this.selectedUserId.set(targetUser.id);
+          this.loadUserPermissions(targetUser.id);
+        } else {
+          if (this.selectedUserId() === null) {
+            this.selectedUserId.set(users[0].id);
+          }
+        }
+
       }
     });
 
     this.rolesSvc.list().subscribe({
       next: (roles) => {
         this.roles.set(roles);
-        if (roles.length && this.selectedRoleId() === null) {
-          this.selectedRoleId.set(roles[0].id);
+        if (roles.length) {
+          const currentRoleId = this.selectedRoleId();
+          const validRole = currentRoleId !== null ? roles.find((r) => r.id === currentRoleId) : null;
+          const chosenRoleId = validRole ? validRole.id : roles[0].id;
+          this.selectedRoleId.set(chosenRoleId);
+          if (this.mode() === 'role') {
+            this.loadRolePermissions(chosenRoleId);
+          }
+
         }
       },
       error: () => this.toast.error('Impossible de charger la liste des rôles.'),
@@ -1194,13 +1320,19 @@ export class PrivilegesPage implements OnInit {
   }
 
   private loadRolePermissions(roleId: number): void {
+    this.draft.setActive('role', roleId);
     const requestId = this.beginPermissionsLoad();
     this.privSvc.getRolePermissions(roleId).subscribe({
       next: (res) => {
         if (requestId !== this.permissionsRequestId) return;
         this.permissionsLoading.set(false);
         this.permissionsLoaded.set(true);
-        this.grantedPermissions.set(new Set(res.grantedPermissions ?? []));
+
+        const r = this.draft.refreshBaseline('role', roleId, res.grantedPermissions ?? []);
+        this.baseline.set(r.baseline);
+        this.grantedPermissions.set(r.working);
+        this.serverChangedWarning.set(r.dirty && r.serverChanged);
+        this.loadedTarget.set({ mode: 'role', id: roleId });
         this.isRoleConfigured.set(res.isConfigured);
       },
       error: () => {
@@ -1219,13 +1351,19 @@ export class PrivilegesPage implements OnInit {
   }
 
   private loadUserPermissions(userId: number): void {
+    this.draft.setActive('user', userId);
     const requestId = this.beginPermissionsLoad();
     this.privSvc.byUser(userId).subscribe({
       next: (res) => {
         if (requestId !== this.permissionsRequestId) return;
         this.permissionsLoading.set(false);
         this.permissionsLoaded.set(true);
-        this.grantedPermissions.set(new Set(res.grantedPermissions ?? []));
+
+        const r = this.draft.refreshBaseline('user', userId, res.grantedPermissions ?? []);
+        this.baseline.set(r.baseline);
+        this.grantedPermissions.set(r.working);
+        this.serverChangedWarning.set(r.dirty && r.serverChanged);
+        this.loadedTarget.set({ mode: 'user', id: userId });
         this.isCustomized.set(res.isCustomized);
       },
       error: () => {
@@ -1243,6 +1381,9 @@ export class PrivilegesPage implements OnInit {
     this.grantedPermissions.set(new Set());
     this.isCustomized.set(false);
     this.isRoleConfigured.set(true);
+    this.loadedTarget.set(null);
+    this.baseline.set(new Set());
+    this.serverChangedWarning.set(false);
     return this.permissionsRequestId;
   }
 
@@ -1250,7 +1391,7 @@ export class PrivilegesPage implements OnInit {
     this.mode() === 'role' ? isAdminRole(this.selectedRoleId()) : isAdminRole(this.selectedUser()?.roleId),
   );
   readonly roleEditLocked = computed(
-    () => this.mode() === 'role' && !canEditRolePermissions(this.session.session()?.roleId, this.selectedRoleId()),
+    () => !this.adminLocked() && this.mode() === 'role' && !canEditRolePermissions(this.session.session()?.roleId, this.selectedRoleId()),
   );
   readonly permissionsLocked = computed(
     () => this.adminLocked() || this.roleEditLocked() || this.permissionsLoading() || !this.permissionsLoaded(),
@@ -1492,11 +1633,14 @@ export class PrivilegesPage implements OnInit {
     const targetName = target ? `${target.nom} (${target.login})` : `Utilisateur #${userId}`;
     this.privSvc.saveUserPermissions(userId, perms).subscribe({
       next: () => {
+        this.draft.markSaved('user', userId, perms);
         this.saving.set(false);
         if (this.saveTargetChanged('user', userId, requestId)) {
           this.toast.success(`Droits enregistrés pour ${targetName}.`);
           return;
         }
+        this.baseline.set(new Set(perms));
+        this.serverChangedWarning.set(false);
         this.isCustomized.set(true);
         if (currentSessionUser && currentSessionUser.userId === userId) {
           this.session.setPermissions(perms, true);
@@ -1527,6 +1671,11 @@ export class PrivilegesPage implements OnInit {
     if (!canEditRolePermissions(this.session.session()?.roleId, roleId)) return;
     if (isAdminRole(roleId)) return;
 
+    if (this.users().length === 0) {
+      this.toast.error("Liste des utilisateurs indisponible : impossible de calculer l'impact du changement.");
+      return;
+    }
+
     const count = countUsersOfRole(this.users(), roleId);
     if (!window.confirm(`${buildRoleImpactMessage(count)}\n\nConfirmer l'enregistrement ?`)) return;
 
@@ -1536,11 +1685,14 @@ export class PrivilegesPage implements OnInit {
     const targetName = this.selectedRoleLabel();
     this.privSvc.saveRolePermissions(roleId, perms).subscribe({
       next: () => {
+        this.draft.markSaved('role', roleId, perms);
         this.saving.set(false);
         if (this.saveTargetChanged('role', roleId, requestId)) {
           this.toast.success(`Droits enregistrés pour ${targetName}.`);
           return;
         }
+        this.baseline.set(new Set(perms));
+        this.serverChangedWarning.set(false);
         this.loadRolePermissions(roleId);
         this.toast.success('Droits du rôle enregistrés.');
       },
@@ -1553,6 +1705,24 @@ export class PrivilegesPage implements OnInit {
         this.toast.error(extractErrorMessage(err));
       },
     });
+  }
+
+  @HostListener('window:beforeunload', ['$event'])
+  beforeUnload(event: BeforeUnloadEvent): void {
+    if (this.draft.hasDirty()) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  }
+
+  discardChanges(): void {
+    if (!this.isDirty()) return;
+    const target = this.loadedTarget();
+    if (!target) return;
+    if (!window.confirm('Annuler les modifications non enregistrées ?')) return;
+    this.draft.discard(target.mode, target.id);
+    this.grantedPermissions.set(new Set(this.baseline()));
+    this.serverChangedWarning.set(false);
   }
 
   getRoleLabel(roleId: number): string {

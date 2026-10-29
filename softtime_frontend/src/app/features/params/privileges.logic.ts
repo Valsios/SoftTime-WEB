@@ -46,3 +46,34 @@ export function extractErrorMessage(err: unknown): string {
   if (typeof message === 'string' && message.trim()) return message;
   return fallback;
 }
+
+/** Calcule les différences entre la base de référence et les droits de travail. */
+export function diffPermissions(
+  baseline: Iterable<string>,
+  working: Iterable<string>,
+): { added: string[]; removed: string[]; count: number } {
+  const baseSet = new Set(baseline);
+  const workSet = new Set(working);
+  const added: string[] = [];
+  const removed: string[] = [];
+
+  for (const permission of workSet) {
+    if (!baseSet.has(permission)) {
+      added.push(permission);
+    }
+  }
+  for (const permission of baseSet) {
+    if (!workSet.has(permission)) {
+      removed.push(permission);
+    }
+  }
+
+  added.sort();
+  removed.sort();
+
+  return {
+    added,
+    removed,
+    count: added.length + removed.length,
+  };
+}
