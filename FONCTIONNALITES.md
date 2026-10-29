@@ -200,6 +200,11 @@ s'affiche « Semaine 27 (30/06 - 06/07/2025) » (année ISO, donc correcte au pa
   `GET /api/import-templates/{key}`) et sont alignés sur les parseurs : un modèle importé tel quel est accepté
   par l'endpoint correspondant (vérifié par les tests `ImportTemplateTests` / `ImportTemplateImportTests`).
   Les modèles « matrice » (planning) sont datés sur la semaine du lundi courant.
+- **Bilan d'import** : après chaque import, le message indique le nombre de lignes importées et de lignes
+  ignorées (ex. « 1 affectation(s) importée(s), 2 ligne(s) ignorée(s). »). Un toast d'avertissement (8 s)
+  s'affiche dès qu'une ligne est ignorée. Pour les affectations, le message nomme la catégorie ou le
+  matricule introuvable (ex. « matricule(s) introuvable(s) : 961 »). Les lignes d'en-tête CSV ne sont pas
+  comptées comme ignorées.
 - **Export Excel** : grilles listées (états, HS, cantine, frais, etc.).
 
 ---

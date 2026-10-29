@@ -10,6 +10,7 @@ import { ShiftsService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, ImportTemplatesModal, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal } from '../../shared/components';
 import { asRow } from '../../shared/utils/date';
+import { toastImportResult } from '../../shared/utils/import-result';
 
 @Component({
   selector: 'app-shifts',
@@ -144,7 +145,14 @@ export class ShiftsPage implements OnInit {
     const file = input.files?.[0];
     if (!file) return;
     this.svc.importExcel(file).subscribe({
-      next: (r) => { this.toast.success(r.message || `${r.imported} importé(s).`); this.reload(); },
+      next: (r) => {
+        toastImportResult(
+          this.toast,
+          r,
+          `${r.imported} shift(s) importé(s), ${r.skipped} ligne(s) ignorée(s).`,
+        );
+        this.reload();
+      },
     });
     input.value = '';
   }

@@ -10,6 +10,7 @@ import { AffectationsService, CategoriesService } from '../../shared/services/ca
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, ImportTemplatesModal, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, SoftSelect } from '../../shared/components';
 import { asRow } from '../../shared/utils/date';
+import { toastImportResult } from '../../shared/utils/import-result';
 
 @Component({
   selector: 'app-affectations',
@@ -203,7 +204,14 @@ export class AffectationsPage implements OnInit {
     const file = input.files?.[0];
     if (!file) return;
     this.svc.importExcel(file).subscribe({
-      next: (r) => { this.toast.success(r.message || `${r.imported} importé(s).`); this.loadPage(); },
+      next: (r) => {
+        toastImportResult(
+          this.toast,
+          r,
+          `${r.imported} affectation(s) importée(s), ${r.skipped} ligne(s) ignorée(s).`,
+        );
+        this.loadPage();
+      },
     });
     input.value = '';
   }

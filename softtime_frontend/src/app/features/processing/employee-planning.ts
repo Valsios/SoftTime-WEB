@@ -23,6 +23,7 @@ import {
   SoftToggle,
 } from '../../shared/components';
 import { asRow, fmtDate, monthStart, today } from '../../shared/utils/date';
+import { toastImportResult } from '../../shared/utils/import-result';
 
 @Component({
   selector: 'app-employee-planning',
@@ -367,7 +368,11 @@ export class EmployeePlanningPage implements OnInit {
     if (!file) return;
     this.svc.importExcel(file).subscribe({
       next: (r) => {
-        this.toast.success(r.message || `${r.imported} ligne(s) importée(s).`);
+        toastImportResult(
+          this.toast,
+          r,
+          `${r.imported} ligne(s) de planning importée(s), ${r.skipped} élément(s) ignoré(s).`,
+        );
         this.activeTab.set('planning');
         this.loadPlanning();
         this.loadEmployeeRows();
@@ -383,7 +388,7 @@ export class EmployeePlanningPage implements OnInit {
     if (!file) return;
     this.svc.generateFromCategory(file).subscribe({
       next: (r) => {
-        this.toast.success(r.message || `${r.imported} jour(s) généré(s).`);
+        toastImportResult(this.toast, r, `${r.imported} jour(s) généré(s), ${r.skipped} ignoré(s).`);
         this.activeTab.set('planning');
         this.loadPlanning();
         this.loadEmployeeRows();
@@ -399,7 +404,7 @@ export class EmployeePlanningPage implements OnInit {
     if (!file) return;
     this.svc.generate(file).subscribe({
       next: (r) => {
-        this.toast.success(r.message || `${r.imported} jour(s) généré(s).`);
+        toastImportResult(this.toast, r, `${r.imported} jour(s) généré(s), ${r.skipped} ignoré(s).`);
         this.activeTab.set('planning');
         this.loadPlanning();
         this.loadEmployeeRows();

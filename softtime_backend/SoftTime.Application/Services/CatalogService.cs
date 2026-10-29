@@ -1499,13 +1499,17 @@ public class CatalogService
             var badgeFold = ExcelCells.Fold(badge);
             if (badgeFold is "BADGE" or "POINTEUSE" or "NPOINTEUSE" or "NUMERO")
             {
+                // En-tête structurel : ignoré, mais pas compté comme une ligne de données ignorée.
+                continue;
+            }
+            if (string.IsNullOrWhiteSpace(matricule))
+            {
                 skipped++;
                 continue;
             }
-            if (string.IsNullOrWhiteSpace(matricule)
-                || ExcelCells.Fold(matricule) is "MATRICULE" or "MATRICULESAGE")
+            if (ExcelCells.Fold(matricule) is "MATRICULE" or "MATRICULESAGE")
             {
-                skipped++;
+                // En-tête décalé (colonne matricule) : même traitement que l'en-tête.
                 continue;
             }
             var card = existing.FirstOrDefault(c => string.Equals(c.SAGE_MATRICULE, matricule, StringComparison.OrdinalIgnoreCase));
@@ -1530,7 +1534,8 @@ public class CatalogService
             imported++;
         }
         await _uow.SaveChangesAsync(ct);
-        return new ImportResultDto(imported, skipped, "Correspondances importées.");
+        return new ImportResultDto(imported, skipped,
+            $"{imported} correspondance(s) importée(s), {skipped} ligne(s) ignorée(s).");
     }
 
     public async Task<IReadOnlyList<CategoryDto>> ListCategoriesAsync(CancellationToken ct = default)
@@ -1657,6 +1662,11 @@ public class CatalogService
         var existing = await repo.ListAsync(a => a.BDD_SAGE == _tenant.SageDb, ct);
         var imported = 0;
         var skipped = 0;
+        var lignesVides = 0;
+        var categoriesManquantes = 0;
+        var matriculesManquants = 0;
+        var categoriesIntrouvables = new List<string>();
+        var matriculesIntrouvables = new List<string>();
         foreach (var row in rows)
         {
             var catName = ExcelCells.Get(row, "Categorie", "CATEGORIE", "Intitule", "Intitulé")
@@ -1665,13 +1675,23 @@ public class CatalogService
                     ?? (row.Count > 1 ? row.Values.Skip(1).FirstOrDefault() : null);
             if (string.IsNullOrWhiteSpace(catName) || string.IsNullOrWhiteSpace(mat))
             {
+                lignesVides++;
                 skipped++;
                 continue;
             }
             var cat = cats.FirstOrDefault(c => string.Equals(c.INTITULE?.Trim(), catName.Trim(), StringComparison.OrdinalIgnoreCase));
-            var card = cards.FirstOrDefault(c => string.Equals(c.SAGE_MATRICULE?.Trim(), mat.Trim(), StringComparison.OrdinalIgnoreCase));
-            if (cat == null || card == null)
+            if (cat == null)
             {
+                categoriesManquantes++;
+                AjouterValeurDistincte(categoriesIntrouvables, catName);
+                skipped++;
+                continue;
+            }
+            var card = cards.FirstOrDefault(c => string.Equals(c.SAGE_MATRICULE?.Trim(), mat.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (card == null)
+            {
+                matriculesManquants++;
+                AjouterValeurDistincte(matriculesIntrouvables, mat);
                 skipped++;
                 continue;
             }
@@ -1696,8 +1716,30 @@ public class CatalogService
             imported++;
         }
         await _uow.SaveChangesAsync(ct);
-        return new ImportResultDto(imported, skipped, "Affectations importées.");
+        var raisons = new List<string>();
+        if (lignesVides > 0)
+            raisons.Add($"{lignesVides} ligne(s) vide(s)");
+        if (categoriesManquantes > 0)
+            raisons.Add($"{categoriesManquantes} catégorie(s) introuvable(s) : {ApercuValeurs(categoriesIntrouvables)}");
+        if (matriculesManquants > 0)
+            raisons.Add($"{matriculesManquants} matricule(s) introuvable(s) : {ApercuValeurs(matriculesIntrouvables)}");
+        var message = $"{imported} affectation(s) importée(s), {skipped} ligne(s) ignorée(s)";
+        if (raisons.Count > 0)
+            message += $" ({string.Join(" ; ", raisons)})";
+        return new ImportResultDto(imported, skipped, message + ".");
     }
+
+    /// <summary>Ajoute une valeur à afficher dans le bilan, sans doublon (comparaison insensible à la casse).</summary>
+    private static void AjouterValeurDistincte(List<string> valeurs, string valeur)
+    {
+        var propre = valeur.Trim();
+        if (!valeurs.Contains(propre, StringComparer.OrdinalIgnoreCase))
+            valeurs.Add(propre);
+    }
+
+    /// <summary>Liste les premières valeurs fautives pour le message d'import.</summary>
+    private static string ApercuValeurs(IReadOnlyList<string> valeurs)
+        => string.Join(", ", valeurs.Take(5)) + (valeurs.Count > 5 ? ", …" : string.Empty);
 
     public async Task DeleteAffectationAsync(int id, CancellationToken ct = default)
     {

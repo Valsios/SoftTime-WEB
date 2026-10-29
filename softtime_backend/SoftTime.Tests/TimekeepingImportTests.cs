@@ -49,6 +49,7 @@ public class TimekeepingImportTests
 
         Assert.Equal(1, resultat.Imported);
         Assert.Equal(1, resultat.Skipped);
+        Assert.Equal("1 pointage(s) importé(s), 1 ligne(s) ignorée(s).", resultat.Message);
         Assert.Single(contexte.Pointages);
     }
 
@@ -90,6 +91,8 @@ public class TimekeepingImportTests
         Assert.Equal(1, premier.Imported);
         Assert.Equal(0, second.Imported);
         Assert.Equal(1, second.Skipped);
+        Assert.Equal("1 pointage(s) importé(s), 0 ignoré(s).", premier.Message);
+        Assert.Equal("0 pointage(s) importé(s), 1 ignoré(s).", second.Message);
         Assert.Single(contexte.Pointages);
     }
 }

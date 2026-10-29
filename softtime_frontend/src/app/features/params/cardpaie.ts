@@ -10,6 +10,7 @@ import { CardPaieService, DepartementServiceService } from '../../shared/service
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, ImportTemplatesModal, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal } from '../../shared/components';
 import { asRow, fmtDate } from '../../shared/utils/date';
+import { toastImportResult } from '../../shared/utils/import-result';
 
 @Component({
   selector: 'app-cardpaie',
@@ -190,7 +191,14 @@ export class CardPaiePage implements OnInit {
     const file = input.files?.[0];
     if (!file) return;
     this.svc.importCsv(file).subscribe({
-      next: (r) => { this.toast.success(r.message || `${r.imported} importé(s).`); this.loadPage(); },
+      next: (r) => {
+        toastImportResult(
+          this.toast,
+          r,
+          `${r.imported} correspondance(s) importée(s), ${r.skipped} ligne(s) ignorée(s).`,
+        );
+        this.loadPage();
+      },
     });
     input.value = '';
   }

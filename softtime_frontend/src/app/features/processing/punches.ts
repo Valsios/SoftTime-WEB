@@ -7,6 +7,7 @@ import { PunchesService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, ImportTemplatesModal, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, PeriodFilter } from '../../shared/components';
 import { asRow, fmtDate } from '../../shared/utils/date';
+import { toastImportResult } from '../../shared/utils/import-result';
 
 @Component({
   selector: 'app-punches',
@@ -136,7 +137,7 @@ export class PunchesPage {
       matriculeTo: this.lastFilter.matriculeTo,
     }).subscribe({
       next: (r) => {
-        this.toast.success(r.message || `${r.imported} importé(s).`);
+        toastImportResult(this.toast, r, `${r.imported} pointage(s) importé(s), ${r.skipped} ignoré(s).`);
         // Le desktop enchaîne import et pré-traitement : on reproduit ce parcours.
         this.runPreprocess();
       },
@@ -167,7 +168,11 @@ export class PunchesPage {
     if (!file) return;
     this.svc.importExcel(file).subscribe({
       next: (r) => {
-        this.toast.success(r.message || `${r.imported} importé(s).`);
+        toastImportResult(
+          this.toast,
+          r,
+          `${r.imported} pointage(s) importé(s), ${r.skipped} ligne(s) ignorée(s).`,
+        );
         if (this.lastFilter) this.runPreprocess();
         else this.refresh();
       },

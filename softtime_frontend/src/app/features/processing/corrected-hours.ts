@@ -10,6 +10,7 @@ import { CorrectedHoursService } from '../../shared/services/processing.service'
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, ImportTemplatesModal, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, PeriodFilter } from '../../shared/components';
 import { asRow, fmtDate } from '../../shared/utils/date';
+import { toastImportResult } from '../../shared/utils/import-result';
 
 @Component({
   selector: 'app-corrected-hours',
@@ -179,7 +180,11 @@ export class CorrectedHoursPage {
     if (!file) return;
     this.svc.importExcel(file).subscribe({
       next: (r) => {
-        this.toast.success(r.message || `${r.imported} importé(s).`);
+        toastImportResult(
+          this.toast,
+          r,
+          `${r.imported} correction(s) importée(s), ${r.skipped} ligne(s) ignorée(s).`,
+        );
         this.reload();
       },
     });
