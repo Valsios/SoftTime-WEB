@@ -6,6 +6,7 @@ export * from './soft-select';
 export * from './soft-toggle';
 export * from './soft-badge';
 export * from './soft-modal';
+export * from './import-templates-modal';
 export * from './data-table';
 export * from './page-header';
 export * from './toast-host';

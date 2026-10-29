@@ -8,13 +8,14 @@ import { Droit } from '../../core/rights';
 import { Shift, PageChangeEvent } from '../../shared/models';
 import { ShiftsService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
-import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal } from '../../shared/components';
+import { Column, DataTable, ImportTemplatesModal, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal } from '../../shared/components';
 import { asRow } from '../../shared/utils/date';
+import { toastImportResult } from '../../shared/utils/import-result';
 
 @Component({
   selector: 'app-shifts',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput],
+  imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, ImportTemplatesModal],
   template: `
     <page-header title="Shifts" subtitle="Catalogue des shifts">
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
@@ -22,6 +23,7 @@ import { asRow } from '../../shared/utils/date';
         <input #shiftFile type="file" accept=".xlsx,.xls" hidden (change)="onFile($event)" />
         <soft-button variant="secondary" (click)="shiftFile.click()">Import Excel</soft-button>
       </label>
+      <soft-button variant="ghost" (click)="templatesOpen.set(true)">Modèles d'import</soft-button>
       <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter</soft-button>
     </page-header>
     <soft-card>
@@ -56,6 +58,11 @@ import { asRow } from '../../shared/utils/date';
         <soft-button [loading]="saving()" (click)="save()">Enregistrer</soft-button>
       </div>
     </soft-modal>
+    <app-import-templates-modal
+      [open]="templatesOpen()"
+      [keys]="importKeys"
+      (closed)="templatesOpen.set(false)"
+    />
   `,
   styles: [`.form-grid { display: grid; gap: 14px; } .file-btn { cursor: pointer; }`],
 })
@@ -73,6 +80,8 @@ export class ShiftsPage implements OnInit {
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly modal = signal(false);
+  readonly templatesOpen = signal(false);
+  readonly importKeys = ['shifts'];
   readonly editId = signal<number | null>(null);
   pageSize = 50;
   readonly rows = signal<Record<string, unknown>[]>([]);
@@ -136,7 +145,14 @@ export class ShiftsPage implements OnInit {
     const file = input.files?.[0];
     if (!file) return;
     this.svc.importExcel(file).subscribe({
-      next: (r) => { this.toast.success(r.message || `${r.imported} importé(s).`); this.reload(); },
+      next: (r) => {
+        toastImportResult(
+          this.toast,
+          r,
+          `${r.imported} shift(s) importé(s), ${r.skipped} ligne(s) ignorée(s).`,
+        );
+        this.reload();
+      },
     });
     input.value = '';
   }

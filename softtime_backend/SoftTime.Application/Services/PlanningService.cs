@@ -409,7 +409,8 @@ public class PlanningService
             }
         }
         await _uow.SaveChangesAsync(ct);
-        return new ImportResultDto(imported, skipped, "Planning importé.");
+        return new ImportResultDto(imported, skipped,
+            $"{imported} ligne(s) de planning importée(s), {skipped} élément(s) ignoré(s).");
     }
 
     /// <summary>
@@ -616,7 +617,8 @@ public class PlanningService
             imported++;
         }
         await _uow.SaveChangesAsync(ct);
-        return new ImportResultDto(imported, skipped, "Shifts importés.");
+        return new ImportResultDto(imported, skipped,
+            $"{imported} shift(s) importé(s), {skipped} ligne(s) ignorée(s).");
     }
 
     private bool MatchesSage(string? stored)

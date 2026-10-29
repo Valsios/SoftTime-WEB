@@ -5,13 +5,14 @@ import { ToastService } from '../../core/toast.service';
 import { PunchUpdate, PeriodRequest, PageChangeEvent } from '../../shared/models';
 import { PunchesService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
-import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, PeriodFilter } from '../../shared/components';
+import { Column, DataTable, ImportTemplatesModal, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, PeriodFilter } from '../../shared/components';
 import { asRow, fmtDate } from '../../shared/utils/date';
+import { toastImportResult } from '../../shared/utils/import-result';
 
 @Component({
   selector: 'app-punches',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftInput, SoftModal, PeriodFilter],
+  imports: [FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftInput, SoftModal, PeriodFilter, ImportTemplatesModal],
   template: `
     <page-header title="Pointages" subtitle="Liste, import et traitement des pointages">
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
@@ -22,6 +23,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         <input #punchFile type="file" accept=".xlsx,.xls" hidden (change)="onFile($event)" />
         <soft-button variant="accent" (click)="punchFile.click()">Import Excel</soft-button>
       </label>
+      <soft-button variant="ghost" (click)="templatesOpen.set(true)">Modèles d'import</soft-button>
     </page-header>
 
     <period-filter (search)="onSearch($event)"></period-filter>
@@ -55,6 +57,11 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         <soft-button [loading]="busy()" (click)="saveEdit()">Enregistrer</soft-button>
       </div>
     </soft-modal>
+    <app-import-templates-modal
+      [open]="templatesOpen()"
+      [keys]="importKeys"
+      (closed)="templatesOpen.set(false)"
+    />
   `,
   styles: [`.file-btn { cursor: pointer; } .form-grid { display: grid; gap: 14px; }`],
 })
@@ -68,6 +75,8 @@ export class PunchesPage {
   readonly processing = signal(false);
   readonly busy = signal(false);
   readonly modal = signal(false);
+  readonly templatesOpen = signal(false);
+  readonly importKeys = ['punches'];
   pageSize = 50;
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly page = signal(1);
@@ -128,7 +137,7 @@ export class PunchesPage {
       matriculeTo: this.lastFilter.matriculeTo,
     }).subscribe({
       next: (r) => {
-        this.toast.success(r.message || `${r.imported} importé(s).`);
+        toastImportResult(this.toast, r, `${r.imported} pointage(s) importé(s), ${r.skipped} ignoré(s).`);
         // Le desktop enchaîne import et pré-traitement : on reproduit ce parcours.
         this.runPreprocess();
       },
@@ -159,7 +168,11 @@ export class PunchesPage {
     if (!file) return;
     this.svc.importExcel(file).subscribe({
       next: (r) => {
-        this.toast.success(r.message || `${r.imported} importé(s).`);
+        toastImportResult(
+          this.toast,
+          r,
+          `${r.imported} pointage(s) importé(s), ${r.skipped} ligne(s) ignorée(s).`,
+        );
         if (this.lastFilter) this.runPreprocess();
         else this.refresh();
       },

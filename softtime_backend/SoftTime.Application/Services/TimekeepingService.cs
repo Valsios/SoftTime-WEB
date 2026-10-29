@@ -272,12 +272,12 @@ public class TimekeepingService
             imported++;
         }
         await _uow.SaveChangesAsync(ct);
-        var message = ambiguousBadges.Count == 0
-            ? "Import pointeuse terminé."
-            : $"Import pointeuse terminé. {ambiguousBadges.Count} badge(s) associé(s) à plusieurs salariés ont été ignorés : "
-              + string.Join(", ", ambiguousBadges.Take(10))
-              + (ambiguousBadges.Count > 10 ? ", …" : string.Empty)
-              + ". Corrigez les correspondances paie en double pour importer ces pointages.";
+        var message = $"{imported} pointage(s) importé(s), {skipped} ignoré(s).";
+        if (ambiguousBadges.Count > 0)
+            message += $" {ambiguousBadges.Count} badge(s) associé(s) à plusieurs salariés ont été ignorés : "
+                       + string.Join(", ", ambiguousBadges.Take(10))
+                       + (ambiguousBadges.Count > 10 ? ", …" : string.Empty)
+                       + ". Corrigez les correspondances paie en double pour importer ces pointages.";
         return new ImportResultDto(imported, skipped, message);
     }
 
@@ -298,7 +298,8 @@ public class TimekeepingService
         }
 
         if (parsed.Count == 0)
-            return new ImportResultDto(0, skipped, "Import Excel pointages terminé.");
+            return new ImportResultDto(0, skipped,
+                $"Aucun pointage valide : {skipped} ligne(s) ignorée(s) (matricule, date ou heure manquants).");
 
         var repo = _uow.Repository<T_POINTAGE>();
         var from = parsed.Min(p => p.Jour);
@@ -341,7 +342,8 @@ public class TimekeepingService
             imported++;
         }
         await _uow.SaveChangesAsync(ct);
-        return new ImportResultDto(imported, skipped, "Import Excel pointages terminé.");
+        return new ImportResultDto(imported, skipped,
+            $"{imported} pointage(s) importé(s), {skipped} ligne(s) ignorée(s).");
     }
 
     /// <summary>Filtre tenant pointeuse, en tolérant les lignes héritées sans base renseignée.</summary>
@@ -621,10 +623,15 @@ public class TimekeepingService
         await _tenant.EnsureAuthorizedAsync(ct);
         var repo = _uow.Repository<T_HEURECORRIGER>();
         var imported = 0;
+        var skipped = 0;
         foreach (var row in rows)
         {
             var matr = ExcelCells.Get(row, "Matricule", "MATRICULE", "Matricule SAGE");
-            if (string.IsNullOrWhiteSpace(matr)) continue;
+            if (string.IsNullOrWhiteSpace(matr))
+            {
+                skipped++;
+                continue;
+            }
             ExcelCells.TryDate(ExcelCells.Get(row, "DateEntree", "DATE ENTREE", "Date entrée", "Date in"), out var dIn);
             ExcelCells.TryDate(ExcelCells.Get(row, "DateSortie", "DATE SORTIE", "Date sortie", "Date out"), out var dOut);
             ExcelCells.TryTime(ExcelCells.Get(row, "HeureEntree", "HEURE ENTREE", "Heure entrée"), out var hIn);
@@ -645,7 +652,10 @@ public class TimekeepingService
             imported++;
         }
         await _uow.SaveChangesAsync(ct);
-        return new ImportResultDto(imported, 0, "Import corrections terminé.");
+        var message = $"{imported} correction(s) importée(s), {skipped} ligne(s) ignorée(s)";
+        if (skipped > 0)
+            message += " (matricule manquant)";
+        return new ImportResultDto(imported, skipped, message + ".");
     }
 
     private static void Apply(CorrectedHourDto dto, T_HEURECORRIGER e)
