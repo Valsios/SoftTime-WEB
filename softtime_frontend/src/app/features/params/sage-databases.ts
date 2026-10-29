@@ -72,7 +72,6 @@ export class SageDatabasesPage implements OnInit {
   private requestSeq = 0;
   readonly form = signal<Partial<SageDb>>({});
   readonly columns: Column[] = [
-    { key: 'id', label: 'ID' },
     { key: 'serveur', label: 'Serveur' },
     { key: 'nomBd', label: 'Base' },
     { key: 'typeBase', label: 'Type' },

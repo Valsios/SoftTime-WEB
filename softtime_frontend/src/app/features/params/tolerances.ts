@@ -69,21 +69,30 @@ export class TolerancesPage implements OnInit {
   readonly total = signal(0);
   private requestSeq = 0;
   readonly categoryOptions = signal<{ value: number; label: string }[]>([]);
+  private readonly categoryLabels = new Map<number, string>();
   filterCategoryId: number | null = null;
   form: Partial<Tolerance> = {};
 
   readonly columns: Column[] = [
-    { key: 'categoryId', label: 'Catégorie' },
+    { key: 'categoryName', label: 'Catégorie' },
     { key: 'tolerance', label: 'Tolérance' },
     { key: 'sortie', label: 'Sortie' },
     { key: 'typesTol', label: 'Type sortie', format: (v) => (v ? 'Oui' : 'Non') },
   ];
 
   ngOnInit(): void {
-    this.catSvc.list().subscribe((cats) =>
-      this.categoryOptions.set(cats.map((c) => ({ value: c.id, label: c.intitule ?? `Cat. ${c.id}` }))),
-    );
-    this.loadPage();
+    this.catSvc.list().subscribe({
+      next: (categories) => {
+        const entries = categories.map((category) => ({
+          id: category.id,
+          label: category.intitule ?? `Catégorie #${category.id}`,
+        }));
+        this.categoryOptions.set(entries.map((entry) => ({ value: entry.id, label: entry.label })));
+        for (const entry of entries) this.categoryLabels.set(entry.id, entry.label);
+        this.loadPage();
+      },
+      error: () => this.loadPage(),
+    });
   }
 
   loadPage(): void {
@@ -92,7 +101,14 @@ export class TolerancesPage implements OnInit {
     this.svc.listPaged(this.page(), this.pageSize, this.filterCategoryId ?? undefined).subscribe({
       next: (r) => {
         if (seq !== this.requestSeq) return;
-        this.rows.set(r.items.map(asRow));
+        this.rows.set(
+          r.items.map((tolerance) =>
+            asRow({
+              ...tolerance,
+              categoryName: this.categoryLabels.get(tolerance.categoryId) ?? '—',
+            }),
+          ),
+        );
         this.total.set(r.total);
         this.page.set(r.page);
         this.loading.set(false);
@@ -113,9 +129,24 @@ export class TolerancesPage implements OnInit {
   }
 
   openCreate(): void { this.editId.set(null); this.form = { categoryId: this.categoryOptions()[0]?.value ?? 0, tolerance: 0, typesTol: false }; this.modal.set(true); }
-  openEdit(row: Record<string, unknown>): void { this.editId.set(row['id'] as number); this.form = { ...(row as unknown as Tolerance) }; this.modal.set(true); }
+  openEdit(row: Record<string, unknown>): void {
+    this.ensureCategoryOption(row['categoryId'] as number);
+    this.editId.set(row['id'] as number);
+    this.form = {
+      id: row['id'] as number,
+      categoryId: row['categoryId'] as number,
+      tolerance: row['tolerance'] as number,
+      typesTol: row['typesTol'] as boolean,
+      sortie: (row['sortie'] as number | null) ?? null,
+    };
+    this.modal.set(true);
+  }
 
   save(): void {
+    if (!this.form.categoryId) {
+      this.toast.error('Sélectionnez une catégorie.');
+      return;
+    }
     this.saving.set(true);
     const id = this.editId();
     const dto = this.form as Tolerance;
@@ -128,5 +159,11 @@ export class TolerancesPage implements OnInit {
     this.svc.remove(row['id'] as number).subscribe({
       next: () => { this.toast.success('Supprimé.'); this.loadPage(); },
     });
+  }
+
+  /** Conserve la catégorie courante même si elle n'est plus dans la liste chargée. */
+  private ensureCategoryOption(id: number | null | undefined): void {
+    if (!id || this.categoryOptions().some((option) => Number(option.value) === id)) return;
+    this.categoryOptions.update((options) => [{ value: id, label: 'Catégorie introuvable' }, ...options]);
   }
 }
