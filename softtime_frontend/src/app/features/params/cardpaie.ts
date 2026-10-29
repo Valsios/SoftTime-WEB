@@ -8,13 +8,13 @@ import { Droit } from '../../core/rights';
 import { CardPaie, DepartementService, PageChangeEvent } from '../../shared/models';
 import { CardPaieService, DepartementServiceService } from '../../shared/services/catalog.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
-import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal } from '../../shared/components';
+import { Column, DataTable, ImportTemplatesModal, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal } from '../../shared/components';
 import { asRow, fmtDate } from '../../shared/utils/date';
 
 @Component({
   selector: 'app-cardpaie',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput],
+  imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, ImportTemplatesModal],
   template: `
     <page-header title="Correspondances paie" subtitle="Cartes SAGE ↔ pointeuse">
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
@@ -22,6 +22,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         <input #csvFile type="file" accept=".csv,.txt" hidden (change)="onCsv($event)" />
         <soft-button variant="secondary" (click)="csvFile.click()">Import CSV</soft-button>
       </label>
+      <soft-button variant="ghost" (click)="templatesOpen.set(true)">Modèles d'import</soft-button>
       <soft-button variant="secondary" [loading]="autoMapping()" [disabled]="autoMapping()" (click)="autoMap()">Auto-mapping</soft-button>
       <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter</soft-button>
     </page-header>
@@ -51,6 +52,11 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         <soft-button [loading]="saving()" (click)="save()">Enregistrer</soft-button>
       </div>
     </soft-modal>
+    <app-import-templates-modal
+      [open]="templatesOpen()"
+      [keys]="importKeys"
+      (closed)="templatesOpen.set(false)"
+    />
   `,
   styles: [`.form-grid { display: grid; gap: 14px; } .file-btn { cursor: pointer; }`],
 })
@@ -69,6 +75,8 @@ export class CardPaiePage implements OnInit {
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly modal = signal(false);
+  readonly templatesOpen = signal(false);
+  readonly importKeys = ['correspondences'];
   readonly editId = signal<number | null>(null);
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly page = signal(1);

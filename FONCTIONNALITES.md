@@ -193,7 +193,13 @@ s'affiche « Semaine 27 (30/06 - 06/07/2025) » (année ISO, donc correcte au pa
 ## 8. Import / export
 
 - **Import Excel** : planning, shifts, pointages, corrections, affectations.  
-- **Import CSV** : correspondances badge ; matricule.  
+- **Import CSV** : correspondances badge ; matricule ; génération de planning par catégorie ou par matricule.  
+- **Modèles d'import** : chaque écran d'import propose un bouton **« Modèles d'import »** qui affiche la matrice des
+  colonnes attendues (obligatoire, format, exemple, remarque), un exemple de fichier et les règles, avec le
+  **modèle téléchargeable** (`.xlsx` ou `.csv`). Les modèles viennent du backend (`GET /api/import-templates`,
+  `GET /api/import-templates/{key}`) et sont alignés sur les parseurs : un modèle importé tel quel est accepté
+  par l'endpoint correspondant (vérifié par les tests `ImportTemplateTests` / `ImportTemplateImportTests`).
+  Les modèles « matrice » (planning) sont datés sur la semaine du lundi courant.
 - **Export Excel** : grilles listées (états, HS, cantine, frais, etc.).
 
 ---
