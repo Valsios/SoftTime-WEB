@@ -171,6 +171,60 @@ public class TimekeepingImportTests
         Assert.Empty(contexte.Uow.Get<T_HEUREANOMALIE>().Items);
     }
 
+    private static void Pointage(Contexte contexte, DateTime jour)
+        => contexte.Pointages.Add(new T_POINTAGE
+        {
+            NOM_BDD_SAGE = "SAGE_TEST",
+            NOM_BDD_POINTEUSE = "PTE_TEST",
+            MATRICULE_SAGE = "001",
+            DATE_POINTAGE = jour.Date,
+            HEURE_POINTAGE = new TimeSpan(8, 0, 0)
+        });
+
+    [Fact]
+    public async Task PurgePointages_NeTouchePasAuLendemainDeLaPeriode()
+    {
+        var contexte = new Contexte();
+        Pointage(contexte, Lundi);
+        Pointage(contexte, Lundi.AddDays(1));
+
+        await contexte.Service.PurgePunchesAsync(new PeriodRequest(null, null, Lundi, Lundi));
+
+        Assert.Equal(Lundi.AddDays(1).Date, Assert.Single(contexte.Pointages).DATE_POINTAGE);
+    }
+
+    [Fact]
+    public async Task PurgePointages_SemaineValideeQuiChevaucheLaPeriode_EstRefusee()
+    {
+        var contexte = new Contexte();
+        ValiderSemaine(contexte, Lundi);
+        var mercredi = Lundi.AddDays(2);
+        Pointage(contexte, mercredi);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => contexte.Service.PurgePunchesAsync(new PeriodRequest(null, null, mercredi, mercredi)));
+        Assert.Single(contexte.Pointages);
+    }
+
+    [Fact]
+    public async Task PurgePointages_CalculExoImpoMensuelEnCours_EstRefusee()
+    {
+        var contexte = new Contexte();
+        contexte.Uow.Get<T_HSExoImp>().Items.Add(new T_HSExoImp
+        {
+            Matricule = "001",
+            BDD_SAGE = "SAGE_TEST",
+            PeriodeDebut = new DateTime(2026, 9, 1),
+            PeriodeFin = new DateTime(2026, 9, 30)
+        });
+        var jour = new DateTime(2026, 9, 8);
+        Pointage(contexte, jour);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => contexte.Service.PurgePunchesAsync(new PeriodRequest(null, null, jour, jour)));
+        Assert.Single(contexte.Pointages);
+    }
+
     [Fact]
     public async Task ValidationAnomalie_SemaineValidee_EstRefusee()
     {

@@ -180,10 +180,25 @@ public class PlanningServiceTests
     }
 
     [Fact]
-    public async Task SaveEmployeePlanning_PauseNull_DevientZero()
+    public async Task SaveEmployeePlanning_PauseNonDefinie_ResteNull()
     {
+        // NULL = pause non définie (le calcul HS retombe sur la catégorie) : elle n'est plus forcée à 00:00.
         var contexte = new Contexte();
         contexte.Shift(1, 8, 0, 17, 0, pauseHeure: null);
+
+        await contexte.Service.SaveEmployeePlanningAsync(new[]
+        {
+            new EmployeePlanningDto(0, 1, 1, Lundi, null, null, null, false)
+        });
+
+        Assert.Null(Assert.Single(contexte.Planning).Pause);
+    }
+
+    [Fact]
+    public async Task SaveEmployeePlanning_PauseZero_SignifieAucunePause()
+    {
+        var contexte = new Contexte();
+        contexte.Shift(1, 8, 0, 17, 0, pauseHeure: 0);
 
         await contexte.Service.SaveEmployeePlanningAsync(new[]
         {

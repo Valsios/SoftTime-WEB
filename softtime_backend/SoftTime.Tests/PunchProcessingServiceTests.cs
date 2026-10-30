@@ -421,4 +421,42 @@ public class PunchProcessingServiceTests
         Assert.Contains(validee, contexte.Corrections);
         Assert.Equal(1, resultat.JoursIgnores);
     }
+
+    [Fact]
+    public async Task Multi_NuitDuDernierJour_RetrouveSaSortieDuLendemain()
+    {
+        var contexte = new Contexte(multi: true);
+        contexte.Planning(Lundi, Lundi.AddHours(22), Lundi.AddDays(1).AddHours(6));
+        contexte.Pointage(Lundi, 22);
+        contexte.Pointage(Lundi.AddDays(1), 6);
+
+        await contexte.Traiter(Lundi, Lundi);
+
+        Assert.Empty(contexte.Anomalies);
+        var correction = Assert.Single(contexte.Corrections);
+        Assert.Equal(new TimeSpan(22, 0, 0), correction.HENTREE);
+        Assert.Equal(Lundi.AddDays(1).Date, correction.DATE_POINTAGE_OUT);
+        Assert.Equal(new TimeSpan(6, 0, 0), correction.HSORTIE);
+    }
+
+    [Fact]
+    public async Task Multi_SortieDeNuitDeLaVeille_NEstPasRetraiteeLePremierJour()
+    {
+        var contexte = new Contexte(multi: true);
+        var mardi = Lundi.AddDays(1);
+        contexte.Planning(Lundi, Lundi.AddHours(22), mardi.AddHours(6));
+        contexte.Planning(mardi, mardi.AddHours(22), mardi.AddDays(1).AddHours(6));
+        contexte.Pointage(Lundi, 22);
+        contexte.Pointage(mardi, 6);
+        contexte.Pointage(mardi, 22);
+        contexte.Pointage(mardi.AddDays(1), 6);
+
+        await contexte.Traiter(mardi, mardi);
+
+        // La sortie de 06:00 appartient à la nuit de lundi : mardi ne garde que sa propre nuit.
+        Assert.Empty(contexte.Anomalies);
+        var correction = Assert.Single(contexte.Corrections);
+        Assert.Equal(mardi.Date, correction.DATE_POINTAGE_IN);
+        Assert.Equal(new TimeSpan(22, 0, 0), correction.HENTREE);
+    }
 }

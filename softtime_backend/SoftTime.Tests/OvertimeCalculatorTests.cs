@@ -448,4 +448,76 @@ public class OvertimeCalculatorTests
         Assert.Equal(8.5m, ferieResultat.Ferie);
         Assert.Equal(0m, ferieResultat.HeuresSup);
     }
+
+    // ------------------------------------------------------------------ corrections de l'audit
+
+    [Fact]
+    public void Absence_PosteDeNuit_PasseMinuit()
+    {
+        var jour = Jour(Lundi, Array.Empty<PunchPair>(), H("22:00"), H("06:00"), TimeSpan.FromMinutes(30), correction: false);
+
+        var resultat = OvertimeCalculator.CalculerJour(Multi(), jour);
+
+        Assert.Equal(7.5m, resultat.Absence);
+    }
+
+    [Fact]
+    public void Retard_AbsenceDuMatin_NEstPasUnRetard()
+    {
+        var jour = Jour(Lundi, new[] { P(Lundi, "13:30", "17:00") }, H("08:00"), H("17:00")) with { AbsenceMatin = true };
+
+        Assert.Equal(0m, OvertimeCalculator.CalculerJour(Multi(), jour).Retard);
+        Assert.Equal(0m, OvertimeCalculator.CalculerJour(Mono(), jour).Retard);
+    }
+
+    [Fact]
+    public void Ferie_UnSamediNonPlanifie_NeCreditePasDeJournee()
+    {
+        var nonPlanifie = Jour(Samedi, Array.Empty<PunchPair>(), ferie: true, correction: false);
+        var planifie = Jour(Samedi, Array.Empty<PunchPair>(), H("08:00"), H("12:00"), ferie: true, correction: false);
+
+        Assert.Equal(0m, OvertimeCalculator.CalculerJour(Multi(), nonPlanifie).HeuresRetenues);
+        Assert.Equal(8m, OvertimeCalculator.CalculerJour(Multi(), planifie).HeuresRetenues);
+    }
+
+    [Fact]
+    public void DemiCongeTravailleLAutreDemiJournee_CumuleCongeEtHeures()
+    {
+        var jour = Jour(Lundi, new[] { P(Lundi, "13:00", "17:00") }, H("08:00"), H("17:00"), conge: 0.5m);
+
+        var multi = OvertimeCalculator.CalculerJour(Multi(), jour);
+        var mono = OvertimeCalculator.CalculerJour(Mono(), jour);
+
+        // Multi : 4 h travaillées (sous le seuil de pause) + 4 h de congé.
+        Assert.Equal(8m, multi.HeuresRetenues);
+        Assert.True(multi.Conge);
+        // Mono : la pause est toujours déduite, 3,5 h + 4 h de congé.
+        Assert.Equal(7.5m, mono.HeuresRetenues);
+        Assert.True(mono.Conge);
+    }
+
+    [Fact]
+    public void Dimanche_MoinsDeCinqHeures_PauseNonDeduite()
+    {
+        var jour = Jour(Dimanche, new[] { P(Dimanche, "08:00", "12:00") });
+
+        var resultat = OvertimeCalculator.CalculerJour(Multi(), jour);
+
+        Assert.Equal(4m, resultat.HeuresRetenues);
+        Assert.Equal(4m, resultat.Dimanche);
+    }
+
+    [Fact]
+    public void Mono_PlusieursLignesLeMemeJour_PauseEtPrevuParJournee()
+    {
+        var jour = Jour(Lundi,
+            new[] { P(Lundi, "08:00", "12:00"), P(Lundi, "13:00", "19:00") },
+            H("08:00"), H("17:00"), TimeSpan.FromHours(1));
+
+        var resultat = OvertimeCalculator.CalculerJour(Mono(), jour);
+
+        // 10 h − 1 h de pause (une seule fois) = 9 h ; prévu 8 h → 1 h sup.
+        Assert.Equal(9m, resultat.HeuresRetenues);
+        Assert.Equal(1m, resultat.HeuresSup);
+    }
 }

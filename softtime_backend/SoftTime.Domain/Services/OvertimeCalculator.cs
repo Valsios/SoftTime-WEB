@@ -66,7 +66,9 @@ public static class OvertimeCalculator
         var sortie = paires.Count > 0 ? paires[^1].SortieHeure : (TimeSpan?)null;
 
         // Congé saisi dans SAGE : la journée est neutralisée (payée comme travaillée), comme le desktop.
-        if (conge)
+        // Une demi-journée de congé travaillée l'autre demi-journée cumule les deux (voir plus bas).
+        var demiCongeTravaille = conge && jour.CongeValeur < 1m && paires.Count > 0;
+        if (conge && !demiCongeTravaille)
         {
             return new OvertimeDayResult(
                 jour.Jour.Date, entree, sortie, reel,
@@ -143,8 +145,9 @@ public static class OvertimeCalculator
             }
         }
 
-        // Le dimanche est compté en heures retenues (pause déduite) ; le férié en heures réelles (desktop).
-        if (dimanche)
+        // Le dimanche est compté en heures retenues (pause déduite, avec le même seuil de 5 h que la
+        // journée) ; le férié en heures réelles (desktop).
+        if (dimanche && reel > (decimal)OvertimeRules.PauseThreshold.TotalHours)
             dim = Math.Max(0m, dim - Heures(manque));
 
         // 8 mars : jour férié pour les femmes, MFerie += heures retenues et complément de journée au total.
@@ -154,6 +157,10 @@ public static class OvertimeCalculator
             retenuJour = Math.Max(retenuJour, config.Journee);
         }
 
+        // Demi-journée de congé : le congé crédite sa part de journée en plus des heures travaillées.
+        if (demiCongeTravaille)
+            retenuJour += config.Journee * jour.CongeValeur;
+
         return new OvertimeDayResult(
             jour.Jour.Date, entree, sortie, reel,
             Arrondir(retenuJour),
@@ -161,15 +168,23 @@ public static class OvertimeCalculator
             CalculerRetard(config, jour, paires),
             Absence: 0m,
             HeuresSup: 0m,
-            Conge: false,
+            Conge: demiCongeTravaille,
             JourTravaille: true,
             NombrePaires: paires.Count);
     }
 
+    /// <summary>
+    /// Journée créditée sans travail (férié, 8 mars). Un samedi ou un dimanche n'est crédité que s'il
+    /// est planifié travaillé : sinon un férié tombant un week-end ajoutait une journée au total
+    /// hebdomadaire, donc des HS, à un salarié qui ne travaille pas ce jour-là.
+    /// </summary>
     private static decimal JourneeCrediteeSansTravail(
         OvertimeWeekConfig config, OvertimeDayInput jour, bool dimanche, bool ferie)
     {
         if (dimanche)
+            return 0m;
+        var samedi = jour.Jour.DayOfWeek == DayOfWeek.Saturday;
+        if (samedi && (jour.Off || !jour.PlanningHa.HasValue))
             return 0m;
         if (ferie)
             return config.Journee;
@@ -204,7 +219,7 @@ public static class OvertimeCalculator
         var prevu = PrevuJournalier(jour, paires[0], paires[^1], pause);
         var entreePlanifiee = jour.PlanningHa ?? paires[0].EntreeHeure;
 
-        decimal reel = 0m, retenuTotal = 0m, nuit = 0m, dim = 0m, ferieH = 0m, hs = 0m;
+        decimal reel = 0m, nuit = 0m, dim = 0m, ferieH = 0m, hs = 0m;
         foreach (var paire in paires)
         {
             var debut = paire.EntreeDate.Date + paire.EntreeHeure;
@@ -218,27 +233,27 @@ public static class OvertimeCalculator
             if (fin <= debut)
                 continue;
 
-            var brut = Heures(fin - debut);
-            var retenu = Math.Max(0m, brut - Heures(pause));
-            reel += brut;
-            retenuTotal += retenu;
-
+            reel += Heures(fin - debut);
+            // Nuit : simple tranche 22:00 → 05:00 (synthèse §4.2).
             if (!dimanche && !ferie)
-            {
-                // Nuit : simple tranche 22:00 → 05:00 (synthèse §4.2).
                 nuit += Heures(NuitEntre(debut, fin));
-                // Samedi : toutes les heures sont supplémentaires (synthèse §4.2).
-                hs += samedi ? retenu : Math.Max(0m, retenu - prevu);
-            }
-            else if (dimanche && !ferie)
-            {
-                dim += retenu;
-            }
-            else
-            {
-                ferieH += retenu;
-            }
         }
+
+        // La pause et le prévu portent sur la journée : plusieurs lignes corrigées le même jour ne
+        // déduisent pas la pause plusieurs fois et ne sont pas comparées chacune à la journée entière.
+        var retenuTotal = Math.Max(0m, reel - Heures(pause));
+        if (!dimanche && !ferie)
+            // Samedi : toutes les heures sont supplémentaires (synthèse §4.2).
+            hs = samedi ? retenuTotal : Math.Max(0m, retenuTotal - prevu);
+        else if (dimanche && !ferie)
+            dim = retenuTotal;
+        else
+            ferieH = retenuTotal;
+
+        // Demi-journée de congé travaillée l'autre demi-journée : le congé crédite sa part de journée.
+        var demiConge = conge && jour.CongeValeur < 1m;
+        if (demiConge)
+            retenuTotal += config.Journee * jour.CongeValeur;
 
         return new OvertimeDayResult(
             jour.Jour.Date, paires[0].EntreeHeure, paires[^1].SortieHeure,
@@ -247,7 +262,7 @@ public static class OvertimeCalculator
             CalculerRetard(config, jour, paires),
             Absence: 0m,
             HeuresSup: Arrondir(hs),
-            Conge: false,
+            Conge: demiConge,
             JourTravaille: true,
             NombrePaires: paires.Count);
     }
@@ -305,14 +320,22 @@ public static class OvertimeCalculator
         if (!jour.PlanningHa.HasValue || !jour.PlanningHd.HasValue)
             return 0m;
 
-        var prevu = (decimal)(jour.PlanningHd.Value - jour.PlanningHa.Value).TotalHours
-                    - (decimal)pause.TotalHours;
+        // Poste de nuit (sortie le lendemain, ex. 22:00 → 06:00) : la durée passe minuit.
+        var duree = jour.PlanningHd.Value - jour.PlanningHa.Value;
+        if (duree <= TimeSpan.Zero)
+            duree += TimeSpan.FromDays(1);
+        var prevu = (decimal)duree.TotalHours - (decimal)pause.TotalHours;
         return prevu > 0m ? Arrondir(prevu) : 0m;
     }
 
-    /// <summary>Retard = (première entrée réelle + tolérance) − heure planifiée, jamais négatif (synthèse §9-5).</summary>
+    /// <summary>
+    /// Retard = (première entrée réelle + tolérance) − heure planifiée, jamais négatif (synthèse §9-5).
+    /// Une absence du matin annule le retard (pas de retard « de midi »), comme l'état des retards.
+    /// </summary>
     private static decimal CalculerRetard(OvertimeWeekConfig config, OvertimeDayInput jour, IReadOnlyList<PunchPair> paires)
     {
+        if (jour.AbsenceMatin)
+            return 0m;
         if (jour.RetardExplicite.HasValue)
             return Math.Max(0m, Arrondir((decimal)jour.RetardExplicite.Value.TotalHours));
         if (!jour.PlanningHa.HasValue || paires.Count == 0)

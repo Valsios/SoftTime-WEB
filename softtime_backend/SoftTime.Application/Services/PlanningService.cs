@@ -265,7 +265,9 @@ public class PlanningService
             var off = dto.Off == true;
             DateTime? ha = null;
             DateTime? hd = null;
-            var pause = TimeSpan.Zero;
+            // Pause : 00:00 = aucune pause, NULL = non définie (le calcul HS retombe alors sur la pause
+            // de la catégorie, puis sur 30 min). Une pause absente n'est donc plus forcée à 00:00.
+            TimeSpan? pause = TimeSpan.Zero;
 
             if (!off)
             {
@@ -276,7 +278,7 @@ public class PlanningService
                 if (!PlanningGenerationRules.TryIntervalle(date, debut, fin, out ha, out hd))
                     throw new InvalidOperationException(
                         $"Heures d'entrée/sortie manquantes ou invalides pour le planning du {date:dd/MM/yyyy}.");
-                pause = dto.Pause ?? shift?.PAUSE ?? entity?.Pause ?? TimeSpan.Zero;
+                pause = dto.Pause ?? shift?.PAUSE ?? entity?.Pause;
             }
 
             if (entity == null)
@@ -370,7 +372,7 @@ public class PlanningService
                 int? noShift = null;
                 DateTime? ha = null;
                 DateTime? hd = null;
-                var pause = TimeSpan.Zero;
+                TimeSpan? pause = TimeSpan.Zero;
 
                 if (!off)
                 {
@@ -386,7 +388,8 @@ public class PlanningService
                         continue;
                     }
                     noShift = numeroShift;
-                    pause = shift.PAUSE ?? TimeSpan.Zero;
+                    // Pause du shift telle quelle : NULL (non définie) reste NULL.
+                    pause = shift.PAUSE;
                 }
 
                 foreach (var card in targets)
@@ -558,7 +561,7 @@ public class PlanningService
                             DateP = jour,
                             HA = ha,
                             HD = hd,
-                            Pause = off ? TimeSpan.Zero : (pause ?? TimeSpan.Zero),
+                            Pause = off ? TimeSpan.Zero : pause,
                             OffP = off,
                             BDD_SAGE = sageDb,
                             BDD_POINTEUSE = pointeuseDb
@@ -572,7 +575,7 @@ public class PlanningService
                         entity.DateP = jour;
                         entity.HA = ha;
                         entity.HD = hd;
-                        entity.Pause = off ? TimeSpan.Zero : (pause ?? TimeSpan.Zero);
+                        entity.Pause = off ? TimeSpan.Zero : pause;
                         entity.OffP = off;
                         entity.BDD_SAGE = sageDb;
                         entity.BDD_POINTEUSE = pointeuseDb;
@@ -617,20 +620,21 @@ public class PlanningService
                 continue;
             }
             ExcelCells.TryTime(ExcelCells.Get(row, "ENTREE", "HA", "Heure arrivée", "Arrivee"), out var ha);
-            ExcelCells.TryTime(ExcelCells.Get(row, "PAUSE", "Pause"), out var pause);
+            // Une pause saisie « 00:00 » signifie « aucune pause » ; une cellule vide la laisse non définie.
+            var pauseSaisie = ExcelCells.TryTime(ExcelCells.Get(row, "PAUSE", "Pause"), out var pause);
             ExcelCells.TryTime(ExcelCells.Get(row, "SORTIE", "HD", "Heure départ", "Depart"), out var hd);
             var intitule = ExcelCells.Get(row, "INTITULE", "Intitulé", "Libelle");
             var entity = existing.FirstOrDefault(s => s.NoSHIFT == noShift);
             if (entity == null)
             {
-                entity = new T_PLANNING { NoSHIFT = noShift, HA = ha == default ? null : ha, PAUSE = pause == default ? null : pause, HD = hd == default ? null : hd, Intitule = intitule };
+                entity = new T_PLANNING { NoSHIFT = noShift, HA = ha == default ? null : ha, PAUSE = pauseSaisie ? pause : null, HD = hd == default ? null : hd, Intitule = intitule };
                 await repo.AddAsync(entity, ct);
                 existing.Add(entity);
             }
             else
             {
                 entity.HA = ha == default ? entity.HA : ha;
-                entity.PAUSE = pause == default ? entity.PAUSE : pause;
+                entity.PAUSE = pauseSaisie ? pause : entity.PAUSE;
                 entity.HD = hd == default ? entity.HD : hd;
                 if (!string.IsNullOrWhiteSpace(intitule))
                     entity.Intitule = intitule;

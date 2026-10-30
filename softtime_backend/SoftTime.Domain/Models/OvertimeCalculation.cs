@@ -32,7 +32,7 @@ public sealed record OvertimeWeekConfig(
 
 /// <summary>
 /// Journée soumise au calcul : paires entrée/sortie retenues (<c>T_HEURECORRIGER</c>) et contexte
-/// (planning du jour, férié, congé, retard explicitement saisi).
+/// (planning du jour, férié, congé, retard explicitement saisi, absence du matin arbitrée).
 /// </summary>
 public sealed record OvertimeDayInput(
     DateTime Jour,
@@ -44,7 +44,8 @@ public sealed record OvertimeDayInput(
     bool Ferie = false,
     bool CorrectionPresente = false,
     decimal CongeValeur = 0m,
-    TimeSpan? RetardExplicite = null);
+    TimeSpan? RetardExplicite = null,
+    bool AbsenceMatin = false);
 
 /// <summary>Résultat d'une journée : heures retenues et compteurs de majoration.</summary>
 public sealed record OvertimeDayResult(

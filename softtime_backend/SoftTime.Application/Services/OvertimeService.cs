@@ -453,8 +453,15 @@ public class OvertimeService
             rows = rows.Where(h => h.Matricule != null && targetMatricules.Contains(h.Matricule)).ToList();
         }
 
+        // Le numéro de salarié SAGE manque si SAGE était indisponible lors du calcul : il est
+        // résolu à nouveau ici, sinon la ligne serait ignorée par l'écriture de paie.
+        var numSalByMat = rows.Any(h => !h.NumSal.HasValue)
+            ? await ChargerNumSalAsync(ct)
+            : new Dictionary<string, int>(StringComparer.Ordinal);
         var dtos = rows
-            .Select(h => new HsExoDto(h.OID, h.Matricule, h.NumSal, h.EXO130, h.EXO150, h.I130, h.I150,
+            .Select(h => new HsExoDto(h.OID, h.Matricule,
+                h.NumSal ?? (numSalByMat.TryGetValue(MatriculeIdentity.Cle(h.Matricule), out var n) ? n : null),
+                h.EXO130, h.EXO150, h.I130, h.I150,
                 h.FERIE, h.NUIT, h.DIM, h.RETARD, h.ABSENCE))
             .ToList();
         return await _payrollWriters.Resolve(sageRow).WriteAsync(sageRow, dtos, ct);
@@ -785,7 +792,9 @@ public class OvertimeService
             Categories = await _uow.Repository<T_CATEGORIE>().ListAsync(c => c.BDD_SAGE == sageDb, ct),
             Affectations = await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == sageDb, ct),
             Tolerances = await _uow.Repository<T_TOLERANCE>().ListAsync(_ => true, ct),
-            Majorations = await _uow.Repository<T_MAJORATION>().ListAsync(_ => true, ct),
+            // Majorations de la société active (les lignes héritées sans société restent communes).
+            Majorations = await _uow.Repository<T_MAJORATION>().ListAsync(
+                m => m.BDD_SAGE == null || m.BDD_SAGE == "" || m.BDD_SAGE == sageDb, ct),
             Conges = await _leaves.LoadAsync(ct),
             Heures = heures,
             Planning = planning,
@@ -845,6 +854,13 @@ public class OvertimeService
                 .Where(h => h.DATE_POINTAGE_IN.HasValue && h.DATE_POINTAGE_IN.Value.Date == jour)
                 .OrderBy(h => h.HENTREE ?? TimeSpan.Zero)
                 .ToList();
+            // Une saisie manuelle remplace les lignes du pré-traitement du même jour (comme le fera le
+            // prochain pré-traitement) : sans cela, les heures seraient comptées deux fois d'ici là.
+            var manuelles = lignes
+                .Where(h => !string.Equals(h.ORIGINE, PunchProcessingConfiguration.OrigineAuto, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (manuelles.Count > 0)
+                lignes = manuelles;
             var paires = lignes
                 .Where(h => h.HENTREE.HasValue && h.HSORTIE.HasValue)
                 .Select(h => new PunchPair(
@@ -879,12 +895,14 @@ public class OvertimeService
                 paires,
                 ha,
                 hd,
+                // Pause planning : 00:00 = aucune pause ; NULL = non définie (catégorie, puis 30 min).
                 off ? null : plan?.Pause,
                 off,
                 ctx.Feries.Any(f => f.DATE.HasValue && f.DATE.Value.Date == jour),
                 lignes.Any(EstPresence),
                 LeaveRules.Valeur(conges, jour),
-                lignes.FirstOrDefault(h => h.RETARD.HasValue)?.RETARD));
+                lignes.FirstOrDefault(h => h.RETARD.HasValue)?.RETARD,
+                lignes.Any(h => h.ABSENCE_AM == true)));
         }
         return jours;
     }

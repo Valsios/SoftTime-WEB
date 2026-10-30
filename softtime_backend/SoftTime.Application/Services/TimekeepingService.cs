@@ -121,26 +121,32 @@ public class TimekeepingService
         var to = request.To.Date;
         var finExclusive = to.AddDays(1);
 
+        // Garde-fous sur tout ce qui CHEVAUCHE la période (et pas seulement ce qui y est inclus) : une
+        // semaine validée commencée avant `from`, ou un calcul EXO/IMPO mensuel qui contient la période.
+        var debutSemaineMin = from.AddDays(-6);
         var validees = (await _uow.Repository<T_HS_VALIDER>().ListAsync(
-            v => v.BDD_SAGE == sageDb && v.VALIDATION_HS == true && v.DATE_DEB >= from && v.DATE_DEB <= to, ct)).Count;
+                v => v.BDD_SAGE == sageDb && v.VALIDATION_HS == true && v.DATE_DEB >= debutSemaineMin && v.DATE_DEB <= to, ct))
+            .Count(v => MatriculeRange.Contains(v.MATRICULES, request));
         if (validees > 0)
             throw new InvalidOperationException(
                 $"La période contient {validees} semaine(s) validée(s) : annulez la validation avant de purger.");
 
         var hsExistants = (await _uow.Repository<T_HSExoImp>().ListAsync(
-            h => h.BDD_SAGE == sageDb && h.PeriodeDebut >= from && h.PeriodeFin <= to, ct)).Count;
+                h => h.BDD_SAGE == sageDb && h.PeriodeDebut <= to && h.PeriodeFin >= from, ct))
+            .Count(h => MatriculeRange.Contains(h.Matricule, request));
         if (hsExistants > 0)
             throw new InvalidOperationException(
                 "Des calculs EXO/IMPO existent sur la période : purgez les heures supplémentaires avant de purger les pointages.");
 
+        // Borne haute exclusive : la purge ne doit pas toucher le lendemain de la période.
         var pointages = (await _uow.Repository<T_POINTAGE>().ListAsync(
-                p => p.NOM_BDD_SAGE == sageDb && p.DATE_POINTAGE >= from && p.DATE_POINTAGE <= finExclusive, ct))
+                p => p.NOM_BDD_SAGE == sageDb && p.DATE_POINTAGE >= from && p.DATE_POINTAGE < finExclusive, ct))
             .Where(p => MatriculeRange.Contains(p.MATRICULE_SAGE, request))
             .ToList();
 
         var corrRepo = _uow.Repository<T_HEURECORRIGER>();
         var corrections = await corrRepo.ListAsync(
-            h => h.BDD_SAGE == sageDb && h.DATE_POINTAGE_IN >= from && h.DATE_POINTAGE_IN <= finExclusive, ct);
+            h => h.BDD_SAGE == sageDb && h.DATE_POINTAGE_IN >= from && h.DATE_POINTAGE_IN < finExclusive, ct);
         var correctionsCibles = corrections
             .Where(h => MatriculeRange.Contains(h.MATRICULE_SAGE, request)
                         && !string.Equals(h.ORIGINE, PunchProcessingConfiguration.OrigineManuel, StringComparison.OrdinalIgnoreCase))
@@ -151,7 +157,7 @@ public class TimekeepingService
 
         var anomRepo = _uow.Repository<T_HEUREANOMALIE>();
         var anomalies = (await anomRepo.ListAsync(
-                a => a.BDD_SAGE == sageDb && a.DATE_POINTAGE_IN >= from && a.DATE_POINTAGE_IN <= finExclusive, ct))
+                a => a.BDD_SAGE == sageDb && a.DATE_POINTAGE_IN >= from && a.DATE_POINTAGE_IN < finExclusive, ct))
             .Where(a => MatriculeRange.Contains(a.MATRICULE_SAGE, request))
             .ToList();
 

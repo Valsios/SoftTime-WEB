@@ -5,7 +5,12 @@ namespace SoftTime.Application.Abstractions;
 
 public interface ISagePayrollWriter
 {
-    Task SyncOvertimeAsync(string sageConnectionString, T_CST[] constants, int numSal, OvertimeSageCodes codes, decimal exo130, decimal exo150, decimal i130, decimal i150, decimal ferie, decimal nuit, decimal dim, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Écrit les cumuls d'heures supplémentaires d'un salarié dans <c>T_CUMSAL</c>, en tout ou rien :
+    /// si un des cumuls n'existe pas pour ce salarié, aucune valeur n'est écrite.
+    /// </summary>
+    /// <returns><c>true</c> si tous les cumuls ont été écrits, <c>false</c> s'il en manque un dans SAGE.</returns>
+    Task<bool> SyncOvertimeAsync(string sageConnectionString, T_CST[] constants, int numSal, OvertimeSageCodes codes, decimal exo130, decimal exo150, decimal i130, decimal i150, decimal ferie, decimal nuit, decimal dim, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Écrit un cumul de paie dans <c>T_CUMSAL</c> pour un salarié et un code opérande donnés.

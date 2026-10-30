@@ -30,9 +30,9 @@ public class OvertimeServiceTests
         public List<T_HSSemaine> Repartition => Uow.Get<T_HSSemaine>().Items;
         public List<T_HSExoImp> Exo => Uow.Get<T_HSExoImp>().Items;
 
-        public Contexte(bool multi = true)
+        public Contexte(bool multi = true, IPayrollWriter? ecriturePaie = null)
         {
-            Uow.Get<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 1, NOM_BD = "SAGE_TEST" });
+            Uow.Get<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 1, NOM_BD = "SAGE_TEST", TYPE_BASE = "STANDARD" });
             Uow.Get<T_CLOCK>().Items.Add(new T_CLOCK { MULTIPOINT = multi });
             Uow.Get<T_CARDPAIE>().Items.Add(new T_CARDPAIE
             {
@@ -68,7 +68,7 @@ public class OvertimeServiceTests
                 Uow,
                 tenant,
                 Source,
-                new PayrollWriterResolver(Array.Empty<IPayrollWriter>()),
+                new PayrollWriterResolver(ecriturePaie is null ? Array.Empty<IPayrollWriter>() : new[] { ecriturePaie }),
                 new HistoryArchiveService(Uow, tenant),
                 new SageLeaveCalendar(tenant, Source));
         }
@@ -366,6 +366,77 @@ public class OvertimeServiceTests
             () => contexte.Service.PurgeValidationAsync(new PeriodRequest(null, null, Lundi, Dimanche)));
 
         Assert.True(Assert.Single(contexte.Semaines).VALIDATION_HS);
+    }
+
+    [Fact]
+    public async Task Apercu_CorrectionManuelle_RemplaceLesLignesAutoDuMemeJour()
+    {
+        var contexte = new Contexte();
+        contexte.Planning(Lundi, TimeSpan.Zero);
+        contexte.Paire(Lundi, Huit, DixSept);
+        contexte.Corrections.Add(new T_HEURECORRIGER
+        {
+            BDD_SAGE = "SAGE_TEST",
+            MATRICULE_SAGE = "001",
+            DATE_POINTAGE_IN = Lundi,
+            DATE_POINTAGE_OUT = Lundi,
+            HENTREE = Huit,
+            HSORTIE = DixHuit,
+            ORIGINE = "MANUEL"
+        });
+
+        var ligne = Assert.Single(await contexte.Apercu(Lundi, Dimanche));
+
+        // Seule la saisie manuelle (08:00 → 18:00, pause 00:00) compte, pas 9 h + 10 h.
+        Assert.Equal(10m, ligne.Ht);
+    }
+
+    [Fact]
+    public async Task Apercu_IgnoreLesMajorationsDUneAutreSociete()
+    {
+        var contexte = new Contexte();
+        // Une société voisine donne la priorité à la nuit : elle ne doit pas s'appliquer ici.
+        contexte.Uow.Get<T_MAJORATION>().Items.Add(
+            new T_MAJORATION { Mojoration = "NUIT", Cotation = 5m, BDD_SAGE = "AUTRE_SOCIETE" });
+        contexte.Paire(Dimanche, new TimeSpan(20, 0, 0), new TimeSpan(23, 0, 0));
+
+        var ligne = Assert.Single(await contexte.Apercu(Lundi, Dimanche));
+
+        Assert.Equal(3m, ligne.Dimanche);
+        Assert.Equal(0m, ligne.Nuit);
+    }
+
+    private sealed class EcriturePaieEspion : IPayrollWriter
+    {
+        public IReadOnlyList<HsExoDto> Lignes { get; private set; } = Array.Empty<HsExoDto>();
+        public bool CanHandle(T_BDD_SAGE database) => true;
+        public Task<PayrollWriteResultDto> ValidateAsync(T_BDD_SAGE database, IReadOnlyList<HsExoDto> rows, CancellationToken ct = default)
+            => Task.FromResult(new PayrollWriteResultDto("", "", 0, 0, ""));
+        public Task<PayrollWriteResultDto> WriteAsync(T_BDD_SAGE database, IReadOnlyList<HsExoDto> rows, CancellationToken ct = default)
+        {
+            Lignes = rows;
+            return Task.FromResult(new PayrollWriteResultDto("", "", rows.Count, 0, ""));
+        }
+    }
+
+    [Fact]
+    public async Task SynchroPaie_ResoutLeNumeroDeSalarieManquant()
+    {
+        var espion = new EcriturePaieEspion();
+        var contexte = new Contexte(ecriturePaie: espion);
+        var debut = new DateTime(2026, 9, 1);
+        var fin = new DateTime(2026, 9, 30);
+        // Calcul fait pendant une indisponibilité de SAGE : NumSal est resté nul.
+        contexte.Exo.Add(new T_HSExoImp
+        {
+            Matricule = "001", NumSal = null, EXO130 = 8m,
+            PeriodeDebut = debut, PeriodeFin = fin, BDD_SAGE = "SAGE_TEST"
+        });
+        contexte.Source.Employees.Add(new ExternalEmployee("001", 42, null, null, null, false));
+
+        await contexte.Service.SyncPayrollAsync(new PeriodRequest(null, null, debut, fin));
+
+        Assert.Equal(42, Assert.Single(espion.Lignes).NumSal);
     }
 
     // ------------------------------------------------------------------ détail

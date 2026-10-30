@@ -99,8 +99,12 @@ public class PunchProcessingService
             h => h.BDD_SAGE == sageDb && h.DATE_POINTAGE_IN >= from && h.DATE_POINTAGE_IN < finExclusive, ct);
         var anomaliesExistantes = await _uow.Repository<T_HEUREANOMALIE>().ListAsync(
             a => a.BDD_SAGE == sageDb && a.DATE_POINTAGE_IN >= from && a.DATE_POINTAGE_IN < finExclusive, ct);
+        // Les pointages débordent d'un jour de chaque côté : la nuit de la veille consomme ses sorties
+        // du premier jour, et la nuit du dernier jour retrouve sa sortie du lendemain.
+        var veille = from.AddDays(-1);
+        var lendemainExclusif = finExclusive.AddDays(1);
         var pointages = (await _uow.Repository<T_POINTAGE>().ListAsync(
-                p => p.NOM_BDD_SAGE == sageDb && p.DATE_POINTAGE >= from && p.DATE_POINTAGE < finExclusive, ct))
+                p => p.NOM_BDD_SAGE == sageDb && p.DATE_POINTAGE >= veille && p.DATE_POINTAGE < lendemainExclusif, ct))
             .Where(p => MatchesPointeuse(p.NOM_BDD_POINTEUSE, pointeuseDb))
             .Where(p => p.DATE_POINTAGE.HasValue && p.HEURE_POINTAGE.HasValue)
             .Where(p => !string.IsNullOrWhiteSpace(p.MATRICULE_SAGE))
@@ -280,8 +284,10 @@ public class PunchProcessingService
                 .ToDictionary(
                     kv => kv.Key,
                     kv => new PunchPlanningWindow(kv.Key, kv.Value.HA, kv.Value.HD, kv.Value.OffP == true));
+            // Le regroupement démarre la veille pour que son éventuel poste de nuit consomme ses
+            // pointages de sortie du premier jour ; la veille elle-même n'est pas retraitée.
             var momentsParJour = multiPointage
-                ? PunchDayGrouping.Build(punchs, fenetres, from, to)
+                ? PunchDayGrouping.Build(punchs, fenetres, veille, to)
                 // Le mode mono ne consulte jamais le planning pour l'appariement : chaque journée
                 // calendaire est traitée séparément (même si un poste de nuit existe au planning).
                 : PunchDayGrouping.Build(punchs, SansPlanning, from, to);

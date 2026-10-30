@@ -43,14 +43,34 @@ public sealed class StandardPayrollWriter : IPayrollWriter
         var connection = await _tenant.GetSageConnectionAsync(ct);
         var codes = await _catalog.GetOvertimeSageCodesAsync(ct);
         var written = 0;
-        foreach (var hs in rows.Where(h => h.NumSal.HasValue))
+        var sansSalarie = new List<string>();
+        var sansCumul = new List<string>();
+        foreach (var hs in rows)
         {
-            await _sageWriter.SyncOvertimeAsync(connection, constants, hs.NumSal!.Value, codes,
+            if (!hs.NumSal.HasValue)
+            {
+                sansSalarie.Add(hs.Matricule ?? "?");
+                continue;
+            }
+            var ecrit = await _sageWriter.SyncOvertimeAsync(connection, constants, hs.NumSal.Value, codes,
                 hs.Exo130 ?? 0, hs.Exo150 ?? 0, hs.I130 ?? 0, hs.I150 ?? 0,
                 hs.Ferie ?? 0, hs.Nuit ?? 0, hs.Dim ?? 0, ct);
-            written++;
+            if (ecrit)
+                written++;
+            else
+                sansCumul.Add(hs.Matricule ?? hs.NumSal.Value.ToString());
         }
-        return new PayrollWriteResultDto(database.NOM_BD ?? string.Empty, "STANDARD", written, written * PayrollWritingConfiguration.Categories.Length,
-            "Synchronisation des heures supplémentaires vers SAGE terminée.");
+
+        // Bilan réel : un salarié non écrit est nommé, au lieu d'être compté comme synchronisé.
+        var message = $"Synchronisation des heures supplémentaires vers SAGE : {written} salarié(s) mis à jour.";
+        if (sansSalarie.Count > 0)
+            message += $" {sansSalarie.Count} matricule(s) absent(s) de SAGE : {Liste(sansSalarie)}.";
+        if (sansCumul.Count > 0)
+            message += $" {sansCumul.Count} salarié(s) sans ligne de cumul HS dans T_CUMSAL (rien n'a été écrit pour eux) : {Liste(sansCumul)}.";
+        return new PayrollWriteResultDto(database.NOM_BD ?? string.Empty, "STANDARD", written,
+            written * PayrollWritingConfiguration.Categories.Length, message);
     }
+
+    private static string Liste(IReadOnlyList<string> matricules)
+        => string.Join(", ", matricules.Take(10)) + (matricules.Count > 10 ? "…" : string.Empty);
 }
