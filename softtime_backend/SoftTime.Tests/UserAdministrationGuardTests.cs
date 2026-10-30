@@ -27,7 +27,7 @@ public class UserAdministrationGuardTests
     }
 
     private AuthService Service(decimal userId, decimal roleId)
-        => new(_uow, new Token(), _mapper, new Mail(), new PasswordHasher<T_RESPONSABLE>(), new FakeUser(userId, roleId));
+        => new(_uow, new Token(), _mapper, new Mail(), new FakeUser(userId, roleId), new PasswordHasher<T_RESPONSABLE>());
 
     private static readonly UserDto NewUserDto = new(0, 2, "Nouveau", "nouveau", null, "ValidP@ss123!");
 
@@ -69,13 +69,48 @@ public class UserAdministrationGuardTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => svc.DeleteUserAsync(1, 1));
     }
 
+
     [Fact]
-    public async Task Without_a_current_user_the_service_behaves_as_before()
+    public async Task Role_named_admin_but_not_role_1_cannot_assign_the_admin_role_nor_touch_rights()
     {
-        // Les tests unitaires historiques construisent le service sans ICurrentUser : comportement inchangé.
-        var legacy = new AuthService(_uow, new Token(), _mapper, new Mail(), new PasswordHasher<T_RESPONSABLE>());
-        var created = await legacy.SaveUserAsync(2, NewUserDto);
-        Assert.Equal("nouveau", created.Login);
+        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 4, NOMROLE = "ROLE_ADMIN_CUSTOM" });
+        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 4, IDROLE = 4, LOGIN = "customadmin" });
+        var svc = Service(4, 4);
+        var before = _uow.Snapshot();
+
+        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SaveUserAsync(4, new UserDto(0, 1, "Nouvel admin", "nouvel", null, "ValidP@ss123!")));
+        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SaveUserAsync(4, new UserDto(3, 1, "Cible", "cible", null, null)));
+        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SaveUserDetailedPermissionsAsync(4, 3, new[] { "PROC:SHIFTS" }));
+        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.ResetUserDetailedPermissionsAsync(4, 3));
+        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SetDbAccessAsync(3, new[] { 1 }));
+        // Même un rôle nommé comme l'administrateur ne peut pas modifier son propre compte de droits.
+        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SaveUserDetailedPermissionsAsync(4, 4, new[] { "PARAMS:USERS" }));
+        Assert.Equal(before, _uow.Snapshot());
+    }
+
+    [Fact]
+    public async Task Role_1_stays_protected_against_deleting_itself_and_removing_the_last_administrator()
+    {
+        var svc = Service(1, 1);
+        var own = await Assert.ThrowsAsync<InvalidOperationException>(() => svc.DeleteUserAsync(1, 1));
+        Assert.Equal("Vous ne pouvez pas supprimer votre propre compte.", own.Message);
+
+        // Dernier administrateur : suppression et rétrogradation refusées (surcharges sans appelant, utilisées par les tests historiques).
+        var delete = await Assert.ThrowsAsync<InvalidOperationException>(() => svc.DeleteUserAsync(1));
+        Assert.Equal("Impossible de supprimer le dernier administrateur.", delete.Message);
+        var demote = await Assert.ThrowsAsync<InvalidOperationException>(() => svc.SaveUserAsync(new UserDto(1, 2, "Admin", "admin", null, null)));
+        Assert.Equal("Impossible de rétrograder le dernier administrateur.", demote.Message);
+        Assert.Contains(_uow.GetRepo<T_RESPONSABLE>().Items, u => u.IDRESPONSABLE == 1 && u.IDROLE == 1);
+    }
+
+    [Fact]
+    public async Task Role_1_cannot_modify_or_delete_another_administrator_without_keeping_one()
+    {
+        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 5, IDROLE = 1, LOGIN = "admin2" });
+        var svc = Service(1, 1);
+        await svc.SaveUserAsync(1, new UserDto(5, 1, "Admin 2 renommé", "admin2", null, null));
+        await svc.DeleteUserAsync(1, 5);
+        Assert.DoesNotContain(_uow.GetRepo<T_RESPONSABLE>().Items, u => u.IDRESPONSABLE == 5);
     }
 
     private sealed class FakeUser : ICurrentUser

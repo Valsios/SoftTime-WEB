@@ -32,13 +32,17 @@ public class AdminRulesAndSafeguardsTests
 
         _email = new FakeEmailService();
         _hasher = new PasswordHasher<T_RESPONSABLE>();
-        _auth = new AuthService(_uow, _tokens, _mapper, _email, _hasher);
+        _auth = new AuthService(_uow, _tokens, _mapper, _email, new SoftTime.Tests.Http.AdminCurrentUser(), _hasher);
 
         // Configuration initiale des rôles de référence
         _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });
         _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 2, NOMROLE = "Utilisateur" });
         _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 3, NOMROLE = "ROLE_ADMIN_CUSTOM" });
     }
+
+    /// <summary>Service dont l'appelant HTTP (ICurrentUser) est le compte indiqué ; _auth, lui, est toujours un administrateur.</summary>
+    private AuthService CallerAuth(decimal userId, decimal roleId)
+        => new(_uow, _tokens, _mapper, _email, new SoftTime.Tests.Http.TestCurrentUser(userId, roleId), _hasher);
 
     #region Tests AdminRules (G5, C3)
 
@@ -50,12 +54,15 @@ public class AdminRulesAndSafeguardsTests
     }
 
     [Fact]
-    public void AdminRules_IsAdmin_IdentifiesRoleNameContainingAdmin_CaseInsensitive()
+    public void AdminRules_IsAdmin_DoesNotRecognizeRoleNameContainingAdmin()
     {
-        Assert.True(AdminRules.IsAdmin(2, "Administrateur"));
-        Assert.True(AdminRules.IsAdmin(3, "ROLE_ADMIN_CUSTOM"));
-        Assert.True(AdminRules.IsAdmin(4, "super-admin"));
-        Assert.True(AdminRules.IsAdmin(5, "Administrateur RH"));
+        // Règle 4b-2 : seul le rôle 1 est administrateur, le nom du rôle ne confère rien (avant : ces quatre cas étaient vrais).
+        Assert.False(AdminRules.IsAdmin(2, "Administrateur"));
+        Assert.False(AdminRules.IsAdmin(3, "ROLE_ADMIN_CUSTOM"));
+        Assert.False(AdminRules.IsAdmin(4, "super-admin"));
+        Assert.False(AdminRules.IsAdmin(5, "Administrateur RH"));
+        Assert.False(AdminRules.IsAdmin(new T_ROLE { IDROLE = 3, NOMROLE = "ROLE_ADMIN_CUSTOM" }));
+        Assert.True(AdminRules.IsAdmin(new T_ROLE { IDROLE = 1, NOMROLE = "Autre nom" }));
     }
 
     [Fact]
@@ -187,26 +194,27 @@ public class AdminRulesAndSafeguardsTests
     }
 
     [Fact]
-    public async Task NonAdmin_CustomAdminRoleOperations_ThrowsInvalidOperationException()
+    public async Task NonAdmin_CustomAdminRoleOperations_AreRefusedByTheAdministratorGuard()
     {
+        // Règle 4b-2 : le rôle 3 « ROLE_ADMIN_CUSTOM » n'est plus un rôle administrateur. Toute opération sur des comptes
+        // par un appelant du rôle 2 est refusée dès l'entrée (avant : InvalidOperationException « Seul un administrateur… »).
         var user = new T_RESPONSABLE { IDRESPONSABLE = 2, IDROLE = 2, LOGIN = "user", NOMRESPONSABLE = "User" };
         var customAdmin = new T_RESPONSABLE { IDRESPONSABLE = 3, IDROLE = 3, LOGIN = "customadmin", NOMRESPONSABLE = "Custom Admin" };
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(customAdmin);
+        var asUser = CallerAuth(2, 2);
 
-        // Attribution d'un rôle personnalisé admin (rôle 3) par un non-admin
         var createDto = new UserDto(0, 3, "New Custom Admin", "newcustom", null, "ValidP@ss123!");
-        var exCreate = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(currentUserId: 2, createDto));
-        Assert.Equal("Seul un administrateur peut attribuer le rôle Administrateur.", exCreate.Message);
+        var exCreate = await Assert.ThrowsAsync<ForbiddenOperationException>(() => asUser.SaveUserAsync(currentUserId: 2, createDto));
+        Assert.Equal(AdminAccess.ReservedMessage, exCreate.Message);
 
-        // Modification d'un compte rôle personnalisé admin par un non-admin
         var updateDto = new UserDto(3, 3, "Custom Admin Modifié", "customadmin", null, null);
-        var exMod = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(currentUserId: 2, updateDto));
-        Assert.Equal("Seul un administrateur peut modifier un compte administrateur.", exMod.Message);
+        var exMod = await Assert.ThrowsAsync<ForbiddenOperationException>(() => asUser.SaveUserAsync(currentUserId: 2, updateDto));
+        Assert.Equal(AdminAccess.ReservedMessage, exMod.Message);
 
-        // Suppression d'un compte rôle personnalisé admin par un non-admin
-        var exDel = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.DeleteUserAsync(currentUserId: 2, id: 3));
-        Assert.Equal("Seul un administrateur peut supprimer un compte administrateur.", exDel.Message);
+        var exDel = await Assert.ThrowsAsync<ForbiddenOperationException>(() => asUser.DeleteUserAsync(currentUserId: 2, id: 3));
+        Assert.Equal(AdminAccess.ReservedMessage, exDel.Message);
+        Assert.Equal("Custom Admin", _uow.GetRepo<T_RESPONSABLE>().Items.Single(u => u.IDRESPONSABLE == 3).NOMRESPONSABLE);
     }
 
     [Fact]
@@ -249,47 +257,35 @@ public class AdminRulesAndSafeguardsTests
     }
 
     [Fact]
-    public async Task CustomAdmin_CanCreateModifyAndDeleteOrdinaryAccount()
+    public async Task CustomAdmin_CannotCreateModifyOrDeleteOrdinaryAccount_AfterRule4b2()
     {
+        // Règle 4b-2 (avant : un rôle dont le nom contient ADMIN pouvait créer, modifier et supprimer un compte ordinaire).
         var customAdmin = new T_RESPONSABLE { IDRESPONSABLE = 3, IDROLE = 3, LOGIN = "customadmin", NOMRESPONSABLE = "Custom Admin" };
+        var ordinary = new T_RESPONSABLE { IDRESPONSABLE = 5, IDROLE = 2, LOGIN = "employe1", NOMRESPONSABLE = "Employé 1" };
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(customAdmin);
+        _uow.GetRepo<T_RESPONSABLE>().Items.Add(ordinary);
+        var asCustom = CallerAuth(3, 3);
 
-        // Création compte ordinaire (rôle 2)
-        var createDto = new UserDto(0, 2, "Employé 1", "employe1", null, "ValidP@ss123!");
-        var created = await _auth.SaveUserAsync(currentUserId: 3, createDto);
-        Assert.Equal(2, created.RoleId);
-        Assert.Equal("employe1", created.Login);
-
-        // Modification compte ordinaire (rôle 2)
-        var updateDto = new UserDto(created.Id, 2, "Employé 1 Modifié", "employe1_mod", null, null);
-        var updated = await _auth.SaveUserAsync(currentUserId: 3, updateDto);
-        Assert.Equal("Employé 1 Modifié", updated.Nom);
-
-        // Suppression compte ordinaire
-        await _auth.DeleteUserAsync(currentUserId: 3, id: created.Id);
-        Assert.Null(await _uow.GetRepo<T_RESPONSABLE>().GetByIdAsync(created.Id));
+        await Assert.ThrowsAsync<ForbiddenOperationException>(() => asCustom.SaveUserAsync(currentUserId: 3, new UserDto(0, 2, "Employé 2", "employe2", null, "ValidP@ss123!")));
+        await Assert.ThrowsAsync<ForbiddenOperationException>(() => asCustom.SaveUserAsync(currentUserId: 3, new UserDto(5, 2, "Employé 1 Modifié", "employe1_mod", null, null)));
+        await Assert.ThrowsAsync<ForbiddenOperationException>(() => asCustom.DeleteUserAsync(currentUserId: 3, id: 5));
+        Assert.Equal("employe1", _uow.GetRepo<T_RESPONSABLE>().Items.Single(u => u.IDRESPONSABLE == 5).LOGIN);
     }
 
     [Fact]
-    public async Task OrdinaryUser_CanCreateModifyAndDeleteOrdinaryAccount_NonRegression()
+    public async Task OrdinaryUser_CannotCreateModifyOrDeleteAccounts_AfterStep4b1()
     {
+        // Étape 4b-1 (avant : un compte ordinaire pouvait gérer des comptes ordinaires au niveau du service).
         var ordinaryCaller = new T_RESPONSABLE { IDRESPONSABLE = 2, IDROLE = 2, LOGIN = "user2", NOMRESPONSABLE = "User 2" };
+        var other = new T_RESPONSABLE { IDRESPONSABLE = 6, IDROLE = 2, LOGIN = "employe3", NOMRESPONSABLE = "Employé 3" };
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(ordinaryCaller);
+        _uow.GetRepo<T_RESPONSABLE>().Items.Add(other);
+        var asOrdinary = CallerAuth(2, 2);
 
-        // Création compte ordinaire
-        var createDto = new UserDto(0, 2, "Employé 2", "employe2", null, "ValidP@ss123!");
-        var created = await _auth.SaveUserAsync(currentUserId: 2, createDto);
-        Assert.Equal(2, created.RoleId);
-        Assert.Equal("employe2", created.Login);
-
-        // Modification compte ordinaire
-        var updateDto = new UserDto(created.Id, 2, "Employé 2 Modifié", "employe2_mod", null, null);
-        var updated = await _auth.SaveUserAsync(currentUserId: 2, updateDto);
-        Assert.Equal("Employé 2 Modifié", updated.Nom);
-
-        // Suppression compte ordinaire
-        await _auth.DeleteUserAsync(currentUserId: 2, id: created.Id);
-        Assert.Null(await _uow.GetRepo<T_RESPONSABLE>().GetByIdAsync(created.Id));
+        await Assert.ThrowsAsync<ForbiddenOperationException>(() => asOrdinary.SaveUserAsync(currentUserId: 2, new UserDto(0, 2, "Employé 2", "employe2", null, "ValidP@ss123!")));
+        await Assert.ThrowsAsync<ForbiddenOperationException>(() => asOrdinary.SaveUserAsync(currentUserId: 2, new UserDto(6, 2, "Employé 3 Modifié", "employe3_mod", null, null)));
+        await Assert.ThrowsAsync<ForbiddenOperationException>(() => asOrdinary.DeleteUserAsync(currentUserId: 2, id: 6));
+        Assert.Equal("employe3", _uow.GetRepo<T_RESPONSABLE>().Items.Single(u => u.IDRESPONSABLE == 6).LOGIN);
     }
 
     [Fact]

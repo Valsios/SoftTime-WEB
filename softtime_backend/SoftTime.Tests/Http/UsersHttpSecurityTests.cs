@@ -1,4 +1,5 @@
 using System.Net;
+using Microsoft.Extensions.DependencyInjection;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 
@@ -70,6 +71,15 @@ public class UsersHttpSecurityTests : IClassFixture<ApiFactory>
         var (deleted, _) = await Send("admin", "DELETE", "/api/users/10051", null);
         Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
         Assert.DoesNotContain(_f.Store.GetRepo<T_RESPONSABLE>().Items, u => u.IDRESPONSABLE == 10051);
+    }
+
+    [Fact]
+    public void Production_container_provides_ICurrentUser_to_AuthService()
+    {
+        // ICurrentUser est obligatoire dans AuthService : si l'enregistrement de production disparaît, ce test échoue.
+        using var scope = _f.Services.CreateScope();
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<SoftTime.Application.Abstractions.ICurrentUser>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<AuthService>());
     }
 
     [Fact]

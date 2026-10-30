@@ -389,7 +389,7 @@ public class EffectiveRightsTests
         public OldWorld()
         {
             var mapper = new MapperConfiguration(c => c.AddProfile<MappingProfile>()).CreateMapper();
-            Auth = new AuthService(Uow, new Token(), mapper, new Mail(), new PasswordHasher<T_RESPONSABLE>());
+            Auth = new AuthService(Uow, new Token(), mapper, new Mail(), new SoftTime.Tests.Http.AdminCurrentUser(), new PasswordHasher<T_RESPONSABLE>());
             Uow.GetRepo<T_BDD_SAGE>().Items.AddRange(new[] { new T_BDD_SAGE { ID = 1, NOM_BD = "BASE1" }, new T_BDD_SAGE { ID = 2, NOM_BD = "BASE2" } });
             Uow.GetRepo<T_BDD_POINTEUSE>().Items.Add(new T_BDD_POINTEUSE { ID = 1, NOM_BD = "PTG" });
         }

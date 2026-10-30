@@ -23,7 +23,7 @@ public class DatabaseConfigurationSecurityTests
 
     public DatabaseConfigurationSecurityTests()
     {
-        _auth = new AuthService(_uow, new FakeTokenService(), _mapper, new FakeEmailService(), new PasswordHasher<T_RESPONSABLE>());
+        _auth = new AuthService(_uow, new FakeTokenService(), _mapper, new FakeEmailService(), new SoftTime.Tests.Http.AdminCurrentUser(), new PasswordHasher<T_RESPONSABLE>());
         _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });
         _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 5, NOMROLE = "Gestionnaire" });
         _uow.GetRepo<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 7, NOM_BD = Base, SERVEUR = "srv" });

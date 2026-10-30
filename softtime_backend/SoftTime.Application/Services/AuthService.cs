@@ -94,13 +94,13 @@ public class AuthService
     private readonly IMapper _mapper;
     private readonly IEmailService _email;
     private readonly IPasswordHasher<T_RESPONSABLE> _passwordHasher;
-    // Fourni par l'injection en production ; absent dans les tests unitaires du service (aucun contrôle d'administrateur alors).
-    private readonly ICurrentUser? _currentUser;
+    // Appelant HTTP, obligatoire : aucune écriture sur un autre compte sans contrôle d'administrateur.
+    private readonly ICurrentUser _currentUser;
 
-    /// <summary>Opérations sur les autres comptes : réservées aux administrateurs (rôle 1) quand l'appelant HTTP est connu.</summary>
+    /// <summary>Opérations sur les autres comptes : réservées aux administrateurs (rôle 1) (rôle 1 uniquement).</summary>
     private void RequireAdministrator()
     {
-        if (_currentUser is not null) AdminAccess.Require(_currentUser);
+        AdminAccess.Require(_currentUser);
     }
 
     public AuthService(
@@ -108,8 +108,8 @@ public class AuthService
         ITokenService tokens,
         IMapper mapper,
         IEmailService email,
-        IPasswordHasher<T_RESPONSABLE>? passwordHasher = null,
-        ICurrentUser? currentUser = null)
+        ICurrentUser currentUser,
+        IPasswordHasher<T_RESPONSABLE>? passwordHasher = null)
     {
         _uow = uow;
         _tokens = tokens;
@@ -332,11 +332,8 @@ public class AuthService
         if (callerRole == null)
             throw new InvalidOperationException("Utilisateur appelant introuvable.");
 
-        var callerIsAdmin = AdminRules.IsAdmin(caller.IDROLE, callerRole.NOMROLE);
         var callerIsSuperAdmin = AdminRules.IsSuperAdmin(caller.IDROLE);
 
-        var targetRole = await _uow.Repository<T_ROLE>().GetByIdAsync(dto.RoleId, cancellationToken);
-        var targetRoleIsAdmin = AdminRules.IsAdmin(dto.RoleId, targetRole?.NOMROLE);
 
         T_RESPONSABLE? entity = null;
         if (dto.Id == 0)
@@ -346,10 +343,6 @@ public class AuthService
                 if (!callerIsSuperAdmin)
                     throw new InvalidOperationException("Seul un super-administrateur peut attribuer le rôle Administrateur.");
             }
-            else if (targetRoleIsAdmin && !callerIsAdmin)
-            {
-                throw new InvalidOperationException("Seul un administrateur peut attribuer le rôle Administrateur.");
-            }
         }
         else
         {
@@ -358,27 +351,17 @@ public class AuthService
             if (dto.Id == currentUserId && entity.IDROLE != dto.RoleId)
                 throw new InvalidOperationException("Vous ne pouvez pas modifier votre propre rôle.");
 
-            var existingRole = await _uow.Repository<T_ROLE>().GetByIdAsync(entity.IDROLE, cancellationToken);
-            var existingIsAdmin = AdminRules.IsAdmin(entity.IDROLE, existingRole?.NOMROLE);
 
             if (entity.IDROLE == AdminRules.AdminRoleId)
             {
                 if (!callerIsSuperAdmin)
                     throw new InvalidOperationException("Seul un super-administrateur peut modifier un compte administrateur.");
             }
-            else if (existingIsAdmin && !callerIsAdmin)
-            {
-                throw new InvalidOperationException("Seul un administrateur peut modifier un compte administrateur.");
-            }
 
             if (dto.RoleId == AdminRules.AdminRoleId)
             {
                 if (!callerIsSuperAdmin)
                     throw new InvalidOperationException("Seul un super-administrateur peut attribuer le rôle Administrateur.");
-            }
-            else if (targetRoleIsAdmin && !callerIsAdmin)
-            {
-                throw new InvalidOperationException("Seul un administrateur peut attribuer le rôle Administrateur.");
             }
 
             if (entity.IDROLE == AdminRules.AdminRoleId && dto.RoleId != AdminRules.AdminRoleId)
@@ -515,24 +498,17 @@ public class AuthService
         if (callerRole == null)
             throw new InvalidOperationException("Utilisateur appelant introuvable.");
 
-        var callerIsAdmin = AdminRules.IsAdmin(caller.IDROLE, callerRole.NOMROLE);
         var callerIsSuperAdmin = AdminRules.IsSuperAdmin(caller.IDROLE);
 
         if (currentUserId == id)
             throw new InvalidOperationException("Vous ne pouvez pas supprimer votre propre compte.");
 
         var entity = await repo.GetByIdAsync(id, cancellationToken) ?? throw new KeyNotFoundException();
-        var targetRole = await _uow.Repository<T_ROLE>().GetByIdAsync(entity.IDROLE, cancellationToken);
-        var targetIsAdmin = AdminRules.IsAdmin(entity.IDROLE, targetRole?.NOMROLE);
 
         if (entity.IDROLE == AdminRules.AdminRoleId)
         {
             if (!callerIsSuperAdmin)
                 throw new InvalidOperationException("Seul un super-administrateur peut supprimer un compte administrateur.");
-        }
-        else if (targetIsAdmin && !callerIsAdmin)
-        {
-            throw new InvalidOperationException("Seul un administrateur peut supprimer un compte administrateur.");
         }
 
         if (entity.IDROLE == AdminRules.AdminRoleId)
@@ -730,8 +706,7 @@ public class AuthService
         var target = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(targetUserId, cancellationToken)
             ?? throw new KeyNotFoundException("Utilisateur cible introuvable.");
 
-        var callerRole = await _uow.Repository<T_ROLE>().GetByIdAsync(caller.IDROLE, cancellationToken);
-        var callerIsAdmin = caller.IDROLE == 1 || (callerRole?.NOMROLE?.Contains("ADMIN", StringComparison.OrdinalIgnoreCase) ?? false);
+        var callerIsAdmin = AdminRules.IsSuperAdmin(caller.IDROLE);
 
         if (currentUserId == targetUserId && !callerIsAdmin)
         {
@@ -959,8 +934,7 @@ public class AuthService
         var target = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(targetUserId, cancellationToken)
             ?? throw new KeyNotFoundException("Utilisateur cible introuvable.");
 
-        var callerRole = await _uow.Repository<T_ROLE>().GetByIdAsync(caller.IDROLE, cancellationToken);
-        var callerIsAdmin = AdminRules.IsAdmin(caller.IDROLE, callerRole?.NOMROLE);
+        var callerIsAdmin = AdminRules.IsSuperAdmin(caller.IDROLE);
 
         if (currentUserId == targetUserId && !callerIsAdmin)
         {
