@@ -94,6 +94,7 @@ public class UsersController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(decimal id, CancellationToken ct) => Ok(await _auth.GetUserAsync(id, ct));
 
+    [RequireAdmin]
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] UserDto dto, CancellationToken ct)
     {
@@ -102,6 +103,7 @@ public class UsersController : ControllerBase
         return Ok(await _auth.SaveUserAsync(currentUserId, dto with { Id = 0 }, ct));
     }
 
+    [RequireAdmin]
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(decimal id, [FromBody] UserDto dto, CancellationToken ct)
     {
@@ -110,6 +112,7 @@ public class UsersController : ControllerBase
         return Ok(await _auth.SaveUserAsync(currentUserId, dto with { Id = id }, ct));
     }
 
+    [RequireAdmin]
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(decimal id, CancellationToken ct)
     {

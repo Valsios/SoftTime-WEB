@@ -94,19 +94,29 @@ public class AuthService
     private readonly IMapper _mapper;
     private readonly IEmailService _email;
     private readonly IPasswordHasher<T_RESPONSABLE> _passwordHasher;
+    // Fourni par l'injection en production ; absent dans les tests unitaires du service (aucun contrôle d'administrateur alors).
+    private readonly ICurrentUser? _currentUser;
+
+    /// <summary>Opérations sur les autres comptes : réservées aux administrateurs (rôle 1) quand l'appelant HTTP est connu.</summary>
+    private void RequireAdministrator()
+    {
+        if (_currentUser is not null) AdminAccess.Require(_currentUser);
+    }
 
     public AuthService(
         IUnitOfWork uow,
         ITokenService tokens,
         IMapper mapper,
         IEmailService email,
-        IPasswordHasher<T_RESPONSABLE>? passwordHasher = null)
+        IPasswordHasher<T_RESPONSABLE>? passwordHasher = null,
+        ICurrentUser? currentUser = null)
     {
         _uow = uow;
         _tokens = tokens;
         _mapper = mapper;
         _email = email;
         _passwordHasher = passwordHasher ?? new PasswordHasher<T_RESPONSABLE>();
+        _currentUser = currentUser;
     }
 
     public async Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
@@ -312,6 +322,7 @@ public class AuthService
 
     public async Task<UserDto> SaveUserAsync(decimal currentUserId, UserDto dto, CancellationToken cancellationToken = default)
     {
+        RequireAdministrator();
         var repo = _uow.Repository<T_RESPONSABLE>();
         var caller = await repo.GetByIdAsync(currentUserId, cancellationToken);
         if (caller == null)
@@ -494,6 +505,7 @@ public class AuthService
 
     public async Task DeleteUserAsync(decimal currentUserId, decimal id, CancellationToken cancellationToken = default)
     {
+        RequireAdministrator();
         var repo = _uow.Repository<T_RESPONSABLE>();
         var caller = await repo.GetByIdAsync(currentUserId, cancellationToken);
         if (caller == null)
@@ -637,6 +649,7 @@ public class AuthService
 
     public async Task SetDbAccessAsync(decimal userId, IReadOnlyCollection<int> sageDbIds, CancellationToken cancellationToken = default)
     {
+        RequireAdministrator();
         var repo = _uow.Repository<T_BDD_AUTORISE>();
         var existing = await repo.ListAsync(a => a.IDRESPONSABLE == userId, cancellationToken);
         repo.RemoveRange(existing);
@@ -710,6 +723,7 @@ public class AuthService
 
     public async Task SaveUserDetailedPermissionsAsync(decimal currentUserId, decimal targetUserId, IReadOnlyCollection<string> permissions, CancellationToken cancellationToken = default)
     {
+        RequireAdministrator();
         var caller = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(currentUserId, cancellationToken)
             ?? throw new UnauthorizedAccessException("Utilisateur connecté introuvable.");
 
@@ -938,6 +952,7 @@ public class AuthService
 
     public async Task ResetUserDetailedPermissionsAsync(decimal currentUserId, decimal targetUserId, CancellationToken cancellationToken = default)
     {
+        RequireAdministrator();
         var caller = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(currentUserId, cancellationToken)
             ?? throw new UnauthorizedAccessException("Utilisateur connecté introuvable.");
 

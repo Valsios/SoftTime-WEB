@@ -80,6 +80,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         users.Add(new T_RESPONSABLE { IDRESPONSABLE = 10030, IDROLE = 29, LOGIN = "user1", NOMRESPONSABLE = "User1" });
         users.Add(new T_RESPONSABLE { IDRESPONSABLE = 10040, IDROLE = 40, LOGIN = "param2", NOMRESPONSABLE = "Param2" });
         users.Add(new T_RESPONSABLE { IDRESPONSABLE = 10050, IDROLE = 91, LOGIN = "cible", NOMRESPONSABLE = "Cible" });
+        users.Add(new T_RESPONSABLE { IDRESPONSABLE = 10051, IDROLE = 91, LOGIN = "jetable", NOMRESPONSABLE = "Jetable" });
+        users.Add(new T_RESPONSABLE { IDRESPONSABLE = 10052, IDROLE = 91, LOGIN = "modifiable", NOMRESPONSABLE = "Modifiable" });
 
         // Profil « comme joel » : portes 1 et 3 via le jeton, permissions fines de lecture seulement.
         var perms = Store.GetRepo<T_USER_PERMISSION>().Items;
@@ -183,6 +185,8 @@ public sealed class InMemoryRepository<T> : IRepository<T> where T : class
 
     public Task AddAsync(T entity, CancellationToken cancellationToken = default)
     {
+        if (entity is T_RESPONSABLE r && r.IDRESPONSABLE == 0)
+            r.IDRESPONSABLE = Items.OfType<T_RESPONSABLE>().Select(x => x.IDRESPONSABLE).DefaultIfEmpty(0).Max() + 1;
         Items.Add(entity);
         return Task.CompletedTask;
     }
