@@ -1,7 +1,22 @@
-import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  computed,
+  inject,
+  OnInit,
+  signal,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { DashboardFilters, DashboardStats, PeriodRequest } from '../../shared/models';
+import {
+  DashboardAssiduiteRow,
+  DashboardFilters,
+  DashboardSlice,
+  DashboardStats,
+  PeriodRequest,
+} from '../../shared/models';
 import { DashboardService } from '../../shared/services/dashboard.service';
+import { ExcelExportService, type ExcelSheet } from '../../shared/services/excel-export.service';
 import {
   ChartPoint,
   ChartSeries,
@@ -17,7 +32,7 @@ import {
   SoftTabs,
   TabItem,
 } from '../../shared/components';
-import { asRow, fmtDate } from '../../shared/utils/date';
+import { asRow, fmtDate, parseLocalDate } from '../../shared/utils/date';
 
 /**
  * Libellé de période réduit pour l'axe des courbes : « Semaine 27 (30/06 - 06/07/2025) »
@@ -26,6 +41,20 @@ import { asRow, fmtDate } from '../../shared/utils/date';
 function libelleCourt(periode: string): string {
   const semaine = /^Semaine\s+(\d+)/.exec(periode);
   return semaine ? `S${semaine[1]}` : fmtDate(periode);
+}
+
+/**
+ * Filtres réellement appliqués à une réponse du serveur : sert au contexte affiché et aux
+ * exports, pour qu'ils ne puissent pas décrire des filtres différents des données visibles.
+ */
+interface ReportContext {
+  from: string;
+  to: string;
+  matriculeFrom: string | null;
+  matriculeTo: string | null;
+  periode: string;
+  departement: string | null;
+  categorie: number | null;
 }
 
 /**
@@ -55,9 +84,26 @@ function libelleCourt(periode: string): string {
     <page-header
       title="Analyse de la période"
       subtitle="Indicateurs, évolution, répartition et assiduité"
-    ></page-header>
+    >
+      <soft-button
+        variant="secondary"
+        (click)="exportExcel()"
+        [disabled]="!stats() || loading()"
+      >Export Excel</soft-button>
+      <soft-button
+        variant="secondary"
+        (click)="exportPdf()"
+        [disabled]="!stats() || loading() || printing()"
+      >Export PDF</soft-button>
+    </page-header>
 
-    <div class="soft-toolbar">
+    @if (printing()) {
+      <div class="print-preparing print-hide" role="status" aria-live="polite">
+        Préparation du PDF…
+      </div>
+    }
+
+    <div class="soft-toolbar print-hide">
       <soft-select
         label="Regroupement"
         [(ngModel)]="periode"
@@ -82,9 +128,24 @@ function libelleCourt(periode: string): string {
         (ngModelChange)="reload()"
       ></soft-select>
     </div>
-    <period-filter [autoSearch]="true" (search)="onSearch($event)"></period-filter>
+    <period-filter
+      class="print-hide"
+      [autoSearch]="true"
+      (search)="onSearch($event)"
+    ></period-filter>
 
     @if (stats(); as s) {
+      @if (applied(); as a) {
+        <p class="report-context">
+          <span>Période : {{ fmtDateFr(a.from) }} → {{ fmtDateFr(a.to) }}</span>
+          <span>Matricules : {{ matriculeLabel(a) }}</span>
+          <span>Regroupement : {{ periodeLabel(a.periode) }}</span>
+          <span>Département : {{ a.departement || 'Tous' }}</span>
+          <span>Catégorie : {{ categorieLabel(a.categorie) }}</span>
+          <span>Données chargées le {{ loadedAtLabel() }}</span>
+        </p>
+      }
+
       <div class="kpi-grid">
         <soft-card padding="md">
           <span class="kpi-label">Effectif actif</span><strong>{{ s.kpi.cartesActives }}</strong>
@@ -158,6 +219,7 @@ function libelleCourt(periode: string): string {
           [columns]="repartitionColumns()"
           [rows]="repartitionRows()"
           [loading]="loading()"
+          [paginate]="!printing()"
         ></data-table>
       </soft-card>
 
@@ -167,6 +229,7 @@ function libelleCourt(periode: string): string {
           [columns]="periodeColumns"
           [rows]="periodeRows()"
           [loading]="loading()"
+          [paginate]="!printing()"
         ></data-table>
       </soft-card>
 
@@ -176,6 +239,7 @@ function libelleCourt(periode: string): string {
           [columns]="assiduiteColumns"
           [rows]="plusPonctuelsRows()"
           [loading]="loading()"
+          [paginate]="!printing()"
           emptyText="Aucun pointage sur la période."
         ></data-table>
       </soft-card>
@@ -186,6 +250,7 @@ function libelleCourt(periode: string): string {
           [columns]="assiduiteColumns"
           [rows]="moinsPonctuelsRows()"
           [loading]="loading()"
+          [paginate]="!printing()"
           emptyText="Aucun pointage sur la période."
         ></data-table>
       </soft-card>
@@ -202,6 +267,31 @@ function libelleCourt(periode: string): string {
   `,
   styles: [
     `
+      .report-context {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 18px;
+        margin: 0 0 18px;
+        padding: 10px 14px;
+        background: var(--surface-light);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        color: var(--text-secondary);
+        font-size: 12.5px;
+        line-height: 1.5;
+      }
+      .print-preparing {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: grid;
+        place-items: center;
+        background: rgba(255, 255, 255, 0.86);
+        color: var(--navy-950);
+        font-family: var(--font-heading);
+        font-size: 18px;
+        font-weight: 600;
+      }
       .kpi-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -260,16 +350,53 @@ function libelleCourt(periode: string): string {
         color: var(--navy-900);
       }
       .muted { color: var(--text-muted); }
+
+      @media print {
+        .report-context {
+          margin-bottom: 10px;
+          padding: 8px 10px;
+          font-size: 10.5px;
+        }
+        .kpi-grid {
+          grid-template-columns: repeat(5, 1fr);
+          gap: 8px;
+          margin-bottom: 8px;
+        }
+        .kpi-grid strong { font-size: 19px; margin: 2px 0; }
+        .kpi-grid small { font-size: 9.5px; }
+        .kpi-label { font-size: 9px; }
+        .kpi-detail {
+          margin-bottom: 14px;
+          padding: 8px 10px;
+          font-size: 11px;
+        }
+        .chart-grid {
+          grid-template-columns: 1fr;
+          gap: 10px;
+          margin-bottom: 14px;
+        }
+        .section-title {
+          font-size: 15px;
+          margin: 16px 0 8px;
+        }
+        .sub-title { margin: 12px 0 8px; font-size: 13px; }
+        .print-preparing { display: none !important; }
+      }
     `,
   ],
 })
 export class AnalyticsPage implements OnInit {
   private readonly svc = inject(DashboardService);
+  private readonly excel = inject(ExcelExportService);
+  private readonly cdr = inject(ChangeDetectorRef);
 
   readonly loading = signal(false);
   readonly erreur = signal(false);
   readonly stats = signal<DashboardStats | null>(null);
   readonly filters = signal<DashboardFilters | null>(null);
+  readonly applied = signal<ReportContext | null>(null);
+  readonly loadedAt = signal<Date | null>(null);
+  readonly printing = signal(false);
 
   readonly periodeOptions = [
     { value: 'quotidienne', label: 'Quotidienne' },
@@ -421,8 +548,242 @@ export class AnalyticsPage implements OnInit {
     return (value ?? 0).toFixed(2);
   }
 
+  /** Date ISO (yyyy-mm-dd) affichée en jj/mm/aaaa, comme dans le contexte du rapport. */
+  fmtDateFr(value: string | null | undefined): string {
+    if (!value) return '—';
+    const date = parseLocalDate(value.slice(0, 10));
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('fr-FR');
+  }
+
+  periodeLabel(value: string): string {
+    return this.periodeOptions.find((option) => option.value === value)?.label ?? value;
+  }
+
+  categorieLabel(id: number | null): string {
+    if (id == null) return 'Toutes';
+    return this.filters()?.categories.find((c) => c.id === id)?.libelle ?? String(id);
+  }
+
+  matriculeLabel(context: ReportContext): string {
+    if (!context.matriculeFrom && !context.matriculeTo) return 'Tous';
+    return `${context.matriculeFrom ?? '—'} → ${context.matriculeTo ?? '—'}`;
+  }
+
+  loadedAtLabel(): string {
+    const loadedAt = this.loadedAt();
+    return loadedAt ? loadedAt.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
+  }
+
+  /**
+   * Export PDF : le document est l'impression du DOM affiché (mise en page A4 dédiée).
+   * Pendant la préparation, la pagination des tableaux est désactivée pour imprimer tout le jeu
+   * filtré ; le thème est forcé en clair et restauré à la fermeture de la boîte d'impression.
+   */
+  exportPdf(): void {
+    const stats = this.stats();
+    const context = this.applied();
+    if (!stats || !context || this.loading() || this.printing()) return;
+
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute('data-theme');
+    const previousTitle = document.title;
+    let restored = false;
+
+    const restore = (): void => {
+      if (restored) return;
+      restored = true;
+      document.title = previousTitle;
+      if (previousTheme) root.setAttribute('data-theme', previousTheme);
+      else root.removeAttribute('data-theme');
+      this.printing.set(false);
+      this.cdr.detectChanges();
+    };
+
+    window.addEventListener('afterprint', restore, { once: true });
+    // Dernier recours si le navigateur n'émet pas afterprint : ne pas laisser l'écran en mode export.
+    window.setTimeout(restore, 300_000);
+
+    this.printing.set(true);
+    document.title = this.printFileName(context);
+    root.setAttribute('data-theme', 'light');
+    this.cdr.detectChanges();
+
+    try {
+      window.print();
+    } catch {
+      restore();
+    }
+  }
+
+  /**
+   * Export Excel : classeur multi-feuilles construit à partir des données déjà affichées.
+   * Les deux axes de répartition sont exportés, indépendamment de l'onglet affiché.
+   */
+  exportExcel(): void {
+    const stats = this.stats();
+    const context = this.applied();
+    if (!stats || !context || this.loading()) return;
+
+    const sheets: ExcelSheet[] = [
+      {
+        sheetName: 'Synthèse',
+        headers: ['Indicateur', 'Valeur'],
+        rows: this.syntheseRows(stats, context),
+      },
+      {
+        sheetName: 'Périodes',
+        headers: [
+          'Période',
+          'Absences',
+          'Retards',
+          'Minutes retard',
+          'Heures travaillées',
+          'Heures supplémentaires',
+        ],
+        rows: this.periodeExportRows(stats),
+      },
+      ...this.repartitionSheets(stats),
+      {
+        sheetName: 'Assiduité',
+        headers: [
+          'Classement',
+          'Matricule',
+          'Nom',
+          'Ponctualité (%)',
+          'Jours pointés',
+          'Retards',
+          'Absences',
+        ],
+        rows: this.assiduiteExportRows(stats),
+      },
+    ];
+
+    this.excel.downloadWorkbook(this.printFileName(context), sheets);
+  }
+
+  /**
+   * Une feuille par axe de répartition (Catégorie, Département). Les deux viennent de la même
+   * réponse du serveur : l'onglet actif ne conditionne pas le contenu du classeur.
+   */
+  private repartitionSheets(stats: DashboardStats): ExcelSheet[] {
+    const toSheet = (axe: string, slices: DashboardSlice[]): ExcelSheet => ({
+      sheetName: `Répartition - ${axe}`,
+      headers: [
+        axe,
+        'Effectif actif',
+        'Absences',
+        'Retards',
+        'Minutes retard',
+        'Heures supplémentaires',
+      ],
+      rows: slices.map((slice) => [
+        slice.libelle,
+        slice.effectif,
+        slice.absences,
+        slice.retards,
+        slice.minutesRetard,
+        slice.heuresSupplementaires,
+      ]),
+    });
+
+    return [
+      toSheet('Catégorie', stats.repartition.parCategorie),
+      toSheet('Département', stats.repartition.parDepartement),
+    ];
+  }
+
+  private printFileName(context: ReportContext): string {
+    return `analyse-periode_${context.from}_${context.to}`;
+  }
+
+  /** Feuille Synthèse : contexte des filtres, KPI et totaux secondaires (mêmes valeurs qu'à l'écran). */
+  private syntheseRows(stats: DashboardStats, context: ReportContext): (string | number)[][] {
+    const kpi = stats.kpi;
+    return [
+      ['Analyse de la période', ''],
+      ['Période', `${this.fmtDateFr(context.from)} → ${this.fmtDateFr(context.to)}`],
+      ['Matricules', this.matriculeLabel(context)],
+      ['Regroupement', this.periodeLabel(context.periode)],
+      ['Département', context.departement || 'Tous'],
+      ['Catégorie', this.categorieLabel(context.categorie)],
+      ['Données chargées le', this.loadedAtLabel()],
+      ['', ''],
+      ['Effectif actif', kpi.cartesActives],
+      ['Cartes sur la période', stats.totalEmployes],
+      ["Taux d'absentéisme (%)", kpi.tauxAbsenteisme],
+      ["Jours d'absence", kpi.joursAbsence],
+      ['Jours planifiés', kpi.joursPlanifies],
+      ['Taux de ponctualité (%)', kpi.tauxPonctualite],
+      ['Jours en retard', kpi.joursRetard],
+      ['Jours pointés', kpi.joursTravailles],
+      ['Heures supplémentaires', kpi.heuresSupplementaires],
+      ['Heures travaillées', kpi.heuresTravaillees],
+      ['Semaines validées', kpi.semainesValidees],
+      ['Semaines en attente', kpi.semainesEnAttente],
+      ['', ''],
+      ['Total absences', stats.absences.total],
+      ['Absences explicites', stats.absences.explicites],
+      ['Absences planifiées sans pointage', stats.absences.planifiesSansPointage],
+      ['Total retards', stats.retards.total],
+      ['Minutes de retard cumulées', stats.retards.totalMinutes],
+      ['Anomalies', kpi.anomalies],
+      ['Corrections manuelles', kpi.correctionsManuelles],
+    ];
+  }
+
+  /** Feuille Périodes : les deux courbes (absences/retards et heures) sur les mêmes libellés. */
+  private periodeExportRows(stats: DashboardStats): (string | number)[][] {
+    const retards = new Map(stats.retards.stats.map((row) => [row.periode, row]));
+    const heures = new Map(stats.series.map((row) => [row.periode, row]));
+    const rows: (string | number)[][] = stats.absences.stats.map((absence) => {
+      const retard = retards.get(absence.periode);
+      const serie = heures.get(absence.periode);
+      return [
+        absence.periode,
+        absence.count,
+        retard?.count ?? 0,
+        retard?.totalMinutes ?? 0,
+        serie?.heures ?? 0,
+        serie?.heuresSupplementaires ?? 0,
+      ];
+    });
+
+    // Filet de sécurité si une période n'apparaissait que dans les séries d'heures.
+    const connues = new Set(rows.map((row) => row[0]));
+    for (const serie of stats.series) {
+      if (connues.has(serie.periode)) continue;
+      rows.push([serie.periode, 0, 0, 0, serie.heures, serie.heuresSupplementaires]);
+    }
+    return rows;
+  }
+
+  private assiduiteExportRows(stats: DashboardStats): (string | number)[][] {
+    const toRow = (row: DashboardAssiduiteRow, classement: string): (string | number)[] => [
+      classement,
+      row.matricule,
+      row.nom ?? '',
+      row.tauxPonctualite,
+      row.joursTravailles,
+      row.joursRetard,
+      row.joursAbsence,
+    ];
+    return [
+      ...stats.assiduite.plusPonctuels.map((row) => toRow(row, 'Plus ponctuel')),
+      ...stats.assiduite.moinsPonctuels.map((row) => toRow(row, 'Moins ponctuel')),
+    ];
+  }
+
   private load(): void {
     if (!this.lastFilter) return;
+    const context: ReportContext = {
+      from: this.lastFilter.from,
+      to: this.lastFilter.to,
+      matriculeFrom: this.lastFilter.matriculeFrom ?? null,
+      matriculeTo: this.lastFilter.matriculeTo ?? null,
+      periode: this.periode,
+      departement: this.departement,
+      categorie: this.categorie,
+    };
     this.loading.set(true);
     this.erreur.set(false);
     this.svc
@@ -434,7 +795,11 @@ export class AnalyticsPage implements OnInit {
       })
       .subscribe({
         next: (s) => {
+          // Le contexte et les données sont mis à jour ensemble : les exports décrivent
+          // exactement le rapport affiché, jamais une requête intermédiaire.
           this.stats.set(s);
+          this.applied.set(context);
+          this.loadedAt.set(new Date());
           this.loading.set(false);
         },
         error: () => {

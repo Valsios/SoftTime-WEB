@@ -134,6 +134,7 @@ public static class ApiCatalog
         E("CodeConstantes", "GET", "/api/code-constantes/paged?page=&pageSize=", "Codes constantes paginés (max 100)"),
         E("PayrollWriteConfiguration", "GET", "/api/payroll-write-config", "Configuration d'écriture paie AUTRE"),
         E("Excel", "POST", "/api/excel/export", "Export grille vers .xlsx"),
+        E("Excel", "POST", "/api/excel/export-workbook", "Export classeur multi-feuilles vers .xlsx"),
         E("ImportTemplates", "GET", "/api/import-templates", "Modèles d'import (colonnes, exemples, règles)"),
         E("ImportTemplates", "GET", "/api/import-templates/{key}", "Télécharger un modèle d'import (.xlsx / .csv)"),
         E("Shifts", "GET", "/api/shifts", "Catalogue shifts"),

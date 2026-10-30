@@ -1313,3 +1313,135 @@ button {
     scroll-behavior: auto !important;
   }
 }
+
+/* ============================================================================
+   Impression des rapports (Export PDF du tableau de bord analytique)
+   Le document est l'impression du DOM affiché : on masque l'habillage, on
+   neutralise les règles mobiles (A4 ≈ 700 px < 767 px) et on évite les coupures.
+   ========================================================================== */
+@page {
+  size: A4 portrait;
+  margin: 12mm 12mm 14mm;
+}
+
+/* Utilitaires communs écran / impression */
+.print-only {
+  display: none;
+}
+
+@media print {
+  html,
+  body {
+    height: auto !important;
+    background: #fff !important;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* L'application ne défile plus : le document entier doit être imprimé. */
+  .shell {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .main {
+    display: block !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  .content {
+    display: block !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  /* Habillage hors document. */
+  .sidebar,
+  .topbar,
+  .mobile-nav-overlay,
+  .soft-toasts,
+  .soft-actions,
+  .print-hide {
+    display: none !important;
+  }
+
+  .print-only {
+    display: inline !important;
+  }
+
+  a[href]::after {
+    content: none !important;
+  }
+
+  .soft-fade-in {
+    animation: none !important;
+  }
+
+  /* Tableaux : toujours en mode tableau (jamais en cartes mobiles), en-tête répété. */
+  .soft-table-wrap {
+    display: block !important;
+    overflow: visible !important;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .soft-table-cards {
+    display: none !important;
+  }
+
+  .soft-table-search,
+  .soft-pagination-wrap {
+    display: none !important;
+  }
+
+  .soft-table {
+    font-size: 11px;
+  }
+
+  .soft-table thead {
+    display: table-header-group;
+  }
+
+  .soft-table thead th,
+  .soft-table tbody td {
+    padding: 6px 8px !important;
+    font-size: 11px !important;
+  }
+
+  .soft-table tbody tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .soft-table__empty {
+    padding: 18px 10px !important;
+  }
+
+  /* Les libellés de barres ne doivent pas être tronqués dans le PDF. */
+  .soft-bars__label {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+  }
+
+  /* Pas de coupure au milieu d'une carte KPI, d'un graphique ou d'un titre. */
+  .kpi-grid > soft-card,
+  .chart-grid > div,
+  .chart-grid soft-card,
+  h2.section-title,
+  h3.sub-title {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  h2.section-title,
+  h3.sub-title {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+}
