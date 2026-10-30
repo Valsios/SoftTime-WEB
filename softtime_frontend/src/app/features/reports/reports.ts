@@ -126,7 +126,7 @@ const RETARD_EXPORT_COLUMNS: Column[] = [
       ></soft-select>
     </div>
 
-    <period-filter [showBranche]="true" (search)="onSearch($event)"></period-filter>
+    <period-filter [showDepartement]="true" (search)="onSearch($event)"></period-filter>
 
     <soft-card>
       <data-table

@@ -28,7 +28,6 @@ export interface CorrespondenceMode {
 export interface CardPaie {
   id: number;
   sageMatricule?: string | null;
-  branche?: string | null;
   sageNom?: string | null;
   sagePrenom?: string | null;
   pointeuseNumero?: string | null;

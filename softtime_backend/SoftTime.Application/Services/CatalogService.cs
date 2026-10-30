@@ -1048,7 +1048,6 @@ public class CatalogService
                 c => c.SAGE_PRENOM,
                 c => c.POINTEUSE_NUMERO,
                 c => c.POINTEUSE_NOM,
-                c => c.BRANCHE,
                 c => c.DEPARTEMENT,
             },
             ct);

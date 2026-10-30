@@ -295,7 +295,7 @@ public class ReportService
 
     /// <summary>
     /// Contexte partagé par l'état des absences et l'état des retards : cartes filtrées (base SAGE,
-    /// plage de matricules, branche), fériés, congés SAGE, corrections, plannings, affectations de
+    /// plage de matricules, département), fériés, congés SAGE, corrections, plannings, affectations de
     /// catégorie et tolérances. La fenêtre est plafonnée à la veille : aucun état ne fabrique
     /// d'événement futur, exactement comme le tableau de bord.
     /// </summary>
@@ -310,12 +310,12 @@ public class ReportService
 
         var borneFinExclusive = fin.AddDays(1);
 
-        // 1. Cartes filtrées par tenant SAGE, plage de matricules (MatriculeRange) et Branche (C5)
-        var periodRequest = new PeriodRequest(filter.MatriculeFrom?.Trim(), filter.MatriculeTo?.Trim(), filter.From, filter.To, filter.Branche);
+        // 1. Cartes filtrées par tenant SAGE, plage de matricules (MatriculeRange) et Département
+        var periodRequest = new PeriodRequest(filter.MatriculeFrom?.Trim(), filter.MatriculeTo?.Trim(), filter.From, filter.To, filter.Departement);
         var cartes = (await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == sageDb, ct))
             .Where(c => MatriculeRange.Contains(c.SAGE_MATRICULE?.Trim(), periodRequest))
-            .Where(c => string.IsNullOrWhiteSpace(filter.Branche)
-                        || string.Equals(c.BRANCHE, filter.Branche, StringComparison.OrdinalIgnoreCase))
+            .Where(c => string.IsNullOrWhiteSpace(filter.Departement)
+                        || string.Equals(c.DEPARTEMENT?.Trim(), filter.Departement.Trim(), StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         if (cartes.Count == 0)

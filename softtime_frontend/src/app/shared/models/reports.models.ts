@@ -108,7 +108,7 @@ export interface ReportFilter {
   matriculeTo?: string | null;
   from: string;
   to: string;
-  branche?: string | null;
+  departement?: string | null;
   /** Terme de recherche du tableau. */
   search?: string | null;
   /** Numéro de page (1-based), uniquement pour les états paginés. */

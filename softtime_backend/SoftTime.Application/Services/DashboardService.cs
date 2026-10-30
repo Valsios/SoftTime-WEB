@@ -30,7 +30,7 @@ public class DashboardService
     }
 
     public async Task<DashboardStatsDto> GetStatsAsync(
-        PeriodRequest filter, string? departement, string? categorie, string periode, CancellationToken ct = default)
+        PeriodRequest filter, string? categorie, string periode, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageDb = _tenant.SageDb;
@@ -55,8 +55,8 @@ public class DashboardService
 
         var cartes = (await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == sageDb, ct))
             .Where(c => MatriculeRange.Contains(c.SAGE_MATRICULE, filter))
-            .Where(c => string.IsNullOrWhiteSpace(departement)
-                        || string.Equals(c.DEPARTEMENT, departement, StringComparison.OrdinalIgnoreCase))
+            .Where(c => string.IsNullOrWhiteSpace(filter.Departement)
+                        || string.Equals(c.DEPARTEMENT, filter.Departement, StringComparison.OrdinalIgnoreCase))
             .Where(c => categorieFiltre is not int idCat
                         || (categorieParCarte.TryGetValue(c.ID, out var carteCat) && carteCat == idCat))
             .ToList();
@@ -261,7 +261,6 @@ public class DashboardService
 
         var repartition = new DashboardRepartitionDto(
             Repartition(cartes, c => categorieParCle.GetValueOrDefault(Cle(c.SAGE_MATRICULE)), joursAbsence, joursRetard, hsParCle),
-            Repartition(cartes, c => c.BRANCHE, joursAbsence, joursRetard, hsParCle),
             Repartition(cartes, c => c.DEPARTEMENT, joursAbsence, joursRetard, hsParCle));
 
         return new DashboardStatsDto(
@@ -274,7 +273,7 @@ public class DashboardService
             Assiduite(cles, categorieParCle, joursPresence, joursAbsence, joursRetard));
     }
 
-    /// <summary>Valeurs distinctes proposées par les filtres de la page (département, branche, catégorie).</summary>
+    /// <summary>Valeurs distinctes proposées par les filtres de la page (département, catégorie).</summary>
     public async Task<DashboardFiltersDto> GetFiltersAsync(CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
@@ -301,7 +300,6 @@ public class DashboardService
 
         return new DashboardFiltersDto(
             Valeurs(cartes.Select(c => c.DEPARTEMENT)),
-            Valeurs(cartes.Select(c => c.BRANCHE)),
             categories);
     }
 
@@ -353,7 +351,7 @@ public class DashboardService
     private static readonly PeriodeMetrics VideMetrics = new(0, 0, 0, 0, 0, Array.Empty<SemaineHs>());
 
     /// <summary>
-    /// Effectif, absences et retards d'un axe (catégorie, branche, département).
+    /// Effectif, absences et retards d'un axe (catégorie, département).
     /// Seules les cartes actives sont comptées : c'est l'« effectif actif » annoncé par les KPI,
     /// et les événements sont donc restreints aux mêmes salariés pour que la ligne reste cohérente.
     /// </summary>

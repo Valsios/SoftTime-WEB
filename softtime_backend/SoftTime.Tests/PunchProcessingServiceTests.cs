@@ -71,7 +71,7 @@ public class PunchProcessingServiceTests
         }
 
         public Task<PreprocessPunchesResultDto> Traiter(DateTime from, DateTime to)
-            => Service.ProcessAsync(new PeriodRequest(null, null, from, to, null));
+            => Service.ProcessAsync(new PeriodRequest(null, null, from, to));
     }
 
     [Fact]

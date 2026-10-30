@@ -359,7 +359,8 @@ public class PunchProcessingService
     /// <summary>Filtre de périmètre identique à <c>OvertimeService.TargetCards</c>.</summary>
     private static List<T_CARDPAIE> FilterCards(List<T_CARDPAIE> cards, PeriodRequest request) =>
         cards
-            .Where(c => string.IsNullOrEmpty(request.Branche) || c.BRANCHE == request.Branche)
+            .Where(c => string.IsNullOrEmpty(request.Departement)
+                        || string.Equals(c.DEPARTEMENT, request.Departement, StringComparison.OrdinalIgnoreCase))
             .Where(c => string.IsNullOrEmpty(request.MatriculeFrom)
                         || string.Compare(c.SAGE_MATRICULE, request.MatriculeFrom, StringComparison.Ordinal) >= 0)
             .Where(c => string.IsNullOrEmpty(request.MatriculeTo)

@@ -137,7 +137,7 @@ public class OvertimeService
             && (string.IsNullOrEmpty(request.MatriculeFrom) || string.Compare(h.Matricule, request.MatriculeFrom) >= 0)
             && (string.IsNullOrEmpty(request.MatriculeTo) || string.Compare(h.Matricule, request.MatriculeTo) <= 0), ct);
 
-        if (!string.IsNullOrEmpty(request.Departement) || !string.IsNullOrEmpty(request.Branche))
+        if (!string.IsNullOrEmpty(request.Departement))
         {
             list = list.Where(h => h.Matricule != null && targetMatricules.Contains(h.Matricule)).ToList();
         }
@@ -150,7 +150,7 @@ public class OvertimeService
 
     /// <summary>
     /// Liste paginée des cumuls EXO/IMPO. Le filtre est traduit en SQL ; le filtre
-    /// branche/département est résolu via les cartes cibles (même sémantique que
+    /// département est résolu via les cartes cibles (même sémantique que
     /// <see cref="ListExoAsync"/>). L'endpoint non paginé reste utilisé pour l'export.
     /// </summary>
     public async Task<PagedResult<HsExoDto>> ListExoPagedAsync(
@@ -169,7 +169,7 @@ public class OvertimeService
             h.OID, h.Matricule, h.NumSal, h.EXO130, h.EXO150, h.I130, h.I150,
             h.FERIE, h.NUIT, h.DIM, h.RETARD, h.ABSENCE);
 
-        if (string.IsNullOrEmpty(request.Departement) && string.IsNullOrEmpty(request.Branche))
+        if (string.IsNullOrEmpty(request.Departement))
         {
             return await PagedLists.PageAsync(
                 repo,
@@ -352,7 +352,7 @@ public class OvertimeService
             && (string.IsNullOrEmpty(request.MatriculeFrom) || string.Compare(h.Matricule, request.MatriculeFrom) >= 0)
             && (string.IsNullOrEmpty(request.MatriculeTo) || string.Compare(h.Matricule, request.MatriculeTo) <= 0), ct);
 
-        if (!string.IsNullOrEmpty(request.Departement) || !string.IsNullOrEmpty(request.Branche))
+        if (!string.IsNullOrEmpty(request.Departement))
         {
             var cards = await TargetCards(request, ct);
             var targetMatricules = cards.Select(c => c.SAGE_MATRICULE).Where(m => !string.IsNullOrEmpty(m)).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -442,7 +442,7 @@ public class OvertimeService
         var rows = await _uow.Repository<T_HSExoImp>().ListAsync(h =>
             h.BDD_SAGE == _tenant.SageDb && h.PeriodeDebut == request.From.Date && h.PeriodeFin == request.To.Date, ct);
 
-        if (!string.IsNullOrEmpty(request.Departement) || !string.IsNullOrEmpty(request.Branche))
+        if (!string.IsNullOrEmpty(request.Departement))
         {
             var cards = await TargetCards(request, ct);
             var targetMatricules = cards.Select(c => c.SAGE_MATRICULE).Where(m => !string.IsNullOrEmpty(m)).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -564,7 +564,7 @@ public class OvertimeService
             throw new InvalidOperationException("La date de fin doit suivre la date de début.");
 
         var cle = MatriculeIdentity.Cle(matricule);
-        var ctx = await ChargerContexteAsync(new PeriodRequest(null, null, debut, fin, null), avecExistantes: false, ct);
+        var ctx = await ChargerContexteAsync(new PeriodRequest(null, null, debut, fin), avecExistantes: false, ct);
         var card = ctx.Cards.FirstOrDefault(c => MatriculeIdentity.Cle(c.SAGE_MATRICULE) == cle);
         var matriculeCarte = card?.SAGE_MATRICULE ?? matricule;
         var config = card == null ? new OvertimeWeekConfig(ctx.MultiPointage) : Configurer(ctx, card);
@@ -964,8 +964,8 @@ public class OvertimeService
         var pointeuseDb = _tenant.PointeuseDb;
         var cards = await _uow.Repository<T_CARDPAIE>().ListAsync(c =>
             c.SAGE_BDD == sageDb
-            && (string.IsNullOrEmpty(request.Branche) || c.BRANCHE == request.Branche)
-            && (string.IsNullOrEmpty(request.Departement) || c.DEPARTEMENT == request.Departement)
+            && (string.IsNullOrEmpty(request.Departement)
+                || string.Equals(c.DEPARTEMENT, request.Departement, StringComparison.OrdinalIgnoreCase))
             && (string.IsNullOrEmpty(request.MatriculeFrom) || string.Compare(c.SAGE_MATRICULE, request.MatriculeFrom) >= 0)
             && (string.IsNullOrEmpty(request.MatriculeTo) || string.Compare(c.SAGE_MATRICULE, request.MatriculeTo) <= 0), ct);
         return cards

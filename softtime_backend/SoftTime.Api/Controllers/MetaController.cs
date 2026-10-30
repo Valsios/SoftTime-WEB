@@ -189,7 +189,7 @@ public static class ApiCatalog
         E("Reports", "GET", "/api/reports/{type}/paged?from=&to=&page=&pageSize=", "État paginé (6 types, max 100)"),
         E("Reports", "GET", "/api/reports/leave?matricule=&date=", "Congé SAGE du jour"),
         E("Dashboard", "GET", "/api/dashboard/stats?from=&to=&departement=&categorie=&periode=", "KPI, absences, retards, répartition et assiduité"),
-        E("Dashboard", "GET", "/api/dashboard/filters", "Valeurs des filtres (départements, branches, catégories)"),
+        E("Dashboard", "GET", "/api/dashboard/filters", "Valeurs des filtres (départements, catégories)"),
         E("Canteen", "GET", "/api/canteen?from=&to=&matriculeFrom=&matriculeTo=", "Liste cantine"),
         E("Canteen", "GET", "/api/canteen/paged?from=&to=&page=&pageSize=", "Liste cantine paginée (max 100)"),
         E("Canteen", "GET", "/api/canteen/anomalies?from=&to=&matriculeFrom=&matriculeTo=", "Anomalies cantine (pointage vs absence)"),

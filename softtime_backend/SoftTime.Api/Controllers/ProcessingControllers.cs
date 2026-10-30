@@ -387,10 +387,9 @@ public class OvertimeController : ControllerBase
         [FromQuery] DateTime to,
         [FromQuery] string? matriculeFrom,
         [FromQuery] string? matriculeTo,
-        [FromQuery] string? branche,
         [FromQuery] string? departement,
         CancellationToken ct)
-        => Ok(await _svc.ListExoAsync(new PeriodRequest(matriculeFrom, matriculeTo, from, to, branche, departement), ct));
+        => Ok(await _svc.ListExoAsync(new PeriodRequest(matriculeFrom, matriculeTo, from, to, departement), ct));
 
     /// <summary>Même liste que <c>GET /api/overtime</c>, paginée (page bornée, total serveur).</summary>
     [HttpGet("paged")]
@@ -399,14 +398,13 @@ public class OvertimeController : ControllerBase
         [FromQuery] DateTime to,
         [FromQuery] string? matriculeFrom,
         [FromQuery] string? matriculeTo,
-        [FromQuery] string? branche,
         [FromQuery] string? departement,
         [FromQuery] int? page,
         [FromQuery] int? pageSize,
         [FromQuery] string? search,
         CancellationToken ct)
         => Ok(await _svc.ListExoPagedAsync(
-            new PeriodRequest(matriculeFrom, matriculeTo, from, to, branche, departement, search),
+            new PeriodRequest(matriculeFrom, matriculeTo, from, to, departement, search),
             page,
             pageSize,
             ct));

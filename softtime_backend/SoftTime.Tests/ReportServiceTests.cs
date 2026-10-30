@@ -48,7 +48,6 @@ public class ReportServiceTests
                 SAGE_NOM = "Dupont",
                 SAGE_PRENOM = "Jean",
                 DEPARTEMENT = "INFO",
-                BRANCHE = "BR1",
                 SAGE_BDD = "SAGE_TEST",
                 POINTEUSE_BDD = "PTE_TEST"
             });
@@ -112,7 +111,8 @@ public class ReportServiceTests
             Source.EmployeeEvents.Add(new ExternalEmployeeEvent(1, "CP", jour.Date, jour.Date, null, null));
         }
 
-        public static ReportFilter Filtre(DateTime from, DateTime to) => new(null, null, from, to, null);
+        public static ReportFilter Filtre(DateTime from, DateTime to, string? departement = null)
+            => new(null, null, from, to, departement);
     }
 
     [Fact]
@@ -157,6 +157,21 @@ public class ReportServiceTests
         var rows = await ctx.Service.AbsencesAsync(Contexte.Filtre(jourOff, ferie));
 
         Assert.Empty(rows);
+    }
+
+    [Fact]
+    public async Task AbsencesAsync_FiltreParDepartement()
+    {
+        var ctx = new Contexte();
+        var jour = JoursOuvresPasses(1)[0];
+        ctx.Plan(jour);
+
+        // La comparaison ignore la casse et les espaces de saisie.
+        var correspondant = await ctx.Service.AbsencesAsync(Contexte.Filtre(jour, jour, " info "));
+        Assert.Single(correspondant);
+
+        var autre = await ctx.Service.AbsencesAsync(Contexte.Filtre(jour, jour, "RH"));
+        Assert.Empty(autre);
     }
 
     [Fact]

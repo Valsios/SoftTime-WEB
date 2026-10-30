@@ -37,7 +37,7 @@ export interface DashboardSerie {
   heuresSupplementaires: number;
 }
 
-/** Ligne de répartition d'un axe (catégorie, branche, département). */
+/** Ligne de répartition d'un axe (catégorie, département). */
 export interface DashboardSlice {
   libelle: string;
   effectif: number;
@@ -49,7 +49,6 @@ export interface DashboardSlice {
 
 export interface DashboardRepartition {
   parCategorie: DashboardSlice[];
-  parBranche: DashboardSlice[];
   parDepartement: DashboardSlice[];
 }
 
@@ -75,7 +74,6 @@ export interface DashboardAssiduite {
 /** Valeurs proposées par les filtres de la page. */
 export interface DashboardFilters {
   departements: string[];
-  branches: string[];
   categories: { id: number; libelle: string }[];
 }
 

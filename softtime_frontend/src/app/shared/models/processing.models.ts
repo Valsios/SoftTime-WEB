@@ -156,7 +156,6 @@ export interface PeriodRequest {
   matriculeTo?: string | null;
   from: string;
   to: string;
-  branche?: string | null;
   departement?: string | null;
   /** Terme de recherche du tableau. */
   search?: string | null;
