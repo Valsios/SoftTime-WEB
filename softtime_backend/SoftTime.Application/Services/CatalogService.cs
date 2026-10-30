@@ -7,6 +7,7 @@ using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
 using SoftTime.Application.Abstractions;
+using SoftTime.Application.Security;
 
 namespace SoftTime.Application.Services;
 
@@ -18,8 +19,9 @@ public class CatalogService
     private readonly IExternalSourceService _externalSource;
     private readonly IExternalDiscoveryService _discovery;
     private readonly DatabaseConfigurationAuthorizer _configAuth;
+    private readonly EffectiveRightsService _effectiveRights;
 
-    public CatalogService(IUnitOfWork uow, IMapper mapper, TenantConnectionService tenant, IExternalSourceService externalSource, IExternalDiscoveryService discovery, DatabaseConfigurationAuthorizer configAuth)
+    public CatalogService(IUnitOfWork uow, IMapper mapper, TenantConnectionService tenant, IExternalSourceService externalSource, IExternalDiscoveryService discovery, DatabaseConfigurationAuthorizer configAuth, EffectiveRightsService effectiveRights)
     {
         _uow = uow;
         _mapper = mapper;
@@ -27,6 +29,7 @@ public class CatalogService
         _externalSource = externalSource;
         _discovery = discovery;
         _configAuth = configAuth;
+        _effectiveRights = effectiveRights;
     }
 
     public async Task<IReadOnlyList<SageDbDto>> ListSageAsync(CancellationToken ct = default)
@@ -86,6 +89,7 @@ public class CatalogService
             repo.Update(entity);
         }
         await _uow.SaveChangesAsync(ct);
+        _effectiveRights.InvalidateAll(); // la liste des bases a changé : les droits effectifs en cache sont périmés
         if (dto.Mappings is not null)
         {
             await ValidateMappingsAsync(true, dto.Mappings, ct);
@@ -143,6 +147,7 @@ public class CatalogService
         await RemoveMappingsAsync(true, id, ct);
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
+        _effectiveRights.InvalidateAll(); // la liste des bases a changé : les droits effectifs en cache sont périmés
     }
 
     // Supprime les mappings d'entite (et leurs champs) d'une connexion. Sans cela les lignes
@@ -228,6 +233,7 @@ public class CatalogService
             repo.Update(entity);
         }
         await _uow.SaveChangesAsync(ct);
+        _effectiveRights.InvalidateAll(); // la liste des bases a changé : les droits effectifs en cache sont périmés
         if (dto.Mappings is not null)
         {
             await ValidateMappingsAsync(false, dto.Mappings, ct);
@@ -284,6 +290,7 @@ public class CatalogService
         await RemoveMappingsAsync(false, id, ct);
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
+        _effectiveRights.InvalidateAll(); // la liste des bases a changé : les droits effectifs en cache sont périmés
     }
 
     public async Task<ClockParamDto> GetClockAsync(CancellationToken ct = default)

@@ -28,7 +28,7 @@ public class DatabasePasswordTests
 
     public DatabasePasswordTests()
     {
-        _auth = new AuthService(_uow, new FakeTokens(), _mapper, new FakeEmail(), new SoftTime.Tests.Http.AdminCurrentUser(), new PasswordHasher<T_RESPONSABLE>());
+        _auth = new AuthService(_uow, new FakeTokens(), _mapper, new FakeEmail(), new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<T_RESPONSABLE>());
         _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });
         _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 5, NOMROLE = "Gestionnaire" });
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 1, IDROLE = 1, LOGIN = "a" });
@@ -38,7 +38,7 @@ public class DatabasePasswordTests
     }
 
     private CatalogService Catalog(decimal userId, decimal roleId, params int[] rights)
-        => new(_uow, _mapper, null!, null!, _discovery, new DatabaseConfigurationAuthorizer(new FakeUser(userId, roleId, rights), _auth));
+        => new(_uow, _mapper, null!, null!, _discovery, new DatabaseConfigurationAuthorizer(new FakeUser(userId, roleId, rights), _auth), SoftTime.Tests.Http.TestRights.Service(_uow));
 
     private CatalogService Admin() => Catalog(1, 1);
 

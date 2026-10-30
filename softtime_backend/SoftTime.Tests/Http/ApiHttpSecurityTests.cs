@@ -158,29 +158,30 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     [Theory]
     [InlineData("param2")]
     [InlineData("user1")]
-    public async Task Activate_by_account_without_access_to_the_base_gives_401_with_message(string profile)
+    public async Task Activate_by_account_without_access_to_the_base_gives_403_with_message(string profile)
     {
         var (resp, text) = await Send(profile, "POST", "/api/sage-databases/activate", null, ApiFactory.SageName);
         ApiFactory.Report($"V3|activate sans accès|{profile}|{(int)resp.StatusCode}|{Format(resp, text)}|{Trunc(text)}");
-        Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
-        Assert.Contains("Base SAGE non autorisée pour cet utilisateur.", text);
+        // Étape 4b-5 : un refus d'usage est un 403 (un 401 déconnectait le client). Avant : 401 « Base SAGE non autorisée pour cet utilisateur. »
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        Assert.Contains("Vous n'avez pas accès à cette base.", text);
     }
 
     /// <summary>
-    /// ÉCART CONNU, à corriger plus tard : avec la porte 1, activate accepte une base absente de T_BDD_AUTORISE
-    /// (TenantConnectionService.EnsureAuthorizedAsync : la porte 1 contourne T_BDD_AUTORISE).
-    /// Ce test documente le comportement actuel ; il devra être inversé à la correction.
+    /// Écart connu fermé à l'étape 4b-5 : avec la porte 1, activate refuse désormais une base absente de T_BDD_AUTORISE
+    /// (avant : 200, la porte 1 contournait T_BDD_AUTORISE).
     /// </summary>
     [Fact]
-    public async Task KnownGap_Activate_with_gate_1_accepts_a_base_missing_from_BDD_AUTORISE()
+    public async Task FormerGap_Activate_with_gate_1_refuses_a_base_missing_from_BDD_AUTORISE()
     {
-        Assert.DoesNotContain(_f.Store.GetRepo<T_BDD_AUTORISE>().Items, a => a.IDRESPONSABLE == 10034);
+        Assert.DoesNotContain(_f.Store.GetRepo<T_BDD_AUTORISE>().Items, a => a.IDRESPONSABLE == 10034 && a.IDBDD == 3034);
         var (resp, text) = await Send("joel", "POST", "/api/sage-databases/activate", null, ApiFactory.OtherSageName);
         ApiFactory.Report($"V3|activate base non attribuée|joel|{(int)resp.StatusCode}|{Format(resp, text)}|{Trunc(text)}");
-        Assert.NotEqual(HttpStatusCode.Unauthorized, resp.StatusCode);
-        Assert.NotEqual(HttpStatusCode.Forbidden, resp.StatusCode);
-        Assert.DoesNotContain(_f.Store.GetRepo<T_BDD_AUTORISE>().Items, a => a.IDRESPONSABLE == 10034);
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        Assert.Contains("Vous n'avez pas accès à cette base.", text);
+        Assert.DoesNotContain(_f.Store.GetRepo<T_BDD_AUTORISE>().Items, a => a.IDRESPONSABLE == 10034 && a.IDBDD == 3034);
     }
+
 
     #endregion
 

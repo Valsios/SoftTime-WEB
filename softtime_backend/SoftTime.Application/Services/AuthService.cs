@@ -96,6 +96,7 @@ public class AuthService
     private readonly IPasswordHasher<T_RESPONSABLE> _passwordHasher;
     // Appelant HTTP, obligatoire : aucune écriture sur un autre compte sans contrôle d'administrateur.
     private readonly ICurrentUser _currentUser;
+    private readonly EffectiveRightsService _effectiveRights;
 
     /// <summary>Opérations sur les autres comptes : réservées aux administrateurs (rôle 1) (rôle 1 uniquement).</summary>
     private void RequireAdministrator()
@@ -109,6 +110,7 @@ public class AuthService
         IMapper mapper,
         IEmailService email,
         ICurrentUser currentUser,
+        EffectiveRightsService effectiveRights,
         IPasswordHasher<T_RESPONSABLE>? passwordHasher = null)
     {
         _uow = uow;
@@ -117,6 +119,7 @@ public class AuthService
         _email = email;
         _passwordHasher = passwordHasher ?? new PasswordHasher<T_RESPONSABLE>();
         _currentUser = currentUser;
+        _effectiveRights = effectiveRights;
     }
 
     public async Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
@@ -185,18 +188,19 @@ public class AuthService
             rights = new List<int> { Rights.Databases, Rights.Parameters, Rights.Processing, Rights.Other, Rights.Traceability, Rights.Reports };
         }
         var token = _tokens.CreateToken(user.IDRESPONSABLE, user.LOGIN ?? login, user.IDROLE, user.MATRICULE, rights);
-        var access = await _uow.Repository<T_BDD_AUTORISE>().ListAsync(a => a.IDRESPONSABLE == user.IDRESPONSABLE, cancellationToken);
-        var sageIds = access.Select(a => a.IDBDD).ToHashSet();
-        // Un admin voit toujours toutes les bases SAGE configurées.
-        var rightsSet = rights.ToHashSet();
-        var sages = (isAdmin || rightsSet.Contains(Rights.Databases))
-            ? await _uow.Repository<T_BDD_SAGE>().ListAsync(_ => true, cancellationToken)
-            : await _uow.Repository<T_BDD_SAGE>().ListAsync(s => sageIds.Contains(s.ID), cancellationToken);
         var detailed = await GetUserDetailedPermissionsAsync(user.IDRESPONSABLE, cancellationToken);
-        var authorizedSages = detailed.IsCustomized
-            ? sages.Where(s => !string.IsNullOrWhiteSpace(s.NOM_BD) && detailed.GrantedPermissions.Contains($"SAGE:{s.NOM_BD}:READ")).ToList()
-            : sages;
+        var authorizedSages = await UsableSageDatabasesAsync(user, cancellationToken);
         return new LoginResponse(token, user.IDRESPONSABLE, user.LOGIN ?? login, user.NOMRESPONSABLE ?? login, user.IDROLE, user.MATRICULE, rights, authorizedSages.Select(_mapper.Map<SageDbDto>).ToList(), detailed.GrantedPermissions, detailed.IsCustomized);
+    }
+
+    /// <summary>Bases SAGE proposées au compte : exactement celles qu'il peut utiliser (même règle que le contrôle serveur).</summary>
+    private async Task<List<T_BDD_SAGE>> UsableSageDatabasesAsync(T_RESPONSABLE user, CancellationToken cancellationToken)
+    {
+        var sages = await _uow.Repository<T_BDD_SAGE>().ListAsync(_ => true, cancellationToken);
+        if (user.IDROLE == AdminRules.AdminRoleId)
+            return sages;
+        var rights = await _effectiveRights.GetAsync(user.IDRESPONSABLE, fresh: true, ct: cancellationToken);
+        return sages.Where(s => rights.CanUseDatabase(DatabaseKind.Sage, s.NOM_BD)).ToList();
     }
 
     public async Task<LoginResponse> GetMeAsync(decimal userId, CancellationToken cancellationToken = default)
@@ -210,17 +214,8 @@ public class AuthService
         {
             rights = new List<int> { Rights.Databases, Rights.Parameters, Rights.Processing, Rights.Other, Rights.Traceability, Rights.Reports };
         }
-        var rightsSet = rights.ToHashSet();
-        var access = await _uow.Repository<T_BDD_AUTORISE>().ListAsync(a => a.IDRESPONSABLE == user.IDRESPONSABLE, cancellationToken);
-        var sageIds = access.Select(a => a.IDBDD).ToHashSet();
-        // Admin : toutes les bases SAGE sont toujours visibles dans la topbar.
-        var sages = (isAdmin || rightsSet.Contains(Rights.Databases))
-            ? await _uow.Repository<T_BDD_SAGE>().ListAsync(_ => true, cancellationToken)
-            : await _uow.Repository<T_BDD_SAGE>().ListAsync(s => sageIds.Contains(s.ID), cancellationToken);
         var detailed = await GetUserDetailedPermissionsAsync(user.IDRESPONSABLE, cancellationToken);
-        var authorizedSages = detailed.IsCustomized
-            ? sages.Where(s => !string.IsNullOrWhiteSpace(s.NOM_BD) && detailed.GrantedPermissions.Contains($"SAGE:{s.NOM_BD}:READ")).ToList()
-            : sages;
+        var authorizedSages = await UsableSageDatabasesAsync(user, cancellationToken);
         return new LoginResponse(string.Empty, user.IDRESPONSABLE, user.LOGIN ?? string.Empty, user.NOMRESPONSABLE ?? string.Empty, user.IDROLE, user.MATRICULE, rights, authorizedSages.Select(_mapper.Map<SageDbDto>).ToList(), detailed.GrantedPermissions, detailed.IsCustomized);
     }
 
@@ -475,6 +470,7 @@ public class AuthService
             repo.Update(entity);
         }
         await _uow.SaveChangesAsync(cancellationToken);
+        _effectiveRights.Invalidate(entity.IDRESPONSABLE);
 
         // Notification best-effort : le service journalise et n'échoue jamais la requête.
         if (dto.Id == 0)
@@ -520,6 +516,7 @@ public class AuthService
         await RemoveAccountRightsAsync(entity.IDRESPONSABLE, cancellationToken);
         repo.Remove(entity);
         await _uow.SaveChangesAsync(cancellationToken);
+        _effectiveRights.Invalidate(id);
     }
 
     /// <summary>
@@ -529,6 +526,7 @@ public class AuthService
     /// </summary>
     private async Task RemoveAccountRightsAsync(decimal userId, CancellationToken cancellationToken)
     {
+        _effectiveRights.Invalidate(userId);
         var permissions = _uow.Repository<T_USER_PERMISSION>();
         permissions.RemoveRange(await permissions.ListAsync(p => p.IDRESPONSABLE == userId, cancellationToken));
         var access = _uow.Repository<T_BDD_AUTORISE>();
@@ -549,6 +547,7 @@ public class AuthService
         await RemoveAccountRightsAsync(entity.IDRESPONSABLE, cancellationToken);
         repo.Remove(entity);
         await _uow.SaveChangesAsync(cancellationToken);
+        _effectiveRights.Invalidate(id);
     }
 
     public async Task<IReadOnlyList<RoleDto>> GetRolesAsync(CancellationToken cancellationToken = default)
@@ -584,6 +583,7 @@ public class AuthService
             repo.Update(entity);
         }
         await _uow.SaveChangesAsync(cancellationToken);
+        _effectiveRights.InvalidateAll();
         return new RoleDto(entity.IDROLE, entity.NOMROLE);
     }
 
@@ -605,6 +605,7 @@ public class AuthService
 
         repo.Remove(entity);
         await _uow.SaveChangesAsync(cancellationToken);
+        _effectiveRights.InvalidateAll();
     }
 
     public async Task<IReadOnlyList<DroitDto>> GetDroitsAsync(CancellationToken cancellationToken = default)
@@ -628,6 +629,7 @@ public class AuthService
         foreach (var d in droitIds.Distinct())
             await repo.AddAsync(new T_DROIT_ROLE { IDROLE = roleId, IDDROIT = d }, cancellationToken);
         await _uow.SaveChangesAsync(cancellationToken);
+        _effectiveRights.InvalidateAll();
     }
 
     public async Task<IReadOnlyList<DbAccessDto>> GetDbAccessAsync(decimal? userId, CancellationToken cancellationToken = default)
@@ -646,6 +648,7 @@ public class AuthService
         foreach (var id in sageDbIds.Distinct())
             await repo.AddAsync(new T_BDD_AUTORISE { IDRESPONSABLE = userId, IDBDD = id }, cancellationToken);
         await _uow.SaveChangesAsync(cancellationToken);
+        _effectiveRights.Invalidate(userId);
     }
 
     public async Task<UserDetailedPermissionsDto> GetUserDetailedPermissionsAsync(decimal userId, CancellationToken cancellationToken = default)
@@ -802,6 +805,7 @@ public class AuthService
             cancellationToken);
 
         await _uow.SaveChangesAsync(cancellationToken);
+        _effectiveRights.Invalidate(targetUserId);
     }
 
     private async Task<List<string>> ComputeDefaultPermissionsForRoleAsync(decimal roleId, CancellationToken cancellationToken)
@@ -937,6 +941,7 @@ public class AuthService
             cancellationToken);
 
         await _uow.SaveChangesAsync(cancellationToken);
+        _effectiveRights.InvalidateAll();
     }
 
     public async Task ResetUserDetailedPermissionsAsync(decimal currentUserId, decimal targetUserId, CancellationToken cancellationToken = default)
@@ -972,6 +977,7 @@ public class AuthService
             cancellationToken);
 
         await _uow.SaveChangesAsync(cancellationToken);
+        _effectiveRights.Invalidate(targetUserId);
     }
 
     public async Task<IReadOnlyList<AuditDroitDto>> GetAuditDroitsAsync(

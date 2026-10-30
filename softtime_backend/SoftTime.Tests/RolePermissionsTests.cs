@@ -32,7 +32,7 @@ public class RolePermissionsTests
 
         _email = new FakeEmailService();
         _hasher = new PasswordHasher<T_RESPONSABLE>();
-        _auth = new AuthService(_uow, _tokens, _mapper, _email, new SoftTime.Tests.Http.AdminCurrentUser(), _hasher);
+        _auth = new AuthService(_uow, _tokens, _mapper, _email, new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), _hasher);
 
         // Rôles initiaux
         _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });

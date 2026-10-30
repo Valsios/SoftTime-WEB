@@ -21,7 +21,7 @@ public class AccountDeletionTests
     {
         _uow = new RecordingUnitOfWork(_store);
         var mapper = new MapperConfiguration(c => c.AddProfile<MappingProfile>()).CreateMapper();
-        _auth = new AuthService(_uow, new Token(), mapper, new Mail(), new AdminCurrentUser(), new PasswordHasher<T_RESPONSABLE>());
+        _auth = new AuthService(_uow, new Token(), mapper, new Mail(), new AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<T_RESPONSABLE>());
 
         _store.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });
         _store.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 2, NOMROLE = "Utilisateur" });

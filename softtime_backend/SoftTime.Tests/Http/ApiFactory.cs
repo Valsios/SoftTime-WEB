@@ -107,6 +107,22 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         Store.GetRepo<T_BDD_AUTORISE>().Items.Add(new T_BDD_AUTORISE { IDBDDAUTORISE = 2, IDRESPONSABLE = 10053, IDBDD = 3033 });
         foreach (var code in new[] { "PROC:SHIFTS", "SAGE:SFOI_PAIE2025:READ" })
             perms.Add(new T_USER_PERMISSION { IDRESPONSABLE = 10053, PERMISSION_CODE = code, IS_GRANTED = true });
+
+        // Étape 4b-5 : usage d'une base. joel a sa base cochée dans « Accès bases » (comme après la migration des données).
+        var access = Store.GetRepo<T_BDD_AUTORISE>().Items;
+        access.Add(new T_BDD_AUTORISE { IDBDDAUTORISE = 3, IDRESPONSABLE = 10034, IDBDD = 3033 });
+        Store.GetRepo<T_CLOCK>().Items.Add(new T_CLOCK { IDPOINT = 1 });
+        void Account(decimal id, decimal role, string login, bool linked, params string[] codes)
+        {
+            users.Add(new T_RESPONSABLE { IDRESPONSABLE = id, IDROLE = role, LOGIN = login, NOMRESPONSABLE = login });
+            if (linked) access.Add(new T_BDD_AUTORISE { IDBDDAUTORISE = (int)id, IDRESPONSABLE = id, IDBDD = 3033 });
+            foreach (var code in codes)
+                perms.Add(new T_USER_PERMISSION { IDRESPONSABLE = id, PERMISSION_CODE = code, IS_GRANTED = true });
+        }
+        Account(10060, 10034, "nolink", false, $"SAGE:{SageName}:READ", "POINTEUSE:PTG:READ", "PROC:SHIFTS");        // base non cochée
+        Account(10061, 10034, "noread", true, "POINTEUSE:PTG:READ", "PROC:SHIFTS");                                   // cochée, sans lecture
+        Account(10062, 91, "nogate", true, "PROC:SHIFTS");                                                            // aucun droit sur les bases (pas de porte 1)
+        Account(10063, 10034, "ptenone", true, $"SAGE:{SageName}:READ", "PROC:SHIFTS");                               // sans droit pointeuse
     }
 
     public static string Token(decimal userId, decimal roleId, params int[] rights)
@@ -137,16 +153,22 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         "joel" => Token(10034, 10034, 1, 3),
         "user1" => Token(10030, 29, 6),
         "param2" => Token(10040, 40, 2),
+        "nolink" => Token(10060, 10034, 1, 3),
+        "noread" => Token(10061, 10034, 1, 3),
+        "nogate" => Token(10062, 91, 3),
+        "ptenone" => Token(10063, 10034, 1, 3),
         _ => throw new ArgumentOutOfRangeException(nameof(profile))
     };
 
-    public HttpRequestMessage Request(string profile, HttpMethod method, string url, string? body = null, string? sageHeader = null)
+    public HttpRequestMessage Request(string profile, HttpMethod method, string url, string? body = null, string? sageHeader = null, string? pointeuseHeader = null)
     {
         var req = new HttpRequestMessage(method, url);
         if (TokenFor(profile) is string t)
             req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {t}");
         if (sageHeader is not null)
             req.Headers.TryAddWithoutValidation("X-Sage-Database", sageHeader);
+        if (pointeuseHeader is not null)
+            req.Headers.TryAddWithoutValidation("X-Pointeuse-Database", pointeuseHeader);
         if (body is not null)
             req.Content = new StringContent(body, Encoding.UTF8, "application/json");
         return req;

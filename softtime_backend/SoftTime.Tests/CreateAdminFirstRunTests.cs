@@ -21,7 +21,7 @@ public class CreateAdminFirstRunTests
     public CreateAdminFirstRunTests()
     {
         var mapper = new MapperConfiguration(c => c.AddProfile<MappingProfile>()).CreateMapper();
-        _auth = new AuthService(_uow, new Token(), mapper, new Mail(), new AdminCurrentUser(), new PasswordHasher<T_RESPONSABLE>());
+        _auth = new AuthService(_uow, new Token(), mapper, new Mail(), new AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<T_RESPONSABLE>());
     }
 
     private static AdminSetupDto Dto => new("Admin Test", "admin", "ValidP@ss123!", null);

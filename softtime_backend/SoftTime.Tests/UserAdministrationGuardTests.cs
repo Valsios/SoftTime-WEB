@@ -27,7 +27,7 @@ public class UserAdministrationGuardTests
     }
 
     private AuthService Service(decimal userId, decimal roleId)
-        => new(_uow, new Token(), _mapper, new Mail(), new FakeUser(userId, roleId), new PasswordHasher<T_RESPONSABLE>());
+        => new(_uow, new Token(), _mapper, new Mail(), new FakeUser(userId, roleId), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<T_RESPONSABLE>());
 
     private static readonly UserDto NewUserDto = new(0, 2, "Nouveau", "nouveau", null, "ValidP@ss123!");
 

@@ -23,7 +23,7 @@ public class DatabaseConfigurationSecurityTests
 
     public DatabaseConfigurationSecurityTests()
     {
-        _auth = new AuthService(_uow, new FakeTokenService(), _mapper, new FakeEmailService(), new SoftTime.Tests.Http.AdminCurrentUser(), new PasswordHasher<T_RESPONSABLE>());
+        _auth = new AuthService(_uow, new FakeTokenService(), _mapper, new FakeEmailService(), new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<T_RESPONSABLE>());
         _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });
         _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 5, NOMROLE = "Gestionnaire" });
         _uow.GetRepo<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 7, NOM_BD = Base, SERVEUR = "srv" });
@@ -158,7 +158,7 @@ public class DatabaseConfigurationSecurityTests
     #region CatalogService : refus avant toute écriture
 
     private CatalogService CatalogFor(DatabaseConfigurationAuthorizer authorizer)
-        => new(_uow, _mapper, null!, null!, null!, authorizer);
+        => new(_uow, _mapper, null!, null!, null!, authorizer, SoftTime.Tests.Http.TestRights.Service(_uow));
 
     [Fact]
     public async Task CatalogService_DeleteSage_RefusedWithoutPermission_KeepsRow()

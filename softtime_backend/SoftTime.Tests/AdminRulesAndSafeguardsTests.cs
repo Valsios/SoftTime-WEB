@@ -32,7 +32,7 @@ public class AdminRulesAndSafeguardsTests
 
         _email = new FakeEmailService();
         _hasher = new PasswordHasher<T_RESPONSABLE>();
-        _auth = new AuthService(_uow, _tokens, _mapper, _email, new SoftTime.Tests.Http.AdminCurrentUser(), _hasher);
+        _auth = new AuthService(_uow, _tokens, _mapper, _email, new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), _hasher);
 
         // Configuration initiale des rôles de référence
         _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });
@@ -42,7 +42,7 @@ public class AdminRulesAndSafeguardsTests
 
     /// <summary>Service dont l'appelant HTTP (ICurrentUser) est le compte indiqué ; _auth, lui, est toujours un administrateur.</summary>
     private AuthService CallerAuth(decimal userId, decimal roleId)
-        => new(_uow, _tokens, _mapper, _email, new SoftTime.Tests.Http.TestCurrentUser(userId, roleId), _hasher);
+        => new(_uow, _tokens, _mapper, _email, new SoftTime.Tests.Http.TestCurrentUser(userId, roleId), SoftTime.Tests.Http.TestRights.Service(_uow), _hasher);
 
     #region Tests AdminRules (G5, C3)
 
