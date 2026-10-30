@@ -12,7 +12,6 @@ import {
   SoftBarChart,
   SoftButton,
   SoftCard,
-  SoftDonutChart,
   SoftLineChart,
   SoftSelect,
   SoftTabs,
@@ -51,7 +50,6 @@ function libelleCourt(periode: string): string {
     PeriodFilter,
     SoftLineChart,
     SoftBarChart,
-    SoftDonutChart,
   ],
   template: `
     <page-header
@@ -145,9 +143,7 @@ function libelleCourt(periode: string): string {
       <h2 class="section-title">Répartition de l'effectif actif</h2>
       <soft-card padding="md">
         <soft-tabs [tabs]="axes" [(activeTab)]="axe"></soft-tabs>
-        @if (axe() === 'branche') {
-          <soft-donut-chart [items]="brancheItems()" [format]="formatCount"></soft-donut-chart>
-        } @else if (axe() === 'departement') {
+        @if (axe() === 'departement') {
           <soft-bar-chart
             [items]="departementBars()"
             color="var(--gold-warm)"
@@ -294,13 +290,12 @@ export class AnalyticsPage implements OnInit {
   /** Un onglet = une ventilation de l'effectif, et le tableau d'activité suit l'onglet actif. */
   readonly axes: TabItem[] = [
     { id: 'categorie', label: 'Catégorie' },
-    { id: 'branche', label: 'Branche' },
     { id: 'departement', label: 'Département' },
   ];
   readonly axe = signal('categorie');
 
   readonly titreAxe = computed(() =>
-    this.axe() === 'branche' ? 'Branche' : this.axe() === 'departement' ? 'Département' : 'Catégorie',
+    this.axe() === 'departement' ? 'Département' : 'Catégorie',
   );
 
   readonly periodeColumns: Column[] = [
@@ -360,9 +355,6 @@ export class AnalyticsPage implements OnInit {
   readonly categorieBars = computed<ChartPoint[]>(() =>
     (this.stats()?.repartition.parCategorie ?? []).map((s) => ({ label: s.libelle, value: s.effectif })),
   );
-  readonly brancheItems = computed<ChartPoint[]>(() =>
-    (this.stats()?.repartition.parBranche ?? []).map((s) => ({ label: s.libelle, value: s.effectif })),
-  );
   readonly departementBars = computed<ChartPoint[]>(() =>
     (this.stats()?.repartition.parDepartement ?? []).map((s) => ({ label: s.libelle, value: s.effectif })),
   );
@@ -371,11 +363,9 @@ export class AnalyticsPage implements OnInit {
     const repartition = this.stats()?.repartition;
     if (!repartition) return [];
     const slices =
-      this.axe() === 'branche'
-        ? repartition.parBranche
-        : this.axe() === 'departement'
-          ? repartition.parDepartement
-          : repartition.parCategorie;
+      this.axe() === 'departement'
+        ? repartition.parDepartement
+        : repartition.parCategorie;
     return slices.map(asRow);
   });
 

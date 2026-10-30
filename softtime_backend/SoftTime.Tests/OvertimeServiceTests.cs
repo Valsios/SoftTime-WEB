@@ -113,10 +113,10 @@ public class OvertimeServiceTests
             });
 
         public Task<IReadOnlyList<WeeklyHsDto>> Apercu(DateTime from, DateTime to)
-            => Service.PreviewWeekAsync(new PeriodRequest(null, null, from, to, null));
+            => Service.PreviewWeekAsync(new PeriodRequest(null, null, from, to));
 
         public Task<PagedResult<WeeklyHsDto>> ApercuPagine(DateTime from, DateTime to)
-            => Service.PreviewWeekPagedAsync(new PeriodRequest(null, null, from, to, null), 1, 50);
+            => Service.PreviewWeekPagedAsync(new PeriodRequest(null, null, from, to), 1, 50);
     }
 
     private static void SemaineOuvree(Contexte contexte, int heuresSortie = 17, TimeSpan? pause = null)
@@ -204,7 +204,7 @@ public class OvertimeServiceTests
     {
         var contexte = new Contexte();
         SemaineOuvree(contexte);
-        var request = new WeeklyValidationRequest(null, null, Lundi, Dimanche, null, new[] { "001" });
+        var request = new WeeklyValidationRequest(null, null, Lundi, Dimanche, new[] { "001" });
 
         await contexte.Service.ValidateWeekAsync(request, true);
 
@@ -229,7 +229,7 @@ public class OvertimeServiceTests
         SemaineOuvree(contexte);
 
         await contexte.Service.ValidateWeekAsync(
-            new WeeklyValidationRequest(null, null, Lundi, Dimanche, null, Array.Empty<string>()), true);
+            new WeeklyValidationRequest(null, null, Lundi, Dimanche, Array.Empty<string>()), true);
 
         Assert.Empty(contexte.Semaines);
         Assert.All(contexte.Corrections, h => Assert.Null(h.VALIDER_HS));
@@ -247,7 +247,7 @@ public class OvertimeServiceTests
         contexte.SemaineValidee(Lundi, 14);
         contexte.SemaineValidee(Lundi.AddDays(7), 20, validee: false);
 
-        var exo = await contexte.Service.CalculateExoImpoAsync(new PeriodRequest(null, null, debut, fin, null));
+        var exo = await contexte.Service.CalculateExoImpoAsync(new PeriodRequest(null, null, debut, fin));
 
         var ligne = Assert.Single(exo);
         Assert.Equal(16m, ligne.Exo130);
@@ -270,7 +270,7 @@ public class OvertimeServiceTests
     {
         var contexte = new Contexte();
         contexte.SemaineValidee(Lundi, 10);
-        var request = new PeriodRequest(null, null, Lundi, Dimanche, null);
+        var request = new PeriodRequest(null, null, Lundi, Dimanche);
 
         await contexte.Service.CalculateExoImpoAsync(request);
         contexte.Semaines.Single().HS = 6;
@@ -287,7 +287,7 @@ public class OvertimeServiceTests
         var contexte = new Contexte();
         contexte.Planning(Lundi, TimeSpan.FromMinutes(30));
 
-        var exo = await contexte.Service.CalculateExoImpoAsync(new PeriodRequest(null, null, Lundi, Dimanche, null));
+        var exo = await contexte.Service.CalculateExoImpoAsync(new PeriodRequest(null, null, Lundi, Dimanche));
 
         var ligne = Assert.Single(exo);
         Assert.Equal(8.5m, ligne.Absence);
@@ -304,7 +304,7 @@ public class OvertimeServiceTests
 
         // Période 01/09 → 30/09 : la semaine du 31/08 déborde sur le mois et doit être prise en compte.
         var exo = await contexte.Service.CalculateExoImpoAsync(
-            new PeriodRequest(null, null, Lundi.AddDays(1), new DateTime(2026, 9, 30), null));
+            new PeriodRequest(null, null, Lundi.AddDays(1), new DateTime(2026, 9, 30)));
 
         var ligne = Assert.Single(exo);
         Assert.Equal(8m, ligne.Exo130);
@@ -324,7 +324,7 @@ public class OvertimeServiceTests
         var semaine2 = new DateTime(2025, 5, 5);
         contexte.SemaineValidee(semaine1, 0m);
         contexte.SemaineValidee(semaine2, 11.21m);
-        await contexte.Service.CalculateExoImpoAsync(new PeriodRequest(null, null, debutPeriode, finPeriode, null));
+        await contexte.Service.CalculateExoImpoAsync(new PeriodRequest(null, null, debutPeriode, finPeriode));
 
         var detail = await contexte.Service.DetailAsync("001", debutPeriode, finPeriode);
 

@@ -47,7 +47,7 @@ import { toastImportResult } from '../../shared/utils/import-result';
         <soft-input label="Prénom SAGE" [(ngModel)]="form.sagePrenom" name="sagePrenom"></soft-input>
         <soft-input label="N° pointeuse" [(ngModel)]="form.pointeuseNumero" name="pointeuseNumero"></soft-input>
         <soft-input label="Nom pointeuse" [(ngModel)]="form.pointeuseNom" name="pointeuseNom"></soft-input>
-        <soft-input label="Branche" [(ngModel)]="form.branche" name="branche"></soft-input>
+        <soft-input label="Département" [(ngModel)]="form.departement" name="departement"></soft-input>
       </div>
       <div footer>
         <soft-button variant="ghost" (click)="modal.set(false)">Annuler</soft-button>

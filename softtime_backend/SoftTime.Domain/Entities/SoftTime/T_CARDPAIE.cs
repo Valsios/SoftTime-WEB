@@ -8,7 +8,6 @@ public class T_CARDPAIE
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int ID { get; set; }
     public string? SAGE_MATRICULE { get; set; }
-    public string? BRANCHE { get; set; }
     public string? SAGE_NOM { get; set; }
     public string? SAGE_PRENOM { get; set; }
     public string? POINTEUSE_NUMERO { get; set; }

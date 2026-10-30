@@ -107,7 +107,7 @@ L’accès est filtré par **rôle** (6 droits) et par **société SAGE** active
 
 ## 5. États (rapports)
 
-Période + plage de matricules + branche, export Excel. Les états sont **calculés** (aucune table
+Période + plage de matricules + département, export Excel. Les états sont **calculés** (aucune table
 tampon n'est lue) et partagent leurs règles avec le tableau de bord analytique.
 
 - État pointage, récap HS EXO/IMPO, heures par semaine, heures dimanche : lecture directe.
@@ -145,7 +145,7 @@ s'affiche « Semaine 27 (30/06 - 06/07/2025) » (année ISO, donc correcte au pa
   corrections) sont sur une ligne de détail sous les cartes.
 - **Courbes** : évolution des absences et des retards ; évolution des heures (travaillées /
   supplémentaires). Le tableau chiffré « Absences et retards par période » les suit.
-- **Répartition** : onglets **Catégorie / Branche / Département** (barres, anneau, barres) avec
+- **Répartition** : onglets **Catégorie / Département** (barres, barres) avec
   l'activité de l'axe sélectionné (effectif actif, absences, retards, minutes, HS).
 - **Assiduité** : top 5 des salariés les plus et les moins ponctuels de la période (matricule, nom,
   ponctualité, jours pointés, retards, absences).

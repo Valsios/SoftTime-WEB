@@ -64,7 +64,6 @@ public class MappingProfile : Profile
             .ForMember(d => d.Departement, o => o.MapFrom(s => s.DEPARTEMENT));
         CreateMap<CardPaieDto, T_CARDPAIE>()
             .ForMember(d => d.SAGE_MATRICULE, o => o.MapFrom(s => s.SageMatricule))
-            .ForMember(d => d.BRANCHE, o => o.MapFrom(s => s.Branche))
             .ForMember(d => d.SAGE_NOM, o => o.MapFrom(s => s.SageNom))
             .ForMember(d => d.SAGE_PRENOM, o => o.MapFrom(s => s.SagePrenom))
             .ForMember(d => d.POINTEUSE_NUMERO, o => o.MapFrom(s => s.PointeuseNumero))
@@ -72,7 +71,8 @@ public class MappingProfile : Profile
             .ForMember(d => d.SAGE_SERVEUR, o => o.MapFrom(s => s.SageServeur))
             .ForMember(d => d.POINTEUSE_SERVEUR, o => o.MapFrom(s => s.PointeuseServeur))
             .ForMember(d => d.SAGE_BDD, o => o.MapFrom(s => s.SageBdd))
-            .ForMember(d => d.POINTEUSE_BDD, o => o.MapFrom(s => s.PointeuseBdd));
+            .ForMember(d => d.POINTEUSE_BDD, o => o.MapFrom(s => s.PointeuseBdd))
+            .ForMember(d => d.DEPARTEMENT, o => o.MapFrom(s => s.Departement));
         CreateMap<T_CATEGORIE, CategoryDto>()
             .ForMember(d => d.Id, o => o.MapFrom(s => s.IDCATEGORIE))
             .ForMember(d => d.SupervisorCardId, o => o.MapFrom(s => s.ID_CARDPAIE))

@@ -30,13 +30,12 @@ public class DashboardController : ControllerBase
         [FromQuery] string? periode,
         CancellationToken ct)
         => Ok(await _svc.GetStatsAsync(
-            new PeriodRequest(matriculeFrom, matriculeTo, from, to, null),
-            departement,
+            new PeriodRequest(matriculeFrom, matriculeTo, from, to, departement),
             categorie,
             string.IsNullOrWhiteSpace(periode) ? "mensuelle" : periode,
             ct));
 
-    /// <summary>Valeurs proposées par les filtres (départements, branches, catégories de personnel).</summary>
+    /// <summary>Valeurs proposées par les filtres (départements, catégories de personnel).</summary>
     [HttpGet("filters")]
     public async Task<IActionResult> Filters(CancellationToken ct)
         => Ok(await _svc.GetFiltersAsync(ct));
