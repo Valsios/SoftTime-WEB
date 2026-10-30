@@ -82,6 +82,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         users.Add(new T_RESPONSABLE { IDRESPONSABLE = 10050, IDROLE = 91, LOGIN = "cible", NOMRESPONSABLE = "Cible" });
         users.Add(new T_RESPONSABLE { IDRESPONSABLE = 10051, IDROLE = 91, LOGIN = "jetable", NOMRESPONSABLE = "Jetable" });
         users.Add(new T_RESPONSABLE { IDRESPONSABLE = 10052, IDROLE = 91, LOGIN = "modifiable", NOMRESPONSABLE = "Modifiable" });
+        users.Add(new T_RESPONSABLE { IDRESPONSABLE = 10053, IDROLE = 91, LOGIN = "supprimable", NOMRESPONSABLE = "Supprimable" });
 
         // Profil « comme joel » : portes 1 et 3 via le jeton, permissions fines de lecture seulement.
         var perms = Store.GetRepo<T_USER_PERMISSION>().Items;
@@ -103,6 +104,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         Store.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDDROITROLE = 1, IDROLE = 10034, IDDROIT = 1 });
         Store.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDDROITROLE = 2, IDROLE = 10034, IDDROIT = 3 });
         Store.GetRepo<T_BDD_AUTORISE>().Items.Add(new T_BDD_AUTORISE { IDBDDAUTORISE = 1, IDRESPONSABLE = 14, IDBDD = 3033 });
+        Store.GetRepo<T_BDD_AUTORISE>().Items.Add(new T_BDD_AUTORISE { IDBDDAUTORISE = 2, IDRESPONSABLE = 10053, IDBDD = 3033 });
+        foreach (var code in new[] { "PROC:SHIFTS", "SAGE:SFOI_PAIE2025:READ" })
+            perms.Add(new T_USER_PERMISSION { IDRESPONSABLE = 10053, PERMISSION_CODE = code, IS_GRANTED = true });
     }
 
     public static string Token(decimal userId, decimal roleId, params int[] rights)

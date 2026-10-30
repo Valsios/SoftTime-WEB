@@ -517,8 +517,22 @@ public class AuthService
                 throw new InvalidOperationException("Impossible de supprimer le dernier administrateur.");
         }
 
+        await RemoveAccountRightsAsync(entity.IDRESPONSABLE, cancellationToken);
         repo.Remove(entity);
         await _uow.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Met en attente la suppression des droits personnels et des accès aux bases d'un compte supprimé.
+    /// Le journal d'audit (T_AUDIT_DROIT) est conservé. Aucun SaveChanges ici : tout part avec la suppression du compte,
+    /// dans la même transaction.
+    /// </summary>
+    private async Task RemoveAccountRightsAsync(decimal userId, CancellationToken cancellationToken)
+    {
+        var permissions = _uow.Repository<T_USER_PERMISSION>();
+        permissions.RemoveRange(await permissions.ListAsync(p => p.IDRESPONSABLE == userId, cancellationToken));
+        var access = _uow.Repository<T_BDD_AUTORISE>();
+        access.RemoveRange(await access.ListAsync(a => a.IDRESPONSABLE == userId, cancellationToken));
     }
 
     /// <summary>Réservé aux tests : le code de production doit transmettre l'identité de l'appelant.</summary>
@@ -532,6 +546,7 @@ public class AuthService
             if (otherAdmins.Count == 0)
                 throw new InvalidOperationException("Impossible de supprimer le dernier administrateur.");
         }
+        await RemoveAccountRightsAsync(entity.IDRESPONSABLE, cancellationToken);
         repo.Remove(entity);
         await _uow.SaveChangesAsync(cancellationToken);
     }
