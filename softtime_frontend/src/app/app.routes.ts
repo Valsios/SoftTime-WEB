@@ -186,6 +186,13 @@ export const routes: Routes = [
         data: { droit: Droit.Reports, permission: 'REPORTS:REPORTS' },
         loadComponent: () => import('./features/reports/reports').then((m) => m.ReportsPage),
       },
+      {
+        path: 'predictions',
+        canActivate: [droitGuard],
+        data: { droit: Droit.Reports, permission: 'REPORTS:PREDICTIONS' },
+        loadComponent: () =>
+          import('./features/predictions/predictions').then((m) => m.PredictionsPage),
+      },
 
       // Extra (droit 4)
       {

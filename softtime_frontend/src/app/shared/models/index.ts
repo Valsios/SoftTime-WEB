@@ -4,5 +4,6 @@ export * from './dashboard.models';
 export * from './import-template.models';
 export * from './mapping.models';
 export * from './pagination.models';
+export * from './predictions.models';
 export * from './processing.models';
 export * from './reports.models';

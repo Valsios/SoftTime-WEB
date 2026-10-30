@@ -1,6 +1,7 @@
 using FluentValidation;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Mapping;
 using SoftTime.Application.Services;
@@ -30,6 +31,15 @@ public static class DependencyInjection
         services.AddScoped<DashboardService>();
         services.AddScoped<ExtraService>();
         services.AddScoped<AuditService>();
+
+        // Moteur prédictif : options liées à la section « Ml », services de la base analytique.
+        services.AddOptions();
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<MlOptions>>().Value);
+        services.AddScoped<MlDatasetService>();
+        services.AddScoped<MlTrainingService>();
+        services.AddScoped<MlPredictionService>();
+        services.AddScoped<MlPipelineService>();
+        services.AddSingleton<MlJobCoordinator>();
         return services;
     }
 }

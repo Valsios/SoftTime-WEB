@@ -72,7 +72,16 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: 'États',
     droit: Droit.Reports,
-    items: [{ label: 'Rapports', path: '/reports', icon: 'bar-chart', droit: Droit.Reports, permission: 'REPORTS:REPORTS' }],
+    items: [
+      { label: 'Rapports', path: '/reports', icon: 'bar-chart', droit: Droit.Reports, permission: 'REPORTS:REPORTS' },
+      {
+        label: 'Prévisions',
+        path: '/predictions',
+        icon: 'trending-up',
+        droit: Droit.Reports,
+        permission: 'REPORTS:PREDICTIONS',
+      },
+    ],
   },
   {
     title: 'Divers',

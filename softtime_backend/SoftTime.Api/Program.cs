@@ -5,6 +5,7 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using SoftTime.Api.HostedServices;
 using SoftTime.Api.Middleware;
 using SoftTime.Api.Security;
 using SoftTime.Application;
@@ -72,6 +73,8 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.Configure<MlOptions>(builder.Configuration.GetSection("Ml"));
+builder.Services.AddHostedService<MlMaintenanceHostedService>();
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
 builder.Services.AddScoped<ICompanyContext, CompanyContext>();
 builder.Services.AddScoped<ICurrentUser>(sp =>
@@ -128,6 +131,17 @@ using (var scope = app.Services.CreateScope())
     await PunchProcessingConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
     await HistoryArchiveConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
     await UserAccountConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
+
+    // Base analytique du moteur prédictif : applique les migrations EF versionnées (schéma ml).
+    // Un échec n'empêche pas l'API de démarrer : la fonctionnalité reste simplement indisponible.
+    try
+    {
+        await MlStorageConfiguration.EnsureSchemaAsync(app.Services, CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Impossible d'appliquer les migrations du moteur prédictif (schéma ml).");
+    }
 
     // Migration globale contrôlée des mots de passe en clair :
     // Par défaut, la migration est assurée de manière fluide et isolée à la connexion de chaque utilisateur (AuthService.LoginAsync),

@@ -173,6 +173,42 @@ s'affiche « Semaine 27 (30/06 - 06/07/2025) » (année ISO, donc correcte au pa
 
 ---
 
+## 5 ter. Moteur prédictif d'absentéisme et d'heures supplémentaires (ML.NET)
+
+Le moteur ne lit **jamais** les tables fonctionnelles pour s'entraîner : il s'appuie sur une base
+analytique dédiée au schéma `ml` (ou une base séparée via `ConnectionStrings:SoftTimeMl`), alimentée
+par un ETL qui rejoue les règles existantes (`AbsenceReportRules`, `OvertimeCalculator`).
+
+- **`ml.SalarieJour`** : grain salarié × jour ; features calculées *as-of J-1* (calendrier, salarié,
+  historique 7/30/90 jours, collectif) et labels d'absence reconstruits. L'absence n'étant pas
+  stockée dans la base fonctionnelle, elle est recalculée pour l'historique puis figée.
+- **`ml.SalarieSemaine`** : grain salarié × semaine ISO ; label HS = valeur validée de
+  `T_HS_VALIDER` si elle existe, sinon résultat de `OvertimeCalculator`.
+- **`ml.Modele`** : registre versionné (binaire ML.NET, hash du contrat de features, métriques,
+  statut). Un seul modèle actif par société et par type.
+- **`ml.Prediction`** : prédictions précalculées (absence par jour ; HS par semaine) et relues par l'API.
+
+Trois modèles par société : **absence** (classification binaire), **P(HS > 0)** et **montant HS**
+(régression). Entraînement `FastTree` (ML.NET, sans dépendance native) sur les 18 derniers mois,
+découpage **chronologique** (dernières semaines en test) et **porte qualité** : un modèle n'est
+activé que s'il bat la baseline statistique ; sinon l'ancien modèle reste actif et l'écran affiche
+« Baseline ».
+
+- **Rafraîchissement** : service d'arrière-plan (quotidien) + jobs admin. Fenêtre glissante de
+  12 semaines pour absorber les corrections tardives ; backfill complet par trimestres au premier
+  déploiement. Les lignes anciennes restent figées (snapshot).
+- **Page `/predictions`** (États, permission `REPORTS:PREDICTIONS`) : état du moteur, salariés à
+  risque, jours à risque, HS prévues avec intervalle et P(dépassement), historique des modèles.
+- **API** : `GET /api/predictions/status|job|absence|overtime`, `POST /api/predictions/refresh|train|backfill`.
+- **Migrations** : EF Core versionnées (`SoftTime.Infrastructure/Migrations/Ml`,
+  `AddMlPredictionSchema`) et script idempotent `migrations/AddMlPredictionSchema.sql`
+  (voir `migrations/README.md`).
+- **Limites assumées** : historique insuffisant ⇒ baseline ; ancienneté approximée par
+  `T_CARDPAIE.DATE` ; prédictions individuelles réservées à l'aide à la planification (pas de
+  sanction automatique).
+
+---
+
 ## 6. Divers
 
 - **Cantine** : jours avec pointage 11h–14h30 ; recherche sur `T_CANTINE`, **Calculer** pour régénérer.
@@ -228,4 +264,6 @@ s'affiche « Semaine 27 (30/06 - 06/07/2025) » (année ISO, donc correcte au pa
 
 - Frontend : Angular  
 - Backend : ASP.NET Core 8  
-- Données : SQL Server (SoftTime + SAGE + pointeuse)
+- Données : SQL Server (SoftTime + SAGE + pointeuse)  
+- Moteur prédictif : ML.NET 5 (`Microsoft.ML`, `Microsoft.ML.FastTree`)
+

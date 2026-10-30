@@ -572,6 +572,7 @@ public class AuthService
         if (rights.Contains(Rights.Reports))
         {
             defaults.Add("REPORTS:REPORTS");
+            defaults.Add("REPORTS:PREDICTIONS");
         }
 
         if (customList.Count > 0)

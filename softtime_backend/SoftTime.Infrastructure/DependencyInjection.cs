@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using SoftTime.Application.Abstractions;
 using SoftTime.Domain.Repositories;
 using SoftTime.Infrastructure.Integrations;
+using SoftTime.Infrastructure.MachineLearning;
 using SoftTime.Infrastructure.Persistence;
 using SoftTime.Infrastructure.Queries;
 using SoftTime.Infrastructure.Repositories;
@@ -38,6 +39,23 @@ public static class DependencyInjection
         services.AddScoped<IPunchAggregate, PunchAggregate>();
         services.AddScoped<IPlanningStatisticsReader, PlanningStatisticsReader>();
         services.AddScoped<IEmailService, EmailService>();
+
+        // Base analytique « model-ready » : schéma ml dans la base SoftTime par défaut,
+        // ou base dédiée via ConnectionStrings:SoftTimeMl (aucun changement de code).
+        var mlConnection = configuration.GetConnectionString("SoftTimeMl");
+        if (string.IsNullOrWhiteSpace(mlConnection))
+            mlConnection = configuration.GetConnectionString("SoftTime");
+
+        services.AddDbContext<MlDbContext>(options =>
+            options.UseSqlServer(
+                mlConnection,
+                sql => sql
+                    .UseCompatibilityLevel(120)
+                    .EnableRetryOnFailure()
+                    .CommandTimeout(300)));
+        services.AddScoped<IMlStore, EfMlStore>();
+        services.AddSingleton<IMlTrainer, MlNetTrainer>();
+        services.AddSingleton<IMlPredictor, MlNetPredictor>();
         return services;
     }
 }
