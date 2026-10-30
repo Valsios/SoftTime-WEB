@@ -280,11 +280,10 @@ public class AuthService
             throw new InvalidOperationException("Le mot de passe est requis.");
         PasswordPolicy.EnsureValid(motDePasse);
 
-        var roles = await _uow.Repository<T_ROLE>().ListAsync(_ => true, cancellationToken);
-        var role = roles.FirstOrDefault(r => string.Equals(r.NOMROLE?.Trim(), RoleAdministrateur, StringComparison.OrdinalIgnoreCase))
-            ?? roles.OrderBy(r => r.IDROLE).FirstOrDefault()
+        // Le premier compte reçoit toujours le rôle d'identifiant 1 : seul ce rôle est administrateur.
+        var role = await _uow.Repository<T_ROLE>().GetByIdAsync(AdminRules.AdminRoleId, cancellationToken)
             ?? throw new InvalidOperationException(
-                "Aucun rôle n'est défini : exécutez le script de base saine (create_softtime_database.sql) avant le démarrage initial.");
+                "Le rôle Administrateur (identifiant 1) est introuvable : exécutez le script de création de la base.");
 
         var entity = new T_RESPONSABLE
         {
