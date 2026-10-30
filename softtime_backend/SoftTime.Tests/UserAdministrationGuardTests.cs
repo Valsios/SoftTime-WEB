@@ -71,7 +71,7 @@ public class UserAdministrationGuardTests
 
 
     [Fact]
-    public async Task Role_named_admin_but_not_role_1_cannot_assign_the_admin_role_nor_touch_rights()
+    public async Task Role_named_admin_but_not_role_1_is_refused_by_the_guard_on_role_1_assignment_and_on_rights_changes()
     {
         _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 4, NOMROLE = "ROLE_ADMIN_CUSTOM" });
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 4, IDROLE = 4, LOGIN = "customadmin" });
@@ -86,6 +86,45 @@ public class UserAdministrationGuardTests
         // Même un rôle nommé comme l'administrateur ne peut pas modifier son propre compte de droits.
         await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SaveUserDetailedPermissionsAsync(4, 4, new[] { "PARAMS:USERS" }));
         Assert.Equal(before, _uow.Snapshot());
+    }
+
+    [Fact]
+    public async Task Role_4_is_refused_on_every_guarded_overload_and_state_is_unchanged()
+    {
+        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 4, NOMROLE = "ROLE_ADMIN_CUSTOM" });
+        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 4, IDROLE = 4, LOGIN = "customadmin" });
+        var svc = Service(4, 4);
+        var before = _uow.Snapshot();
+
+        // Créer, modifier, attribuer le rôle 1, rétrograder le compte 1 : la garde refuse avant tout contrôle interne.
+        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SaveUserAsync(4, new UserDto(0, 2, "Nouveau", "nouveau", null, "ValidP@ss123!")));
+        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SaveUserAsync(4, new UserDto(3, 2, "Cible modifiée", "cible", null, null)));
+        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SaveUserAsync(4, new UserDto(3, 1, "Cible", "cible", null, null)));
+        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SaveUserAsync(4, new UserDto(1, 2, "Admin", "admin", null, null)));
+        // Supprimer, accès aux bases, droits, réinitialisation.
+        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.DeleteUserAsync(4, 3));
+        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.DeleteUserAsync(4, 1));
+        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SetDbAccessAsync(3, new[] { 1 }));
+        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SaveUserDetailedPermissionsAsync(4, 3, new[] { "PROC:SHIFTS" }));
+        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.ResetUserDetailedPermissionsAsync(4, 3));
+
+        Assert.Equal(before, _uow.Snapshot());
+    }
+
+    [Fact]
+    public async Task Role_4_changing_its_own_role_is_refused_the_same_way()
+    {
+        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 4, NOMROLE = "ROLE_ADMIN_CUSTOM" });
+        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 4, IDROLE = 4, LOGIN = "customadmin" });
+        var before = _uow.Snapshot();
+
+        await Assert.ThrowsAsync<ForbiddenOperationException>(() =>
+            Service(4, 4).SaveUserAsync(4, new UserDto(4, 1, "customadmin", "customadmin", null, null)));   // vers le rôle 1
+        await Assert.ThrowsAsync<ForbiddenOperationException>(() =>
+            Service(4, 4).SaveUserAsync(4, new UserDto(4, 2, "customadmin", "customadmin", null, null)));   // vers un autre rôle
+
+        Assert.Equal(before, _uow.Snapshot());
+        Assert.Equal(4, _uow.GetRepo<T_RESPONSABLE>().Items.Single(u => u.IDRESPONSABLE == 4).IDROLE);
     }
 
     [Fact]

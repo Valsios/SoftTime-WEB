@@ -386,8 +386,8 @@ public class AuthService
         return await ExecuteSaveUserInternalAsync(entity, dto, cancellationToken);
     }
 
-    /// <summary>Réservé aux tests : le code de production doit transmettre l'identité de l'appelant.</summary>
-    public async Task<UserDto> SaveUserAsync(UserDto dto, CancellationToken cancellationToken = default)
+    /// <summary>Réservé aux tests (internal, sans garde) : le code de production doit transmettre l'identité de l'appelant.</summary>
+    internal async Task<UserDto> SaveUserAsync(UserDto dto, CancellationToken cancellationToken = default)
     {
         var repo = _uow.Repository<T_RESPONSABLE>();
         T_RESPONSABLE? entity = null;
@@ -533,8 +533,8 @@ public class AuthService
         access.RemoveRange(await access.ListAsync(a => a.IDRESPONSABLE == userId, cancellationToken));
     }
 
-    /// <summary>Réservé aux tests : le code de production doit transmettre l'identité de l'appelant.</summary>
-    public async Task DeleteUserAsync(decimal id, CancellationToken cancellationToken = default)
+    /// <summary>Réservé aux tests (internal, sans garde) : le code de production doit transmettre l'identité de l'appelant.</summary>
+    internal async Task DeleteUserAsync(decimal id, CancellationToken cancellationToken = default)
     {
         var repo = _uow.Repository<T_RESPONSABLE>();
         var entity = await repo.GetByIdAsync(id, cancellationToken) ?? throw new KeyNotFoundException();
