@@ -64,7 +64,9 @@ L’accès est filtré par **rôle** (6 droits) et par **société SAGE** active
 - **Multi-pointage** : journée simple = pointages du jour ; poste de nuit = pointages rattachés au jour d’entrée jusqu’à la sortie planifiée, les pointages de sortie étant consommés pour ne pas être retraités le lendemain ; appariement avec seuil de 15 minutes, dernier pointage forcé en sortie ; nombre pair → corrections, impair → une anomalie par jour.
 - **Fériés** : lus dans `T_FERIE` (synchronisé depuis SAGE `EtatJour = 1`). Un férié travaillé produit une correction avec `FERIER`, `FERIER_AM` et `FERIER_PM`.
 - **Jours non travaillés** (samedi/dimanche, `OffP`, férié) : sans pointage → rien ; avec pointage → correction (travail exceptionnel).
-- **Protections** : les corrections `ORIGINE = MANUEL` et les semaines validées ne sont jamais écrasées ; seules les corrections `ORIGINE = AUTO` sont purgées puis régénérées.
+- **Protections** : les corrections `ORIGINE = MANUEL` et les semaines validées ne sont jamais écrasées ; seules les corrections `ORIGINE = AUTO` **du périmètre traité** (département, plage de matricules, pointeuse) et hors semaine validée sont purgées puis régénérées.
+- **Semaine validée figée** : saisie, modification, suppression et import d'heures corrigées, validation d'anomalies et modification de pointage sont refusés (l'import ignore la ligne) tant que la validation n'est pas annulée.
+- **Arbitrage d'une absence** : une anomalie marquée absente matin **et** après-midi se valide sans heures (des heures saisies en plus sont refusées) ; elle devient une absence comptée dans `T_HS_VALIDER.ABSENCE` / `T_HSExoImp.ABSENCE`.
 - **Import** : dédoublonnage systématique (pointeuse et Excel, dans les deux modes), puis pré-traitement enchaîné depuis l’écran Pointages. Les pointages bruts restent dans `T_POINTAGE`.
 
 **Calcul des heures supplémentaires — validation semaine** (portage de `Frm_Validations.calculHSSemaine`, synthèse `SYNTHESE_CALCUL_HS.md` §4) :
@@ -80,12 +82,15 @@ L’accès est filtré par **rôle** (6 droits) et par **société SAGE** active
   majoration, la `T_MAJORATION.Cotation` la plus forte l'emporte.
 - **Crédits** : un férié non travaillé crédite la journée (`HEURESEMAINE / 5`) ; un congé SAGE crédite la journée
   (ou la demi-journée) ; le 8 mars crédite la journée des salariées (`T_SAL.Civilite` renseignée et ≠ 0).
-- **Absence** : jour planifié non chômé sans aucune heure corrigée, hors congé et hors férié → `(HD − HA) − pause`.
+- **Absence** : jour planifié non chômé sans aucune heure de présence, hors congé et hors férié → `(HD − HA) − pause`.
+  Une ligne qui ne fait que déclarer une absence (`ABSENCE_AM` / `ABSENCE_PM` sans heure) n'est pas une présence.
 - **Validation** : seules les lignes cochées passent `VALIDATION_HS = true` et verrouillent `VALIDER_HS` ; une
-  semaine validée reste affichée (elle n'est plus recalculée) et peut être annulée, voire purgée.
+  semaine validée reste affichée (elle n'est plus recalculée) et peut être annulée, voire purgée — sauf si elle
+  est déjà incluse dans un calcul EXO/IMPO : purger d'abord les heures supplémentaires de cette période.
 - **Ventilation** : `T_HSSemaine` est reconstruit à chaque calcul à partir des semaines **validées** —
   8 h à 130 %, au-delà à 150 %.
-- **Exonération** : `T_HSExoImp` agrège les semaines validées de la période (max. un mois), plafond de 20 h
+- **Exonération** : `T_HSExoImp` agrège les semaines validées de la période (max. un mois) — une semaine appartient
+  à la seule période qui contient son **dimanche** (une semaine à cheval sur deux mois n'est payée qu'une fois) —, plafond de 20 h
   exonérées consommé d'abord sur le 130 %, et reporte `NUIT`, `DIM`, `FERIE`, `RETARD` et `ABSENCE`.
 - **Écarts assumés vs desktop** : pas d'écriture dans `T_HS_NONVALIDER` (`T_HS_VALIDER` est la source unique) ;
   l'exonération n'agrège que les semaines validées (`VALIDATION_HS`) ; nuit / dimanche / férié ne se cumulent
