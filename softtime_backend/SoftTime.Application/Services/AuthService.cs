@@ -180,42 +180,41 @@ public class AuthService
             await _uow.SaveChangesAsync(cancellationToken);
         }
 
-        var privileges = await _uow.Repository<T_DROIT_ROLE>().ListAsync(p => p.IDROLE == user.IDROLE, cancellationToken);
-        var rights = privileges.Select(p => (int)p.IDDROIT).Distinct().ToList();
-        var isAdmin = user.IDROLE == 1;
-        if (isAdmin)
-        {
-            rights = new List<int> { Rights.Databases, Rights.Parameters, Rights.Processing, Rights.Other, Rights.Traceability, Rights.Reports };
-        }
+        var (rights, effective) = await TokenGatesAsync(user, cancellationToken);
         var token = _tokens.CreateToken(user.IDRESPONSABLE, user.LOGIN ?? login, user.IDROLE, user.MATRICULE, rights);
         var detailed = await GetUserDetailedPermissionsAsync(user.IDRESPONSABLE, cancellationToken);
-        var authorizedSages = await UsableSageDatabasesAsync(user, cancellationToken);
+        var authorizedSages = await UsableSageDatabasesAsync(user, effective, cancellationToken);
         return new LoginResponse(token, user.IDRESPONSABLE, user.LOGIN ?? login, user.NOMRESPONSABLE ?? login, user.IDROLE, user.MATRICULE, rights, authorizedSages.Select(_mapper.Map<SageDbDto>).ToList(), detailed.GrantedPermissions, detailed.IsCustomized);
     }
 
+    /// <summary>
+    /// Portes du claim « rights » : celles des droits effectifs du compte (rôle + ajouts − retraits), lues à la connexion.
+    /// L'administrateur (rôle 1) a les portes 1 à 6. Un changement de droits ne s'applique qu'à la reconnexion.
+    /// </summary>
+    private async Task<(List<int> Gates, EffectiveRights? Effective)> TokenGatesAsync(T_RESPONSABLE user, CancellationToken cancellationToken)
+    {
+        if (user.IDROLE == AdminRules.AdminRoleId)
+            return (new List<int> { Rights.Databases, Rights.Parameters, Rights.Processing, Rights.Other, Rights.Traceability, Rights.Reports }, null);
+        var effective = await _effectiveRights.GetAsync(user.IDRESPONSABLE, fresh: true, ct: cancellationToken);
+        return (effective.Gates.OrderBy(g => g).ToList(), effective);
+    }
+
     /// <summary>Bases SAGE proposées au compte : exactement celles qu'il peut utiliser (même règle que le contrôle serveur).</summary>
-    private async Task<List<T_BDD_SAGE>> UsableSageDatabasesAsync(T_RESPONSABLE user, CancellationToken cancellationToken)
+    private async Task<List<T_BDD_SAGE>> UsableSageDatabasesAsync(T_RESPONSABLE user, EffectiveRights? effective, CancellationToken cancellationToken)
     {
         var sages = await _uow.Repository<T_BDD_SAGE>().ListAsync(_ => true, cancellationToken);
-        if (user.IDROLE == AdminRules.AdminRoleId)
+        if (effective is null)
             return sages;
-        var rights = await _effectiveRights.GetAsync(user.IDRESPONSABLE, fresh: true, ct: cancellationToken);
-        return sages.Where(s => rights.CanUseDatabase(DatabaseKind.Sage, s.NOM_BD)).ToList();
+        return sages.Where(s => effective.CanUseDatabase(DatabaseKind.Sage, s.NOM_BD)).ToList();
     }
 
     public async Task<LoginResponse> GetMeAsync(decimal userId, CancellationToken cancellationToken = default)
     {
         var user = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(userId, cancellationToken)
             ?? throw new KeyNotFoundException("Utilisateur introuvable.");
-        var privileges = await _uow.Repository<T_DROIT_ROLE>().ListAsync(p => p.IDROLE == user.IDROLE, cancellationToken);
-        var rights = privileges.Select(p => (int)p.IDDROIT).Distinct().ToList();
-        var isAdmin = user.IDROLE == 1;
-        if (isAdmin)
-        {
-            rights = new List<int> { Rights.Databases, Rights.Parameters, Rights.Processing, Rights.Other, Rights.Traceability, Rights.Reports };
-        }
+        var (rights, effective) = await TokenGatesAsync(user, cancellationToken);
         var detailed = await GetUserDetailedPermissionsAsync(user.IDRESPONSABLE, cancellationToken);
-        var authorizedSages = await UsableSageDatabasesAsync(user, cancellationToken);
+        var authorizedSages = await UsableSageDatabasesAsync(user, effective, cancellationToken);
         return new LoginResponse(string.Empty, user.IDRESPONSABLE, user.LOGIN ?? string.Empty, user.NOMRESPONSABLE ?? string.Empty, user.IDROLE, user.MATRICULE, rights, authorizedSages.Select(_mapper.Map<SageDbDto>).ToList(), detailed.GrantedPermissions, detailed.IsCustomized);
     }
 
@@ -623,6 +622,10 @@ public class AuthService
     {
         if (roleId == AdminRules.AdminRoleId)
             throw new InvalidOperationException("Les privilèges du rôle Administrateur ne sont pas modifiables.");
+        // Les portes d'un rôle ayant des droits détaillés se déduisent de ces droits (SaveRoleDetailedPermissionsAsync) : écrire
+        // T_DROIT_ROLE à la main n'aurait aucun effet sur le jeton et le contredirait.
+        if ((await _uow.Repository<T_ROLE_PERMISSION>().ListAsync(p => p.IDROLE == roleId, cancellationToken)).Count > 0)
+            throw new InvalidOperationException("Ce rôle a des droits détaillés : modifiez-les depuis la page Privilèges, les portes en sont déduites.");
         var repo = _uow.Repository<T_DROIT_ROLE>();
         var existing = await repo.ListAsync(p => p.IDROLE == roleId, cancellationToken);
         repo.RemoveRange(existing);
