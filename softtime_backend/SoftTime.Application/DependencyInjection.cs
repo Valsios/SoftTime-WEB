@@ -17,6 +17,7 @@ public static class DependencyInjection
         services.AddScoped<IPasswordHasher<T_RESPONSABLE>, PasswordHasher<T_RESPONSABLE>>();
         services.AddScoped<TenantConnectionService>();
         services.AddScoped<AuthService>();
+        services.AddScoped<DatabaseConfigurationAuthorizer>();
         services.AddScoped<CatalogService>();
         services.AddScoped<IExternalSourceService, ExternalSourceService>();
         services.AddScoped<SageLeaveCalendar>();

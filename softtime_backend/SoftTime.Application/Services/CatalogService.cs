@@ -17,14 +17,16 @@ public class CatalogService
     private readonly TenantConnectionService _tenant;
     private readonly IExternalSourceService _externalSource;
     private readonly IExternalDiscoveryService _discovery;
+    private readonly DatabaseConfigurationAuthorizer _configAuth;
 
-    public CatalogService(IUnitOfWork uow, IMapper mapper, TenantConnectionService tenant, IExternalSourceService externalSource, IExternalDiscoveryService discovery)
+    public CatalogService(IUnitOfWork uow, IMapper mapper, TenantConnectionService tenant, IExternalSourceService externalSource, IExternalDiscoveryService discovery, DatabaseConfigurationAuthorizer configAuth)
     {
         _uow = uow;
         _mapper = mapper;
         _tenant = tenant;
         _externalSource = externalSource;
         _discovery = discovery;
+        _configAuth = configAuth;
     }
 
     public async Task<IReadOnlyList<SageDbDto>> ListSageAsync(CancellationToken ct = default)
@@ -47,6 +49,13 @@ public class CatalogService
 
     public async Task<SageDbDto> SaveSageAsync(SageDbDto dto, CancellationToken ct = default)
     {
+        if (dto.Id == 0)
+            await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, dto.NomBd, ct);
+        else
+        {
+            var current = await _uow.Repository<T_BDD_SAGE>().GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
+            await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Update, current.NOM_BD, ct);
+        }
         if (dto.TypeBase != "STANDARD" && dto.TypeBase != "AUTRE")
             throw new InvalidOperationException("TypeBase doit valoir 'STANDARD' ou 'AUTRE'.");
         if (dto.TypeBase == "AUTRE" && (dto.Mappings is null || dto.Mappings.Count == 0))
@@ -129,6 +138,7 @@ public class CatalogService
     {
         var repo = _uow.Repository<T_BDD_SAGE>();
         var e = await repo.GetByIdAsync(id, ct) ?? throw new KeyNotFoundException();
+        await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Delete, e.NOM_BD, ct);
         await RemoveMappingsAsync(true, id, ct);
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
@@ -169,6 +179,13 @@ public class CatalogService
 
     public async Task<PointeuseDbDto> SavePointeuseAsync(PointeuseDbDto dto, CancellationToken ct = default)
     {
+        if (dto.Id == 0)
+            await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Create, dto.NomBd, ct);
+        else
+        {
+            var current = await _uow.Repository<T_BDD_POINTEUSE>().GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
+            await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Update, current.NOM_BD, ct);
+        }
         if (dto.TypeBase != "STANDARD" && dto.TypeBase != "AUTRE")
             throw new InvalidOperationException("TypeBase doit valoir 'STANDARD' ou 'AUTRE'.");
         if (dto.TypeBase == "AUTRE" && (dto.Mappings is null || dto.Mappings.Count == 0))
@@ -261,6 +278,7 @@ public class CatalogService
     {
         var repo = _uow.Repository<T_BDD_POINTEUSE>();
         var e = await repo.GetByIdAsync(id, ct) ?? throw new KeyNotFoundException();
+        await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Delete, e.NOM_BD, ct);
         await RemoveMappingsAsync(false, id, ct);
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);

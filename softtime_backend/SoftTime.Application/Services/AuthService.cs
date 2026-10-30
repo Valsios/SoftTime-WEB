@@ -670,6 +670,8 @@ public class AuthService
 
     public async Task<RoleDto> SaveRoleAsync(RoleDto dto, CancellationToken cancellationToken = default)
     {
+        if (dto.Id == AdminRules.AdminRoleId)
+            throw new InvalidOperationException("Le rôle Administrateur ne peut pas être modifié ni renommé.");
         var repo = _uow.Repository<T_ROLE>();
         T_ROLE entity;
         if (dto.Id == 0)
@@ -689,6 +691,8 @@ public class AuthService
 
     public async Task DeleteRoleAsync(decimal id, CancellationToken cancellationToken = default)
     {
+        if (id == AdminRules.AdminRoleId)
+            throw new InvalidOperationException("Le rôle Administrateur ne peut pas être supprimé.");
         var repo = _uow.Repository<T_ROLE>();
         var entity = await repo.GetByIdAsync(id, cancellationToken) ?? throw new KeyNotFoundException();
 
@@ -718,6 +722,8 @@ public class AuthService
 
     public async Task SetPrivilegesAsync(decimal roleId, IReadOnlyCollection<decimal> droitIds, CancellationToken cancellationToken = default)
     {
+        if (roleId == AdminRules.AdminRoleId)
+            throw new InvalidOperationException("Les privilèges du rôle Administrateur ne sont pas modifiables.");
         var repo = _uow.Repository<T_DROIT_ROLE>();
         var existing = await repo.ListAsync(p => p.IDROLE == roleId, cancellationToken);
         repo.RemoveRange(existing);

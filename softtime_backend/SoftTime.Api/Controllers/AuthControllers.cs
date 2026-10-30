@@ -138,14 +138,17 @@ public class RolesController : ControllerBase
         [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
         => Ok(await _auth.GetRolesPagedAsync(page, pageSize, ct));
 
+    [RequireAdmin]
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] RoleDto dto, CancellationToken ct)
         => Ok(await _auth.SaveRoleAsync(dto with { Id = 0 }, ct));
 
+    [RequireAdmin]
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(decimal id, [FromBody] RoleDto dto, CancellationToken ct)
         => Ok(await _auth.SaveRoleAsync(dto with { Id = id }, ct));
 
+    [RequireAdmin]
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(decimal id, CancellationToken ct)
     {
@@ -176,6 +179,7 @@ public class PrivilegesController : ControllerBase
     public async Task<IActionResult> GetByRole([FromQuery] decimal? roleId, CancellationToken ct)
         => Ok(await _auth.GetPrivilegesAsync(roleId, ct));
 
+    [RequireAdmin]
     [HttpPut("{roleId}")]
     public async Task<IActionResult> Replace(decimal roleId, [FromBody] List<decimal> droits, CancellationToken ct)
     {
@@ -187,6 +191,7 @@ public class PrivilegesController : ControllerBase
     public async Task<IActionResult> GetUserPermissions(decimal userId, CancellationToken ct)
         => Ok(await _auth.GetUserDetailedPermissionsAsync(userId, ct));
 
+    [RequireAdmin]
     [HttpPut("user/{userId}")]
     public async Task<IActionResult> SaveUserPermissions(decimal userId, [FromBody] SaveUserDetailedPermissionsRequest request, CancellationToken ct)
     {
@@ -209,6 +214,7 @@ public class PrivilegesController : ControllerBase
         return NoContent();
     }
 
+    [RequireAdmin]
     [HttpPost("user/{userId}/reset")]
     public async Task<IActionResult> ResetUserPermissions(decimal userId, CancellationToken ct)
     {
@@ -253,6 +259,7 @@ public class DbAccessController : ControllerBase
     public async Task<IActionResult> Get([FromQuery] decimal? userId, CancellationToken ct)
         => Ok(await _auth.GetDbAccessAsync(userId, ct));
 
+    [RequireAdmin]
     [HttpPut("{userId}")]
     public async Task<IActionResult> Replace(decimal userId, [FromBody] List<int> sageDbIds, CancellationToken ct)
     {
