@@ -526,6 +526,18 @@ public record ExcelExportRequest(string FileName, string SheetName, List<string>
     public ExcelExportRequest() : this("export.xlsx", "Données", new List<string>(), new List<List<string?>>()) { }
 }
 
+/// <summary>Une feuille d'un classeur d'export : en-têtes + lignes typées (texte, nombre, booléen).</summary>
+public record ExcelSheetRequest(string SheetName, List<string> Headers, List<List<object?>> Rows)
+{
+    public ExcelSheetRequest() : this("Données", new List<string>(), new List<List<object?>>()) { }
+}
+
+/// <summary>Classeur multi-feuilles généré côté serveur (données déjà calculées par l'écran).</summary>
+public record ExcelWorkbookRequest(string FileName, List<ExcelSheetRequest> Sheets)
+{
+    public ExcelWorkbookRequest() : this("export.xlsx", new List<ExcelSheetRequest>()) { }
+}
+
 public record ReportFilter(string? MatriculeFrom, string? MatriculeTo, DateTime From, DateTime To, string? Departement, string? Search = null)
 {
     public ReportFilter() : this(default, default, default, default, default) { }

@@ -149,6 +149,18 @@ s'affiche « Semaine 27 (30/06 - 06/07/2025) » (année ISO, donc correcte au pa
   l'activité de l'axe sélectionné (effectif actif, absences, retards, minutes, HS).
 - **Assiduité** : top 5 des salariés les plus et les moins ponctuels de la période (matricule, nom,
   ponctualité, jours pointés, retards, absences).
+- **Export PDF** : bouton **Export PDF** dans l'en-tête. Le document est l'impression du rapport
+  affiché (A4 portrait, thème clair, sans menu ni filtres) ; il reprend les KPI, les courbes, la
+  répartition de l'onglet actif et l'assiduité. Pendant l'export, la pagination des tableaux est
+  désactivée pour imprimer **tout le jeu filtré**, pas seulement la page courante. Le navigateur
+  ouvre sa boîte d'impression : choisir « Enregistrer au format PDF ». Le thème, le titre et la
+  pagination de l'écran sont restaurés à la fermeture.
+- **Export Excel** : bouton **Export Excel** dans l'en-tête. Classeur multi-feuilles `.xlsx` généré
+  à partir des mêmes données affichées : **Synthèse** (filtres, KPI, totaux), **Périodes**
+  (absences/retards par période + heures), **Répartition - Catégorie** et **Répartition -
+  Département** (les deux axes, quel que soit l'onglet affiché) et **Assiduité**. Toutes les lignes
+  filtrées sont exportées, avec des cellules numériques (tri, sommes). Aucune requête base
+  supplémentaire : les deux axes viennent de la même réponse du serveur.
 - Les périodes sans événement sont affichées à 0 : tableaux et courbes restent alignés.
 - **Absences et retards** : mêmes règles et mêmes fonctions que les états (`AbsenceReportRules`,
   `RetardReportRules`) — un jour de congé, férié, week-end, OFF ou sans heures n'est jamais une
@@ -205,7 +217,10 @@ s'affiche « Semaine 27 (30/06 - 06/07/2025) » (année ISO, donc correcte au pa
   s'affiche dès qu'une ligne est ignorée. Pour les affectations, le message nomme la catégorie ou le
   matricule introuvable (ex. « matricule(s) introuvable(s) : 961 »). Les lignes d'en-tête CSV ne sont pas
   comptées comme ignorées.
-- **Export Excel** : grilles listées (états, HS, cantine, frais, etc.).
+- **Export Excel** : grilles listées (états, HS, cantine, frais, etc.) et classeur multi-feuilles du
+  tableau de bord analytique.
+- **Export PDF** : impression navigateur du tableau de bord analytique (A4, thème clair, toutes les
+  lignes filtrées).
 
 ---
 
