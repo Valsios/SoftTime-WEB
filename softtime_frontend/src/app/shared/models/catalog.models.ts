@@ -7,7 +7,9 @@ export interface PointeuseDb {
   id: number;
   serveur?: string | null;
   login?: string | null;
+  /** Saisie seulement : le serveur ne renvoie jamais le mot de passe. */
   password?: string | null;
+  passwordDefined?: boolean | null;
   sqlAuth?: boolean | null;
   nomBd?: string | null;
   typePointage?: string | null;

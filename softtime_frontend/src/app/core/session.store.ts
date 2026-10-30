@@ -1,5 +1,6 @@
 import { Injectable, computed, effect, signal } from '@angular/core';
 import { LoginResponse, PointeuseDb, SageDb } from '../shared/models';
+import { stripDatabasePasswords } from '../shared/utils/connection-password';
 
 const TOKEN_KEY = 'st_token';
 const SESSION_KEY = 'st_session';
@@ -78,7 +79,7 @@ export class SessionStore {
       roleId: res.roleId,
       matricule: res.matricule,
       rights: res.rights ?? [],
-      authorizedDatabases: res.authorizedDatabases ?? [],
+      authorizedDatabases: stripDatabasePasswords(res.authorizedDatabases),
       permissions: res.permissions ?? [],
       permissionsCustomized: res.permissionsCustomized ?? false,
     };
@@ -113,7 +114,7 @@ export class SessionStore {
     if (!cur) return;
     const updated: StoredSession = {
       ...cur,
-      authorizedDatabases: databases ?? [],
+      authorizedDatabases: stripDatabasePasswords(databases),
     };
     this._session.set(updated);
     localStorage.setItem(SESSION_KEY, JSON.stringify(updated));
@@ -169,7 +170,13 @@ export class SessionStore {
     const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return null;
     try {
-      return JSON.parse(raw) as StoredSession;
+      const stored = JSON.parse(raw) as StoredSession;
+      // Une session enregistrée avant la correction peut encore contenir des mots de passe de bases : on les purge.
+      if (stored.authorizedDatabases?.some((d) => d.password !== undefined)) {
+        stored.authorizedDatabases = stripDatabasePasswords(stored.authorizedDatabases);
+        localStorage.setItem(SESSION_KEY, JSON.stringify(stored));
+      }
+      return stored;
     } catch {
       return null;
     }

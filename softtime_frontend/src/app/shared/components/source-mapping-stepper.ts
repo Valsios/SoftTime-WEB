@@ -28,6 +28,13 @@ import {
   SoftToggle,
   TabItem,
 } from '../../shared/components';
+import {
+  connectionPayload,
+  connectionTargetChanged,
+  discoveryAuth,
+  usesStoredPassword,
+  withoutPassword,
+} from '../utils/connection-password';
 
 interface EntityState {
   kind: string;
@@ -79,7 +86,14 @@ const ENTITY_LABELS: Record<string, string> = {
           </label>
           @if (form.sqlAuth ?? true) {
             <soft-input label="Login SQL" [(ngModel)]="form.login" name="login" (ngModelChange)="onConnectionChange()" />
-            <soft-input label="Mot de passe" type="password" [(ngModel)]="form.password" name="password" (ngModelChange)="onConnectionChange()" />
+            @if (storedPassword()) {
+              <div class="password-defined">
+                <span class="password-defined__label">Mot de passe défini</span>
+                <soft-button variant="secondary" size="sm" (click)="editPassword()">Modifier</soft-button>
+              </div>
+            } @else {
+              <soft-input label="Mot de passe" type="password" [(ngModel)]="form.password" name="password" (ngModelChange)="onConnectionChange()" />
+            }
           }
           @if (loadingBases()) {
             <p class="muted">Recherche des bases sur ce serveur...</p>
@@ -153,6 +167,9 @@ const ENTITY_LABELS: Record<string, string> = {
       .stepper__item.is-active .stepper__num { background: var(--navy-700); border-color: var(--navy-700); color: #fff; }
       .stepper__item.is-done .stepper__num { background: var(--success-bg); border-color: var(--success); color: var(--success); }
       .form-grid { display: grid; gap: 16px; margin-top: 16px; }
+      .password-defined { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px;
+        border: 1px solid var(--color-border); background: var(--surface-dark); }
+      .password-defined__label { font-size: 14px; font-weight: 600; color: var(--app-text); }
       .toggle-row { display: flex; align-items: center; justify-content: space-between; font-weight: 600; font-size: 14px; color: var(--app-text); }
       .inline-row { display: flex; gap: 10px; align-items: flex-end; }
       .section-title { margin: 18px 0 10px; font-family: var(--font-heading); font-size: 15px; font-weight: 600; color: var(--navy-900); }
@@ -198,6 +215,9 @@ export class SourceMappingStepper {
   private readonly basesSig = signal<string[]>([]);
   private readonly tablesSig = signal<string[]>([]);
   form: Partial<SageDb> & Partial<PointeuseDb> = { sqlAuth: true };
+  /** Vrai pour une nouvelle base ou après « Modifier » : seul un mot de passe saisi est envoyé. */
+  readonly passwordEditing = signal(true);
+  private initialTarget: (Partial<SageDb> & Partial<PointeuseDb>) | null = null;
 
   constructor() {
     effect(() => {
@@ -237,8 +257,20 @@ export class SourceMappingStepper {
     if (t === 'STANDARD') this.step.set(1);
   }
 
+  storedPassword(): boolean {
+    return usesStoredPassword(this.form, this.passwordEditing());
+  }
+
+  editPassword(): void {
+    this.passwordEditing.set(true);
+    this.form.password = '';
+    this.testResult.set(null);
+  }
+
   onConnectionChange(): void {
     this.testResult.set(null);
+    // Le mot de passe stocké ne sert que pour le même serveur et le même login : sinon il faut le ressaisir.
+    if (this.storedPassword() && connectionTargetChanged(this.form, this.initialTarget)) this.editPassword();
     if (this.connKey() !== this.loadedConnKey) {
       this.loadedConnKey = this.connKey();
       this.clearMappings();
@@ -303,7 +335,7 @@ export class SourceMappingStepper {
   testConnection(): void {
     this.testing.set(true);
     this.testResult.set(null);
-    const dto = { ...this.form, typeBase: this.typeBase(), mappings: this.buildMappings() };
+    const dto = { ...connectionPayload(this.form, this.passwordEditing()), typeBase: this.typeBase(), mappings: this.buildMappings() };
     const obs = this.system === 'SAGE' ? this.sageSvc.testConnection(dto) : this.pointeuseSvc.testConnection(dto);
     obs.subscribe({
       next: (r) => { this.testResult.set(r); this.testing.set(false); },
@@ -338,7 +370,7 @@ export class SourceMappingStepper {
 
   save(): void {
     this.saved.emit({
-      ...this.form,
+      ...connectionPayload(this.form, this.passwordEditing()),
       typeBase: this.typeBase(),
       mappings: this.typeBase() === 'AUTRE' ? this.buildMappings() : [],
     });
@@ -346,7 +378,9 @@ export class SourceMappingStepper {
 
   private reset(system: 'SAGE' | 'POINTEUSE', init: (Partial<SageDb> & Partial<PointeuseDb>) | null): void {
     this.system = system;
-    this.form = init ? { ...init } : { sqlAuth: true };
+    this.form = init ? withoutPassword({ ...init }) : { sqlAuth: true };
+    this.initialTarget = init ? { serveur: init.serveur, login: init.login, sqlAuth: init.sqlAuth } : null;
+    this.passwordEditing.set(!((init?.id ?? 0) > 0 && init?.passwordDefined === true));
     if (system === 'POINTEUSE' && this.form.active === undefined) this.form.active = true;
     this.loadedConnKey = this.connKey();
     this.typeBase.set((init?.typeBase === 'AUTRE' ? 'AUTRE' : 'STANDARD'));
@@ -442,12 +476,7 @@ export class SourceMappingStepper {
       }));
   }
 
-  private authPayload(): { sqlAuth: boolean; login: string | null; password: string | null } {
-    const sqlAuth = this.form.sqlAuth ?? true;
-    return {
-      sqlAuth,
-      login: sqlAuth ? (this.form.login ?? null) : null,
-      password: sqlAuth ? (this.form.password ?? null) : null,
-    };
+  private authPayload() {
+    return discoveryAuth(this.form, this.system, this.passwordEditing());
   }
 }

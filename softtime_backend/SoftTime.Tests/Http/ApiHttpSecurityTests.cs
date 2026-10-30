@@ -24,7 +24,6 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
         _http = factory.CreateClient();
     }
 
-    private const string SkipH4 = "H4 non appliqué : la fuite du mot de passe est constatée (voir rapport). Retirer Skip après le correctif.";
     private const string SageBody = """{"id":0,"serveur":"h","login":"l","password":"FAKE-SAGE-SECRET-PWD","sqlAuth":true,"nomBd":"NEWBASE","typeBase":"STANDARD"}""";
     private const string SageUpdateBody = """{"id":3036,"serveur":"h","login":"l","password":"p","sqlAuth":true,"nomBd":"MODIF_SAGE_2","typeBase":"STANDARD"}""";
     private const string PointeuseUpdateBody = """{"id":3,"serveur":"h","login":"l","password":"p","sqlAuth":true,"nomBd":"MODIF_PTG_2","typePointage":null,"active":false,"typeBase":"STANDARD"}""";
@@ -227,14 +226,14 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     #region V6 : mots de passe de base
 
     [Theory]
-    [InlineData("admin", "/api/sage-databases", Skip = SkipH4)]
-    [InlineData("joel", "/api/sage-databases", Skip = SkipH4)]
-    [InlineData("user1", "/api/sage-databases", Skip = SkipH4)]
-    [InlineData("joel", "/api/sage-databases/paged", Skip = SkipH4)]
-    [InlineData("joel", "/api/pointeuse-databases", Skip = SkipH4)]
-    [InlineData("joel", "/api/pointeuse-databases/paged", Skip = SkipH4)]
-    [InlineData("joel", "/api/auth/me", Skip = SkipH4)]
-    [InlineData("admin", "/api/auth/me", Skip = SkipH4)]
+    [InlineData("admin", "/api/sage-databases")]
+    [InlineData("joel", "/api/sage-databases")]
+    [InlineData("user1", "/api/sage-databases")]
+    [InlineData("joel", "/api/sage-databases/paged")]
+    [InlineData("joel", "/api/pointeuse-databases")]
+    [InlineData("joel", "/api/pointeuse-databases/paged")]
+    [InlineData("joel", "/api/auth/me")]
+    [InlineData("admin", "/api/auth/me")]
     public async Task V6_Responses_never_contain_a_database_password(string profile, string url)
     {
         var (resp, text) = await Send(profile, "GET", url, null);
@@ -243,7 +242,7 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
         Assert.Empty(leaks);
     }
 
-    [Fact(Skip = SkipH4)]
+    [Fact]
     public async Task V6_Create_and_update_responses_never_contain_the_submitted_password()
     {
         var (resp, text) = await Send("admin", "POST", "/api/sage-databases", SageBody.Replace("NEWBASE", "V6BASE"));

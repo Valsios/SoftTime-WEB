@@ -77,13 +77,13 @@ export class DiscoveryService extends ApiService {
   servers(): Observable<string[]> {
     return this.http.get<string[]>(this.url('/api/discovery/servers'));
   }
-  databases(dto: { serveur: string; sqlAuth: boolean; login: string | null; password: string | null }): Observable<string[]> {
+  databases(dto: { serveur: string; sqlAuth: boolean; login: string | null; password: string | null; connectionId?: number; connectionKind?: 'SAGE' | 'POINTEUSE' }): Observable<string[]> {
     return this.http.post<string[]>(this.url('/api/discovery/databases'), dto);
   }
-  tables(dto: { serveur: string; base: string; sqlAuth: boolean; login: string | null; password: string | null }): Observable<string[]> {
+  tables(dto: { serveur: string; base: string; sqlAuth: boolean; login: string | null; password: string | null; connectionId?: number; connectionKind?: 'SAGE' | 'POINTEUSE' }): Observable<string[]> {
     return this.http.post<string[]>(this.url('/api/discovery/tables'), dto);
   }
-  columns(dto: { serveur: string; base: string; table: string; sqlAuth: boolean; login: string | null; password: string | null }): Observable<string[]> {
+  columns(dto: { serveur: string; base: string; table: string; sqlAuth: boolean; login: string | null; password: string | null; connectionId?: number; connectionKind?: 'SAGE' | 'POINTEUSE' }): Observable<string[]> {
     return this.http.post<string[]>(this.url('/api/discovery/columns'), dto);
   }
 }

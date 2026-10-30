@@ -79,7 +79,7 @@ public class CatalogService
             entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
             entity.SERVEUR = dto.Serveur;
             entity.TLOGIN = dto.Login;
-            entity.TMDP = dto.Password;
+            if (!string.IsNullOrEmpty(dto.Password)) entity.TMDP = dto.Password;
             entity.TYPE_AUTH = dto.SqlAuth;
             entity.NOM_BD = dto.NomBd;
             entity.TYPE_BASE = dto.TypeBase;
@@ -98,12 +98,13 @@ public class CatalogService
     private static readonly string[] SageStandardTables = { "T_SAL", "T_HST_AFFECTATION", "T_DEPARTEMENT", "T_GHRCAL_SOCIETE", "T_CST" };
     public async Task<ConnectionTestResultDto> TestSageConnectionAsync(TestSageConnectionDto dto, CancellationToken ct = default)
     {
+        var password = await ResolveStoredPasswordAsync("SAGE", dto.Id, dto.Serveur, dto.SqlAuth, dto.Login, dto.Password, ct);
         if (string.IsNullOrWhiteSpace(dto.Serveur) || string.IsNullOrWhiteSpace(dto.NomBd))
             return new ConnectionTestResultDto(false, "Serveur et nom de base requis.");
         IReadOnlyList<string> tables;
         try
         {
-            tables = await _discovery.ListTablesAsync(dto.Serveur, dto.NomBd, dto.SqlAuth ?? true, dto.Login, dto.Password, ct);
+            tables = await _discovery.ListTablesAsync(dto.Serveur, dto.NomBd, dto.SqlAuth ?? true, dto.Login, password, ct);
         }
         catch (Exception ex)
         {
@@ -119,7 +120,7 @@ public class CatalogService
                         missingCustom.Add(t);
                 if (missingCustom.Count == 0)
                 {
-                    var missingCols = await ValidateMappingColumnsAsync(dto.Serveur!, dto.NomBd!, dto.SqlAuth ?? true, dto.Login, dto.Password, dto.Mappings, ct);
+                    var missingCols = await ValidateMappingColumnsAsync(dto.Serveur!, dto.NomBd!, dto.SqlAuth ?? true, dto.Login, password, dto.Mappings, ct);
                     if (missingCols.Count > 0)
                         return new ConnectionTestResultDto(false, "Connexion réussie mais certaines colonnes mappées sont introuvables.", missingCols);
                 }
@@ -218,7 +219,7 @@ public class CatalogService
             entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
             entity.SERVEUR = dto.Serveur;
             entity.TLOGIN = dto.Login;
-            entity.TMDP = dto.Password;
+            if (!string.IsNullOrEmpty(dto.Password)) entity.TMDP = dto.Password;
             entity.TYPE_AUTH = dto.SqlAuth;
             entity.NOM_BD = dto.NomBd;
             entity.TYPE_POINTAGE = dto.TypePointage;
@@ -238,12 +239,13 @@ public class CatalogService
     private static readonly string[] PointeuseStandardTables = { "USERINFO", "CHECKINOUT" };
     public async Task<ConnectionTestResultDto> TestPointeuseConnectionAsync(TestPointeuseConnectionDto dto, CancellationToken ct = default)
     {
+        var password = await ResolveStoredPasswordAsync("POINTEUSE", dto.Id, dto.Serveur, dto.SqlAuth, dto.Login, dto.Password, ct);
         if (string.IsNullOrWhiteSpace(dto.Serveur) || string.IsNullOrWhiteSpace(dto.NomBd))
             return new ConnectionTestResultDto(false, "Serveur et nom de base requis.");
         IReadOnlyList<string> tables;
         try
         {
-            tables = await _discovery.ListTablesAsync(dto.Serveur, dto.NomBd, dto.SqlAuth ?? true, dto.Login, dto.Password, ct);
+            tables = await _discovery.ListTablesAsync(dto.Serveur, dto.NomBd, dto.SqlAuth ?? true, dto.Login, password, ct);
         }
         catch (Exception ex)
         {
@@ -259,7 +261,7 @@ public class CatalogService
                         missingCustom.Add(t);
                 if (missingCustom.Count == 0)
                 {
-                    var missingCols = await ValidateMappingColumnsAsync(dto.Serveur!, dto.NomBd!, dto.SqlAuth ?? true, dto.Login, dto.Password, dto.Mappings, ct);
+                    var missingCols = await ValidateMappingColumnsAsync(dto.Serveur!, dto.NomBd!, dto.SqlAuth ?? true, dto.Login, password, dto.Mappings, ct);
                     if (missingCols.Count > 0)
                         return new ConnectionTestResultDto(false, "Connexion réussie mais certaines colonnes mappées sont introuvables.", missingCols);
                 }
@@ -570,14 +572,57 @@ public class CatalogService
     public Task<IReadOnlyList<string>> DiscoverServersAsync(CancellationToken ct = default)
         => _discovery.ListServersAsync(ct);
 
-    public Task<IReadOnlyList<string>> DiscoverDatabasesAsync(DiscoverDatabasesDto dto, CancellationToken ct = default)
-        => _discovery.ListDatabasesAsync(dto.Serveur, dto.SqlAuth, dto.Login, dto.Password, ct);
+    public async Task<IReadOnlyList<string>> DiscoverDatabasesAsync(DiscoverDatabasesDto dto, CancellationToken ct = default)
+    {
+        var password = await ResolveStoredPasswordAsync(dto.ConnectionKind, dto.ConnectionId, dto.Serveur, dto.SqlAuth, dto.Login, dto.Password, ct);
+        return await _discovery.ListDatabasesAsync(dto.Serveur, dto.SqlAuth, dto.Login, password, ct);
+    }
 
-    public Task<IReadOnlyList<string>> DiscoverTablesAsync(DiscoverTablesDto dto, CancellationToken ct = default)
-        => _discovery.ListTablesAsync(dto.Serveur, dto.Base, dto.SqlAuth, dto.Login, dto.Password, ct);
+    public async Task<IReadOnlyList<string>> DiscoverTablesAsync(DiscoverTablesDto dto, CancellationToken ct = default)
+    {
+        var password = await ResolveStoredPasswordAsync(dto.ConnectionKind, dto.ConnectionId, dto.Serveur, dto.SqlAuth, dto.Login, dto.Password, ct);
+        return await _discovery.ListTablesAsync(dto.Serveur, dto.Base, dto.SqlAuth, dto.Login, password, ct);
+    }
 
-    public Task<IReadOnlyList<string>> DiscoverColumnsAsync(DiscoverColumnsDto dto, CancellationToken ct = default)
-        => _discovery.ListColumnsAsync(dto.Serveur, dto.Base, dto.Table, dto.SqlAuth, dto.Login, dto.Password, ct);
+    public async Task<IReadOnlyList<string>> DiscoverColumnsAsync(DiscoverColumnsDto dto, CancellationToken ct = default)
+    {
+        var password = await ResolveStoredPasswordAsync(dto.ConnectionKind, dto.ConnectionId, dto.Serveur, dto.SqlAuth, dto.Login, dto.Password, ct);
+        return await _discovery.ListColumnsAsync(dto.Serveur, dto.Base, dto.Table, dto.SqlAuth, dto.Login, password, ct);
+    }
+
+    /// <summary>
+    /// Mot de passe à utiliser pour tester ou explorer une connexion. Un mot de passe saisi l'emporte.
+    /// Sinon, pour une base existante, le mot de passe stocké (jamais renvoyé au client) n'est utilisé que si
+    /// l'appelant peut modifier cette base ET que serveur, login et mode d'authentification sont inchangés :
+    /// le mot de passe stocké ne doit jamais être envoyé vers un autre serveur choisi par le client.
+    /// </summary>
+    private async Task<string?> ResolveStoredPasswordAsync(string? kind, int? id, string? serveur, bool? sqlAuth, string? login, string? password, CancellationToken ct)
+    {
+        if (!string.IsNullOrEmpty(password) || id is not > 0 || sqlAuth == false) return password;
+        var isSage = string.Equals(kind, "SAGE", StringComparison.OrdinalIgnoreCase);
+        if (!isSage && !string.Equals(kind, "POINTEUSE", StringComparison.OrdinalIgnoreCase)) return password;
+
+        string? storedServeur, storedLogin, storedPassword, storedName;
+        bool storedSqlAuth;
+        if (isSage)
+        {
+            var row = await _uow.Repository<T_BDD_SAGE>().GetByIdAsync(id.Value, ct) ?? throw new KeyNotFoundException();
+            (storedServeur, storedLogin, storedPassword, storedName, storedSqlAuth) = (row.SERVEUR, row.TLOGIN, row.TMDP, row.NOM_BD, row.TYPE_AUTH == true);
+        }
+        else
+        {
+            var row = await _uow.Repository<T_BDD_POINTEUSE>().GetByIdAsync(id.Value, ct) ?? throw new KeyNotFoundException();
+            (storedServeur, storedLogin, storedPassword, storedName, storedSqlAuth) = (row.SERVEUR, row.TLOGIN, row.TMDP, row.NOM_BD, row.TYPE_AUTH == true);
+        }
+
+        await _configAuth.EnsureCanConfigureAsync(isSage ? DatabaseKind.Sage : DatabaseKind.Pointeuse, DatabaseConfigAction.Update, storedName, ct);
+        var sameTarget = storedSqlAuth
+                         && string.Equals((serveur ?? string.Empty).Trim(), (storedServeur ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase)
+                         && string.Equals((login ?? string.Empty).Trim(), (storedLogin ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase);
+        if (!sameTarget)
+            throw new InvalidOperationException("Le serveur, le login ou le mode d'authentification a changé : saisissez le mot de passe pour utiliser cette connexion.");
+        return storedPassword;
+    }
 
     // Cree (idempotent) le modele de mapping dynamique et seed le catalogue des roles.
     private async Task EnsureMappingSchemaAsync(CancellationToken ct)

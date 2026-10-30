@@ -61,15 +61,17 @@ public record DbAccessDto(int Id, decimal UserId, int SageDbId)
     public DbAccessDto() : this(default, default, default) { }
 }
 
+// Password : entrée seulement. Jamais renvoyé par l'API (PasswordDefined indique qu'un mot de passe est stocké).
 public record SageDbDto(
     int Id,
     string? Serveur,
     string? Login,
-    string? Password,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Password,
     bool? SqlAuth,
     string? NomBd,
     string TypeBase = "STANDARD",
-    IReadOnlyList<SourceEntityMappingDto>? Mappings = null)
+    IReadOnlyList<SourceEntityMappingDto>? Mappings = null,
+    bool PasswordDefined = false)
 {
     public SageDbDto() : this(default, default, default, default, default, default) { }
 }
@@ -77,19 +79,20 @@ public record PointeuseDbDto(
     int Id,
     string? Serveur,
     string? Login,
-    string? Password,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Password,
     bool? SqlAuth,
     string? NomBd,
     string? TypePointage,
     bool? Active,
     string TypeBase = "STANDARD",
-    IReadOnlyList<SourceEntityMappingDto>? Mappings = null)
+    IReadOnlyList<SourceEntityMappingDto>? Mappings = null,
+    bool PasswordDefined = false)
 {
     public PointeuseDbDto() : this(default, default, default, default, default, default, default, default) { }
 }
 
-public record TestSageConnectionDto(string? Serveur, bool? SqlAuth, string? Login, string? Password, string? NomBd, string TypeBase, IReadOnlyList<SourceEntityMappingDto>? Mappings = null);
-public record TestPointeuseConnectionDto(string? Serveur, bool? SqlAuth, string? Login, string? Password, string? NomBd, string TypeBase, IReadOnlyList<SourceEntityMappingDto>? Mappings = null);
+public record TestSageConnectionDto(string? Serveur, bool? SqlAuth, string? Login, string? Password, string? NomBd, string TypeBase, IReadOnlyList<SourceEntityMappingDto>? Mappings = null, int? Id = null);
+public record TestPointeuseConnectionDto(string? Serveur, bool? SqlAuth, string? Login, string? Password, string? NomBd, string TypeBase, IReadOnlyList<SourceEntityMappingDto>? Mappings = null, int? Id = null);
 public record ConnectionTestResultDto(bool Success, string Message, IReadOnlyList<string>? MissingTables = null);
 
 public record FieldRoleDto(string Code, string? Label, string SystemType, string EntityKind, bool IsRequired, string? AutoMappingPatterns, int SortOrder);
@@ -166,9 +169,10 @@ public record MajorationDto(int Id, string? Mojoration, decimal? Cotation)
 }
 
 public record DepartementServiceDto(string Matricule, string? Departement, string? Service);
-public record DiscoverDatabasesDto(string Serveur, bool SqlAuth, string? Login, string? Password);
-public record DiscoverTablesDto(string Serveur, string Base, bool SqlAuth, string? Login, string? Password);
-public record DiscoverColumnsDto(string Serveur, string Base, string Table, bool SqlAuth, string? Login, string? Password);
+// ConnectionId/ConnectionKind : base existante ("SAGE" ou "POINTEUSE") dont le mot de passe stocké est utilisé si Password est vide.
+public record DiscoverDatabasesDto(string Serveur, bool SqlAuth, string? Login, string? Password, int? ConnectionId = null, string? ConnectionKind = null);
+public record DiscoverTablesDto(string Serveur, string Base, bool SqlAuth, string? Login, string? Password, int? ConnectionId = null, string? ConnectionKind = null);
+public record DiscoverColumnsDto(string Serveur, string Base, string Table, bool SqlAuth, string? Login, string? Password, int? ConnectionId = null, string? ConnectionKind = null);
 
 public record CodeConstanteDto(int Id, string Categorie, string? Intitule, string CodeConstante, string? TableCible = null)
 {
