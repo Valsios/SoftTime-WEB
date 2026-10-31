@@ -11,6 +11,15 @@ import { PrivilegesDraftService } from '../../shared/services/privileges-draft.s
 import { AuthService } from '../../shared/services/auth.service';
 import { Icon } from '../../shared/components/icon';
 import { PermMark } from './perm-mark';
+import { PermSearch } from './perm-search';
+import {
+  SENSITIVE_RIGHT_HINT,
+  applyToggle,
+  computeWarnings,
+  filterCategories,
+  isSensitiveRight,
+  matchesAnySearch,
+} from './privileges.advice';
 import {
   appliesAtNextLoginNote,
   buildResetToRoleMessage,
@@ -46,7 +55,7 @@ interface FeatureCategory {
 @Component({
   selector: 'app-privileges',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, FormsModule, Icon, PermMark],
+  imports: [CommonModule, FormsModule, Icon, PermMark, PermSearch],
   template: `
     <!-- En-tête de page - Conforme Charte Softwell §7.1 N°3 et N°4 -->
     <header class="sw-page-header">
@@ -84,6 +93,9 @@ interface FeatureCategory {
           <span class="sw-draft-bar-text">{{ changesCount() }} modification(s) non enregistrée(s)</span>
           @if (serverChangedWarning()) {
             <span class="sw-draft-bar-warning">Les droits ont changé sur le serveur depuis votre dernière modification.</span>
+          }
+          @for (w of warnings(); track w) {
+            <span class="sw-draft-bar-warning">{{ w }}</span>
           }
           @if (otherDirtyCount() > 0) {
             <span class="sw-draft-bar-others">Brouillons en attente pour {{ otherDirtyCount() }} autre(s) cible(s).</span>
@@ -248,6 +260,9 @@ interface FeatureCategory {
     <!-- Conteneur des permissions par catégorie -->
     <div class="sw-permissions-container" *ngIf="hasTarget()">
       <!-- Section 1 : Bases RH / Paie (Charte §7.1 N°8 & §8.4) -->
+      <perm-search [value]="search()" (changed)="search.set($event)"></perm-search>
+
+      @if (matchesAnySearch(sageSearchLabels(), search())) {
       <section class="sw-card sw-perm-card" [class.is-collapsed]="isCollapsed('SAGE')">
         <div class="sw-perm-card-header">
           <div class="sw-perm-title-group">
@@ -353,8 +368,10 @@ interface FeatureCategory {
           </div>
         }
       </section>
+      }
 
       <!-- Section 2 : Bases de pointage (Charte §7.1 N°8 & §8.4) -->
+      @if (matchesAnySearch(pointeuseSearchLabels(), search())) {
       <section class="sw-card sw-perm-card" [class.is-collapsed]="isCollapsed('POINTEUSE')">
         <div class="sw-perm-card-header">
           <div class="sw-perm-title-group">
@@ -460,9 +477,10 @@ interface FeatureCategory {
           </div>
         }
       </section>
+      }
 
       <!-- Sections 3 à 7 : Catégories fonctionnelles (Charte §7.1 & §8.4) -->
-      @for (cat of featureCategories; track cat.key) {
+      @for (cat of visibleCategories(); track cat.key) {
         <section class="sw-card sw-perm-card" [class.is-collapsed]="isCollapsed(cat.key)">
           <div class="sw-perm-card-header">
             <div class="sw-perm-title-group">
@@ -506,6 +524,11 @@ interface FeatureCategory {
                       <strong class="sw-perm-item-title">{{ item.label }}</strong>
                       @if (isMandatory(item.code)) {
                         <span class="sw-lock-indicator" title="Obligatoire pour le profil Administrateur">
+                          <app-icon name="shield" [size]="12"></app-icon>
+                        </span>
+                      }
+                      @if (isSensitive(item.code)) {
+                        <span class="sw-sensitive" role="img" [attr.title]="sensitiveHint" [attr.aria-label]="sensitiveHint">
                           <app-icon name="shield" [size]="12"></app-icon>
                         </span>
                       }
@@ -1179,6 +1202,13 @@ interface FeatureCategory {
         font-weight: 500;
       }
 
+      .sw-sensitive {
+        display: inline-flex;
+        align-items: center;
+        color: var(--warning);
+        margin-left: 4px;
+      }
+
       .sw-draft-bar-others {
         color: var(--text-secondary);
         font-style: italic;
@@ -1362,10 +1392,30 @@ export class PrivilegesPage implements OnInit {
     },
   ];
 
+  /** Pages (codes sans action) : cocher une action coche sa page, décocher une page décoche ses actions. */
+  private readonly pageCodes: ReadonlySet<string> = new Set(this.featureCategories.flatMap((c) => c.items.map((i) => i.code)));
+
+  // Recherche : n'agit que sur l'affichage, jamais sur le brouillon.
+  readonly search = signal('');
+  readonly searching = computed(() => this.search().trim() !== '');
+  readonly visibleCategories = computed(() => filterCategories(this.featureCategories, this.search()));
+  readonly sageSearchLabels = computed(() => ['Bases RH / Paie', 'Ajouter une base', ...this.sageDbs().map((d) => d.nomBd ?? '')]);
+  readonly pointeuseSearchLabels = computed(() => ['Bases de pointage', 'Ajouter une base', ...this.pointeuseDbs().map((d) => d.nomBd ?? '')]);
+  readonly matchesAnySearch = matchesAnySearch;
+  readonly isSensitive = isSensitiveRight;
+  readonly sensitiveHint = SENSITIVE_RIGHT_HINT;
+
+  /** Avertissements du brouillon (ne bloquent pas l'enregistrement). */
+  readonly warnings = computed(() =>
+    this.adminLocked() ? [] : computeWarnings(this.grantedPermissions(), this.mode(), this.baseline()),
+  );
+
   readonly totalSagePerms = computed(() => (this.sageDbs().length > 0 ? 1 + this.sageDbs().length * 3 : 0));
   readonly totalPointeusePerms = computed(() => (this.pointeuseDbs().length > 0 ? 1 + this.pointeuseDbs().length * 3 : 0));
 
-  totalCategoryPerms(cat: FeatureCategory): number {
+  totalCategoryPerms(shown: FeatureCategory): number {
+    // La catégorie affichée peut être filtrée par la recherche : le total porte toujours sur la catégorie complète.
+    const cat = this.featureCategories.find((c) => c.key === shown.key) ?? shown;
     return cat.items.reduce((acc, it) => {
       let count = 1;
       if (it.canCreate) count++;
@@ -1618,12 +1668,7 @@ export class PrivilegesPage implements OnInit {
       return;
     }
     const checked = (event.target as HTMLInputElement).checked;
-    this.grantedPermissions.update((set) => {
-      const next = new Set(set);
-      if (checked) next.add(code);
-      else next.delete(code);
-      return next;
-    });
+    this.grantedPermissions.update((set) => applyToggle(set, code, checked, this.pageCodes, (c) => this.isMandatory(c)));
   }
 
   readonly collapsedSections = signal<Set<string>>(
@@ -1631,7 +1676,8 @@ export class PrivilegesPage implements OnInit {
   );
 
   isCollapsed(key: string): boolean {
-    return this.collapsedSections().has(key);
+    // Pendant une recherche, les catégories affichées sont ouvertes (sans modifier l'état de repli mémorisé).
+    return !this.searching() && this.collapsedSections().has(key);
   }
 
   toggleCollapse(key: string): void {
