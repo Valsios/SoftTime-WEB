@@ -73,11 +73,14 @@ public class AuthServiceSecurityTests
     }
 
     [Fact]
-    public async Task SaveUserAsync_NewUser_WithoutPassword_ThrowsException()
+    public async Task SaveUserAsync_NewUser_WithoutPassword_ThrowsFieldValidation()
     {
         var userDto = new UserDto(0, 2, "No Pwd", "nopwd", "M002", "");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(userDto));
+        var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(userDto));
+
+        Assert.Equal("password", ex.Field);
+        Assert.Empty(_uow.GetRepo<T_RESPONSABLE>().Items);
     }
 
     [Fact]
@@ -85,10 +88,82 @@ public class AuthServiceSecurityTests
     {
         var userDto = new UserDto(0, 2, "Weak User", "weakuser", "M010", "password");
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(userDto));
+        var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(userDto));
 
+        Assert.Equal("password", ex.Field);
         Assert.Contains("règles de sécurité", ex.Message);
         Assert.Empty(_uow.GetRepo<T_RESPONSABLE>().Items.Where(u => u.LOGIN == "weakuser"));
+    }
+
+    [Fact]
+    public async Task SaveUserAsync_NewUser_WithoutName_ThrowsFieldValidation()
+    {
+        var userDto = new UserDto(0, 2, "   ", "sansnom", null, "StrongPassword123!");
+
+        var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(userDto));
+
+        Assert.Equal("nom", ex.Field);
+        Assert.Empty(_uow.GetRepo<T_RESPONSABLE>().Items);
+    }
+
+    [Fact]
+    public async Task SaveUserAsync_NewUser_WithoutLogin_ThrowsFieldValidation()
+    {
+        var userDto = new UserDto(0, 2, "Sans Login", "   ", null, "StrongPassword123!");
+
+        var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(userDto));
+
+        Assert.Equal("login", ex.Field);
+        Assert.Empty(_uow.GetRepo<T_RESPONSABLE>().Items);
+    }
+
+    [Fact]
+    public async Task SaveUserAsync_NewUser_WithoutRole_ThrowsFieldValidation()
+    {
+        var userDto = new UserDto(0, 0, "Sans Rôle", "sansrole", null, "StrongPassword123!");
+
+        var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(userDto));
+
+        Assert.Equal("roleId", ex.Field);
+        Assert.Empty(_uow.GetRepo<T_RESPONSABLE>().Items);
+    }
+
+    [Fact]
+    public async Task SaveUserAsync_NewUser_WithDuplicateLogin_ThrowsFieldValidation()
+    {
+        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE
+        {
+            IDRESPONSABLE = 50,
+            IDROLE = 2,
+            NOMRESPONSABLE = "Existante",
+            LOGIN = "Alice",
+            PASSWORD = _hasher.HashPassword(new T_RESPONSABLE(), "ExistingSecret123!")
+        });
+
+        var userDto = new UserDto(0, 2, "Doublon", "  alice ", null, "StrongPassword123!");
+
+        var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(userDto));
+
+        Assert.Equal("login", ex.Field);
+        Assert.Single(_uow.GetRepo<T_RESPONSABLE>().Items);
+    }
+
+    [Fact]
+    public async Task SaveUserAsync_ExistingLogin_AllowsProfileUpdateEvenIfLoginIsAlreadyDuplicated()
+    {
+        var hash = _hasher.HashPassword(new T_RESPONSABLE(), "Secret123!");
+        _uow.GetRepo<T_RESPONSABLE>().Items.AddRange(new[]
+        {
+            new T_RESPONSABLE { IDRESPONSABLE = 60, IDROLE = 2, NOMRESPONSABLE = "Premier", LOGIN = "shared", PASSWORD = hash },
+            new T_RESPONSABLE { IDRESPONSABLE = 61, IDROLE = 2, NOMRESPONSABLE = "Second", LOGIN = "shared", PASSWORD = hash },
+        });
+
+        var updateDto = new UserDto(60, 2, "Premier Renommé", "shared", null, null);
+
+        var result = await _auth.SaveUserAsync(updateDto);
+
+        Assert.Equal("Premier Renommé", result.Nom);
+        Assert.Equal(hash, _uow.GetRepo<T_RESPONSABLE>().Items.Single(u => u.IDRESPONSABLE == 60).PASSWORD);
     }
 
     [Fact]
@@ -117,8 +192,9 @@ public class AuthServiceSecurityTests
 
         var updateDto = new UserDto(12, 2, "User To Update", "weakupdate", "M011", "azerty");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(updateDto));
+        var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(updateDto));
 
+        Assert.Equal("password", ex.Field);
         var unchanged = _uow.GetRepo<T_RESPONSABLE>().Items.Single(u => u.IDRESPONSABLE == 12);
         Assert.Equal(initialHash, unchanged.PASSWORD);
     }

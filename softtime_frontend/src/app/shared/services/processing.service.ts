@@ -33,9 +33,9 @@ export class ShiftsService extends ApiService {
     return this.http.get<Shift[]>(this.url('/api/shifts'));
   }
   /** Catalogue paginé (le catalogue complet reste exposé pour l'export et les options). */
-  listPaged(page: number, pageSize: number): Observable<PagedResult<Shift>> {
+  listPaged(page: number, pageSize: number, search?: string | null): Observable<PagedResult<Shift>> {
     return this.http.get<PagedResult<Shift>>(this.url('/api/shifts/paged'), {
-      params: this.params({ page, pageSize }),
+      params: this.params({ page, pageSize, search }),
     });
   }
   create(dto: Shift): Observable<Shift> {
@@ -79,10 +79,11 @@ export class EmployeePlanningService extends ApiService {
     to: string,
     page: number,
     pageSize: number,
+    search?: string | null,
   ): Observable<PagedResult<PlanningEmployeeStat>> {
     return this.http.get<PagedResult<PlanningEmployeeStat>>(
       this.url('/api/employee-planning/employees/paged'),
-      { params: this.params({ from, to, page, pageSize }) },
+      { params: this.params({ from, to, page, pageSize, search }) },
     );
   }
   employees(): Observable<PlanningEmployee[]> {

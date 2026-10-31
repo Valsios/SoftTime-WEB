@@ -6,6 +6,22 @@ public static class OvertimeRules
 {
     public const decimal ExemptCeilingHours = 20m;
     public const decimal WeeklyHs130Cap = 8m;
+    public const decimal DefaultWeeklyHours = 40m;
+
+    /// <summary>Début de la plage de nuit (synthèse §4.3 d, §9-7).</summary>
+    public static readonly TimeSpan NightStart = new(22, 0, 0);
+
+    /// <summary>Fin de la plage de nuit : 05:00 est la frontière d'attribution au jour suivant.</summary>
+    public static readonly TimeSpan NightEnd = new(5, 0, 0);
+
+    /// <summary>Seuil au-delà duquel la pause manquante est déduite (mode multi, synthèse §4.3 d).</summary>
+    public static readonly TimeSpan PauseThreshold = new(5, 0, 0);
+
+    /// <summary>Pause de 30 minutes appliquée quand ni le planning ni la catégorie n'en définissent (synthèse §3).</summary>
+    public static readonly TimeSpan DefaultPause = new(0, 30, 0);
+
+    /// <summary>Pas d'arrondi de la sortie en mode 2 pointages : demi-heure inférieure (synthèse §4.4).</summary>
+    public const int MonoExitRoundingMinutes = 30;
 
     public static HsWeekSplit SplitWeekly(decimal hs)
     {
@@ -37,14 +53,17 @@ public static class OvertimeRules
         return end <= start.AddMonths(1);
     }
 
+    /// <summary>
+    /// Minute de sortie arrondie <b>vers le bas</b> au multiple du pas de tolérance (synthèse §3, §4.3 d).
+    /// L'implémentation du desktop (<c>while (reste &gt; tol) reste -= tol</c>) retirait un pas de trop
+    /// lorsque la minute était déjà un multiple exact (17:45 avec un pas de 15 devenait 17:30) : le
+    /// plancher est ici arithmétique, ce que le jeu de tests de la synthèse (cas N) suppose.
+    /// </summary>
     public static int GetMinuteSortie(int sortie, int tol)
     {
-        if (tol <= 0)
+        if (tol <= 0 || sortie <= 0)
             return sortie;
-        var reste = sortie;
-        while (reste > tol)
-            reste -= tol;
-        return sortie - reste;
+        return sortie / tol * tol;
     }
 
     /// <summary>
@@ -132,15 +151,8 @@ public static class OvertimeRules
     }
 
     /// <summary>
-    /// La plage est-elle de nuit ? Même règle que le calcul de semaine (entrée avant 6 h
-    /// ou sortie à partir de 21 h).
-    /// </summary>
-    public static bool EstPlageNuit(TimeSpan entree, TimeSpan sortie)
-        => entree.Hours < 6 || sortie.Hours >= 21;
-
-    /// <summary>
     /// Indicateur de dépassement journalier, porté du desktop
-    /// (<c>DetailHS</c> : <c>Math.Max(0, totalHeures - 8)</c>). Les heures supplémentaires
+    /// (<c>DetailHS</c> : <c>Math.Max(0, totalHeures - journee)</c>). Les heures supplémentaires
     /// réellement payées restent calculées à la semaine (voir <see cref="SplitWeekly"/>).
     /// </summary>
     public static decimal HeuresSupJournalieres(TimeSpan heures, double seuil = 8)

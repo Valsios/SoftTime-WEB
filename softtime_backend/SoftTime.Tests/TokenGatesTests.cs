@@ -21,7 +21,7 @@ public class TokenGatesTests
 {
     private const string FakePassword = "FAKE-LOGIN-PWD";
 
-    private readonly InMemoryUnitOfWork _uow = new();
+    private readonly SnapshotInMemoryUnitOfWork _uow = new();
     private readonly AuthService _auth;
 
     public TokenGatesTests()

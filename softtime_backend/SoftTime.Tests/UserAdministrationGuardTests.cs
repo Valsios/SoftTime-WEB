@@ -13,7 +13,7 @@ namespace SoftTime.Tests;
 /// <summary>Étape 4b-1 : contrôle d'administrateur dans AuthService pour toute écriture sur un autre compte.</summary>
 public class UserAdministrationGuardTests
 {
-    private readonly InMemoryUnitOfWork _uow = new();
+    private readonly SnapshotInMemoryUnitOfWork _uow = new();
     private readonly IMapper _mapper = new MapperConfiguration(c => c.AddProfile<MappingProfile>()).CreateMapper();
 
     public UserAdministrationGuardTests()

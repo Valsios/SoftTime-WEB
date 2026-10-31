@@ -94,6 +94,42 @@ public class PlanningGenerationRulesTests
     }
 
     [Fact]
+    public void TryIntervalle_TimeSpan_BuildsSameDayRange()
+    {
+        Assert.True(PlanningGenerationRules.TryIntervalle(
+            Lundi, new TimeSpan(8, 0, 0), new TimeSpan(17, 0, 0), out var ha, out var hd));
+        Assert.Equal(Lundi.AddHours(8), ha);
+        Assert.Equal(Lundi.AddHours(17), hd);
+    }
+
+    [Fact]
+    public void TryIntervalle_TimeSpan_NightShift_EndsNextDay()
+    {
+        Assert.True(PlanningGenerationRules.TryIntervalle(
+            Lundi, new TimeSpan(17, 0, 0), new TimeSpan(7, 0, 0), out var ha, out var hd));
+        Assert.Equal(Lundi.AddHours(17), ha);
+        Assert.Equal(Lundi.AddDays(1).AddHours(7), hd);
+    }
+
+    [Fact]
+    public void TryIntervalle_TimeSpan_EqualHours_StaySameDay()
+    {
+        Assert.True(PlanningGenerationRules.TryIntervalle(
+            Lundi, new TimeSpan(8, 0, 0), new TimeSpan(8, 0, 0), out var ha, out var hd));
+        Assert.Equal(Lundi.AddHours(8), ha);
+        Assert.Equal(Lundi.AddHours(8), hd);
+    }
+
+    [Fact]
+    public void TryIntervalle_TimeSpan_MissingHour_ReturnsFalse()
+    {
+        Assert.False(PlanningGenerationRules.TryIntervalle(
+            Lundi, new TimeSpan(8, 0, 0), null, out var ha, out var hd));
+        Assert.Null(ha);
+        Assert.Null(hd);
+    }
+
+    [Fact]
     public void IndiceDebut_CategoryFormat_SkipsTwoCellsPerDay()
     {
         // catégorie ; lundi ; (début ; fin) × 7

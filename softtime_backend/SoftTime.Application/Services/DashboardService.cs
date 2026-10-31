@@ -30,12 +30,17 @@ public class DashboardService
     }
 
     public async Task<DashboardStatsDto> GetStatsAsync(
-        PeriodRequest filter, string? departement, string? categorie, string periode, CancellationToken ct = default)
+        PeriodRequest filter, string? categorie, string periode, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageDb = _tenant.SageDb;
         var from = filter.From.Date;
         var to = filter.To.Date;
+
+        // Aucun événement futur : absences et retards sont calculés jusqu'à la veille, exactement
+        // comme les états (rapports) qui partagent les mêmes règles.
+        var hier = DateTime.Today.AddDays(-1);
+        var finEvenements = to < hier ? to : hier;
 
         var categorieFiltre = int.TryParse(categorie, out var idCategorie) ? idCategorie : (int?)null;
 
@@ -50,8 +55,8 @@ public class DashboardService
 
         var cartes = (await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == sageDb, ct))
             .Where(c => MatriculeRange.Contains(c.SAGE_MATRICULE, filter))
-            .Where(c => string.IsNullOrWhiteSpace(departement)
-                        || string.Equals(c.DEPARTEMENT, departement, StringComparison.OrdinalIgnoreCase))
+            .Where(c => string.IsNullOrWhiteSpace(filter.Departement)
+                        || string.Equals(c.DEPARTEMENT, filter.Departement, StringComparison.OrdinalIgnoreCase))
             .Where(c => categorieFiltre is not int idCat
                         || (categorieParCarte.TryGetValue(c.ID, out var carteCat) && carteCat == idCat))
             .ToList();
@@ -80,10 +85,22 @@ public class DashboardService
             .GroupBy(h => Cle(h.MATRICULE_SAGE), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
 
+        // Planning de chaque carte, indexé par jour : une ligne de travail prime sur une ligne OFF,
+        // puis le plus petit ID (même convention déterministe que l'état des absences).
         var planning = (await _uow.Repository<T_PLANNING_SAL>().ListAsync(
                 p => p.BDD_SAGE == sageDb && p.DateP >= from && p.DateP <= to, ct))
             .Where(p => p.DateP.HasValue)
-            .ToLookup(p => p.IDSAL);
+            .GroupBy(p => p.IDSAL)
+            .ToDictionary(
+                g => g.Key,
+                g => g
+                    .GroupBy(p => p.DateP!.Value.Date)
+                    .ToDictionary(
+                        d => d.Key,
+                        d => d
+                            .OrderBy(p => AbsenceReportRules.EstJourOff(p) ? 1 : 0)
+                            .ThenBy(p => p.ID)
+                            .First()));
 
         var tolerances = await _uow.Repository<T_TOLERANCE>().ListAsync(_ => true, ct);
 
@@ -108,26 +125,41 @@ public class DashboardService
             correctionsParCle.TryGetValue(cle, out var lignes);
             lignes ??= new List<T_HEURECORRIGER>();
             var conges = congesParCle.TryGetValue(cle, out var joursConge) ? joursConge : new List<LeaveDay>();
+            var plansDuSalarie = planning.TryGetValue(carte.ID, out var plansCarte) ? plansCarte : PlansVides;
 
-            // Absences explicites : l'absence est portée par l'heure corrigée.
+            // Absences explicites : l'absence est portée par l'heure corrigée. Un jour de repos
+            // planifié (OFF) n'est jamais une absence, même si une correction le mentionne.
             foreach (var ligne in lignes.Where(h => h.ABSENCE_AM == true || h.ABSENCE_PM == true))
             {
-                if (ligne.DATE_POINTAGE_IN is not DateTime jour || EstNonTravaille(jour, feries))
+                if (ligne.DATE_POINTAGE_IN is not DateTime jour)
                     continue;
-                absences.Add((cle, jour.Date));
+                var jourDate = jour.Date;
+                if (jourDate > finEvenements || EstNonTravaille(jourDate, feries))
+                    continue;
+                if (AbsenceReportRules.EstJourOff(plansDuSalarie.GetValueOrDefault(jourDate)))
+                    continue;
+                absences.Add((cle, jourDate));
             }
 
-            foreach (var jour in planning[carte.ID]
-                         .Where(p => p.OffP != true && p.DateP.HasValue)
-                         .Select(p => p.DateP!.Value.Date))
+            foreach (var (jour, plan) in plansDuSalarie)
             {
+                if (jour > finEvenements)
+                    continue;
+
+                var estNonTravaille = EstNonTravaille(jour, feries);
+                var estConge = LeaveRules.EstConge(conges, jour);
                 // LOT 9 : un jour de conge SAGE n'est ni une presence theorique ni une absence, comme
                 // dans la validation semaine — il sort donc aussi du denominateur de l'absenteisme.
-                if (!DashboardRules.CompteDansPresenceTheorique(EstNonTravaille(jour, feries), LeaveRules.EstConge(conges, jour)))
+                if (!DashboardRules.CompteDansPresenceTheorique(estNonTravaille, estConge))
                     continue;
+                // Jour de repos planifié (OFF) ou shift sans heures : aucune journée attendue.
+                if (AbsenceReportRules.CalculerDureeHeures(plan) is null)
+                    continue;
+
                 joursPlanifies++;
-                // Jour planifie sans heure corrigee = absence probable.
-                if (!lignes.Any(h => h.DATE_POINTAGE_IN?.Date == jour))
+                // Règle partagée avec l'état des absences : jour planifié avec heures, sans pointage.
+                var aPointage = lignes.Any(h => h.DATE_POINTAGE_IN?.Date == jour);
+                if (AbsenceReportRules.EstNonJustifiee(estNonTravaille, estConge, plan, aPointage))
                     absences.Add((cle, jour));
             }
 
@@ -136,36 +168,35 @@ public class DashboardService
             foreach (var ligne in lignes.Where(h => h.DATE_POINTAGE_IN.HasValue && h.HENTREE.HasValue))
             {
                 var jour = ligne.DATE_POINTAGE_IN!.Value.Date;
-                if (EstNonTravaille(jour, feries))
+                if (jour > finEvenements || EstNonTravaille(jour, feries))
                     continue;
                 presences.Add((cle, jour));
             }
 
-            // Retards : la valeur saisie prime, sinon règle planning + tolérance d'entrée
-            // (identique à OvertimeService.ComputeWeekAsync).
-            foreach (var ligne in lignes.Where(h => h.DATE_POINTAGE_IN.HasValue))
+            // Retards : règle partagée avec l'état des retards (valeur saisie prioritaire, sinon
+            // première entrée du jour vs planning + tolérance d'entrée). On raisonne par journée pour
+            // ne pas compter l'entrée d'une deuxième paire (après-midi) comme un retard.
+            foreach (var groupeJour in lignes
+                         .Where(h => h.DATE_POINTAGE_IN.HasValue)
+                         .GroupBy(h => h.DATE_POINTAGE_IN!.Value.Date))
             {
-                var jour = ligne.DATE_POINTAGE_IN!.Value.Date;
-                if (EstNonTravaille(jour, feries))
+                var jour = groupeJour.Key;
+                if (jour > finEvenements || EstNonTravaille(jour, feries))
                     continue;
 
-                if (ligne.RETARD.HasValue)
-                {
-                    var minutes = (int)ligne.RETARD.Value.TotalMinutes;
-                    if (minutes > 0)
-                        retards.Add((cle, jour, minutes));
-                    continue;
-                }
+                var entrees = groupeJour
+                    .Where(h => h.HENTREE.HasValue)
+                    .Select(h => h.HENTREE!.Value)
+                    .ToList();
+                var minutes = RetardReportRules.MinutesRetardJour(
+                    absenceMatin: groupeJour.Any(h => h.ABSENCE_AM == true),
+                    retardsSaisis: groupeJour.Select(h => h.RETARD),
+                    premiereEntree: entrees.Count > 0 ? entrees.Min() : null,
+                    heurePrevue: RetardReportRules.HeurePrevue(plansDuSalarie.GetValueOrDefault(jour)),
+                    toleranceMinutes: RetardReportRules.ToleranceEntree(carte.ID, categorieParCarte, tolerances));
 
-                if (ligne.HENTREE is null)
-                    continue;
-                var plan = planning[carte.ID].FirstOrDefault(p => p.DateP?.Date == jour);
-                if (plan?.HA is null)
-                    continue;
-                var tolerance = ToleranceEntree(carte.ID, categorieParCarte, tolerances);
-                var autorise = plan.HA.Value.TimeOfDay.Add(TimeSpan.FromMinutes(tolerance));
-                if (ligne.HENTREE.Value > autorise)
-                    retards.Add((cle, jour, (int)(ligne.HENTREE.Value - autorise).TotalMinutes));
+                if (minutes > 0)
+                    retards.Add((cle, jour, minutes));
             }
         }
 
@@ -230,7 +261,6 @@ public class DashboardService
 
         var repartition = new DashboardRepartitionDto(
             Repartition(cartes, c => categorieParCle.GetValueOrDefault(Cle(c.SAGE_MATRICULE)), joursAbsence, joursRetard, hsParCle),
-            Repartition(cartes, c => c.BRANCHE, joursAbsence, joursRetard, hsParCle),
             Repartition(cartes, c => c.DEPARTEMENT, joursAbsence, joursRetard, hsParCle));
 
         return new DashboardStatsDto(
@@ -243,7 +273,7 @@ public class DashboardService
             Assiduite(cles, categorieParCle, joursPresence, joursAbsence, joursRetard));
     }
 
-    /// <summary>Valeurs distinctes proposées par les filtres de la page (département, branche, catégorie).</summary>
+    /// <summary>Valeurs distinctes proposées par les filtres de la page (département, catégorie).</summary>
     public async Task<DashboardFiltersDto> GetFiltersAsync(CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
@@ -270,7 +300,6 @@ public class DashboardService
 
         return new DashboardFiltersDto(
             Valeurs(cartes.Select(c => c.DEPARTEMENT)),
-            Valeurs(cartes.Select(c => c.BRANCHE)),
             categories);
     }
 
@@ -322,7 +351,7 @@ public class DashboardService
     private static readonly PeriodeMetrics VideMetrics = new(0, 0, 0, 0, 0, Array.Empty<SemaineHs>());
 
     /// <summary>
-    /// Effectif, absences et retards d'un axe (catégorie, branche, département).
+    /// Effectif, absences et retards d'un axe (catégorie, département).
     /// Seules les cartes actives sont comptées : c'est l'« effectif actif » annoncé par les KPI,
     /// et les événements sont donc restreints aux mêmes salariés pour que la ligne reste cohérente.
     /// </summary>
@@ -431,17 +460,8 @@ public class DashboardService
         int MinutesRetard,
         IReadOnlyList<SemaineHs> Semaines);
 
-    /// <summary>Tolérance d'entrée de la catégorie du salarié (TYPES_TOL = false), comme la semaine.</summary>
-    private static int ToleranceEntree(
-        int carteId,
-        IReadOnlyDictionary<int, int> categorieParCarte,
-        IReadOnlyList<T_TOLERANCE> tolerances)
-    {
-        if (!categorieParCarte.TryGetValue(carteId, out var idCategorie))
-            return 0;
-        return tolerances
-            .FirstOrDefault(t => t.IDCATEGORIE == idCategorie && t.TYPES_TOL == false)?.TOLERANCE ?? 0;
-    }
+    /// <summary>Planning vide partagé : évite une allocation par salarié sans planning.</summary>
+    private static readonly Dictionary<DateTime, T_PLANNING_SAL> PlansVides = new();
 
     private static DashboardTopDto ToTop(
         string cle, int count, int minutes, IReadOnlyDictionary<string, T_CARDPAIE> cles)

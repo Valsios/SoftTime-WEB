@@ -30,7 +30,6 @@ export interface CorrespondenceMode {
 export interface CardPaie {
   id: number;
   sageMatricule?: string | null;
-  branche?: string | null;
   sageNom?: string | null;
   sagePrenom?: string | null;
   pointeuseNumero?: string | null;
@@ -70,6 +69,7 @@ export interface AffectationQuery {
   categoryId?: number | null;
   departement?: string | null;
   service?: string | null;
+  search?: string | null;
 }
 
 export interface AffectationOptions {

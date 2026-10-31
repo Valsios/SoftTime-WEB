@@ -13,7 +13,7 @@ namespace SoftTime.Tests;
 /// <summary>Supprimer un compte efface ses droits personnels et ses accès aux bases, dans la même sauvegarde.</summary>
 public class AccountDeletionTests
 {
-    private readonly InMemoryUnitOfWork _store = new();
+    private readonly SnapshotInMemoryUnitOfWork _store = new();
     private readonly RecordingUnitOfWork _uow;
     private readonly AuthService _auth;
 
@@ -110,8 +110,8 @@ public class AccountDeletionTests
     /// <summary>Délègue au magasin en mémoire et mémorise l'état au moment de la sauvegarde.</summary>
     private sealed class RecordingUnitOfWork : IUnitOfWork
     {
-        private readonly InMemoryUnitOfWork _inner;
-        public RecordingUnitOfWork(InMemoryUnitOfWork inner) => _inner = inner;
+        private readonly SnapshotInMemoryUnitOfWork _inner;
+        public RecordingUnitOfWork(SnapshotInMemoryUnitOfWork inner) => _inner = inner;
         public int SaveCount { get; private set; }
         public bool FailOnSave { get; set; }
         public (bool UserStillThere, int RowsLeft)? StateAtSave { get; private set; }

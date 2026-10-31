@@ -46,6 +46,11 @@ public sealed class ExternalSourceService : IExternalSourceService
 
     private static long? ParseLong(string? value) => long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var l) ? l : null;
     private static short? ParseShort(string? value) => short.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var s) ? s : null;
+    private static byte? ParseByte(string? value) => byte.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var b) ? b : null;
+
+    /// <summary>Lecture null-safe d'une colonne mappée optionnelle (rôle absent du mapping).</summary>
+    private static string? Col(MappedRow row, string role)
+        => row.Values.TryGetValue(role, out var valeur) ? valeur : null;
 
     private static DateTime? ParseDate(string? value)
         => DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : null;
@@ -81,7 +86,7 @@ public sealed class ExternalSourceService : IExternalSourceService
             using var sage = _sageFactory.Create(conn);
             return sage.Employees.ToList()
                 .Where(e => e.SalarieDesactive != 1)
-                .Select(e => new ExternalEmployee(e.MatriculeSalarie.Trim(), e.SA_CompteurNumero, e.Nom, e.Prenom, e.NumeroDeBadge, false))
+                .Select(e => new ExternalEmployee(e.MatriculeSalarie.Trim(), e.SA_CompteurNumero, e.Nom, e.Prenom, e.NumeroDeBadge, false, e.Civilite))
                 .ToList();
         }
         var rows = await ReadEntityAsync(true, row.ID, "EMPLOYEE", conn, null, ct);
@@ -92,7 +97,7 @@ public sealed class ExternalSourceService : IExternalSourceService
             var id = ParseLong(r["SAGE_EMPLOYEE_ID"]);
             if (string.IsNullOrWhiteSpace(matricule) || id is null) continue;
             if (ParseBool(r["SAGE_INACTIVE_FLAG"]) == true) continue;
-            result.Add(new ExternalEmployee(matricule!.Trim(), id.Value, r["SAGE_NOM"], r["SAGE_PRENOM"], r["SAGE_BADGE"], false));
+            result.Add(new ExternalEmployee(matricule!.Trim(), id.Value, r["SAGE_NOM"], r["SAGE_PRENOM"], r["SAGE_BADGE"], false, ParseByte(Col(r, "SAGE_CIVILITE"))));
         }
         return result;
     }

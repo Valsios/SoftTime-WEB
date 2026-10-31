@@ -698,6 +698,7 @@ public class CatalogService
                 (N'SAGE_PRENOM', N'Prénom', N'SAGE', N'EMPLOYEE', 0, N'prenom|prénom|firstname', 40),
                 (N'SAGE_BADGE', N'Numéro de badge', N'SAGE', N'EMPLOYEE', 0, N'badge|badgenumber|numbadge|num_badge|numerobadge', 50),
                 (N'SAGE_INACTIVE_FLAG', N'Indicateur désactivé', N'SAGE', N'EMPLOYEE', 0, N'desactive|désactivé|inactive|actif', 60),
+                (N'SAGE_CIVILITE', N'Civilité', N'SAGE', N'EMPLOYEE', 0, N'civilite|civilité|sexe|genre', 70),
                 (N'SAGE_AFF_EMPLOYEE_ID', N'Identifiant employé', N'SAGE', N'AFFECTATION', 1, N'numsalarie|num_salarie|compteur|salarieid', 10),
                 (N'SAGE_AFF_DEPARTEMENT', N'Code département', N'SAGE', N'AFFECTATION', 0, N'departement|département|code_dep|dep', 20),
                 (N'SAGE_AFF_SERVICE', N'Service', N'SAGE', N'AFFECTATION', 0, N'service', 30),
@@ -1027,7 +1028,7 @@ public class CatalogService
     // ---------------------------------------------------------------- Listes paginées (Lot A)
 
     public async Task<PagedResult<SageDbDto>> ListSagePagedAsync(
-        IReadOnlyCollection<string>? allowedNames, int? page, int? pageSize, CancellationToken ct = default)
+        IReadOnlyCollection<string>? allowedNames, int? page, int? pageSize, string? search = null, CancellationToken ct = default)
     {
         await EnsureMappingSchemaAsync(ct);
         await MigrateLegacyMappingsAsync(ct);
@@ -1041,6 +1042,10 @@ public class CatalogService
         System.Linq.Expressions.Expression<Func<T_BDD_SAGE, bool>> predicate = allowedNames is null
             ? s => true
             : s => s.NOM_BD != null && allowedNames.Contains(s.NOM_BD);
+        var searchPredicate = SearchExpression.For<T_BDD_SAGE>(
+            search, s => s.SERVEUR, s => s.NOM_BD, s => s.TYPE_BASE);
+        if (searchPredicate is not null)
+            predicate = SearchExpression.AndAlso(predicate, searchPredicate);
         var result = await _uow.Repository<T_BDD_SAGE>().ToPagedAsync(
             predicate, q => q.OrderBy(s => s.ID), page, pageSize, ct);
         if (result.Total > 0 && result.Items.Count == 0 && result.Page > result.TotalPages)
@@ -1056,7 +1061,7 @@ public class CatalogService
     }
 
     public async Task<PagedResult<PointeuseDbDto>> ListPointeusePagedAsync(
-        IReadOnlyCollection<string>? allowedNames, int? page, int? pageSize, CancellationToken ct = default)
+        IReadOnlyCollection<string>? allowedNames, int? page, int? pageSize, string? search = null, CancellationToken ct = default)
     {
         await EnsureMappingSchemaAsync(ct);
         await MigrateLegacyMappingsAsync(ct);
@@ -1070,6 +1075,10 @@ public class CatalogService
         System.Linq.Expressions.Expression<Func<T_BDD_POINTEUSE, bool>> predicate = allowedNames is null
             ? p => true
             : p => p.NOM_BD != null && allowedNames.Contains(p.NOM_BD);
+        var searchPredicate = SearchExpression.For<T_BDD_POINTEUSE>(
+            search, p => p.SERVEUR, p => p.NOM_BD, p => p.TYPE_BASE);
+        if (searchPredicate is not null)
+            predicate = SearchExpression.AndAlso(predicate, searchPredicate);
         var result = await _uow.Repository<T_BDD_POINTEUSE>().ToPagedAsync(
             predicate, q => q.OrderBy(p => p.ID), page, pageSize, ct);
         if (result.Total > 0 && result.Items.Count == 0 && result.Page > result.TotalPages)
@@ -1085,7 +1094,7 @@ public class CatalogService
     }
 
     public async Task<PagedResult<CardPaieDto>> ListCardsPagedAsync(
-        int? page, int? pageSize, CancellationToken ct = default)
+        int? page, int? pageSize, string? search = null, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sage = (_tenant.SageDb ?? string.Empty).Trim().ToLowerInvariant();
@@ -1101,17 +1110,60 @@ public class CatalogService
             page,
             pageSize,
             c => _mapper.Map<CardPaieDto>(c),
+            search,
+            new System.Linq.Expressions.Expression<Func<T_CARDPAIE, string?>>[]
+            {
+                c => c.SAGE_MATRICULE,
+                c => c.SAGE_NOM,
+                c => c.SAGE_PRENOM,
+                c => c.POINTEUSE_NUMERO,
+                c => c.POINTEUSE_NOM,
+                c => c.DEPARTEMENT,
+            },
             ct);
     }
 
     public async Task<PagedResult<CategoryDto>> ListCategoriesPagedAsync(
-        int? page, int? pageSize, CancellationToken ct = default)
+        int? page, int? pageSize, string? search = null, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sage = _tenant.SageDb;
+        int[] supervisorIds = Array.Empty<int>();
+        if (SearchText.Terms(search).Count > 0)
+        {
+            var sageKey = (sage ?? string.Empty).Trim().ToLowerInvariant();
+            var cards = await _uow.Repository<T_CARDPAIE>().ListAsync(
+                c => c.SAGE_BDD == null
+                     || c.SAGE_BDD.Trim() == ""
+                     || c.SAGE_BDD.Trim().ToLower() == sageKey,
+                ct);
+            supervisorIds = cards
+                .Where(c => SearchText.Matches(search, c.SAGE_MATRICULE, c.SAGE_NOM, c.SAGE_PRENOM))
+                .Select(c => c.ID)
+                .ToArray();
+        }
+
+        var searchPredicate = SearchExpression.For<T_CATEGORIE>(search, c => c.INTITULE);
+        System.Linq.Expressions.Expression<Func<T_CATEGORIE, bool>> predicate =
+            c => c.BDD_SAGE == sage;
+        if (supervisorIds.Length > 0)
+        {
+            System.Linq.Expressions.Expression<Func<T_CATEGORIE, bool>> supervisorPredicate =
+                c => supervisorIds.Contains(c.ID_CARDPAIE);
+            predicate = SearchExpression.AndAlso(
+                predicate,
+                searchPredicate is null
+                    ? supervisorPredicate
+                    : SearchExpression.OrElse(searchPredicate, supervisorPredicate));
+        }
+        else if (searchPredicate is not null)
+        {
+            predicate = SearchExpression.AndAlso(predicate, searchPredicate);
+        }
+
         return await PagedLists.PageAsync(
             _uow.Repository<T_CATEGORIE>(),
-            c => c.BDD_SAGE == sage,
+            predicate,
             q => q.OrderBy(c => c.IDCATEGORIE),
             page,
             pageSize,
@@ -1125,14 +1177,32 @@ public class CatalogService
     /// filtre, le jeu complet est enrichi avant le découpage, comme pour une liste calculée.
     /// </summary>
     public async Task<PagedResult<AffectationRowDto>> ListAffectationsPagedAsync(
-        int? categoryId, string? departement, string? service, int? page, int? pageSize, CancellationToken ct = default)
+        int? categoryId, string? departement, string? service, int? page, int? pageSize,
+        string? search = null, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
 
-        if (!string.IsNullOrWhiteSpace(departement) || !string.IsNullOrWhiteSpace(service))
+        if (!string.IsNullOrWhiteSpace(departement)
+            || !string.IsNullOrWhiteSpace(service)
+            || SearchText.Terms(search).Count > 0)
         {
             var rows = await LoadAffectationRowsAsync(categoryId, ct);
-            return PagedLists.Page(ApplyAffectationFilters(rows, departement, service).ToList(), page, pageSize);
+            var filtered = ApplyAffectationFilters(rows, departement, service).ToList();
+            if (SearchText.Terms(search).Count > 0)
+            {
+                var labels = await LoadCategoryLabelsAsync(ct);
+                filtered = filtered
+                    .Where(row => SearchText.Matches(
+                        search,
+                        row.Matricule,
+                        row.Nom,
+                        row.Prenom,
+                        row.Departement,
+                        row.Service,
+                        labels.GetValueOrDefault(row.CategoryId)))
+                    .ToList();
+            }
+            return PagedLists.Page(filtered, page, pageSize);
         }
 
         var sage = _tenant.SageDb;
@@ -1187,48 +1257,55 @@ public class CatalogService
     }
 
     public async Task<PagedResult<ToleranceDto>> ListTolerancesPagedAsync(
-        int? categoryId, int? page, int? pageSize, CancellationToken ct = default)
+        int? categoryId, int? page, int? pageSize, string? search = null, CancellationToken ct = default)
     {
-        return await PagedLists.PageAsync(
-            _uow.Repository<T_TOLERANCE>(),
-            t => !categoryId.HasValue || t.IDCATEGORIE == categoryId,
-            q => q.OrderBy(t => t.IDCATEGORIE).ThenBy(t => t.ID),
-            page,
-            pageSize,
-            t => new ToleranceDto(t.ID, t.IDCATEGORIE, t.TOLERANCE, t.TYPES_TOL, t.SORTIE),
-            ct);
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var labels = await LoadCategoryLabelsAsync(ct);
+        var list = await _uow.Repository<T_TOLERANCE>().ListAsync(
+            t => !categoryId.HasValue || t.IDCATEGORIE == categoryId, ct);
+        var rows = list
+            .OrderBy(t => t.IDCATEGORIE)
+            .ThenBy(t => t.ID)
+            .Select(t => new ToleranceDto(t.ID, t.IDCATEGORIE, t.TOLERANCE, t.TYPES_TOL, t.SORTIE))
+            .Where(t => SearchText.Matches(
+                search,
+                labels.GetValueOrDefault(t.CategoryId),
+                t.Tolerance,
+                t.Sortie,
+                t.TypesTol ? "oui" : "non"))
+            .ToList();
+        return PagedLists.Page(rows, page, pageSize);
     }
 
     public async Task<PagedResult<HolidayDto>> ListHolidaysPagedAsync(
-        int? page, int? pageSize, CancellationToken ct = default)
+        int? page, int? pageSize, string? search = null, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sage = _tenant.SageDb;
-        return await PagedLists.PageAsync(
-            _uow.Repository<T_FERIE>(),
-            f => f.BDD_SAGE == sage,
-            q => q.OrderBy(f => f.ID),
-            page,
-            pageSize,
-            f => _mapper.Map<HolidayDto>(f),
-            ct);
+        var list = await _uow.Repository<T_FERIE>().ListAsync(f => f.BDD_SAGE == sage, ct);
+        var rows = list
+            .OrderBy(f => f.ID)
+            .Select(_mapper.Map<HolidayDto>)
+            .Where(f => SearchText.Matches(search, f.Intitule, f.Date))
+            .ToList();
+        return PagedLists.Page(rows, page, pageSize);
     }
 
     public async Task<PagedResult<MajorationDto>> ListMajorationsPagedAsync(
-        int? page, int? pageSize, CancellationToken ct = default)
+        int? page, int? pageSize, string? search = null, CancellationToken ct = default)
     {
-        return await PagedLists.PageAsync(
-            _uow.Repository<T_MAJORATION>(),
-            _ => true,
-            q => q.OrderBy(m => m.Cotation).ThenBy(m => m.ID),
-            page,
-            pageSize,
-            m => _mapper.Map<MajorationDto>(m),
-            ct);
+        var list = await _uow.Repository<T_MAJORATION>().ListAsync(_ => true, ct);
+        var rows = list
+            .OrderBy(m => m.Cotation)
+            .ThenBy(m => m.ID)
+            .Select(_mapper.Map<MajorationDto>)
+            .Where(m => SearchText.Matches(search, m.Mojoration, m.Cotation))
+            .ToList();
+        return PagedLists.Page(rows, page, pageSize);
     }
 
     public async Task<PagedResult<AbsenceCodeDto>> ListAbsenceCodesPagedAsync(
-        int? page, int? pageSize, CancellationToken ct = default)
+        int? page, int? pageSize, string? search = null, CancellationToken ct = default)
     {
         return await PagedLists.PageAsync(
             _uow.Repository<T_CODEABSENCE>(),
@@ -1237,6 +1314,8 @@ public class CatalogService
             page,
             pageSize,
             a => new AbsenceCodeDto(a.ID_ABSENCE, a.INTITULE_ABSENCE, a.NOT_PAY),
+            search,
+            new System.Linq.Expressions.Expression<Func<T_CODEABSENCE, string?>>[] { a => a.INTITULE_ABSENCE },
             ct);
     }
 
@@ -1245,10 +1324,13 @@ public class CatalogService
     /// pas une colonne SQL, on pagine donc en mémoire après le tri (volume négligeable).
     /// </summary>
     public async Task<PagedResult<CodeConstanteDto>> ListCodeConstantesPagedAsync(
-        int? page, int? pageSize, CancellationToken ct = default)
+        int? page, int? pageSize, string? search = null, CancellationToken ct = default)
     {
         var list = await ListCodeConstantesAsync(ct);
-        return PagedLists.Page(list, page, pageSize);
+        var rows = list
+            .Where(c => SearchText.Matches(search, c.Categorie, c.Intitule, c.CodeConstante, c.TableCible))
+            .ToList();
+        return PagedLists.Page(rows, page, pageSize);
     }
 
     private async Task<List<AffectationRowDto>> LoadAffectationRowsAsync(
@@ -1267,6 +1349,15 @@ public class CatalogService
             .ToList();
         var deptByMat = await LoadDepartementServicesAsync(matricules, ct);
         return affectations.Select(a => ToAffectationRow(a, cards, deptByMat)).ToList();
+    }
+
+    private async Task<Dictionary<int, string>> LoadCategoryLabelsAsync(CancellationToken ct)
+    {
+        var sage = _tenant.SageDb;
+        var categories = await _uow.Repository<T_CATEGORIE>().ListAsync(c => c.BDD_SAGE == sage, ct);
+        return categories.ToDictionary(
+            category => category.IDCATEGORIE,
+            category => category.INTITULE ?? "Catégorie introuvable");
     }
 
     private async Task<Dictionary<int, T_CARDPAIE>> LoadCardsAsync(
@@ -1568,13 +1659,17 @@ public class CatalogService
             var badgeFold = ExcelCells.Fold(badge);
             if (badgeFold is "BADGE" or "POINTEUSE" or "NPOINTEUSE" or "NUMERO")
             {
+                // En-tête structurel : ignoré, mais pas compté comme une ligne de données ignorée.
+                continue;
+            }
+            if (string.IsNullOrWhiteSpace(matricule))
+            {
                 skipped++;
                 continue;
             }
-            if (string.IsNullOrWhiteSpace(matricule)
-                || ExcelCells.Fold(matricule) is "MATRICULE" or "MATRICULESAGE")
+            if (ExcelCells.Fold(matricule) is "MATRICULE" or "MATRICULESAGE")
             {
-                skipped++;
+                // En-tête décalé (colonne matricule) : même traitement que l'en-tête.
                 continue;
             }
             var card = existing.FirstOrDefault(c => string.Equals(c.SAGE_MATRICULE, matricule, StringComparison.OrdinalIgnoreCase));
@@ -1599,7 +1694,8 @@ public class CatalogService
             imported++;
         }
         await _uow.SaveChangesAsync(ct);
-        return new ImportResultDto(imported, skipped, "Correspondances importées.");
+        return new ImportResultDto(imported, skipped,
+            $"{imported} correspondance(s) importée(s), {skipped} ligne(s) ignorée(s).");
     }
 
     public async Task<IReadOnlyList<CategoryDto>> ListCategoriesAsync(CancellationToken ct = default)
@@ -1726,6 +1822,11 @@ public class CatalogService
         var existing = await repo.ListAsync(a => a.BDD_SAGE == _tenant.SageDb, ct);
         var imported = 0;
         var skipped = 0;
+        var lignesVides = 0;
+        var categoriesManquantes = 0;
+        var matriculesManquants = 0;
+        var categoriesIntrouvables = new List<string>();
+        var matriculesIntrouvables = new List<string>();
         foreach (var row in rows)
         {
             var catName = ExcelCells.Get(row, "Categorie", "CATEGORIE", "Intitule", "Intitulé")
@@ -1734,13 +1835,23 @@ public class CatalogService
                     ?? (row.Count > 1 ? row.Values.Skip(1).FirstOrDefault() : null);
             if (string.IsNullOrWhiteSpace(catName) || string.IsNullOrWhiteSpace(mat))
             {
+                lignesVides++;
                 skipped++;
                 continue;
             }
             var cat = cats.FirstOrDefault(c => string.Equals(c.INTITULE?.Trim(), catName.Trim(), StringComparison.OrdinalIgnoreCase));
-            var card = cards.FirstOrDefault(c => string.Equals(c.SAGE_MATRICULE?.Trim(), mat.Trim(), StringComparison.OrdinalIgnoreCase));
-            if (cat == null || card == null)
+            if (cat == null)
             {
+                categoriesManquantes++;
+                AjouterValeurDistincte(categoriesIntrouvables, catName);
+                skipped++;
+                continue;
+            }
+            var card = cards.FirstOrDefault(c => string.Equals(c.SAGE_MATRICULE?.Trim(), mat.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (card == null)
+            {
+                matriculesManquants++;
+                AjouterValeurDistincte(matriculesIntrouvables, mat);
                 skipped++;
                 continue;
             }
@@ -1765,8 +1876,30 @@ public class CatalogService
             imported++;
         }
         await _uow.SaveChangesAsync(ct);
-        return new ImportResultDto(imported, skipped, "Affectations importées.");
+        var raisons = new List<string>();
+        if (lignesVides > 0)
+            raisons.Add($"{lignesVides} ligne(s) vide(s)");
+        if (categoriesManquantes > 0)
+            raisons.Add($"{categoriesManquantes} catégorie(s) introuvable(s) : {ApercuValeurs(categoriesIntrouvables)}");
+        if (matriculesManquants > 0)
+            raisons.Add($"{matriculesManquants} matricule(s) introuvable(s) : {ApercuValeurs(matriculesIntrouvables)}");
+        var message = $"{imported} affectation(s) importée(s), {skipped} ligne(s) ignorée(s)";
+        if (raisons.Count > 0)
+            message += $" ({string.Join(" ; ", raisons)})";
+        return new ImportResultDto(imported, skipped, message + ".");
     }
+
+    /// <summary>Ajoute une valeur à afficher dans le bilan, sans doublon (comparaison insensible à la casse).</summary>
+    private static void AjouterValeurDistincte(List<string> valeurs, string valeur)
+    {
+        var propre = valeur.Trim();
+        if (!valeurs.Contains(propre, StringComparer.OrdinalIgnoreCase))
+            valeurs.Add(propre);
+    }
+
+    /// <summary>Liste les premières valeurs fautives pour le message d'import.</summary>
+    private static string ApercuValeurs(IReadOnlyList<string> valeurs)
+        => string.Join(", ", valeurs.Take(5)) + (valeurs.Count > 5 ? ", …" : string.Empty);
 
     public async Task DeleteAffectationAsync(int id, CancellationToken ct = default)
     {

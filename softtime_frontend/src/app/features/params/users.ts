@@ -1,6 +1,8 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, ElementRef, inject, OnInit, signal, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HttpErrorResponse } from '@angular/common/http';
+import { apiErrorMessage, apiFieldErrors } from '../../core/api-error';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
@@ -29,6 +31,23 @@ import {
   isPasswordCompliant,
 } from '../../shared/utils/password-policy';
 
+type FieldKey = 'nom' | 'login' | 'password' | 'roleId';
+type FieldErrors = Record<FieldKey, string>;
+
+const EMPTY_FIELD_ERRORS: FieldErrors = { nom: '', login: '', password: '', roleId: '' };
+const API_FIELD_KEYS: Record<string, FieldKey> = {
+  nom: 'nom',
+  login: 'login',
+  password: 'password',
+  roleid: 'roleId',
+};
+const MESSAGES_REQUIS: FieldErrors = {
+  nom: 'Le nom est obligatoire.',
+  login: 'Le login est obligatoire.',
+  password: 'Le mot de passe saisi est invalide.',
+  roleId: 'Le rôle est obligatoire.',
+};
+
 @Component({
   selector: 'app-users',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -40,6 +59,7 @@ import {
     <soft-card>
       <data-table [columns]="columns" [rows]="rows()" [loading]="loading()"
         [serverSide]="true" [total]="total()" [serverPage]="page()" [serverPageSize]="pageSize"
+        [(searchTerm)]="tableSearch" (searchSubmit)="onTableSearch($event)"
         (pageChange)="onPageChange($event)">
         <ng-template #actions let-row>
           <div class="soft-actions" style="justify-content: end">
@@ -49,38 +69,84 @@ import {
         </ng-template>
       </data-table>
     </soft-card>
-    <soft-modal [open]="modal()" [title]="editId() ? 'Modifier utilisateur' : 'Nouvel utilisateur'" (closed)="modal.set(false)">
-      <div class="form-grid">
-        <soft-input label="Nom" [(ngModel)]="form.nom" name="nom"></soft-input>
-        <soft-input label="Login" [(ngModel)]="form.login" name="login"></soft-input>
-        <soft-input label="E-mail" type="email" [(ngModel)]="form.email" name="email" placeholder="Envoi des identifiants"></soft-input>
-        <soft-select label="Matricule" [(ngModel)]="form.matricule" name="matricule" placeholder="Aucun" [options]="matriculeOptions()"></soft-select>
-        <div class="form-grid__password">
+    <soft-modal #userModal [open]="modal()" [title]="editId() ? 'Modifier utilisateur' : 'Nouvel utilisateur'" (closed)="close()">
+      @if (modal()) {
+        @if (formError()) {
+          <div class="form-error" role="alert">{{ formError() }}</div>
+        }
+        <div class="form-grid">
           <soft-input
-            label="Mot de passe"
-            type="password"
-            [(ngModel)]="form.password"
-            name="password"
-            [required]="!editId()"
-            [placeholder]="editId() ? 'Laisser vide pour conserver' : '••••••••'"
+            label="Nom"
+            [required]="true"
+            [(ngModel)]="form.nom"
+            (ngModelChange)="onFieldChange()"
+            name="nom"
+            [error]="errors().nom"
           ></soft-input>
-          <password-policy-hint
-            [password]="form.password ?? ''"
-            [policy]="policy()"
-          ></password-policy-hint>
+          <soft-input
+            label="Login"
+            [required]="true"
+            [(ngModel)]="form.login"
+            (ngModelChange)="onFieldChange()"
+            name="login"
+            [error]="errors().login"
+          ></soft-input>
+          <soft-input label="E-mail" type="email" [(ngModel)]="form.email" name="email" placeholder="Envoi des identifiants"></soft-input>
+          <soft-select label="Matricule" [(ngModel)]="form.matricule" name="matricule" placeholder="Aucun" [options]="matriculeOptions()"></soft-select>
+          <div class="form-grid__password">
+            <soft-input
+              label="Mot de passe"
+              type="password"
+              [(ngModel)]="form.password"
+              (ngModelChange)="onFieldChange()"
+              name="password"
+              [required]="!editId()"
+              [error]="errors().password"
+              [placeholder]="editId() ? 'Laisser vide pour conserver' : '••••••••'"
+            ></soft-input>
+            @if (!errors().password) {
+              <password-policy-hint
+                [password]="form.password ?? ''"
+                [policy]="policy()"
+              ></password-policy-hint>
+            }
+          </div>
+          <soft-select
+            label="Rôle"
+            [required]="true"
+            [ngModel]="form.roleId"
+            (ngModelChange)="onRoleChange($event)"
+            name="roleId"
+            placeholder="Sélectionner un rôle"
+            [options]="roleOptions()"
+            [hint]="roleOptions().length ? '' : 'Aucun rôle disponible : créez un rôle avant de créer un utilisateur.'"
+            [error]="errors().roleId"
+          ></soft-select>
         </div>
-        <soft-select label="Rôle" [ngModel]="form.roleId" (ngModelChange)="onRoleChange($event)" name="roleId" [options]="roleOptions()"></soft-select>
-      </div>
-      <div footer>
-        <soft-button variant="ghost" (click)="modal.set(false)">Annuler</soft-button>
-        <soft-button [loading]="saving()" [disabled]="!canSave()" (click)="save()">Enregistrer</soft-button>
-      </div>
+      }
+      @if (modal()) {
+        <div footer>
+          <soft-button variant="ghost" [disabled]="saving()" (click)="close()">Annuler</soft-button>
+          <soft-button [loading]="saving()" (click)="save()">Enregistrer</soft-button>
+        </div>
+      }
     </soft-modal>
   `,
   styles: [
     `
       .form-grid { display: grid; gap: 14px; }
       .form-grid__password { display: grid; gap: 8px; }
+      .form-error {
+        margin-bottom: 14px;
+        padding: 10px 12px;
+        border: 1px solid var(--danger-border);
+        border-radius: var(--radius-md);
+        background: var(--danger-bg);
+        color: var(--danger);
+        font-size: 13px;
+        font-weight: 500;
+        line-height: 1.4;
+      }
     `,
   ],
 })
@@ -93,6 +159,8 @@ export class UsersPage implements OnInit {
   private readonly confirm = inject(ConfirmService);
   private readonly session = inject(SessionStore);
   private readonly cdr = inject(ChangeDetectorRef);
+
+  private readonly modalHost = viewChild('userModal', { read: ElementRef });
 
   readonly canCreate = computed(() => this.session.hasPermission('PARAMS:USERS:CREATE', Droit.Parameters));
   readonly canUpdate = computed(() => this.session.hasPermission('PARAMS:USERS:UPDATE', Droit.Parameters));
@@ -110,13 +178,49 @@ export class UsersPage implements OnInit {
   readonly roleOptions = signal<{ value: number; label: string }[]>([]);
   readonly matriculeOptions = signal<{ value: string; label: string }[]>([]);
   readonly policy = signal<PasswordPolicy | null>(null);
+  readonly tableSearch = signal('');
   form: Partial<User> = {};
   /** Rôle du compte à l'ouverture de la modification, et confirmation d'effacement des ajustements si le rôle change. */
   private originalRoleId: number | null = null;
   private roleChangeConfirmed = false;
 
+  readonly submitted = signal(false);
+  readonly serverErrors = signal<Partial<FieldErrors>>({});
+  readonly formError = signal('');
+  private readonly formVersion = signal(0);
+
+  /** Erreurs de validation locales, recalculées à chaque saisie et au chargement de la politique. */
+  private readonly localErrors = computed<FieldErrors>(() => {
+    this.formVersion();
+    const nom = (this.form.nom ?? '').trim();
+    const login = (this.form.login ?? '').trim();
+    return {
+      nom: nom ? '' : 'Le nom est obligatoire.',
+      login: login ? '' : 'Le login est obligatoire.',
+      password: this.passwordError(),
+      roleId: this.roleIdValid() ? '' : 'Le rôle est obligatoire.',
+    };
+  });
+
+  /** Erreurs affichées sous les champs : locales, complétées par les erreurs renvoyées par l'API. */
+  readonly errors = computed<FieldErrors>(() => {
+    if (!this.submitted()) return EMPTY_FIELD_ERRORS;
+    const local = this.localErrors();
+    const server = this.serverErrors();
+    return {
+      nom: local.nom || server.nom || '',
+      login: local.login || server.login || '',
+      password: local.password || server.password || '',
+      roleId: local.roleId || server.roleId || '',
+    };
+  });
+
+  readonly isValid = computed(() => {
+    const errors = this.localErrors();
+    return !errors.nom && !errors.login && !errors.password && !errors.roleId;
+  });
+
   readonly columns: Column[] = [
-    { key: 'id', label: 'ID' },
     { key: 'nom', label: 'Nom' },
     { key: 'login', label: 'Login' },
     { key: 'email', label: 'E-mail' },
@@ -147,7 +251,7 @@ export class UsersPage implements OnInit {
   loadPage(): void {
     const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.listPaged(this.page(), this.pageSize).subscribe({
+    this.svc.listPaged(this.page(), this.pageSize, this.tableSearch()).subscribe({
       next: (r) => {
         if (seq !== this.requestSeq) return;
         const roles = this.roleOptions();
@@ -173,15 +277,6 @@ export class UsersPage implements OnInit {
     this.loadPage();
   }
 
-  openCreate(): void { this.editId.set(null); this.form = { roleId: this.roleOptions()[0]?.value ?? 0 }; this.modal.set(true); }
-  openEdit(row: Record<string, unknown>): void {
-    this.editId.set(row['id'] as number);
-    this.form = { ...(row as unknown as User) };
-    this.originalRoleId = Number(this.form.roleId);
-    this.roleChangeConfirmed = false;
-    this.modal.set(true);
-  }
-
   /**
    * Changement de rôle d'un compte existant : le serveur dit quels ajustements personnels seraient effacés ;
    * s'il y en a, on demande confirmation, sinon on restaure l'ancien rôle sans rien envoyer.
@@ -189,6 +284,7 @@ export class UsersPage implements OnInit {
   onRoleChange(newRoleId: number | string | null): void {
     const id = this.editId();
     this.form.roleId = Number(newRoleId);
+    this.onFieldChange();
     if (!id || this.originalRoleId === null || this.form.roleId === this.originalRoleId) {
       this.roleChangeConfirmed = false;
       return;
@@ -213,45 +309,87 @@ export class UsersPage implements OnInit {
   private restoreRole(): void {
     if (this.originalRoleId !== null) this.form.roleId = this.originalRoleId;
     this.roleChangeConfirmed = false;
+    this.onFieldChange();
     this.cdr.markForCheck();
   }
 
-  /** Un mot de passe saisi doit respecter la politique ; en modification, un champ vide conserve l'ancien. */
-  passwordValid(): boolean {
-    return isPasswordCompliant(
-      evaluatePasswordPolicy(this.form.password ?? '', this.policy() ?? FALLBACK_PASSWORD_POLICY),
-    );
+  onTableSearch(term: string): void {
+    this.tableSearch.set(term);
+    this.page.set(1);
+    this.loadPage();
   }
 
-  canSave(): boolean {
-    if (this.saving()) return false;
-    const passwordSaisi = (this.form.password ?? '').trim().length > 0;
-    // En modification, laisser le champ vide conserve le mot de passe existant.
-    if (this.editId() && !passwordSaisi) return true;
-    return this.passwordValid();
+  openCreate(): void {
+    this.editId.set(null);
+    this.form = {};
+    this.originalRoleId = null;
+    this.roleChangeConfirmed = false;
+    this.resetValidation();
+    this.modal.set(true);
+  }
+
+  openEdit(row: Record<string, unknown>): void {
+    this.editId.set(row['id'] as number);
+    this.form = { ...(row as unknown as User), password: null };
+    this.originalRoleId = Number(this.form.roleId);
+    this.roleChangeConfirmed = false;
+    this.resetValidation();
+    this.modal.set(true);
+  }
+
+  close(): void {
+    this.modal.set(false);
+    this.form = {};
+    this.originalRoleId = null;
+    this.roleChangeConfirmed = false;
+    this.saving.set(false);
+    this.resetValidation();
+  }
+
+  onFieldChange(): void {
+    this.formVersion.update((version) => version + 1);
+    this.serverErrors.set({});
+    this.formError.set('');
   }
 
   save(): void {
-    if (!this.canSave()) {
-      this.toast.warning(
-        this.editId()
-          ? 'Le nouveau mot de passe ne respecte pas les règles de sécurité.'
-          : 'Choisissez un mot de passe conforme aux règles de sécurité.',
-      );
+    if (this.saving()) return;
+    this.submitted.set(true);
+    this.serverErrors.set({});
+    this.formError.set('');
+    if (!this.isValid()) {
+      this.focusFirstInvalid();
       return;
     }
+
     const id = this.editId();
-    const dto = this.form as User;
+    const dto: User = {
+      ...(this.form as User),
+      nom: (this.form.nom ?? '').trim(),
+      login: (this.form.login ?? '').trim(),
+      roleId: Number(this.form.roleId),
+      password: this.form.password ?? null,
+    };
     this.saving.set(true);
     const confirmClearAdjustments = confirmFlag(this.roleChangeConfirmed, this.originalRoleId, dto.roleId);
     const req = id ? this.svc.update(id, { ...dto, id, confirmClearAdjustments }) : this.svc.create({ ...dto, id: 0 });
     req.subscribe({
-      next: () => { this.saving.set(false); this.modal.set(false); this.toast.success('Enregistré.'); this.loadPage(); },
-      error: (err) => {
+      next: () => {
+        this.saving.set(false);
+        this.close();
+        this.toast.success('Enregistré.');
+        this.loadPage();
+      },
+      error: (err: HttpErrorResponse) => {
         this.saving.set(false);
         // Un 409 malgré l'aperçu (droits modifiés entre-temps) est une demande de confirmation, pas une erreur.
         const preview = previewFromConflict(err);
-        if (preview) void this.askRoleChange(preview).then((ok) => { if (ok) this.save(); });
+        if (preview) {
+          void this.askRoleChange(preview).then((ok) => { if (ok) this.save(); });
+          return;
+        }
+        this.applyServerError(err);
+        this.focusFirstInvalid();
       },
     });
   }
@@ -260,4 +398,73 @@ export class UsersPage implements OnInit {
     if (!(await this.confirm.ask('Supprimer cet utilisateur ?'))) return;
     this.svc.remove(row['id'] as number).subscribe({ next: () => { this.toast.success('Supprimé.'); this.loadPage(); } });
   }
+
+  /** Un mot de passe saisi doit respecter la politique ; en modification, un champ vide conserve l'ancien. */
+  private passwordError(): string {
+    const password = this.form.password ?? '';
+    if (!password.trim()) {
+      return this.editId() ? '' : 'Le mot de passe est obligatoire.';
+    }
+    const checks = evaluatePasswordPolicy(password, this.policy() ?? FALLBACK_PASSWORD_POLICY);
+    if (isPasswordCompliant(checks)) return '';
+    const manquantes = checks.filter((check) => !check.ok).map((check) => lowerFirst(check.label));
+    return `Mot de passe non conforme : ${joinFr(manquantes)}.`;
+  }
+
+  private roleIdValid(): boolean {
+    const roleId = Number(this.form.roleId);
+    return Number.isFinite(roleId) && roleId > 0;
+  }
+
+  private resetValidation(): void {
+    this.submitted.set(false);
+    this.serverErrors.set({});
+    this.formError.set('');
+    this.formVersion.update((version) => version + 1);
+  }
+
+  /** Affiche les erreurs renvoyées par l'API sous le champ concerné, sinon dans le bandeau du popup. */
+  private applyServerError(err: HttpErrorResponse): void {
+    const { fields, trusted } = apiFieldErrors(err);
+    const mapped: Partial<FieldErrors> = {};
+    const inconnues: string[] = [];
+
+    for (const [key, message] of Object.entries(fields)) {
+      const field = API_FIELD_KEYS[key];
+      if (!field) {
+        inconnues.push(message);
+        continue;
+      }
+      mapped[field] = trusted[key] ? message : MESSAGES_REQUIS[field];
+    }
+
+    this.serverErrors.set(mapped);
+    const aDesChamps = Object.keys(mapped).length > 0;
+    this.formError.set(
+      inconnues.length
+        ? inconnues.join(' ')
+        : aDesChamps
+          ? ''
+          : apiErrorMessage(err) || "L'enregistrement a échoué. Veuillez réessayer.",
+    );
+  }
+
+  private focusFirstInvalid(): void {
+    setTimeout(() => {
+      const panel = this.modalHost()?.nativeElement;
+      const invalid = panel?.querySelector(
+        '.soft-field--error .soft-input, .soft-field--error .soft-select select',
+      );
+      invalid?.focus();
+    });
+  }
+}
+
+function lowerFirst(value: string): string {
+  return value.length ? value.charAt(0).toLowerCase() + value.slice(1) : value;
+}
+
+function joinFr(parts: readonly string[]): string {
+  if (parts.length <= 1) return parts[0] ?? '';
+  return `${parts.slice(0, -1).join(', ')} et ${parts[parts.length - 1]}`;
 }

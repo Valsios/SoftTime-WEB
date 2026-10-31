@@ -173,7 +173,6 @@ IF OBJECT_ID(N'dbo.T_CARDPAIE', N'U') IS NULL
 CREATE TABLE dbo.T_CARDPAIE (
     ID                int           IDENTITY(1,1) NOT NULL,
     SAGE_MATRICULE    nvarchar(64)  NULL,
-    BRANCHE           nvarchar(max) NULL,
     SAGE_NOM          nvarchar(max) NULL,
     SAGE_PRENOM       nvarchar(max) NULL,
     POINTEUSE_NUMERO  nvarchar(max) NULL,

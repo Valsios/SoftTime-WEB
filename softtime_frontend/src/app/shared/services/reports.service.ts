@@ -123,9 +123,9 @@ export class AuditService extends ApiService {
     return this.http.get<AuditConfig[]>(this.url('/api/audit/config'));
   }
   /** Configuration d'audit paginée. */
-  configPaged(page: number, pageSize: number): Observable<PagedResult<AuditConfig>> {
+  configPaged(page: number, pageSize: number, search?: string | null): Observable<PagedResult<AuditConfig>> {
     return this.http.get<PagedResult<AuditConfig>>(this.url('/api/audit/config/paged'), {
-      params: this.params({ page, pageSize }),
+      params: this.params({ page, pageSize, search }),
     });
   }
   createConfig(dto: AuditConfig): Observable<void> {

@@ -51,8 +51,8 @@ export interface TabItem {
         color: var(--navy-900);
       }
       .soft-tabs__item.is-active {
-        color: var(--navy-700);
-        border-bottom-color: var(--navy-700);
+        color: var(--accent);
+        border-bottom-color: var(--accent);
         font-weight: 700;
       }
     `,

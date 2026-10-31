@@ -184,7 +184,7 @@ import { ConfirmService } from '../core/confirm.service';
         flex-direction: column;
         overflow-y: auto;
         overflow-x: hidden;
-        border-right: 1px solid rgba(0, 0, 0, 0.15);
+        border-right: 1px solid var(--sidebar-border);
         transition: transform var(--t-normal) var(--ease);
       }
       .sidebar__brand {
@@ -192,7 +192,7 @@ import { ConfirmService } from '../core/confirm.service';
         align-items: center;
         gap: 12px;
         padding: 20px 18px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        border-bottom: 1px solid var(--sidebar-brand-border);
         min-height: 68px;
       }
       .sidebar__logo {
@@ -207,14 +207,14 @@ import { ConfirmService } from '../core/confirm.service';
         line-height: 1.2;
       }
       .sidebar__brand-text strong {
-        color: #ffffff;
+        color: var(--sidebar-brand-text);
         font-family: var(--font-heading);
         font-size: 16px;
         font-weight: 700;
         letter-spacing: -0.01em;
       }
       .sidebar__brand-text small {
-        color: rgba(255, 255, 255, 0.6);
+        color: var(--sidebar-brand-sub);
         font-size: 11px;
         font-weight: 500;
         letter-spacing: 0.02em;
@@ -250,7 +250,7 @@ import { ConfirmService } from '../core/confirm.service';
         background: var(--sidebar-hover);
       }
       .sidebar__section-toggle:focus-visible {
-        outline: 2px solid var(--gold-300);
+        outline: 2px solid var(--sidebar-focus-ring);
         outline-offset: 2px;
       }
       .sidebar__section-title {
@@ -279,7 +279,11 @@ import { ConfirmService } from '../core/confirm.service';
       }
       .sidebar__item:hover {
         background: var(--sidebar-hover);
-        color: #ffffff;
+        color: var(--sidebar-text-hover);
+      }
+      .sidebar__item:focus-visible {
+        outline: 2px solid var(--sidebar-focus-ring);
+        outline-offset: 2px;
       }
       .sidebar__item.is-active {
         background: var(--sidebar-active-bg);
@@ -341,6 +345,11 @@ import { ConfirmService } from '../core/confirm.service';
         border-color: var(--navy-700);
         background: var(--navy-50);
       }
+      .topbar__toggle:focus-visible,
+      .topbar__icon-btn:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
       .topbar__company {
         display: flex;
         align-items: center;
@@ -354,8 +363,8 @@ import { ConfirmService } from '../core/confirm.service';
         transition: border var(--t-fast) var(--ease);
       }
       .topbar__company:focus-within {
-        border-color: var(--navy-700);
-        box-shadow: 0 0 0 3px rgba(46, 66, 123, 0.1);
+        border-color: var(--border-strong);
+        box-shadow: 0 0 0 3px var(--focus-glow);
       }
       .topbar__company--empty {
         opacity: 0.65;
@@ -382,8 +391,8 @@ import { ConfirmService } from '../core/confirm.service';
         width: 38px;
         height: 38px;
         border-radius: 50%;
-        background: var(--navy-700);
-        color: #ffffff;
+        background: var(--accent);
+        color: var(--text-on-accent);
         display: grid;
         place-items: center;
         font-weight: 700;
@@ -428,7 +437,7 @@ import { ConfirmService } from '../core/confirm.service';
           inset: 0;
           z-index: var(--z-dropdown);
           border: 0;
-          background: rgba(11, 19, 50, 0.5);
+          background: var(--overlay);
           cursor: pointer;
         }
         .topbar {

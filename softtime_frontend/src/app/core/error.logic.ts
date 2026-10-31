@@ -14,7 +14,12 @@ export function bodyMessage(err: HttpErrorLike): string {
   const body = err.error;
   if (typeof body === 'string') return body.trim();
   if (body && typeof body === 'object') {
-    const b = body as { error?: unknown; message?: unknown; title?: unknown };
+    const b = body as { error?: unknown; errors?: unknown; message?: unknown; title?: unknown };
+    // Erreurs de validation MVC (ProblemDetails) : plus parlantes que le titre générique.
+    if (typeof b.error !== 'string' || !b.error.trim()) {
+      const details = validationMessages(b.errors);
+      if (details.length) return details.join(' ');
+    }
     for (const v of [b.error, b.message, b.title]) {
       if (typeof v === 'string' && v.trim()) return v.trim();
     }
@@ -61,4 +66,12 @@ export function parseRoleChangePreview(body: unknown): RoleChangePreview | null 
 /** 409 « confirmation requise » : une demande de confirmation de la page, pas une erreur à afficher. */
 export function previewFromConflict(err: HttpErrorLike): RoleChangePreview | null {
   return err.status === 409 ? parseRoleChangePreview(err.error) : null;
+}
+
+function validationMessages(errors: unknown): string[] {
+  if (!errors || typeof errors !== 'object') return [];
+  return Object.values(errors as Record<string, unknown>)
+    .flatMap((value) => (Array.isArray(value) ? value : [value]))
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .map((value) => value.trim());
 }

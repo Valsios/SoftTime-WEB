@@ -46,8 +46,7 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             new DateTime(2025, 11, 1),
             new DateTime(2025, 11, 15),
-            Today,
-            new DateTime(2025, 11, 15));
+            Today);
 
         Assert.Empty(result);
     }
@@ -67,8 +66,7 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             new DateTime(2025, 11, 22),
             new DateTime(2025, 11, 30),
-            Today, // hier = 2025-11-19
-            new DateTime(2025, 11, 15));
+            Today); // hier = 2025-11-19
 
         Assert.Empty(result);
     }
@@ -84,13 +82,12 @@ public class AbsenceReportRulesTests
         var result = AbsenceReportRules.Calculer(
             plannings,
             cartes,
-            new[] { Corr(1, "001", date.AddDays(-1)) }, // Correction la veille -> dernierJourTraite = date
+            new[] { Corr(1, "001", date.AddDays(-1)) }, // Autre jour pointé : ne masque plus l'absence
             new Dictionary<string, List<LeaveDay>>(),
             new HashSet<DateTime>(),
             date,
             date,
-            Today,
-            date);
+            Today);
 
         var row = Assert.Single(result);
         Assert.Equal("001", row.Matricule);
@@ -119,8 +116,7 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             date,
             date,
-            Today,
-            date);
+            Today);
 
         Assert.Empty(result);
     }
@@ -159,8 +155,7 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime> { ferie },
             new DateTime(2025, 11, 8),
             new DateTime(2025, 11, 12),
-            Today,
-            new DateTime(2025, 11, 15));
+            Today);
 
         Assert.Empty(result);
     }
@@ -184,16 +179,16 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             Today,
             Today.AddDays(5),
-            Today,
-            Today.AddDays(5));
+            Today);
 
         Assert.Empty(result);
     }
 
     [Fact]
-    public void Calculer_JourApresDernierJourTraite_NeGenereAucuneNonJustifiee()
+    public void Calculer_JourPlanifieApresUnAutrePointage_ResteUneNonJustifiee()
     {
-        // Planning le 12/11 et le 14/11. Dernier jour traité = 12/11.
+        // L'ancien garde-fou « dernier jour traité » est supprimé : un jour planifié sans pointage
+        // est une absence, même si un autre jour de la période a été pointé (règle du dashboard).
         var j1 = new DateTime(2025, 11, 12);
         var j2 = new DateTime(2025, 11, 14);
         var cartes = new[] { Carte(1, "001") };
@@ -211,17 +206,19 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             j1,
             j2,
-            Today,
-            dernierJourTraite: j1);
+            Today);
 
-        // j1 a une correction donc pas non justifiée ; j2 est après dernierJourTraite donc non justifiée interdite
-        Assert.Empty(result);
+        // j1 a une correction donc pas non justifiée ; j2 n'a aucun pointage -> non justifiée.
+        var row = Assert.Single(result);
+        Assert.Equal(j2, row.Date);
+        Assert.Equal("Non justifiée", row.Type);
+        Assert.Equal(8m, row.DureeHeures);
     }
 
     [Fact]
-    public void Calculer_CongeApresDernierJourTraiteMaisAvantHier_EstConserve()
+    public void Calculer_CongeMalgrePointageSurUnAutreJour_EstConserve()
     {
-        // Congé le 14/11/2025 (vendredi). Dernier pointage traité = 12/11/2025. Hier = 19/11/2025.
+        // Congé le 14/11/2025 (vendredi), pointage sur un autre jour : le congé reste affiché.
         var jConge = new DateTime(2025, 11, 14);
         var cartes = new[] { Carte(1, "001") };
         var conges = new Dictionary<string, List<LeaveDay>>
@@ -237,8 +234,7 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             new DateTime(2025, 11, 10),
             new DateTime(2025, 11, 18),
-            Today,
-            dernierJourTraite: new DateTime(2025, 11, 12));
+            Today);
 
         var row = Assert.Single(result);
         Assert.Equal("Congé SAGE", row.Type);
@@ -266,8 +262,7 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             date,
             date,
-            Today,
-            date);
+            Today);
 
         var row = Assert.Single(result);
         Assert.Equal("Congé SAGE", row.Type);
@@ -295,8 +290,7 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             date,
             date,
-            Today,
-            date);
+            Today);
 
         var row = Assert.Single(result);
         Assert.Equal("Congé SAGE", row.Type);
@@ -325,8 +319,7 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             date,
             date,
-            Today,
-            date);
+            Today);
 
         var row = Assert.Single(result);
         Assert.Equal("Congé SAGE", row.Type);
@@ -354,8 +347,7 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             date,
             date,
-            Today,
-            date);
+            Today);
 
         var row = Assert.Single(result);
         Assert.Equal("Congé SAGE", row.Type);
@@ -384,8 +376,7 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             date,
             date,
-            Today,
-            date);
+            Today);
 
         var row = Assert.Single(result);
         Assert.Equal("Arbitrée GTA", row.Type);
@@ -415,8 +406,7 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             date,
             date,
-            Today,
-            date);
+            Today);
 
         var row = Assert.Single(result);
         Assert.Equal("Congé SAGE", row.Type);
@@ -451,8 +441,7 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             date,
             date,
-            Today,
-            date);
+            Today);
 
         var row = Assert.Single(result);
         Assert.Equal(9m, row.DureeHeures); // issu du planning ID=50
@@ -477,8 +466,7 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             date,
             date,
-            Today,
-            date);
+            Today);
 
         var row = Assert.Single(result);
         Assert.Equal("00369", row.Matricule);
@@ -504,8 +492,7 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             date,
             date,
-            Today,
-            date);
+            Today);
 
         var row = Assert.Single(result);
         Assert.Equal("03919", row.Matricule);
@@ -515,9 +502,9 @@ public class AbsenceReportRulesTests
     }
 
     [Fact]
-    public void Calculer_HaEgaleHd_ShiftPause_DureeTheoriqueEstNull()
+    public void Calculer_HaEgaleHd_ShiftPause_NeGenereAucuneLigne()
     {
-        // C7 & R10 : Shift 17 / Pause avec HA == HD = 00:00
+        // C7 & R10 : Shift 17 / Pause avec HA == HD = 00:00 -> jour de repos, aucune absence.
         var date = new DateTime(2025, 11, 4);
         var cartes = new[] { Carte(1, "001") };
         var plannings = new[] { Plan(1, 1, date, TimeSpan.Zero, TimeSpan.Zero) };
@@ -530,12 +517,9 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             date,
             date,
-            Today,
-            date);
+            Today);
 
-        var row = Assert.Single(result);
-        Assert.Equal("Non justifiée", row.Type);
-        Assert.Null(row.DureeHeures);
+        Assert.Empty(result);
     }
 
     [Fact]
@@ -554,17 +538,17 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             date,
             date,
-            Today,
-            date);
+            Today);
 
         var row = Assert.Single(result);
         Assert.Equal(7.5m, row.DureeHeures);
     }
 
     [Fact]
-    public void Calculer_AucuneCorrectionSurLaPeriode_AucuneNonJustifieeProduite()
+    public void Calculer_JourPlanifieSansAucuneCorrectionSurLaPeriode_GenereNonJustifiee()
     {
-        // C2 & C8 : dernierJourTraite = null -> aucune Non justifiée
+        // Le dashboard ne dépend pas d'un « dernier jour traité » : un jour planifié avec heures et
+        // sans aucun pointage est une absence non justifiée.
         var date = new DateTime(2025, 11, 4);
         var cartes = new[] { Carte(1, "001") };
         var plannings = new[] { Plan(1, 1, date, TimeSpan.FromHours(8), TimeSpan.FromHours(17)) };
@@ -577,10 +561,11 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             date,
             date,
-            Today,
-            dernierJourTraite: null);
+            Today);
 
-        Assert.Empty(result);
+        var row = Assert.Single(result);
+        Assert.Equal("Non justifiée", row.Type);
+        Assert.Equal(9m, row.DureeHeures);
     }
 
     [Fact]
@@ -603,8 +588,7 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             date,
             date,
-            Today,
-            date);
+            Today);
 
         Assert.Empty(result);
     }
@@ -632,8 +616,7 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             j1,
             j3,
-            Today,
-            j3);
+            Today);
 
         Assert.Equal(3, result.Count);
         Assert.Equal(j1, result[0].Date);
@@ -660,8 +643,7 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             date,
             date,
-            Today,
-            date);
+            Today);
 
         var row = Assert.Single(result);
         Assert.Equal("001", row.Matricule);
@@ -680,23 +662,12 @@ public class AbsenceReportRulesTests
             OffP = offP
         };
 
-    private static T_PLANNING ShiftDef(int noShift, string intitule, TimeSpan? ha = null, TimeSpan? hd = null)
-        => new()
-        {
-            IDPLANNING = noShift,
-            NoSHIFT = noShift,
-            Intitule = intitule,
-            HA = ha,
-            HD = hd
-        };
-
     [Fact]
     public void Calculer_ShiftSansHeures_AucunPointage_NeGenereAucuneLigne()
     {
-        // (a) Shift 17 (Pause) avec HA/HD null dans T_PLANNING et aucun pointage -> jour de repos, aucune ligne
+        // (a) Shift 17 (Pause) sans heures et aucun pointage -> jour de repos, aucune ligne
         var date = new DateTime(2025, 11, 4); // Mardi ouvré
         var cartes = new[] { Carte(1, "001") };
-        var shifts = new[] { ShiftDef(17, "Pause", null, null) };
         var plannings = new[] { PlanWithShift(1, 1, date, 17, TimeSpan.Zero, TimeSpan.Zero) };
 
         var result = AbsenceReportRules.Calculer(
@@ -707,9 +678,7 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             date,
             date,
-            Today,
-            date,
-            shifts);
+            Today);
 
         Assert.Empty(result);
     }
@@ -720,7 +689,6 @@ public class AbsenceReportRulesTests
         // (b) Shift 17 (Pause) avec congé SAGE -> la priorité 1 Congé SAGE prime et la ligne est conservée
         var date = new DateTime(2025, 11, 4);
         var cartes = new[] { Carte(1, "001") };
-        var shifts = new[] { ShiftDef(17, "Pause", null, null) };
         var plannings = new[] { PlanWithShift(1, 1, date, 17, TimeSpan.Zero, TimeSpan.Zero) };
         var conges = new Dictionary<string, List<LeaveDay>>
         {
@@ -735,9 +703,7 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             date,
             date,
-            Today,
-            date,
-            shifts);
+            Today);
 
         var row = Assert.Single(result);
         Assert.Equal("Congé SAGE", row.Type);
@@ -751,7 +717,6 @@ public class AbsenceReportRulesTests
         // (c) Shift 13 normal (06:00 à 18:00) avec aucun pointage -> Non justifiée avec 12h
         var date = new DateTime(2025, 11, 4);
         var cartes = new[] { Carte(1, "001") };
-        var shifts = new[] { ShiftDef(13, "Jour", TimeSpan.FromHours(6), TimeSpan.FromHours(18)) };
         var plannings = new[] { PlanWithShift(1, 1, date, 13, TimeSpan.FromHours(6), TimeSpan.FromHours(18)) };
 
         var result = AbsenceReportRules.Calculer(
@@ -762,9 +727,7 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             date,
             date,
-            Today,
-            date,
-            shifts);
+            Today);
 
         var row = Assert.Single(result);
         Assert.Equal("Non justifiée", row.Type);
@@ -772,12 +735,12 @@ public class AbsenceReportRulesTests
     }
 
     [Fact]
-    public void Calculer_ShiftIntrouvable_GenereNonJustifieeDureeNulle()
+    public void Calculer_ShiftIntrouvable_SansHeures_NeGenereAucuneLigne()
     {
-        // (d) Shift 999 absent de T_PLANNING -> anomalie de données, ligne Non justifiée conservée avec durée nulle
+        // (d) Shift 999 absent du catalogue et ligne de planning sans heures : rien à valoriser,
+        // ce n'est pas une absence (la référence est constituée des heures du planning).
         var date = new DateTime(2025, 11, 4);
         var cartes = new[] { Carte(1, "001") };
-        var shifts = new[] { ShiftDef(17, "Pause", null, null) }; // 999 n'y est pas
         var plannings = new[] { PlanWithShift(1, 1, date, 999) };
 
         var result = AbsenceReportRules.Calculer(
@@ -788,13 +751,9 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             date,
             date,
-            Today,
-            date,
-            shifts);
+            Today);
 
-        var row = Assert.Single(result);
-        Assert.Equal("Non justifiée", row.Type);
-        Assert.Null(row.DureeHeures);
+        Assert.Empty(result);
     }
 
     [Fact]
@@ -803,7 +762,6 @@ public class AbsenceReportRulesTests
         // (e) Salarié qui a pointé un jour de Pause -> pas d'absence
         var date = new DateTime(2025, 11, 4);
         var cartes = new[] { Carte(1, "001") };
-        var shifts = new[] { ShiftDef(17, "Pause", null, null) };
         var plannings = new[] { PlanWithShift(1, 1, date, 17, TimeSpan.Zero, TimeSpan.Zero) };
         var corrections = new[] { Corr(1, "001", date) };
 
@@ -815,9 +773,7 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             date,
             date,
-            Today,
-            date,
-            shifts);
+            Today);
 
         Assert.Empty(result);
     }
@@ -830,11 +786,6 @@ public class AbsenceReportRulesTests
         var jTravail = new DateTime(2025, 11, 4);
         var jPause = new DateTime(2025, 11, 5);
         var cartes = new[] { Carte(1, "001") };
-        var shifts = new[]
-        {
-            ShiftDef(13, "Jour", TimeSpan.FromHours(6), TimeSpan.FromHours(18)),
-            ShiftDef(17, "Pause", null, null)
-        };
         var plannings = new[]
         {
             PlanWithShift(1, 1, jTravail, 13, TimeSpan.FromHours(6), TimeSpan.FromHours(18)),
@@ -849,13 +800,106 @@ public class AbsenceReportRulesTests
             new HashSet<DateTime>(),
             jTravail,
             jPause,
-            Today,
-            jPause,
-            shifts);
+            Today);
 
         var row = Assert.Single(result);
         Assert.Equal(jTravail, row.Date);
         Assert.Equal("Non justifiée", row.Type);
         Assert.Equal(12m, row.DureeHeures);
+    }
+
+    [Fact]
+    public void Calculer_JourOff_AvecCongeSage_NeGenereAucuneLigne()
+    {
+        // Un jour de repos planifié n'est jamais une absence, même couvert par un congé SAGE.
+        var date = new DateTime(2025, 11, 4);
+        var cartes = new[] { Carte(1, "001") };
+        var plannings = new[] { Plan(1, 1, date, offP: true) };
+        var conges = new Dictionary<string, List<LeaveDay>>
+        {
+            ["1"] = new() { new LeaveDay(date, 1m, "0410") }
+        };
+
+        var result = AbsenceReportRules.Calculer(
+            plannings,
+            cartes,
+            Array.Empty<T_HEURECORRIGER>(),
+            conges,
+            new HashSet<DateTime>(),
+            date,
+            date,
+            Today);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void Calculer_JourOff_AvecCorrectionAbsence_NeGenereAucuneLigne()
+    {
+        // Un jour de repos planifié n'est pas une absence, même si une correction le mentionne.
+        var date = new DateTime(2025, 11, 4);
+        var cartes = new[] { Carte(1, "001") };
+        var plannings = new[] { Plan(1, 1, date, offP: true) };
+        var corrections = new[] { Corr(1, "001", date, am: true, pm: true, intitule: "Repos décalé") };
+
+        var result = AbsenceReportRules.Calculer(
+            plannings,
+            cartes,
+            corrections,
+            new Dictionary<string, List<LeaveDay>>(),
+            new HashSet<DateTime>(),
+            date,
+            date,
+            Today);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void Calculer_JourOff_AvecHeuresResiduelles_NeGenereAucuneLigne()
+    {
+        // Des données historiques peuvent porter des heures sur une ligne OFF : le drapeau prime.
+        var date = new DateTime(2025, 11, 4);
+        var cartes = new[] { Carte(1, "001") };
+        var plannings = new[] { Plan(1, 1, date, TimeSpan.FromHours(8), TimeSpan.FromHours(16), offP: true) };
+
+        var result = AbsenceReportRules.Calculer(
+            plannings,
+            cartes,
+            Array.Empty<T_HEURECORRIGER>(),
+            new Dictionary<string, List<LeaveDay>>(),
+            new HashSet<DateTime>(),
+            date,
+            date,
+            Today);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void Calculer_PlanningOffEtTravailMemeJour_LeJourTravaillePrime()
+    {
+        // Deux lignes de planning le même jour : une OFF (plus petit ID) et une travaillée.
+        var date = new DateTime(2025, 11, 4);
+        var cartes = new[] { Carte(1, "001") };
+        var plannings = new[]
+        {
+            Plan(1, 1, date, offP: true),
+            Plan(2, 1, date, TimeSpan.FromHours(8), TimeSpan.FromHours(16))
+        };
+
+        var result = AbsenceReportRules.Calculer(
+            plannings,
+            cartes,
+            Array.Empty<T_HEURECORRIGER>(),
+            new Dictionary<string, List<LeaveDay>>(),
+            new HashSet<DateTime>(),
+            date,
+            date,
+            Today);
+
+        var row = Assert.Single(result);
+        Assert.Equal("Non justifiée", row.Type);
+        Assert.Equal(8m, row.DureeHeures);
     }
 }

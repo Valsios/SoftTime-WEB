@@ -383,7 +383,7 @@ public class EffectiveRightsTests
 
     private sealed class OldWorld
     {
-        public readonly InMemoryUnitOfWork Uow = new();
+        public readonly SnapshotInMemoryUnitOfWork Uow = new();
         public readonly AuthService Auth;
 
         public OldWorld()

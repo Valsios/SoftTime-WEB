@@ -15,7 +15,7 @@ public class CreateAdminFirstRunTests
 {
     private const string Missing = "Le rôle Administrateur (identifiant 1) est introuvable : exécutez le script de création de la base.";
 
-    private readonly InMemoryUnitOfWork _uow = new();
+    private readonly SnapshotInMemoryUnitOfWork _uow = new();
     private readonly AuthService _auth;
 
     public CreateAdminFirstRunTests()

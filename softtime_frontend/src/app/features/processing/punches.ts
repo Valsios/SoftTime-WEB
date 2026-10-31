@@ -5,13 +5,14 @@ import { ToastService } from '../../core/toast.service';
 import { PunchUpdate, PeriodRequest, PageChangeEvent } from '../../shared/models';
 import { PunchesService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
-import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, PeriodFilter } from '../../shared/components';
+import { Column, DataTable, ImportTemplatesModal, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, PeriodFilter } from '../../shared/components';
 import { asRow, fmtDate } from '../../shared/utils/date';
+import { toastImportResult } from '../../shared/utils/import-result';
 
 @Component({
   selector: 'app-punches',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftInput, SoftModal, PeriodFilter],
+  imports: [FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftInput, SoftModal, PeriodFilter, ImportTemplatesModal],
   template: `
     <page-header title="Pointages" subtitle="Liste, import et traitement des pointages">
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
@@ -22,6 +23,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         <input #punchFile type="file" accept=".xlsx,.xls" hidden (change)="onFile($event)" />
         <soft-button variant="accent" (click)="punchFile.click()">Import Excel</soft-button>
       </label>
+      <soft-button variant="ghost" (click)="templatesOpen.set(true)">Modèles d'import</soft-button>
     </page-header>
 
     <period-filter (search)="onSearch($event)"></period-filter>
@@ -35,6 +37,8 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         [total]="total()"
         [serverPageSize]="pageSize"
         [serverPage]="page()"
+        [(searchTerm)]="tableSearch"
+        (searchSubmit)="onTableSearch($event)"
         (pageChange)="onPageChange($event)"
       >
         <ng-template #actions let-row>
@@ -55,6 +59,11 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         <soft-button [loading]="busy()" (click)="saveEdit()">Enregistrer</soft-button>
       </div>
     </soft-modal>
+    <app-import-templates-modal
+      [open]="templatesOpen()"
+      [keys]="importKeys"
+      (closed)="templatesOpen.set(false)"
+    />
   `,
   styles: [`.file-btn { cursor: pointer; } .form-grid { display: grid; gap: 14px; }`],
 })
@@ -68,10 +77,13 @@ export class PunchesPage {
   readonly processing = signal(false);
   readonly busy = signal(false);
   readonly modal = signal(false);
+  readonly templatesOpen = signal(false);
+  readonly importKeys = ['punches'];
   pageSize = 50;
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly page = signal(1);
   readonly total = signal(0);
+  readonly tableSearch = signal('');
   private lastFilter: PeriodRequest | null = null;
   private requestSeq = 0;
   private editId: number | null = null;
@@ -99,6 +111,7 @@ export class PunchesPage {
     this.loading.set(true);
     this.svc.listPaged({
       ...this.lastFilter,
+      search: this.tableSearch(),
       page: this.page(),
       pageSize: this.pageSize,
     }).subscribe({
@@ -119,6 +132,12 @@ export class PunchesPage {
     this.loadPage();
   }
 
+  onTableSearch(term: string): void {
+    this.tableSearch.set(term);
+    this.page.set(1);
+    this.loadPage();
+  }
+
   importClock(): void {
     if (!this.lastFilter) { this.toast.warning('Lancez d\'abord une recherche.'); return; }
     this.svc.importClock({
@@ -127,12 +146,20 @@ export class PunchesPage {
       matriculeFrom: this.lastFilter.matriculeFrom,
       matriculeTo: this.lastFilter.matriculeTo,
     }).subscribe({
-      next: (r) => { this.toast.success(r.message || `${r.imported} importé(s).`); this.onSearch(this.lastFilter!); },
+      next: (r) => {
+        toastImportResult(this.toast, r, `${r.imported} pointage(s) importé(s), ${r.skipped} ignoré(s).`);
+        // Le desktop enchaîne import et pré-traitement : on reproduit ce parcours.
+        this.runPreprocess();
+      },
     });
   }
 
-  /** Prétraitement : transforme les pointages en heures corrigées + anomalies à arbitrer. */
+  /** Pré-traitement : transforme les pointages en heures corrigées + anomalies à arbitrer. */
   preprocess(): void {
+    this.runPreprocess();
+  }
+
+  private runPreprocess(): void {
     if (!this.lastFilter) { this.toast.warning('Lancez d\'abord une recherche.'); return; }
     this.processing.set(true);
     this.svc.preprocess(this.lastFilter).subscribe({
@@ -141,7 +168,7 @@ export class PunchesPage {
         this.toast.success(r.message || `${r.correctionsCreees} correction(s) créée(s).`);
         this.onSearch(this.lastFilter!);
       },
-      error: () => this.processing.set(false),
+      error: () => { this.processing.set(false); this.refresh(); },
     });
   }
 
@@ -150,7 +177,15 @@ export class PunchesPage {
     const file = input.files?.[0];
     if (!file) return;
     this.svc.importExcel(file).subscribe({
-      next: (r) => { this.toast.success(r.message || `${r.imported} importé(s).`); if (this.lastFilter) this.onSearch(this.lastFilter); },
+      next: (r) => {
+        toastImportResult(
+          this.toast,
+          r,
+          `${r.imported} pointage(s) importé(s), ${r.skipped} ligne(s) ignorée(s).`,
+        );
+        if (this.lastFilter) this.runPreprocess();
+        else this.refresh();
+      },
     });
     input.value = '';
   }
@@ -160,14 +195,14 @@ export class PunchesPage {
    */
   exportExcel(): void {
     if (!this.lastFilter) {
-      this.excel.download('pointages', this.columns, this.rows());
+      this.excel.download('pointages', this.columns, this.rows(), 'Données', this.tableSearch());
       return;
     }
     this.loading.set(true);
     this.svc.list(this.lastFilter).subscribe({
       next: (items) => {
         this.loading.set(false);
-        this.excel.download('pointages', this.columns, items.map(asRow));
+        this.excel.download('pointages', this.columns, items.map(asRow), 'Données', this.tableSearch());
       },
       error: () => this.loading.set(false),
     });

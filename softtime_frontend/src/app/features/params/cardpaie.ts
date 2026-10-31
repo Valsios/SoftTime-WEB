@@ -8,13 +8,14 @@ import { Droit } from '../../core/rights';
 import { CardPaie, DepartementService, PageChangeEvent } from '../../shared/models';
 import { CardPaieService, DepartementServiceService } from '../../shared/services/catalog.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
-import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal } from '../../shared/components';
+import { Column, DataTable, ImportTemplatesModal, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal } from '../../shared/components';
 import { asRow, fmtDate } from '../../shared/utils/date';
+import { toastImportResult } from '../../shared/utils/import-result';
 
 @Component({
   selector: 'app-cardpaie',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput],
+  imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, ImportTemplatesModal],
   template: `
     <page-header title="Correspondances paie" subtitle="Cartes SAGE ↔ pointeuse">
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
@@ -22,12 +23,14 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         <input #csvFile type="file" accept=".csv,.txt" hidden (change)="onCsv($event)" />
         <soft-button variant="secondary" (click)="csvFile.click()">Import CSV</soft-button>
       </label>
+      <soft-button variant="ghost" (click)="templatesOpen.set(true)">Modèles d'import</soft-button>
       <soft-button variant="secondary" [loading]="autoMapping()" [disabled]="autoMapping()" (click)="autoMap()">Auto-mapping</soft-button>
       <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter</soft-button>
     </page-header>
     <soft-card>
       <data-table [columns]="columns" [rows]="rows()" [loading]="loading()"
         [serverSide]="true" [total]="total()" [serverPage]="page()" [serverPageSize]="pageSize"
+        [(searchTerm)]="tableSearch" (searchSubmit)="onTableSearch($event)"
         (pageChange)="onPageChange($event)">
         <ng-template #actions let-row>
           <div class="soft-actions" style="justify-content: end">
@@ -44,13 +47,18 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         <soft-input label="Prénom SAGE" [(ngModel)]="form.sagePrenom" name="sagePrenom"></soft-input>
         <soft-input label="N° pointeuse" [(ngModel)]="form.pointeuseNumero" name="pointeuseNumero"></soft-input>
         <soft-input label="Nom pointeuse" [(ngModel)]="form.pointeuseNom" name="pointeuseNom"></soft-input>
-        <soft-input label="Branche" [(ngModel)]="form.branche" name="branche"></soft-input>
+        <soft-input label="Département" [(ngModel)]="form.departement" name="departement"></soft-input>
       </div>
       <div footer>
         <soft-button variant="ghost" (click)="modal.set(false)">Annuler</soft-button>
         <soft-button [loading]="saving()" (click)="save()">Enregistrer</soft-button>
       </div>
     </soft-modal>
+    <app-import-templates-modal
+      [open]="templatesOpen()"
+      [keys]="importKeys"
+      (closed)="templatesOpen.set(false)"
+    />
   `,
   styles: [`.form-grid { display: grid; gap: 14px; } .file-btn { cursor: pointer; }`],
 })
@@ -69,11 +77,14 @@ export class CardPaiePage implements OnInit {
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly modal = signal(false);
+  readonly templatesOpen = signal(false);
+  readonly importKeys = ['correspondences'];
   readonly editId = signal<number | null>(null);
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly page = signal(1);
   pageSize = 50;
   readonly total = signal(0);
+  readonly tableSearch = signal('');
   private requestSeq = 0;
   readonly autoMapping = signal(false);
   form: Partial<CardPaie> = {};
@@ -93,7 +104,7 @@ export class CardPaiePage implements OnInit {
   loadPage(): void {
     const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.listPaged(this.page(), this.pageSize).subscribe({
+    this.svc.listPaged(this.page(), this.pageSize, this.tableSearch()).subscribe({
       next: (r) => {
         if (seq !== this.requestSeq) return;
         this.rows.set(r.items.map(asRow));
@@ -109,6 +120,12 @@ export class CardPaiePage implements OnInit {
   onPageChange(event: PageChangeEvent): void {
     this.page.set(event.page);
     this.pageSize = event.pageSize;
+    this.loadPage();
+  }
+
+  onTableSearch(term: string): void {
+    this.tableSearch.set(term);
+    this.page.set(1);
     this.loadPage();
   }
 
@@ -160,7 +177,7 @@ export class CardPaiePage implements OnInit {
           .map((i) => i.sageMatricule?.trim())
           .filter((m): m is string => !!m);
         if (matricules.length === 0) {
-          this.excel.download('correspondances-paie', this.columns, items.map(asRow));
+          this.excel.download('correspondances-paie', this.columns, items.map(asRow), 'Données', this.tableSearch());
           return;
         }
         this.deptSvc.lookupBatch(matricules).subscribe({
@@ -170,9 +187,9 @@ export class CardPaiePage implements OnInit {
               const info = item.sageMatricule ? byMat.get(item.sageMatricule.trim()) : undefined;
               return { ...item, departement: info?.departement ?? null, service: info?.service ?? null };
             });
-            this.excel.download('correspondances-paie', this.columns, rows.map(asRow));
+            this.excel.download('correspondances-paie', this.columns, rows.map(asRow), 'Données', this.tableSearch());
           },
-          error: () => this.excel.download('correspondances-paie', this.columns, items.map(asRow)),
+          error: () => this.excel.download('correspondances-paie', this.columns, items.map(asRow), 'Données', this.tableSearch()),
         });
       },
     });
@@ -182,7 +199,14 @@ export class CardPaiePage implements OnInit {
     const file = input.files?.[0];
     if (!file) return;
     this.svc.importCsv(file).subscribe({
-      next: (r) => { this.toast.success(r.message || `${r.imported} importé(s).`); this.loadPage(); },
+      next: (r) => {
+        toastImportResult(
+          this.toast,
+          r,
+          `${r.imported} correspondance(s) importée(s), ${r.skipped} ligne(s) ignorée(s).`,
+        );
+        this.loadPage();
+      },
     });
     input.value = '';
   }

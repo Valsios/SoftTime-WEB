@@ -4,22 +4,11 @@ namespace SoftTime.Tests;
 
 /// <summary>
 /// Indicateurs journaliers du détail des heures supplémentaires (portage de <c>DetailHS</c>).
+/// Le décompte de nuit (22:00 → 05:00, arbitré par les cotations) est couvert par
+/// <see cref="OvertimeCalculatorTests"/>.
 /// </summary>
 public class OvertimeDetailRulesTests
 {
-    [Theory]
-    [InlineData(5, 30, 14, 0)]   // entrée avant 6 h → nuit
-    [InlineData(8, 0, 21, 0)]    // sortie à 21 h → nuit
-    [InlineData(22, 0, 23, 0)]   // sortie après 21 h → nuit
-    public void EstPlageNuit_FlagsNightRanges(int hEntree, int mEntree, int hSortie, int mSortie)
-        => Assert.True(OvertimeRules.EstPlageNuit(new TimeSpan(hEntree, mEntree, 0), new TimeSpan(hSortie, mSortie, 0)));
-
-    [Theory]
-    [InlineData(6, 0, 20, 59)]   // entrée à 6 h et sortie à 20 h 59 → jour
-    [InlineData(9, 0, 17, 0)]
-    public void EstPlageNuit_LeavesDayRangesAlone(int hEntree, int mEntree, int hSortie, int mSortie)
-        => Assert.False(OvertimeRules.EstPlageNuit(new TimeSpan(hEntree, mEntree, 0), new TimeSpan(hSortie, mSortie, 0)));
-
     [Fact]
     public void HeuresSupJournalieres_KeepsTheDesktopEightHourThreshold()
     {

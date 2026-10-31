@@ -33,6 +33,13 @@ describe('error.logic', () => {
     expect(bodyMessage({ status: 500, error: null })).toBe('');
   });
 
+  it('affiche les erreurs de validation MVC avant le titre générique, sans masquer le message applicatif', () => {
+    const problem = { title: 'One or more validation errors occurred.', errors: { Nom: ['Le nom est obligatoire.'], Login: 'Login requis.' } };
+    expect(errorMessage({ status: 400, error: problem })).toBe('Le nom est obligatoire. Login requis.');
+    expect(errorMessage({ status: 400, error: { error: 'Message métier.', errors: { Nom: ['x'] } } })).toBe('Message métier.');
+    expect(errorMessage({ status: 400, error: { title: 't', errors: {} } })).toBe('t');
+  });
+
   it('autres statuts sans corps : texte natif, puis message par défaut', () => {
     expect(errorMessage({ status: 500, error: null, message: 'Http failure 500' })).toBe('Http failure 500');
     expect(errorMessage({ status: 500, error: null, message: null })).toBe('Une erreur est survenue.');

@@ -11,6 +11,7 @@ import { ExcelExportService } from '../../shared/services/excel-export.service';
 import {
   Column,
   DataTable,
+  ImportTemplatesModal,
   PageHeader,
   PeriodFilter,
   SoftButton,
@@ -22,6 +23,7 @@ import {
   SoftToggle,
 } from '../../shared/components';
 import { asRow, fmtDate, monthStart, today } from '../../shared/utils/date';
+import { toastImportResult } from '../../shared/utils/import-result';
 
 @Component({
   selector: 'app-employee-planning',
@@ -39,6 +41,7 @@ import { asRow, fmtDate, monthStart, today } from '../../shared/utils/date';
     SoftSelect,
     SoftToggle,
     SoftTabs,
+    ImportTemplatesModal,
   ],
   template: `
     <page-header title="Planning salariés" subtitle="Tous les salariés, même sans planning">
@@ -56,6 +59,7 @@ import { asRow, fmtDate, monthStart, today } from '../../shared/utils/date';
         <input #generateFile type="file" accept=".csv" hidden (change)="onGenerateFile($event)" />
         <soft-button variant="secondary" (click)="generateFile.click()">Générer par matricule (CSV)</soft-button>
       </label>
+      <soft-button variant="ghost" (click)="templatesOpen.set(true)">Modèles d'import</soft-button>
     </page-header>
 
     <period-filter [showMatricule]="false" (search)="onSearch($event)"></period-filter>
@@ -72,6 +76,8 @@ import { asRow, fmtDate, monthStart, today } from '../../shared/utils/date';
           [total]="employeeTotal()"
           [serverPageSize]="employeePageSize"
           [serverPage]="employeePage()"
+          [(searchTerm)]="employeeSearch"
+          (searchSubmit)="onEmployeeSearch($event)"
           (pageChange)="onEmployeePageChange($event)"
         >
           <ng-template #actions let-row>
@@ -89,6 +95,8 @@ import { asRow, fmtDate, monthStart, today } from '../../shared/utils/date';
           [total]="planningTotal()"
           [serverPageSize]="planningPageSize"
           [serverPage]="planningPage()"
+          [(searchTerm)]="planningSearch"
+          (searchSubmit)="onPlanningSearch($event)"
           (pageChange)="onPlanningPageChange($event)"
         >
           <ng-template #actions let-row>
@@ -127,6 +135,11 @@ import { asRow, fmtDate, monthStart, today } from '../../shared/utils/date';
         <soft-button [loading]="saving()" (click)="save()">Enregistrer</soft-button>
       </div>
     </soft-modal>
+    <app-import-templates-modal
+      [open]="templatesOpen()"
+      [keys]="importKeys"
+      (closed)="templatesOpen.set(false)"
+    />
   `,
   styles: [
     `
@@ -152,6 +165,13 @@ export class EmployeePlanningPage implements OnInit {
   readonly loadingPeople = signal(true);
   readonly saving = signal(false);
   readonly modal = signal(false);
+  readonly templatesOpen = signal(false);
+  readonly importKeys = [
+    'planning-matricule',
+    'planning-categorie',
+    'planning-generate-category',
+    'planning-generate-matricule',
+  ];
   employeePageSize = 50;
   planningPageSize = 50;
   readonly employeeRows = signal<Record<string, unknown>[]>([]);
@@ -160,6 +180,8 @@ export class EmployeePlanningPage implements OnInit {
   readonly employeeTotal = signal(0);
   readonly planningPage = signal(1);
   readonly planningTotal = signal(0);
+  readonly employeeSearch = signal('');
+  readonly planningSearch = signal('');
   readonly employeeOptions = signal<{ value: number; label: string }[]>([]);
   readonly shiftOptions = signal<{ value: number; label: string }[]>([]);
   private employees: PlanningEmployee[] = [];
@@ -224,6 +246,18 @@ export class EmployeePlanningPage implements OnInit {
     this.loadPlanning();
   }
 
+  onEmployeeSearch(term: string): void {
+    this.employeeSearch.set(term);
+    this.employeePage.set(1);
+    this.loadEmployeeRows();
+  }
+
+  onPlanningSearch(term: string): void {
+    this.planningSearch.set(term);
+    this.planningPage.set(1);
+    this.loadPlanning();
+  }
+
   loadEmployees(): void {
     this.svc.employees().subscribe({
       next: (items) => {
@@ -247,6 +281,7 @@ export class EmployeePlanningPage implements OnInit {
       this.lastFilter.to,
       this.employeePage(),
       this.employeePageSize,
+      this.employeeSearch(),
     ).subscribe({
       next: (r) => {
         if (seq !== this.employeeSeq) return;
@@ -265,6 +300,7 @@ export class EmployeePlanningPage implements OnInit {
     this.svc.listPaged({
       from: this.lastFilter.from,
       to: this.lastFilter.to,
+      search: this.planningSearch(),
       page: this.planningPage(),
       pageSize: this.planningPageSize,
     }).subscribe({
@@ -337,11 +373,11 @@ export class EmployeePlanningPage implements OnInit {
   exportExcel(): void {
     if (this.activeTab() === 'employees') {
       this.svc.employeesStats(this.lastFilter.from, this.lastFilter.to).subscribe({
-        next: (items) => this.excel.download('salaries-planning', this.employeeColumns, items.map(asRow)),
+        next: (items) => this.excel.download('salaries-planning', this.employeeColumns, items.map(asRow), 'Données', this.employeeSearch()),
       });
     } else {
       this.svc.list(this.lastFilter.from, this.lastFilter.to).subscribe({
-        next: (items) => this.excel.download('lignes-planning', this.planningColumns, items.map(asRow)),
+        next: (items) => this.excel.download('lignes-planning', this.planningColumns, items.map(asRow), 'Données', this.planningSearch()),
       });
     }
   }
@@ -352,7 +388,11 @@ export class EmployeePlanningPage implements OnInit {
     if (!file) return;
     this.svc.importExcel(file).subscribe({
       next: (r) => {
-        this.toast.success(r.message || `${r.imported} ligne(s) importée(s).`);
+        toastImportResult(
+          this.toast,
+          r,
+          `${r.imported} ligne(s) de planning importée(s), ${r.skipped} élément(s) ignoré(s).`,
+        );
         this.activeTab.set('planning');
         this.loadPlanning();
         this.loadEmployeeRows();
@@ -368,7 +408,7 @@ export class EmployeePlanningPage implements OnInit {
     if (!file) return;
     this.svc.generateFromCategory(file).subscribe({
       next: (r) => {
-        this.toast.success(r.message || `${r.imported} jour(s) généré(s).`);
+        toastImportResult(this.toast, r, `${r.imported} jour(s) généré(s), ${r.skipped} ignoré(s).`);
         this.activeTab.set('planning');
         this.loadPlanning();
         this.loadEmployeeRows();
@@ -384,7 +424,7 @@ export class EmployeePlanningPage implements OnInit {
     if (!file) return;
     this.svc.generate(file).subscribe({
       next: (r) => {
-        this.toast.success(r.message || `${r.imported} jour(s) généré(s).`);
+        toastImportResult(this.toast, r, `${r.imported} jour(s) généré(s), ${r.skipped} ignoré(s).`);
         this.activeTab.set('planning');
         this.loadPlanning();
         this.loadEmployeeRows();

@@ -32,6 +32,8 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         [total]="totalsTotal()"
         [serverPageSize]="totalsPageSize"
         [serverPage]="totalsPage()"
+        [(searchTerm)]="totalsSearch"
+        (searchSubmit)="onTotalsSearch($event)"
         (pageChange)="onTotalsPageChange($event)"
       ></data-table>
     </soft-card>
@@ -50,6 +52,8 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         [total]="anomaliesTotal()"
         [serverPageSize]="anomaliesPageSize"
         [serverPage]="anomaliesPage()"
+        [(searchTerm)]="anomalySearch"
+        (searchSubmit)="onAnomaliesSearch($event)"
         (pageChange)="onAnomaliesPageChange($event)"
       ></data-table>
     </soft-card>
@@ -77,6 +81,8 @@ export class CanteenPage {
   readonly totalsTotal = signal(0);
   readonly anomaliesPage = signal(1);
   readonly anomaliesTotal = signal(0);
+  readonly totalsSearch = signal('');
+  readonly anomalySearch = signal('');
   private lastFilter: PeriodRequest | null = null;
   private totalsSeq = 0;
   private anomaliesSeq = 0;
@@ -105,9 +111,21 @@ export class CanteenPage {
     this.loadTotals();
   }
 
+  onTotalsSearch(term: string): void {
+    this.totalsSearch.set(term);
+    this.totalsPage.set(1);
+    this.loadTotals();
+  }
+
   onAnomaliesPageChange(event: PageChangeEvent): void {
     this.anomaliesPage.set(event.page);
     this.anomaliesPageSize = event.pageSize;
+    this.loadAnomalies();
+  }
+
+  onAnomaliesSearch(term: string): void {
+    this.anomalySearch.set(term);
+    this.anomaliesPage.set(1);
     this.loadAnomalies();
   }
 
@@ -154,11 +172,11 @@ export class CanteenPage {
 
   exportExcel(): void {
     if (!this.lastFilter) {
-      this.excel.download('cantine', this.columns, this.rows());
+      this.excel.download('cantine', this.columns, this.rows(), 'Données', this.totalsSearch());
       return;
     }
     this.svc.list(this.lastFilter).subscribe({
-      next: (items) => this.excel.download('cantine', this.columns, items.map(asRow)),
+      next: (items) => this.excel.download('cantine', this.columns, items.map(asRow), 'Données', this.totalsSearch()),
     });
   }
 
@@ -173,7 +191,12 @@ export class CanteenPage {
     if (!this.lastFilter) return;
     const seq = ++this.totalsSeq;
     this.totalsLoading.set(true);
-    this.svc.listPaged({ ...this.lastFilter, page: this.totalsPage(), pageSize: this.totalsPageSize }).subscribe({
+    this.svc.listPaged({
+      ...this.lastFilter,
+      search: this.totalsSearch(),
+      page: this.totalsPage(),
+      pageSize: this.totalsPageSize,
+    }).subscribe({
       next: (r) => {
         if (seq !== this.totalsSeq) return;
         this.rows.set(r.items.map(asRow));
@@ -189,7 +212,12 @@ export class CanteenPage {
     if (!this.lastFilter) return;
     const seq = ++this.anomaliesSeq;
     this.anomaliesLoading.set(true);
-    this.svc.anomaliesPaged({ ...this.lastFilter, page: this.anomaliesPage(), pageSize: this.anomaliesPageSize }).subscribe({
+    this.svc.anomaliesPaged({
+      ...this.lastFilter,
+      search: this.anomalySearch(),
+      page: this.anomaliesPage(),
+      pageSize: this.anomaliesPageSize,
+    }).subscribe({
       next: (r) => {
         if (seq !== this.anomaliesSeq) return;
         this.anomalyRows.set(r.items.map(asRow));

@@ -170,15 +170,21 @@ public class HistoryArchiveService
         var to = filter.To;
         var matriculeFrom = filter.MatriculeFrom;
         var matriculeTo = filter.MatriculeTo;
-        return await PagedLists.PageAsync(
-            _uow.Repository<T_HISTORIQUE_POINTAGE>(),
+        System.Linq.Expressions.Expression<Func<T_HISTORIQUE_POINTAGE, bool>> predicate =
             h => h.NOM_BDD_SAGE == sageDb
                  && h.DATE_SUPPRESSION >= from
                  && h.DATE_SUPPRESSION <= to
                  && (string.IsNullOrEmpty(matriculeFrom)
                      || (h.MATRICULE_SAGE != null && string.Compare(h.MATRICULE_SAGE, matriculeFrom) >= 0))
                  && (string.IsNullOrEmpty(matriculeTo)
-                     || (h.MATRICULE_SAGE != null && string.Compare(h.MATRICULE_SAGE, matriculeTo) <= 0)),
+                     || (h.MATRICULE_SAGE != null && string.Compare(h.MATRICULE_SAGE, matriculeTo) <= 0));
+        var searchPredicate = SearchExpression.For<T_HISTORIQUE_POINTAGE>(
+            filter.Search, h => h.MATRICULE_SAGE, h => h.TYPE_POINTAGE);
+        if (searchPredicate is not null)
+            predicate = SearchExpression.AndAlso(predicate, searchPredicate);
+        return await PagedLists.PageAsync(
+            _uow.Repository<T_HISTORIQUE_POINTAGE>(),
+            predicate,
             q => q.OrderByDescending(h => h.DATE_SUPPRESSION).ThenByDescending(h => h.ID),
             page,
             pageSize,
@@ -197,15 +203,21 @@ public class HistoryArchiveService
         var to = filter.To;
         var matriculeFrom = filter.MatriculeFrom;
         var matriculeTo = filter.MatriculeTo;
-        return await PagedLists.PageAsync(
-            _uow.Repository<T_HISTORIQUE_ANOMALIE>(),
+        System.Linq.Expressions.Expression<Func<T_HISTORIQUE_ANOMALIE, bool>> predicate =
             h => h.BDD_SAGE == sageDb
                  && h.DATE_SUPPRESSION >= from
                  && h.DATE_SUPPRESSION <= to
                  && (string.IsNullOrEmpty(matriculeFrom)
                      || (h.MATRICULE_SAGE != null && string.Compare(h.MATRICULE_SAGE, matriculeFrom) >= 0))
                  && (string.IsNullOrEmpty(matriculeTo)
-                     || (h.MATRICULE_SAGE != null && string.Compare(h.MATRICULE_SAGE, matriculeTo) <= 0)),
+                     || (h.MATRICULE_SAGE != null && string.Compare(h.MATRICULE_SAGE, matriculeTo) <= 0));
+        var searchPredicate = SearchExpression.For<T_HISTORIQUE_ANOMALIE>(
+            filter.Search, h => h.MATRICULE_SAGE, h => h.INTITULE_ABSENCE);
+        if (searchPredicate is not null)
+            predicate = SearchExpression.AndAlso(predicate, searchPredicate);
+        return await PagedLists.PageAsync(
+            _uow.Repository<T_HISTORIQUE_ANOMALIE>(),
+            predicate,
             q => q.OrderByDescending(h => h.DATE_SUPPRESSION).ThenByDescending(h => h.ID),
             page,
             pageSize,
@@ -224,15 +236,21 @@ public class HistoryArchiveService
         var to = filter.To;
         var matriculeFrom = filter.MatriculeFrom;
         var matriculeTo = filter.MatriculeTo;
-        return await PagedLists.PageAsync(
-            _uow.Repository<T_HISTORIQUE_HS>(),
+        System.Linq.Expressions.Expression<Func<T_HISTORIQUE_HS, bool>> predicate =
             h => h.BDD_SAGE == sageDb
                  && h.DATE_SUPPRESSION >= from
                  && h.DATE_SUPPRESSION <= to
                  && (string.IsNullOrEmpty(matriculeFrom)
                      || (h.MATRICULE != null && string.Compare(h.MATRICULE, matriculeFrom) >= 0))
                  && (string.IsNullOrEmpty(matriculeTo)
-                     || (h.MATRICULE != null && string.Compare(h.MATRICULE, matriculeTo) <= 0)),
+                     || (h.MATRICULE != null && string.Compare(h.MATRICULE, matriculeTo) <= 0));
+        var searchPredicate = SearchExpression.For<T_HISTORIQUE_HS>(
+            filter.Search, h => h.MATRICULE);
+        if (searchPredicate is not null)
+            predicate = SearchExpression.AndAlso(predicate, searchPredicate);
+        return await PagedLists.PageAsync(
+            _uow.Repository<T_HISTORIQUE_HS>(),
+            predicate,
             q => q.OrderByDescending(h => h.DATE_SUPPRESSION).ThenByDescending(h => h.ID),
             page,
             pageSize,

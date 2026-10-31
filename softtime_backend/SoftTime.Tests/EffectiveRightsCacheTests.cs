@@ -15,7 +15,7 @@ namespace SoftTime.Tests;
 /// <summary>Étape 4b-5 : cache de 30 secondes des droits effectifs, invalidation immédiate, échec fermé.</summary>
 public class EffectiveRightsCacheTests
 {
-    private readonly InMemoryUnitOfWork _store = new();
+    private readonly SnapshotInMemoryUnitOfWork _store = new();
     private readonly FakeTime _time = new();
     private readonly EffectiveRightsCache _cache;
     private readonly EffectiveRightsService _rights;
@@ -164,8 +164,8 @@ public class EffectiveRightsCacheTests
     /// <summary>Unité de travail qui échoue à la lecture des comptes quand Fail est vrai (message volontairement sensible).</summary>
     private sealed class FailingUnitOfWork : IUnitOfWork
     {
-        private readonly InMemoryUnitOfWork _inner;
-        public FailingUnitOfWork(InMemoryUnitOfWork inner) => _inner = inner;
+        private readonly SnapshotInMemoryUnitOfWork _inner;
+        public FailingUnitOfWork(SnapshotInMemoryUnitOfWork inner) => _inner = inner;
         public bool Fail { get; set; }
 
         public IRepository<T> Repository<T>() where T : class

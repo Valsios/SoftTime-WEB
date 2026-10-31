@@ -164,8 +164,8 @@ public class AuditController : ControllerBase
     /// <summary>Configuration d'audit paginée.</summary>
     [HttpGet("config/paged")]
     public async Task<IActionResult> GetConfigPaged(
-        [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
-        => Ok(await _svc.ListConfigPagedAsync(page, pageSize, ct));
+        [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
+        => Ok(await _svc.ListConfigPagedAsync(page, pageSize, search, ct));
 
     [HttpPost("config")]
     public async Task<IActionResult> CreateConfig([FromBody] AuditConfigDto dto, CancellationToken ct)
@@ -197,10 +197,11 @@ public class AuditController : ControllerBase
         [FromQuery] DateTime? to,
         [FromQuery] string? table,
         [FromQuery] string? action,
+        [FromQuery] string? search,
         [FromQuery] int? page,
         [FromQuery] int? pageSize,
         CancellationToken ct)
-        => Ok(await _svc.ListEventsPagedAsync(from, to, table, action, page, pageSize, ct));
+        => Ok(await _svc.ListEventsPagedAsync(from, to, table, action, search, page, pageSize, ct));
 
     [HttpGet("schema")]
     public async Task<IActionResult> GetSchema(CancellationToken ct)

@@ -18,7 +18,7 @@ export class DashboardService extends ApiService {
     });
   }
 
-  /** Valeurs des filtres (départements, branches, catégories de personnel). */
+  /** Valeurs des filtres (départements, catégories de personnel). */
   filters(): Observable<DashboardFilters> {
     return this.http.get<DashboardFilters>(this.url('/api/dashboard/filters'));
   }

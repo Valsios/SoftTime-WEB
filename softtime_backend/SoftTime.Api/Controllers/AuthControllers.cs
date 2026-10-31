@@ -88,8 +88,8 @@ public class UsersController : ControllerBase
 
     [HttpGet("paged")]
     public async Task<IActionResult> GetPaged(
-        [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
-        => Ok(await _auth.GetUsersPagedAsync(page, pageSize, ct));
+        [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
+        => Ok(await _auth.GetUsersPagedAsync(page, pageSize, search, ct));
 
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(decimal id, CancellationToken ct) => Ok(await _auth.GetUserAsync(id, ct));
@@ -152,8 +152,8 @@ public class RolesController : ControllerBase
 
     [HttpGet("paged")]
     public async Task<IActionResult> GetPaged(
-        [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
-        => Ok(await _auth.GetRolesPagedAsync(page, pageSize, ct));
+        [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
+        => Ok(await _auth.GetRolesPagedAsync(page, pageSize, search, ct));
 
     [RequireAdmin]
     [HttpPost]

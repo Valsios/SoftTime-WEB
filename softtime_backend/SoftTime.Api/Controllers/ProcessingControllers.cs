@@ -22,8 +22,9 @@ public class ShiftsController : ControllerBase
 
     /// <summary>Même catalogue que <c>GET /api/shifts</c>, paginé (page bornée, total serveur).</summary>
     [HttpGet("paged")]
-    public async Task<IActionResult> GetPaged([FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
-        => Ok(await _svc.ListShiftsPagedAsync(page, pageSize, ct));
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
+        => Ok(await _svc.ListShiftsPagedAsync(page, pageSize, search, ct));
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] ShiftDto dto, CancellationToken ct)
@@ -79,8 +80,9 @@ public class EmployeePlanningController : ControllerBase
         [FromQuery] int? cardId,
         [FromQuery] int? page,
         [FromQuery] int? pageSize,
+        [FromQuery] string? search,
         CancellationToken ct)
-        => Ok(await _svc.ListEmployeePlanningPagedAsync(from, to, cardId, page, pageSize, ct));
+        => Ok(await _svc.ListEmployeePlanningPagedAsync(from, to, cardId, page, pageSize, search, ct));
 
     /// <summary>Salariés + nombre de jours planifiés (complet, pour l'export).</summary>
     [HttpGet("employees/stats")]
@@ -97,21 +99,33 @@ public class EmployeePlanningController : ControllerBase
         [FromQuery] DateTime to,
         [FromQuery] int? page,
         [FromQuery] int? pageSize,
+        [FromQuery] string? search,
         CancellationToken ct)
-        => Ok(await _svc.ListEmployeeStatsPagedAsync(from, to, page, pageSize, ct));
+        => Ok(await _svc.ListEmployeeStatsPagedAsync(from, to, page, pageSize, search, ct));
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] List<EmployeePlanningDto> rows, CancellationToken ct)
-    {
-        await _svc.SaveEmployeePlanningAsync(rows, ct);
-        return NoContent();
-    }
+    public Task<IActionResult> Create([FromBody] List<EmployeePlanningDto> rows, CancellationToken ct)
+        => SavePlanningAsync(rows, ct);
 
     [HttpPut]
-    public async Task<IActionResult> Update([FromBody] List<EmployeePlanningDto> rows, CancellationToken ct)
+    public Task<IActionResult> Update([FromBody] List<EmployeePlanningDto> rows, CancellationToken ct)
+        => SavePlanningAsync(rows, ct);
+
+    /// <summary>
+    /// Une ligne incohérente (date manquante, shift inconnu, heures absentes) est une erreur de
+    /// saisie : elle doit remonter en 400, pas en 500.
+    /// </summary>
+    private async Task<IActionResult> SavePlanningAsync(List<EmployeePlanningDto> rows, CancellationToken ct)
     {
-        await _svc.SaveEmployeePlanningAsync(rows, ct);
-        return NoContent();
+        try
+        {
+            await _svc.SaveEmployeePlanningAsync(rows, ct);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 
     [HttpDelete("{id:int}")]
@@ -373,10 +387,9 @@ public class OvertimeController : ControllerBase
         [FromQuery] DateTime to,
         [FromQuery] string? matriculeFrom,
         [FromQuery] string? matriculeTo,
-        [FromQuery] string? branche,
         [FromQuery] string? departement,
         CancellationToken ct)
-        => Ok(await _svc.ListExoAsync(new PeriodRequest(matriculeFrom, matriculeTo, from, to, branche, departement), ct));
+        => Ok(await _svc.ListExoAsync(new PeriodRequest(matriculeFrom, matriculeTo, from, to, departement), ct));
 
     /// <summary>Même liste que <c>GET /api/overtime</c>, paginée (page bornée, total serveur).</summary>
     [HttpGet("paged")]
@@ -385,13 +398,13 @@ public class OvertimeController : ControllerBase
         [FromQuery] DateTime to,
         [FromQuery] string? matriculeFrom,
         [FromQuery] string? matriculeTo,
-        [FromQuery] string? branche,
         [FromQuery] string? departement,
         [FromQuery] int? page,
         [FromQuery] int? pageSize,
+        [FromQuery] string? search,
         CancellationToken ct)
         => Ok(await _svc.ListExoPagedAsync(
-            new PeriodRequest(matriculeFrom, matriculeTo, from, to, branche, departement),
+            new PeriodRequest(matriculeFrom, matriculeTo, from, to, departement, search),
             page,
             pageSize,
             ct));

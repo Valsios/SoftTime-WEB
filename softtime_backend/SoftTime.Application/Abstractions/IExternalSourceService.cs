@@ -2,7 +2,14 @@ using SoftTime.Domain.Entities.SoftTime;
 
 namespace SoftTime.Application.Abstractions;
 
-public sealed record ExternalEmployee(string Matricule, long EmployeeId, string? Nom, string? Prenom, string? Badge, bool Inactive);
+public sealed record ExternalEmployee(
+    string Matricule,
+    long EmployeeId,
+    string? Nom,
+    string? Prenom,
+    string? Badge,
+    bool Inactive,
+    byte? Civilite = null);
 
 public sealed record ExternalAffectation(long EmployeeId, string? Departement, string? Service, DateTime? DateDebut, DateTime? DateSortie);
 

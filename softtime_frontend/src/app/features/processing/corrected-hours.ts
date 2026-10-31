@@ -8,13 +8,14 @@ import { Droit } from '../../core/rights';
 import { CorrectedHour, PeriodRequest, PageChangeEvent } from '../../shared/models';
 import { CorrectedHoursService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
-import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, PeriodFilter } from '../../shared/components';
+import { Column, DataTable, ImportTemplatesModal, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, PeriodFilter } from '../../shared/components';
 import { asRow, fmtDate } from '../../shared/utils/date';
+import { toastImportResult } from '../../shared/utils/import-result';
 
 @Component({
   selector: 'app-corrected-hours',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, PeriodFilter],
+  imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, PeriodFilter, ImportTemplatesModal],
   template: `
     <page-header title="Heures corrigées" subtitle="Corrections manuelles">
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
@@ -23,6 +24,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         <input #corrFile type="file" accept=".xlsx,.xls" hidden (change)="onFile($event)" />
         <soft-button variant="secondary" (click)="corrFile.click()">Import Excel</soft-button>
       </label>
+      <soft-button variant="ghost" (click)="templatesOpen.set(true)">Modèles d'import</soft-button>
     </page-header>
 
     <period-filter (search)="onSearch($event)"></period-filter>
@@ -36,6 +38,8 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         [total]="total()"
         [serverPageSize]="pageSize"
         [serverPage]="page()"
+        [(searchTerm)]="tableSearch"
+        (searchSubmit)="onTableSearch($event)"
         (pageChange)="onPageChange($event)"
       >
         <ng-template #actions let-row>
@@ -60,6 +64,11 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         <soft-button [loading]="saving()" (click)="save()">Enregistrer</soft-button>
       </div>
     </soft-modal>
+    <app-import-templates-modal
+      [open]="templatesOpen()"
+      [keys]="importKeys"
+      (closed)="templatesOpen.set(false)"
+    />
   `,
   styles: [`.form-grid { display: grid; gap: 14px; } .file-btn { cursor: pointer; }`],
 })
@@ -77,11 +86,14 @@ export class CorrectedHoursPage {
   readonly loading = signal(false);
   readonly saving = signal(false);
   readonly modal = signal(false);
+  readonly templatesOpen = signal(false);
+  readonly importKeys = ['corrections'];
   readonly editId = signal<number | null>(null);
   pageSize = 50;
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly page = signal(1);
   readonly total = signal(0);
+  readonly tableSearch = signal('');
   form: Partial<CorrectedHour> = {};
   private lastFilter: PeriodRequest | null = null;
   private requestSeq = 0;
@@ -108,11 +120,22 @@ export class CorrectedHoursPage {
     this.loadPage();
   }
 
+  onTableSearch(term: string): void {
+    this.tableSearch.set(term);
+    this.page.set(1);
+    this.loadPage();
+  }
+
   private loadPage(): void {
     if (!this.lastFilter) return;
     const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.listPaged({ ...this.lastFilter, page: this.page(), pageSize: this.pageSize }).subscribe({
+    this.svc.listPaged({
+      ...this.lastFilter,
+      search: this.tableSearch(),
+      page: this.page(),
+      pageSize: this.pageSize,
+    }).subscribe({
       next: (r) => {
         if (seq !== this.requestSeq) return;
         this.rows.set(r.items.map(asRow));
@@ -171,7 +194,11 @@ export class CorrectedHoursPage {
     if (!file) return;
     this.svc.importExcel(file).subscribe({
       next: (r) => {
-        this.toast.success(r.message || `${r.imported} importé(s).`);
+        toastImportResult(
+          this.toast,
+          r,
+          `${r.imported} correction(s) importée(s), ${r.skipped} ligne(s) ignorée(s).`,
+        );
         this.reload();
       },
     });
@@ -180,14 +207,14 @@ export class CorrectedHoursPage {
 
   exportExcel(): void {
     if (!this.lastFilter) {
-      this.excel.download('heures-corrigees', this.columns, this.rows());
+      this.excel.download('heures-corrigees', this.columns, this.rows(), 'Données', this.tableSearch());
       return;
     }
     this.loading.set(true);
     this.svc.list(this.lastFilter).subscribe({
       next: (items) => {
         this.loading.set(false);
-        this.excel.download('heures-corrigees', this.columns, items.map(asRow));
+        this.excel.download('heures-corrigees', this.columns, items.map(asRow), 'Données', this.tableSearch());
       },
       error: () => this.loading.set(false),
     });

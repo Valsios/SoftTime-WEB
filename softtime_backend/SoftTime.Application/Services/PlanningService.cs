@@ -31,7 +31,8 @@ public class PlanningService
     /// même contrat que les autres listes (page bornée, total serveur) pour éviter un découpage
     /// côté client.
     /// </summary>
-    public async Task<PagedResult<ShiftDto>> ListShiftsPagedAsync(int? page, int? pageSize, CancellationToken ct = default)
+    public async Task<PagedResult<ShiftDto>> ListShiftsPagedAsync(
+        int? page, int? pageSize, string? search = null, CancellationToken ct = default)
         => await PagedLists.PageAsync(
             _uow.Repository<T_PLANNING>(),
             _ => true,
@@ -41,6 +42,8 @@ public class PlanningService
             page,
             pageSize,
             ToShiftDto,
+            search,
+            new Expression<Func<T_PLANNING, string?>>[] { s => s.Intitule },
             ct);
 
     private static ShiftDto ToShiftDto(T_PLANNING s) => new(
@@ -125,7 +128,8 @@ public class PlanningService
     /// (petite table) sont chargées une fois pour exposer matricule/nom/prénom.
     /// </summary>
     public async Task<PagedResult<EmployeePlanningDto>> ListEmployeePlanningPagedAsync(
-        DateTime from, DateTime to, int? cardId, int? page, int? pageSize, CancellationToken ct = default)
+        DateTime from, DateTime to, int? cardId, int? page, int? pageSize,
+        string? search = null, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageDb = _tenant.SageDb;
@@ -133,13 +137,23 @@ public class PlanningService
         var end = to.Date.AddDays(1);
         var cards = (await _uow.Repository<T_CARDPAIE>().ListAsync(EmployeeCardPredicate(sageDb), ct))
             .ToDictionary(c => c.ID);
+        var hasSearch = SearchText.Terms(search).Count > 0;
+        var cardIds = hasSearch
+            ? cards.Values
+                .Where(c => SearchText.Matches(search, c.SAGE_MATRICULE, c.SAGE_NOM, c.SAGE_PRENOM))
+                .Select(c => c.ID)
+                .ToArray()
+            : Array.Empty<int>();
+        if (hasSearch && cardIds.Length == 0)
+            return PagedLists.Page(Array.Empty<EmployeePlanningDto>(), page, pageSize);
 
         return await PagedLists.PageAsync(
             _uow.Repository<T_PLANNING_SAL>(),
             p => p.DateP >= start
                  && p.DateP < end
                  && (p.BDD_SAGE == null || p.BDD_SAGE.Trim() == "" || p.BDD_SAGE.Trim() == sageDb)
-                 && (!cardId.HasValue || p.IDSAL == cardId.Value),
+                 && (!cardId.HasValue || p.IDSAL == cardId.Value)
+                 && (!hasSearch || cardIds.Contains(p.IDSAL)),
             q => q.OrderBy(p => p.IDSAL).ThenBy(p => p.DateP).ThenBy(p => p.ID),
             page,
             pageSize,
@@ -173,7 +187,8 @@ public class PlanningService
 
     /// <summary>Grille paginée des salariés avec leur nombre de jours planifiés.</summary>
     public async Task<PagedResult<PlanningEmployeeStatDto>> ListEmployeeStatsPagedAsync(
-        DateTime from, DateTime to, int? page, int? pageSize, CancellationToken ct = default)
+        DateTime from, DateTime to, int? page, int? pageSize,
+        string? search = null, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageDb = _tenant.SageDb;
@@ -188,6 +203,13 @@ public class PlanningService
             pageSize,
             c => new PlanningEmployeeStatDto(
                 c.ID, c.SAGE_MATRICULE, c.SAGE_NOM, c.SAGE_PRENOM, counts.GetValueOrDefault(c.ID)),
+            search,
+            new Expression<Func<T_CARDPAIE, string?>>[]
+            {
+                c => c.SAGE_MATRICULE,
+                c => c.SAGE_NOM,
+                c => c.SAGE_PRENOM,
+            },
             ct);
     }
 
@@ -200,21 +222,63 @@ public class PlanningService
         await _tenant.EnsureAuthorizedAsync(ct);
         var repo = _uow.Repository<T_PLANNING_SAL>();
         var shifts = await _uow.Repository<T_PLANNING>().ListAsync(_ => true, ct);
+        var cards = (await _uow.Repository<T_CARDPAIE>().ListAsync(_ => true, ct))
+            .Where(c => MatchesSage(c.SAGE_BDD) && MatchesPointeuse(c.POINTEUSE_BDD))
+            .GroupBy(c => c.ID)
+            .ToDictionary(g => g.Key, g => g.First());
+
         foreach (var dto in rows)
         {
-            var date = (dto.DateP ?? DateTime.Today).Date;
-            var shift = dto.NoShift is int n ? shifts.FirstOrDefault(s => s.NoSHIFT == n) : null;
-            var ha = dto.Ha ?? Combine(date, shift?.HA);
-            var hd = dto.Hd ?? Combine(date, shift?.HD);
-            var pause = dto.Pause ?? shift?.PAUSE;
+            if (!dto.DateP.HasValue)
+                throw new InvalidOperationException("La date du planning est requise.");
+            if (!cards.ContainsKey(dto.CardPaieId))
+                throw new InvalidOperationException($"Salarié introuvable pour la carte {dto.CardPaieId}.");
+
+            var date = dto.DateP.Value.Date;
+            var shift = dto.NoShift is int noShift
+                ? shifts.FirstOrDefault(s => s.NoSHIFT == noShift)
+                : null;
+            if (dto.NoShift is int shiftDemande && shift is null)
+                throw new InvalidOperationException($"Shift {shiftDemande} introuvable.");
+
             T_PLANNING_SAL? entity = null;
             if (dto.Id != 0)
-                entity = await repo.GetByIdAsync(dto.Id, ct);
-            entity ??= (await repo.ListAsync(
-                p => p.IDSAL == dto.CardPaieId
-                     && p.DateP != null
-                     && p.DateP.Value.Date == date
-                     && p.BDD_SAGE == _tenant.SageDb, ct)).FirstOrDefault();
+            {
+                entity = await repo.GetByIdAsync(dto.Id, ct)
+                    ?? throw new InvalidOperationException($"Planning {dto.Id} introuvable.");
+                if (!MatchesSage(entity.BDD_SAGE) || !MatchesPointeuse(entity.BDD_POINTEUSE))
+                    throw new InvalidOperationException("Planning hors du périmètre de la base active.");
+            }
+
+            if (entity is null)
+            {
+                var existantes = await repo.ListAsync(
+                    p => p.IDSAL == dto.CardPaieId
+                         && p.DateP != null
+                         && p.DateP.Value.Date == date, ct);
+                entity = existantes
+                    .Where(p => MatchesSage(p.BDD_SAGE) && MatchesPointeuse(p.BDD_POINTEUSE))
+                    .OrderBy(p => p.ID)
+                    .FirstOrDefault();
+            }
+
+            var off = dto.Off == true;
+            DateTime? ha = null;
+            DateTime? hd = null;
+            var pause = TimeSpan.Zero;
+
+            if (!off)
+            {
+                // Une ligne héritée peut ne pas avoir de NoSHIFT : on conserve alors ses heures
+                // existantes si l'écran n'en fournit pas.
+                var debut = dto.Ha?.TimeOfDay ?? shift?.HA ?? entity?.HA?.TimeOfDay;
+                var fin = dto.Hd?.TimeOfDay ?? shift?.HD ?? entity?.HD?.TimeOfDay;
+                if (!PlanningGenerationRules.TryIntervalle(date, debut, fin, out ha, out hd))
+                    throw new InvalidOperationException(
+                        $"Heures d'entrée/sortie manquantes ou invalides pour le planning du {date:dd/MM/yyyy}.");
+                pause = dto.Pause ?? shift?.PAUSE ?? entity?.Pause ?? TimeSpan.Zero;
+            }
+
             if (entity == null)
             {
                 await repo.AddAsync(new T_PLANNING_SAL
@@ -225,7 +289,7 @@ public class PlanningService
                     HA = ha,
                     Pause = pause,
                     HD = hd,
-                    OffP = dto.Off,
+                    OffP = off,
                     BDD_SAGE = _tenant.SageDb,
                     BDD_POINTEUSE = _tenant.PointeuseDb
                 }, ct);
@@ -238,7 +302,9 @@ public class PlanningService
                 entity.HA = ha;
                 entity.Pause = pause;
                 entity.HD = hd;
-                entity.OffP = dto.Off;
+                entity.OffP = off;
+                entity.BDD_SAGE = _tenant.SageDb;
+                entity.BDD_POINTEUSE = _tenant.PointeuseDb;
                 repo.Update(entity);
             }
         }
@@ -260,9 +326,15 @@ public class PlanningService
             return new ImportResultDto(0, 0, "Fichier vide.");
         var mode = ExcelCells.Fold(headers[0]);
         var shifts = await _uow.Repository<T_PLANNING>().ListAsync(_ => true, ct);
-        var cards = await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == _tenant.SageDb, ct);
-        var categories = await _uow.Repository<T_CATEGORIE>().ListAsync(c => c.BDD_SAGE == _tenant.SageDb, ct);
-        var affect = await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == _tenant.SageDb, ct);
+        var cards = (await _uow.Repository<T_CARDPAIE>().ListAsync(_ => true, ct))
+            .Where(c => MatchesSage(c.SAGE_BDD) && MatchesPointeuse(c.POINTEUSE_BDD))
+            .ToList();
+        var categories = (await _uow.Repository<T_CATEGORIE>().ListAsync(c => c.BDD_SAGE == _tenant.SageDb, ct))
+            .Where(c => MatchesPointeuse(c.BDD_POINTEUSE))
+            .ToList();
+        var affect = (await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == _tenant.SageDb, ct))
+            .Where(a => MatchesPointeuse(a.BDD_POINTEUSE))
+            .ToList();
         var repo = _uow.Repository<T_PLANNING_SAL>();
         var imported = 0;
         var skipped = 0;
@@ -280,27 +352,54 @@ public class PlanningService
             }
             else
             {
-                var card = cards.FirstOrDefault(c => c.SAGE_MATRICULE == key);
+                var card = cards.FirstOrDefault(c => MemeIdentifiant(c.SAGE_MATRICULE, key));
                 if (card == null) { skipped++; continue; }
                 targets = new[] { card };
             }
+
             foreach (var header in dateHeaders)
             {
                 if (!ExcelCells.TryDate(header, out var date))
                     continue;
-                if (!int.TryParse(row.GetValueOrDefault(header), out var noShift))
+
+                var cellule = row.GetValueOrDefault(header)?.Trim();
+                if (string.IsNullOrWhiteSpace(cellule))
                     continue;
-                var shift = shifts.FirstOrDefault(s => s.NoSHIFT == noShift);
-                if (shift == null) { skipped++; continue; }
+
+                var off = string.Equals(cellule, "OFF", StringComparison.OrdinalIgnoreCase);
+                int? noShift = null;
+                DateTime? ha = null;
+                DateTime? hd = null;
+                var pause = TimeSpan.Zero;
+
+                if (!off)
+                {
+                    if (!int.TryParse(cellule, out var numeroShift))
+                    {
+                        skipped++;
+                        continue;
+                    }
+                    var shift = shifts.FirstOrDefault(s => s.NoSHIFT == numeroShift);
+                    if (shift == null || !PlanningGenerationRules.TryIntervalle(date, shift.HA, shift.HD, out ha, out hd))
+                    {
+                        skipped++;
+                        continue;
+                    }
+                    noShift = numeroShift;
+                    pause = shift.PAUSE ?? TimeSpan.Zero;
+                }
+
                 foreach (var card in targets)
                 {
-                    var existing = (await repo.ListAsync(
+                    var existantes = await repo.ListAsync(
                         p => p.IDSAL == card.ID
                              && p.DateP != null
-                             && p.DateP.Value.Date == date.Date
-                             && p.BDD_SAGE == _tenant.SageDb, ct)).FirstOrDefault();
-                    var ha = Combine(date, shift.HA);
-                    var hd = Combine(date, shift.HD);
+                             && p.DateP.Value.Date == date.Date, ct);
+                    var existing = existantes
+                        .Where(p => MatchesSage(p.BDD_SAGE) && MatchesPointeuse(p.BDD_POINTEUSE))
+                        .OrderBy(p => p.ID)
+                        .FirstOrDefault();
+
                     if (existing == null)
                     {
                         await repo.AddAsync(new T_PLANNING_SAL
@@ -310,8 +409,8 @@ public class PlanningService
                             DateP = date.Date,
                             HA = ha,
                             HD = hd,
-                            Pause = shift.PAUSE,
-                            OffP = false,
+                            Pause = pause,
+                            OffP = off,
                             BDD_SAGE = _tenant.SageDb,
                             BDD_POINTEUSE = _tenant.PointeuseDb
                         }, ct);
@@ -321,8 +420,10 @@ public class PlanningService
                         existing.NoSHIFT = noShift;
                         existing.HA = ha;
                         existing.HD = hd;
-                        existing.Pause = shift.PAUSE;
-                        existing.OffP = false;
+                        existing.Pause = pause;
+                        existing.OffP = off;
+                        existing.BDD_SAGE = _tenant.SageDb;
+                        existing.BDD_POINTEUSE = _tenant.PointeuseDb;
                         repo.Update(existing);
                     }
                     imported++;
@@ -330,7 +431,8 @@ public class PlanningService
             }
         }
         await _uow.SaveChangesAsync(ct);
-        return new ImportResultDto(imported, skipped, "Planning importé.");
+        return new ImportResultDto(imported, skipped,
+            $"{imported} ligne(s) de planning importée(s), {skipped} élément(s) ignoré(s).");
     }
 
     /// <summary>
@@ -359,11 +461,19 @@ public class PlanningService
 
         var sageDb = _tenant.SageDb;
         var pointeuseDb = _tenant.PointeuseDb;
-        var cards = await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == sageDb, ct);
-        var categories = await _uow.Repository<T_CATEGORIE>().ListAsync(c => c.BDD_SAGE == sageDb, ct);
-        var affectations = await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == sageDb, ct);
+        var cards = (await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == sageDb, ct))
+            .Where(c => MatchesPointeuse(c.POINTEUSE_BDD))
+            .ToList();
+        var categories = (await _uow.Repository<T_CATEGORIE>().ListAsync(c => c.BDD_SAGE == sageDb, ct))
+            .Where(c => MatchesPointeuse(c.BDD_POINTEUSE))
+            .ToList();
+        var affectations = (await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == sageDb, ct))
+            .Where(a => MatchesPointeuse(a.BDD_POINTEUSE))
+            .ToList();
         var repo = _uow.Repository<T_PLANNING_SAL>();
-        var existantes = await repo.ListAsync(p => p.BDD_SAGE == sageDb, ct);
+        var existantes = (await repo.ListAsync(p => p.BDD_SAGE == sageDb, ct))
+            .Where(p => MatchesPointeuse(p.BDD_POINTEUSE))
+            .ToList();
 
         var pas = parCategorie ? 2 : 3;   // (début, fin) ou (début, pause, fin)
         var ecrites = 0;
@@ -435,16 +545,20 @@ public class PlanningService
 
                 foreach (var carte in cibles)
                 {
-                    var entity = existantes.FirstOrDefault(p => p.IDSAL == carte.ID && p.DateP?.Date == jour);
+                    var entity = existantes
+                        .Where(p => p.IDSAL == carte.ID && p.DateP?.Date == jour)
+                        .OrderBy(p => p.ID)
+                        .FirstOrDefault();
                     if (entity is null)
                     {
                         entity = new T_PLANNING_SAL
                         {
                             IDSAL = carte.ID,
+                            NoSHIFT = null,
                             DateP = jour,
                             HA = ha,
                             HD = hd,
-                            Pause = off ? TimeSpan.Zero : pause,
+                            Pause = off ? TimeSpan.Zero : (pause ?? TimeSpan.Zero),
                             OffP = off,
                             BDD_SAGE = sageDb,
                             BDD_POINTEUSE = pointeuseDb
@@ -454,10 +568,11 @@ public class PlanningService
                     }
                     else
                     {
+                        entity.NoSHIFT = null;
                         entity.DateP = jour;
                         entity.HA = ha;
                         entity.HD = hd;
-                        entity.Pause = off ? TimeSpan.Zero : pause;
+                        entity.Pause = off ? TimeSpan.Zero : (pause ?? TimeSpan.Zero);
                         entity.OffP = off;
                         entity.BDD_SAGE = sageDb;
                         entity.BDD_POINTEUSE = pointeuseDb;
@@ -524,7 +639,8 @@ public class PlanningService
             imported++;
         }
         await _uow.SaveChangesAsync(ct);
-        return new ImportResultDto(imported, skipped, "Shifts importés.");
+        return new ImportResultDto(imported, skipped,
+            $"{imported} shift(s) importé(s), {skipped} ligne(s) ignorée(s).");
     }
 
     private bool MatchesSage(string? stored)
@@ -535,6 +651,11 @@ public class PlanningService
         return string.Equals(stored.Trim(), sage.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
-    private static DateTime? Combine(DateTime date, TimeSpan? time)
-        => time.HasValue ? date.Date + time.Value : date.Date;
+    private bool MatchesPointeuse(string? stored)
+    {
+        var pointeuse = _tenant.PointeuseDb;
+        if (string.IsNullOrWhiteSpace(stored))
+            return true;
+        return string.Equals(stored.Trim(), pointeuse.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
 }

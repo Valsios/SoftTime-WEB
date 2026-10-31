@@ -21,7 +21,7 @@ public class DisplayedRightsTests
         "POINTEUSE:CREATE", "POINTEUSE:PTG:UPDATE", "POINTEUSE:PTG:DELETE",
     };
 
-    private readonly InMemoryUnitOfWork _uow = new();
+    private readonly SnapshotInMemoryUnitOfWork _uow = new();
     private readonly AuthService _auth;
 
     public DisplayedRightsTests()

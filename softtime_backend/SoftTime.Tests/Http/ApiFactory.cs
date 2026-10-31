@@ -31,7 +31,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
 
     public static readonly string ReportPath = Path.Combine(Path.GetTempPath(), "softtime-http-report.txt");
 
-    public InMemoryUnitOfWork Store { get; } = new();
+    public SnapshotInMemoryUnitOfWork Store { get; } = new();
 
     static ApiFactory()
     {
@@ -247,7 +247,7 @@ public sealed class InMemoryRepository<T> : IRepository<T> where T : class
     }
 }
 
-public sealed class InMemoryUnitOfWork : IUnitOfWork
+public sealed class SnapshotInMemoryUnitOfWork : IUnitOfWork
 {
     private readonly Dictionary<Type, object> _repos = new();
     private readonly object _gate = new();

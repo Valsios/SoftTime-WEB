@@ -47,12 +47,31 @@ public static class PlanningGenerationRules
     /// </summary>
     public static bool TryIntervalle(DateTime jour, string? debutTxt, string? finTxt, out DateTime? ha, out DateTime? hd)
     {
+        if (!TryHeure(debutTxt, out var debut) || !TryHeure(finTxt, out var fin))
+        {
+            ha = null;
+            hd = null;
+            return false;
+        }
+        return TryIntervalle(jour, debut, fin, out ha, out hd);
+    }
+
+    /// <summary>
+    /// Même règle que la surcharge texte, à partir d'heures déjà parsées. Utilisée par la saisie
+    /// manuelle et l'import Excel pour que les postes de nuit soient stockés comme dans le desktop
+    /// (<c>HD</c> le lendemain).
+    /// </summary>
+    public static bool TryIntervalle(DateTime jour, TimeSpan? debut, TimeSpan? fin, out DateTime? ha, out DateTime? hd)
+    {
         ha = null;
         hd = null;
-        if (!TryHeure(debutTxt, out var debut) || !TryHeure(finTxt, out var fin))
+        if (!debut.HasValue || !fin.HasValue)
             return false;
-        ha = jour.Add(debut);
-        hd = fin < debut ? jour.AddDays(1).Add(fin) : jour.Add(fin);
+
+        ha = jour.Date + debut.Value;
+        hd = fin.Value < debut.Value
+            ? jour.Date.AddDays(1) + fin.Value
+            : jour.Date + fin.Value;
         return true;
     }
 

@@ -129,12 +129,12 @@ public record CorrespondenceModeDto(bool Active)
 }
 
 public record CardPaieDto(
-    int Id, string? SageMatricule, string? Branche, string? SageNom, string? SagePrenom,
+    int Id, string? SageMatricule, string? SageNom, string? SagePrenom,
     string? PointeuseNumero, string? PointeuseNom, string? SageServeur, string? PointeuseServeur,
     string? SageBdd, string? PointeuseBdd, DateTime? Date,
     string Origine = "AUTO", bool Actif = true, string? Departement = null)
 {
-    public CardPaieDto() : this(default, default, default, default, default, default, default, default, default, default, default, default) { }
+    public CardPaieDto() : this(default, default, default, default, default, default, default, default, default, default, default) { }
 }
 public record SyncResultDto(int Added, int Deactivated, string Message);
 
@@ -389,7 +389,7 @@ public record DashboardTopDto(string Matricule, string? Nom, string? Prenom, str
     public DashboardTopDto() : this(string.Empty, default, default, default, default, default) { }
 }
 
-/// <summary>Répartition de l'effectif et de l'activité d'un axe (catégorie, branche, département).</summary>
+/// <summary>Répartition de l'effectif et de l'activité d'un axe (catégorie, département).</summary>
 public record DashboardSliceDto(string Libelle, int Effectif, int Absences, int Retards, int MinutesRetard, decimal HeuresSupplementaires)
 {
     public DashboardSliceDto() : this(string.Empty, default, default, default, default, default) { }
@@ -397,10 +397,9 @@ public record DashboardSliceDto(string Libelle, int Effectif, int Absences, int 
 
 public record DashboardRepartitionDto(
     IReadOnlyList<DashboardSliceDto> ParCategorie,
-    IReadOnlyList<DashboardSliceDto> ParBranche,
     IReadOnlyList<DashboardSliceDto> ParDepartement)
 {
-    public DashboardRepartitionDto() : this(Array.Empty<DashboardSliceDto>(), Array.Empty<DashboardSliceDto>(), Array.Empty<DashboardSliceDto>()) { }
+    public DashboardRepartitionDto() : this(Array.Empty<DashboardSliceDto>(), Array.Empty<DashboardSliceDto>()) { }
 }
 
 /// <param name="TauxPonctualite">Jours travaillés sans retard / jours travaillés, en pourcentage.</param>
@@ -423,10 +422,9 @@ public record DashboardAssiduiteDto(
 /// <summary>Valeurs disponibles pour les filtres du tableau de bord analytique.</summary>
 public record DashboardFiltersDto(
     IReadOnlyList<string> Departements,
-    IReadOnlyList<string> Branches,
     IReadOnlyList<DashboardOptionDto> Categories)
 {
-    public DashboardFiltersDto() : this(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<DashboardOptionDto>()) { }
+    public DashboardFiltersDto() : this(Array.Empty<string>(), Array.Empty<DashboardOptionDto>()) { }
 }
 
 public record DashboardOptionDto(int Id, string Libelle)
@@ -439,7 +437,7 @@ public record CorrectedHourDto(decimal Id, string? Matricule, DateTime? DateIn, 
     public CorrectedHourDto() : this(default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default, default) { }
 }
 
-public record PeriodRequest(string? MatriculeFrom, string? MatriculeTo, DateTime From, DateTime To, string? Branche, string? Departement = null)
+public record PeriodRequest(string? MatriculeFrom, string? MatriculeTo, DateTime From, DateTime To, string? Departement = null, string? Search = null)
 {
     public PeriodRequest() : this(default, default, default, default, default, default) { }
 }
@@ -449,11 +447,10 @@ public record WeeklyValidationRequest(
     string? MatriculeTo,
     DateTime From,
     DateTime To,
-    string? Branche,
     IReadOnlyList<string>? SelectedMatricules,
-    string? Departement = null) : PeriodRequest(MatriculeFrom, MatriculeTo, From, To, Branche, Departement)
+    string? Departement = null) : PeriodRequest(MatriculeFrom, MatriculeTo, From, To, Departement)
 {
-    public WeeklyValidationRequest() : this(default, default, default, default, default, default, default) { }
+    public WeeklyValidationRequest() : this(default, default, default, default, default, default) { }
 }
 
 public record WeeklyHsDto(int Id, string? Matricule, DateTime? DateDeb, DateTime? DateFin, decimal? Ht, decimal? Hs, decimal? Nuit, decimal? Dimanche, decimal? Feries, decimal? Retard, decimal? Absence, bool? Validated)
@@ -480,12 +477,17 @@ public record OvertimeDetailDayDto(
     bool AbsenceAm,
     bool AbsencePm,
     bool Conge,
-    bool JourTravaille)
+    bool JourTravaille,
+    decimal HeuresReelles)
 {
-    public OvertimeDetailDayDto() : this(default, default, default, default, default, default, default, default, default, default, default, default, default) { }
+    public OvertimeDetailDayDto() : this(default, default, default, default, default, default, default, default, default, default, default, default, default, default) { }
 }
 
-/// <summary>Semaine du calcul EXO/IMPO d'un salarié (répartition 130 % / 150 %).</summary>
+/// <summary>
+/// Semaine du calcul EXO/IMPO d'un salarié (répartition 130 % / 150 %). <see cref="Debut"/> et
+/// <see cref="Fin"/> sont les bornes lundi → dimanche de la semaine ; la période du calcul, elle,
+/// est affichée dans l'en-tête du détail et stockée dans <c>T_HSSemaine.PeriodeDebut/PeriodeFin</c>.
+/// </summary>
 public record OvertimeDetailWeekDto(int? Semaine, DateTime? Debut, DateTime? Fin, decimal Hs, decimal Hs1, decimal Hs2)
 {
     public OvertimeDetailWeekDto() : this(default, default, default, default, default, default) { }
@@ -542,7 +544,19 @@ public record ExcelExportRequest(string FileName, string SheetName, List<string>
     public ExcelExportRequest() : this("export.xlsx", "Données", new List<string>(), new List<List<string?>>()) { }
 }
 
-public record ReportFilter(string? MatriculeFrom, string? MatriculeTo, DateTime From, DateTime To, string? Branche)
+/// <summary>Une feuille d'un classeur d'export : en-têtes + lignes typées (texte, nombre, booléen).</summary>
+public record ExcelSheetRequest(string SheetName, List<string> Headers, List<List<object?>> Rows)
+{
+    public ExcelSheetRequest() : this("Données", new List<string>(), new List<List<object?>>()) { }
+}
+
+/// <summary>Classeur multi-feuilles généré côté serveur (données déjà calculées par l'écran).</summary>
+public record ExcelWorkbookRequest(string FileName, List<ExcelSheetRequest> Sheets)
+{
+    public ExcelWorkbookRequest() : this("export.xlsx", new List<ExcelSheetRequest>()) { }
+}
+
+public record ReportFilter(string? MatriculeFrom, string? MatriculeTo, DateTime From, DateTime To, string? Departement, string? Search = null)
 {
     public ReportFilter() : this(default, default, default, default, default) { }
 }

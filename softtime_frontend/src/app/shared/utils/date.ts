@@ -70,6 +70,18 @@ export function fmtDate(value: unknown): string {
   return s.length >= 10 ? s.slice(0, 10) : s;
 }
 
+/**
+ * Formats a time value for display: TimeSpan « 08:45:00 » ou « 08:45 » → « 08:45 ».
+ * Les durées négatives ou supérieures à 24 h (TimeSpan « c ») sont affichées telles quelles.
+ */
+export function fmtHeure(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '';
+  const s = String(value);
+  const match = /^(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/.exec(s);
+  if (!match) return s;
+  return `${match[1].padStart(2, '0')}:${match[2]}`;
+}
+
 /** Maps an object to a table row (keys preserved). */
 export function asRow<T extends object>(item: T): Record<string, unknown> {
   return { ...(item as Record<string, unknown>) };

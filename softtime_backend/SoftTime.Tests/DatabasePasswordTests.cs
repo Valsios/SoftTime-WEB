@@ -21,7 +21,7 @@ public class DatabasePasswordTests
     private const string Stored = "FAKE-STORED-PWD";
     private const string Typed = "FAKE-TYPED-PWD";
 
-    private readonly InMemoryUnitOfWork _uow = new();
+    private readonly SnapshotInMemoryUnitOfWork _uow = new();
     private readonly IMapper _mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
     private readonly RecordingDiscovery _discovery = new();
     private readonly AuthService _auth;

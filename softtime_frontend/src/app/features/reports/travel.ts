@@ -29,6 +29,8 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         [total]="total()"
         [serverPageSize]="pageSize"
         [serverPage]="page()"
+        [(searchTerm)]="tableSearch"
+        (searchSubmit)="onTableSearch($event)"
         (pageChange)="onPageChange($event)"
       ></data-table>
     </soft-card>
@@ -47,6 +49,7 @@ export class TravelPage {
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly page = signal(1);
   readonly total = signal(0);
+  readonly tableSearch = signal('');
   private lastFilter: PeriodRequest | null = null;
   private requestSeq = 0;
 
@@ -69,11 +72,22 @@ export class TravelPage {
     this.loadPage();
   }
 
+  onTableSearch(term: string): void {
+    this.tableSearch.set(term);
+    this.page.set(1);
+    this.loadPage();
+  }
+
   private loadPage(): void {
     if (!this.lastFilter) return;
     const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.listPaged({ ...this.lastFilter, page: this.page(), pageSize: this.pageSize }).subscribe({
+    this.svc.listPaged({
+      ...this.lastFilter,
+      search: this.tableSearch(),
+      page: this.page(),
+      pageSize: this.pageSize,
+    }).subscribe({
       next: (r) => {
         if (seq !== this.requestSeq) return;
         this.rows.set(r.items.map(asRow));
@@ -113,11 +127,11 @@ export class TravelPage {
 
   exportExcel(): void {
     if (!this.lastFilter) {
-      this.excel.download('frais-deplacement', this.columns, this.rows());
+      this.excel.download('frais-deplacement', this.columns, this.rows(), 'Données', this.tableSearch());
       return;
     }
     this.svc.list(this.lastFilter).subscribe({
-      next: (items) => this.excel.download('frais-deplacement', this.columns, items.map(asRow)),
+      next: (items) => this.excel.download('frais-deplacement', this.columns, items.map(asRow), 'Données', this.tableSearch()),
     });
   }
 }

@@ -271,12 +271,38 @@ public class AuthService
     }
 
     public async Task<PagedResult<UserDto>> GetUsersPagedAsync(
-        int? page, int? pageSize, CancellationToken cancellationToken = default)
+        int? page, int? pageSize, string? search = null, CancellationToken cancellationToken = default)
     {
         await EnsureCanReadAsync(ReadUsers, cancellationToken);
+        decimal[] roleIds = Array.Empty<decimal>();
+        if (SearchText.Terms(search).Count > 0)
+        {
+            roleIds = (await _uow.Repository<T_ROLE>().ListAsync(_ => true, cancellationToken))
+                .Where(role => SearchText.Matches(search, role.NOMROLE))
+                .Select(role => role.IDROLE)
+                .ToArray();
+        }
+
+        var searchPredicate = SearchExpression.For<T_RESPONSABLE>(
+            search,
+            u => u.NOMRESPONSABLE,
+            u => u.LOGIN,
+            u => u.EMAIL,
+            u => u.MATRICULE);
+        System.Linq.Expressions.Expression<Func<T_RESPONSABLE, bool>> predicate =
+            searchPredicate ?? (_ => true);
+        if (roleIds.Length > 0)
+        {
+            System.Linq.Expressions.Expression<Func<T_RESPONSABLE, bool>> rolePredicate =
+                user => roleIds.Contains(user.IDROLE);
+            predicate = searchPredicate is null
+                ? rolePredicate
+                : SearchExpression.OrElse(searchPredicate, rolePredicate);
+        }
+
         return await PagedLists.PageAsync(
             _uow.Repository<T_RESPONSABLE>(),
-            _ => true,
+            predicate,
             q => q.OrderBy(u => u.NOMRESPONSABLE).ThenBy(u => u.LOGIN).ThenBy(u => u.IDRESPONSABLE),
             page,
             pageSize,
@@ -355,6 +381,7 @@ public class AuthService
     public async Task<UserDto> SaveUserAsync(decimal currentUserId, UserDto dto, CancellationToken cancellationToken = default)
     {
         RequireAdministrator();
+        ValidateUserFields(dto);
         var repo = _uow.Repository<T_RESPONSABLE>();
         var caller = await repo.GetByIdAsync(currentUserId, cancellationToken);
         if (caller == null)
@@ -470,19 +497,21 @@ public class AuthService
     private async Task<UserDto> ExecuteSaveUserInternalAsync(T_RESPONSABLE? entity, UserDto dto, CancellationToken cancellationToken)
     {
         var repo = _uow.Repository<T_RESPONSABLE>();
+        var (nom, login) = ValidateUserFields(dto);
         var loginModifie = false;
         var motDePasseModifie = false;
         if (dto.Id == 0)
         {
+            await EnsureLoginAvailableAsync(repo, login, dto.Id, cancellationToken);
             if (string.IsNullOrWhiteSpace(dto.Password))
-                throw new InvalidOperationException("Le mot de passe est requis pour un nouvel utilisateur.");
-            PasswordPolicy.EnsureValid(dto.Password);
+                throw new FieldValidationException("password", "Le mot de passe est obligatoire pour un nouvel utilisateur.");
+            EnsurePasswordPolicy(dto.Password);
 
             entity = new T_RESPONSABLE
             {
                 IDROLE = dto.RoleId,
-                NOMRESPONSABLE = dto.Nom,
-                LOGIN = dto.Login,
+                NOMRESPONSABLE = nom,
+                LOGIN = login,
                 PASSWORD = _passwordHasher.HashPassword(null!, dto.Password),
                 MATRICULE = dto.Matricule,
                 EMAIL = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim()
@@ -492,7 +521,11 @@ public class AuthService
         else
         {
             entity ??= await repo.GetByIdAsync(dto.Id, cancellationToken) ?? throw new KeyNotFoundException();
-            loginModifie = !string.Equals((entity.LOGIN ?? string.Empty).Trim(), (dto.Login ?? string.Empty).Trim(), StringComparison.Ordinal);
+            loginModifie = !string.Equals((entity.LOGIN ?? string.Empty).Trim(), login, StringComparison.Ordinal);
+            // Ne pas bloquer la modification d'un compte historique dont le login serait déjà dupliqué :
+            // l'unicité n'est vérifiée que lorsqu'un nouveau login est choisi.
+            if (!string.Equals((entity.LOGIN ?? string.Empty).Trim(), login, StringComparison.OrdinalIgnoreCase))
+                await EnsureLoginAvailableAsync(repo, login, dto.Id, cancellationToken);
 
             if (!string.IsNullOrWhiteSpace(dto.Password))
             {
@@ -514,7 +547,7 @@ public class AuthService
 
                 if (!isSame)
                 {
-                    PasswordPolicy.EnsureValid(dto.Password);
+                    EnsurePasswordPolicy(dto.Password);
                     motDePasseModifie = true;
                     entity.PASSWORD = _passwordHasher.HashPassword(entity, dto.Password);
                 }
@@ -526,8 +559,8 @@ public class AuthService
             }
 
             entity.IDROLE = dto.RoleId;
-            entity.NOMRESPONSABLE = dto.Nom;
-            entity.LOGIN = dto.Login;
+            entity.NOMRESPONSABLE = nom;
+            entity.LOGIN = login;
             entity.MATRICULE = dto.Matricule;
             entity.EMAIL = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim();
             repo.Update(entity);
@@ -596,6 +629,41 @@ public class AuthService
         access.RemoveRange(await access.ListAsync(a => a.IDRESPONSABLE == userId, cancellationToken));
     }
 
+    /// <summary>Valide le mot de passe et rattache l'erreur au champ « password » du formulaire.</summary>
+    private static void EnsurePasswordPolicy(string? password)
+    {
+        var validation = PasswordPolicy.Validate(password);
+        if (!validation.IsValid)
+            throw new FieldValidationException("password", validation.ErrorMessage);
+    }
+
+    /// <summary>Champs obligatoires d'un compte (nom, login, rôle) : renvoie le nom et le login nettoyés.</summary>
+    private static (string Nom, string Login) ValidateUserFields(UserDto dto)
+    {
+        var nom = (dto.Nom ?? string.Empty).Trim();
+        var login = (dto.Login ?? string.Empty).Trim();
+
+        if (nom.Length == 0)
+            throw new FieldValidationException("nom", "Le nom est obligatoire.");
+        if (login.Length == 0)
+            throw new FieldValidationException("login", "Le login est obligatoire.");
+        if (dto.RoleId <= 0)
+            throw new FieldValidationException("roleId", "Le rôle est obligatoire.");
+        return (nom, login);
+    }
+
+    /// <summary>Refuse un login déjà porté par un autre compte (comparaison sans casse ni espaces).</summary>
+    private static async Task EnsureLoginAvailableAsync(
+        IRepository<T_RESPONSABLE> repo,
+        string login,
+        decimal id,
+        CancellationToken cancellationToken)
+    {
+        var autres = await repo.ListAsync(u => u.IDRESPONSABLE != id, cancellationToken);
+        if (autres.Any(u => string.Equals((u.LOGIN ?? string.Empty).Trim(), login, StringComparison.OrdinalIgnoreCase)))
+            throw new FieldValidationException("login", "Ce login est déjà utilisé. Choisissez-en un autre.");
+    }
+
     /// <summary>Réservé aux tests (internal, sans garde) : le code de production doit transmettre l'identité de l'appelant.</summary>
     internal async Task DeleteUserAsync(decimal id, CancellationToken cancellationToken = default)
     {
@@ -621,7 +689,7 @@ public class AuthService
     }
 
     public async Task<PagedResult<RoleDto>> GetRolesPagedAsync(
-        int? page, int? pageSize, CancellationToken cancellationToken = default)
+        int? page, int? pageSize, string? search = null, CancellationToken cancellationToken = default)
     {
         await EnsureCanReadAsync(ReadRoles, cancellationToken);
         return await PagedLists.PageAsync(
@@ -631,6 +699,8 @@ public class AuthService
             page,
             pageSize,
             r => new RoleDto(r.IDROLE, r.NOMROLE),
+            search,
+            new System.Linq.Expressions.Expression<Func<T_ROLE, string?>>[] { r => r.NOMROLE },
             cancellationToken);
     }
 

@@ -47,6 +47,12 @@ public class TimekeepingService
             page,
             pageSize,
             ToPunchDto,
+            filter.Search,
+            new Expression<Func<T_POINTAGE, string?>>[]
+            {
+                p => p.MATRICULE_SAGE,
+                p => p.TYPE_POINTAGE,
+            },
             ct);
     }
 
@@ -200,10 +206,17 @@ public class TimekeepingService
     public async Task<ImportResultDto> ImportFromClockAsync(ImportPunchesRequest request, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var clock = (await _uow.Repository<T_CLOCK>().ListAsync(_ => true, ct)).FirstOrDefault()
+        if (request.From == default || request.To == default)
+            throw new InvalidOperationException("La période (from/to) est requise pour importer les pointages.");
+        if (request.To.Date < request.From.Date)
+            throw new InvalidOperationException("La date de fin doit être postérieure ou égale à la date de début.");
+
+        _ = (await _uow.Repository<T_CLOCK>().ListAsync(_ => true, ct)).FirstOrDefault()
             ?? throw new InvalidOperationException("Paramètre pointeuse (T_CLOCK) manquant.");
         var pteRow = await _tenant.GetPointeuseRowAsync(ct);
-        var cards = await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == _tenant.SageDb, ct);
+        var cards = (await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == _tenant.SageDb, ct))
+            .Where(c => MatchesPointeuse(c.POINTEUSE_BDD, _tenant.PointeuseDb))
+            .ToList();
         if (!string.IsNullOrEmpty(request.MatriculeFrom))
             cards = cards.Where(c => string.Compare(c.SAGE_MATRICULE, request.MatriculeFrom, StringComparison.Ordinal) >= 0).ToList();
         if (!string.IsNullOrEmpty(request.MatriculeTo))
@@ -230,6 +243,18 @@ public class TimekeepingService
         var repo = _uow.Repository<T_POINTAGE>();
         var existing = await repo.ListAsync(p =>
             p.NOM_BDD_SAGE == _tenant.SageDb && p.DATE_POINTAGE >= from && p.DATE_POINTAGE < to, ct);
+        // Dédoublonnage exact (matricule canonique + date + heure) dans les deux modes. L'ancien
+        // comportement ne dédoublonnait qu'en mono : en multi, une réimportation doublait les lignes.
+        var dejaImportes = existing
+            .Where(p => MatchesPointeuse(p.NOM_BDD_POINTEUSE, _tenant.PointeuseDb))
+            .Where(p => p.DATE_POINTAGE.HasValue
+                        && p.HEURE_POINTAGE.HasValue
+                        && !string.IsNullOrWhiteSpace(p.MATRICULE_SAGE))
+            .Select(p => (
+                Cle: MatriculeIdentity.Cle(p.MATRICULE_SAGE),
+                Jour: p.DATE_POINTAGE!.Value.Date,
+                Heure: p.HEURE_POINTAGE!.Value))
+            .ToHashSet();
         var imported = 0;
         var skipped = 0;
         foreach (var punch in punches)
@@ -237,12 +262,7 @@ public class TimekeepingService
             var user = users.FirstOrDefault(u => u.UserId == punch.UserId);
             if (user?.Badge is not string badge || !badgeMap.TryGetValue(badge.Trim(), out var card))
             { skipped++; continue; }
-            var dup = existing.Any(e =>
-                e.MATRICULE_SAGE == card.SAGE_MATRICULE
-                && e.DATE_POINTAGE.HasValue && e.DATE_POINTAGE.Value.Date == punch.CheckTime.Date
-                && e.HEURE_POINTAGE.HasValue && e.HEURE_POINTAGE.Value.Hours == punch.CheckTime.Hour
-                && e.HEURE_POINTAGE.Value.Minutes == punch.CheckTime.Minute);
-            if (dup && clock.MULTIPOINT != true)
+            if (!dejaImportes.Add((MatriculeIdentity.Cle(card.SAGE_MATRICULE), punch.CheckTime.Date, punch.CheckTime.TimeOfDay)))
             { skipped++; continue; }
             await repo.AddAsync(new T_POINTAGE
             {
@@ -258,20 +278,19 @@ public class TimekeepingService
             imported++;
         }
         await _uow.SaveChangesAsync(ct);
-        var message = ambiguousBadges.Count == 0
-            ? "Import pointeuse terminé."
-            : $"Import pointeuse terminé. {ambiguousBadges.Count} badge(s) associé(s) à plusieurs salariés ont été ignorés : "
-              + string.Join(", ", ambiguousBadges.Take(10))
-              + (ambiguousBadges.Count > 10 ? ", …" : string.Empty)
-              + ". Corrigez les correspondances paie en double pour importer ces pointages.";
+        var message = $"{imported} pointage(s) importé(s), {skipped} ignoré(s).";
+        if (ambiguousBadges.Count > 0)
+            message += $" {ambiguousBadges.Count} badge(s) associé(s) à plusieurs salariés ont été ignorés : "
+                       + string.Join(", ", ambiguousBadges.Take(10))
+                       + (ambiguousBadges.Count > 10 ? ", …" : string.Empty)
+                       + ". Corrigez les correspondances paie en double pour importer ces pointages.";
         return new ImportResultDto(imported, skipped, message);
     }
 
     public async Task<ImportResultDto> ImportPunchesExcelAsync(IReadOnlyList<Dictionary<string, string>> rows, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var repo = _uow.Repository<T_POINTAGE>();
-        var imported = 0;
+        var parsed = new List<(string Matricule, DateTime Jour, TimeSpan Heure)>();
         var skipped = 0;
         foreach (var row in rows)
         {
@@ -279,23 +298,48 @@ public class TimekeepingService
             if (string.IsNullOrWhiteSpace(matr)) { skipped++; continue; }
             if (!ExcelCells.TryDate(ExcelCells.Get(row, "Date", "DATE", "Date pointage"), out var date))
             { skipped++; continue; }
-            ExcelCells.TryTime(ExcelCells.Get(row, "Heure", "HEURE", "Heure pointage"), out var heure);
-            var dup = (await repo.ListAsync(p =>
-                p.NOM_BDD_SAGE == _tenant.SageDb
-                && p.MATRICULE_SAGE == matr
-                && p.DATE_POINTAGE != null
-                && p.DATE_POINTAGE.Value.Date == date.Date
-                && p.HEURE_POINTAGE == heure, ct)).Count > 0;
-            if (dup)
+            if (!ExcelCells.TryTime(ExcelCells.Get(row, "Heure", "HEURE", "Heure pointage"), out var heure))
+            { skipped++; continue; }
+            parsed.Add((matr.Trim(), date.Date, heure));
+        }
+
+        if (parsed.Count == 0)
+            return new ImportResultDto(0, skipped,
+                $"Aucun pointage valide : {skipped} ligne(s) ignorée(s) (matricule, date ou heure manquants).");
+
+        var repo = _uow.Repository<T_POINTAGE>();
+        var from = parsed.Min(p => p.Jour);
+        var to = parsed.Max(p => p.Jour).AddDays(1);
+        var existing = await repo.ListAsync(p =>
+            p.NOM_BDD_SAGE == _tenant.SageDb
+            && p.DATE_POINTAGE >= from
+            && p.DATE_POINTAGE < to, ct);
+        // Dédoublonnage contre la base et au sein du fichier (deux lignes identiques ne doivent
+        // produire qu'un seul pointage).
+        var dejaImportes = existing
+            .Where(p => MatchesPointeuse(p.NOM_BDD_POINTEUSE, _tenant.PointeuseDb))
+            .Where(p => p.DATE_POINTAGE.HasValue
+                        && p.HEURE_POINTAGE.HasValue
+                        && !string.IsNullOrWhiteSpace(p.MATRICULE_SAGE))
+            .Select(p => (
+                Cle: MatriculeIdentity.Cle(p.MATRICULE_SAGE),
+                Jour: p.DATE_POINTAGE!.Value.Date,
+                Heure: p.HEURE_POINTAGE!.Value))
+            .ToHashSet();
+
+        var imported = 0;
+        foreach (var row in parsed)
+        {
+            if (!dejaImportes.Add((MatriculeIdentity.Cle(row.Matricule), row.Jour, row.Heure)))
             {
                 skipped++;
                 continue;
             }
             await repo.AddAsync(new T_POINTAGE
             {
-                MATRICULE_SAGE = matr,
-                DATE_POINTAGE = date.Date,
-                HEURE_POINTAGE = heure,
+                MATRICULE_SAGE = row.Matricule,
+                DATE_POINTAGE = row.Jour,
+                HEURE_POINTAGE = row.Heure,
                 DATE_IMPORTATION = DateTime.Now,
                 NOM_BDD_SAGE = _tenant.SageDb,
                 NOM_BDD_POINTEUSE = _tenant.PointeuseDb,
@@ -304,8 +348,14 @@ public class TimekeepingService
             imported++;
         }
         await _uow.SaveChangesAsync(ct);
-        return new ImportResultDto(imported, skipped, "Import Excel pointages terminé.");
+        return new ImportResultDto(imported, skipped,
+            $"{imported} pointage(s) importé(s), {skipped} ligne(s) ignorée(s).");
     }
+
+    /// <summary>Filtre tenant pointeuse, en tolérant les lignes héritées sans base renseignée.</summary>
+    private static bool MatchesPointeuse(string? valeur, string pointeuseDb) =>
+        string.IsNullOrWhiteSpace(valeur)
+        || string.Equals(valeur.Trim(), pointeuseDb.Trim(), StringComparison.OrdinalIgnoreCase);
 
     public async Task<IReadOnlyList<AnomalyDto>> ListAnomaliesAsync(PeriodRequest filter, CancellationToken ct = default)
     {
@@ -328,6 +378,12 @@ public class TimekeepingService
             page,
             pageSize,
             MapAnomaly,
+            filter.Search,
+            new Expression<Func<T_HEUREANOMALIE, string?>>[]
+            {
+                a => a.MATRICULE_SAGE,
+                a => a.INTITULE_ABSENCE,
+            },
             ct);
     }
 
@@ -518,6 +574,12 @@ public class TimekeepingService
             page,
             pageSize,
             MapCorrection,
+            filter.Search,
+            new Expression<Func<T_HEURECORRIGER, string?>>[]
+            {
+                a => a.MATRICULE_SAGE,
+                a => a.INTITULE_ABSENCE,
+            },
             ct);
     }
 
@@ -579,10 +641,15 @@ public class TimekeepingService
         await _tenant.EnsureAuthorizedAsync(ct);
         var repo = _uow.Repository<T_HEURECORRIGER>();
         var imported = 0;
+        var skipped = 0;
         foreach (var row in rows)
         {
             var matr = ExcelCells.Get(row, "Matricule", "MATRICULE", "Matricule SAGE");
-            if (string.IsNullOrWhiteSpace(matr)) continue;
+            if (string.IsNullOrWhiteSpace(matr))
+            {
+                skipped++;
+                continue;
+            }
             ExcelCells.TryDate(ExcelCells.Get(row, "DateEntree", "DATE ENTREE", "Date entrée", "Date in"), out var dIn);
             ExcelCells.TryDate(ExcelCells.Get(row, "DateSortie", "DATE SORTIE", "Date sortie", "Date out"), out var dOut);
             ExcelCells.TryTime(ExcelCells.Get(row, "HeureEntree", "HEURE ENTREE", "Heure entrée"), out var hIn);
@@ -603,7 +670,10 @@ public class TimekeepingService
             imported++;
         }
         await _uow.SaveChangesAsync(ct);
-        return new ImportResultDto(imported, 0, "Import corrections terminé.");
+        var message = $"{imported} correction(s) importée(s), {skipped} ligne(s) ignorée(s)";
+        if (skipped > 0)
+            message += " (matricule manquant)";
+        return new ImportResultDto(imported, skipped, message + ".");
     }
 
     private static void Apply(CorrectedHourDto dto, T_HEURECORRIGER e)
