@@ -1,6 +1,7 @@
 import { Injectable, computed, effect, signal } from '@angular/core';
 import { LoginResponse, PointeuseDb, SageDb } from '../shared/models';
 import { stripDatabasePasswords } from '../shared/utils/connection-password';
+import { AccessContext, canAccess, decodeTokenGates, gateAllows, hasUsableDatabase } from './access.logic';
 
 const TOKEN_KEY = 'st_token';
 const SESSION_KEY = 'st_session';
@@ -47,28 +48,29 @@ export class SessionStore {
     });
   }
 
-  hasRight(droit: number): boolean {
-    if (this._session()?.roleId === 1) return true;
-    return this.rights().includes(droit);
+  /** Portes du compte telles que le serveur les applique : claim « rights » du jeton, sinon portes de la connexion. */
+  readonly gates = computed(() => decodeTokenGates(this._token()) ?? this.rights());
+  /** Au moins une base SAGE utilisable (liste fournie par le serveur selon la même règle que le contrôle d'usage). */
+  readonly hasUsableDatabase = computed(() => hasUsableDatabase(this.databases()));
+
+  accessContext(): AccessContext {
+    const session = this._session();
+    return {
+      roleId: session?.roleId,
+      permissions: this.permissions(),
+      customized: session?.permissionsCustomized ?? false,
+      gates: decodeTokenGates(this._token()),
+      fallbackRights: this.rights(),
+    };
   }
 
+  hasRight(droit: number): boolean {
+    return gateAllows(this.accessContext(), droit);
+  }
+
+  /** Permission fine ET porte serveur (voir access.logic.ts). */
   hasPermission(permissionCode?: string, fallbackDroit?: number): boolean {
-    if (this._session()?.roleId === 1) return true;
-    if (!permissionCode) {
-      return fallbackDroit ? this.hasRight(fallbackDroit) : true;
-    }
-    const session = this._session();
-    const perms = this.permissions();
-    if (session?.permissionsCustomized || perms.length > 0) {
-      if (permissionCode === 'SAGE') {
-        return perms.some((p) => p.startsWith('SAGE:'));
-      }
-      if (permissionCode === 'POINTEUSE') {
-        return perms.some((p) => p.startsWith('POINTEUSE:'));
-      }
-      return perms.includes(permissionCode);
-    }
-    return fallbackDroit ? this.hasRight(fallbackDroit) : true;
+    return canAccess(this.accessContext(), permissionCode, fallbackDroit);
   }
 
   setSession(res: LoginResponse): void {

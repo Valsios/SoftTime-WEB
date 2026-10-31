@@ -21,6 +21,16 @@ export const droitGuard: CanActivateFn = (route) => {
   return router.createUrlTree(['/']);
 };
 
+/**
+ * Pages qui lisent des données d'une base : sans base utilisable pour le compte, on n'appelle aucune API
+ * et on affiche l'état vide partagé (/no-database), au lieu d'une cascade d'erreurs.
+ */
+export const databaseGuard: CanActivateFn = () => {
+  const session = inject(SessionStore);
+  const router = inject(Router);
+  return session.hasUsableDatabase() ? true : router.createUrlTree(['/no-database']);
+};
+
 /** Empêche de quitter la page Privilèges avec un brouillon non enregistré. */
 export const privilegesLeaveGuard: CanDeactivateFn<unknown> = () => {
   const draft = inject(PrivilegesDraftService);

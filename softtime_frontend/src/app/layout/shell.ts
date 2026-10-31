@@ -6,6 +6,7 @@ import { AuthService } from '../shared/services/auth.service';
 import { PointeuseDatabasesService } from '../shared/services/catalog.service';
 import { SageDatabasesService } from '../shared/services/users.service';
 import { NAV_SECTIONS, NavSection } from './nav';
+import { visibleSections as filterSections } from '../core/access.logic';
 import { Icon } from '../shared/components/icon';
 import { PointeuseDb } from '../shared/models';
 import { ToastService } from '../core/toast.service';
@@ -506,12 +507,8 @@ export class Shell implements OnInit {
     ),
   );
 
-  readonly visibleSections = computed<NavSection[]>(() =>
-    NAV_SECTIONS.map((section) => ({
-      ...section,
-      items: section.items.filter((item) => this.session.hasPermission(item.permission, item.droit)),
-    })).filter((section) => section.items.length > 0),
-  );
+  /** Menu : permission fine ET porte serveur ; une section sans élément visible est masquée (access.logic.ts). */
+  readonly visibleSections = computed<NavSection[]>(() => filterSections(NAV_SECTIONS, this.session.accessContext()));
 
   readonly initials = computed(() => {
     const name = this.session.displayName().trim();

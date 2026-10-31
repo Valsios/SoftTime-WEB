@@ -1,4 +1,5 @@
 import { Injectable, signal } from '@angular/core';
+import { shouldShowToast } from './toast.logic';
 
 export type ToastKind = 'success' | 'error' | 'warning' | 'info';
 
@@ -12,8 +13,11 @@ export interface Toast {
 export class ToastService {
   readonly toasts = signal<Toast[]>([]);
   private seq = 0;
+  private readonly lastShown = new Map<string, number>();
 
   show(message: string, kind: ToastKind = 'info', durationMs = 4000): void {
+    // Un même message d'erreur déjà affiché dans les 3 dernières secondes n'est pas répété.
+    if (!shouldShowToast(this.lastShown, kind, message, Date.now())) return;
     const id = ++this.seq;
     this.toasts.update((list) => [...list, { id, kind, message }]);
     setTimeout(() => this.dismiss(id), durationMs);
