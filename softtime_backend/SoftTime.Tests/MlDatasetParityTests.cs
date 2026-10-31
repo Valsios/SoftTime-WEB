@@ -23,7 +23,7 @@ public class MlDatasetParityTests
         var uow = new InMemoryUnitOfWork();
         var source = new FakeExternalSourceService();
         var company = new FakeCompanyContext();
-        var tenant = new TenantConnectionService(uow, company, new FakeCurrentUser());
+        var tenant = new TenantConnectionService(uow, company, new FakeCurrentUser(), SoftTime.Tests.Http.TestRights.Service(uow), Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
         var store = new FakeMlStore();
 
         uow.Get<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 1, NOM_BD = "SAGE_TEST" });

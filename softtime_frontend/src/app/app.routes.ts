@@ -195,7 +195,7 @@ export const routes: Routes = [
       },
       {
         path: 'predictions',
-        canActivate: [droitGuard],
+        canActivate: [droitGuard, databaseGuard],
         data: { droit: Droit.Reports, permission: 'REPORTS:PREDICTIONS' },
         loadComponent: () =>
           import('./features/predictions/predictions').then((m) => m.PredictionsPage),

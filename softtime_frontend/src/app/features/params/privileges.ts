@@ -1388,7 +1388,10 @@ export class PrivilegesPage implements OnInit {
       key: 'REPORTS',
       title: 'États',
       icon: 'bar-chart',
-      items: [{ code: 'REPORTS:REPORTS', label: 'Rapports et exports' }],
+      items: [
+        { code: 'REPORTS:REPORTS', label: 'Rapports et exports' },
+        { code: 'REPORTS:PREDICTIONS', label: 'Prévisions' },
+      ],
     },
   ];
 

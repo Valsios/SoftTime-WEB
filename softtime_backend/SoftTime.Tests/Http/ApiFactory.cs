@@ -40,6 +40,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("Jwt__Key", TestKey);
         Environment.SetEnvironmentVariable("Jwt__Issuer", TestIssuer);
         Environment.SetEnvironmentVariable("Jwt__Audience", TestAudience);
+        // Moteur prédictif : pas de tâche de fond ni de base analytique dans les tests HTTP.
+        Environment.SetEnvironmentVariable("Ml__Enabled", "false");
         Environment.SetEnvironmentVariable("ConnectionStrings__SoftTime",
             "Data Source=invalid.host.test;Initial Catalog=INVALID;User ID=none;Password=none;Connect Timeout=1");
     }
@@ -60,6 +62,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<IUnitOfWork>(Store);
             services.RemoveAll<IExternalDiscoveryService>();
             services.AddSingleton(NullObject.Create<IExternalDiscoveryService>());
+            services.RemoveAll<SoftTime.Application.Abstractions.IMlStore>();
+            services.AddSingleton(NullObject.Create<SoftTime.Application.Abstractions.IMlStore>());
             services.RemoveAll<IExternalSourceService>();
             services.AddSingleton(NullObject.Create<IExternalSourceService>());
         });
@@ -130,6 +134,10 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         Account(10072, 91, "privreader", false, "PARAMS:PRIVILEGES");
         Account(10073, 91, "dbreader", false, "PARAMS:DB_ACCESS");
         Account(10074, 91, "paramsother", false, "PARAMS:CATEGORIES");
+        // Prévisions : porte 6 avec la permission fine, et porte 6 sans elle.
+        Account(10090, 91, "predreader", true, "REPORTS:PREDICTIONS", $"SAGE:{SageName}:READ");
+        Account(10092, 91, "prednobase", false, "REPORTS:PREDICTIONS");                  // permission fine mais base non cochée
+        Account(10091, 91, "gate6only", true, "REPORTS:REPORTS", $"SAGE:{SageName}:READ");
         // Étape 4b-8 : comptes avec ajustements personnels (rôle 91 sans droits : chaque ligne est un ajout).
         Account(10080, 91, "adjusted1", false, "PROC:SHIFTS", "PROC:PUNCHES");
         Account(10081, 91, "adjusted2", false, "PROC:SHIFTS", "PROC:PUNCHES");
@@ -173,6 +181,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         "privreader" => Token(10072, 91, 2),
         "dbreader" => Token(10073, 91, 2),
         "paramsother" => Token(10074, 91, 2),
+        "predreader" => Token(10090, 91, 1, 6),
+        "prednobase" => Token(10092, 91, 6),
+        "gate6only" => Token(10091, 91, 1, 6),
         _ => throw new ArgumentOutOfRangeException(nameof(profile))
     };
 

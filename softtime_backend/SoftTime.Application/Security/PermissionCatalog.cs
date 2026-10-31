@@ -35,7 +35,7 @@ public static class PermissionCatalog
         "PROC:WEEKLY_VALIDATION", "PROC:OVERTIME",
         "OTHER:CANTEEN", "OTHER:TRAVEL_EXPENSES",
         "TRACE:AUDIT",
-        "REPORTS:REPORTS"
+        "REPORTS:REPORTS", "REPORTS:PREDICTIONS"
     };
 
     public static bool IsKnown(string code)
@@ -155,6 +155,7 @@ public static class PermissionCatalog
         if (rights.Contains(Rights.Reports))
         {
             defaults.Add("REPORTS:REPORTS");
+            defaults.Add("REPORTS:PREDICTIONS");
         }
 
         return defaults;

@@ -133,7 +133,7 @@ public class PermissionCatalogCharacterizationTests
         Assert.Equal(Proc, Build(new[] { Rights.Processing }));
         Assert.Equal(Other, Build(new[] { Rights.Other }));
         Assert.Equal(new[] { "TRACE:AUDIT" }, Build(new[] { Rights.Traceability }));
-        Assert.Equal(new[] { "REPORTS:REPORTS" }, Build(new[] { Rights.Reports }));
+        Assert.Equal(new[] { "REPORTS:REPORTS", "REPORTS:PREDICTIONS" }, Build(new[] { Rights.Reports }));
     }
 
     [Fact]
@@ -141,7 +141,7 @@ public class PermissionCatalogCharacterizationTests
     {
         var all = new[] { Rights.Databases, Rights.Parameters, Rights.Processing, Rights.Other, Rights.Traceability, Rights.Reports };
         var expected = new[] { "SAGE:CREATE", "SAGE:A:READ", "SAGE:A:UPDATE", "SAGE:A:DELETE", "POINTEUSE:CREATE", "POINTEUSE:P:READ", "POINTEUSE:P:UPDATE", "POINTEUSE:P:DELETE" }
-            .Concat(Params).Concat(Proc).Concat(Other).Concat(new[] { "TRACE:AUDIT", "REPORTS:REPORTS" });
+            .Concat(Params).Concat(Proc).Concat(Other).Concat(new[] { "TRACE:AUDIT", "REPORTS:REPORTS", "REPORTS:PREDICTIONS" });
         Assert.Equal(expected, Build(all, new[] { "A" }, new[] { "P" }));
     }
 
@@ -159,6 +159,8 @@ public class PermissionCatalogCharacterizationTests
         Assert.Equal(new decimal[] { 4 }, Gates(new[] { "OTHER:CANTEEN" }));
         Assert.Equal(new decimal[] { 5 }, Gates(new[] { "TRACE:AUDIT" }));
         Assert.Equal(new decimal[] { 6 }, Gates(new[] { "REPORTS:REPORTS" }));
+        Assert.Equal(new decimal[] { 6 }, Gates(new[] { "REPORTS:PREDICTIONS" }));
+        Assert.True(PermissionCatalog.IsKnown("REPORTS:PREDICTIONS"));
     }
 
     [Fact]

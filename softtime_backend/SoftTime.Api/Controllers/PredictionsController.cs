@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SoftTime.Application.Abstractions;
+using SoftTime.Application.Security;
 using SoftTime.Application.Services;
 using SoftTime.Domain;
 
@@ -21,25 +22,35 @@ public class PredictionsController : ControllerBase
     private readonly MlJobCoordinator _jobs;
     private readonly ICurrentUser _user;
     private readonly ICompanyContext _company;
+    private readonly EffectiveRightsService _rights;
 
     public PredictionsController(
         MlPredictionService predictions,
         MlJobCoordinator jobs,
         ICurrentUser user,
-        ICompanyContext company)
+        ICompanyContext company,
+        EffectiveRightsService rights)
     {
         _predictions = predictions;
         _jobs = jobs;
         _user = user;
         _company = company;
+        _rights = rights;
     }
 
     [HttpGet("status")]
     public async Task<IActionResult> Status(CancellationToken ct)
-        => CanRead() ? Ok(await _predictions.GetStatusAsync(ct)) : Forbid();
+    {
+        await EnsureCanReadAsync(ct);
+        return Ok(await _predictions.GetStatusAsync(ct));
+    }
 
     [HttpGet("job")]
-    public IActionResult Job() => CanRead() ? Ok(_jobs.State) : Forbid();
+    public async Task<IActionResult> Job(CancellationToken ct)
+    {
+        await EnsureCanReadAsync(ct);
+        return Ok(_jobs.State);
+    }
 
     [HttpGet("absence")]
     public async Task<IActionResult> Absence(
@@ -49,8 +60,7 @@ public class PredictionsController : ControllerBase
         [FromQuery] int? categorie,
         CancellationToken ct)
     {
-        if (!CanRead())
-            return Forbid();
+        await EnsureCanReadAsync(ct);
 
         var debut = (from ?? DateTime.Today).Date;
         var fin = (to ?? debut.AddDays(14)).Date;
@@ -61,9 +71,10 @@ public class PredictionsController : ControllerBase
 
     [HttpGet("overtime")]
     public async Task<IActionResult> Overtime([FromQuery] DateTime? week, CancellationToken ct)
-        => CanRead()
-            ? Ok(await _predictions.GetHsForecastsAsync((week ?? DateTime.Today).Date, ct))
-            : Forbid();
+    {
+        await EnsureCanReadAsync(ct);
+        return Ok(await _predictions.GetHsForecastsAsync((week ?? DateTime.Today).Date, ct));
+    }
 
     /// <summary>Rafraîchit la fenêtre glissante (12 semaines par défaut) et régénère les prévisions.</summary>
     [HttpPost("refresh")]
@@ -80,7 +91,9 @@ public class PredictionsController : ControllerBase
     public IActionResult Train() => Enqueue(new MlJobRequest(_company.SageDatabase, FullRefresh: false, Train: true),
         "Réentraînement programmé.");
 
-    private bool CanRead() => _user.HasRight(Rights.Reports);
+    /// <summary>Lecture des prévisions : administrateur, ou porte 6 ET permission REPORTS:PREDICTIONS effective.</summary>
+    private Task EnsureCanReadAsync(CancellationToken ct)
+        => FineReadAccess.EnsureAsync(_user, _rights, Rights.Reports, "REPORTS:PREDICTIONS", ct);
 
     private IActionResult Enqueue(MlJobRequest job, string message)
     {
