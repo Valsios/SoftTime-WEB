@@ -3,7 +3,7 @@ import { inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { catchError, throwError } from 'rxjs';
 import { BaseAccessService } from '../base-access.service';
-import { errorMessage, isBaseAccessDenied, isMissingBaseError } from '../error.logic';
+import { errorMessage, isBaseAccessDenied, isMissingBaseError, previewFromConflict } from '../error.logic';
 import { SessionStore } from '../session.store';
 import { ToastService } from '../toast.service';
 
@@ -33,6 +33,8 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
       } else if (isMissingBaseError(err)) {
         // Aucune base active : l'état vide « Aucune base n'est disponible… » remplace l'erreur brute.
         if (!router.url.startsWith('/no-database')) router.navigate(['/no-database']);
+      } else if (previewFromConflict(err)) {
+        // Confirmation demandée par la page (changement de rôle) : pas une erreur à afficher.
       } else if (err.status === 403) {
         toast.error(errorMessage(err));
         if (isBaseAccessDenied(err)) void baseAccess.proposeReload();

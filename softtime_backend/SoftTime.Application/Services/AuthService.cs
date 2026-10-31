@@ -403,25 +403,50 @@ public class AuthService
                     throw new InvalidOperationException("Impossible de rétrograder le dernier administrateur.");
             }
 
-            if (entity.IDROLE != dto.RoleId && dto.ResetPermissions)
+            if (entity.IDROLE != dto.RoleId)
             {
+                // Lectures seulement jusqu'ici : un refus de confirmation n'écrit rien.
+                var adjustments = await _effectiveRights.AdjustmentsAsync(entity.IDRESPONSABLE, cancellationToken);
+                if (adjustments.Count > 0 && !dto.ConfirmClearAdjustments)
+                    throw new RoleChangeConfirmationRequiredException(
+                        new RoleChangePreviewDto(adjustments, adjustments.Count, entity.LOGIN ?? string.Empty));
+
+                // Les ajustements (et toute ligne personnelle) disparaissent dans la même sauvegarde que le changement de rôle.
                 var permRepo = _uow.Repository<T_USER_PERMISSION>();
                 var existingPerms = await permRepo.ListAsync(p => p.IDRESPONSABLE == entity.IDRESPONSABLE, cancellationToken);
                 var permsAvant = existingPerms
                     .Where(p => p.PERMISSION_CODE != EmptyPermissionsMarker)
                     .Select(p => p.PERMISSION_CODE)
                     .ToList();
-                permRepo.RemoveRange(existingPerms);
-                await EcrireAuditDroitAsync(
-                    currentUserId, caller.LOGIN ?? string.Empty,
-                    "USER", entity.IDRESPONSABLE, entity.NOMRESPONSABLE,
-                    "RESET_USER_PERMS",
-                    permsAvant, null,
-                    cancellationToken);
+                if (existingPerms.Count > 0)
+                {
+                    permRepo.RemoveRange(existingPerms);
+                    await EcrireAuditDroitAsync(
+                        currentUserId, caller.LOGIN ?? string.Empty,
+                        "USER", entity.IDRESPONSABLE, entity.NOMRESPONSABLE,
+                        "RESET_USER_PERMS",
+                        permsAvant, null,
+                        cancellationToken);
+                }
             }
         }
 
         return await ExecuteSaveUserInternalAsync(entity, dto, cancellationToken);
+    }
+
+    /// <summary>
+    /// Aperçu d'un changement de rôle : ajustements personnels qui seraient effacés. Lecture seule, administrateur seulement.
+    /// Si le rôle ne change pas ou si le compte n'a aucun ajustement, Count vaut 0.
+    /// </summary>
+    public async Task<RoleChangePreviewDto> PreviewRoleChangeAsync(decimal userId, decimal newRoleId, CancellationToken cancellationToken = default)
+    {
+        RequireAdministrator();
+        var user = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(userId, cancellationToken) ?? throw new KeyNotFoundException();
+        var login = user.LOGIN ?? string.Empty;
+        if (user.IDROLE == newRoleId)
+            return new RoleChangePreviewDto(Array.Empty<string>(), 0, login);
+        var adjustments = await _effectiveRights.AdjustmentsAsync(userId, cancellationToken);
+        return new RoleChangePreviewDto(adjustments, adjustments.Count, login);
     }
 
     /// <summary>Réservé aux tests (internal, sans garde) : le code de production doit transmettre l'identité de l'appelant.</summary>

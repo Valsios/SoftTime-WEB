@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '../../core/api';
+import { RoleChangePreview } from '../../core/error.logic';
 import { DbAccess, DepartementService, DepartementServiceOptions, Droit, PagedResult, Privilege, Role, RoleDetailedPermissions, SageDb, User } from '../models';
 
 @Injectable({ providedIn: 'root' })
@@ -21,6 +22,10 @@ export class UsersService extends ApiService {
   }
   update(id: number, dto: User): Observable<User> {
     return this.http.put<User>(this.url(`/api/users/${id}`), dto);
+  }
+  /** Aperçu d'un changement de rôle : ajustements personnels qui seraient effacés (lecture seule). */
+  rolePreview(id: number, newRoleId: number): Observable<RoleChangePreview> {
+    return this.http.post<RoleChangePreview>(this.url(`/api/users/${id}/role-change-preview`), { newRoleId });
   }
   remove(id: number): Observable<void> {
     return this.http.delete<void>(this.url(`/api/users/${id}`));

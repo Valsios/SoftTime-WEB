@@ -17,10 +17,21 @@ public record UserDto(decimal Id, decimal RoleId, string Nom, string Login, stri
     /// <summary>Adresse d'envoi des identifiants (facultative).</summary>
     public string? Email { get; init; }
 
-    /// <summary>Si vrai et que le rôle change, réinitialise les droits personnalisés de l'utilisateur (défaut false).</summary>
-    public bool ResetPermissions { get; init; } = false;
+    /// <summary>
+    /// Changement de rôle : à vrai, confirme l'effacement des ajustements personnels du compte (défaut false).
+    /// Sans cette confirmation, un changement de rôle d'un compte qui a des ajustements est refusé (409) et rien n'est écrit.
+    /// </summary>
+    public bool ConfirmClearAdjustments { get; init; } = false;
 
     public UserDto() : this(default, default, default!, default!, default, default) { }
+}
+
+/// <summary>Aperçu d'un changement de rôle : ajustements personnels qui seraient effacés (« +CODE » ajouté, « -CODE » retiré).</summary>
+public record RoleChangePreviewDto(IReadOnlyList<string> AdjustmentsToClear, int Count, string AccountLogin);
+
+public record RoleChangePreviewRequest(decimal NewRoleId)
+{
+    public RoleChangePreviewRequest() : this(default(decimal)) { }
 }
 
 /// <summary>Création du premier compte administrateur (installation vierge).</summary>

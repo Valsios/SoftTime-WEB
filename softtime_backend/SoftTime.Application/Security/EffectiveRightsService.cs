@@ -69,6 +69,25 @@ public sealed class EffectiveRightsService
 
     private async Task<EffectiveRights> LoadAsync(decimal userId, CancellationToken ct)
     {
+        var (role, rows, catalog) = await LoadInputsAsync(userId, ct);
+        return EffectiveRightsCalculator.ComputeEffectiveRights(role, rows, catalog);
+    }
+
+    /// <summary>
+    /// Ajustements personnels réels d'un compte par rapport à son rôle actuel : droits ajoutés (« +CODE ») et retirés (« -CODE »).
+    /// C'est ce qu'un changement de rôle effacerait ; lecture seule.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> AdjustmentsAsync(decimal userId, CancellationToken ct = default)
+    {
+        var (role, rows, catalog) = await LoadInputsAsync(userId, ct);
+        var roleOnly = EffectiveRightsCalculator.ComputeEffectiveRights(role, Array.Empty<PermissionRow>(), catalog);
+        var effective = EffectiveRightsCalculator.ComputeEffectiveRights(role, rows, catalog);
+        var (additions, removals) = EffectiveRightsCalculator.ConvertLegacyList(roleOnly.Permissions.ToList(), effective.Permissions.ToList());
+        return additions.Select(c => "+" + c).Concat(removals.Select(c => "-" + c)).ToList();
+    }
+
+    private async Task<(RoleDefinition Role, IReadOnlyCollection<PermissionRow> Rows, DatabaseCatalog Catalog)> LoadInputsAsync(decimal userId, CancellationToken ct)
+    {
         var user = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(userId, ct);
         var roleEntity = user is null ? null : await _uow.Repository<T_ROLE>().GetByIdAsync(user.IDROLE, ct);
 
@@ -95,7 +114,7 @@ public sealed class EffectiveRightsService
         var userRows = (await _uow.Repository<T_USER_PERMISSION>().ListAsync(p => p.IDRESPONSABLE == userId, ct))
             .Select(p => new PermissionRow(p.PERMISSION_CODE, p.IS_GRANTED)).ToList();
 
-        return EffectiveRightsCalculator.ComputeEffectiveRights(role, LegacyToDeviations(role, userRows, catalog), catalog);
+        return (role, LegacyToDeviations(role, userRows, catalog), catalog);
     }
 
     /// <summary>

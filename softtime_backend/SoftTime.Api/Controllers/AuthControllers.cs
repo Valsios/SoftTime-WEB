@@ -109,8 +109,22 @@ public class UsersController : ControllerBase
     {
         if (_user.UserId is not decimal currentUserId)
             return Unauthorized();
-        return Ok(await _auth.SaveUserAsync(currentUserId, dto with { Id = id }, ct));
+        try
+        {
+            return Ok(await _auth.SaveUserAsync(currentUserId, dto with { Id = id }, ct));
+        }
+        catch (RoleChangeConfirmationRequiredException ex)
+        {
+            // Même corps que l'aperçu : le client demande confirmation puis renvoie confirmClearAdjustments = true.
+            return StatusCode(StatusCodes.Status409Conflict, ex.Preview);
+        }
     }
+
+    /// <summary>Aperçu d'un changement de rôle (lecture seule) : ajustements personnels qui seraient effacés.</summary>
+    [RequireAdmin]
+    [HttpPost("{id}/role-change-preview")]
+    public async Task<IActionResult> RoleChangePreview(decimal id, [FromBody] RoleChangePreviewRequest request, CancellationToken ct)
+        => Ok(await _auth.PreviewRoleChangeAsync(id, request.NewRoleId, ct));
 
     [RequireAdmin]
     [HttpDelete("{id}")]

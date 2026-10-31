@@ -1,10 +1,12 @@
-import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
 import { Droit } from '../../core/rights';
+import { RoleChangePreview, previewFromConflict } from '../../core/error.logic';
+import { confirmFlag, confirmationMessage, needsConfirmation } from './role-change.logic';
 import { PasswordPolicy, Role, User, PageChangeEvent } from '../../shared/models';
 import { CardPaieService } from '../../shared/services/catalog.service';
 import { PasswordPolicyService } from '../../shared/services/password-policy.service';
@@ -67,7 +69,7 @@ import {
             [policy]="policy()"
           ></password-policy-hint>
         </div>
-        <soft-select label="Rôle" [(ngModel)]="form.roleId" name="roleId" [options]="roleOptions()"></soft-select>
+        <soft-select label="Rôle" [ngModel]="form.roleId" (ngModelChange)="onRoleChange($event)" name="roleId" [options]="roleOptions()"></soft-select>
       </div>
       <div footer>
         <soft-button variant="ghost" (click)="modal.set(false)">Annuler</soft-button>
@@ -90,6 +92,7 @@ export class UsersPage implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly session = inject(SessionStore);
+  private readonly cdr = inject(ChangeDetectorRef);
 
   readonly canCreate = computed(() => this.session.hasPermission('PARAMS:USERS:CREATE', Droit.Parameters));
   readonly canUpdate = computed(() => this.session.hasPermission('PARAMS:USERS:UPDATE', Droit.Parameters));
@@ -108,6 +111,9 @@ export class UsersPage implements OnInit {
   readonly matriculeOptions = signal<{ value: string; label: string }[]>([]);
   readonly policy = signal<PasswordPolicy | null>(null);
   form: Partial<User> = {};
+  /** Rôle du compte à l'ouverture de la modification, et confirmation d'effacement des ajustements si le rôle change. */
+  private originalRoleId: number | null = null;
+  private roleChangeConfirmed = false;
 
   readonly columns: Column[] = [
     { key: 'id', label: 'ID' },
@@ -168,7 +174,47 @@ export class UsersPage implements OnInit {
   }
 
   openCreate(): void { this.editId.set(null); this.form = { roleId: this.roleOptions()[0]?.value ?? 0 }; this.modal.set(true); }
-  openEdit(row: Record<string, unknown>): void { this.editId.set(row['id'] as number); this.form = { ...(row as unknown as User) }; this.modal.set(true); }
+  openEdit(row: Record<string, unknown>): void {
+    this.editId.set(row['id'] as number);
+    this.form = { ...(row as unknown as User) };
+    this.originalRoleId = Number(this.form.roleId);
+    this.roleChangeConfirmed = false;
+    this.modal.set(true);
+  }
+
+  /**
+   * Changement de rôle d'un compte existant : le serveur dit quels ajustements personnels seraient effacés ;
+   * s'il y en a, on demande confirmation, sinon on restaure l'ancien rôle sans rien envoyer.
+   */
+  onRoleChange(newRoleId: number | string | null): void {
+    const id = this.editId();
+    this.form.roleId = Number(newRoleId);
+    if (!id || this.originalRoleId === null || this.form.roleId === this.originalRoleId) {
+      this.roleChangeConfirmed = false;
+      return;
+    }
+    this.roleChangeConfirmed = false;
+    this.svc.rolePreview(id, this.form.roleId).subscribe({
+      next: (preview) => {
+        if (!needsConfirmation(preview)) return;
+        void this.askRoleChange(preview);
+      },
+      error: () => this.restoreRole(),
+    });
+  }
+
+  private async askRoleChange(preview: RoleChangePreview): Promise<boolean> {
+    const ok = await this.confirm.ask(confirmationMessage(preview), 'Changement de rôle', 'Continuer');
+    this.roleChangeConfirmed = ok;
+    if (!ok) this.restoreRole();
+    return ok;
+  }
+
+  private restoreRole(): void {
+    if (this.originalRoleId !== null) this.form.roleId = this.originalRoleId;
+    this.roleChangeConfirmed = false;
+    this.cdr.markForCheck();
+  }
 
   /** Un mot de passe saisi doit respecter la politique ; en modification, un champ vide conserve l'ancien. */
   passwordValid(): boolean {
@@ -197,8 +243,17 @@ export class UsersPage implements OnInit {
     const id = this.editId();
     const dto = this.form as User;
     this.saving.set(true);
-    const req = id ? this.svc.update(id, { ...dto, id }) : this.svc.create({ ...dto, id: 0 });
-    req.subscribe({ next: () => { this.saving.set(false); this.modal.set(false); this.toast.success('Enregistré.'); this.loadPage(); }, error: () => this.saving.set(false) });
+    const confirmClearAdjustments = confirmFlag(this.roleChangeConfirmed, this.originalRoleId, dto.roleId);
+    const req = id ? this.svc.update(id, { ...dto, id, confirmClearAdjustments }) : this.svc.create({ ...dto, id: 0 });
+    req.subscribe({
+      next: () => { this.saving.set(false); this.modal.set(false); this.toast.success('Enregistré.'); this.loadPage(); },
+      error: (err) => {
+        this.saving.set(false);
+        // Un 409 malgré l'aperçu (droits modifiés entre-temps) est une demande de confirmation, pas une erreur.
+        const preview = previewFromConflict(err);
+        if (preview) void this.askRoleChange(preview).then((ok) => { if (ok) this.save(); });
+      },
+    });
   }
 
   async remove(row: Record<string, unknown>): Promise<void> {

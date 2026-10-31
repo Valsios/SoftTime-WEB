@@ -326,7 +326,7 @@ public class RolePermissionsTests
     }
 
     [Fact]
-    public async Task SaveUserAsync_RoleChangeWithResetPermissions_SingleSaveChangesAsync_AuditResetPresent()
+    public async Task SaveUserAsync_RoleChangeWithConfirmedClear_SingleSaveChangesAsync_AuditResetPresent()
     {
         // Utilisateur 2 (actuellement IDROLE = 2) a des permissions personnalisées
         _uow.GetRepo<T_USER_PERMISSION>().Items.Add(new T_USER_PERMISSION
@@ -339,7 +339,7 @@ public class RolePermissionsTests
 
         var dto = new UserDto(2, 3, "Simple User", "user", null, null)
         {
-            ResetPermissions = true
+            ConfirmClearAdjustments = true
         };
 
         _uow.ResetSaveChangesCount();
@@ -482,14 +482,14 @@ public class RolePermissionsTests
     #region C6 — Changement de rôle et resetPermissions
 
     [Fact]
-    public async Task SaveUserAsync_ResetPermissions_AppliedWhenRoleActuallyChanges()
+    public async Task SaveUserAsync_ConfirmClearAdjustments_AppliedWhenRoleActuallyChanges()
     {
         // Utilisateur 3 avec rôle 2 et personnalisation
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 3, IDROLE = 2, LOGIN = "user3", NOMRESPONSABLE = "User 3" });
         _uow.GetRepo<T_USER_PERMISSION>().Items.Add(new T_USER_PERMISSION { IDRESPONSABLE = 3, PERMISSION_CODE = "PARAMS:USERS", IS_GRANTED = true });
 
-        // Changement de rôle vers 3 avec ResetPermissions = true
-        var updateDto = new UserDto(3, 3, "User 3", "user3", null, null) { ResetPermissions = true };
+        // Changement de rôle vers 3 avec ConfirmClearAdjustments = true
+        var updateDto = new UserDto(3, 3, "User 3", "user3", null, null) { ConfirmClearAdjustments = true };
         await _auth.SaveUserAsync(currentUserId: 1, updateDto);
 
         // Permissions personnalisées purgées
@@ -502,14 +502,14 @@ public class RolePermissionsTests
     }
 
     [Fact]
-    public async Task SaveUserAsync_ResetPermissions_IgnoredWhenRoleUnchanged()
+    public async Task SaveUserAsync_ConfirmClearAdjustments_IgnoredWhenRoleUnchanged()
     {
         // Utilisateur 3 avec rôle 2 et personnalisation
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 3, IDROLE = 2, LOGIN = "user3", NOMRESPONSABLE = "User 3" });
         _uow.GetRepo<T_USER_PERMISSION>().Items.Add(new T_USER_PERMISSION { IDRESPONSABLE = 3, PERMISSION_CODE = "PARAMS:USERS", IS_GRANTED = true });
 
-        // Même rôle 2 avec ResetPermissions = true
-        var updateDto = new UserDto(3, 2, "User 3 Modif Nom", "user3", null, null) { ResetPermissions = true };
+        // Même rôle 2 avec ConfirmClearAdjustments = true
+        var updateDto = new UserDto(3, 2, "User 3 Modif Nom", "user3", null, null) { ConfirmClearAdjustments = true };
         await _auth.SaveUserAsync(currentUserId: 1, updateDto);
 
         // Permissions personnalisées NON purgées (car le rôle n'a pas changé)

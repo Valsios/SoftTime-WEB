@@ -129,6 +129,10 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         Account(10072, 91, "privreader", false, "PARAMS:PRIVILEGES");
         Account(10073, 91, "dbreader", false, "PARAMS:DB_ACCESS");
         Account(10074, 91, "paramsother", false, "PARAMS:CATEGORIES");
+        // Étape 4b-8 : comptes avec ajustements personnels (rôle 91 sans droits : chaque ligne est un ajout).
+        Account(10080, 91, "adjusted1", false, "PROC:SHIFTS", "PROC:PUNCHES");
+        Account(10081, 91, "adjusted2", false, "PROC:SHIFTS", "PROC:PUNCHES");
+        Account(10083, 91, "adjusted3", false, "PROC:SHIFTS", "PROC:PUNCHES");
     }
 
     public static string Token(decimal userId, decimal roleId, params int[] rights)

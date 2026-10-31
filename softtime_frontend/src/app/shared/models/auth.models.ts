@@ -40,8 +40,8 @@ export interface User {
   password?: string | null;
   /** Adresse d'envoi des identifiants (facultative). */
   email?: string | null;
-  /** Demande de remise à zéro des droits personnalisés de l'utilisateur. */
-  resetPermissions?: boolean;
+  /** Changement de rôle : confirme l'effacement des ajustements personnels du compte (sinon le serveur répond 409). */
+  confirmClearAdjustments?: boolean;
 }
 
 /** Droits détaillés d'un rôle (`GET /api/privileges/role/{roleId}`). */

@@ -39,3 +39,26 @@ export function errorMessage(err: HttpErrorLike): string {
   if (err.status === 403) return FORBIDDEN_DEFAULT_MESSAGE;
   return err.message || 'Une erreur est survenue.';
 }
+
+/** Aperçu d'un changement de rôle renvoyé par le serveur (POST users/{id}/role-change-preview, ou corps d'un 409). */
+export interface RoleChangePreview {
+  adjustmentsToClear: string[];
+  count: number;
+  accountLogin: string;
+}
+
+export function parseRoleChangePreview(body: unknown): RoleChangePreview | null {
+  if (!body || typeof body !== 'object') return null;
+  const b = body as { adjustmentsToClear?: unknown; count?: unknown; accountLogin?: unknown };
+  if (!Array.isArray(b.adjustmentsToClear) || typeof b.count !== 'number') return null;
+  return {
+    adjustmentsToClear: b.adjustmentsToClear.filter((c): c is string => typeof c === 'string'),
+    count: b.count,
+    accountLogin: typeof b.accountLogin === 'string' ? b.accountLogin : '',
+  };
+}
+
+/** 409 « confirmation requise » : une demande de confirmation de la page, pas une erreur à afficher. */
+export function previewFromConflict(err: HttpErrorLike): RoleChangePreview | null {
+  return err.status === 409 ? parseRoleChangePreview(err.error) : null;
+}
