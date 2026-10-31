@@ -109,9 +109,26 @@ public class PunchProcessingService
         var corrRepo = _uow.Repository<T_HEURECORRIGER>();
         var anomRepo = _uow.Repository<T_HEUREANOMALIE>();
 
-        // Purge des lignes issues du pré-traitement ; tout le reste est protégé.
+        var semainesProtegees = semainesValidees
+            .GroupBy(v => MatriculeIdentity.Cle(v.MATRICULES))
+            .ToDictionary(g => g.Key, g => g.Select(v => v.DATE_DEB!.Value.Date).ToHashSet());
+        bool SemaineValidee(string cle, DateTime jour)
+        {
+            var lundi = jour.AddDays(-(((int)jour.DayOfWeek + 6) % 7));
+            return semainesProtegees.TryGetValue(cle, out var lundis) && lundis.Contains(lundi);
+        }
+
+        // Purge des lignes issues du pré-traitement, limitée à ce qui va être régénéré : salariés du
+        // périmètre demandé (département, plage de matricules, pointeuse) hors semaines validées.
+        // Les autres lignes AUTO de la période ne sont pas retraitées : les effacer les perdrait.
+        var clesPerimetre = cards
+            .Select(c => MatriculeIdentity.Cle(c.SAGE_MATRICULE))
+            .ToHashSet(StringComparer.Ordinal);
         var aPurger = correctionsExistantes
             .Where(h => string.Equals(h.ORIGINE, PunchProcessingConfiguration.OrigineAuto, StringComparison.OrdinalIgnoreCase))
+            .Where(h => h.DATE_POINTAGE_IN.HasValue && !string.IsNullOrWhiteSpace(h.MATRICULE_SAGE))
+            .Where(h => clesPerimetre.Contains(MatriculeIdentity.Cle(h.MATRICULE_SAGE)))
+            .Where(h => !SemaineValidee(MatriculeIdentity.Cle(h.MATRICULE_SAGE), h.DATE_POINTAGE_IN!.Value.Date))
             .ToList();
         if (aPurger.Count > 0)
             corrRepo.RemoveRange(aPurger);
@@ -121,9 +138,6 @@ public class PunchProcessingService
             .Where(h => h.DATE_POINTAGE_IN.HasValue && !string.IsNullOrWhiteSpace(h.MATRICULE_SAGE))
             .GroupBy(h => MatriculeIdentity.Cle(h.MATRICULE_SAGE))
             .ToDictionary(g => g.Key, g => g.Select(h => h.DATE_POINTAGE_IN!.Value.Date).ToHashSet());
-        var semainesProtegees = semainesValidees
-            .GroupBy(v => MatriculeIdentity.Cle(v.MATRICULES))
-            .ToDictionary(g => g.Key, g => g.Select(v => v.DATE_DEB!.Value.Date).ToHashSet());
 
         var pointagesParCle = pointages
             .GroupBy(p => MatriculeIdentity.Cle(p.MATRICULE_SAGE))
@@ -149,8 +163,7 @@ public class PunchProcessingService
         {
             if (joursProteges.TryGetValue(cle, out var jours) && jours.Contains(jour))
                 return true;
-            var lundi = jour.AddDays(-(((int)jour.DayOfWeek + 6) % 7));
-            return semainesProtegees.TryGetValue(cle, out var lundis) && lundis.Contains(lundi);
+            return SemaineValidee(cle, jour);
         }
 
         void SupprimerAnomaliesDuJour(string cle, DateTime jour)

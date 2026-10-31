@@ -191,6 +191,22 @@ public class TimekeepingService
                 $"La semaine du {lundi:dd/MM/yyyy} est validée : annulez la validation avant de modifier les pointages.");
     }
 
+    /// <summary>
+    /// Semaines validées de la base active, par (clé matricule, lundi) : chargées une fois pour les
+    /// opérations de masse (import, validation d'anomalies) au lieu d'une requête par ligne.
+    /// </summary>
+    private async Task<HashSet<(string Cle, DateTime Lundi)>> ChargerSemainesValideesAsync(string sageDb, CancellationToken ct)
+        => (await _uow.Repository<T_HS_VALIDER>().ListAsync(
+                v => v.BDD_SAGE == sageDb && v.VALIDATION_HS == true && v.DATE_DEB != null, ct))
+            .Where(v => !string.IsNullOrWhiteSpace(v.MATRICULES))
+            .Select(v => (MatriculeIdentity.Cle(v.MATRICULES), v.DATE_DEB!.Value.Date))
+            .ToHashSet();
+
+    private static DateTime Lundi(DateTime jour) => jour.Date.AddDays(-(((int)jour.DayOfWeek + 6) % 7));
+
+    private static bool AbsenceJourneeComplete(T_HEUREANOMALIE anomalie)
+        => anomalie.ABS_AM == true && anomalie.ABS_PM == true;
+
     /// <summary>Comparaison de matricule insensible au remplissage par des zéros (« 00369 » == « 369 »).</summary>
     private static bool MemeIdentifiant(string? a, string? b)
     {
@@ -461,13 +477,41 @@ public class TimekeepingService
         if (anomalies.Count == 0)
             throw new InvalidOperationException("Aucune anomalie trouvée pour les identifiants fournis.");
 
-        var incompletes = anomalies.Where(a => a.HENTREE is null || a.HSORTIE is null).ToList();
+        // Une absence de la journée complète (matin et après-midi) se valide sans heures : c'est
+        // l'arbitrage « le salarié était absent ». Des heures saisies en plus seraient payées.
+        var contradictoires = anomalies
+            .Where(a => AbsenceJourneeComplete(a) && (a.HENTREE.HasValue || a.HSORTIE.HasValue))
+            .ToList();
+        if (contradictoires.Count > 0)
+        {
+            var detail = string.Join(", ", contradictoires.Take(5)
+                .Select(a => $"{a.MATRICULE_SAGE} du {a.DATE_POINTAGE_IN?.ToString("dd/MM/yyyy") ?? "?"}"));
+            throw new InvalidOperationException(
+                $"Absence de la journée complète et heures saisies pour : {detail}. Retirez les heures ou l'absence avant de valider.");
+        }
+
+        var incompletes = anomalies
+            .Where(a => !AbsenceJourneeComplete(a) && (a.HENTREE is null || a.HSORTIE is null))
+            .ToList();
         if (incompletes.Count > 0)
         {
             var detail = string.Join(", ", incompletes.Take(5)
                 .Select(a => $"{a.MATRICULE_SAGE} du {a.DATE_POINTAGE_IN?.ToString("dd/MM/yyyy") ?? "?"}"));
             throw new InvalidOperationException(
                 $"Heure d'entrée ou de sortie manquante pour : {detail}. Renseignez-les avant de valider.");
+        }
+
+        var semainesValidees = await ChargerSemainesValideesAsync(_tenant.SageDb, ct);
+        var verrouillees = anomalies
+            .Where(a => a.DATE_POINTAGE_IN.HasValue
+                        && semainesValidees.Contains((MatriculeIdentity.Cle(a.MATRICULE_SAGE), Lundi(a.DATE_POINTAGE_IN.Value))))
+            .ToList();
+        if (verrouillees.Count > 0)
+        {
+            var detail = string.Join(", ", verrouillees.Take(5)
+                .Select(a => $"{a.MATRICULE_SAGE} du {a.DATE_POINTAGE_IN:dd/MM/yyyy}"));
+            throw new InvalidOperationException(
+                $"Semaine validée pour : {detail}. Annulez la validation avant de modifier les heures.");
         }
 
         var corrRepo = _uow.Repository<T_HEURECORRIGER>();
@@ -600,6 +644,9 @@ public class TimekeepingService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var repo = _uow.Repository<T_HEURECORRIGER>();
+        var sageDb = _tenant.SageDb;
+        // La semaine cible ne doit pas être validée (ni, pour une modification, la semaine d'origine).
+        await RefuserSiSemaineValideeAsync(sageDb, dto.Matricule, dto.DateIn, ct);
         T_HEURECORRIGER entity;
         if (dto.Id == 0)
         {
@@ -617,6 +664,7 @@ public class TimekeepingService
         else
         {
             entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
+            await RefuserSiSemaineValideeAsync(sageDb, entity.MATRICULE_SAGE, entity.DATE_POINTAGE_IN, ct);
             entity.ORIGINE = PunchProcessingConfiguration.OrigineManuel;
             Apply(dto, entity);
             repo.Update(entity);
@@ -632,6 +680,7 @@ public class TimekeepingService
         var sageDb = _tenant.SageDb;
         var e = (await repo.ListAsync(h => h.ID == id && h.BDD_SAGE == sageDb, ct)).FirstOrDefault()
                 ?? throw new KeyNotFoundException();
+        await RefuserSiSemaineValideeAsync(sageDb, e.MATRICULE_SAGE, e.DATE_POINTAGE_IN, ct);
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
     }
@@ -640,20 +689,28 @@ public class TimekeepingService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var repo = _uow.Repository<T_HEURECORRIGER>();
+        var semainesValidees = await ChargerSemainesValideesAsync(_tenant.SageDb, ct);
         var imported = 0;
-        var skipped = 0;
+        var sansMatricule = 0;
+        var verrouillees = 0;
         foreach (var row in rows)
         {
             var matr = ExcelCells.Get(row, "Matricule", "MATRICULE", "Matricule SAGE");
             if (string.IsNullOrWhiteSpace(matr))
             {
-                skipped++;
+                sansMatricule++;
                 continue;
             }
             ExcelCells.TryDate(ExcelCells.Get(row, "DateEntree", "DATE ENTREE", "Date entrée", "Date in"), out var dIn);
             ExcelCells.TryDate(ExcelCells.Get(row, "DateSortie", "DATE SORTIE", "Date sortie", "Date out"), out var dOut);
             ExcelCells.TryTime(ExcelCells.Get(row, "HeureEntree", "HEURE ENTREE", "Heure entrée"), out var hIn);
             ExcelCells.TryTime(ExcelCells.Get(row, "HeureSortie", "HEURE SORTIE", "Heure sortie"), out var hOut);
+            // Une semaine validée est figée : la ligne est ignorée plutôt que d'en changer les heures.
+            if (dIn != default && semainesValidees.Contains((MatriculeIdentity.Cle(matr), Lundi(dIn))))
+            {
+                verrouillees++;
+                continue;
+            }
             await repo.AddAsync(new T_HEURECORRIGER
             {
                 MATRICULE_SAGE = matr,
@@ -670,9 +727,15 @@ public class TimekeepingService
             imported++;
         }
         await _uow.SaveChangesAsync(ct);
+        var skipped = sansMatricule + verrouillees;
         var message = $"{imported} correction(s) importée(s), {skipped} ligne(s) ignorée(s)";
-        if (skipped > 0)
-            message += " (matricule manquant)";
+        var motifs = new List<string>();
+        if (sansMatricule > 0)
+            motifs.Add("matricule manquant");
+        if (verrouillees > 0)
+            motifs.Add($"{verrouillees} sur une semaine validée");
+        if (motifs.Count > 0)
+            message += $" ({string.Join(", ", motifs)})";
         return new ImportResultDto(imported, skipped, message + ".");
     }
 

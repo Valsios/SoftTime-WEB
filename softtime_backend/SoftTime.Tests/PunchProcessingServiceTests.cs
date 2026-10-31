@@ -367,4 +367,58 @@ public class PunchProcessingServiceTests
 
         Assert.Empty(contexte.Anomalies);
     }
+
+    private static T_HEURECORRIGER CorrectionAuto(string matricule, DateTime jour) => new()
+    {
+        BDD_SAGE = "SAGE_TEST",
+        BDD_POINTEUSE = "PTE_TEST",
+        MATRICULE_SAGE = matricule,
+        DATE_POINTAGE_IN = jour.Date,
+        DATE_POINTAGE_OUT = jour.Date,
+        HENTREE = new TimeSpan(8, 0, 0),
+        HSORTIE = new TimeSpan(17, 0, 0),
+        ORIGINE = "AUTO"
+    };
+
+    [Fact]
+    public async Task Traitement_FiltreDepartement_NePurgePasLesCorrectionsDesAutresSalaries()
+    {
+        var contexte = new Contexte();
+        contexte.Uow.Get<T_CARDPAIE>().Items[0].DEPARTEMENT = "ATELIER";
+        contexte.Uow.Get<T_CARDPAIE>().Items.Add(new T_CARDPAIE
+        {
+            ID = 2,
+            SAGE_MATRICULE = "002",
+            SAGE_BDD = "SAGE_TEST",
+            POINTEUSE_BDD = "PTE_TEST",
+            DEPARTEMENT = "BUREAU"
+        });
+        var autre = CorrectionAuto("002", Lundi);
+        contexte.Corrections.Add(autre);
+
+        await contexte.Service.ProcessAsync(new PeriodRequest(null, null, Lundi, Lundi, "ATELIER"));
+
+        Assert.Contains(autre, contexte.Corrections);
+    }
+
+    [Fact]
+    public async Task Traitement_SemaineValidee_ConserveSesCorrectionsAuto()
+    {
+        var contexte = new Contexte();
+        var validee = CorrectionAuto("001", Lundi);
+        contexte.Corrections.Add(validee);
+        contexte.Uow.Get<T_HS_VALIDER>().Items.Add(new T_HS_VALIDER
+        {
+            BDD_SAGE = "SAGE_TEST",
+            MATRICULES = "001",
+            DATE_DEB = Lundi,
+            DATE_FIN = Lundi.AddDays(6),
+            VALIDATION_HS = true
+        });
+
+        var resultat = await contexte.Traiter(Lundi, Lundi);
+
+        Assert.Contains(validee, contexte.Corrections);
+        Assert.Equal(1, resultat.JoursIgnores);
+    }
 }
