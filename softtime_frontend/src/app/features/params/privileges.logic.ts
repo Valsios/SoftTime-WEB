@@ -87,3 +87,42 @@ export function resolveRoleLabel(
   const role = roles.find((r) => r.id === roleId);
   return role?.nom?.trim() ? role.nom : `Rôle #${roleId}`;
 }
+
+/** Écarts d'un compte par rapport aux droits de son rôle. */
+export interface PermissionSources {
+  /** Codes accordés au compte mais pas à son rôle. */
+  added: Set<string>;
+  /** Codes du rôle absents du compte. */
+  removed: Set<string>;
+  count: number;
+}
+
+/** Marqueurs internes du stockage (par exemple « aucun droit ») : jamais des droits. */
+export function isInternalMarker(code: string): boolean {
+  return code.startsWith('__SOFTTIME_EMPTY_');
+}
+
+export function computeSources(rolePermissions: Iterable<string>, userPermissions: Iterable<string>): PermissionSources {
+  const role = new Set([...rolePermissions].filter((c) => !isInternalMarker(c)));
+  const user = new Set([...userPermissions].filter((c) => !isInternalMarker(c)));
+  const added = new Set([...user].filter((c) => !role.has(c)));
+  const removed = new Set([...role].filter((c) => !user.has(c)));
+  return { added, removed, count: added.size + removed.size };
+}
+
+/** Libellé du badge d'un compte personnalisé : « Personnalisé · +A −R ». */
+export function customizedBadgeLabel(sources: PermissionSources): string {
+  return `Personnalisé · +${sources.added.size} \u2212${sources.removed.size}`;
+}
+
+export function buildResetToRoleMessage(roleName: string, adjustments: number, hasUnsavedChanges: boolean): string {
+  const effaces = adjustments === 1 ? 'Le 1 ajustement personnel sera effacé.' : `Les ${adjustments} ajustements personnels seront effacés.`;
+  const base = `Revenir aux droits du rôle ${roleName} ? ${effaces}`;
+  return hasUnsavedChanges ? `${base} Les modifications non enregistrées sur ce compte seront aussi perdues.` : base;
+}
+
+/** Suite du message de succès après enregistrement : les droits ne changent que lorsque le jeton est renouvelé. */
+export function appliesAtNextLoginNote(mode: 'user' | 'role'): string {
+  const who = mode === 'user' ? 'de la personne' : 'des personnes de ce rôle';
+  return `Les changements s'appliquent à la prochaine connexion ${who} (jusqu'à 12 h).`;
+}

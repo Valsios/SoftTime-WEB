@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, HostListener, inject, OnInit, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
 import { PointeuseDb, Role, SageDb, User } from '../../shared/models';
@@ -9,9 +10,14 @@ import { PrivilegesService, RolesService, SageDatabasesService, UsersService } f
 import { PrivilegesDraftService } from '../../shared/services/privileges-draft.service';
 import { AuthService } from '../../shared/services/auth.service';
 import { Icon } from '../../shared/components/icon';
+import { PermMark } from './perm-mark';
 import {
+  appliesAtNextLoginNote,
+  buildResetToRoleMessage,
   buildRoleImpactMessage,
   canEditRolePermissions,
+  computeSources,
+  customizedBadgeLabel,
   countUsersOfRole,
   diffPermissions,
   extractErrorMessage,
@@ -40,7 +46,7 @@ interface FeatureCategory {
 @Component({
   selector: 'app-privileges',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, FormsModule, Icon],
+  imports: [CommonModule, FormsModule, Icon, PermMark],
   template: `
     <!-- En-tête de page - Conforme Charte Softwell §7.1 N°3 et N°4 -->
     <header class="sw-page-header">
@@ -161,8 +167,8 @@ interface FeatureCategory {
               <app-icon name="shield" [size]="14"></app-icon>
               Rôle : {{ getRoleLabel(u.roleId) }}
             </span>
-            <span class="sw-badge" [class.sw-badge-custom]="adminLocked() || isCustomized()" [class.sw-badge-default]="!adminLocked() && !isCustomized()">
-              {{ adminLocked() ? 'Tous les droits' : (isCustomized() ? 'Permissions personnalisées' : 'Permissions par défaut (Rôle)') }}
+            <span class="sw-badge" [class.sw-badge-custom]="adminLocked() || showCustomized()" [class.sw-badge-default]="!adminLocked() && !showCustomized()">
+              {{ badgeLabel() }}
             </span>
           </div>
 
@@ -180,6 +186,17 @@ interface FeatureCategory {
               >
                 Tout décocher
               </button>
+              @if (canResetToRole()) {
+                <button
+                  type="button"
+                  class="sw-btn-sm"
+                  [disabled]="saving() || permissionsLoading()"
+                  (click)="resetToRole()"
+                  title="Effacer les ajustements personnels et reprendre les droits du rôle"
+                >
+                  Revenir aux droits du rôle
+                </button>
+              }
             </div>
           }
         } @else {
@@ -252,6 +269,7 @@ interface FeatureCategory {
                 [disabled]="isReadOnly('SAGE:CREATE')"
                 (change)="toggle('SAGE:CREATE', $event)"
               />
+              <perm-mark [kind]="mark('SAGE:CREATE')"></perm-mark>
               <span>Ajouter une base</span>
               @if (isMandatory('SAGE:CREATE')) {
                 <span class="sw-lock-indicator" title="Obligatoire pour le profil Administrateur">
@@ -293,6 +311,7 @@ interface FeatureCategory {
                           [disabled]="isReadOnly('SAGE:' + db.nomBd + ':READ')"
                           (change)="toggle('SAGE:' + db.nomBd + ':READ', $event)"
                         />
+                        <perm-mark [kind]="mark('SAGE:' + db.nomBd + ':READ')"></perm-mark>
                         <span>Consulter</span>
                         @if (isMandatory('SAGE:' + db.nomBd + ':READ')) {
                           <span class="sw-lock-dot" title="Obligatoire pour l'administrateur"></span>
@@ -306,6 +325,7 @@ interface FeatureCategory {
                           [disabled]="isReadOnly('SAGE:' + db.nomBd + ':UPDATE')"
                           (change)="toggle('SAGE:' + db.nomBd + ':UPDATE', $event)"
                         />
+                        <perm-mark [kind]="mark('SAGE:' + db.nomBd + ':UPDATE')"></perm-mark>
                         <span>Modifier</span>
                         @if (isMandatory('SAGE:' + db.nomBd + ':UPDATE')) {
                           <span class="sw-lock-dot" title="Obligatoire pour l'administrateur"></span>
@@ -319,6 +339,7 @@ interface FeatureCategory {
                           [disabled]="isReadOnly('SAGE:' + db.nomBd + ':DELETE')"
                           (change)="toggle('SAGE:' + db.nomBd + ':DELETE', $event)"
                         />
+                        <perm-mark [kind]="mark('SAGE:' + db.nomBd + ':DELETE')"></perm-mark>
                         <span>Supprimer</span>
                         @if (isMandatory('SAGE:' + db.nomBd + ':DELETE')) {
                           <span class="sw-lock-dot" title="Obligatoire pour l'administrateur"></span>
@@ -355,6 +376,7 @@ interface FeatureCategory {
                 [disabled]="isReadOnly('POINTEUSE:CREATE')"
                 (change)="toggle('POINTEUSE:CREATE', $event)"
               />
+              <perm-mark [kind]="mark('POINTEUSE:CREATE')"></perm-mark>
               <span>Ajouter une base</span>
               @if (isMandatory('POINTEUSE:CREATE')) {
                 <span class="sw-lock-indicator" title="Obligatoire pour le profil Administrateur">
@@ -396,6 +418,7 @@ interface FeatureCategory {
                           [disabled]="isReadOnly('POINTEUSE:' + db.nomBd + ':READ')"
                           (change)="toggle('POINTEUSE:' + db.nomBd + ':READ', $event)"
                         />
+                        <perm-mark [kind]="mark('POINTEUSE:' + db.nomBd + ':READ')"></perm-mark>
                         <span>Consulter</span>
                         @if (isMandatory('POINTEUSE:' + db.nomBd + ':READ')) {
                           <span class="sw-lock-dot" title="Obligatoire pour l'administrateur"></span>
@@ -409,6 +432,7 @@ interface FeatureCategory {
                           [disabled]="isReadOnly('POINTEUSE:' + db.nomBd + ':UPDATE')"
                           (change)="toggle('POINTEUSE:' + db.nomBd + ':UPDATE', $event)"
                         />
+                        <perm-mark [kind]="mark('POINTEUSE:' + db.nomBd + ':UPDATE')"></perm-mark>
                         <span>Modifier</span>
                         @if (isMandatory('POINTEUSE:' + db.nomBd + ':UPDATE')) {
                           <span class="sw-lock-dot" title="Obligatoire pour l'administrateur"></span>
@@ -422,6 +446,7 @@ interface FeatureCategory {
                           [disabled]="isReadOnly('POINTEUSE:' + db.nomBd + ':DELETE')"
                           (change)="toggle('POINTEUSE:' + db.nomBd + ':DELETE', $event)"
                         />
+                        <perm-mark [kind]="mark('POINTEUSE:' + db.nomBd + ':DELETE')"></perm-mark>
                         <span>Supprimer</span>
                         @if (isMandatory('POINTEUSE:' + db.nomBd + ':DELETE')) {
                           <span class="sw-lock-dot" title="Obligatoire pour l'administrateur"></span>
@@ -477,6 +502,7 @@ interface FeatureCategory {
                         [disabled]="isReadOnly(item.code)"
                         (change)="toggle(item.code, $event)"
                       />
+                      <perm-mark [kind]="mark(item.code)"></perm-mark>
                       <strong class="sw-perm-item-title">{{ item.label }}</strong>
                       @if (isMandatory(item.code)) {
                         <span class="sw-lock-indicator" title="Obligatoire pour le profil Administrateur">
@@ -495,6 +521,7 @@ interface FeatureCategory {
                               [disabled]="isReadOnly(item.code + ':CREATE')"
                               (change)="toggle(item.code + ':CREATE', $event)"
                             />
+                            <perm-mark [kind]="mark(item.code + ':CREATE')"></perm-mark>
                             <span>Ajouter</span>
                             @if (isMandatory(item.code + ':CREATE')) {
                               <span class="sw-lock-dot" title="Obligatoire pour l'administrateur"></span>
@@ -509,6 +536,7 @@ interface FeatureCategory {
                               [disabled]="isReadOnly(item.code + ':UPDATE')"
                               (change)="toggle(item.code + ':UPDATE', $event)"
                             />
+                            <perm-mark [kind]="mark(item.code + ':UPDATE')"></perm-mark>
                             <span>Modifier</span>
                             @if (isMandatory(item.code + ':UPDATE')) {
                               <span class="sw-lock-dot" title="Obligatoire pour l'administrateur"></span>
@@ -523,6 +551,7 @@ interface FeatureCategory {
                               [disabled]="isReadOnly(item.code + ':DELETE')"
                               (change)="toggle(item.code + ':DELETE', $event)"
                             />
+                            <perm-mark [kind]="mark(item.code + ':DELETE')"></perm-mark>
                             <span>Supprimer</span>
                             @if (isMandatory(item.code + ':DELETE')) {
                               <span class="sw-lock-dot" title="Obligatoire pour l'administrateur"></span>
@@ -1182,6 +1211,7 @@ export class PrivilegesPage implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
   private readonly draft = inject(PrivilegesDraftService);
+  private readonly confirmService = inject(ConfirmService);
 
   readonly users = signal<User[]>([]);
   readonly userOptions = signal<{ value: number; label: string }[]>([]);
@@ -1212,6 +1242,45 @@ export class PrivilegesPage implements OnInit {
 
   readonly grantedPermissions = signal<Set<string>>(new Set());
   readonly isCustomized = signal(false);
+
+  // Sources des droits (mode « Par utilisateur ») : droits du rôle du compte, chargés une fois par rôle.
+  private readonly roleBaseline = signal<{ roleId: number; perms: Set<string> } | null>(null);
+  private readonly rolePermsCache = new Map<number, Set<string>>();
+  private roleBaselineRequest = 0;
+  private readonly currentRolePerms = computed(() => {
+    const base = this.roleBaseline();
+    const roleId = this.selectedUser()?.roleId;
+    return base && roleId !== undefined && base.roleId === roleId ? base.perms : null;
+  });
+  /** Écarts du brouillon en cours (cases cochées non enregistrées comprises). */
+  readonly sources = computed(() => {
+    const role = this.currentRolePerms();
+    if (this.mode() !== 'user' || this.adminLocked() || !role || !this.permissionsLoaded()) return null;
+    return computeSources(role, this.grantedPermissions());
+  });
+  /** Écarts enregistrés sur le serveur : ce que « Revenir aux droits du rôle » effacerait. */
+  private readonly savedSources = computed(() => {
+    const role = this.currentRolePerms();
+    if (this.mode() !== 'user' || this.adminLocked() || !role || !this.permissionsLoaded()) return null;
+    return computeSources(role, this.baseline());
+  });
+  readonly showCustomized = computed(() => {
+    const s = this.sources();
+    return s ? s.count > 0 : this.isCustomized();
+  });
+  readonly badgeLabel = computed(() => {
+    if (this.adminLocked()) return 'Tous les droits';
+    const s = this.sources();
+    if (s) return s.count > 0 ? customizedBadgeLabel(s) : 'Permissions par défaut (Rôle)';
+    return this.isCustomized() ? 'Permissions personnalisées' : 'Permissions par défaut (Rôle)';
+  });
+  readonly canResetToRole = computed(() => (this.savedSources()?.count ?? 0) > 0);
+
+  mark(code: string): 'added' | 'removed' | null {
+    const s = this.sources();
+    if (!s) return null;
+    return s.added.has(code) ? 'added' : s.removed.has(code) ? 'removed' : null;
+  }
   readonly saving = signal(false);
   readonly baseline = signal<Set<string>>(new Set());
   readonly loadedTarget = signal<{ mode: PrivilegesMode; id: number } | null>(null);
@@ -1420,11 +1489,58 @@ export class PrivilegesPage implements OnInit {
         this.serverChangedWarning.set(r.dirty && r.serverChanged);
         this.loadedTarget.set({ mode: 'user', id: userId });
         this.isCustomized.set(res.isCustomized);
+        this.loadRoleBaseline(this.users().find((u) => u.id === userId)?.roleId);
       },
       error: () => {
         if (requestId !== this.permissionsRequestId) return;
         this.permissionsLoading.set(false);
         this.toast.error('Impossible de charger les privilèges de cet utilisateur.');
+      },
+    });
+  }
+
+  /** Droits du rôle du compte choisi : un appel par rôle (puis cache), sans recharger à chaque case cochée. */
+  private loadRoleBaseline(roleId: number | undefined): void {
+    if (roleId === undefined) return;
+    const cached = this.rolePermsCache.get(roleId);
+    if (cached) {
+      this.roleBaseline.set({ roleId, perms: cached });
+      return;
+    }
+    const request = ++this.roleBaselineRequest;
+    this.privSvc.getRolePermissions(roleId).subscribe({
+      next: (res) => {
+        if (request !== this.roleBaselineRequest) return;
+        const perms = new Set(res.grantedPermissions ?? []);
+        this.rolePermsCache.set(roleId, perms);
+        this.roleBaseline.set({ roleId, perms });
+      },
+      // Échec : la page fonctionne sans marqueurs ni compteur d'écarts (ancien badge).
+      error: () => {
+        if (request === this.roleBaselineRequest) this.roleBaseline.set(null);
+      },
+    });
+  }
+
+  async resetToRole(): Promise<void> {
+    const userId = this.selectedUserId();
+    const user = this.selectedUser();
+    const saved = this.savedSources();
+    if (userId === null || !user || !saved || saved.count === 0 || this.adminLocked()) return;
+    const message = buildResetToRoleMessage(this.getRoleLabel(user.roleId), saved.count, this.draft.hasDirty('user', userId));
+    if (!(await this.confirmService.ask(message, 'Revenir aux droits du rôle', 'Revenir au rôle'))) return;
+
+    this.saving.set(true);
+    this.privSvc.resetUserPermissions(userId).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.draft.clearTarget('user', userId);
+        this.loadUserPermissions(userId);
+        this.toast.success(`Droits du rôle rétablis pour ${user.nom} (${user.login}). ${appliesAtNextLoginNote('user')}`);
+      },
+      error: (e: unknown) => {
+        this.saving.set(false);
+        this.toast.error(extractErrorMessage(e));
       },
     });
   }
@@ -1691,7 +1807,7 @@ export class PrivilegesPage implements OnInit {
         this.draft.markSaved('user', userId, perms);
         this.saving.set(false);
         if (this.saveTargetChanged('user', userId, requestId)) {
-          this.toast.success(`Droits enregistrés pour ${targetName}.`);
+          this.toast.success(`Droits enregistrés pour ${targetName}. ` + appliesAtNextLoginNote('user'));
           return;
         }
         this.baseline.set(new Set(perms));
@@ -1701,7 +1817,7 @@ export class PrivilegesPage implements OnInit {
           this.session.setPermissions(perms, true);
           this.auth.refreshMe().subscribe();
         }
-        this.toast.success('Permissions enregistrées avec succès.');
+        this.toast.success('Permissions enregistrées avec succès. ' + appliesAtNextLoginNote('user'));
       },
       error: (e) => {
         this.saving.set(false);
@@ -1743,13 +1859,14 @@ export class PrivilegesPage implements OnInit {
         this.draft.markSaved('role', roleId, perms);
         this.saving.set(false);
         if (this.saveTargetChanged('role', roleId, requestId)) {
-          this.toast.success(`Droits enregistrés pour ${targetName}.`);
+          this.toast.success(`Droits enregistrés pour ${targetName}. ` + appliesAtNextLoginNote('role'));
           return;
         }
         this.baseline.set(new Set(perms));
         this.serverChangedWarning.set(false);
+        this.rolePermsCache.delete(roleId);
         this.loadRolePermissions(roleId);
-        this.toast.success('Droits du rôle enregistrés.');
+        this.toast.success('Droits du rôle enregistrés. ' + appliesAtNextLoginNote('role'));
       },
       error: (err: unknown) => {
         this.saving.set(false);
