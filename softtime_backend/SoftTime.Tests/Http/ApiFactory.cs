@@ -123,6 +123,12 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         Account(10061, 10034, "noread", true, "POINTEUSE:PTG:READ", "PROC:SHIFTS");                                   // cochée, sans lecture
         Account(10062, 91, "nogate", true, "PROC:SHIFTS");                                                            // aucun droit sur les bases (pas de porte 1)
         Account(10063, 10034, "ptenone", true, $"SAGE:{SageName}:READ", "PROC:SHIFTS");                               // sans droit pointeuse
+        // Étape 4b-9 : porte 2 (déduite de PARAMS:*) avec une seule permission fine, pour les lectures sensibles.
+        Account(10070, 91, "usersreader", false, "PARAMS:USERS");
+        Account(10071, 91, "rolesreader", false, "PARAMS:ROLES");
+        Account(10072, 91, "privreader", false, "PARAMS:PRIVILEGES");
+        Account(10073, 91, "dbreader", false, "PARAMS:DB_ACCESS");
+        Account(10074, 91, "paramsother", false, "PARAMS:CATEGORIES");
     }
 
     public static string Token(decimal userId, decimal roleId, params int[] rights)
@@ -157,6 +163,11 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         "noread" => Token(10061, 10034, 1, 3),
         "nogate" => Token(10062, 91, 3),
         "ptenone" => Token(10063, 10034, 1, 3),
+        "usersreader" => Token(10070, 91, 2),
+        "rolesreader" => Token(10071, 91, 2),
+        "privreader" => Token(10072, 91, 2),
+        "dbreader" => Token(10073, 91, 2),
+        "paramsother" => Token(10074, 91, 2),
         _ => throw new ArgumentOutOfRangeException(nameof(profile))
     };
 

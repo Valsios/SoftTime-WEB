@@ -192,7 +192,11 @@ public class PrivilegesController : ControllerBase
 
     [HttpGet("user/{userId}")]
     public async Task<IActionResult> GetUserPermissions(decimal userId, CancellationToken ct)
-        => Ok(await _auth.GetUserDetailedPermissionsAsync(userId, ct));
+    {
+        // GetUserDetailedPermissionsAsync sert aussi en interne (connexion, listes de bases) : le contrôle est donc ici.
+        await _auth.EnsureCanReadAsync(AuthService.ReadPrivileges, ct);
+        return Ok(await _auth.GetUserDetailedPermissionsAsync(userId, ct));
+    }
 
     [RequireAdmin]
     [HttpPut("user/{userId}")]

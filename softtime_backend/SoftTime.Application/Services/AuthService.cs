@@ -98,6 +98,40 @@ public class AuthService
     private readonly ICurrentUser _currentUser;
     private readonly EffectiveRightsService _effectiveRights;
 
+    public const string ReadDenied = "Vous n'avez pas la permission requise pour cette consultation.";
+
+    // Lectures sensibles de la section Paramètres : permission fine requise (l'une ou l'autre quand plusieurs écrans partagent la route).
+    public static readonly string[] ReadUsers = { "PARAMS:USERS" };
+    public static readonly string[] ReadUserList = { "PARAMS:USERS", "PARAMS:PRIVILEGES", "PARAMS:DB_ACCESS" };
+    public static readonly string[] ReadRoles = { "PARAMS:ROLES" };
+    public static readonly string[] ReadRoleList = { "PARAMS:USERS", "PARAMS:PRIVILEGES" };
+    public static readonly string[] ReadPrivileges = { "PARAMS:PRIVILEGES" };
+    public static readonly string[] ReadPrivilegeList = { "PARAMS:PRIVILEGES", "PARAMS:ROLES" };
+    public static readonly string[] ReadDbAccess = { "PARAMS:DB_ACCESS" };
+
+    /// <summary>
+    /// Consultation sensible : administrateur, ou porte 2 ET l'une des permissions fines, lues dans les droits effectifs
+    /// (pas dans le jeton). Échec fermé si la lecture des droits échoue.
+    /// </summary>
+    public async Task EnsureCanReadAsync(string[] anyOf, CancellationToken cancellationToken = default)
+    {
+        if (AdminAccess.IsAdmin(_currentUser)) return;
+        if (_currentUser.UserId is not decimal uid)
+            throw new ForbiddenOperationException(ReadDenied);
+        EffectiveRights rights;
+        try
+        {
+            rights = await _effectiveRights.GetAsync(uid, ct: cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _effectiveRights.LogReadFailure(uid, ex);
+            throw new ForbiddenOperationException(ReadDenied);
+        }
+        if (!rights.HasGate(Rights.Parameters) || !anyOf.Any(rights.Has))
+            throw new ForbiddenOperationException(ReadDenied);
+    }
+
     /// <summary>Opérations sur les autres comptes : réservées aux administrateurs (rôle 1) (rôle 1 uniquement).</summary>
     private void RequireAdministrator()
     {
@@ -220,12 +254,14 @@ public class AuthService
 
     public async Task<UserDto> GetUserAsync(decimal id, CancellationToken cancellationToken = default)
     {
+        await EnsureCanReadAsync(ReadUsers, cancellationToken);
         var u = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(id, cancellationToken) ?? throw new KeyNotFoundException();
         return new UserDto(u.IDRESPONSABLE, u.IDROLE, u.NOMRESPONSABLE ?? string.Empty, u.LOGIN ?? string.Empty, u.MATRICULE, null) { Email = u.EMAIL };
     }
 
     public async Task<IReadOnlyList<UserDto>> GetUsersAsync(CancellationToken cancellationToken = default)
     {
+        await EnsureCanReadAsync(ReadUserList, cancellationToken);
         var list = await _uow.Repository<T_RESPONSABLE>().ListAsync(_ => true, cancellationToken);
         return list
             .OrderBy(u => u.NOMRESPONSABLE)
@@ -236,7 +272,9 @@ public class AuthService
 
     public async Task<PagedResult<UserDto>> GetUsersPagedAsync(
         int? page, int? pageSize, CancellationToken cancellationToken = default)
-        => await PagedLists.PageAsync(
+    {
+        await EnsureCanReadAsync(ReadUsers, cancellationToken);
+        return await PagedLists.PageAsync(
             _uow.Repository<T_RESPONSABLE>(),
             _ => true,
             q => q.OrderBy(u => u.NOMRESPONSABLE).ThenBy(u => u.LOGIN).ThenBy(u => u.IDRESPONSABLE),
@@ -244,6 +282,7 @@ public class AuthService
             pageSize,
             u => new UserDto(u.IDRESPONSABLE, u.IDROLE, u.NOMRESPONSABLE ?? string.Empty, u.LOGIN ?? string.Empty, u.MATRICULE, null) { Email = u.EMAIL },
             cancellationToken);
+    }
 
     /// <summary>
     /// Installation vierge ? Portage de <c>is-first-run</c> du desktop, avec un critère plus sain :
@@ -550,12 +589,17 @@ public class AuthService
     }
 
     public async Task<IReadOnlyList<RoleDto>> GetRolesAsync(CancellationToken cancellationToken = default)
-        => (await _uow.Repository<T_ROLE>().ListAsync(_ => true, cancellationToken))
+    {
+        await EnsureCanReadAsync(ReadRoleList, cancellationToken);
+        return (await _uow.Repository<T_ROLE>().ListAsync(_ => true, cancellationToken))
             .Select(r => new RoleDto(r.IDROLE, r.NOMROLE)).ToList();
+    }
 
     public async Task<PagedResult<RoleDto>> GetRolesPagedAsync(
         int? page, int? pageSize, CancellationToken cancellationToken = default)
-        => await PagedLists.PageAsync(
+    {
+        await EnsureCanReadAsync(ReadRoles, cancellationToken);
+        return await PagedLists.PageAsync(
             _uow.Repository<T_ROLE>(),
             _ => true,
             q => q.OrderBy(r => r.IDROLE),
@@ -563,6 +607,7 @@ public class AuthService
             pageSize,
             r => new RoleDto(r.IDROLE, r.NOMROLE),
             cancellationToken);
+    }
 
     public async Task<RoleDto> SaveRoleAsync(RoleDto dto, CancellationToken cancellationToken = default)
     {
@@ -608,11 +653,15 @@ public class AuthService
     }
 
     public async Task<IReadOnlyList<DroitDto>> GetDroitsAsync(CancellationToken cancellationToken = default)
-        => (await _uow.Repository<T_DROIT>().ListAsync(_ => true, cancellationToken))
+    {
+        await EnsureCanReadAsync(ReadPrivilegeList, cancellationToken);
+        return (await _uow.Repository<T_DROIT>().ListAsync(_ => true, cancellationToken))
             .Select(d => new DroitDto(d.IDDROIT, d.DROIT)).ToList();
+    }
 
     public async Task<IReadOnlyList<PrivilegeDto>> GetPrivilegesAsync(decimal? roleId, CancellationToken cancellationToken = default)
     {
+        await EnsureCanReadAsync(ReadPrivilegeList, cancellationToken);
         var list = await _uow.Repository<T_DROIT_ROLE>().ListAsync(
             p => !roleId.HasValue || p.IDROLE == roleId.Value, cancellationToken);
         return list.Select(p => new PrivilegeDto(p.IDDROITROLE, p.IDROLE, p.IDDROIT)).ToList();
@@ -637,6 +686,7 @@ public class AuthService
 
     public async Task<IReadOnlyList<DbAccessDto>> GetDbAccessAsync(decimal? userId, CancellationToken cancellationToken = default)
     {
+        await EnsureCanReadAsync(ReadDbAccess, cancellationToken);
         var list = await _uow.Repository<T_BDD_AUTORISE>().ListAsync(
             a => !userId.HasValue || a.IDRESPONSABLE == userId.Value, cancellationToken);
         return list.Select(a => new DbAccessDto(a.IDBDDAUTORISE, a.IDRESPONSABLE, a.IDBDD)).ToList();
@@ -833,6 +883,7 @@ public class AuthService
 
     public async Task<RoleDetailedPermissionsDto> GetRoleDetailedPermissionsAsync(decimal roleId, CancellationToken cancellationToken = default)
     {
+        await EnsureCanReadAsync(ReadPrivileges, cancellationToken);
         var roleList = await _uow.Repository<T_ROLE_PERMISSION>().ListAsync(
             p => p.IDROLE == roleId && p.IS_GRANTED, cancellationToken);
 

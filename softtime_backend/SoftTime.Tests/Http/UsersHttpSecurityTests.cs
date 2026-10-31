@@ -83,12 +83,15 @@ public class UsersHttpSecurityTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Reading_users_stays_available_with_gate_2()
+    public async Task Reading_users_needs_the_fine_permission_since_step_4b_9()
     {
+        // Avant 4b-9 : la porte 2 seule suffisait (param2 lisait les comptes en 200). Maintenant : porte 2 ET PARAMS:USERS.
         foreach (var url in new[] { "/api/users", "/api/users/10052" })
         {
-            var (resp, _) = await Send("param2", "GET", url, null);
-            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+            var (ok, _) = await Send("usersreader", "GET", url, null);
+            Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+            var (refused, text) = await Send("param2", "GET", url, null);
+            Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
         }
         // Sans la porte 2, la lecture reste refusée comme avant.
         var (denied, _) = await Send("joel", "GET", "/api/users", null);
