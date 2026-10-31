@@ -424,17 +424,16 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public async Task Role_with_gates_and_no_rows_differs_from_the_current_calculation_only_by_database_configuration()
+    public async Task Role_with_gates_and_no_rows_now_shows_the_same_rights_as_the_calculator()
     {
+        // Étape 4b-10 : avant, la lecture actuelle ajoutait la configuration des bases (SAGE:CREATE, UPDATE, DELETE et pointeuse)
+        // que le calculateur n'accorde pas ; l'attendu précédent était « différence = configuration seulement ».
         var world = new OldWorld();
         var gates = new[] { Databases, Processing, Reports };
-        var old = await world.OldAsync(10032, null, gates);
+        var shown = await world.OldAsync(10032, null, gates);
         var now = Compute(Role(10032, null, gates));
-        var configurationOnly = old.Except(now.Permissions).ToList();
-        Assert.NotEmpty(configurationOnly);
-        Assert.All(configurationOnly, c => Assert.True(
-            (c.StartsWith("SAGE:") || c.StartsWith("POINTEUSE:")) && (c.EndsWith(":CREATE") || c.EndsWith(":UPDATE") || c.EndsWith(":DELETE")), c));
-        Assert.Empty(now.Permissions.Except(old));
+        Assert.True(shown.SetEquals(now.Permissions));
+        Assert.DoesNotContain(shown, c => (c.StartsWith("SAGE:") || c.StartsWith("POINTEUSE:")) && (c.EndsWith(":CREATE") || c.EndsWith(":UPDATE") || c.EndsWith(":DELETE")));
     }
 
     private sealed class Token : ITokenService

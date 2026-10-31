@@ -46,7 +46,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
 
     public ApiFactory()
     {
-        File.WriteAllText(ReportPath, string.Empty);
+        // Plusieurs classes de test créent leur fabrique en parallèle : même verrou que Report.
+        lock (ReportPath) File.WriteAllText(ReportPath, string.Empty);
         Seed();
     }
 

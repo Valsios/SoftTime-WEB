@@ -789,6 +789,10 @@ public class AuthService
             return new UserDetailedPermissionsDto(userId, rolePerms, false);
         }
 
+        // Rôle sans lignes et compte sans ajustement : les droits affichés sont les droits effectifs du calculateur
+        // (sans la configuration des bases). L'administrateur garde ses droits par défaut complets.
+        if (!isAdmin)
+            return new UserDetailedPermissionsDto(userId, (await _effectiveRights.GetAsync(userId, fresh: true, ct: cancellationToken)).Permissions.ToList(), false);
         return new UserDetailedPermissionsDto(userId, defaults.Distinct().ToList(), false);
     }
 
@@ -886,26 +890,6 @@ public class AuthService
         _effectiveRights.Invalidate(targetUserId);
     }
 
-    private async Task<List<string>> ComputeDefaultPermissionsForRoleAsync(decimal roleId, CancellationToken cancellationToken)
-    {
-        var rolePrivileges = await _uow.Repository<T_DROIT_ROLE>().ListAsync(p => p.IDROLE == roleId, cancellationToken);
-        var rights = rolePrivileges.Select(p => (int)p.IDDROIT).ToHashSet();
-        var isAdmin = roleId == AdminRules.AdminRoleId;
-        if (isAdmin)
-        {
-            rights = new HashSet<int> { Rights.Databases, Rights.Parameters, Rights.Processing, Rights.Other, Rights.Traceability, Rights.Reports };
-        }
-
-        var sageDbs = (isAdmin || rights.Contains(Rights.Databases))
-            ? await _uow.Repository<T_BDD_SAGE>().ListAsync(_ => true, cancellationToken)
-            : (IReadOnlyCollection<T_BDD_SAGE>)Array.Empty<T_BDD_SAGE>();
-        var pointeuseDbs = (isAdmin || rights.Contains(Rights.Databases))
-            ? await _uow.Repository<T_BDD_POINTEUSE>().ListAsync(_ => true, cancellationToken)
-            : (IReadOnlyCollection<T_BDD_POINTEUSE>)Array.Empty<T_BDD_POINTEUSE>();
-
-        return BuildDefaultPermissionsList(rights, sageDbs, pointeuseDbs);
-    }
-
     public async Task<RoleDetailedPermissionsDto> GetRoleDetailedPermissionsAsync(decimal roleId, CancellationToken cancellationToken = default)
     {
         await EnsureCanReadAsync(ReadPrivileges, cancellationToken);
@@ -914,7 +898,7 @@ public class AuthService
 
         if (roleList.Count == 0)
         {
-            var defaultPerms = await ComputeDefaultPermissionsForRoleAsync(roleId, cancellationToken);
+            var defaultPerms = (await _effectiveRights.RoleDefaultPermissionsAsync(roleId, cancellationToken)).ToList();
             return new RoleDetailedPermissionsDto(roleId, defaultPerms, false);
         }
 
