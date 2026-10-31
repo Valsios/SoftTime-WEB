@@ -8,6 +8,7 @@ using SoftTime.Infrastructure.MachineLearning;
 using SoftTime.Infrastructure.Persistence;
 using SoftTime.Infrastructure.Queries;
 using SoftTime.Infrastructure.Repositories;
+using SoftTime.Infrastructure.SchemaMigrations;
 
 namespace SoftTime.Infrastructure;
 
@@ -29,6 +30,13 @@ public static class DependencyInjection
                     .EnableRetryOnFailure()
                     .CommandTimeout(120)));
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+        // Migrations SQL versionnées (migrations/versions), exécutées au démarrage si Database:AutoMigrate.
+        services.AddSingleton(SchemaMigrationOptions.FromConfiguration(configuration));
+        services.AddSingleton<IMigrationScriptSource>(_ => new EmbeddedMigrationScriptSource());
+        services.AddSingleton<ISchemaMigrationConnectionFactory>(_ =>
+            new SqlSchemaMigrationConnectionFactory(configuration.GetConnectionString("SoftTime") ?? string.Empty));
+        services.AddSingleton<SchemaMigrator>();
         services.AddSingleton<ISageContextFactory, SageContextFactory>();
         services.AddSingleton<IPointeuseContextFactory, PointeuseContextFactory>();
         services.AddScoped<ISagePayrollWriter, SagePayrollWriter>();

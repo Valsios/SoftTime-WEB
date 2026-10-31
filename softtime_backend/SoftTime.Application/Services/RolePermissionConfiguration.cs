@@ -4,7 +4,8 @@ namespace SoftTime.Application.Services;
 
 public static class RolePermissionConfiguration
 {
-    public static Task EnsureStorageAsync(IUnitOfWork uow, CancellationToken ct = default) => uow.ExecuteSqlAsync("""
+    // Table cible : T_ROLE, à laquelle se rattachent les droits par rôle.
+    public static Task EnsureStorageAsync(IUnitOfWork uow, CancellationToken ct = default) => SchemaPresenceGuard.ExecuteAsync(uow, "T_ROLE", """
         IF OBJECT_ID(N'dbo.T_ROLE_PERMISSION', N'U') IS NULL
         BEGIN
             CREATE TABLE dbo.T_ROLE_PERMISSION (

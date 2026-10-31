@@ -13,6 +13,7 @@ using SoftTime.Application.Abstractions;
 using SoftTime.Application.Serialization;
 using SoftTime.Application.Services;
 using SoftTime.Infrastructure;
+using SoftTime.Infrastructure.SchemaMigrations;
 using SoftTime.Domain.Repositories;
 using Microsoft.AspNetCore.Identity;
 using SoftTime.Domain.Entities.SoftTime;
@@ -127,6 +128,10 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAn
 var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
+    // Scripts SQL versionnés (migrations/versions) : uniquement si Database:AutoMigrate = true (faux par défaut),
+    // AVANT les Ensure* ci-dessous. Un échec arrête le démarrage avec un message explicite.
+    await scope.ServiceProvider.GetRequiredService<SchemaMigrator>().RunIfEnabledAsync(CancellationToken.None);
+
     await SageDatabaseConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
     await PunchProcessingConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
     await HistoryArchiveConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
