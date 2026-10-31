@@ -596,14 +596,14 @@ interface FeatureCategory {
     `
       /* ==========================================================================
          Charte Graphique Softwell v1.0 — Styles dédiés Écran Privilèges
-         Palette : Navy-700 (#2E427B), Navy-800 (#243569), Navy-950 (#0B1332)
-                   Gold-400 (#AA9E39), Gold-300 (#E1C340), Line-input (#878D9A)
+         Palette : Navy-700 , Navy-800, Navy-950
+                   Gold-400, Gold-300, Line-input
          Typographie : Outfit (titres) & Inter (corps, boutons, libellés)
          ========================================================================== */
 
       :host {
         display: block;
-        color: #353944; /* neutral-800 */
+        color: var(--app-text); /* neutral-800 */
         font-family: 'Inter', system-ui, -apple-system, sans-serif;
       }
 
@@ -616,7 +616,7 @@ interface FeatureCategory {
         gap: 16px;
         margin-bottom: 24px;
         padding-bottom: 20px;
-        border-bottom: 1px solid #D6D9E0; /* neutral-200 */
+        border-bottom: 1px solid var(--app-border); /* neutral-200 */
       }
 
       .sw-page-header-main {
@@ -636,7 +636,7 @@ interface FeatureCategory {
         display: inline-block;
         width: 16px;
         height: 2px;
-        background-color: #AA9E39; /* gold-400 - filet or de la charte */
+        background-color: var(--color-gold-400); /* gold-400 - filet or de la charte */
         border-radius: 1px;
       }
 
@@ -645,7 +645,7 @@ interface FeatureCategory {
         font-weight: 600;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: #5B606D; /* neutral-600 */
+        color: var(--text-secondary); /* neutral-600 */
       }
 
       .sw-page-title {
@@ -655,14 +655,14 @@ interface FeatureCategory {
         font-weight: 600;
         line-height: 1.25;
         letter-spacing: -0.02em;
-        color: #0B1332; /* navy-950 */
+        color: var(--app-text-strong); /* navy-950 */
       }
 
       .sw-page-subtitle {
         margin: 0;
         font-size: 14px;
         line-height: 1.5;
-        color: #5B606D; /* neutral-600 */
+        color: var(--text-secondary); /* neutral-600 */
       }
 
       .sw-page-header-actions {
@@ -679,25 +679,25 @@ interface FeatureCategory {
         gap: 8px;
         min-height: 44px; /* Hauteur standard 44px */
         padding: 10px 20px;
-        background-color: #2E427B; /* navy-700 Marine Softwell */
-        color: #ffffff;
+        background-color: var(--accent); /* navy-700 Marine Softwell */
+        color: var(--text-on-accent);
         font-size: 14px;
         font-weight: 700;
         font-family: 'Inter', system-ui, sans-serif;
         border: none;
         border-radius: 8px; /* rounded-xl charte = 8px */
-        box-shadow: 0 1px 2px rgba(11, 19, 50, 0.05);
+        box-shadow: var(--shadow-xs);
         cursor: pointer;
         transition: background-color 150ms cubic-bezier(0.2, 0, 0, 1), transform 150ms ease;
         white-space: nowrap;
       }
 
       .sw-btn-primary:hover:not(:disabled) {
-        background-color: #243569; /* navy-800 survol */
+        background-color: var(--accent-hover); /* navy-800 survol */
       }
 
       .sw-btn-primary:focus-visible {
-        outline: 3px solid #2E427B;
+        outline: 3px solid var(--softtime);
         outline-offset: 2px;
       }
 
@@ -710,8 +710,8 @@ interface FeatureCategory {
         display: inline-block;
         width: 14px;
         height: 14px;
-        border: 2px solid rgba(255, 255, 255, 0.35);
-        border-top-color: #ffffff;
+        border: 2px solid var(--spinner-track);
+        border-top-color: var(--spinner-head);
         border-radius: 50%;
         animation: sw-spin 0.6s linear infinite;
       }
@@ -722,10 +722,10 @@ interface FeatureCategory {
 
       /* ---- 2. Carte (§8.4) & Sélecteur d'utilisateur ---- */
       .sw-card {
-        background-color: #ffffff;
-        border: 1px solid #D6D9E0; /* neutral-200 */
+        background-color: var(--app-surface);
+        border: 1px solid var(--app-border); /* neutral-200 */
         border-radius: 12px; /* rounded-2xl charte = 12px */
-        box-shadow: 0 1px 2px rgba(11, 19, 50, 0.04);
+        box-shadow: var(--shadow-xs);
       }
 
       .sw-mode-card {
@@ -765,7 +765,7 @@ interface FeatureCategory {
 
       .sw-segment-btn.is-active {
         background: var(--softtime);
-        color: var(--app-surface);
+        color: var(--text-on-accent);
         box-shadow: var(--shadow-xs);
       }
 
@@ -810,12 +810,12 @@ interface FeatureCategory {
         display: block;
         font-size: 14px;
         font-weight: 600;
-        color: #353944; /* neutral-800 casse de phrase */
+        color: var(--app-text); /* neutral-800 casse de phrase */
         margin-bottom: 6px;
       }
 
       .sw-req {
-        color: #BE123C; /* rose-700 / danger */
+        color: var(--danger); /* rose-700 / danger */
         font-weight: 700;
       }
 
@@ -830,9 +830,9 @@ interface FeatureCategory {
         font-size: 14px;
         font-weight: 500;
         font-family: 'Inter', system-ui, sans-serif;
-        color: #242830; /* neutral-900 */
-        background-color: #ffffff;
-        border: 1px solid #878D9A; /* line-input 3,3:1 conforme AA */
+        color: var(--app-text-strong); /* neutral-900 */
+        background-color: var(--app-surface);
+        border: 1px solid var(--color-border-input); /* line-input 3,3:1 conforme AA */
         border-radius: 8px; /* rounded-xl = 8px */
         transition: border-color 150ms ease, box-shadow 150ms ease;
         appearance: none;
@@ -844,9 +844,9 @@ interface FeatureCategory {
       }
 
       .sw-select:focus-visible {
-        outline: 3px solid #2E427B;
+        outline: 3px solid var(--softtime);
         outline-offset: 2px;
-        border-color: #2E427B;
+        border-color: var(--softtime);
       }
 
       /* ---- Badges de Statut (§8.3) ---- */
@@ -869,27 +869,27 @@ interface FeatureCategory {
       }
 
       .sw-badge-role {
-        background-color: #F5F7F9; /* neutral-50 */
-        color: #353944; /* neutral-800 */
-        border: 1px solid #D6D9E0; /* neutral-200 */
+        background-color: var(--surface-light); /* neutral-50 */
+        color: var(--app-text); /* neutral-800 */
+        border: 1px solid var(--app-border); /* neutral-200 */
       }
 
       .sw-badge-default {
-        background-color: #F5F7F9;
-        color: #5B606D; /* neutral-600 */
-        border: 1px solid #D6D9E0;
+        background-color: var(--surface-light);
+        color: var(--text-secondary); /* neutral-600 */
+        border: 1px solid var(--app-border);
       }
 
       .sw-badge-custom {
-        background-color: #F4F7FE; /* navy-50 */
-        color: #2E427B; /* navy-700 */
-        border: 1px solid #CAD9FB; /* navy-200 */
+        background-color: var(--app-surface-soft); /* navy-50 */
+        color: var(--softtime); /* navy-700 */
+        border: 1px solid var(--navy-200); /* navy-200 */
       }
 
       .sw-badge-admin-shield {
-        background-color: #FFFBEB; /* amber-50 Avertissement charte */
-        color: #B45309; /* amber-700 */
-        border: 1px solid #FDE68A; /* amber-200 */
+        background-color: var(--warning-bg); /* amber-50 Avertissement charte */
+        color: var(--warning); /* amber-700 */
+        border: 1px solid var(--warning-border); /* amber-200 */
       }
 
       /* ---- Petits Boutons Secondaires (§8.1 Petit 36px) ---- */
@@ -905,23 +905,23 @@ interface FeatureCategory {
         justify-content: center;
         min-height: 36px; /* 36px charte */
         padding: 0 14px;
-        background-color: #ffffff;
-        border: 1px solid #D6D9E0; /* neutral-200 */
+        background-color: var(--app-surface);
+        border: 1px solid var(--app-border); /* neutral-200 */
         border-radius: 8px;
         font-size: 13px;
         font-weight: 600;
-        color: #353944;
+        color: var(--app-text);
         cursor: pointer;
         transition: all 150ms ease;
       }
 
       .sw-btn-sm:hover:not(:disabled) {
-        background-color: #F5F7F9;
-        border-color: #B9BEC8;
+        background-color: var(--surface-light);
+        border-color: var(--border-hover);
       }
 
       .sw-btn-sm:focus-visible {
-        outline: 3px solid #2E427B;
+        outline: 3px solid var(--softtime);
         outline-offset: 2px;
       }
 
@@ -949,8 +949,8 @@ interface FeatureCategory {
         flex-wrap: wrap;
         gap: 14px;
         padding: 18px 24px;
-        background-color: #ffffff;
-        border-bottom: 1px solid #E9EBF0;
+        background-color: var(--app-surface);
+        border-bottom: 1px solid var(--border-light);
       }
 
       .sw-perm-card.is-collapsed .sw-perm-card-header {
@@ -970,9 +970,9 @@ interface FeatureCategory {
         width: 36px;
         height: 36px;
         border-radius: 8px;
-        background-color: #F4F7FE; /* navy-50 */
-        color: #2E427B; /* navy-700 Marine Softwell */
-        border: 1px solid #CAD9FB;
+        background-color: var(--app-surface-soft); /* navy-50 */
+        color: var(--softtime); /* navy-700 Marine Softwell */
+        border: 1px solid var(--navy-200);
       }
 
       .sw-category-title {
@@ -980,13 +980,13 @@ interface FeatureCategory {
         font-family: 'Outfit', 'Inter', system-ui, sans-serif;
         font-size: 16px;
         font-weight: 600;
-        color: #0B1332; /* navy-950 */
+        color: var(--app-text-strong); /* navy-950 */
       }
 
       .sw-category-desc {
         margin: 2px 0 0;
         font-size: 12px;
-        color: #5B606D; /* neutral-600 */
+        color: var(--text-secondary); /* neutral-600 */
       }
 
       /* Compteur selon Charte §8.3 (Or clair, texte marine nuit) */
@@ -999,9 +999,9 @@ interface FeatureCategory {
         font-family: 'Inter', system-ui, sans-serif;
         font-variant-numeric: tabular-nums;
         border-radius: 6px;
-        background-color: #E1C340; /* gold-300 */
-        color: #0B1332; /* navy-950 - Contraste 8,6:1 conforme AA */
-        border: 1px solid #AA9E39;
+        background-color: var(--color-gold-300); /* gold-300 */
+        color: var(--text-on-gold); /* navy-950 - Contraste 8,6:1 conforme AA */
+        border: 1px solid var(--color-gold-400);
       }
 
       .sw-card-bulk-actions {
@@ -1016,19 +1016,19 @@ interface FeatureCategory {
         justify-content: center;
         height: 30px;
         padding: 0 10px;
-        background-color: #ffffff;
-        border: 1px solid #D6D9E0;
+        background-color: var(--app-surface);
+        border: 1px solid var(--app-border);
         border-radius: 6px;
         font-size: 12px;
         font-weight: 500;
-        color: #353944;
+        color: var(--app-text);
         cursor: pointer;
         transition: all 150ms ease;
       }
 
       .sw-btn-xs:hover:not(:disabled) {
-        background-color: #F5F7F9;
-        border-color: #B9BEC8;
+        background-color: var(--surface-light);
+        border-color: var(--border-hover);
       }
 
       .sw-btn-xs:disabled {
@@ -1044,28 +1044,28 @@ interface FeatureCategory {
         height: 30px;
         padding: 0;
         background-color: transparent;
-        border: 1px solid #D6D9E0;
+        border: 1px solid var(--app-border);
         border-radius: 6px;
-        color: #5B606D;
+        color: var(--text-secondary);
         cursor: pointer;
         transition: all 150ms ease;
       }
 
       .sw-btn-icon-collapse:hover {
-        background-color: #F5F7F9;
-        color: #2E427B;
+        background-color: var(--surface-light);
+        color: var(--softtime);
       }
 
       /* ---- Contenu de la Carte & Liste des Lignes ---- */
       .sw-card-content {
         padding: 16px 24px;
-        background-color: #ffffff;
+        background-color: var(--app-surface);
       }
 
       .sw-empty-hint {
         padding: 24px;
         text-align: center;
-        color: #747A88;
+        color: var(--text-muted);
         font-size: 13px;
         font-style: italic;
       }
@@ -1083,15 +1083,15 @@ interface FeatureCategory {
         flex-wrap: wrap;
         gap: 16px;
         padding: 12px 18px;
-        background-color: #F8FAFD; /* neutral teinté marine §4.2 */
-        border: 1px solid #E9EBF0;
+        background-color: var(--app-bg); /* neutral teinté marine §4.2 */
+        border: 1px solid var(--border-light);
         border-radius: 8px; /* rounded-xl = 8px */
         transition: background-color 120ms ease;
       }
 
       .sw-perm-row:hover {
-        background-color: #F4F7FE; /* navy-50 au survol */
-        border-color: #CAD9FB;
+        background-color: var(--navy-50); /* navy-50 au survol */
+        border-color: var(--navy-200);
       }
 
       .sw-perm-name-col {
@@ -1103,12 +1103,12 @@ interface FeatureCategory {
       .sw-perm-item-title {
         font-size: 14px;
         font-weight: 600;
-        color: #0B1332; /* navy-950 */
+        color: var(--app-text-strong); /* navy-950 */
       }
 
       .sw-perm-item-subtitle {
         font-size: 12px;
-        color: #5B606D; /* neutral-600 */
+        color: var(--text-secondary); /* neutral-600 */
       }
 
       .sw-actions-toggles {
@@ -1125,7 +1125,7 @@ interface FeatureCategory {
         gap: 8px;
         font-size: 13px;
         font-weight: 500;
-        color: #353944;
+        color: var(--app-text);
         cursor: pointer;
         user-select: none;
         min-height: 32px;
@@ -1135,13 +1135,13 @@ interface FeatureCategory {
         width: 16px;
         height: 16px;
         cursor: pointer;
-        accent-color: #2E427B; /* Marine Softwell §4.1 */
+        accent-color: var(--softtime); /* Marine Softwell §4.1 */
         border-radius: 4px;
       }
 
       .sw-check-label.is-disabled {
         cursor: not-allowed;
-        color: #747A88;
+        color: var(--text-muted);
       }
 
       .sw-check-label.is-disabled input[type='checkbox'] {
@@ -1151,7 +1151,7 @@ interface FeatureCategory {
       .sw-header-check-label {
         margin-right: 8px;
         font-weight: 600;
-        color: #2E427B;
+        color: var(--softtime);
       }
 
       .sw-item-access-check {
@@ -1162,7 +1162,7 @@ interface FeatureCategory {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        color: #B45309; /* amber-700 */
+        color: var(--warning); /* amber-700 */
         margin-left: 2px;
       }
 
@@ -1225,7 +1225,7 @@ interface FeatureCategory {
         width: 6px;
         height: 6px;
         border-radius: 50%;
-        background-color: #AA9E39; /* gold-400 */
+        background-color: var(--color-gold-400); /* gold-400 */
         margin-left: 2px;
       }
     `,
