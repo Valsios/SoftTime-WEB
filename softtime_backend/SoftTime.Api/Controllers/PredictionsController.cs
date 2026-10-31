@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SoftTime.Api.Authorization;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Security;
 using SoftTime.Application.Services;
@@ -77,16 +78,19 @@ public class PredictionsController : ControllerBase
     }
 
     /// <summary>Rafraîchit la fenêtre glissante (12 semaines par défaut) et régénère les prévisions.</summary>
+    [RequireAdmin]
     [HttpPost("refresh")]
     public IActionResult Refresh() => Enqueue(new MlJobRequest(_company.SageDatabase, FullRefresh: false, Train: false),
         "Rafraîchissement des données et des prévisions programmé.");
 
     /// <summary>Reconstruit tout l'historique (premier déploiement), réentraîne et régénère.</summary>
+    [RequireAdmin]
     [HttpPost("backfill")]
     public IActionResult Backfill() => Enqueue(new MlJobRequest(_company.SageDatabase, FullRefresh: true, Train: true),
         "Reconstruction complète de la base analytique programmée.");
 
     /// <summary>Réentraîne les modèles actifs.</summary>
+    [RequireAdmin]
     [HttpPost("train")]
     public IActionResult Train() => Enqueue(new MlJobRequest(_company.SageDatabase, FullRefresh: false, Train: true),
         "Réentraînement programmé.");
@@ -97,8 +101,7 @@ public class PredictionsController : ControllerBase
 
     private IActionResult Enqueue(MlJobRequest job, string message)
     {
-        if (!_user.HasRight(Rights.Parameters))
-            return Forbid();
+        AdminAccess.Require(_user);
 
         return _jobs.TryEnqueue(job)
             ? Accepted(new { message })

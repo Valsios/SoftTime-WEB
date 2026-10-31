@@ -70,4 +70,38 @@ public class PredictionsHttpTests : IClassFixture<ApiFactory>
         await _http.SendAsync(_f.Request("gate6only", HttpMethod.Get, "/api/predictions/absence", sageHeader: ApiFactory.SageName));
         Assert.Equal(before, _f.Snapshot());
     }
+
+    // Étape 4b-11 : déclencher un traitement (entraînement, recalcul) est réservé aux administrateurs.
+    public static IEnumerable<object[]> Triggers()
+    {
+        foreach (var url in new[] { "/api/predictions/refresh", "/api/predictions/train", "/api/predictions/backfill" })
+            foreach (var profile in new[] { "admin", "param2", "predreader", "gate6only", "joel", "anonyme" })
+                yield return new object[] { url, profile };
+    }
+
+    [Theory]
+    [MemberData(nameof(Triggers))]
+    public async Task Training_actions_are_reserved_to_administrators(string url, string profile)
+    {
+        var before = _f.Snapshot();
+        var resp = await _http.SendAsync(_f.Request(profile, HttpMethod.Post, url));
+        var text = await resp.Content.ReadAsStringAsync();
+        ApiFactory.Report($"4B11|{url}|{profile}|{(int)resp.StatusCode}|{(text.Length == 0 ? "corps vide" : text.Length > 90 ? text[..90] : text)}");
+
+        if (profile == "anonyme")
+        {
+            Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
+        }
+        else if (profile == "admin")
+        {
+            // Accepté, ou « déjà en cours » si un autre test a déjà programmé un traitement : jamais refusé.
+            Assert.Contains(resp.StatusCode, new[] { HttpStatusCode.Accepted, HttpStatusCode.Conflict });
+        }
+        else
+        {
+            Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+            Assert.Contains("Cette opération est réservée aux administrateurs.", text);
+        }
+        Assert.Equal(before, _f.Snapshot());   // aucune donnée applicative n'est écrite
+    }
 }
