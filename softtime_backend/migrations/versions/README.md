@@ -21,6 +21,45 @@ Ils sont **embarqués comme ressources** dans `SoftTime.Infrastructure` et appli
 Le schéma `ml` (moteur prédictif) reste géré par les migrations EF Core (`EfMlStore.MigrateAsync`)
 et n'est pas concerné.
 
+## Pour les développeurs après un `git pull`
+
+1. Lancer l'API comme d'habitude (`dotnet run` dans `SoftTime.Api`, ou depuis Visual Studio) : le profil `http`
+   utilise `ASPNETCORE_ENVIRONMENT=Development`, donc `appsettings.Development.json` s'applique et
+   `Database:AutoMigrate` vaut `true`. Votre `appsettings.json` local (chaîne de connexion) n'est pas modifié.
+2. Regarder la ligne du journal au démarrage :
+   - `Migrations de schéma : N script(s) appliqué(s), M déjà à jour.` : tout est en ordre ;
+   - `Migrations de schéma désactivées (Database:AutoMigrate = false).` : l'activation est coupée (autre
+     environnement, ou valeur remplacée) ; sans schéma, l'API refuse alors de démarrer avec un message clair.
+3. Aucun SQL à exécuter à la main : les nouveaux scripts de `versions/` s'appliquent seuls, dans l'ordre, une seule fois.
+
+**Règle d'or : faites une sauvegarde avant d'activer l'application automatique sur une base qui contient des
+données utiles** (`BACKUP DATABASE <base> TO DISK = '<fichier>' WITH COPY_ONLY`). Les scripts ne sont jamais
+destructifs, mais seule la sauvegarde permet un retour arrière fiable.
+
+## Première installation (base vide)
+
+1. Créer une base vide (`CREATE DATABASE <nom>`) et la renseigner dans la chaîne de connexion locale
+   (`ConnectionStrings:SoftTime` de votre `appsettings.json`, jamais dans le dépôt).
+2. Lancer l'API avec `Database:AutoMigrate = true` : elle crée tout le schéma (001, 002), le schéma `ml` du moteur
+   prédictif, le rôle 1 « Administrateur », les six droits et les données de départ. Aucun compte n'est créé.
+3. Créer le premier administrateur : `GET /api/auth/is-first-run` répond `true`, puis
+   `POST /api/auth/create-admin` (nom, login, mot de passe conforme à la politique). Ensuite `is-first-run` répond `false`.
+4. Se connecter normalement. Les bases SAGE et pointeuse se déclarent ensuite dans l'application.
+
+## Que faire si une migration échoue
+
+- Le démarrage s'arrête avec un message en français, sans chaîne de connexion ; chaque script s'exécute dans
+  une transaction annulée en cas d'erreur : la base reste dans l'état précédent.
+- « le verrou … n'a pas été obtenu » : une autre instance applique les migrations. Attendre qu'elle ait démarré,
+  puis relancer ; au besoin augmenter `Database:AutoMigrateLockTimeoutSeconds`.
+- « connexion à la base SoftTime refusée » : vérifier le serveur, la base et les droits du compte Windows
+  (il faut pouvoir créer des objets sur la base : rôle `db_owner` en développement).
+- « Le schéma de la base est absent » : activer `Database:AutoMigrate` (développement) ou exécuter
+  `001_schema_initial.sql` à la main.
+- Erreur dans un script : restaurer la sauvegarde si la base doit revenir en arrière, désactiver
+  `Database:AutoMigrate`, corriger le script dans un **nouveau** numéro (ne jamais modifier un script déjà appliqué)
+  ou `git revert` du commit fautif, puis relancer.
+
 ## Activer
 
 Dans la configuration de l'API (fichier local, variables d'environnement…) :
@@ -57,6 +96,14 @@ constantes, `T_CLOCK`). **Aucun compte utilisateur** : le premier compte se cré
 Sur une base **existante** (T_ROLE déjà présente), 001 ajoute seulement les tables manquantes avec
 leurs index, les colonnes des `Ensure*` et les données de départ dans les tables **vides** ; il ne
 construit aucun index et aucune clé étrangère sur une table existante.
+
+## 002_integrite_base_neuve.sql
+
+Ajoute à une base neuve les index **uniques** présents dans les anciennes bases mais absents du schéma initial.
+Aujourd'hui : `UX_T_ACTIVECORRESP_PAIRE` (paires SAGE/pointeuse actives, filtré). Rejouable ; si les colonnes ne
+sont pas indexables (`nvarchar(max)` dans une base neuve) ou s'il existe des doublons, l'index est **ignoré** avec
+un `PRINT`. Sur une ancienne base où l'index existe déjà, 002 ne change rien. Le bornage des colonnes
+(`ALTER COLUMN`) reste dans le script manuel `add_pagination_performance_indexes.sql`.
 
 ## Ajouter un script
 

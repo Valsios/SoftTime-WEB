@@ -56,7 +56,11 @@ public interface ISchemaMigrationConnectionFactory
     Task<ISchemaMigrationConnection> OpenAsync(CancellationToken ct);
 }
 
-public sealed record SchemaMigrationResult(IReadOnlyList<string> Applied, IReadOnlyList<string> ChecksumMismatches);
+public sealed record SchemaMigrationResult(IReadOnlyList<string> Applied, IReadOnlyList<string> ChecksumMismatches)
+{
+    /// <summary>Scripts déjà enregistrés dans T_SCHEMA_VERSION (non rejoués).</summary>
+    public int AlreadyUpToDate { get; init; }
+}
 
 /// <summary>
 /// Applique, dans l'ordre numérique, les scripts versionnés pas encore enregistrés dans
@@ -89,9 +93,20 @@ public sealed class SchemaMigrator
     public async Task<SchemaMigrationResult?> RunIfEnabledAsync(CancellationToken ct = default)
     {
         if (!_options.AutoMigrate)
+        {
+            _logger.LogInformation("{Message}", DisabledMessage);
             return null;
-        return await RunAsync(ct);
+        }
+        var result = await RunAsync(ct);
+        _logger.LogInformation("{Message}", Summarize(result));
+        return result;
     }
+
+    public const string DisabledMessage = "Migrations de schéma désactivées (Database:AutoMigrate = false).";
+
+    /// <summary>Ligne de journal du démarrage : sans secret, sans chaîne de connexion.</summary>
+    public static string Summarize(SchemaMigrationResult result)
+        => $"Migrations de schéma : {result.Applied.Count} script(s) appliqué(s), {result.AlreadyUpToDate} déjà à jour.";
 
     public async Task<SchemaMigrationResult> RunAsync(CancellationToken ct = default)
     {
@@ -129,7 +144,7 @@ public sealed class SchemaMigrator
 
             if (appliedNow.Count == 0)
                 _logger.LogInformation("Schéma à jour : aucune migration à appliquer.");
-            return new SchemaMigrationResult(appliedNow, mismatches);
+            return new SchemaMigrationResult(appliedNow, mismatches) { AlreadyUpToDate = scripts.Count - appliedNow.Count };
         }
         finally
         {

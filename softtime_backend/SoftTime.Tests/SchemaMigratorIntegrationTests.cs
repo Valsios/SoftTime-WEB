@@ -76,6 +76,27 @@ public class SchemaMigratorIntegrationTests
         Assert.DoesNotContain("Data Source", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [MigrationIntegrationFact]
+    public async Task Script002_CanBeReplayedOnAMigratedDatabase_WithoutChangingTheSchema()
+    {
+        var connectionString = DisposableConnectionString();
+        await Migrator(connectionString, lockTimeoutSeconds: 60).RunAsync();
+
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+        const string fingerprint = "SELECT COUNT(*) FROM sys.indexes WHERE object_id IN (SELECT object_id FROM sys.tables)";
+        var before = await ScalarAsync<int>(connection, fingerprint);
+        var script = new EmbeddedMigrationScriptSource().Load().Single(s => s.Version == 2);
+        foreach (var batch in SqlBatchSplitter.Split(script.Content))
+        {
+            await using var command = new SqlCommand(batch, connection);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        Assert.Equal(before, await ScalarAsync<int>(connection, fingerprint));
+        Assert.Equal(2, await ScalarAsync<int>(connection, "SELECT COUNT(*) FROM dbo.T_SCHEMA_VERSION WHERE VERSION IN (1, 2);"));
+    }
+
     private static SchemaMigrator Migrator(string connectionString, int lockTimeoutSeconds)
         => new(new SqlSchemaMigrationConnectionFactory(connectionString),
             new EmbeddedMigrationScriptSource(),
