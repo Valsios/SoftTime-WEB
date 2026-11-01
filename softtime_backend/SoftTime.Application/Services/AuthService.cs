@@ -39,7 +39,7 @@ public class AuthService
         "PROC:WEEKLY_VALIDATION", "PROC:OVERTIME",
         "OTHER:CANTEEN", "OTHER:TRAVEL_EXPENSES",
         "TRACE:AUDIT",
-        "REPORTS:REPORTS", "REPORTS:PREDICTIONS"
+        "REPORTS:REPORTS", "REPORTS:PREDICTIONS", "REPORTS:CLOSING"
     };
 
     private static bool IsKnownPermissionCode(string code)

@@ -69,4 +69,41 @@ public sealed record ClosingAnalysisDto(
     IReadOnlyList<ClosingCountDto> ParType,
     PagedResult<ClosingAnomalyDto> Anomalies,
     IReadOnlyList<ClosingDepartmentDto> ParDepartement,
-    ClosingComparisonDto? Comparaison);
+    ClosingComparisonDto? Comparaison,
+    string? Statut = null);
+
+/// <summary>Anomalie présentée à l'écran : nom et prénom <c>null</c> quand l'affichage des noms est désactivé.</summary>
+public sealed record ClosingAnomalyViewDto(
+    string Type,
+    string Gravite,
+    int Poids,
+    string Matricule,
+    string? Nom,
+    string? Prenom,
+    string? Departement,
+    DateTime Date,
+    string Detail,
+    decimal? Heures);
+
+/// <summary>
+/// Réponse de la route d'analyse : statut (Pret / ACorriger / Bloquant, <c>null</c> sans jour
+/// contrôlé) et son libellé, seuil appliqué, score, formule, comptages, départements, page
+/// d'anomalies enrichie, comparaison (si demandée).
+/// </summary>
+public sealed record ClosingReportDto(
+    DateTime From,
+    DateTime To,
+    string? Departement,
+    string? Statut,
+    string? StatutLibelle,
+    decimal SeuilBloquant,
+    int? Score,
+    string Formule,
+    int JoursEmployeControles,
+    int NombreAnomalies,
+    IReadOnlyList<ClosingCountDto> ParGravite,
+    IReadOnlyList<ClosingCountDto> ParType,
+    PagedResult<ClosingAnomalyViewDto> Anomalies,
+    IReadOnlyList<ClosingDepartmentDto> ParDepartement,
+    ClosingComparisonDto? Comparaison,
+    bool NomsAffiches);

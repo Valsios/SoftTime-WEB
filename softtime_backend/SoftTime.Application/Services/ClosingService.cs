@@ -27,8 +27,12 @@ namespace SoftTime.Application.Services;
 /// </summary>
 public class ClosingService
 {
-    /// <summary>Longueur maximale de la période analysée, bornes comprises.</summary>
-    public const int MaxPeriodDays = 366;
+    /// <summary>Longueur maximale par défaut de la période analysée, bornes comprises (réglage Closing:MaxPeriodDays).</summary>
+    public const int MaxPeriodDays = ClosingOptions.PlafondPeriodDays;
+
+    /// <summary>Taille de page par défaut et maximale de la liste d'anomalies (une demande supérieure est ramenée au maximum).</summary>
+    public const int DefaultPageSize = 50;
+    public const int MaxPageSize = 200;
 
     private static readonly IReadOnlyList<ClosingAnomalyType> Types = Enum.GetValues<ClosingAnomalyType>();
     private static readonly IReadOnlyList<ClosingSeverity> Gravites = Enum.GetValues<ClosingSeverity>();
@@ -37,23 +41,31 @@ public class ClosingService
     private readonly TenantConnectionService _tenant;
     private readonly SageLeaveCalendar _leaves;
     private readonly TimeProvider _horloge;
+    private readonly ClosingOptions _reglages;
 
     public ClosingService(
         IUnitOfWork uow,
         TenantConnectionService tenant,
         SageLeaveCalendar leaves,
-        TimeProvider? horloge = null)
+        TimeProvider? horloge = null,
+        ClosingOptions? reglages = null)
     {
         _uow = uow;
         _tenant = tenant;
         _leaves = leaves;
         _horloge = horloge ?? TimeProvider.System;
+        _reglages = reglages ?? new ClosingOptions();
     }
 
+    /// <summary>
+    /// Analyse d'une période. Sans options de règles dans la demande, les réglages « Closing »
+    /// s'appliquent (tolérance, semaines validées, gravités, poids, seuil de statut).
+    /// </summary>
     public async Task<ClosingAnalysisDto> AnalyserAsync(ClosingAnalysisRequest request, CancellationToken ct = default)
     {
         request = AvecPeriodeParDefaut(request, Today());
-        Valider(request);
+        request = request with { Options = request.Options ?? _reglages.ReglesParDefaut() };
+        Valider(request, _reglages.MaxPeriodDays);
         var donnees = await ChargerAsync(request, ct);
         return Calculer(donnees, request);
     }
@@ -71,15 +83,22 @@ public class ClosingService
         return request with { From = debutMois, To = debutMois.AddMonths(1).AddDays(-1) };
     }
 
-    /// <summary>Contrôle de la période, avec le même type d'exception que les autres services.</summary>
-    internal static void Valider(ClosingAnalysisRequest request)
+    /// <summary>
+    /// Contrôle de la période et de la pagination, avec le même type d'exception que les autres
+    /// services (traduit en HTTP 400) : page et taille de page doivent être au moins 1.
+    /// </summary>
+    internal static void Valider(ClosingAnalysisRequest request, int maxPeriodDays = MaxPeriodDays)
     {
         if (request.From == default || request.To == default)
             throw new InvalidOperationException("La période (from/to) est requise pour analyser la clôture.");
         if (request.To.Date < request.From.Date)
             throw new InvalidOperationException("La date de fin doit être postérieure ou égale à la date de début.");
-        if (LongueurJours(request.From, request.To) > MaxPeriodDays)
-            throw new InvalidOperationException($"La période analysée ne peut pas dépasser {MaxPeriodDays} jours.");
+        if (LongueurJours(request.From, request.To) > maxPeriodDays)
+            throw new InvalidOperationException($"La période analysée ne peut pas dépasser {maxPeriodDays} jours.");
+        if (request.Page is < 1)
+            throw new InvalidOperationException("Le numéro de page doit être supérieur ou égal à 1.");
+        if (request.PageSize is < 1)
+            throw new InvalidOperationException("La taille de page doit être supérieure ou égale à 1.");
     }
 
     /// <summary>
@@ -206,7 +225,8 @@ public class ClosingService
         var score = PayrollClosingRules.Score(actuel.Anomalies, actuel.JoursControles.Count, options);
         var parType = CompterTypes(actuel.Anomalies);
 
-        var (page, taille) = PaginationRules.Normaliser(request.Page, request.PageSize);
+        var page = Math.Max(1, request.Page ?? 1);
+        var taille = Math.Clamp(request.PageSize ?? DefaultPageSize, 1, MaxPageSize);
         var total = actuel.Anomalies.Count;
         var items = actuel.Anomalies
             .Skip(PaginationRules.Decalage(page, taille))
@@ -274,7 +294,8 @@ public class ClosingService
             ComptagesType(actuel.Anomalies),
             anomaliesPage,
             parDepartement,
-            comparaison);
+            comparaison,
+            ClosingStatusRules.Statut(actuel.Anomalies, actuel.JoursControles.Count, options.CriticalRatioBlocking)?.ToString());
     }
 
     /// <summary>Toutes les règles de clôture sur une période plafonnée à la veille.</summary>
@@ -301,7 +322,9 @@ public class ClosingService
         anomalies.AddRange(PayrollClosingRules.FeriesNonAppliques(
             d.Cartes, d.Plannings, d.Corrections, d.Feries, from, fin, d.DateDuJour));
 
-        return new ResultatPeriode(PayrollClosingRules.Trier(anomalies), JoursControles(d, from, fin));
+        return new ResultatPeriode(
+            PayrollClosingRules.AppliquerGravites(PayrollClosingRules.Trier(anomalies), options),
+            JoursControles(d, from, fin));
     }
 
     /// <summary>

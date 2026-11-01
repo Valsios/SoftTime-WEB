@@ -72,4 +72,18 @@ public sealed record ClosingRulesOptions
 
     public int PoidsMaximum => Math.Max(Poids(ClosingSeverity.Mineure),
         Math.Max(Poids(ClosingSeverity.Importante), Poids(ClosingSeverity.Critique)));
+
+    /// <summary>
+    /// Gravités remplaçant celles par défaut (<see cref="Services.PayrollClosingRules.GraviteParDefaut"/>)
+    /// pour certains types. Vide par défaut.
+    /// </summary>
+    public IReadOnlyDictionary<ClosingAnomalyType, ClosingSeverity> Gravites { get; init; } =
+        new Dictionary<ClosingAnomalyType, ClosingSeverity>();
+
+    /// <summary>Gravité appliquée à un type : la gravité configurée, sinon la gravité par défaut.</summary>
+    public ClosingSeverity Gravite(ClosingAnomalyType type) =>
+        Gravites.TryGetValue(type, out var gravite) ? gravite : Services.PayrollClosingRules.GraviteParDefaut(type);
+
+    /// <summary>Seuil du statut « Bloquant » : critiques ÷ jours-employé contrôlés (défaut provisoire 0,02).</summary>
+    public decimal CriticalRatioBlocking { get; init; } = Services.ClosingStatusRules.DefaultCriticalRatioBlocking;
 }

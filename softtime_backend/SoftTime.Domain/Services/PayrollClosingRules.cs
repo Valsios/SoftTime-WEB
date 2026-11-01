@@ -478,6 +478,20 @@ public static class PayrollClosingRules
         return (int)Math.Round(score, MidpointRounding.AwayFromZero);
     }
 
+    /// <summary>
+    /// Applique les gravités configurées (<see cref="ClosingRulesOptions.Gravite"/>) aux anomalies ;
+    /// l'ordre est conservé (la gravité ne fait pas partie du tri). Sans gravité configurée, la liste
+    /// est renvoyée telle quelle.
+    /// </summary>
+    public static IReadOnlyList<ClosingAnomaly> AppliquerGravites(IReadOnlyList<ClosingAnomaly> anomalies, ClosingRulesOptions options)
+    {
+        if (options.Gravites.Count == 0)
+            return anomalies;
+        return anomalies
+            .Select(a => options.Gravite(a.Type) is var gravite && gravite != a.Severity ? a with { Severity = gravite } : a)
+            .ToList();
+    }
+
     /// <summary>Ordre déterministe : date, matricule, type, puis détail.</summary>
     public static IReadOnlyList<ClosingAnomaly> Trier(IEnumerable<ClosingAnomaly> anomalies) =>
         anomalies

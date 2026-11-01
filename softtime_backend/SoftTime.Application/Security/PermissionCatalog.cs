@@ -35,7 +35,7 @@ public static class PermissionCatalog
         "PROC:WEEKLY_VALIDATION", "PROC:OVERTIME",
         "OTHER:CANTEEN", "OTHER:TRAVEL_EXPENSES",
         "TRACE:AUDIT",
-        "REPORTS:REPORTS", "REPORTS:PREDICTIONS"
+        "REPORTS:REPORTS", "REPORTS:PREDICTIONS", "REPORTS:CLOSING"
     };
 
     public static bool IsKnown(string code)
@@ -156,6 +156,7 @@ public static class PermissionCatalog
         {
             defaults.Add("REPORTS:REPORTS");
             defaults.Add("REPORTS:PREDICTIONS");
+            defaults.Add("REPORTS:CLOSING");
         }
 
         return defaults;
