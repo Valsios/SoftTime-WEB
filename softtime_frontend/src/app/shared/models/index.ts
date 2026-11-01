@@ -8,3 +8,4 @@ export * from './predictions.models';
 export * from './processing.models';
 export * from './reports.models';
 export * from './journal.models';
+export * from './closing.models';

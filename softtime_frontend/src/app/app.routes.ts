@@ -200,6 +200,12 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/predictions/predictions').then((m) => m.PredictionsPage),
       },
+      {
+        path: 'closing',
+        canActivate: [droitGuard, databaseGuard],
+        data: { droit: Droit.Reports, permission: 'REPORTS:CLOSING' },
+        loadComponent: () => import('./features/closing/closing').then((m) => m.ClosingPage),
+      },
 
       // Extra (droit 4)
       {
