@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using SoftTime.Application.Abstractions;
+using SoftTime.Application.Security;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 
@@ -15,14 +16,16 @@ namespace SoftTime.Infrastructure.Persistence;
 /// </summary>
 public sealed class AuditJournalSaveChangesInterceptor : SaveChangesInterceptor
 {
+    /// <summary>
+    /// Tables jamais journalisées : journaux eux-mêmes, historiques, et <c>T_AUDIT_DROIT</c> qui est déjà le journal
+    /// spécialisé des changements de droits.
+    /// </summary>
     private static readonly HashSet<string> ExcludedTables = new(StringComparer.OrdinalIgnoreCase)
     {
         "suivi_SUIVI", "suivi_T", "suivi_TBLCLN", "suivi_JOURNAL",
-        "T_HISTORIQUE_POINTAGE", "T_HISTORIQUE_ANOMALIE", "T_HISTORIQUE_HS"
+        "T_HISTORIQUE_POINTAGE", "T_HISTORIQUE_ANOMALIE", "T_HISTORIQUE_HS",
+        "T_AUDIT_DROIT"
     };
-
-    private static readonly string[] SensitiveFragments =
-        ["PASS", "MDP", "PWD", "HASH", "SALT", "TOKEN", "SECRET", "CONN", "KEY", "JETON"];
 
     private readonly ICurrentUser _user;
     private readonly ICompanyContext _company;
@@ -215,14 +218,15 @@ public sealed class AuditJournalSaveChangesInterceptor : SaveChangesInterceptor
         var action = ActionFor(state);
         foreach (var property in ChangedProperties(entry, state))
         {
-            var masked = IsSensitive(property.Metadata.Name);
+            var column = property.Metadata.GetColumnName() ?? property.Metadata.Name;
+            var masked = AuditMaskingPolicy.IsSensitive(table, column);
             yield return CreateEntry(
                 table,
-                KeyFor(entry, state),
-                property.Metadata.GetColumnName() ?? property.Metadata.Name,
+                AuditMaskingPolicy.MaskKey(table, KeyFor(entry, state)),
+                column,
                 action,
-                masked ? "********" : OldValueFor(property, state),
-                masked ? "********" : NewValueFor(property, state),
+                masked ? AuditMaskingPolicy.Mask : OldValueFor(property, state),
+                masked ? AuditMaskingPolicy.Mask : NewValueFor(property, state),
                 correlation);
         }
     }
@@ -290,9 +294,6 @@ public sealed class AuditJournalSaveChangesInterceptor : SaveChangesInterceptor
             IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
             _ => value.ToString()
         };
-
-    private static bool IsSensitive(string name)
-        => SensitiveFragments.Any(fragment => name.Contains(fragment, StringComparison.OrdinalIgnoreCase));
 
     private static string ActionFor(EntityState state) => state switch
     {

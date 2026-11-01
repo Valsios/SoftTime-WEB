@@ -35,6 +35,7 @@ public static class DependencyInjection
         services.AddScoped<DashboardService>();
         services.AddScoped<ExtraService>();
         services.AddScoped<AuditService>();
+        services.AddScoped<JournalService>();
 
         // Moteur prédictif : options liées à la section « Ml », services de la base analytique.
         services.AddOptions();
