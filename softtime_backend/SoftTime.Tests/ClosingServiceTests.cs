@@ -315,7 +315,7 @@ public class ClosingServiceTests
         ctx.JeuFixe();
         ctx.SemainePrecedente(manquantsPour002: true);
 
-        var result = await ctx.Service.AnalyserAsync(Semaine());
+        var result = await ctx.Service.AnalyserAsync(Semaine() with { IncludeComparison = true });
 
         // Précédente (12 → 16 nov.) : 2 manquants sur 6 jours → 100 − 100 × 10 / 30 = 66,67 → 67
         var comparaison = Assert.IsType<ClosingComparisonDto>(result.Comparaison);
@@ -337,7 +337,7 @@ public class ClosingServiceTests
         ctx.JeuFixe();
         ctx.SemainePrecedente(manquantsPour002: false);
 
-        var result = await ctx.Service.AnalyserAsync(Semaine());
+        var result = await ctx.Service.AnalyserAsync(Semaine() with { IncludeComparison = true });
 
         var comparaison = Assert.IsType<ClosingComparisonDto>(result.Comparaison);
         Assert.Equal(100, comparaison.ScorePrecedent);
@@ -441,6 +441,90 @@ public class ClosingServiceTests
         var second = JsonSerializer.Serialize(await ctx.Service.AnalyserAsync(Semaine()));
 
         Assert.Equal(premier, second);
+    }
+
+    [Fact]
+    public async Task Analyse_ComparisonNotRequested_IsAbsentByDefault()
+    {
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+        ctx.SemainePrecedente(manquantsPour002: true);
+
+        var result = await ctx.Service.AnalyserAsync(Semaine());
+
+        Assert.False(Semaine().IncludeComparison);
+        Assert.Null(result.Comparaison);
+        Assert.Equal(76, result.Score);
+        Assert.Equal(4, result.NombreAnomalies);
+    }
+
+    [Fact]
+    public async Task Analyse_ComparisonNotRequested_PreviousPeriodIsNotLoaded()
+    {
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+        ctx.SemainePrecedente(manquantsPour002: true);
+
+        var sans = await ctx.Service.ChargerAsync(Semaine(), CancellationToken.None);
+        var avec = await ctx.Service.ChargerAsync(Semaine() with { IncludeComparison = true }, CancellationToken.None);
+
+        Assert.DoesNotContain(sans.Pointages, p => p.DATE_POINTAGE < Lundi);
+        Assert.DoesNotContain(sans.Plannings, p => p.DateP < Lundi.AddDays(-1));
+        Assert.Contains(avec.Pointages, p => p.DATE_POINTAGE < Lundi);
+    }
+
+    [Fact]
+    public async Task Analyse_WithAndWithoutComparison_SameCurrentPeriodResult()
+    {
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+        ctx.SemainePrecedente(manquantsPour002: true);
+
+        var sans = await ctx.Service.AnalyserAsync(Semaine());
+        var avec = await ctx.Service.AnalyserAsync(Semaine() with { IncludeComparison = true });
+
+        Assert.NotNull(avec.Comparaison);
+        Assert.Equal(
+            JsonSerializer.Serialize(sans),
+            JsonSerializer.Serialize(avec with { Comparaison = null }));
+    }
+
+    [Fact]
+    public async Task Analyse_NoPeriod_DefaultsToPreviousCalendarMonth()
+    {
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+
+        var result = await ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(default, default));
+
+        // Aujourd'hui = 1er décembre 2025 : mois civil complet précédent = novembre 2025.
+        Assert.Equal(new DateTime(2025, 11, 1), result.From);
+        Assert.Equal(new DateTime(2025, 11, 30), result.To);
+        Assert.Equal(76, result.Score);
+    }
+
+    [Theory]
+    [InlineData(2025, 12, 1, 2025, 11, 1, 2025, 11, 30)]
+    [InlineData(2025, 12, 31, 2025, 11, 1, 2025, 11, 30)]
+    [InlineData(2026, 1, 15, 2025, 12, 1, 2025, 12, 31)]
+    [InlineData(2024, 3, 10, 2024, 2, 1, 2024, 2, 29)]
+    public void DefaultPeriod_IsPreviousCalendarMonth(int a, int m, int j, int a1, int m1, int j1, int a2, int m2, int j2)
+    {
+        var request = ClosingService.AvecPeriodeParDefaut(new ClosingAnalysisRequest(default, default), new DateTime(a, m, j));
+
+        Assert.Equal(new DateTime(a1, m1, j1), request.From);
+        Assert.Equal(new DateTime(a2, m2, j2), request.To);
+    }
+
+    [Fact]
+    public async Task Analyse_OnlyOneBoundProvided_ThrowsValidationError()
+    {
+        var ctx = new Contexte();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(Lundi, default)));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(default, Vendredi)));
     }
 
     [Fact]

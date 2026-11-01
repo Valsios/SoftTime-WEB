@@ -66,6 +66,20 @@ public static class PayrollClosingRules
         DateTime to,
         bool multiPointage,
         ClosingRulesOptions? options = null)
+        => PointagesIncomplets(cartes, plannings, ClosingPunchIndex.Build(pointages), corrections, semainesValidees,
+            from, to, multiPointage, options);
+
+    /// <summary>3.1 sur un index de pointages déjà construit (même résultat que la surcharge par liste).</summary>
+    public static IReadOnlyList<ClosingAnomaly> PointagesIncomplets(
+        IReadOnlyList<T_CARDPAIE> cartes,
+        IReadOnlyList<T_PLANNING_SAL> plannings,
+        ClosingPunchIndex pointages,
+        IReadOnlyList<T_HEURECORRIGER> corrections,
+        IReadOnlyList<T_HS_VALIDER> semainesValidees,
+        DateTime from,
+        DateTime to,
+        bool multiPointage,
+        ClosingRulesOptions? options = null)
     {
         options ??= ClosingRulesOptions.Default;
         var debut = from.Date;
@@ -93,14 +107,6 @@ public static class PayrollClosingRules
             return lundisValides.TryGetValue(cle, out var lundis) && lundis.Contains(lundi);
         }
 
-        var momentsParCle = PointagesValides(pointages)
-            .GroupBy(p => MatriculeIdentity.Cle(p.MATRICULE_SAGE))
-            .ToDictionary(
-                g => g.Key,
-                g => (IReadOnlyList<PunchMoment>)g
-                    .Select(p => new PunchMoment(p.DATE_POINTAGE!.Value.Date, p.HEURE_POINTAGE!.Value))
-                    .ToList());
-
         // Même planning que le pré-traitement : par carte et par jour, la ligne de plus petit ID.
         var planningParCarte = plannings
             .Where(p => p.DateP.HasValue)
@@ -113,7 +119,8 @@ public static class PayrollClosingRules
         var resultats = new List<ClosingAnomaly>();
         foreach (var (cle, carte) in CartesParCle(cartes))
         {
-            if (!momentsParCle.TryGetValue(cle, out var punchs))
+            var punchs = pointages.Moments(cle);
+            if (punchs.Count == 0)
                 continue;
 
             var planningCarte = planningParCarte.GetValueOrDefault(carte.ID)
@@ -162,14 +169,22 @@ public static class PayrollClosingRules
         DateTime from,
         DateTime to,
         DateTime dateDuJour)
-    {
-        var joursPointes = JoursPointes(pointages);
+        => PointagesManquants(
+            AbsenceReportRules.Calculer(plannings, cartes, corrections, congesParCle, feries, from, to, dateDuJour),
+            ClosingPunchIndex.Build(pointages));
 
-        var resultats = AbsenceReportRules
-            .Calculer(plannings, cartes, corrections, congesParCle, feries, from, to, dateDuJour)
+    /// <summary>
+    /// 3.2 sur les lignes déjà calculées par <see cref="AbsenceReportRules.Calculer"/> (partagées avec
+    /// 3.3 pour ne les calculer qu'une fois) et un index de pointages.
+    /// </summary>
+    public static IReadOnlyList<ClosingAnomaly> PointagesManquants(
+        IReadOnlyList<AbsenceReportRow> lignesAbsence,
+        ClosingPunchIndex pointages)
+    {
+        var resultats = lignesAbsence
             .Where(r => r.Type == AbsenceReportRules.TypeNonJustifiee)
             .Select(r => (Ligne: r, Cle: MatriculeIdentity.Cle(r.Matricule)))
-            .Where(x => !joursPointes.Contains((x.Cle, x.Ligne.Date.Date)))
+            .Where(x => !pointages.APointage(x.Cle, x.Ligne.Date))
             .Select(x => Anomalie(
                 ClosingAnomalyType.PointageManquant, x.Cle, x.Ligne.Date,
                 "Jour planifié sans pointage ni correction", x.Ligne.DureeHeures))
@@ -195,15 +210,24 @@ public static class PayrollClosingRules
         DateTime from,
         DateTime to,
         DateTime dateDuJour)
+        => PlanningsSansPointage(
+            AbsenceReportRules.Calculer(plannings, cartes, corrections, congesParCle, feries, from, to, dateDuJour),
+            ClosingPunchIndex.Build(pointages),
+            corrections);
+
+    /// <summary>3.3 sur les lignes déjà calculées par <see cref="AbsenceReportRules.Calculer"/> et un index de pointages.</summary>
+    public static IReadOnlyList<ClosingAnomaly> PlanningsSansPointage(
+        IReadOnlyList<AbsenceReportRow> lignesAbsence,
+        ClosingPunchIndex pointages,
+        IReadOnlyList<T_HEURECORRIGER> corrections)
     {
-        var joursPointes = JoursPointes(pointages);
         var correctionsParJour = corrections
             .Where(h => h.DATE_POINTAGE_IN.HasValue && !string.IsNullOrWhiteSpace(h.MATRICULE_SAGE))
             .GroupBy(h => (Cle: MatriculeIdentity.Cle(h.MATRICULE_SAGE), Jour: h.DATE_POINTAGE_IN!.Value.Date))
             .ToDictionary(g => g.Key, g => g.ToList());
 
         var resultats = new List<ClosingAnomaly>();
-        foreach (var ligne in AbsenceReportRules.Calculer(plannings, cartes, corrections, congesParCle, feries, from, to, dateDuJour))
+        foreach (var ligne in lignesAbsence)
         {
             if (ligne.DureeHeures is null)
                 continue;
@@ -216,7 +240,7 @@ public static class PayrollClosingRules
 
             var cle = MatriculeIdentity.Cle(ligne.Matricule);
             var jour = ligne.Date.Date;
-            if (joursPointes.Contains((cle, jour)))
+            if (pointages.APointage(cle, jour))
                 continue;
 
             var corrsDuJour = correctionsParJour.GetValueOrDefault((cle, jour)) ?? new List<T_HEURECORRIGER>();
@@ -250,6 +274,15 @@ public static class PayrollClosingRules
         IReadOnlyList<T_POINTAGE> pointages,
         DateTime from,
         DateTime to)
+        => PointagesSansPlanning(cartes, plannings, ClosingPunchIndex.Build(pointages), from, to);
+
+    /// <summary>3.4 sur un index de pointages déjà construit.</summary>
+    public static IReadOnlyList<ClosingAnomaly> PointagesSansPlanning(
+        IReadOnlyList<T_CARDPAIE> cartes,
+        IReadOnlyList<T_PLANNING_SAL> plannings,
+        ClosingPunchIndex pointages,
+        DateTime from,
+        DateTime to)
     {
         var debut = from.Date;
         var fin = to.Date;
@@ -261,14 +294,12 @@ public static class PayrollClosingRules
             .ToHashSet();
         var clesConnues = cleParIdSal.Values.ToHashSet();
 
-        var resultats = PointagesValides(pointages)
-            .Select(p => (Cle: MatriculeIdentity.Cle(p.MATRICULE_SAGE), Jour: p.DATE_POINTAGE!.Value.Date))
+        var resultats = pointages.Jours
             .Where(x => x.Jour >= debut && x.Jour <= fin && clesConnues.Contains(x.Cle))
-            .GroupBy(x => x)
-            .Where(g => !joursPlanifies.Contains(g.Key))
-            .Select(g => Anomalie(
-                ClosingAnomalyType.PointageSansPlanning, g.Key.Cle, g.Key.Jour,
-                $"{g.Count()} pointage(s) sans ligne de planning"))
+            .Where(x => !joursPlanifies.Contains((x.Cle, x.Jour)))
+            .Select(x => Anomalie(
+                ClosingAnomalyType.PointageSansPlanning, x.Cle, x.Jour,
+                $"{x.Nombre} pointage(s) sans ligne de planning"))
             .ToList();
 
         return Trier(resultats);
@@ -279,18 +310,35 @@ public static class PayrollClosingRules
         IReadOnlyList<T_POINTAGE> pointages,
         DateTime from,
         DateTime to)
+        => DoublonsExacts(ClosingPunchIndex.Build(pointages), from, to);
+
+    /// <summary>3.5 sur un index de pointages déjà construit (pointages triés : les doublons sont contigus).</summary>
+    public static IReadOnlyList<ClosingAnomaly> DoublonsExacts(
+        ClosingPunchIndex pointages,
+        DateTime from,
+        DateTime to)
     {
         var debut = from.Date;
         var fin = to.Date;
 
-        var resultats = PointagesValides(pointages)
-            .Where(p => p.DATE_POINTAGE!.Value.Date >= debut && p.DATE_POINTAGE!.Value.Date <= fin)
-            .GroupBy(p => (Cle: MatriculeIdentity.Cle(p.MATRICULE_SAGE), Jour: p.DATE_POINTAGE!.Value.Date, Heure: p.HEURE_POINTAGE!.Value))
-            .Where(g => g.Count() > 1)
-            .Select(g => Anomalie(
-                ClosingAnomalyType.DoublonExact, g.Key.Cle, g.Key.Jour,
-                $"{g.Count()} pointages identiques à {FormatHeure(g.Key.Heure)}"))
-            .ToList();
+        var resultats = new List<ClosingAnomaly>();
+        foreach (var cle in pointages.Cles)
+        {
+            var moments = pointages.Moments(cle);
+            for (var i = 0; i < moments.Count;)
+            {
+                var j = i + 1;
+                while (j < moments.Count && moments[j] == moments[i])
+                    j++;
+
+                var jour = moments[i].Date;
+                if (j - i > 1 && jour >= debut && jour <= fin)
+                    resultats.Add(Anomalie(
+                        ClosingAnomalyType.DoublonExact, cle, jour,
+                        $"{j - i} pointages identiques à {FormatHeure(moments[i].Heure)}"));
+                i = j;
+            }
+        }
 
         return Trier(resultats);
     }
@@ -306,6 +354,14 @@ public static class PayrollClosingRules
         DateTime from,
         DateTime to,
         ClosingRulesOptions? options = null)
+        => QuasiDoublons(ClosingPunchIndex.Build(pointages), from, to, options);
+
+    /// <summary>3.6 sur un index de pointages déjà construit.</summary>
+    public static IReadOnlyList<ClosingAnomaly> QuasiDoublons(
+        ClosingPunchIndex pointages,
+        DateTime from,
+        DateTime to,
+        ClosingRulesOptions? options = null)
     {
         options ??= ClosingRulesOptions.Default;
         var tolerance = TimeSpan.FromSeconds(Math.Max(0, options.DuplicateToleranceSeconds));
@@ -313,17 +369,18 @@ public static class PayrollClosingRules
         var fin = to.Date;
 
         var resultats = new List<ClosingAnomaly>();
-        var instantsParCle = PointagesValides(pointages)
-            .Where(p => p.DATE_POINTAGE!.Value.Date >= debut && p.DATE_POINTAGE!.Value.Date <= fin)
-            .GroupBy(p => MatriculeIdentity.Cle(p.MATRICULE_SAGE));
-
-        foreach (var groupe in instantsParCle)
+        foreach (var cle in pointages.Cles)
         {
-            var instants = groupe
-                .Select(p => p.DATE_POINTAGE!.Value.Date + p.HEURE_POINTAGE!.Value)
-                .Distinct()
-                .OrderBy(d => d)
-                .ToList();
+            // Pointages déjà triés : instants distincts de la période, dans l'ordre.
+            var instants = new List<DateTime>();
+            foreach (var m in pointages.Moments(cle))
+            {
+                if (m.Date < debut || m.Date > fin)
+                    continue;
+                var instant = m.Date + m.Heure;
+                if (instants.Count == 0 || instants[^1] != instant)
+                    instants.Add(instant);
+            }
 
             for (var i = 1; i < instants.Count; i++)
             {
@@ -332,7 +389,7 @@ public static class PayrollClosingRules
                     continue;
 
                 resultats.Add(Anomalie(
-                    ClosingAnomalyType.QuasiDoublon, groupe.Key, instants[i - 1].Date,
+                    ClosingAnomalyType.QuasiDoublon, cle, instants[i - 1].Date,
                     $"Écart de {(int)ecart.TotalSeconds} s entre {FormatHeure(instants[i - 1].TimeOfDay)} et {FormatHeure(instants[i].TimeOfDay)}"));
             }
         }
@@ -433,17 +490,6 @@ public static class PayrollClosingRules
     private static ClosingAnomaly Anomalie(
         ClosingAnomalyType type, string cle, DateTime jour, string detail, decimal? heures = null)
         => new(type, GraviteParDefaut(type), cle, jour.Date, detail, heures);
-
-    /// <summary>Pointages exploitables, avec le même filtre que le pré-traitement.</summary>
-    private static IEnumerable<T_POINTAGE> PointagesValides(IEnumerable<T_POINTAGE> pointages) =>
-        pointages.Where(p => p.DATE_POINTAGE.HasValue
-                             && p.HEURE_POINTAGE.HasValue
-                             && !string.IsNullOrWhiteSpace(p.MATRICULE_SAGE));
-
-    private static HashSet<(string Cle, DateTime Jour)> JoursPointes(IEnumerable<T_POINTAGE> pointages) =>
-        PointagesValides(pointages)
-            .Select(p => (MatriculeIdentity.Cle(p.MATRICULE_SAGE), p.DATE_POINTAGE!.Value.Date))
-            .ToHashSet();
 
     private static bool AHeuresCorrigees(T_HEURECORRIGER h) =>
         h.HENTREE.HasValue || h.HSORTIE.HasValue || h.HPS.HasValue || h.HPE.HasValue;

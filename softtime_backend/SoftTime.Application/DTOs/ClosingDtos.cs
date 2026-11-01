@@ -5,6 +5,9 @@ namespace SoftTime.Application.DTOs;
 /// <summary>
 /// Demande d'analyse de clôture : période inclusive, département facultatif, page de la liste
 /// d'anomalies et options des règles (valeurs par défaut du Domain si absentes).
+/// Sans <see cref="From"/> ni <see cref="To"/>, la période est le mois civil complet précédent.
+/// <see cref="IncludeComparison"/> (faux par défaut) charge et calcule aussi la période précédente
+/// de même longueur ; sinon <c>Comparaison</c> vaut <c>null</c>.
 /// </summary>
 public sealed record ClosingAnalysisRequest(
     DateTime From,
@@ -12,7 +15,8 @@ public sealed record ClosingAnalysisRequest(
     string? Departement = null,
     int? Page = null,
     int? PageSize = null,
-    ClosingRulesOptions? Options = null);
+    ClosingRulesOptions? Options = null,
+    bool IncludeComparison = false);
 
 /// <summary>Comptage d'une gravité ou d'un type d'anomalie.</summary>
 public sealed record ClosingCountDto(string Cle, int Nombre);

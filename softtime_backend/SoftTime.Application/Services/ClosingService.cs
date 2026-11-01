@@ -52,9 +52,23 @@ public class ClosingService
 
     public async Task<ClosingAnalysisDto> AnalyserAsync(ClosingAnalysisRequest request, CancellationToken ct = default)
     {
+        request = AvecPeriodeParDefaut(request, Today());
         Valider(request);
         var donnees = await ChargerAsync(request, ct);
         return Calculer(donnees, request);
+    }
+
+    /// <summary>
+    /// Période par défaut, quand ni début ni fin ne sont fournis : le mois civil complet PRÉCÉDENT
+    /// (le mois que l'on clôture ; le mois en cours n'est pas terminé). Une seule borne fournie reste
+    /// une erreur de validation.
+    /// </summary>
+    internal static ClosingAnalysisRequest AvecPeriodeParDefaut(ClosingAnalysisRequest request, DateTime aujourdhui)
+    {
+        if (request.From != default || request.To != default)
+            return request;
+        var debutMois = new DateTime(aujourdhui.Year, aujourdhui.Month, 1).AddMonths(-1);
+        return request with { From = debutMois, To = debutMois.AddMonths(1).AddDays(-1) };
     }
 
     /// <summary>Contrôle de la période, avec le même type d'exception que les autres services.</summary>
@@ -69,9 +83,11 @@ public class ClosingService
     }
 
     /// <summary>
-    /// Chargement ensembliste de la période demandée et de la période précédente. Le filtre
-    /// département s'applique aux cartes, puis toutes les autres données sont restreintes aux
-    /// salariés retenus avant le calcul.
+    /// Chargement ensembliste de la période demandée (et de la période précédente seulement si la
+    /// comparaison est demandée). Le filtre département s'applique aux cartes, puis toutes les autres
+    /// données sont restreintes aux salariés retenus avant le calcul. Planning, pointages, corrections
+    /// et semaines validées sont projetés sur les seules colonnes utiles aux règles : ces objets ne
+    /// sont pas suivis par le contexte (lecture seule, mémoire réduite).
     /// </summary>
     internal async Task<ClosingData> ChargerAsync(ClosingAnalysisRequest request, CancellationToken ct)
     {
@@ -80,7 +96,7 @@ public class ClosingService
         var pointeuseDb = _tenant.PointeuseDb;
 
         var (debutPrecedent, _) = PeriodePrecedente(request.From, request.To);
-        var debut = debutPrecedent;
+        var debut = request.IncludeComparison ? debutPrecedent : request.From.Date;
         var fin = request.To.Date;
 
         var clock = (await _uow.Repository<T_CLOCK>().ListAsync(_ => true, ct)).FirstOrDefault()
@@ -108,28 +124,54 @@ public class ClosingService
         // Marge d'un jour de planning de chaque côté (postes de nuit), comme le pré-traitement.
         var planDebut = debut.AddDays(-1);
         var planFin = fin.AddDays(1);
-        var plannings = (await _uow.Repository<T_PLANNING_SAL>().ListAsync(
-                p => p.BDD_SAGE == sageDb && p.DateP >= planDebut && p.DateP <= planFin, ct))
+        var repoPlanning = _uow.Repository<T_PLANNING_SAL>();
+        var plannings = (await repoPlanning.ToListAsync(repoPlanning.Query()
+                .Where(p => p.BDD_SAGE == sageDb && p.DateP >= planDebut && p.DateP <= planFin)
+                .OrderBy(p => p.ID)
+                .Select(p => new T_PLANNING_SAL
+                {
+                    ID = p.ID, IDSAL = p.IDSAL, DateP = p.DateP, HA = p.HA, HD = p.HD, Pause = p.Pause, OffP = p.OffP
+                }), ct))
             .Where(p => p.DateP.HasValue && idsCartes.Contains(p.IDSAL))
             .ToList();
 
         // Sorties de nuit : les pointages du lendemain de la fin de période sont aussi chargés.
         var pointagesFinExclusive = fin.AddDays(2);
-        var pointages = (await _uow.Repository<T_POINTAGE>().ListAsync(
-                p => p.NOM_BDD_SAGE == sageDb && p.DATE_POINTAGE >= debut && p.DATE_POINTAGE < pointagesFinExclusive, ct))
+        var repoPointage = _uow.Repository<T_POINTAGE>();
+        var pointages = (await repoPointage.ToListAsync(repoPointage.Query()
+                .Where(p => p.NOM_BDD_SAGE == sageDb && p.DATE_POINTAGE >= debut && p.DATE_POINTAGE < pointagesFinExclusive)
+                .OrderBy(p => p.IDPOINTAGE)
+                .Select(p => new T_POINTAGE
+                {
+                    IDPOINTAGE = p.IDPOINTAGE, MATRICULE_SAGE = p.MATRICULE_SAGE, DATE_POINTAGE = p.DATE_POINTAGE,
+                    HEURE_POINTAGE = p.HEURE_POINTAGE, NOM_BDD_POINTEUSE = p.NOM_BDD_POINTEUSE
+                }), ct))
             .Where(p => CorrespondPointeuse(p.NOM_BDD_POINTEUSE, pointeuseDb))
             .Where(p => cles.Contains(MatriculeIdentity.Cle(p.MATRICULE_SAGE)))
             .ToList();
 
         var correctionsFinExclusive = fin.AddDays(1);
-        var corrections = (await _uow.Repository<T_HEURECORRIGER>().ListAsync(
-                h => h.BDD_SAGE == sageDb && h.DATE_POINTAGE_IN >= debut && h.DATE_POINTAGE_IN < correctionsFinExclusive, ct))
+        var repoCorrection = _uow.Repository<T_HEURECORRIGER>();
+        var corrections = (await repoCorrection.ToListAsync(repoCorrection.Query()
+                .Where(h => h.BDD_SAGE == sageDb && h.DATE_POINTAGE_IN >= debut && h.DATE_POINTAGE_IN < correctionsFinExclusive)
+                .OrderBy(h => h.ID)
+                .Select(h => new T_HEURECORRIGER
+                {
+                    ID = h.ID, MATRICULE_SAGE = h.MATRICULE_SAGE, DATE_POINTAGE_IN = h.DATE_POINTAGE_IN,
+                    HENTREE = h.HENTREE, HSORTIE = h.HSORTIE, HPS = h.HPS, HPE = h.HPE,
+                    ABSENCE_AM = h.ABSENCE_AM, ABSENCE_PM = h.ABSENCE_PM, INTITULE_ABSENCE = h.INTITULE_ABSENCE,
+                    FERIER = h.FERIER, FERIER_AM = h.FERIER_AM, FERIER_PM = h.FERIER_PM, M_FERIES = h.M_FERIES,
+                    ORIGINE = h.ORIGINE
+                }), ct))
             .Where(h => cles.Contains(MatriculeIdentity.Cle(h.MATRICULE_SAGE)))
             .ToList();
 
         var lundiDebut = debut.AddDays(-(((int)debut.DayOfWeek + 6) % 7));
-        var semainesValidees = (await _uow.Repository<T_HS_VALIDER>().ListAsync(
-                v => v.BDD_SAGE == sageDb && v.VALIDATION_HS == true && v.DATE_DEB >= lundiDebut && v.DATE_DEB <= fin, ct))
+        var repoSemaine = _uow.Repository<T_HS_VALIDER>();
+        var semainesValidees = (await repoSemaine.ToListAsync(repoSemaine.Query()
+                .Where(v => v.BDD_SAGE == sageDb && v.VALIDATION_HS == true && v.DATE_DEB >= lundiDebut && v.DATE_DEB <= fin)
+                .OrderBy(v => v.ID)
+                .Select(v => new T_HS_VALIDER { ID = v.ID, MATRICULES = v.MATRICULES, DATE_DEB = v.DATE_DEB, VALIDATION_HS = v.VALIDATION_HS }), ct))
             .Where(v => cles.Contains(MatriculeIdentity.Cle(v.MATRICULES)))
             .ToList();
 
@@ -158,7 +200,8 @@ public class ClosingService
                 StringComparer.Ordinal);
 
         var actuel = Controler(donnees, from, to, options);
-        var precedent = Controler(donnees, debutPrecedent, finPrecedente, options);
+        // Période précédente : calculée seulement si la comparaison est demandée (elle n'est alors chargée qu'à ce moment).
+        var precedent = request.IncludeComparison ? Controler(donnees, debutPrecedent, finPrecedente, options) : null;
 
         var score = PayrollClosingRules.Score(actuel.Anomalies, actuel.JoursControles.Count, options);
         var parType = CompterTypes(actuel.Anomalies);
@@ -182,7 +225,7 @@ public class ClosingService
             items, total, PaginationRules.PageEffective(total, page), taille, PaginationRules.NombreDePages(total, taille));
 
         ClosingComparisonDto? comparaison = null;
-        if (precedent.JoursControles.Count > 0)
+        if (precedent is not null && precedent.JoursControles.Count > 0)
         {
             var scorePrecedent = PayrollClosingRules.Score(precedent.Anomalies, precedent.JoursControles.Count, options);
             var parTypePrecedent = CompterTypes(precedent.Anomalies);
@@ -242,16 +285,19 @@ public class ClosingService
         if (from > fin)
             return new ResultatPeriode(Array.Empty<ClosingAnomaly>(), new HashSet<(string, DateTime)>());
 
+        // Index des pointages construit une fois au chargement ; lignes d'absence calculées une fois
+        // et partagées entre pointages manquants et plannings sans pointage.
+        var index = d.IndexPointages;
+        var lignesAbsence = AbsenceReportRules.Calculer(d.Plannings, d.Cartes, d.Corrections, d.Conges, d.Feries, from, fin, d.DateDuJour);
+
         var anomalies = new List<ClosingAnomaly>();
         anomalies.AddRange(PayrollClosingRules.PointagesIncomplets(
-            d.Cartes, d.Plannings, d.Pointages, d.Corrections, d.SemainesValidees, from, fin, d.MultiPointage, options));
-        anomalies.AddRange(PayrollClosingRules.PointagesManquants(
-            d.Cartes, d.Plannings, d.Pointages, d.Corrections, d.Conges, d.Feries, from, fin, d.DateDuJour));
-        anomalies.AddRange(PayrollClosingRules.PlanningsSansPointage(
-            d.Cartes, d.Plannings, d.Pointages, d.Corrections, d.Conges, d.Feries, from, fin, d.DateDuJour));
-        anomalies.AddRange(PayrollClosingRules.PointagesSansPlanning(d.Cartes, d.Plannings, d.Pointages, from, fin));
-        anomalies.AddRange(PayrollClosingRules.DoublonsExacts(d.Pointages, from, fin));
-        anomalies.AddRange(PayrollClosingRules.QuasiDoublons(d.Pointages, from, fin, options));
+            d.Cartes, d.Plannings, index, d.Corrections, d.SemainesValidees, from, fin, d.MultiPointage, options));
+        anomalies.AddRange(PayrollClosingRules.PointagesManquants(lignesAbsence, index));
+        anomalies.AddRange(PayrollClosingRules.PlanningsSansPointage(lignesAbsence, index, d.Corrections));
+        anomalies.AddRange(PayrollClosingRules.PointagesSansPlanning(d.Cartes, d.Plannings, index, from, fin));
+        anomalies.AddRange(PayrollClosingRules.DoublonsExacts(index, from, fin));
+        anomalies.AddRange(PayrollClosingRules.QuasiDoublons(index, from, fin, options));
         anomalies.AddRange(PayrollClosingRules.FeriesNonAppliques(
             d.Cartes, d.Plannings, d.Corrections, d.Feries, from, fin, d.DateDuJour));
 
@@ -276,13 +322,10 @@ public class ClosingService
             .Select(x => x.Key)
             .ToHashSet();
 
-        foreach (var p in d.Pointages)
+        foreach (var (cle, jour, _) in d.IndexPointages.Jours)
         {
-            if (p.DATE_POINTAGE is not DateTime date || !p.HEURE_POINTAGE.HasValue)
-                continue;
-            var jour = date.Date;
             if (jour >= from && jour <= fin)
-                jours.Add((MatriculeIdentity.Cle(p.MATRICULE_SAGE), jour));
+                jours.Add((cle, jour));
         }
 
         return jours;
@@ -338,4 +381,8 @@ internal sealed record ClosingData(
     IReadOnlyList<T_HS_VALIDER> SemainesValidees,
     IReadOnlySet<DateTime> Feries,
     IReadOnlyDictionary<string, List<LeaveDay>> Conges,
-    DateTime DateDuJour);
+    DateTime DateDuJour)
+{
+    /// <summary>Pointages indexés une seule fois par (matricule, jour), partagés par toutes les règles.</summary>
+    public ClosingPunchIndex IndexPointages { get; } = ClosingPunchIndex.Build(Pointages);
+}

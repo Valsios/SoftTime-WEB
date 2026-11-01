@@ -40,7 +40,8 @@ public sealed class ClosingIntegrationFactAttribute : FactAttribute
 [Trait("Category", "Integration")]
 public class ClosingServiceIntegrationTests
 {
-    private const string BaseAutorisee = "SOFTTIME_DEMO_CLOTURE";
+    // Copies jetables : la base de démonstration (anomalies injectées) et la copie de référence intacte.
+    private static readonly string[] BasesAutorisees = { "SOFTTIME_DEMO_CLOTURE", "SOFTTIME_DEMO_CLOTURE_REF" };
     private static readonly DateTime Novembre = new(2025, 11, 1);
     private static readonly DateTime FinNovembre = new(2025, 11, 30);
 
@@ -170,6 +171,102 @@ public class ClosingServiceIntegrationTests
         Assert.True(manquees.Count == 0, "Anomalies injectées non détectées : " + string.Join(", ", manquees));
     }
 
+    /// <summary>
+    /// Empreinte de non-régression d'une période (SOFTTIME_CLOTURE_DEBUT / SOFTTIME_CLOTURE_FIN, novembre 2025
+    /// par défaut) : score, comptages, départements, comparaison et hash SHA-256 de la liste complète.
+    /// </summary>
+    [ClosingIntegrationFact]
+    public async Task Fingerprint_PeriodResult()
+    {
+        var debut = DateLue("SOFTTIME_CLOTURE_DEBUT") ?? Novembre;
+        var fin = DateLue("SOFTTIME_CLOTURE_FIN") ?? FinNovembre;
+        using var scope = Fournisseur().CreateScope();
+        var service = ActivatorUtilities.CreateInstance<ClosingService>(scope.ServiceProvider);
+        var request = new ClosingAnalysisRequest(debut, fin, IncludeComparison: Comparaison(defaut: true));
+        var donnees = await service.ChargerAsync(request, CancellationToken.None);
+        var resultat = ClosingService.Calculer(donnees, request);
+        var anomalies = ClosingService.Controler(donnees, debut, fin, ClosingRulesOptions.Default).Anomalies;
+
+        static string Comptes(IEnumerable<ClosingCountDto> c) => string.Join(",", c.Select(x => $"{x.Cle}={x.Nombre}"));
+        var e = new StringBuilder();
+        e.AppendLine($"periode;{debut:yyyy-MM-dd};{fin:yyyy-MM-dd}");
+        e.AppendLine($"score;{resultat.Score?.ToString() ?? "null"}");
+        e.AppendLine($"jours_controles;{resultat.JoursEmployeControles}");
+        e.AppendLine($"anomalies;{resultat.NombreAnomalies}");
+        e.AppendLine($"par_gravite;{Comptes(resultat.ParGravite)}");
+        e.AppendLine($"par_type;{Comptes(resultat.ParType)}");
+        foreach (var dep in resultat.ParDepartement)
+            e.AppendLine($"departement;{dep.Departement ?? "(aucun)"};{dep.Score?.ToString() ?? "null"};{dep.JoursEmployeControles};{dep.NombreAnomalies};{Comptes(dep.ParType)}");
+        var c = resultat.Comparaison;
+        e.AppendLine(c is null
+            ? "comparaison;null"
+            : $"comparaison;{c.From:yyyy-MM-dd};{c.To:yyyy-MM-dd};{c.ScorePrecedent?.ToString() ?? "null"};{c.JoursEmployeControlesPrecedent};{c.EcartScore?.ToString() ?? "null"};"
+              + string.Join(",", c.ParType.Select(t => $"{t.Type}={t.Precedent}/{t.Actuel}/{t.Ecart}")));
+        e.AppendLine($"hash_anomalies;{Hash(anomalies.Select(a => string.Join(";", a.Type, a.Severity, a.Matricule,
+            a.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), a.Detail, a.Heures?.ToString(CultureInfo.InvariantCulture) ?? "")))}");
+        e.AppendLine($"hash_page1;{Hash(resultat.Anomalies.Items.Select(a => string.Join(";", a.Type, a.Gravite, a.Poids, a.Matricule,
+            a.Departement, a.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), a.Detail, a.Heures?.ToString(CultureInfo.InvariantCulture) ?? "")))}");
+        Ecrire("empreinte", e.ToString());
+    }
+
+    /// <summary>
+    /// Mesure d'un scénario (une période, à lancer seul dans son processus pour un pic mémoire
+    /// significatif) : chargement et calcul à froid puis à chaud via <see cref="ClosingService.AnalyserAsync"/>.
+    /// </summary>
+    [ClosingIntegrationFact]
+    public async Task Performance_SingleScenario()
+    {
+        var debut = DateLue("SOFTTIME_CLOTURE_DEBUT") ?? Novembre;
+        var fin = DateLue("SOFTTIME_CLOTURE_FIN") ?? FinNovembre;
+        var request = new ClosingAnalysisRequest(debut, fin, IncludeComparison: Comparaison(defaut: false));
+        var process = Process.GetCurrentProcess();
+        process.Refresh();
+        var memoireDepart = process.WorkingSet64;
+
+        var mesures = new List<string>();
+        for (var passage = 1; passage <= 2; passage++)
+        {
+            using var scope = Fournisseur().CreateScope();
+            var service = ActivatorUtilities.CreateInstance<ClosingService>(scope.ServiceProvider);
+            var chrono = Stopwatch.StartNew();
+            var donnees = await service.ChargerAsync(request, CancellationToken.None);
+            var chargement = chrono.ElapsedMilliseconds;
+            var heapCharge = GC.GetTotalMemory(forceFullCollection: true);
+            chrono.Restart();
+            var resultat = ClosingService.Calculer(donnees, request);
+            var calcul = chrono.ElapsedMilliseconds;
+            mesures.Add($"{(passage == 1 ? "froid" : "chaud")};{chargement};{calcul};{chargement + calcul};{heapCharge / (1024 * 1024)};{resultat.NombreAnomalies};{resultat.Score?.ToString() ?? "null"};{(resultat.Comparaison is null ? "non" : "oui")}");
+        }
+
+        process.Refresh();
+        Ecrire("perf", $"periode;{debut:yyyy-MM-dd};{fin:yyyy-MM-dd}\n"
+            + "passage;chargement_ms;calcul_ms;total_ms;tas_gere_apres_chargement_mo;anomalies;score;comparaison\n"
+            + string.Join("\n", mesures) + "\n"
+            + $"memoire_processus_depart_mo;{memoireDepart / (1024 * 1024)}\n"
+            + $"pic_memoire_processus_mo;{process.PeakWorkingSet64 / (1024 * 1024)}\n");
+    }
+
+    private static string Hash(IEnumerable<string> lignes)
+    {
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        var octets = Encoding.UTF8.GetBytes(string.Join("\n", lignes));
+        return Convert.ToHexString(sha.ComputeHash(octets));
+    }
+
+    /// <summary>SOFTTIME_CLOTURE_COMPARAISON = 1 / 0 ; absente : valeur par défaut du scénario.</summary>
+    private static bool Comparaison(bool defaut) =>
+        Environment.GetEnvironmentVariable("SOFTTIME_CLOTURE_COMPARAISON") switch
+        {
+            "1" => true,
+            "0" => false,
+            _ => defaut
+        };
+
+    private static DateTime? DateLue(string variable) =>
+        DateTime.TryParseExact(Environment.GetEnvironmentVariable(variable), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d)
+            ? d
+            : null;
+
     private static IEnumerable<(string Suffixe, ClosingRulesOptions Options)> ModesOptions()
     {
         yield return ("defaut", ClosingRulesOptions.Default);
@@ -189,8 +286,8 @@ public class ClosingServiceIntegrationTests
     {
         var connexion = Environment.GetEnvironmentVariable(ClosingIntegrationFactAttribute.Variable)!;
         var catalogue = new SqlConnectionStringBuilder(connexion).InitialCatalog;
-        if (!string.Equals(catalogue, BaseAutorisee, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException($"Base refusée : seule la copie {BaseAutorisee} est autorisée.");
+        if (!BasesAutorisees.Contains(catalogue, StringComparer.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Base refusée : seules les copies {string.Join(", ", BasesAutorisees)} sont autorisées.");
 
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:SoftTime"] = connexion })
