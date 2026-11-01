@@ -22,7 +22,7 @@ public sealed class MigrationIntegrationFactAttribute : FactAttribute
 [Trait("Category", "Integration")]
 public class SchemaMigratorIntegrationTests
 {
-    // Les 48 tables du modèle EF (SoftTimeDbContext) créées par 001.
+    // Les 48 tables du modèle EF (SoftTimeDbContext) créées par 001, plus suivi_JOURNAL créée par 003.
     private static readonly string[] ApplicationTables =
     {
         "T_ROLE", "T_RESPONSABLE", "T_DROIT", "T_DROIT_ROLE", "T_BDD_AUTORISE", "T_USER_PERMISSION",
@@ -33,7 +33,7 @@ public class SchemaMigratorIntegrationTests
         "T_impr_ABS", "T_impr_RET", "T_impr_HS", "T_FRAIS", "T_CANTINE", "suivi_SUIVI", "suivi_T",
         "suivi_TBLCLN", "T_FIELD_ROLE", "T_SOURCE_ENTITY_MAPPING", "T_SOURCE_FIELD_MAPPING",
         "T_CODE_CONSTANTE", "T_PAIE_ECRITURE", "T_HISTORIQUE_POINTAGE", "T_HISTORIQUE_ANOMALIE",
-        "T_HISTORIQUE_HS", "T_ROLE_PERMISSION", "T_AUDIT_DROIT",
+        "T_HISTORIQUE_HS", "T_ROLE_PERMISSION", "T_AUDIT_DROIT", "suivi_JOURNAL",
     };
 
     [MigrationIntegrationFact]
@@ -94,7 +94,31 @@ public class SchemaMigratorIntegrationTests
         }
 
         Assert.Equal(before, await ScalarAsync<int>(connection, fingerprint));
-        Assert.Equal(2, await ScalarAsync<int>(connection, "SELECT COUNT(*) FROM dbo.T_SCHEMA_VERSION WHERE VERSION IN (1, 2);"));
+        Assert.Equal(3, await ScalarAsync<int>(connection, "SELECT COUNT(*) FROM dbo.T_SCHEMA_VERSION WHERE VERSION IN (1, 2, 3);"));
+    }
+
+    [MigrationIntegrationFact]
+    public async Task Script003_CreatesTheJournalWithTheEntityColumns_AndCanBeReplayedWithoutChange()
+    {
+        var connectionString = DisposableConnectionString();
+        await Migrator(connectionString, lockTimeoutSeconds: 60).RunAsync();
+
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+        const string fingerprint = "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.suivi_JOURNAL')";
+        const string columns = "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.suivi_JOURNAL')";
+        var indexesBefore = await ScalarAsync<int>(connection, fingerprint);
+        Assert.Equal(13, await ScalarAsync<int>(connection, columns));
+        Assert.Equal(7, indexesBefore);
+        var script = new EmbeddedMigrationScriptSource().Load().Single(s => s.Version == 3);
+        foreach (var batch in SqlBatchSplitter.Split(script.Content))
+        {
+            await using var command = new SqlCommand(batch, connection);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        Assert.Equal(indexesBefore, await ScalarAsync<int>(connection, fingerprint));
+        Assert.Equal(13, await ScalarAsync<int>(connection, columns));
     }
 
     private static SchemaMigrator Migrator(string connectionString, int lockTimeoutSeconds)

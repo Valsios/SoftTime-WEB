@@ -40,7 +40,7 @@ destructifs, mais seule la sauvegarde permet un retour arrière fiable.
 
 1. Créer une base vide (`CREATE DATABASE <nom>`) et la renseigner dans la chaîne de connexion locale
    (`ConnectionStrings:SoftTime` de votre `appsettings.json`, jamais dans le dépôt).
-2. Lancer l'API avec `Database:AutoMigrate = true` : elle crée tout le schéma (001, 002), le schéma `ml` du moteur
+2. Lancer l'API avec `Database:AutoMigrate = true` : elle crée tout le schéma (001, 002, 003), le schéma `ml` du moteur
    prédictif, le rôle 1 « Administrateur », les six droits et les données de départ. Aucun compte n'est créé.
 3. Créer le premier administrateur : `GET /api/auth/is-first-run` répond `true`, puis
    `POST /api/auth/create-admin` (nom, login, mot de passe conforme à la politique). Ensuite `is-first-run` répond `false`.
@@ -105,9 +105,24 @@ sont pas indexables (`nvarchar(max)` dans une base neuve) ou s'il existe des dou
 un `PRINT`. Sur une ancienne base où l'index existe déjà, 002 ne change rien. Le bornage des colonnes
 (`ALTER COLUMN`) reste dans le script manuel `add_pagination_performance_indexes.sql`.
 
+## 003_journal_central.sql
+
+Crée `dbo.suivi_JOURNAL`, le **journal central des modifications** alimenté par l'intercepteur de
+`SoftTimeDbContext` (entité `suivi_JOURNAL`, 13 colonnes) et ses index non uniques : date, base, table/action/date,
+corrélation, utilisateur (`IX_suivi_JOURNAL_User_Date`) et objet (`IX_suivi_JOURNAL_Cles_Date`). Rejouable : sur une
+table existante, aucune colonne n'est modifiée et seuls les index manquants sont ajoutés ; un index dont les
+colonnes ne sont pas indexables est **ignoré** avec un `PRINT`. Ne touche ni `suivi_SUIVI`, ni `suivi_TBLCLN`, ni les
+déclencheurs, ni `T_AUDIT_DROIT`.
+
+Cette migration remplace l'ancienne création au démarrage (`AuditJournalConfiguration`, supprimée) : le script manuel
+`create_audit_journal.sql` **n'est plus nécessaire**. Sans la table et sans `Database:AutoMigrate`, l'API refuse de
+démarrer avec le message « Le journal d'audit est absent : activez Database:AutoMigrate (développement) ou exécutez
+migrations/versions/003_journal_central.sql. » (au lieu d'une erreur SQL à chaque écriture ; désactivable par
+`AuditJournal:Enabled = false`).
+
 ## Ajouter un script
 
-1. Prendre le **numéro suivant** : `002_ma_modification.sql` (jamais réutiliser ni renuméroter).
+1. Prendre le **numéro suivant** : `004_ma_modification.sql` (jamais réutiliser ni renuméroter).
 2. Le rendre **rejouable** : chaque objet créé seulement s'il n'existe pas
    (`IF OBJECT_ID(...) IS NULL`, `IF COL_LENGTH(...) IS NULL`, `IF NOT EXISTS (SELECT 1 FROM sys.indexes ...)`).
 3. **Jamais destructif** : pas de `DROP`, `DELETE`, `TRUNCATE`, ni `ALTER COLUMN` qui réduit ou
@@ -142,6 +157,7 @@ Ces scripts du dossier `migrations/` restent à exécuter à la main, après sau
 | `audit_and_migrate_passwords.sql` | Audit et migration des mots de passe |
 | `upgrade_password_column_schema.sql` | Élargissement de la colonne PASSWORD |
 | `create_role_permission_table.sql` | Tables des droits par rôle (repris dans 001) |
+| `create_audit_journal.sql` | Journal central `suivi_JOURNAL` (repris dans 003, n'est plus nécessaire) |
 | `cleanup_duplicate_cards.sql` | Nettoyage des cartes en double (destructif) |
 | `cleanup_orphan_source_mappings.sql` | Nettoyage des mappings orphelins (destructif) |
 | `drop_legacy_cardpaie_branche.sql` | Suppression de la colonne héritée T_CARDPAIE.BRANCHE (destructif) |

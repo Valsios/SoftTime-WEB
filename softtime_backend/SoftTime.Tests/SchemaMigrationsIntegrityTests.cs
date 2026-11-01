@@ -29,6 +29,32 @@ public class SchemaMigrationsIntegrityTests
         Assert.DoesNotContain("Password", integrity.Content, StringComparison.OrdinalIgnoreCase);
     }
 
+    // ---------- Script 003 ----------
+
+    [Fact]
+    public void Script003_IsEmbeddedAfter002_AndIsReplayableAndNonDestructive()
+    {
+        var scripts = new EmbeddedMigrationScriptSource().Load();
+        Assert.Equal(new[] { 1, 2, 3 }, scripts.Select(s => s.Version).ToArray());
+        var journal = Assert.Single(scripts, s => s.Version == 3);
+
+        Assert.Equal("003_journal_central.sql", journal.Name);
+        foreach (var forbidden in new[] { "DROP ", "DELETE", "TRUNCATE", "ALTER COLUMN", "ALTER TABLE", "USE [", "CREATE DATABASE", "UPDATE ", "INSERT " })
+            Assert.DoesNotContain(forbidden, journal.Content, StringComparison.OrdinalIgnoreCase);
+        // Rejouable : table et index ne sont créés que s'ils n'existent pas.
+        Assert.Contains("OBJECT_ID(N'dbo.suivi_JOURNAL', N'U') IS NULL", journal.Content);
+        foreach (var index in new[] { "IX_suivi_JOURNAL_Date", "IX_suivi_JOURNAL_Base_Date", "IX_suivi_JOURNAL_Table_Action_Date",
+                     "IX_suivi_JOURNAL_Correlation", "IX_suivi_JOURNAL_User_Date", "IX_suivi_JOURNAL_Cles_Date" })
+            Assert.Contains($"name = N'{index}'", journal.Content);
+        Assert.DoesNotContain("UNIQUE INDEX", journal.Content, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("PRINT", journal.Content);
+        // Aucune autre table n'est touchée (hors en-tête de commentaire qui les cite pour le dire).
+        var code = journal.Content[(journal.Content.IndexOf("*/", StringComparison.Ordinal) + 2)..];
+        foreach (var other in new[] { "suivi_SUIVI", "suivi_TBLCLN", "T_AUDIT_DROIT", "TRIGGER" })
+            Assert.DoesNotContain(other, code, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Password", journal.Content, StringComparison.OrdinalIgnoreCase);
+    }
+
     // ---------- Journal de démarrage ----------
 
     [Fact]

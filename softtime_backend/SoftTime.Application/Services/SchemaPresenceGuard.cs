@@ -28,6 +28,25 @@ public static class SchemaPresenceGuard
         }
     }
 
+    public const string MissingAuditJournalMessage =
+        "Le journal d'audit est absent : activez Database:AutoMigrate (développement) ou exécutez migrations/versions/003_journal_central.sql.";
+
+    /// <summary>
+    /// Sans suivi_JOURNAL, chaque sauvegarde d'une entité auditée échouerait sur une erreur SQL
+    /// « Invalid object name » ; le démarrage s'arrête à la place avec un message qui indique la marche à suivre.
+    /// </summary>
+    public static async Task EnsureAuditJournalAsync(IUnitOfWork uow, CancellationToken ct)
+    {
+        try
+        {
+            await uow.ExecuteSqlAsync(GuardedSql("suivi_JOURNAL", "SELECT 1;"), ct);
+        }
+        catch (Exception ex) when (ex.Message.Contains(Marker, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(MissingAuditJournalMessage);
+        }
+    }
+
     public static string GuardedSql(string table, string sql) => $"""
         IF OBJECT_ID(N'dbo.{table}', N'U') IS NULL
             THROW 51990, N'{Marker}: dbo.{table}', 1;

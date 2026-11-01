@@ -217,6 +217,20 @@ public class SchemaMigratorTests
     }
 
     [Fact]
+    public async Task EnsureAuditJournal_WithoutJournalTable_ThrowsClearFrenchMessage()
+    {
+        var uow = new MissingSchemaUnitOfWork();
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            SchemaPresenceGuard.EnsureAuditJournalAsync(uow, CancellationToken.None));
+
+        Assert.Equal(
+            "Le journal d'audit est absent : activez Database:AutoMigrate (développement) ou exécutez migrations/versions/003_journal_central.sql.",
+            ex.Message);
+        Assert.Contains("OBJECT_ID(N'dbo.suivi_JOURNAL', N'U') IS NULL", uow.LastSql);
+    }
+
+    [Fact]
     public void GuardedSql_KeepsOriginalStatementAfterTheCheck()
     {
         var sql = SchemaPresenceGuard.GuardedSql("T_ROLE", "SELECT 1;");
