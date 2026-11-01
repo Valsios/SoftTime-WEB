@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
@@ -49,14 +50,33 @@ public sealed class MlPredictionService
         var sage = _tenant.SageDb;
         var today = DateTime.Today;
         var now = DateTime.Now;
+        var absenceTo = today.AddDays(Math.Max(1, _options.ForecastHorizonDays));
+        var weekStart = MondayOf(today);
+        var weekEnd = weekStart.AddDays(7 * Math.Max(1, _options.ForecastHorizonWeeks) - 1);
+
+        // Sans pointage récent, les features décrivent un passé lointain : on ne prédit pas, et
+        // les anciennes prévisions de l'horizon sont retirées pour ne pas rester affichées.
+        var depuis = today.AddDays(-Math.Max(1, _options.RecentDataDays));
+        var pointagesRecents = (await _uow.Repository<T_HEURECORRIGER>().ListAsync(
+                h => h.BDD_SAGE == sage && h.DATE_POINTAGE_IN >= depuis && h.DATE_POINTAGE_IN < today, ct))
+            .Count;
+        if (pointagesRecents == 0)
+        {
+            await _store.ReplacePredictionsAsync(sage, MlModelType.Absence, today, absenceTo, Array.Empty<T_ML_PREDICTION>(), ct);
+            await _store.ReplacePredictionsAsync(sage, MlModelType.HsProbabilite, weekStart, weekEnd, Array.Empty<T_ML_PREDICTION>(), ct);
+            await _store.ReplacePredictionsAsync(sage, MlModelType.HsMontant, weekStart, weekEnd, Array.Empty<T_ML_PREDICTION>(), ct);
+            var raison = $"Aucun pointage depuis {_options.RecentDataDays} jours : prévisions suspendues.";
+            _logger.LogWarning("Prévisions {Sage} : {Raison}", sage, raison);
+            return new MlPipelineResultDto("Baseline", raison, 0, 0, 0, 0);
+        }
 
         var absenceCount = 0;
         var dailyRows = 0;
-        var absenceModel = await _store.GetActiveModelAsync(sage, MlModelType.Absence, ct);
+        var absenceModel = Utilisable(await _store.GetActiveModelAsync(sage, MlModelType.Absence, ct));
 
         if (absenceModel?.ModeleBinaire is { Length: > 0 } absenceBinary)
         {
-            var to = today.AddDays(Math.Max(1, _options.ForecastHorizonDays));
+            var to = absenceTo;
             var rows = await _dataset.BuildInferenceDailyAsync(today, to, ct);
             dailyRows = rows.Count;
 
@@ -76,21 +96,24 @@ public sealed class MlPredictionService
                     GenereLe = now
                 }).ToList();
 
-                await _store.ReplacePredictionsAsync(sage, MlModelType.Absence, today, to, absenceModel.Id, predictions, ct);
+                await _store.ReplacePredictionsAsync(sage, MlModelType.Absence, today, to, predictions, ct);
                 absenceCount = predictions.Count;
             }
         }
+        if (absenceCount == 0)
+            await _store.ReplacePredictionsAsync(sage, MlModelType.Absence, today, absenceTo, Array.Empty<T_ML_PREDICTION>(), ct);
 
         var hsCount = 0;
         var weeklyRows = 0;
-        var hsProbability = await _store.GetActiveModelAsync(sage, MlModelType.HsProbabilite, ct);
-        var hsAmount = await _store.GetActiveModelAsync(sage, MlModelType.HsMontant, ct);
+        var hsProbability = Utilisable(await _store.GetActiveModelAsync(sage, MlModelType.HsProbabilite, ct));
+        var hsAmount = Utilisable(await _store.GetActiveModelAsync(sage, MlModelType.HsMontant, ct));
 
         if (hsProbability?.ModeleBinaire is { Length: > 0 } probabilityBinary
             && hsAmount?.ModeleBinaire is { Length: > 0 } amountBinary)
         {
-            var weekStart = MondayOf(today);
-            var weekEnd = weekStart.AddDays(7 * Math.Max(1, _options.ForecastHorizonWeeks) - 1);
+            // Demi-largeur de l'intervalle : erreur observée sur le jeu de test (80e centile, sinon MAE).
+            var metriques = LireMetriques(hsAmount);
+            var erreur = (decimal)(metriques?.ErreurP80 ?? metriques?.Mae ?? 0d);
             var weeks = (await _dataset.BuildInferenceWeeklyAsync(weekStart, weekEnd, ct))
                 .Where(w => w.NbJoursPlanifies > 0 || w.HeuresTravaillees > 0m)
                 .ToList();
@@ -124,18 +147,23 @@ public sealed class MlPredictionService
                         TypeModele = MlModelTypes.HsMontant,
                         Cible = week.SemaineDebut,
                         ValeurPrevue = valeur,
-                        BorneBasse = Math.Round(valeur * 0.8m, 2),
-                        BorneHaute = Math.Round(valeur * 1.2m, 2),
+                        BorneBasse = Math.Round(Math.Max(0m, valeur - erreur), 2),
+                        BorneHaute = Math.Round(valeur + erreur, 2),
                         NiveauRisque = Niveau(probabilities[index]),
                         ModeleId = hsAmount.Id,
                         GenereLe = now
                     };
                 }).ToList();
 
-                await _store.ReplacePredictionsAsync(sage, MlModelType.HsProbabilite, weekStart, weekEnd, hsProbability.Id, probabilityPredictions, ct);
-                await _store.ReplacePredictionsAsync(sage, MlModelType.HsMontant, weekStart, weekEnd, hsAmount.Id, amountPredictions, ct);
+                await _store.ReplacePredictionsAsync(sage, MlModelType.HsProbabilite, weekStart, weekEnd, probabilityPredictions, ct);
+                await _store.ReplacePredictionsAsync(sage, MlModelType.HsMontant, weekStart, weekEnd, amountPredictions, ct);
                 hsCount = amountPredictions.Count;
             }
+        }
+        if (hsCount == 0)
+        {
+            await _store.ReplacePredictionsAsync(sage, MlModelType.HsProbabilite, weekStart, weekEnd, Array.Empty<T_ML_PREDICTION>(), ct);
+            await _store.ReplacePredictionsAsync(sage, MlModelType.HsMontant, weekStart, weekEnd, Array.Empty<T_ML_PREDICTION>(), ct);
         }
 
         _logger.LogInformation(
@@ -157,7 +185,8 @@ public sealed class MlPredictionService
         await _tenant.EnsureAuthorizedAsync(ct);
         var sage = _tenant.SageDb;
         var models = await _store.ListModelsAsync(sage, ct);
-        var active = models.Where(m => m.EstActif).ToList();
+        var active = models.Where(m => m.EstActif && m.SchemaHash == _predictor.FeatureSchemaHash).ToList();
+        var obsoletes = models.Any(m => m.EstActif && m.SchemaHash != _predictor.FeatureSchemaHash);
 
         var etat = !_options.Enabled
             ? "Desactive"
@@ -165,6 +194,7 @@ public sealed class MlPredictionService
         var message = etat switch
         {
             "Desactive" => "Moteur prédictif désactivé par la configuration.",
+            "Baseline" when obsoletes => "Mode baseline : les modèles actifs utilisent un ancien contrat de features, un réentraînement est nécessaire.",
             "Baseline" => BaselineMessage(models),
             _ => $"{active.Count} modèle(s) actif(s)."
         };
@@ -196,6 +226,11 @@ public sealed class MlPredictionService
         var cards = await LoadCardsAsync(sage, ct);
         var categoriesParCarte = await LoadCategoriesAsync(sage, ct);
 
+        // Référence du niveau de risque : probabilité journalière moyenne de toute la société.
+        // Le risque cumulé sur 14 jours dépasse vite les seuils journaliers ; le niveau compare donc
+        // les absences attendues du salarié à celles d'un salarié moyen sur les mêmes jours.
+        var probabiliteMoyenne = predictions.Average(p => Math.Clamp(p.Probabilite ?? 0d, 0d, 1d));
+
         var resultat = new List<MlAbsenceForecastDto>();
         foreach (var groupe in predictions.GroupBy(p => p.Matricule, StringComparer.Ordinal))
         {
@@ -219,6 +254,9 @@ public sealed class MlPredictionService
                 risque *= 1d - Math.Clamp(jour.Probabilite, 0d, 1d);
             risque = 1d - risque;
 
+            var attendues = jours.Sum(j => Math.Clamp(j.Probabilite, 0d, 1d));
+            var reference = probabiliteMoyenne * jours.Count;
+
             var cle = groupe.Key;
             resultat.Add(new MlAbsenceForecastDto(
                 cle,
@@ -226,7 +264,7 @@ public sealed class MlPredictionService
                 card?.SAGE_PRENOM,
                 card?.DEPARTEMENT,
                 Math.Round(risque, 4),
-                Niveau(risque),
+                NiveauRelatif(attendues, reference),
                 jours));
         }
 
@@ -303,6 +341,41 @@ public sealed class MlPredictionService
         return dernier?.Commentaire is { Length: > 0 } raison
             ? $"Mode baseline : {raison}"
             : "Aucun modèle actif : données insuffisantes ou modèle indisponible.";
+    }
+
+    private byte NiveauRelatif(double attendues, double reference)
+    {
+        if (reference <= 0d)
+            return 1;
+        var ratio = attendues / reference;
+        return ratio >= _options.HorizonHighRiskRatio ? (byte)3
+            : ratio >= _options.HorizonMediumRiskRatio ? (byte)2
+            : (byte)1;
+    }
+
+    /// <summary>Un modèle n'est utilisé que s'il a été entraîné sur le contrat de features courant.</summary>
+    private T_ML_MODELE? Utilisable(T_ML_MODELE? model)
+    {
+        if (model is null || model.SchemaHash == _predictor.FeatureSchemaHash)
+            return model;
+        _logger.LogWarning(
+            "Modèle {Type} {Version} ignoré : contrat de features obsolète, réentraînement nécessaire.",
+            model.TypeModele, model.Version);
+        return null;
+    }
+
+    private static MlMetrics? LireMetriques(T_ML_MODELE model)
+    {
+        try
+        {
+            return string.IsNullOrWhiteSpace(model.MetriquesJson)
+                ? null
+                : JsonSerializer.Deserialize<MlMetrics>(model.MetriquesJson);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private byte Niveau(double probabilite)

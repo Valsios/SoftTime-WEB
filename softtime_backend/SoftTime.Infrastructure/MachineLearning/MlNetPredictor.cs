@@ -11,6 +11,8 @@ namespace SoftTime.Infrastructure.MachineLearning;
 /// </summary>
 public sealed class MlNetPredictor : IMlPredictor
 {
+    public string FeatureSchemaHash { get; } = MlNetData.ComputeSchemaHash();
+
     public IReadOnlyList<float> PredictAbsence(byte[] model, IReadOnlyList<MlAbsenceSample> samples)
     {
         if (samples.Count == 0)

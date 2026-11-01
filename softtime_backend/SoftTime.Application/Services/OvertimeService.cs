@@ -775,8 +775,7 @@ public class OvertimeService
 
         var planning = (await _uow.Repository<T_PLANNING_SAL>().ListAsync(
                 p => p.BDD_SAGE == sageDb && p.DateP >= from && p.DateP <= to, ct))
-            .Where(p => string.IsNullOrWhiteSpace(p.BDD_POINTEUSE)
-                        || string.Equals(p.BDD_POINTEUSE.Trim(), pointeuseDb.Trim(), StringComparison.OrdinalIgnoreCase))
+            .Where(p => OvertimeDayRules.EstDeLaPointeuse(p, pointeuseDb))
             .GroupBy(p => p.IDSAL)
             .ToDictionary(g => g.Key, g => g.ToList());
 
@@ -805,7 +804,7 @@ public class OvertimeService
             Heures = heures,
             Planning = planning,
             Existantes = existantes,
-            Civilites = SemaineContientHuitMars(from, to)
+            Civilites = OvertimeDayRules.ContientHuitMars(from, to)
                 ? await ChargerCivilitesAsync(ct)
                 : new Dictionary<string, byte?>(StringComparer.Ordinal)
         };
@@ -835,7 +834,7 @@ public class OvertimeService
             CotationNuit: Cotation(ctx.Majorations, "NUIT"),
             CotationDimanche: Cotation(ctx.Majorations, "DIMANCHE"),
             CotationFerie: Cotation(ctx.Majorations, "FERIE"),
-            EstFemme: civilite is > 0);
+            EstFemme: OvertimeDayRules.EstFemme(civilite));
     }
 
     private static decimal Cotation(IReadOnlyList<T_MAJORATION> majorations, string type)
@@ -854,96 +853,22 @@ public class OvertimeService
         var conges = ctx.Conges.GetValueOrDefault(cle) ?? new List<LeaveDay>();
         var jours = new List<OvertimeDayInput>();
 
+        // Construction partagée avec la base analytique du moteur prédictif.
         for (var jour = from.Date; jour <= to.Date; jour = jour.AddDays(1))
         {
-            var lignes = heures
-                .Where(h => h.DATE_POINTAGE_IN.HasValue && h.DATE_POINTAGE_IN.Value.Date == jour)
-                .OrderBy(h => h.HENTREE ?? TimeSpan.Zero)
-                .ToList();
-            var paires = lignes
-                .Where(h => h.HENTREE.HasValue && h.HSORTIE.HasValue)
-                .Select(h => new PunchPair(
-                    h.DATE_POINTAGE_IN!.Value.Date,
-                    h.HENTREE!.Value,
-                    (h.DATE_POINTAGE_OUT ?? h.DATE_POINTAGE_IN)!.Value.Date,
-                    h.HSORTIE!.Value))
-                .ToList();
-
-            var plan = planning
-                .Where(p => p.DateP.HasValue && p.DateP.Value.Date == jour)
-                .OrderBy(p => p.ID)
-                .FirstOrDefault();
-            var off = plan?.OffP == true;
-            // Les heures de planning « vides » du desktop portent une date sentinelle : elles valent NULL.
-            var sentinelle = new DateTime(2000, 1, 1);
-            var haPlanifiee = plan?.HA is DateTime haBrute && haBrute.Date > sentinelle ? haBrute.TimeOfDay : (TimeSpan?)null;
-            var hdPlanifiee = plan?.HD is DateTime hdBrute && hdBrute.Date > sentinelle ? hdBrute.TimeOfDay : (TimeSpan?)null;
-            TimeSpan? ha = off ? null : haPlanifiee;
-            TimeSpan? hd = off ? null : hdPlanifiee;
-
-            // Planning manquant : le desktop le reconstruit avec les heures réelles (entrée et sortie
-            // non corrigées), ce qui neutralise le seuil journalier du mode 2 pointages.
-            if (!off && paires.Count > 0)
-            {
-                ha ??= paires[0].EntreeHeure;
-                hd ??= paires[^1].SortieHeure;
-            }
-
-            jours.Add(new OvertimeDayInput(
+            jours.Add(OvertimeDayRules.Construire(
                 jour,
-                paires,
-                ha,
-                hd,
-                off ? null : plan?.Pause,
-                off,
+                heures.Where(h => h.DATE_POINTAGE_IN.HasValue && h.DATE_POINTAGE_IN.Value.Date == jour),
+                OvertimeDayRules.PlanDuJour(planning.Where(p => p.DateP.HasValue && p.DateP.Value.Date == jour)),
                 ctx.Feries.Any(f => f.DATE.HasValue && f.DATE.Value.Date == jour),
-                lignes.Any(EstPresence),
-                LeaveRules.Valeur(conges, jour),
-                lignes.FirstOrDefault(h => h.RETARD.HasValue)?.RETARD));
+                LeaveRules.Valeur(conges, jour)));
         }
         return jours;
     }
 
-    /// <summary>
-    /// Une heure corrigée atteste-t-elle une présence ? Une ligne qui ne fait que déclarer une absence
-    /// (arbitrage <c>ABSENCE_AM</c> / <c>ABSENCE_PM</c> sans aucune heure) n'en est pas une : sans
-    /// cette distinction, arbitrer une anomalie en absence effaçait l'absence du calcul.
-    /// </summary>
-    private static bool EstPresence(T_HEURECORRIGER ligne)
-        => ligne.HENTREE.HasValue
-           || ligne.HSORTIE.HasValue
-           || !(ligne.ABSENCE_AM == true || ligne.ABSENCE_PM == true);
-
     /// <summary>La civilité n'est chargée que si la période contient un 8 mars (évite un appel SAGE systématique).</summary>
-    private static bool SemaineContientHuitMars(DateTime from, DateTime to)
-    {
-        for (var jour = from.Date; jour <= to.Date; jour = jour.AddDays(1))
-        {
-            if (jour.Day == 8 && jour.Month == 3)
-                return true;
-        }
-        return false;
-    }
-
-    private async Task<Dictionary<string, byte?>> ChargerCivilitesAsync(CancellationToken ct)
-    {
-        var civilites = new Dictionary<string, byte?>(StringComparer.Ordinal);
-        try
-        {
-            var sageRow = await _tenant.GetSageRowAsync(ct);
-            foreach (var employe in await _externalSource.GetEmployeesAsync(sageRow, ct))
-            {
-                var cle = MatriculeIdentity.Cle(employe.Matricule);
-                if (cle.Length > 0)
-                    civilites[cle] = employe.Civilite;
-            }
-        }
-        catch
-        {
-            // SAGE indisponible : sans civilité, la règle du 8 mars n'est pas appliquée.
-        }
-        return civilites;
-    }
+    private Task<Dictionary<string, byte?>> ChargerCivilitesAsync(CancellationToken ct)
+        => SageCivilites.ChargerAsync(_tenant, _externalSource, ct);
 
     private async Task<Dictionary<string, int>> ChargerNumSalAsync(CancellationToken ct)
     {

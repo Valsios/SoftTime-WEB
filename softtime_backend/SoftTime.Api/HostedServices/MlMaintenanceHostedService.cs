@@ -97,6 +97,8 @@ public sealed class MlMaintenanceHostedService : BackgroundService
                 try
                 {
                     using var scope = _scopeFactory.CreateScope();
+                    // Avant toute résolution d'ICurrentUser : le scope n'a pas d'utilisateur HTTP.
+                    scope.ServiceProvider.GetRequiredService<SystemExecution>().Enable();
                     scope.ServiceProvider.GetRequiredService<ICompanyContext>().Set(tenant, null);
                     var pipeline = scope.ServiceProvider.GetRequiredService<MlPipelineService>();
                     var result = await pipeline.RunAsync(job.FullRefresh, job.Train, ct);

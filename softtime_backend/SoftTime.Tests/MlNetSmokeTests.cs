@@ -64,9 +64,7 @@ public class MlNetSmokeTests
                 SemaineIso = (i % 50) + 1,
                 Mois = (i % 12) + 1,
                 HeuresPlanifiees = 40,
-                HeuresTravaillees = 40,
                 NbJoursPlanifies = 5,
-                NbJoursTravailles = 5,
                 HsMoyenne4Semaines = montant > 0 ? 3f : 0f,
                 HsMoyenne8Semaines = montant > 0 ? 2f : 0f,
                 HeuresSemaineContrat = 40

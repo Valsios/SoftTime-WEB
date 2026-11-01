@@ -34,15 +34,13 @@ public static class MlModelTypes
 /// <summary>Version du contrat de features, stockée dans les instantanés et le registre.</summary>
 public static class MlSchema
 {
-    public const string Version = "v1";
+    public const string Version = "v2";
 }
 
 /// <summary>Échantillon d'entraînement/prédiction pour l'absentéisme (grain salarié × jour).</summary>
 public sealed class MlAbsenceSample
 {
-    // Label et pondération (déséquilibre des classes).
     public bool Label { get; set; }
-    public float Weight { get; set; } = 1f;
 
     // Calendrier.
     public float JourSemaine { get; set; }
@@ -87,12 +85,12 @@ public sealed class MlHsSample
     public bool HsPositive { get; set; }
     public float HsAmount { get; set; }
 
+    // Uniquement des valeurs connues avant la semaine cible : les heures travaillées de la semaine
+    // elle-même donneraient la réponse à l'entraînement et vaudraient 0 en prévision.
     public float SemaineIso { get; set; }
     public float Mois { get; set; }
     public float HeuresPlanifiees { get; set; }
-    public float HeuresTravaillees { get; set; }
     public float NbJoursPlanifies { get; set; }
-    public float NbJoursTravailles { get; set; }
     public float CongeJours { get; set; }
 
     public float HsMoyenne4Semaines { get; set; }
@@ -117,6 +115,8 @@ public sealed record MlMetrics(
     double? R2 = null,
     double? BaselineAuc = null,
     double? BaselineMae = null,
+    // 80e centile de l'erreur absolue du montant HS sur le jeu de test : demi-largeur de l'intervalle affiché.
+    double? ErreurP80 = null,
     int TestRows = 0,
     int TestPositives = 0);
 
