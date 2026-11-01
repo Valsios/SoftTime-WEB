@@ -52,8 +52,9 @@ public static class PayrollClosingRules
     /// 3.1 — Jour-employé dont les pointages ne s'apparient pas (nombre impair), avec la même
     /// définition que le pré-traitement : regroupement <see cref="PunchDayGrouping"/> (planning en
     /// multi-pointage, jour calendaire en mono) puis <see cref="PunchPairingRules"/>. Les jours d'une
-    /// semaine validée et les jours portant une correction non <c>AUTO</c> (MANUEL ou héritée) sont
-    /// ignorés, comme dans le pré-traitement.
+    /// semaine validée (sauf <see cref="ClosingRulesOptions.IgnorerSemainesValidees"/> à <c>false</c>)
+    /// et les jours portant une correction non <c>AUTO</c> (MANUEL ou héritée) sont ignorés, comme
+    /// dans le pré-traitement.
     /// </summary>
     public static IReadOnlyList<ClosingAnomaly> PointagesIncomplets(
         IReadOnlyList<T_CARDPAIE> cartes,
@@ -63,14 +64,17 @@ public static class PayrollClosingRules
         IReadOnlyList<T_HS_VALIDER> semainesValidees,
         DateTime from,
         DateTime to,
-        bool multiPointage)
+        bool multiPointage,
+        ClosingRulesOptions? options = null)
     {
+        options ??= ClosingRulesOptions.Default;
         var debut = from.Date;
         var fin = to.Date;
         if (debut > fin)
             return Array.Empty<ClosingAnomaly>();
 
         var lundisValides = semainesValidees
+            .Where(_ => options.IgnorerSemainesValidees)
             .Where(v => v.VALIDATION_HS == true && v.DATE_DEB.HasValue && !string.IsNullOrWhiteSpace(v.MATRICULES))
             .GroupBy(v => MatriculeIdentity.Cle(v.MATRICULES))
             .ToDictionary(g => g.Key, g => g.Select(v => v.DATE_DEB!.Value.Date).ToHashSet());

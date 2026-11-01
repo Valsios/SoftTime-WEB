@@ -49,6 +49,12 @@ public sealed record ClosingRulesOptions
     /// <summary>Deux pointages séparés de strictement moins de ce délai sont des quasi-doublons.</summary>
     public int DuplicateToleranceSeconds { get; init; } = DefaultDuplicateToleranceSeconds;
 
+    /// <summary>
+    /// Pointages impairs : ignorer les jours d'une semaine validée, comme le pré-traitement (défaut).
+    /// À <c>false</c>, ces jours sont aussi signalés.
+    /// </summary>
+    public bool IgnorerSemainesValidees { get; init; } = true;
+
     public int PoidsMineure { get; init; } = (int)ClosingSeverity.Mineure;
 
     public int PoidsImportante { get; init; } = (int)ClosingSeverity.Importante;
