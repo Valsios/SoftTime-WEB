@@ -10,6 +10,8 @@ import { CorrectedHoursService } from '../../shared/services/processing.service'
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, ImportTemplatesModal, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, PeriodFilter } from '../../shared/components';
 import { asRow, fmtDate } from '../../shared/utils/date';
+import { input } from '@angular/core';
+import { readDeepLink } from '../../shared/utils/deep-link';
 import { toastImportResult } from '../../shared/utils/import-result';
 
 @Component({
@@ -27,7 +29,7 @@ import { toastImportResult } from '../../shared/utils/import-result';
       <soft-button variant="ghost" (click)="templatesOpen.set(true)">Modèles d'import</soft-button>
     </page-header>
 
-    <period-filter (search)="onSearch($event)"></period-filter>
+    <period-filter [initial]="link()" (search)="onSearch($event)"></period-filter>
 
     <soft-card>
       <data-table
@@ -73,6 +75,11 @@ import { toastImportResult } from '../../shared/utils/import-result';
   styles: [`.form-grid { display: grid; gap: 14px; } .file-btn { cursor: pointer; }`],
 })
 export class CorrectedHoursPage {
+  // Lien profond facultatif (?du=&au=&matricule=), lié par withComponentInputBinding ; validé avant tout usage.
+  readonly du = input<unknown>();
+  readonly au = input<unknown>();
+  readonly matricule = input<unknown>();
+  readonly link = computed(() => readDeepLink({ du: this.du(), au: this.au(), matricule: this.matricule() }));
   private readonly svc = inject(CorrectedHoursService);
   private readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);

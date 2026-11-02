@@ -133,7 +133,7 @@ public class PermissionCatalogCharacterizationTests
         Assert.Equal(Proc, Build(new[] { Rights.Processing }));
         Assert.Equal(Other, Build(new[] { Rights.Other }));
         Assert.Equal(new[] { "TRACE:AUDIT" }, Build(new[] { Rights.Traceability }));
-        Assert.Equal(new[] { "REPORTS:REPORTS", "REPORTS:PREDICTIONS" }, Build(new[] { Rights.Reports }));
+        Assert.Equal(new[] { "REPORTS:REPORTS", "REPORTS:PREDICTIONS", "REPORTS:CLOSING" }, Build(new[] { Rights.Reports }));
     }
 
     [Fact]
@@ -141,7 +141,7 @@ public class PermissionCatalogCharacterizationTests
     {
         var all = new[] { Rights.Databases, Rights.Parameters, Rights.Processing, Rights.Other, Rights.Traceability, Rights.Reports };
         var expected = new[] { "SAGE:CREATE", "SAGE:A:READ", "SAGE:A:UPDATE", "SAGE:A:DELETE", "POINTEUSE:CREATE", "POINTEUSE:P:READ", "POINTEUSE:P:UPDATE", "POINTEUSE:P:DELETE" }
-            .Concat(Params).Concat(Proc).Concat(Other).Concat(new[] { "TRACE:AUDIT", "REPORTS:REPORTS", "REPORTS:PREDICTIONS" });
+            .Concat(Params).Concat(Proc).Concat(Other).Concat(new[] { "TRACE:AUDIT", "REPORTS:REPORTS", "REPORTS:PREDICTIONS", "REPORTS:CLOSING" });
         Assert.Equal(expected, Build(all, new[] { "A" }, new[] { "P" }));
     }
 
