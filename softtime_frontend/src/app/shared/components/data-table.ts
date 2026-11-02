@@ -3,7 +3,9 @@ import {
   Component,
   computed,
   contentChild,
+  contentChildren,
   DestroyRef,
+  Directive,
   inject,
   input,
   model,
@@ -24,6 +26,23 @@ export interface Column {
   align?: 'left' | 'right' | 'center';
   /** Optional value formatter. Receives the raw cell value and full row. */
   format?: (value: unknown, row: Record<string, unknown>) => string;
+}
+
+export interface DataTableCellContext {
+  $implicit: Record<string, unknown>;
+  value: unknown;
+}
+
+/**
+ * Rendu personnalisé d'une colonne (badge, pastilles…), sans changer le reste du tableau :
+ *   <ng-template dataTableCell="niveau" let-row let-value="value">…</ng-template>
+ * La recherche continue de porter sur le texte de la colonne (format, sinon valeur brute) :
+ * donnez un `format` lisible aux colonnes personnalisées pour qu'elles restent cherchables.
+ */
+@Directive({ selector: 'ng-template[dataTableCell]' })
+export class DataTableCell {
+  readonly key = input.required<string>({ alias: 'dataTableCell' });
+  readonly template = inject<TemplateRef<DataTableCellContext>>(TemplateRef);
 }
 
 /** Tailles de page proposées en mode serveur (pas d'option "tout" : règle non confirmée). */
@@ -104,7 +123,7 @@ const SERVER_PAGE_SIZES = [10, 25, 50, 100] as const;
                   }
                   @for (col of columns(); track col.key) {
                     <td [style.text-align]="col.align || 'left'">
-                      {{ display(col, row) }}
+                      <ng-container [ngTemplateOutlet]="cellTpl" [ngTemplateOutletContext]="{ $implicit: col, row: row }"></ng-container>
                     </td>
                   }
                   @if (actionsTpl(); as tpl) {
@@ -145,7 +164,7 @@ const SERVER_PAGE_SIZES = [10, 25, 50, 100] as const;
                 <div class="soft-table-card__field">
                   <span>{{ col.label }}</span>
                   <strong [class.text-right]="col.align === 'right'" [class.text-center]="col.align === 'center'">
-                    {{ display(col, row) }}
+                    <ng-container [ngTemplateOutlet]="cellTpl" [ngTemplateOutletContext]="{ $implicit: col, row: row }"></ng-container>
                   </strong>
                 </div>
               }
@@ -295,7 +314,7 @@ const SERVER_PAGE_SIZES = [10, 25, 50, 100] as const;
                   }
                   @for (col of columns(); track col.key) {
                     <td [style.text-align]="col.align || 'left'">
-                      {{ display(col, row) }}
+                      <ng-container [ngTemplateOutlet]="cellTpl" [ngTemplateOutletContext]="{ $implicit: col, row: row }"></ng-container>
                     </td>
                   }
                   @if (actionsTpl(); as tpl) {
@@ -336,7 +355,7 @@ const SERVER_PAGE_SIZES = [10, 25, 50, 100] as const;
                 <div class="soft-table-card__field">
                   <span>{{ col.label }}</span>
                   <strong [class.text-right]="col.align === 'right'" [class.text-center]="col.align === 'center'">
-                    {{ display(col, row) }}
+                    <ng-container [ngTemplateOutlet]="cellTpl" [ngTemplateOutletContext]="{ $implicit: col, row: row }"></ng-container>
                   </strong>
                 </div>
               }
@@ -441,6 +460,18 @@ const SERVER_PAGE_SIZES = [10, 25, 50, 100] as const;
         }
       </div>
     }
+
+    <!-- Contenu d'une cellule (tableau et cartes mobiles) : modèle dataTableCell s'il existe, texte sinon. -->
+    <ng-template #cellTpl let-col let-row="row">
+      @if (cellTemplate(col.key); as tpl) {
+        <ng-container
+          [ngTemplateOutlet]="tpl"
+          [ngTemplateOutletContext]="{ $implicit: row, value: row[col.key] }"
+        ></ng-container>
+      } @else {
+        {{ display(col, row) }}
+      }
+    </ng-template>
   `,
   styles: [
     `
@@ -487,6 +518,15 @@ export class DataTable {
   readonly selectedKeys = model<string[]>([]);
   readonly actionsTpl =
     contentChild<TemplateRef<{ $implicit: Record<string, unknown> }>>('actions');
+  /** Rendus personnalisés par clé de colonne (directive dataTableCell). */
+  private readonly cellDefs = contentChildren(DataTableCell);
+  private readonly cellTemplates = computed(
+    () => new Map(this.cellDefs().map((def) => [def.key(), def.template] as const)),
+  );
+
+  cellTemplate(key: string): TemplateRef<DataTableCellContext> | null {
+    return this.cellTemplates().get(key) ?? null;
+  }
 
   // ──────────────────────────────────────────────────────────────────────────
   // Recherche (modes client ET serveur)
