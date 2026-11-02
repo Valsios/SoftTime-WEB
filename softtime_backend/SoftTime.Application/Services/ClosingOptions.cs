@@ -14,10 +14,11 @@ namespace SoftTime.Application.Services;
 /// <code>
 /// "Closing": {
 ///   "Enabled": true, "ShowNames": true,
-///   "DuplicateToleranceSeconds": 120, "IgnorerSemainesValidees": true, "MaxPeriodDays": 366,
-///   "CriticalRatioBlocking": 0.02,
+///   "DuplicateToleranceSeconds": 30, "IgnorerSemainesValidees": true, "MaxPeriodDays": 366,
+///   "CriticalRatioBlocking": 0.05,
+///   "ExclureSansPlanningSurPeriode": true, "DoublonsMonoGravite": "Mineure",
 ///   "Gravites": { "QuasiDoublon": "Importante" },
-///   "Poids": { "Mineure": 1, "Importante": 3, "Critique": 5 }
+///   "Poids": { "Information": 0, "Mineure": 1, "Importante": 3, "Critique": 5 }
 /// }
 /// </code>
 /// </summary>
@@ -38,6 +39,12 @@ public sealed class ClosingOptions
 
     public bool IgnorerSemainesValidees { get; set; } = true;
 
+    /// <summary>Salariés sans aucune ligne de planning sur la période : non contrôlés par « pointage sans planning ».</summary>
+    public bool ExclureSansPlanningSurPeriode { get; set; } = true;
+
+    /// <summary>Gravité des doublons en mono-pointage (en multi-pointage : Information, sauf gravité explicite).</summary>
+    public ClosingSeverity DoublonsMonoGravite { get; set; } = ClosingSeverity.Mineure;
+
     public int MaxPeriodDays { get; set; } = PlafondPeriodDays;
 
     /// <summary>Seuil du statut « Bloquant » (critiques ÷ jours-employé) ; défaut PROVISOIRE à confirmer.</summary>
@@ -49,6 +56,7 @@ public sealed class ClosingOptions
     /// <summary>Poids du score par gravité.</summary>
     public Dictionary<ClosingSeverity, int> Poids { get; } = new()
     {
+        [ClosingSeverity.Information] = (int)ClosingSeverity.Information,
         [ClosingSeverity.Mineure] = (int)ClosingSeverity.Mineure,
         [ClosingSeverity.Importante] = (int)ClosingSeverity.Importante,
         [ClosingSeverity.Critique] = (int)ClosingSeverity.Critique
@@ -62,6 +70,9 @@ public sealed class ClosingOptions
     {
         DuplicateToleranceSeconds = DuplicateToleranceSeconds,
         IgnorerSemainesValidees = IgnorerSemainesValidees,
+        ExclureSansPlanningSurPeriode = ExclureSansPlanningSurPeriode,
+        DoublonsMonoGravite = DoublonsMonoGravite,
+        PoidsInformation = Poids[ClosingSeverity.Information],
         PoidsMineure = Poids[ClosingSeverity.Mineure],
         PoidsImportante = Poids[ClosingSeverity.Importante],
         PoidsCritique = Poids[ClosingSeverity.Critique],
@@ -79,13 +90,21 @@ public sealed class ClosingOptions
         Booleen(section, nameof(ShowNames), v => ShowNames = v);
         Entier(section, nameof(DuplicateToleranceSeconds), v => DuplicateToleranceSeconds = v);
         Booleen(section, nameof(IgnorerSemainesValidees), v => IgnorerSemainesValidees = v);
+        Booleen(section, nameof(ExclureSansPlanningSurPeriode), v => ExclureSansPlanningSurPeriode = v);
+        if (section[nameof(DoublonsMonoGravite)] is string monoGravite)
+        {
+            if (EnumNomme<ClosingSeverity>(monoGravite, out var gravite))
+                DoublonsMonoGravite = gravite;
+            else
+                ErreursLecture.Add($"{Section}:{nameof(DoublonsMonoGravite)} doit valoir Information, Mineure, Importante ou Critique.");
+        }
         Entier(section, nameof(MaxPeriodDays), v => MaxPeriodDays = v);
         if (section[nameof(CriticalRatioBlocking)] is string ratio)
         {
             if (decimal.TryParse(ratio, NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign | NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite, CultureInfo.InvariantCulture, out var valeur))
                 CriticalRatioBlocking = valeur;
             else
-                ErreursLecture.Add($"{Section}:{nameof(CriticalRatioBlocking)} doit être un nombre décimal (ex. 0.02).");
+                ErreursLecture.Add($"{Section}:{nameof(CriticalRatioBlocking)} doit être un nombre décimal (ex. 0.05).");
         }
 
         foreach (var ligne in section.GetSection(nameof(Gravites)).GetChildren())
@@ -93,7 +112,7 @@ public sealed class ClosingOptions
             if (!EnumNomme<ClosingAnomalyType>(ligne.Key, out var type))
                 ErreursLecture.Add($"{Section}:{nameof(Gravites)}:{ligne.Key} : type d'anomalie inconnu.");
             else if (!EnumNomme<ClosingSeverity>(ligne.Value, out var gravite))
-                ErreursLecture.Add($"{Section}:{nameof(Gravites)}:{ligne.Key} doit valoir Mineure, Importante ou Critique.");
+                ErreursLecture.Add($"{Section}:{nameof(Gravites)}:{ligne.Key} doit valoir Information, Mineure, Importante ou Critique.");
             else
                 Gravites[type] = gravite;
         }
@@ -101,7 +120,7 @@ public sealed class ClosingOptions
         foreach (var ligne in section.GetSection(nameof(Poids)).GetChildren())
         {
             if (!EnumNomme<ClosingSeverity>(ligne.Key, out var gravite))
-                ErreursLecture.Add($"{Section}:{nameof(Poids)}:{ligne.Key} : gravité inconnue (Mineure, Importante ou Critique).");
+                ErreursLecture.Add($"{Section}:{nameof(Poids)}:{ligne.Key} : gravité inconnue (Information, Mineure, Importante ou Critique).");
             else if (!int.TryParse(ligne.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var poids))
                 ErreursLecture.Add($"{Section}:{nameof(Poids)}:{ligne.Key} doit être un nombre entier.");
             else

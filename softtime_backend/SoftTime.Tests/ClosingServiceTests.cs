@@ -142,7 +142,7 @@ public class ClosingServiceTests
         /// Jeu fixe, semaine du lundi 17 au vendredi 21 novembre 2025, deux salariés planifiés 8 h–17 h :
         /// <list type="bullet">
         ///   <item>001 (INFO) : mardi un seul pointage (incomplet, 5), mercredi 08:00 en double
-        ///     (doublon exact, 1), jeudi 08:00 puis 08:01 (quasi-doublon, 1) ;</item>
+        ///     (doublon exact, 1), jeudi 08:00 puis 08:00:20 (quasi-doublon, 1) ;</item>
         ///   <item>002 (RH) : lundi sans pointage (manquant, 5), le reste complet.</item>
         /// </list>
         /// </summary>
@@ -159,7 +159,7 @@ public class ClosingServiceTests
             Punch("001", Lundi, H8, H17);
             Punch("001", Lundi.AddDays(1), H8);
             Punch("001", Lundi.AddDays(2), H8, H8, H17);
-            Punch("001", Lundi.AddDays(3), H8, H8.Add(TimeSpan.FromMinutes(1)), H17);
+            Punch("001", Lundi.AddDays(3), H8, H8.Add(TimeSpan.FromSeconds(20)), H17);
             Punch("001", Vendredi, H8, H17);
             for (var jour = Lundi.AddDays(1); jour <= Vendredi; jour = jour.AddDays(1))
                 Punch("002", jour, H8, H17);

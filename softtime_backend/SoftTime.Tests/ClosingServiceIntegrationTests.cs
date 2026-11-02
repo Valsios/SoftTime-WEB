@@ -182,10 +182,11 @@ public class ClosingServiceIntegrationTests
         var fin = DateLue("SOFTTIME_CLOTURE_FIN") ?? FinNovembre;
         using var scope = Fournisseur().CreateScope();
         var service = ActivatorUtilities.CreateInstance<ClosingService>(scope.ServiceProvider);
-        var request = new ClosingAnalysisRequest(debut, fin, IncludeComparison: Comparaison(defaut: true));
+        var reglages = Reglages();
+        var request = new ClosingAnalysisRequest(debut, fin, Options: reglages, IncludeComparison: Comparaison(defaut: true));
         var donnees = await service.ChargerAsync(request, CancellationToken.None);
         var resultat = ClosingService.Calculer(donnees, request);
-        var anomalies = ClosingService.Controler(donnees, debut, fin, ClosingRulesOptions.Default).Anomalies;
+        var anomalies = ClosingService.Controler(donnees, debut, fin, reglages).Anomalies;
 
         static string Comptes(IEnumerable<ClosingCountDto> c) => string.Join(",", c.Select(x => $"{x.Cle}={x.Nombre}"));
         var e = new StringBuilder();
@@ -193,7 +194,7 @@ public class ClosingServiceIntegrationTests
         e.AppendLine($"score;{resultat.Score?.ToString() ?? "null"}");
         e.AppendLine($"jours_controles;{resultat.JoursEmployeControles}");
         e.AppendLine($"anomalies;{resultat.NombreAnomalies}");
-        e.AppendLine($"par_gravite;{Comptes(resultat.ParGravite)}");
+        e.AppendLine($"par_gravite;{Comptes(resultat.ParGravite.Where(g => g.Cle != nameof(ClosingSeverity.Information) || g.Nombre > 0))}");
         e.AppendLine($"par_type;{Comptes(resultat.ParType)}");
         foreach (var dep in resultat.ParDepartement)
             e.AppendLine($"departement;{dep.Departement ?? "(aucun)"};{dep.Score?.ToString() ?? "null"};{dep.JoursEmployeControles};{dep.NombreAnomalies};{Comptes(dep.ParType)}");
@@ -206,7 +207,20 @@ public class ClosingServiceIntegrationTests
             a.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), a.Detail, a.Heures?.ToString(CultureInfo.InvariantCulture) ?? "")))}");
         e.AppendLine($"hash_page1;{Hash(resultat.Anomalies.Items.Select(a => string.Join(";", a.Type, a.Gravite, a.Poids, a.Matricule,
             a.Departement, a.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), a.Detail, a.Heures?.ToString(CultureInfo.InvariantCulture) ?? "")))}");
+        // Preuves de non-régression indépendantes du libellé des détails (reformulé en phase 3c pour
+        // DoublonExact, QuasiDoublon et FerieNonApplique) : tout le reste de la ligne, puis les lignes
+        // complètes des autres types.
+        static string Jour(ClosingAnomaly a) => a.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        e.AppendLine($"hash_sans_detail;{Hash(anomalies.Select(a => string.Join(";", a.Type, a.Severity, a.Matricule, Jour(a), a.Heures?.ToString(CultureInfo.InvariantCulture) ?? "")))}");
+        var typesReformules = new[] { ClosingAnomalyType.DoublonExact, ClosingAnomalyType.QuasiDoublon, ClosingAnomalyType.FerieNonApplique };
+        e.AppendLine($"hash_details_inchanges;{Hash(anomalies.Where(a => !typesReformules.Contains(a.Type)).Select(a => string.Join(";", a.Type, a.Severity, a.Matricule, Jour(a), a.Detail, a.Heures?.ToString(CultureInfo.InvariantCulture) ?? "")))}");
         Ecrire("empreinte", e.ToString());
+        // Hors empreinte (son format reste celui d'avant la phase 3c) : statut et salariés non contrôlés.
+        Ecrire("synthese", string.Join("\n",
+            $"statut;{resultat.Statut ?? "null"}",
+            $"seuil;{reglages.CriticalRatioBlocking}",
+            $"salaries_sans_planning_exclus;{resultat.SalariesSansPlanningExclus}",
+            $"critiques_sur_jours;{Comptes(resultat.ParGravite.Where(g => g.Cle == nameof(ClosingSeverity.Critique)))};{resultat.JoursEmployeControles}") + "\n");
     }
 
     /// <summary>
@@ -246,6 +260,27 @@ public class ClosingServiceIntegrationTests
             + $"pic_memoire_processus_mo;{process.PeakWorkingSet64 / (1024 * 1024)}\n");
     }
 
+    /// <summary>
+    /// Réglages du scénario : ceux du code par défaut, ou, avec SOFTTIME_CLOTURE_REGLAGES=anciens, les
+    /// réglages d'avant la phase 3c (tolérance 120 s, doublons Mineure, férié Importante, sans exclusion
+    /// des salariés sans planning, seuil 0,02) pour prouver la non-régression.
+    /// </summary>
+    private static ClosingRulesOptions Reglages() =>
+        Environment.GetEnvironmentVariable("SOFTTIME_CLOTURE_REGLAGES") == "anciens"
+            ? new ClosingRulesOptions
+            {
+                DuplicateToleranceSeconds = 120,
+                ExclureSansPlanningSurPeriode = false,
+                CriticalRatioBlocking = 0.02m,
+                Gravites = new Dictionary<ClosingAnomalyType, ClosingSeverity>
+                {
+                    [ClosingAnomalyType.DoublonExact] = ClosingSeverity.Mineure,
+                    [ClosingAnomalyType.QuasiDoublon] = ClosingSeverity.Mineure,
+                    [ClosingAnomalyType.FerieNonApplique] = ClosingSeverity.Importante
+                }
+            }
+            : ClosingRulesOptions.Default;
+
     private static string Hash(IEnumerable<string> lignes)
     {
         using var sha = System.Security.Cryptography.SHA256.Create();
@@ -269,8 +304,8 @@ public class ClosingServiceIntegrationTests
 
     private static IEnumerable<(string Suffixe, ClosingRulesOptions Options)> ModesOptions()
     {
-        yield return ("defaut", ClosingRulesOptions.Default);
-        yield return ("sans-semaines-validees", new ClosingRulesOptions { IgnorerSemainesValidees = false });
+        yield return ("defaut", Reglages());
+        yield return ("sans-semaines-validees", Reglages() with { IgnorerSemainesValidees = false });
     }
 
     private static HashSet<(string, string, string)> LireAnomalies(string chemin) =>

@@ -22,7 +22,7 @@ public enum ClosingStatus
 /// </summary>
 public static class ClosingStatusRules
 {
-    public const decimal DefaultCriticalRatioBlocking = 0.02m;
+    public const decimal DefaultCriticalRatioBlocking = 0.05m;
 
     public static ClosingStatus? Statut(int critiques, int joursEmployeControles, decimal ratioBloquant)
     {

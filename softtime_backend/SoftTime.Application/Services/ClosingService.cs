@@ -227,8 +227,12 @@ public class ClosingService
 
         var page = Math.Max(1, request.Page ?? 1);
         var taille = Math.Clamp(request.PageSize ?? DefaultPageSize, 1, MaxPageSize);
-        var total = actuel.Anomalies.Count;
-        var items = actuel.Anomalies
+        // Les comptages incluent toujours les « Information » ; la liste les omet sauf demande.
+        var affichees = request.IncludeInformation
+            ? actuel.Anomalies
+            : actuel.Anomalies.Where(a => a.Severity != ClosingSeverity.Information).ToList();
+        var total = affichees.Count;
+        var items = affichees
             .Skip(PaginationRules.Decalage(page, taille))
             .Take(taille)
             .Select(a => new ClosingAnomalyDto(
@@ -239,7 +243,8 @@ public class ClosingService
                 departementParCle.GetValueOrDefault(a.Matricule),
                 a.Date,
                 a.Detail,
-                a.Heures))
+                a.Heures,
+                a.PointageExiste))
             .ToList();
         var anomaliesPage = new PagedResult<ClosingAnomalyDto>(
             items, total, PaginationRules.PageEffective(total, page), taille, PaginationRules.NombreDePages(total, taille));
@@ -289,13 +294,14 @@ public class ClosingService
             score,
             PayrollClosingRules.FormuleScore,
             actuel.JoursControles.Count,
-            total,
+            actuel.Anomalies.Count,
             ComptagesGravite(actuel.Anomalies),
             ComptagesType(actuel.Anomalies),
             anomaliesPage,
             parDepartement,
             comparaison,
-            ClosingStatusRules.Statut(actuel.Anomalies, actuel.JoursControles.Count, options.CriticalRatioBlocking)?.ToString());
+            ClosingStatusRules.Statut(actuel.Anomalies, actuel.JoursControles.Count, options.CriticalRatioBlocking)?.ToString(),
+            actuel.SalariesSansPlanningExclus);
     }
 
     /// <summary>Toutes les règles de clôture sur une période plafonnée à la veille.</summary>
@@ -304,7 +310,7 @@ public class ClosingService
         var hier = d.DateDuJour.Date.AddDays(-1);
         var fin = to < hier ? to : hier;
         if (from > fin)
-            return new ResultatPeriode(Array.Empty<ClosingAnomaly>(), new HashSet<(string, DateTime)>());
+            return new ResultatPeriode(Array.Empty<ClosingAnomaly>(), new HashSet<(string, DateTime)>(), 0);
 
         // Index des pointages construit une fois au chargement ; lignes d'absence calculées une fois
         // et partagées entre pointages manquants et plannings sans pointage.
@@ -316,15 +322,19 @@ public class ClosingService
             d.Cartes, d.Plannings, index, d.Corrections, d.SemainesValidees, from, fin, d.MultiPointage, options));
         anomalies.AddRange(PayrollClosingRules.PointagesManquants(lignesAbsence, index));
         anomalies.AddRange(PayrollClosingRules.PlanningsSansPointage(lignesAbsence, index, d.Corrections));
-        anomalies.AddRange(PayrollClosingRules.PointagesSansPlanning(d.Cartes, d.Plannings, index, from, fin));
-        anomalies.AddRange(PayrollClosingRules.DoublonsExacts(index, from, fin));
-        anomalies.AddRange(PayrollClosingRules.QuasiDoublons(index, from, fin, options));
+        anomalies.AddRange(PayrollClosingRules.PointagesSansPlanning(d.Cartes, d.Plannings, index, from, fin, options));
+        anomalies.AddRange(PayrollClosingRules.DoublonsExacts(index, from, fin, options, d.MultiPointage));
+        anomalies.AddRange(PayrollClosingRules.QuasiDoublons(index, from, fin, options, d.MultiPointage));
         anomalies.AddRange(PayrollClosingRules.FeriesNonAppliques(
-            d.Cartes, d.Plannings, d.Corrections, d.Feries, from, fin, d.DateDuJour));
+            d.Cartes, d.Plannings, d.Corrections, d.Feries, from, fin, d.DateDuJour, index));
 
+        var exclus = options.ExclureSansPlanningSurPeriode
+            ? PayrollClosingRules.SalariesSansPlanningSurPeriode(d.Cartes, d.Plannings, index, from, fin).Count
+            : 0;
         return new ResultatPeriode(
             PayrollClosingRules.AppliquerGravites(PayrollClosingRules.Trier(anomalies), options),
-            JoursControles(d, from, fin));
+            JoursControles(d, from, fin),
+            exclus);
     }
 
     /// <summary>
@@ -391,7 +401,8 @@ public class ClosingService
 
     internal sealed record ResultatPeriode(
         IReadOnlyList<ClosingAnomaly> Anomalies,
-        HashSet<(string Cle, DateTime Jour)> JoursControles);
+        HashSet<(string Cle, DateTime Jour)> JoursControles,
+        int SalariesSansPlanningExclus);
 }
 
 /// <summary>Données chargées pour une analyse de clôture (période demandée et période précédente).</summary>

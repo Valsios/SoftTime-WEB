@@ -34,12 +34,14 @@ public class ClosingSettingsTests
 
         Assert.True(o.Enabled);
         Assert.True(o.ShowNames);
-        Assert.Equal(120, o.DuplicateToleranceSeconds);
+        Assert.Equal(30, o.DuplicateToleranceSeconds);
+        Assert.True(o.ExclureSansPlanningSurPeriode);
+        Assert.Equal(ClosingSeverity.Mineure, o.DoublonsMonoGravite);
         Assert.True(o.IgnorerSemainesValidees);
         Assert.Equal(366, o.MaxPeriodDays);
-        Assert.Equal(0.02m, o.CriticalRatioBlocking);
+        Assert.Equal(0.05m, o.CriticalRatioBlocking);
         Assert.Empty(o.Gravites);
-        Assert.Equal(new[] { 1, 3, 5 }, new[] { o.Poids[ClosingSeverity.Mineure], o.Poids[ClosingSeverity.Importante], o.Poids[ClosingSeverity.Critique] });
+        Assert.Equal(new[] { 0, 1, 3, 5 }, new[] { o.Poids[ClosingSeverity.Information], o.Poids[ClosingSeverity.Mineure], o.Poids[ClosingSeverity.Importante], o.Poids[ClosingSeverity.Critique] });
         Assert.Empty(o.Erreurs());
         var regles = o.ReglesParDefaut();
         Assert.Empty(regles.Gravites);

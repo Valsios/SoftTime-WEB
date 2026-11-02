@@ -35,14 +35,17 @@ public static class PayrollClosingRules
     /// <summary>Origine des lignes régénérées par le pré-traitement (miroir de <c>PunchProcessingConfiguration.OrigineAuto</c>).</summary>
     private const string OrigineAuto = "AUTO";
 
-    /// <summary>Gravité par défaut de chaque type d'anomalie.</summary>
+    /// <summary>
+    /// Gravité par défaut de chaque type d'anomalie. Les doublons (exacts et quasi) dépendent aussi du
+    /// mode de pointage : voir <see cref="ClosingRulesOptions.Gravite(ClosingAnomalyType, bool)"/>.
+    /// </summary>
     public static ClosingSeverity GraviteParDefaut(ClosingAnomalyType type) => type switch
     {
         ClosingAnomalyType.PointageIncomplet => ClosingSeverity.Critique,
         ClosingAnomalyType.PointageManquant => ClosingSeverity.Critique,
         ClosingAnomalyType.PlanningSansPointage => ClosingSeverity.Importante,
         ClosingAnomalyType.PointageSansPlanning => ClosingSeverity.Importante,
-        ClosingAnomalyType.FerieNonApplique => ClosingSeverity.Importante,
+        ClosingAnomalyType.FerieNonApplique => ClosingSeverity.Information,
         ClosingAnomalyType.DoublonExact => ClosingSeverity.Mineure,
         ClosingAnomalyType.QuasiDoublon => ClosingSeverity.Mineure,
         _ => ClosingSeverity.Critique
@@ -273,11 +276,52 @@ public static class PayrollClosingRules
         IReadOnlyList<T_PLANNING_SAL> plannings,
         IReadOnlyList<T_POINTAGE> pointages,
         DateTime from,
-        DateTime to)
-        => PointagesSansPlanning(cartes, plannings, ClosingPunchIndex.Build(pointages), from, to);
+        DateTime to,
+        ClosingRulesOptions? options = null)
+        => PointagesSansPlanning(cartes, plannings, ClosingPunchIndex.Build(pointages), from, to, options);
 
     /// <summary>3.4 sur un index de pointages déjà construit.</summary>
     public static IReadOnlyList<ClosingAnomaly> PointagesSansPlanning(
+        IReadOnlyList<T_CARDPAIE> cartes,
+        IReadOnlyList<T_PLANNING_SAL> plannings,
+        ClosingPunchIndex pointages,
+        DateTime from,
+        DateTime to,
+        ClosingRulesOptions? options = null)
+    {
+        options ??= ClosingRulesOptions.Default;
+        var debut = from.Date;
+        var fin = to.Date;
+        var cleParIdSal = CleParIdSal(cartes);
+        var exclus = options.ExclureSansPlanningSurPeriode
+            ? SalariesSansPlanningSurPeriode(cartes, plannings, pointages, from, to)
+            : new HashSet<string>(StringComparer.Ordinal);
+
+        var joursPlanifies = plannings
+            .Where(p => p.DateP.HasValue && cleParIdSal.ContainsKey(p.IDSAL))
+            .Select(p => (Cle: cleParIdSal[p.IDSAL], Jour: p.DateP!.Value.Date))
+            .ToHashSet();
+        var clesConnues = cleParIdSal.Values.ToHashSet();
+
+        var resultats = pointages.Jours
+            .Where(x => x.Jour >= debut && x.Jour <= fin && clesConnues.Contains(x.Cle))
+            .Where(x => !exclus.Contains(x.Cle))
+            .Where(x => !joursPlanifies.Contains((x.Cle, x.Jour)))
+            .Select(x => Anomalie(
+                ClosingAnomalyType.PointageSansPlanning, x.Cle, x.Jour,
+                $"{x.Nombre} pointage(s) sans ligne de planning"))
+            .ToList();
+
+        return Trier(resultats);
+    }
+
+    /// <summary>
+    /// Salariés (clés) ayant au moins un pointage sur la période mais AUCUNE ligne de planning, de toute
+    /// nature (travail, OFF, Pause), sur cette même période : ils ne sont pas contrôlés par la règle
+    /// « pointage sans planning » quand <see cref="ClosingRulesOptions.ExclureSansPlanningSurPeriode"/>
+    /// est vrai. Un salarié partiellement planifié n'en fait pas partie.
+    /// </summary>
+    public static IReadOnlySet<string> SalariesSansPlanningSurPeriode(
         IReadOnlyList<T_CARDPAIE> cartes,
         IReadOnlyList<T_PLANNING_SAL> plannings,
         ClosingPunchIndex pointages,
@@ -288,36 +332,38 @@ public static class PayrollClosingRules
         var fin = to.Date;
         var cleParIdSal = CleParIdSal(cartes);
 
-        var joursPlanifies = plannings
+        var planifies = plannings
             .Where(p => p.DateP.HasValue && cleParIdSal.ContainsKey(p.IDSAL))
-            .Select(p => (Cle: cleParIdSal[p.IDSAL], Jour: p.DateP!.Value.Date))
-            .ToHashSet();
-        var clesConnues = cleParIdSal.Values.ToHashSet();
+            .Where(p => p.DateP!.Value.Date >= debut && p.DateP!.Value.Date <= fin)
+            .Select(p => cleParIdSal[p.IDSAL])
+            .ToHashSet(StringComparer.Ordinal);
+        var clesConnues = cleParIdSal.Values.ToHashSet(StringComparer.Ordinal);
 
-        var resultats = pointages.Jours
-            .Where(x => x.Jour >= debut && x.Jour <= fin && clesConnues.Contains(x.Cle))
-            .Where(x => !joursPlanifies.Contains((x.Cle, x.Jour)))
-            .Select(x => Anomalie(
-                ClosingAnomalyType.PointageSansPlanning, x.Cle, x.Jour,
-                $"{x.Nombre} pointage(s) sans ligne de planning"))
-            .ToList();
-
-        return Trier(resultats);
+        return pointages.Jours
+            .Where(x => x.Jour >= debut && x.Jour <= fin && clesConnues.Contains(x.Cle) && !planifies.Contains(x.Cle))
+            .Select(x => x.Cle)
+            .ToHashSet(StringComparer.Ordinal);
     }
 
     /// <summary>3.5 — Plusieurs pointages du même matricule à la même date et à la même heure exacte.</summary>
     public static IReadOnlyList<ClosingAnomaly> DoublonsExacts(
         IReadOnlyList<T_POINTAGE> pointages,
         DateTime from,
-        DateTime to)
-        => DoublonsExacts(ClosingPunchIndex.Build(pointages), from, to);
+        DateTime to,
+        ClosingRulesOptions? options = null,
+        bool multiPointage = false)
+        => DoublonsExacts(ClosingPunchIndex.Build(pointages), from, to, options, multiPointage);
 
     /// <summary>3.5 sur un index de pointages déjà construit (pointages triés : les doublons sont contigus).</summary>
     public static IReadOnlyList<ClosingAnomaly> DoublonsExacts(
         ClosingPunchIndex pointages,
         DateTime from,
-        DateTime to)
+        DateTime to,
+        ClosingRulesOptions? options = null,
+        bool multiPointage = false)
     {
+        options ??= ClosingRulesOptions.Default;
+        var gravite = options.Gravite(ClosingAnomalyType.DoublonExact, multiPointage);
         var debut = from.Date;
         var fin = to.Date;
 
@@ -335,7 +381,8 @@ public static class PayrollClosingRules
                 if (j - i > 1 && jour >= debut && jour <= fin)
                     resultats.Add(Anomalie(
                         ClosingAnomalyType.DoublonExact, cle, jour,
-                        $"{j - i} pointages identiques à {FormatHeure(moments[i].Heure)}"));
+                        $"{j - i} pointages identiques à {FormatHeure(moments[i].Heure)} ({EffetDoublon(multiPointage)})",
+                        gravite: gravite));
                 i = j;
             }
         }
@@ -353,17 +400,20 @@ public static class PayrollClosingRules
         IReadOnlyList<T_POINTAGE> pointages,
         DateTime from,
         DateTime to,
-        ClosingRulesOptions? options = null)
-        => QuasiDoublons(ClosingPunchIndex.Build(pointages), from, to, options);
+        ClosingRulesOptions? options = null,
+        bool multiPointage = false)
+        => QuasiDoublons(ClosingPunchIndex.Build(pointages), from, to, options, multiPointage);
 
     /// <summary>3.6 sur un index de pointages déjà construit.</summary>
     public static IReadOnlyList<ClosingAnomaly> QuasiDoublons(
         ClosingPunchIndex pointages,
         DateTime from,
         DateTime to,
-        ClosingRulesOptions? options = null)
+        ClosingRulesOptions? options = null,
+        bool multiPointage = false)
     {
         options ??= ClosingRulesOptions.Default;
+        var gravite = options.Gravite(ClosingAnomalyType.QuasiDoublon, multiPointage);
         var tolerance = TimeSpan.FromSeconds(Math.Max(0, options.DuplicateToleranceSeconds));
         var debut = from.Date;
         var fin = to.Date;
@@ -390,7 +440,8 @@ public static class PayrollClosingRules
 
                 resultats.Add(Anomalie(
                     ClosingAnomalyType.QuasiDoublon, cle, instants[i - 1].Date,
-                    $"Écart de {(int)ecart.TotalSeconds} s entre {FormatHeure(instants[i - 1].TimeOfDay)} et {FormatHeure(instants[i].TimeOfDay)}"));
+                    $"Écart de {(int)ecart.TotalSeconds} s entre {FormatHeure(instants[i - 1].TimeOfDay)} et {FormatHeure(instants[i].TimeOfDay)} ({EffetDoublon(multiPointage)})",
+                    gravite: gravite));
             }
         }
 
@@ -410,7 +461,8 @@ public static class PayrollClosingRules
         IReadOnlySet<DateTime> feries,
         DateTime from,
         DateTime to,
-        DateTime dateDuJour)
+        DateTime dateDuJour,
+        ClosingPunchIndex? pointages = null)
     {
         var debut = from.Date;
         var hier = dateDuJour.Date.AddDays(-1);
@@ -451,7 +503,8 @@ public static class PayrollClosingRules
 
             resultats.Add(Anomalie(
                 ClosingAnomalyType.FerieNonApplique, cleJour.Cle, cleJour.Jour,
-                "Férié planifié sans correction férié", duree));
+                "drapeau férié absent (sans effet sur le calcul de la paie)", duree,
+                pointageExiste: pointages?.APointage(cleJour.Cle, cleJour.Jour)));
         }
 
         return Trier(resultats);
@@ -487,8 +540,10 @@ public static class PayrollClosingRules
     {
         if (options.Gravites.Count == 0)
             return anomalies;
+        // Seuls les types fixés explicitement sont remplacés : la gravité des autres (dont celle des
+        // doublons, qui dépend du mode) a déjà été posée par la règle.
         return anomalies
-            .Select(a => options.Gravite(a.Type) is var gravite && gravite != a.Severity ? a with { Severity = gravite } : a)
+            .Select(a => options.Gravites.TryGetValue(a.Type, out var gravite) && gravite != a.Severity ? a with { Severity = gravite } : a)
             .ToList();
     }
 
@@ -502,8 +557,12 @@ public static class PayrollClosingRules
             .ToList();
 
     private static ClosingAnomaly Anomalie(
-        ClosingAnomalyType type, string cle, DateTime jour, string detail, decimal? heures = null)
-        => new(type, GraviteParDefaut(type), cle, jour.Date, detail, heures);
+        ClosingAnomalyType type, string cle, DateTime jour, string detail, decimal? heures = null,
+        ClosingSeverity? gravite = null, bool? pointageExiste = null)
+        => new(type, gravite ?? GraviteParDefaut(type), cle, jour.Date, detail, heures, pointageExiste);
+
+    private static string EffetDoublon(bool multiPointage) =>
+        multiPointage ? "double passage sans effet sur la paie (multi-pointage)" : "peut fausser les heures";
 
     private static bool AHeuresCorrigees(T_HEURECORRIGER h) =>
         h.HENTREE.HasValue || h.HSORTIE.HasValue || h.HPS.HasValue || h.HPE.HasValue;

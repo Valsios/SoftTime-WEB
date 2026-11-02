@@ -131,7 +131,7 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
         var r = json.RootElement;
         Assert.Equal("Bloquant", r.GetProperty("statut").GetString());      // 1 critique sur 1 jour contrôlé
         Assert.Equal("Bloquant", r.GetProperty("statutLibelle").GetString());
-        Assert.Equal(0.02m, r.GetProperty("seuilBloquant").GetDecimal());
+        Assert.Equal(0.05m, r.GetProperty("seuilBloquant").GetDecimal());
         Assert.Equal(0, r.GetProperty("score").GetInt32());
         Assert.Contains("poids maximum", r.GetProperty("formule").GetString());
         Assert.Equal(1, r.GetProperty("joursEmployeControles").GetInt32());
@@ -145,6 +145,19 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
         Assert.Equal("Testnom", anomalie.GetProperty("nom").GetString());
         Assert.Equal("Testprenom", anomalie.GetProperty("prenom").GetString());
         Assert.Equal("DEP1", anomalie.GetProperty("departement").GetString());
+    }
+
+    [Fact]
+    public async Task Analysis_accepts_includeInformation_and_exposes_the_excluded_employee_count()
+    {
+        var (code, texte) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}&includeInformation=true"));
+
+        Assert.Equal(HttpStatusCode.OK, code);
+        using var json = JsonDocument.Parse(texte);
+        var r = json.RootElement;
+        Assert.Equal(0, r.GetProperty("salariesSansPlanningExclus").GetInt32());
+        Assert.Contains(r.GetProperty("parGravite").EnumerateArray(), g => g.GetProperty("cle").GetString() == "Information");
+        Assert.True(r.GetProperty("anomalies").GetProperty("items")[0].TryGetProperty("pointageExiste", out _));
     }
 
     [Fact]

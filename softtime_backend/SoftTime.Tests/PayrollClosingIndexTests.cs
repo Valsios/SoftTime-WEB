@@ -38,9 +38,9 @@ public class PayrollClosingIndexTests
 
     private static readonly T_POINTAGE[] Pointages =
     {
-        P("369", Lundi, H17), P("00369", Lundi, H8), P("369", Lundi, H8), P("369", Lundi, H8.Add(TimeSpan.FromSeconds(30))),
+        P("369", Lundi, H17), P("00369", Lundi, H8), P("369", Lundi, H8), P("369", Lundi, H8.Add(TimeSpan.FromSeconds(20))),
         P("500", Lundi.AddDays(1), TimeSpan.FromHours(22)), P("500", Lundi.AddDays(2), TimeSpan.FromHours(6)),
-        P("500", Lundi.AddDays(2), TimeSpan.FromHours(6).Add(TimeSpan.FromSeconds(119))),
+        P("500", Lundi.AddDays(2), TimeSpan.FromHours(6).Add(TimeSpan.FromSeconds(29))),
         P("a12", Lundi, H8), P("A12", Lundi.AddDays(1), H8), P("A12", Lundi.AddDays(1), H17), P("A12", Lundi.AddDays(1), H17),
         P("369", Lundi.AddDays(1), H8), P("369", To.AddDays(1), H8), P("369", To.AddDays(1), H8), P("369", From.AddDays(-1), H8),
         P("999", Lundi, H8), P("999", Lundi, H8),
@@ -109,7 +109,7 @@ public class PayrollClosingIndexTests
     public void Index_GroupsByCanonicalMatriculeSortedAndCountsPerDay()
     {
         Assert.Equal(
-            new[] { H8, H8, H8.Add(TimeSpan.FromSeconds(30)), H17 },
+            new[] { H8, H8, H8.Add(TimeSpan.FromSeconds(20)), H17 },
             Index.Moments("369").Where(m => m.Date == Lundi).Select(m => m.Heure));
         Assert.True(Index.APointage("369", Lundi.AddHours(10)));
         Assert.False(Index.APointage("369", Lundi.AddDays(2)));

@@ -114,7 +114,7 @@ public class PayrollClosingRulesTests
     [InlineData(ClosingAnomalyType.PointageManquant, ClosingSeverity.Critique)]
     [InlineData(ClosingAnomalyType.PlanningSansPointage, ClosingSeverity.Importante)]
     [InlineData(ClosingAnomalyType.PointageSansPlanning, ClosingSeverity.Importante)]
-    [InlineData(ClosingAnomalyType.FerieNonApplique, ClosingSeverity.Importante)]
+    [InlineData(ClosingAnomalyType.FerieNonApplique, ClosingSeverity.Information)]
     [InlineData(ClosingAnomalyType.DoublonExact, ClosingSeverity.Mineure)]
     [InlineData(ClosingAnomalyType.QuasiDoublon, ClosingSeverity.Mineure)]
     public void DefaultSeverity_MatchesSpecification(ClosingAnomalyType type, ClosingSeverity attendu)
@@ -123,11 +123,12 @@ public class PayrollClosingRulesTests
     }
 
     [Fact]
-    public void Options_Defaults_AreToleranceOf120sAndSeverityWeights()
+    public void Options_Defaults_AreToleranceOf30sAndSeverityWeights()
     {
         var options = ClosingRulesOptions.Default;
 
-        Assert.Equal(120, options.DuplicateToleranceSeconds);
+        Assert.Equal(30, options.DuplicateToleranceSeconds);
+        Assert.Equal(0, options.Poids(ClosingSeverity.Information));
         Assert.Equal(1, options.Poids(ClosingSeverity.Mineure));
         Assert.Equal(3, options.Poids(ClosingSeverity.Importante));
         Assert.Equal(5, options.Poids(ClosingSeverity.Critique));
@@ -347,9 +348,10 @@ public class PayrollClosingRulesTests
     [Fact]
     public void PunchWithoutPlanning_IsImportantAnomaly()
     {
+        // Salarié planifié un autre jour de la période : il est contrôlé, le jour pointé sans planning est signalé.
         var result = PayrollClosingRules.PointagesSansPlanning(
             new[] { Carte(1, "00369") },
-            Array.Empty<T_PLANNING_SAL>(),
+            new[] { Travail(1, 1, Mardi) },
             new[] { Punch("369", Lundi, H8), Punch("369", Lundi, H17) },
             From, To);
 
@@ -397,10 +399,10 @@ public class PayrollClosingRulesTests
     }
 
     [Fact]
-    public void NearDuplicate_119Seconds_IsAnomaly()
+    public void NearDuplicate_29Seconds_IsAnomaly()
     {
         var result = PayrollClosingRules.QuasiDoublons(
-            new[] { Punch("369", Lundi, H8), Punch("369", Lundi, H8.Add(TimeSpan.FromSeconds(119))) },
+            new[] { Punch("369", Lundi, H8), Punch("369", Lundi, H8.Add(TimeSpan.FromSeconds(29))) },
             From, To);
 
         var anomalie = Assert.Single(result);
@@ -409,8 +411,8 @@ public class PayrollClosingRulesTests
     }
 
     [Theory]
-    [InlineData(120)]
-    [InlineData(121)]
+    [InlineData(30)]
+    [InlineData(31)]
     public void NearDuplicate_AtOrAboveTolerance_NoAnomaly(int secondes)
     {
         var result = PayrollClosingRules.QuasiDoublons(
@@ -450,7 +452,7 @@ public class PayrollClosingRulesTests
         var pointages = new[]
         {
             Punch("369", Lundi, H8), Punch("369", Lundi, H8),
-            Punch("369", Lundi, H8.Add(TimeSpan.FromSeconds(30)))
+            Punch("369", Lundi, H8.Add(TimeSpan.FromSeconds(20)))
         };
 
         Assert.Single(PayrollClosingRules.DoublonsExacts(pointages, From, To));
@@ -460,13 +462,13 @@ public class PayrollClosingRulesTests
     // ---------- 3.7 FerieNonApplique ----------
 
     [Fact]
-    public void HolidayNotApplied_PlannedHolidayWithoutHolidayCorrection_IsImportant()
+    public void HolidayNotApplied_PlannedHolidayWithoutHolidayCorrection_IsInformation()
     {
         var result = FeriesNonAppliques(new[] { Travail(1, 1, Ferie) });
 
         var anomalie = Assert.Single(result);
         Assert.Equal(ClosingAnomalyType.FerieNonApplique, anomalie.Type);
-        Assert.Equal(ClosingSeverity.Importante, anomalie.Severity);
+        Assert.Equal(ClosingSeverity.Information, anomalie.Severity);
         Assert.Equal(Ferie, anomalie.Date);
         Assert.Equal(9m, anomalie.Heures);
     }

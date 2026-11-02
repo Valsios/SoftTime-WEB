@@ -7,7 +7,8 @@ namespace SoftTime.Application.DTOs;
 /// d'anomalies et options des règles (valeurs par défaut du Domain si absentes).
 /// Sans <see cref="From"/> ni <see cref="To"/>, la période est le mois civil complet précédent.
 /// <see cref="IncludeComparison"/> (faux par défaut) charge et calcule aussi la période précédente
-/// de même longueur ; sinon <c>Comparaison</c> vaut <c>null</c>.
+/// de même longueur ; sinon <c>Comparaison</c> vaut <c>null</c>. <see cref="IncludeInformation"/>
+/// (faux par défaut) ajoute à la LISTE les anomalies « Information » ; les comptages les incluent toujours.
 /// </summary>
 public sealed record ClosingAnalysisRequest(
     DateTime From,
@@ -16,7 +17,8 @@ public sealed record ClosingAnalysisRequest(
     int? Page = null,
     int? PageSize = null,
     ClosingRulesOptions? Options = null,
-    bool IncludeComparison = false);
+    bool IncludeComparison = false,
+    bool IncludeInformation = false);
 
 /// <summary>Comptage d'une gravité ou d'un type d'anomalie.</summary>
 public sealed record ClosingCountDto(string Cle, int Nombre);
@@ -30,7 +32,8 @@ public sealed record ClosingAnomalyDto(
     string? Departement,
     DateTime Date,
     string Detail,
-    decimal? Heures);
+    decimal? Heures,
+    bool? PointageExiste = null);
 
 /// <summary>Score et répartition d'un département (<c>null</c> : salariés sans département).</summary>
 public sealed record ClosingDepartmentDto(
@@ -70,7 +73,8 @@ public sealed record ClosingAnalysisDto(
     PagedResult<ClosingAnomalyDto> Anomalies,
     IReadOnlyList<ClosingDepartmentDto> ParDepartement,
     ClosingComparisonDto? Comparaison,
-    string? Statut = null);
+    string? Statut = null,
+    int SalariesSansPlanningExclus = 0);
 
 /// <summary>Anomalie présentée à l'écran : nom et prénom <c>null</c> quand l'affichage des noms est désactivé.</summary>
 public sealed record ClosingAnomalyViewDto(
@@ -83,7 +87,8 @@ public sealed record ClosingAnomalyViewDto(
     string? Departement,
     DateTime Date,
     string Detail,
-    decimal? Heures);
+    decimal? Heures,
+    bool? PointageExiste = null);
 
 /// <summary>
 /// Réponse de la route d'analyse : statut (Pret / ACorriger / Bloquant, <c>null</c> sans jour
@@ -106,4 +111,5 @@ public sealed record ClosingReportDto(
     PagedResult<ClosingAnomalyViewDto> Anomalies,
     IReadOnlyList<ClosingDepartmentDto> ParDepartement,
     ClosingComparisonDto? Comparaison,
-    bool NomsAffiches);
+    bool NomsAffiches,
+    int SalariesSansPlanningExclus = 0);

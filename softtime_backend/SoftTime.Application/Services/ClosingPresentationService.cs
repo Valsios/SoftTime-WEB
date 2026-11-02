@@ -49,7 +49,7 @@ public class ClosingPresentationService
             .Select(a =>
             {
                 var (nom, prenom) = noms.GetValueOrDefault(a.Matricule);
-                return new ClosingAnomalyViewDto(a.Type, a.Gravite, a.Poids, a.Matricule, nom, prenom, a.Departement, a.Date, a.Detail, a.Heures);
+                return new ClosingAnomalyViewDto(a.Type, a.Gravite, a.Poids, a.Matricule, nom, prenom, a.Departement, a.Date, a.Detail, a.Heures, a.PointageExiste);
             })
             .ToList();
         var page = analyse.Anomalies;
@@ -71,7 +71,8 @@ public class ClosingPresentationService
             new PagedResult<ClosingAnomalyViewDto>(items, page.Total, page.Page, page.PageSize, page.TotalPages),
             analyse.ParDepartement,
             analyse.Comparaison,
-            afficherNoms);
+            afficherNoms,
+            analyse.SalariesSansPlanningExclus);
     }
 
     private static string? Texte(string? valeur) => string.IsNullOrWhiteSpace(valeur) ? null : valeur.Trim();
