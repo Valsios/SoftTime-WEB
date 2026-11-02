@@ -9,7 +9,6 @@ internal static class MlSampleMapper
     public static MlAbsenceSample ToAbsence(T_ML_SALARIE_JOUR row) => new()
     {
         Label = row.AbsenceNonJustifiee,
-        Weight = row.AbsenceNonJustifiee ? 3f : 1f,
         JourSemaine = row.JourSemaine,
         SemaineIso = row.SemaineIso,
         Mois = row.Mois,
@@ -45,9 +44,7 @@ internal static class MlSampleMapper
         SemaineIso = row.SemaineIso,
         Mois = row.SemaineDebut.Month,
         HeuresPlanifiees = (float)row.HeuresPlanifiees,
-        HeuresTravaillees = (float)row.HeuresTravaillees,
         NbJoursPlanifies = row.NbJoursPlanifies,
-        NbJoursTravailles = row.NbJoursTravailles,
         CongeJours = (float)row.CongeJours,
         HsMoyenne4Semaines = (float)row.HsMoyenne4Semaines,
         HsMoyenne8Semaines = (float)row.HsMoyenne8Semaines,

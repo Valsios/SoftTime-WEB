@@ -47,8 +47,28 @@ public sealed class MlOptions
 
     public int ModelRetentionPerType { get; set; } = 5;
 
+    /// <summary>Seuils du risque d'absence d'un jour (probabilité journalière).</summary>
     public double LowRiskThreshold { get; set; } = 0.15;
     public double HighRiskThreshold { get; set; } = 0.35;
+
+    /// <summary>
+    /// Seuils du risque sur l'horizon, relatifs : absences attendues du salarié rapportées à celles
+    /// d'un salarié moyen sur les mêmes jours (1,5 = 50 % de plus que la moyenne).
+    /// </summary>
+    public double HorizonMediumRiskRatio { get; set; } = 1.5;
+    public double HorizonHighRiskRatio { get; set; } = 2.5;
+
+    /// <summary>
+    /// Qualité des labels : un jour où au moins cette part des salariés planifiés n'a aucun pointage
+    /// est traité comme un trou de données (import ou traitement non fait), pas comme des absences.
+    /// </summary>
+    public double MissingPunchDayAbsenceRate { get; set; } = 0.5;
+
+    /// <summary>Nombre minimal de salariés planifiés pour juger un jour « sans pointage ».</summary>
+    public int MissingPunchDayMinPlanned { get; set; } = 5;
+
+    /// <summary>Sans aucun pointage sur cette période récente, les prévisions sont suspendues.</summary>
+    public int RecentDataDays { get; set; } = 14;
 
     /// <summary>Porte qualité : AUC minimale du modèle d'absence.</summary>
     public double AbsenceMinAuc { get; set; } = 0.55;

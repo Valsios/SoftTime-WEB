@@ -24,6 +24,7 @@ public sealed class MlDatasetService
     private readonly IUnitOfWork _uow;
     private readonly TenantConnectionService _tenant;
     private readonly SageLeaveCalendar _leaves;
+    private readonly IExternalSourceService _externalSource;
     private readonly IMlStore _store;
     private readonly MlOptions _options;
     private readonly ILogger<MlDatasetService> _logger;
@@ -32,6 +33,7 @@ public sealed class MlDatasetService
         IUnitOfWork uow,
         TenantConnectionService tenant,
         SageLeaveCalendar leaves,
+        IExternalSourceService externalSource,
         IMlStore store,
         MlOptions options,
         ILogger<MlDatasetService> logger)
@@ -39,6 +41,7 @@ public sealed class MlDatasetService
         _uow = uow;
         _tenant = tenant;
         _leaves = leaves;
+        _externalSource = externalSource;
         _store = store;
         _options = options;
         _logger = logger;
@@ -57,9 +60,7 @@ public sealed class MlDatasetService
             throw new InvalidOperationException("La date de fin doit suivre la date de début.");
 
         var ctx = await LoadContextAsync(from, to, ct);
-        BuildDays(ctx);
-        ComputeRollingFeatures(ctx);
-        ComputeTeamFeatures(ctx);
+        Prepare(ctx);
 
         var daily = ctx.EmployeeDays.Values
             .SelectMany(days => days)
@@ -87,9 +88,7 @@ public sealed class MlDatasetService
         DateTime from, DateTime to, CancellationToken ct = default)
     {
         var ctx = await LoadContextAsync(from.Date, to.Date, ct);
-        BuildDays(ctx);
-        ComputeRollingFeatures(ctx);
-        ComputeTeamFeatures(ctx);
+        Prepare(ctx);
         return ctx.EmployeeDays.Values
             .SelectMany(days => days)
             .Where(d => d.Date >= from.Date && d.Date <= to.Date && d.EstJourPlanifie)
@@ -103,10 +102,25 @@ public sealed class MlDatasetService
         DateTime from, DateTime to, CancellationToken ct = default)
     {
         var ctx = await LoadContextAsync(from.Date, to.Date, ct);
+        Prepare(ctx);
+        return BuildWeekly(ctx, from.Date, to.Date);
+    }
+
+    /// <summary>
+    /// Journées, trous de données puis features. Les jours sans pointage collectif (import ou
+    /// traitement non fait) sont écartés des historiques pour ne pas être lus comme des absences.
+    /// </summary>
+    private void Prepare(DatasetContext ctx)
+    {
         BuildDays(ctx);
+        ctx.JoursSansPointage = MlDataQuality.JoursSansPointage(
+            ctx.EmployeeDays.Values
+                .SelectMany(days => days)
+                .Where(d => d.Date < ctx.ObservedUntil)
+                .Select(d => (d.Date, d.EstJourPlanifie, d.AbsenceNonJustifiee)),
+            _options);
         ComputeRollingFeatures(ctx);
         ComputeTeamFeatures(ctx);
-        return BuildWeekly(ctx, from.Date, to.Date);
     }
 
     // ------------------------------------------------------------------ contexte
@@ -118,8 +132,10 @@ public sealed class MlDatasetService
         var pointeuseDb = _tenant.PointeuseDb;
         var warmupFrom = from.AddDays(-Math.Max(0, _options.WarmupDays));
 
-        var cards = (await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == sageDb, ct))
+        var allCards = (await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == sageDb, ct))
             .Where(c => !string.IsNullOrWhiteSpace(c.SAGE_MATRICULE))
+            .ToList();
+        var cards = allCards
             .Where(c => string.IsNullOrWhiteSpace(c.POINTEUSE_BDD)
                         || string.Equals(c.POINTEUSE_BDD.Trim(), pointeuseDb.Trim(), StringComparison.OrdinalIgnoreCase))
             .GroupBy(c => MlKey(c.SAGE_MATRICULE))
@@ -145,13 +161,35 @@ public sealed class MlDatasetService
             .GroupBy(h => MlKey(h.MATRICULE_SAGE))
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
 
-        var planning = (await _uow.Repository<T_PLANNING_SAL>().ListAsync(
+        var plannings = (await _uow.Repository<T_PLANNING_SAL>().ListAsync(
                 p => p.BDD_SAGE == sageDb && p.DateP >= warmupFrom && p.DateP <= to, ct))
             .Where(p => p.DateP.HasValue)
+            .ToList();
+
+        // Vue HS (écran heures supplémentaires) : planning de la carte et de la pointeuse active.
+        var planningHs = plannings
+            .Where(p => OvertimeDayRules.EstDeLaPointeuse(p, pointeuseDb))
             .GroupBy(p => p.IDSAL)
             .ToDictionary(g => g.Key, g => g.ToList());
 
+        // Vue absences / retards (états et tableau de bord) : plannings de toutes les cartes de même
+        // clé matricule (C11), toutes pointeuses confondues.
+        var cleParIdSal = allCards
+            .GroupBy(c => c.ID)
+            .ToDictionary(g => g.Key, g => MlKey(g.First().SAGE_MATRICULE));
+        var planningEtats = plannings
+            .Where(p => cleParIdSal.ContainsKey(p.IDSAL))
+            .GroupBy(p => cleParIdSal[p.IDSAL], StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+
+        var categorieParCarte = affectations
+            .GroupBy(a => a.MATRICULE_SAGE)
+            .ToDictionary(g => g.Key, g => g.First().ID_CATEG);
+
         var conges = await _leaves.LoadAsync(ct);
+        var civilites = OvertimeDayRules.ContientHuitMars(warmupFrom, to)
+            ? await SageCivilites.ChargerAsync(_tenant, _externalSource, ct)
+            : new Dictionary<string, byte?>(StringComparer.Ordinal);
 
         var validees = (await _uow.Repository<T_HS_VALIDER>().ListAsync(
                 v => v.BDD_SAGE == sageDb
@@ -170,6 +208,7 @@ public sealed class MlDatasetService
             From = from,
             To = to,
             WarmupFrom = warmupFrom,
+            ObservedUntil = DateTime.Today,
             MultiPointage = multiPointage,
             Cards = cards,
             Categories = categories,
@@ -178,8 +217,11 @@ public sealed class MlDatasetService
             Majorations = majorations,
             Feries = feries,
             Corrections = corrections,
-            Planning = planning,
+            PlanningHs = planningHs,
+            PlanningEtats = planningEtats,
+            CategorieParCarte = categorieParCarte,
             Conges = conges,
+            Civilites = civilites,
             HsValidees = validees
         };
 
@@ -213,7 +255,7 @@ public sealed class MlDatasetService
             CotationNuit: Cotation(ctx.Majorations, "NUIT"),
             CotationDimanche: Cotation(ctx.Majorations, "DIMANCHE"),
             CotationFerie: Cotation(ctx.Majorations, "FERIE"),
-            EstFemme: false);
+            EstFemme: OvertimeDayRules.EstFemme(ctx.Civilites.GetValueOrDefault(MlKey(card.SAGE_MATRICULE))));
 
         return new EmployeeConfig(week, categorie?.IDCATEGORIE, categorie?.HEURESEMAINE);
     }
@@ -239,15 +281,22 @@ public sealed class MlDatasetService
                 .Where(h => h.DATE_POINTAGE_IN.HasValue)
                 .GroupBy(h => h.DATE_POINTAGE_IN!.Value.Date)
                 .ToDictionary(g => g.Key, g => g.ToList());
-            var plansParJour = (ctx.Planning.GetValueOrDefault(card.ID) ?? new List<T_PLANNING_SAL>())
-                .Where(p => p.DateP.HasValue)
+            // Deux vues du planning, chacune alignée sur l'écran qui l'utilise :
+            // états absences/retards (toutes cartes de la clé, travail prioritaire sur OFF) et
+            // écran HS (carte et pointeuse actives, plus petit ID).
+            var plansParJour = (ctx.PlanningEtats.GetValueOrDefault(cle) ?? new List<T_PLANNING_SAL>())
                 .GroupBy(p => p.DateP!.Value.Date)
                 .ToDictionary(g => g.Key, g => SelectPlan(g));
+            var plansHsParJour = (ctx.PlanningHs.GetValueOrDefault(card.ID) ?? new List<T_PLANNING_SAL>())
+                .GroupBy(p => p.DateP!.Value.Date)
+                .ToDictionary(g => g.Key, g => OvertimeDayRules.PlanDuJour(g));
+            var toleranceEntree = RetardReportRules.ToleranceEntree(card.ID, ctx.CategorieParCarte, ctx.Tolerances);
 
             var days = new List<DayRow>();
             for (var date = ctx.WarmupFrom; date <= ctx.To; date = date.AddDays(1))
             {
                 plansParJour.TryGetValue(date, out var plan);
+                plansHsParJour.TryGetValue(date, out var planHs);
                 correctionsParJour.TryGetValue(date, out var lignes);
                 lignes ??= new List<T_HEURECORRIGER>();
 
@@ -258,42 +307,28 @@ public sealed class MlDatasetService
                 var conge = congeValeur > 0m;
                 var dureePlanifiee = off ? null : AbsenceReportRules.CalculerDureeHeures(plan);
 
-                var sentinelle = new DateTime(2000, 1, 1);
-                TimeSpan? ha = plan?.HA is DateTime haBrute && haBrute.Date > sentinelle ? haBrute.TimeOfDay : null;
-                TimeSpan? hd = plan?.HD is DateTime hdBrute && hdBrute.Date > sentinelle ? hdBrute.TimeOfDay : null;
-                if (off)
-                {
-                    ha = null;
-                    hd = null;
-                }
-
-                var paires = lignes
-                    .Where(h => h.HENTREE.HasValue && h.HSORTIE.HasValue)
-                    .OrderBy(h => h.HENTREE)
-                    .Select(h => new PunchPair(
-                        h.DATE_POINTAGE_IN!.Value.Date,
-                        h.HENTREE!.Value,
-                        (h.DATE_POINTAGE_OUT ?? h.DATE_POINTAGE_IN)!.Value.Date,
-                        h.HSORTIE!.Value))
-                    .ToList();
-
-                if (!off && paires.Count > 0)
-                {
-                    ha ??= paires[0].EntreeHeure;
-                    hd ??= paires[^1].SortieHeure;
-                }
+                var overtimeDay = OvertimeDayRules.Construire(date, lignes, planHs, ferie, congeValeur);
 
                 var aPointage = lignes.Count > 0;
-                var absenceNonJustifiee = AbsenceReportRules.EstNonJustifiee(
-                    estNonTravaille: weekend || ferie,
-                    estConge: conge,
-                    plan,
-                    aPointage);
+                var absenceNonJustifiee = date < ctx.ObservedUntil
+                    && AbsenceReportRules.EstNonJustifiee(
+                        estNonTravaille: weekend || ferie,
+                        estConge: conge,
+                        plan,
+                        aPointage);
                 var absenceDeclaree = lignes.Any(h => h.ABSENCE_AM == true || h.ABSENCE_PM == true);
-                var retardSaisi = lignes.FirstOrDefault(h => h.RETARD.HasValue)?.RETARD;
-                var retardMinutes = retardSaisi is TimeSpan retard && retard > TimeSpan.Zero
-                    ? (int)Math.Round(retard.TotalMinutes)
-                    : 0;
+
+                // Même règle que l'état des retards et le tableau de bord : valeur saisie prioritaire,
+                // sinon première entrée du jour vs heure planifiée + tolérance de la catégorie.
+                var entrees = lignes.Where(h => h.HENTREE.HasValue).Select(h => h.HENTREE!.Value).ToList();
+                var retardMinutes = weekend || ferie || lignes.Count == 0
+                    ? 0
+                    : RetardReportRules.MinutesRetardJour(
+                        absenceMatin: lignes.Any(h => h.ABSENCE_AM == true),
+                        retardsSaisis: lignes.Select(h => h.RETARD),
+                        premiereEntree: entrees.Count > 0 ? entrees.Min() : null,
+                        heurePrevue: RetardReportRules.HeurePrevue(plan),
+                        toleranceMinutes: toleranceEntree);
 
                 var day = new DayRow
                 {
@@ -308,22 +343,12 @@ public sealed class MlDatasetService
                     PlanningConnu = plan != null,
                     EstJourPlanifie = !off && !weekend && !ferie && !conge && dureePlanifiee.HasValue,
                     HeuresPlanifiees = dureePlanifiee,
-                    HeuresTravaillees = HeuresTravaillees(paires),
+                    HeuresTravaillees = HeuresTravaillees(overtimeDay.Paires),
                     RetardMinutes = retardMinutes,
                     AbsenceNonJustifiee = absenceNonJustifiee,
                     AbsenceDeclaree = absenceDeclaree,
                     AbsenceHeures = absenceNonJustifiee ? dureePlanifiee : null,
-                    OvertimeDay = new OvertimeDayInput(
-                        Jour: date,
-                        Paires: paires,
-                        PlanningHa: ha,
-                        PlanningHd: hd,
-                        PlanningPause: off ? null : plan?.Pause,
-                        Off: off,
-                        Ferie: ferie,
-                        CorrectionPresente: aPointage,
-                        CongeValeur: congeValeur,
-                        RetardExplicite: retardSaisi)
+                    OvertimeDay = overtimeDay
                 };
 
                 days.Add(day);
@@ -414,14 +439,17 @@ public sealed class MlDatasetService
                     ? null
                     : (day.Date - derniereAbsence.Date).Days;
 
-                var lundi = MondayOf(day.Date);
+                var lundi = DerniereSemaineConnue(ctx, day.Date);
                 day.HeuresSupp4Semaines = Math.Round(
                     Enumerable.Range(1, 4)
                         .Sum(i => ctx.WeekResults
                             .GetValueOrDefault((cle, lundi.AddDays(-7 * i)))?.Hs ?? 0m),
                     2);
 
-                history.Add(day);
+                // Seuls les jours réellement observés alimentent l'historique : les jours futurs
+                // (sans pointage par construction) et les trous de données n'y entrent pas.
+                if (day.Date < ctx.ObservedUntil && !ctx.JoursSansPointage.Contains(day.Date))
+                    history.Add(day);
             }
         }
     }
@@ -434,12 +462,14 @@ public sealed class MlDatasetService
         {
             var parDate = dept.GroupBy(d => d.Date).ToDictionary(g => g.Key, g => g.ToList());
             var dates = parDate.Keys.OrderBy(d => d).ToList();
-            var planned = parDate.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Count(d => d.EstJourPlanifie));
-            var absents = parDate.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Count(d => d.AbsenceNonJustifiee));
+            bool Observe(DateTime date) => date < ctx.ObservedUntil && !ctx.JoursSansPointage.Contains(date);
+            var planned = parDate.ToDictionary(kvp => kvp.Key, kvp => Observe(kvp.Key) ? kvp.Value.Count(d => d.EstJourPlanifie) : 0);
+            var absents = parDate.ToDictionary(kvp => kvp.Key, kvp => Observe(kvp.Key) ? kvp.Value.Count(d => d.AbsenceNonJustifiee) : 0);
 
             var fenetre = new List<DateTime>();
             var plannedSum = 0;
             var absentsSum = 0;
+            double? tauxFige = null;
 
             foreach (var date in dates)
             {
@@ -451,6 +481,12 @@ public sealed class MlDatasetService
                 }
 
                 var taux = plannedSum == 0 ? 0d : (double)absentsSum / plannedSum;
+                // Jours futurs : le taux d'équipe reste celui des 30 derniers jours observés.
+                if (date >= ctx.ObservedUntil)
+                {
+                    tauxFige ??= taux;
+                    taux = tauxFige.Value;
+                }
                 foreach (var row in parDate[date])
                     row.TauxAbsenceEquipe30j = taux;
 
@@ -498,12 +534,16 @@ public sealed class MlDatasetService
 
                 var computation = ctx.WeekResults[(cle, semaine.Key)];
                 var jours = semaine.OrderBy(d => d.Date).ToList();
+                // Historique : semaines complètes et observées avant la semaine cible (pour une
+                // semaine future, les dernières semaines terminées).
+                var ancre = DerniereSemaineConnue(ctx, semaine.Key);
                 var precedentes4 = semaines
-                    .Where(w => w.Key < semaine.Key && w.Key >= semaine.Key.AddDays(-28))
+                    .Where(w => w.Key < ancre && w.Key >= ancre.AddDays(-28))
                     .ToList();
                 var precedentes8 = semaines
-                    .Where(w => w.Key < semaine.Key && w.Key >= semaine.Key.AddDays(-56))
+                    .Where(w => w.Key < ancre && w.Key >= ancre.AddDays(-56))
                     .ToList();
+                bool Observe(DayRow d) => d.Date < ctx.ObservedUntil && !ctx.JoursSansPointage.Contains(d.Date);
 
                 decimal HsMoyenne(List<IGrouping<DateTime, DayRow>> semainesSource)
                     => semainesSource.Count == 0
@@ -531,8 +571,8 @@ public sealed class MlDatasetService
                     AbsenceHeures = Math.Round(computation.Absence, 2),
                     HsMoyenne4Semaines = HsMoyenne(precedentes4),
                     HsMoyenne8Semaines = HsMoyenne(precedentes8),
-                    Absences4Semaines = precedentes4.Sum(w => w.Count(d => d.AbsenceNonJustifiee)),
-                    Retards4Semaines = precedentes4.Sum(w => w.Count(d => d.RetardMinutes > 0)),
+                    Absences4Semaines = precedentes4.Sum(w => w.Count(d => d.AbsenceNonJustifiee && Observe(d))),
+                    Retards4Semaines = precedentes4.Sum(w => w.Count(d => d.RetardMinutes > 0 && Observe(d))),
                     HeuresTravaillees4Semaines = Math.Round(precedentes4.Sum(w => w.Sum(d => d.HeuresTravaillees)), 2),
                     CategorieId = config.CategorieId,
                     Departement = card.DEPARTEMENT,
@@ -606,6 +646,17 @@ public sealed class MlDatasetService
     private static DateTime MondayOf(DateTime date)
         => date.Date.AddDays(-(((int)date.Date.DayOfWeek + 6) % 7));
 
+    /// <summary>
+    /// Lundi à partir duquel compter les semaines d'historique : celui de la date cible, ou celui
+    /// de la semaine en cours si la cible est future (les semaines précédentes sont complètes).
+    /// </summary>
+    private static DateTime DerniereSemaineConnue(DatasetContext ctx, DateTime date)
+    {
+        var lundi = MondayOf(date);
+        var lundiCourant = MondayOf(ctx.ObservedUntil);
+        return lundi < lundiCourant ? lundi : lundiCourant;
+    }
+
     private sealed class DatasetContext
     {
         public string SageDb { get; init; } = string.Empty;
@@ -613,6 +664,14 @@ public sealed class MlDatasetService
         public DateTime From { get; init; }
         public DateTime To { get; init; }
         public DateTime WarmupFrom { get; init; }
+
+        /// <summary>
+        /// Premier jour non observé (aujourd'hui) : comme les états, aucune absence n'est constatée
+        /// à partir de ce jour, et les historiques des jours futurs s'arrêtent à la veille.
+        /// </summary>
+        public DateTime ObservedUntil { get; init; }
+
+        public HashSet<DateTime> JoursSansPointage { get; set; } = new();
         public bool MultiPointage { get; init; }
         public List<T_CARDPAIE> Cards { get; init; } = new();
         public List<T_CATEGORIE> Categories { get; init; } = new();
@@ -621,8 +680,11 @@ public sealed class MlDatasetService
         public List<T_MAJORATION> Majorations { get; init; } = new();
         public HashSet<DateTime> Feries { get; init; } = new();
         public Dictionary<string, List<T_HEURECORRIGER>> Corrections { get; init; } = new(StringComparer.Ordinal);
-        public Dictionary<int, List<T_PLANNING_SAL>> Planning { get; init; } = new();
+        public Dictionary<int, List<T_PLANNING_SAL>> PlanningHs { get; init; } = new();
+        public Dictionary<string, List<T_PLANNING_SAL>> PlanningEtats { get; init; } = new(StringComparer.Ordinal);
+        public Dictionary<int, int> CategorieParCarte { get; init; } = new();
         public Dictionary<string, List<LeaveDay>> Conges { get; init; } = new(StringComparer.Ordinal);
+        public Dictionary<string, byte?> Civilites { get; init; } = new(StringComparer.Ordinal);
         public Dictionary<(string, DateTime), T_HS_VALIDER> HsValidees { get; init; } = new();
 
         public Dictionary<string, T_CARDPAIE> CardByKey { get; } = new(StringComparer.Ordinal);

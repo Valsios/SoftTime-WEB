@@ -44,10 +44,19 @@ public sealed class MlTrainingService
     public async Task<MlTrainingOutcome> TrainAsync(string bddSage, CancellationToken ct = default)
     {
         var to = DateTime.Today.AddDays(-1);
-        var from = to.AddMonths(-_options.TrainingMonths);
+        // L'entraînement ne peut pas remonter plus loin que l'historique reconstruit.
+        var from = to.AddMonths(-Math.Min(_options.TrainingMonths, _options.HistoryMonths));
 
-        var absence = await TrainAbsenceAsync(bddSage, from, to, ct);
-        var hs = await TrainHsAsync(bddSage, from, to, ct);
+        var daily = await _store.GetDailyForTrainingAsync(bddSage, from, to, _options.MaxTrainingRows, ct);
+        var joursSansPointage = MlDataQuality.JoursSansPointage(
+            daily.Select(d => (d.Date, d.EstJourPlanifie, d.AbsenceNonJustifiee)), _options);
+        if (joursSansPointage.Count > 0)
+            _logger.LogInformation(
+                "ML {Sage} : {Count} jour(s) sans pointage collectif écartés de l'entraînement.",
+                bddSage, joursSansPointage.Count);
+
+        var absence = await TrainAbsenceAsync(bddSage, daily, joursSansPointage, from, to, ct);
+        var hs = await TrainHsAsync(bddSage, joursSansPointage, from, to, ct);
 
         var etat = absence.Absence?.EstActif == true || hs.HsMontant?.EstActif == true
             ? "Pret"
@@ -67,11 +76,11 @@ public sealed class MlTrainingService
     // ------------------------------------------------------------------ absence
 
     private async Task<AbsenceOutcome> TrainAbsenceAsync(
-        string bddSage, DateTime from, DateTime to, CancellationToken ct)
+        string bddSage, IReadOnlyList<T_ML_SALARIE_JOUR> daily, IReadOnlySet<DateTime> joursSansPointage,
+        DateTime from, DateTime to, CancellationToken ct)
     {
-        var rows = (await _store.GetDailyForTrainingAsync(
-                bddSage, from, to, _options.MaxTrainingRows, ct))
-            .Where(d => d.EstJourPlanifie)
+        var rows = daily
+            .Where(d => d.EstJourPlanifie && !joursSansPointage.Contains(d.Date.Date))
             .OrderBy(d => d.Date)
             .ToList();
 
@@ -131,11 +140,15 @@ public sealed class MlTrainingService
     // ------------------------------------------------------------------ heures supplémentaires
 
     private async Task<HsOutcome> TrainHsAsync(
-        string bddSage, DateTime from, DateTime to, CancellationToken ct)
+        string bddSage, IReadOnlySet<DateTime> joursSansPointage, DateTime from, DateTime to, CancellationToken ct)
     {
+        // Semaines terminées uniquement (la semaine en cours a un label partiel) et sans trou de
+        // pointage (des HS à 0 faute d'import ne sont pas des semaines sans HS).
         var rows = (await _store.GetWeeklyForTrainingAsync(
                 bddSage, from, to, _options.MaxTrainingWeeks, ct))
             .Where(w => w.NbJoursPlanifies > 0 || w.HeuresTravaillees > 0)
+            .Where(w => w.SemaineDebut.AddDays(6) <= to)
+            .Where(w => !Enumerable.Range(0, 7).Any(i => joursSansPointage.Contains(w.SemaineDebut.Date.AddDays(i))))
             .OrderBy(w => w.SemaineDebut)
             .ToList();
 

@@ -8,7 +8,6 @@ namespace SoftTime.Infrastructure.MachineLearning;
 internal sealed class MlAbsenceData
 {
     public bool Label { get; set; }
-    public float Weight { get; set; } = 1f;
 
     public float JourSemaine { get; set; }
     public float SemaineIso { get; set; }
@@ -51,9 +50,7 @@ internal sealed class MlHsData
     public float SemaineIso { get; set; }
     public float Mois { get; set; }
     public float HeuresPlanifiees { get; set; }
-    public float HeuresTravaillees { get; set; }
     public float NbJoursPlanifies { get; set; }
-    public float NbJoursTravailles { get; set; }
     public float CongeJours { get; set; }
 
     public float HsMoyenne4Semaines { get; set; }
@@ -129,9 +126,7 @@ internal static class MlNetData
         nameof(MlHsData.SemaineIso),
         nameof(MlHsData.Mois),
         nameof(MlHsData.HeuresPlanifiees),
-        nameof(MlHsData.HeuresTravaillees),
         nameof(MlHsData.NbJoursPlanifies),
-        nameof(MlHsData.NbJoursTravailles),
         nameof(MlHsData.CongeJours),
         nameof(MlHsData.HsMoyenne4Semaines),
         nameof(MlHsData.HsMoyenne8Semaines),
@@ -147,7 +142,6 @@ internal static class MlNetData
     public static MlAbsenceData Map(MlAbsenceSample s) => new()
     {
         Label = s.Label,
-        Weight = s.Weight,
         JourSemaine = s.JourSemaine,
         SemaineIso = s.SemaineIso,
         Mois = s.Mois,
@@ -183,9 +177,7 @@ internal static class MlNetData
         SemaineIso = s.SemaineIso,
         Mois = s.Mois,
         HeuresPlanifiees = s.HeuresPlanifiees,
-        HeuresTravaillees = s.HeuresTravaillees,
         NbJoursPlanifies = s.NbJoursPlanifies,
-        NbJoursTravailles = s.NbJoursTravailles,
         CongeJours = s.CongeJours,
         HsMoyenne4Semaines = s.HsMoyenne4Semaines,
         HsMoyenne8Semaines = s.HsMoyenne8Semaines,
@@ -200,7 +192,7 @@ internal static class MlNetData
 
     public static string ComputeSchemaHash()
     {
-        var contract = string.Join("|", AbsenceFeatures) + "||" + string.Join("|", HsFeatures);
+        var contract = MlSchema.Version + "||" + string.Join("|", AbsenceFeatures) + "||" + string.Join("|", HsFeatures);
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(contract));
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }

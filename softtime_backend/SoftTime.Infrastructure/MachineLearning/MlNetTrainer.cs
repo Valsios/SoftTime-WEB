@@ -190,6 +190,13 @@ public sealed class MlNetTrainer : IMlTrainer
         var metrics = ml.Regression.Evaluate(
             predictions, labelColumnName: nameof(MlHsData.HsAmount));
 
+        // Erreur absolue observée sur le jeu de test (prévision bornée à 0, comme à l'affichage).
+        var erreurs = ml.Data
+            .CreateEnumerable<MlHsAmountPrediction>(predictions, reuseRowObject: false)
+            .Select(r => Math.Abs(r.HsAmount - Math.Max(0f, r.Score)))
+            .OrderBy(e => e)
+            .ToList();
+
         return new MlTrainingResult(
             Accepted: true,
             Algorithm: sdca ? "SdcaRegression" : "FastTree",
@@ -198,8 +205,17 @@ public sealed class MlNetTrainer : IMlTrainer
                 Mae: metrics.MeanAbsoluteError,
                 Rmse: metrics.RootMeanSquaredError,
                 R2: metrics.RSquared,
+                ErreurP80: Centile(erreurs, 0.8),
                 TestRows: test.Count),
             RejectReason: null);
+    }
+
+    private static double? Centile(IReadOnlyList<float> triees, double centile)
+    {
+        if (triees.Count == 0)
+            return null;
+        var index = (int)Math.Ceiling(centile * triees.Count) - 1;
+        return Math.Round(triees[Math.Clamp(index, 0, triees.Count - 1)], 2);
     }
 
     private static bool UseSdca(string algorithm)

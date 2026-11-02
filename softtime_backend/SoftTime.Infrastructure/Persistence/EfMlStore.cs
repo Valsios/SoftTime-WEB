@@ -110,14 +110,13 @@ public sealed class EfMlStore : IMlStore
             .ToListAsync(ct);
 
     public async Task ReplacePredictionsAsync(
-        string bddSage, MlModelType type, DateTime from, DateTime to, int modelId,
+        string bddSage, MlModelType type, DateTime from, DateTime to,
         IReadOnlyCollection<T_ML_PREDICTION> rows, CancellationToken ct = default)
     {
         var storageType = MlModelTypes.ToStorage(type);
         await _db.Prediction
             .Where(x => x.BddSage == bddSage
                         && x.TypeModele == storageType
-                        && x.ModeleId == modelId
                         && x.Cible >= from.Date
                         && x.Cible <= to.Date)
             .ExecuteDeleteAsync(ct);

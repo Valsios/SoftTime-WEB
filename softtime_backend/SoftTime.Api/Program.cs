@@ -78,9 +78,13 @@ builder.Services.Configure<MlOptions>(builder.Configuration.GetSection("Ml"));
 builder.Services.AddHostedService<MlMaintenanceHostedService>();
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
 builder.Services.AddScoped<ICompanyContext, CompanyContext>();
+builder.Services.AddScoped<SystemExecution>();
 builder.Services.AddScoped<ICurrentUser>(sp =>
 {
     var http = sp.GetRequiredService<IHttpContextAccessor>().HttpContext;
+    // Scope d'arrière-plan (jobs ML) : identité système administratrice, jamais pour une requête HTTP.
+    if (http is null && sp.GetRequiredService<SystemExecution>().Active)
+        return new CurrentUser { Login = SystemExecution.Login, RoleId = SoftTime.Domain.Services.AdminRules.AdminRoleId };
     var principal = http?.User;
     if (principal?.Identity?.IsAuthenticated != true)
         return new CurrentUser();

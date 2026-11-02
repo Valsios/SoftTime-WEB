@@ -54,7 +54,7 @@ public sealed class MlPipelineService
         }
         else
         {
-            var from = to.AddDays(-7 * Math.Max(1, _options.RefreshWindowWeeks));
+            var from = MondayOf(to.AddDays(-7 * Math.Max(1, _options.RefreshWindowWeeks)));
             var result = await _dataset.BuildAsync(from, to, persist: true, ct);
             dailyRows = result.DailyRows;
             weeklyRows = result.WeeklyRows;
@@ -85,17 +85,26 @@ public sealed class MlPipelineService
             predictions.HsPredictions);
     }
 
-    private static IEnumerable<(DateTime Start, DateTime End)> Chunks(
+    /// <summary>
+    /// Tranches du backfill alignées sur des semaines complètes (lundi → dimanche) : une semaine à
+    /// cheval sur deux tranches serait sinon calculée sur quelques jours puis jamais recalculée.
+    /// </summary>
+    internal static IEnumerable<(DateTime Start, DateTime End)> Chunks(
         DateTime from, DateTime to, int months)
     {
-        var start = from.Date;
+        var start = MondayOf(from);
         while (start <= to.Date)
         {
-            var end = start.AddMonths(months).AddDays(-1);
+            var end = MondayOf(start.AddMonths(months)).AddDays(-1);
+            if (end < start)
+                end = start.AddDays(6);
             if (end > to.Date)
                 end = to.Date;
             yield return (start, end);
             start = end.AddDays(1);
         }
     }
+
+    private static DateTime MondayOf(DateTime date)
+        => date.Date.AddDays(-(((int)date.Date.DayOfWeek + 6) % 7));
 }

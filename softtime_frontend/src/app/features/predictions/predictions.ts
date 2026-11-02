@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { forkJoin } from 'rxjs';
 import {
   MlAbsenceForecast,
@@ -8,7 +9,15 @@ import {
   MlStatus,
 } from '../../shared/models';
 import { PredictionsService } from '../../shared/services/predictions.service';
-import { PageHeader, SoftBadge, SoftButton, SoftCard } from '../../shared/components';
+import {
+  Column,
+  DataTable,
+  DataTableCell,
+  PageHeader,
+  SoftBadge,
+  SoftButton,
+  SoftCard,
+} from '../../shared/components';
 import { fmtDate as formatIsoDate } from '../../shared/utils/date';
 
 /**
@@ -19,7 +28,7 @@ import { fmtDate as formatIsoDate } from '../../shared/utils/date';
 @Component({
   selector: 'app-predictions',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [PageHeader, SoftCard, SoftButton, SoftBadge],
+  imports: [PageHeader, SoftCard, SoftButton, SoftBadge, DataTable, DataTableCell, NgTemplateOutlet],
   template: `
     <page-header
       title="Prévisions"
@@ -102,45 +111,29 @@ import { fmtDate as formatIsoDate } from '../../shared/utils/date';
           <h2>Absences prévues</h2>
           <span>{{ absences().length }} salarié(s) · horizon {{ horizonJours }} jours</span>
         </div>
-        @if (!absences().length) {
-          <div class="pred-empty">Aucune prévision d'absence sur l'horizon.</div>
-        } @else {
-          <div class="soft-table-wrap">
-            <table class="soft-table pred-table">
-              <thead>
-                <tr>
-                  <th>Salarié</th>
-                  <th>Département</th>
-                  <th>Risque</th>
-                  <th>Jours à risque</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (a of absences(); track a.matricule) {
-                  <tr>
-                    <td>
-                      <strong>{{ a.nom }} {{ a.prenom }}</strong>
-                      <small>{{ a.matricule }}</small>
-                    </td>
-                    <td>{{ a.departement || '—' }}</td>
-                    <td>
-                      <soft-badge [variant]="niveauVariant(a.niveau)">{{ pct(a.risque) }}</soft-badge>
-                    </td>
-                    <td>
-                      <span class="pred-days">
-                        @for (j of a.jours; track j.date) {
-                          <span class="pred-day" [class]="'pred-day pred-day--' + niveauClass(j.niveau)">
-                            {{ jourCourt(j.date) }} · {{ pct(j.probabilite) }}
-                          </span>
-                        }
-                      </span>
-                    </td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-        }
+        <data-table
+          [columns]="absenceColumns"
+          [rows]="absenceRows()"
+          trackKey="matricule"
+          searchPlaceholder="Rechercher un salarié, un matricule, un département…"
+          emptyText="Aucune prévision d'absence sur l'horizon."
+        >
+          <ng-template dataTableCell="salarie" let-row>
+            <ng-container *ngTemplateOutlet="salarieCell; context: { $implicit: row }"></ng-container>
+          </ng-template>
+          <ng-template dataTableCell="risque" let-row>
+            <soft-badge [variant]="niveauVariant(absence(row).niveau)">{{ pct(absence(row).risque) }}</soft-badge>
+          </ng-template>
+          <ng-template dataTableCell="jours" let-row>
+            <span class="pred-days">
+              @for (j of absence(row).jours; track j.date) {
+                <span class="pred-day" [class]="'pred-day pred-day--' + niveauClass(j.niveau)">
+                  {{ jourCourt(j.date) }} · {{ pct(j.probabilite) }}
+                </span>
+              }
+            </span>
+          </ng-template>
+        </data-table>
       </soft-card>
 
       <soft-card variant="bordered" padding="sm">
@@ -148,81 +141,49 @@ import { fmtDate as formatIsoDate } from '../../shared/utils/date';
           <h2>Heures supplémentaires prévues</h2>
           <span>{{ semaineLabel() }}</span>
         </div>
-        @if (!hs().length) {
-          <div class="pred-empty">Aucune prévision HS : planning de la semaine incomplet ou modèle indisponible.</div>
-        } @else {
-          <div class="soft-table-wrap">
-            <table class="soft-table pred-table">
-              <thead>
-                <tr>
-                  <th>Salarié</th>
-                  <th>Département</th>
-                  <th>HS prévues</th>
-                  <th>Intervalle</th>
-                  <th>P(dépassement)</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (h of hs(); track h.matricule) {
-                  <tr>
-                    <td>
-                      <strong>{{ h.nom }} {{ h.prenom }}</strong>
-                      <small>{{ h.matricule }}</small>
-                    </td>
-                    <td>{{ h.departement || '—' }}</td>
-                    <td><strong>{{ h.heuresPrevues.toFixed(1) }} h</strong></td>
-                    <td>{{ h.borneBasse.toFixed(1) }} – {{ h.borneHaute.toFixed(1) }} h</td>
-                    <td>
-                      <soft-badge [variant]="niveauVariant(h.niveau)">{{ pct(h.probabiliteDepassement) }}</soft-badge>
-                    </td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-        }
+        <data-table
+          [columns]="hsColumns"
+          [rows]="hsRows()"
+          trackKey="matricule"
+          searchPlaceholder="Rechercher un salarié, un matricule, un département…"
+          emptyText="Aucune prévision HS : planning de la semaine incomplet ou modèle indisponible."
+        >
+          <ng-template dataTableCell="salarie" let-row>
+            <ng-container *ngTemplateOutlet="salarieCell; context: { $implicit: row }"></ng-container>
+          </ng-template>
+          <ng-template dataTableCell="heuresPrevues" let-row>
+            <strong>{{ hsLigne(row).heuresPrevues.toFixed(1) }} h</strong>
+          </ng-template>
+          <ng-template dataTableCell="probabiliteDepassement" let-row>
+            <soft-badge [variant]="niveauVariant(hsLigne(row).niveau)">
+              {{ pct(hsLigne(row).probabiliteDepassement) }}
+            </soft-badge>
+          </ng-template>
+        </data-table>
       </soft-card>
     }
+
+    <ng-template #salarieCell let-row>
+      <strong>{{ row['nom'] }} {{ row['prenom'] }}</strong>
+      <small class="pred-sub">{{ row['matricule'] }}</small>
+    </ng-template>
 
     <soft-card variant="bordered" padding="sm">
       <div class="pred-section-head">
         <h2>Modèles</h2>
         <span>Registre versionné des entraînements</span>
       </div>
-      @if (!modeles().length) {
-        <div class="pred-empty">Aucun entraînement enregistré.</div>
-      } @else {
-        <div class="soft-table-wrap">
-          <table class="soft-table pred-table">
-            <thead>
-              <tr>
-                <th>Type</th>
-                <th>Version</th>
-                <th>Algorithme</th>
-                <th>Statut</th>
-                <th>Entraîné le</th>
-                <th>Métriques</th>
-                <th>Commentaire</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (m of modeles(); track m.id) {
-                <tr>
-                  <td>{{ typeLabel(m.typeModele) }}</td>
-                  <td>{{ m.version }}</td>
-                  <td>{{ m.algorithme }}</td>
-                  <td>
-                    <soft-badge [variant]="statutVariant(m)">{{ m.statut }}</soft-badge>
-                  </td>
-                  <td>{{ fmtDate(m.entraineLe) }}</td>
-                  <td>{{ metricLabel(m) }}</td>
-                  <td>{{ m.commentaire || '—' }}</td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-      }
+      <data-table
+        [columns]="modeleColumns"
+        [rows]="modeleRows()"
+        trackKey="id"
+        searchPlaceholder="Rechercher un type, une version, un statut…"
+        emptyText="Aucun entraînement enregistré."
+      >
+        <ng-template dataTableCell="statut" let-row>
+          <soft-badge [variant]="statutVariant(modele(row))">{{ modele(row).statut }}</soft-badge>
+        </ng-template>
+      </data-table>
     </soft-card>
   `,
   styles: [
@@ -324,7 +285,7 @@ import { fmtDate as formatIsoDate } from '../../shared/utils/date';
         font-size: 12.5px;
         color: var(--text-muted);
       }
-      .pred-table td small {
+      .pred-sub {
         display: block;
         color: var(--text-muted);
         font-size: 11.5px;
@@ -361,9 +322,6 @@ import { fmtDate as formatIsoDate } from '../../shared/utils/date';
         color: var(--text-muted);
         font-size: 13px;
       }
-      .pred-table {
-        width: 100%;
-      }
     `,
   ],
 })
@@ -381,6 +339,56 @@ export class PredictionsPage implements OnInit {
   readonly horizonJours = 14;
 
   readonly modeles = computed<MlModelInfo[]>(() => this.status()?.modeles ?? []);
+
+  // Tableaux partagés (data-table) : le texte des colonnes (format) sert aussi à la recherche.
+  readonly absenceRows = computed(() => this.absences() as unknown as Record<string, unknown>[]);
+  readonly hsRows = computed(() => this.hs() as unknown as Record<string, unknown>[]);
+  readonly modeleRows = computed(() => this.modeles() as unknown as Record<string, unknown>[]);
+
+  readonly absenceColumns: Column[] = [
+    { key: 'salarie', label: 'Salarié', format: (_, row) => this.salarieTexte(row) },
+    { key: 'departement', label: 'Département', format: (v) => (v as string | null) || '—' },
+    {
+      key: 'risque',
+      label: 'Risque',
+      format: (_, row) => `${this.pct(this.absence(row).risque)} ${this.niveauLabel(this.absence(row).niveau)}`,
+    },
+    {
+      key: 'jours',
+      label: 'Jours à risque',
+      format: (_, row) =>
+        this.absence(row)
+          .jours.map((j) => `${this.jourCourt(j.date)} · ${this.pct(j.probabilite)}`)
+          .join(', '),
+    },
+  ];
+
+  readonly hsColumns: Column[] = [
+    { key: 'salarie', label: 'Salarié', format: (_, row) => this.salarieTexte(row) },
+    { key: 'departement', label: 'Département', format: (v) => (v as string | null) || '—' },
+    { key: 'heuresPrevues', label: 'HS prévues', format: (v) => `${(v as number).toFixed(1)} h` },
+    {
+      key: 'intervalle',
+      label: 'Intervalle',
+      format: (_, row) =>
+        `${this.hsLigne(row).borneBasse.toFixed(1)} – ${this.hsLigne(row).borneHaute.toFixed(1)} h`,
+    },
+    {
+      key: 'probabiliteDepassement',
+      label: 'P(dépassement)',
+      format: (v, row) => `${this.pct(v as number)} ${this.niveauLabel(this.hsLigne(row).niveau)}`,
+    },
+  ];
+
+  readonly modeleColumns: Column[] = [
+    { key: 'typeModele', label: 'Type', format: (v) => this.typeLabel(v as string) },
+    { key: 'version', label: 'Version' },
+    { key: 'algorithme', label: 'Algorithme' },
+    { key: 'statut', label: 'Statut' },
+    { key: 'entraineLe', label: 'Entraîné le', format: (v) => this.fmtDate(v as string) },
+    { key: 'metriques', label: 'Métriques', format: (_, row) => this.metricLabel(this.modele(row)) },
+    { key: 'commentaire', label: 'Commentaire', format: (v) => (v as string | null) || '—' },
+  ];
   readonly salariesARisque = computed(() => this.absences().filter((a) => a.niveau >= 3).length);
   readonly risqueMoyen = computed(() => {
     const list = this.absences();
@@ -479,6 +487,30 @@ export class PredictionsPage implements OnInit {
     if (niveau >= 3) return 'high';
     if (niveau >= 2) return 'mid';
     return 'low';
+  }
+
+  /** Texte du niveau, pour que la recherche trouve « élevé », « moyen » ou « faible ». */
+  niveauLabel(niveau: number): string {
+    if (niveau >= 3) return 'élevé';
+    if (niveau >= 2) return 'moyen';
+    return 'faible';
+  }
+
+  // Lignes du data-table, typées pour les modèles de cellule.
+  absence(row: Record<string, unknown>): MlAbsenceForecast {
+    return row as unknown as MlAbsenceForecast;
+  }
+
+  hsLigne(row: Record<string, unknown>): MlHsForecast {
+    return row as unknown as MlHsForecast;
+  }
+
+  modele(row: Record<string, unknown>): MlModelInfo {
+    return row as unknown as MlModelInfo;
+  }
+
+  private salarieTexte(row: Record<string, unknown>): string {
+    return [row['nom'], row['prenom'], row['matricule']].filter(Boolean).join(' ');
   }
 
   typeLabel(type: string): string {
