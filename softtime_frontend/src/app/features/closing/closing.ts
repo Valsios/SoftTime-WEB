@@ -248,7 +248,8 @@ import {
   `,
   styles: [
     `
-      :host { display: flex; flex-direction: column; gap: 16px; }
+      /* « relative » : les légendes masquées (.closing-sr, position absolute) restent dans la zone de défilement de la page. */
+      :host { display: flex; flex-direction: column; gap: 16px; position: relative; }
       /* Les blocs partagés portent leurs propres marges basses : l'espacement de la page vient du « gap » de l'hôte. */
       :host ::ng-deep .soft-page-header { margin-bottom: 0; }
       :host ::ng-deep .soft-toolbar { margin-bottom: 0; }

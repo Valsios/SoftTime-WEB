@@ -193,6 +193,21 @@ describe('page Clôture de paie : niveau Information', () => {
     expect(el.querySelectorAll<HTMLElement>('[role="tab"]')[1].getAttribute('aria-selected')).toBe('true');
   });
 
+  it('les légendes masquées (position absolue) ont un ancêtre positionné : la page ne déborde pas du cadre', () => {
+    const { el } = creer([avecInformations()]);
+    const hote = el.querySelector('app-closing') ?? el;
+    const captions = Array.from(el.querySelectorAll<HTMLElement>('caption.closing-sr'));
+
+    expect(captions.length).toBeGreaterThan(0);
+    // Sans ancêtre positionné, une légende absolue étendrait le document au-delà du cadre de l’application.
+    let positionne = false;
+    for (let n: HTMLElement | null = captions[0].parentElement; n && n !== document.body; n = n.parentElement) {
+      if (getComputedStyle(n).position !== 'static') positionne = true;
+    }
+    expect(getComputedStyle(captions[0]).position).toBe('absolute');
+    expect(positionne || getComputedStyle(hote).position === 'relative').toBe(true);
+  });
+
   it('le score et le statut ne dépendent pas de l’onglet', () => {
     const { el } = creer([avecInformations(), avecInformations()]);
     const avant = el.querySelector('.closing-score__value')?.textContent;
