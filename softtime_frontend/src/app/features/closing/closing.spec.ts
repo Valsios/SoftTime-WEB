@@ -90,27 +90,116 @@ describe('page Clôture de paie : niveau Information', () => {
     expect(information.querySelector('.soft-badge--muted')).not.toBeNull();
   });
 
-  it('propose la case « Afficher aussi les informations » décochée, et ne demande pas les informations par défaut', () => {
-    const { el, requetes } = creer([rapport()]);
-    const case_ = Array.from(el.querySelectorAll<HTMLInputElement>('.closing-check input'))
-      .find((i) => i.parentElement?.textContent?.includes('Afficher aussi les informations (sans effet sur le score)'));
+  it('l’ancienne case « Afficher aussi les informations » et la case de comparaison ont disparu', () => {
+    const { el } = creer([rapport()]);
 
-    expect(case_).toBeDefined();
-    expect(case_?.checked).toBe(false);
-    expect(requetes[0].includeInformation).toBe(false);
+    expect(el.querySelector('.closing-check')).toBeNull();
+    expect(el.textContent).not.toContain('Afficher aussi les informations');
+    expect(el.querySelectorAll('input[type="checkbox"]')).toHaveLength(1); // seul l’interrupteur de comparaison
   });
 
-  it('cocher la case relance l’analyse avec includeInformation et revient à la page 1', () => {
-    const { fixture, el, requetes } = creer([rapport(), rapport()]);
-    const case_ = Array.from(el.querySelectorAll<HTMLInputElement>('.closing-check input'))[1];
+  it('interrupteur de comparaison : nommé, état en texte, désactivé par défaut', async () => {
+    const { fixture, el, requetes } = creer([rapport()]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const interrupteur = el.querySelector<HTMLInputElement>('label.closing-switch input[type="checkbox"]');
 
-    case_.checked = true;
-    case_.dispatchEvent(new Event('change'));
+    expect(interrupteur).not.toBeNull();
+    expect(interrupteur?.checked).toBe(false);
+    expect(el.querySelector('label.closing-switch')?.textContent).toContain('Comparer avec la période précédente');
+    expect(el.querySelector('.closing-switch__state')?.textContent?.trim()).toBe('Désactivée');
+    expect(requetes[0].includeComparison).toBe(false);
+  });
+
+  it('interrupteur de comparaison : au clavier ou à la souris, relance l’analyse et affiche « Activée »', async () => {
+    const { fixture, el, requetes } = creer([rapport(), rapport()]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const interrupteur = el.querySelector<HTMLInputElement>('label.closing-switch input[type="checkbox"]')!;
+
+    interrupteur.focus(); // un contrôle natif : Espace l’active comme un clic
+    interrupteur.click();
+    fixture.detectChanges();
+
+    expect(requetes).toHaveLength(2);
+    expect(requetes[1].includeComparison).toBe(true);
+    expect(el.querySelector('.closing-switch__state')?.textContent?.trim()).toBe('Activée');
+
+    interrupteur.click();
+    fixture.detectChanges();
+    expect(requetes[2].includeComparison).toBe(false);
+    expect(el.querySelector('.closing-switch__state')?.textContent?.trim()).toBe('Désactivée');
+  });
+
+  const avecInformations = (over: Partial<ClosingReport> = {}) =>
+    rapport(
+      {
+        nombreAnomalies: 5,
+        parGravite: [
+          { cle: 'Information', nombre: 2 },
+          { cle: 'Critique', nombre: 3 },
+        ],
+        ...over,
+      },
+      [anomalie({})],
+    );
+
+  it('deux onglets avec leurs totaux : « À corriger (N) » et « Avec informations (M) »', () => {
+    const { el } = creer([avecInformations()]);
+    const onglets = Array.from(el.querySelectorAll<HTMLElement>('[role="tab"]'));
+
+    expect(onglets.map((o) => o.textContent?.trim())).toEqual(['À corriger (3)', 'Avec informations (5)']);
+    expect(onglets[0].getAttribute('aria-selected')).toBe('true');
+    expect(onglets[1].getAttribute('aria-selected')).toBe('false');
+  });
+
+  it('onglet « Avec informations » : includeInformation = true, retour à la page 1, filtres et comparaison conservés', async () => {
+    const { fixture, el, requetes } = creer([avecInformations(), avecInformations(), avecInformations()]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    el.querySelector<HTMLInputElement>('label.closing-switch input')!.click();
+    fixture.detectChanges();
+    fixture.componentInstance.goTo(3);
+    fixture.detectChanges();
+
+    el.querySelectorAll<HTMLElement>('[role="tab"]')[1].click();
+    fixture.detectChanges();
+    const dernier = requetes[requetes.length - 1];
+
+    expect(dernier.includeInformation).toBe(true);
+    expect(dernier.page).toBe(1);
+    expect(dernier.includeComparison).toBe(true);
+    expect(dernier.from).toBe(requetes[0].from);
+    expect(dernier.to).toBe(requetes[0].to);
+    expect(requetes[0].includeInformation).toBe(false);
+
+    el.querySelectorAll<HTMLElement>('[role="tab"]')[0].click();
+    fixture.detectChanges();
+    expect(requetes[requetes.length - 1].includeInformation).toBe(false);
+  });
+
+  it('onglets : lecture au clavier (flèche droite) et recliquer l’onglet actif ne relance rien', () => {
+    const { fixture, el, requetes } = creer([avecInformations(), avecInformations()]);
+    const onglets = el.querySelectorAll<HTMLElement>('[role="tab"]');
+
+    onglets[0].click();
+    expect(requetes).toHaveLength(1);
+
+    onglets[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
     fixture.detectChanges();
 
     expect(requetes).toHaveLength(2);
     expect(requetes[1].includeInformation).toBe(true);
-    expect(requetes[1].page).toBe(1);
+    expect(el.querySelectorAll<HTMLElement>('[role="tab"]')[1].getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('le score et le statut ne dépendent pas de l’onglet', () => {
+    const { el } = creer([avecInformations(), avecInformations()]);
+    const avant = el.querySelector('.closing-score__value')?.textContent;
+
+    el.querySelectorAll<HTMLElement>('[role="tab"]')[1].click();
+
+    expect(el.querySelector('.closing-score__value')?.textContent).toBe(avant);
   });
 
   it('mentionne les salariés sans planning non contrôlés seulement quand il y en a', () => {

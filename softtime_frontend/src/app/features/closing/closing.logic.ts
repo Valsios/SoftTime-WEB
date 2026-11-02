@@ -10,7 +10,6 @@ export const NO_CONTROLLED_DAY = 'Aucun jour contrôlé sur cette période';
 export const NO_ANOMALY = 'Aucune anomalie détectée : les données de la période sont prêtes pour la clôture.';
 export const NO_ANOMALY_TO_FIX = 'Aucune anomalie à corriger : les données de la période sont prêtes pour la clôture.';
 export const NOTHING_TO_FIX = 'Rien à corriger dans l’application';
-export const SHOW_INFORMATION_LABEL = 'Afficher aussi les informations (sans effet sur le score)';
 /** Rôle du niveau « Information » dans l'explication dépliable du score et du statut. */
 export const INFORMATION_RULE =
   'Une anomalie « Information » n’a pas d’effet sur la paie : elle figure dans les comptages et, si la case est cochée, dans la liste, mais elle n’entre ni dans le score (poids 0 par défaut) ni dans le statut.';
