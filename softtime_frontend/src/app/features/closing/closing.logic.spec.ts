@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ClosingComparison, ClosingReport } from '../../shared/models';
+import { readDeepLink } from '../../shared/utils/deep-link';
 import {
   correctionLink,
   CORRECTION_TARGETS,
@@ -7,6 +8,7 @@ import {
   defaultPeriod,
   formatDay,
   isDisabledError,
+  jourSuivant,
   NO_ANOMALY,
   NO_CONTROLLED_DAY,
   personLabel,
@@ -180,13 +182,55 @@ describe('liens de correction', () => {
     expect(correctionLink({ ...anomalie, type: 'Inconnu' })).toBeNull();
   });
 
-  it('sans paramètres : aucune page cible ne lit la date ni le matricule aujourd’hui', () => {
-    expect(correctionLink(anomalie)?.queryParams).toBeNull();
+  it('sans paramètres : la page Fériés ne lit ni la date ni le matricule', () => {
+    expect(correctionLink({ ...anomalie, type: 'FerieNonApplique' })?.queryParams).toBeNull();
   });
 
   it('avec paramètres quand la page cible les lit', () => {
     const link = correctionLink(anomalie, new Set(['/anomalies']));
-    expect(link?.queryParams).toEqual({ date: '2025-11-03', matricule: '777' });
+    expect(link?.queryParams).toEqual({ du: '2025-11-03', au: '2025-11-04', matricule: '777' });
+    expect(correctionLink(anomalie, new Set())?.queryParams).toBeNull();
+  });
+
+  it('paramètres exacts de chaque type (du, au, matricule)', () => {
+    const a = { ...anomalie, matricule: '4171', date: '2025-11-12T00:00:00' };
+    const du = '2025-11-12';
+    const lendemain = '2025-11-13';
+    const attendu: Record<string, { path: string; au: string } | null> = {
+      PointageIncomplet: { path: '/anomalies', au: lendemain },
+      PointageManquant: { path: '/corrected-hours', au: du },
+      PlanningSansPointage: { path: '/corrected-hours', au: du },
+      PointageSansPlanning: { path: '/employee-planning', au: du },
+      DoublonExact: { path: '/punches', au: lendemain },
+      QuasiDoublon: { path: '/punches', au: lendemain },
+      FerieNonApplique: null,
+    };
+    for (const [type, cible] of Object.entries(attendu)) {
+      const link = correctionLink({ ...a, type });
+      if (!cible) {
+        expect(link?.path).toBe('/holidays');
+        expect(link?.queryParams).toBeNull();
+      } else {
+        expect(link?.path).toBe(cible.path);
+        expect(link?.queryParams).toEqual({ du, au: cible.au, matricule: '4171' });
+      }
+    }
+  });
+
+  it('jour suivant : fin de mois, d’année et année bissextile', () => {
+    expect(jourSuivant('2025-11-30')).toBe('2025-12-01');
+    expect(jourSuivant('2025-12-31')).toBe('2026-01-01');
+    expect(jourSuivant('2024-02-28')).toBe('2024-02-29');
+    expect(jourSuivant('2025-02-28')).toBe('2025-03-01');
+    expect(jourSuivant('n’importe quoi')).toBe('');
+    expect(correctionLink({ ...anomalie, date: '2025-12-31T00:00:00' })?.queryParams)
+      .toEqual({ du: '2025-12-31', au: '2026-01-01', matricule: '777' });
+  });
+
+  it('les paramètres produits sont acceptés par la validation des pages', () => {
+    const q = correctionLink({ ...anomalie, type: 'DoublonExact', matricule: '4171', date: '2025-12-31T00:00:00' })?.queryParams;
+    expect(readDeepLink({ du: q?.['du'], au: q?.['au'], matricule: q?.['matricule'] }))
+      .toEqual({ from: '2025-12-31', to: '2026-01-01', matricule: '4171' });
   });
 
   it('libellé accessible complet pour le lecteur d’écran', () => {

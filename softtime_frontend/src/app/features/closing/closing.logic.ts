@@ -189,11 +189,26 @@ export const CORRECTION_TARGETS: Record<string, CorrectionTarget> = {
 };
 
 /**
- * Pages cibles qui lisent des paramètres de requête. AUCUNE aujourd'hui (vérifié : aucune n'utilise
- * ActivatedRoute ni d'entrée liée à la route) : les liens sont donc sans paramètres et la date et
- * le matricule restent affichés dans le tableau.
+ * Pages cibles qui lisent les paramètres facultatifs du, au et matricule (entrées liées à la route,
+ * validées par readDeepLink). Les autres pages (Fériés) ouvrent sans paramètres.
  */
-export const PAGES_WITH_QUERY_PARAMS: ReadonlySet<string> = new Set<string>();
+export const PAGES_WITH_QUERY_PARAMS: ReadonlySet<string> = new Set<string>([
+  '/anomalies',
+  '/corrected-hours',
+  '/employee-planning',
+  '/punches',
+]);
+
+/** Types dont la plage va jusqu'au lendemain (sortie d'un poste de nuit ou doublon à cheval sur minuit). */
+const TYPES_JUSQU_AU_LENDEMAIN: ReadonlySet<string> = new Set(['PointageIncomplet', 'DoublonExact', 'QuasiDoublon']);
+
+/** AAAA-MM-JJ → jour suivant (fin de mois et d'année comprises) ; vide si la date n'est pas lisible. */
+export function jourSuivant(jour: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(jour);
+  if (!m) return '';
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + 1));
+  return d.toISOString().slice(0, 10);
+}
 
 export interface CorrectionLink extends CorrectionTarget {
   queryParams: Record<string, string> | null;
@@ -209,7 +224,9 @@ export function correctionLink(
   const jour = anomaly.date ? anomaly.date.slice(0, 10) : '';
   return {
     ...target,
-    queryParams: pagesWithParams.has(target.path) ? { date: jour, matricule: anomaly.matricule } : null,
+    queryParams: pagesWithParams.has(target.path) && jour
+      ? { du: jour, au: TYPES_JUSQU_AU_LENDEMAIN.has(anomaly.type) ? jourSuivant(jour) : jour, matricule: anomaly.matricule }
+      : null,
     ariaLabel: `Corriger dans ${target.label} : ${typeLabel(anomaly.type).toLowerCase()}, matricule ${anomaly.matricule}, ${formatDay(jour)}`,
   };
 }
