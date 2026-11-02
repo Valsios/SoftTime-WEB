@@ -6,13 +6,19 @@ import {
   CORRECTION_TARGETS,
   dashboardCardView,
   defaultPeriod,
+  excludedEmployeesText,
   formatDay,
+  INFORMATION_RULE,
   isDisabledError,
   jourSuivant,
   NO_ANOMALY,
+  NO_ANOMALY_TO_FIX,
   NO_CONTROLLED_DAY,
+  nothingToFix,
+  NOTHING_TO_FIX,
   personLabel,
   scoreText,
+  SEVERITIES,
   severityLabel,
   severitySentence,
   severityTone,
@@ -78,6 +84,9 @@ describe('statut et score', () => {
   it('règle du statut expliquée avec le seuil du serveur', () => {
     expect(statusRuleText(0.02)).toContain('2 %');
     expect(statusRuleText(0.025)).toContain('2,5 %');
+    // Le seuil affiché est celui du serveur (défaut 5 %), jamais une valeur écrite en dur.
+    expect(statusRuleText(0.05)).toContain('5 %');
+    expect(statusRuleText(0.05)).not.toContain('2 %');
   });
 });
 
@@ -98,6 +107,16 @@ describe('libellés', () => {
     expect(severityTone('Critique')).toBe('danger');
     expect(severityTone('Importante')).toBe('warning');
     expect(severityTone('Mineure')).toBe('info');
+    expect(severityLabel('Information')).toBe('Information');
+    expect(severityTone('Information')).toBe('muted');
+    expect(SEVERITIES).toEqual(['Critique', 'Importante', 'Mineure', 'Information']);
+  });
+
+  it('phrase de la carte Information : texte, jamais alarmiste', () => {
+    expect(severitySentence('Information', 0)).toBe('Aucune information');
+    expect(severitySentence('Information', 1)).toBe('1 information sans effet sur le score');
+    expect(severitySentence('Information', 567)).toBe('567 informations sans effet sur le score');
+    expect(severitySentence('Information', 3)).not.toContain('anomalie');
   });
 
   it('phrases de comptage par gravité accordées', () => {
@@ -161,6 +180,46 @@ describe('résumé en phrases', () => {
     expect(stable).toContain('Score identique à celui de la période précédente.');
   });
 
+  it('informations : phrase calme, sans effet sur le score ni le statut', () => {
+    const phrases = summarySentences(
+      rapport({
+        nombreAnomalies: 12,
+        parType: [{ cle: 'DoublonExact', nombre: 12 }],
+        parGravite: [{ cle: 'Information', nombre: 12 }],
+      }),
+    );
+    expect(phrases).toContain(NO_ANOMALY_TO_FIX);
+    expect(phrases).toContain('12 informations sans effet sur le score : elles ne comptent ni dans le score ni dans le statut.');
+    expect(phrases).not.toContain(NO_ANOMALY);
+  });
+
+  it('informations en plus d’anomalies à corriger : pas de message « prêt »', () => {
+    const phrases = summarySentences(
+      rapport({
+        nombreAnomalies: 5,
+        parType: [{ cle: 'PointageManquant', nombre: 3 }],
+        parGravite: [{ cle: 'Critique', nombre: 3 }, { cle: 'Information', nombre: 2 }],
+      }),
+    );
+    expect(phrases).not.toContain(NO_ANOMALY_TO_FIX);
+    expect(phrases).toContain('3 pointages manquants.');
+    expect(phrases).toContain('2 informations sans effet sur le score : elles ne comptent ni dans le score ni dans le statut.');
+  });
+
+  it('salariés sans planning non contrôlés : mentionnés seulement quand il y en a', () => {
+    expect(excludedEmployeesText(0)).toBe('');
+    expect(excludedEmployeesText(undefined)).toBe('');
+    expect(excludedEmployeesText(1)).toBe('1 salarié sans aucun planning sur la période n’est pas contrôlé.');
+    expect(excludedEmployeesText(22)).toBe('22 salariés sans aucun planning sur la période ne sont pas contrôlés.');
+    expect(summarySentences(rapport({ salariesSansPlanningExclus: 22 }))).toContain(excludedEmployeesText(22));
+    expect(summarySentences(rapport({ salariesSansPlanningExclus: 0 })).join(' ')).not.toContain('sans aucun planning');
+  });
+
+  it('l’explication du statut indique le rôle de « Information »', () => {
+    expect(INFORMATION_RULE).toContain('Information');
+    expect(INFORMATION_RULE).toContain('ni dans le statut');
+  });
+
   it('aucune anomalie : message positif ; aucun jour contrôlé : une seule phrase', () => {
     expect(summarySentences(rapport())).toEqual([NO_ANOMALY]);
     expect(summarySentences(rapport({ score: null, joursEmployeControles: 0 }))).toEqual([NO_CONTROLLED_DAY + '.']);
@@ -177,13 +236,26 @@ describe('liens de correction', () => {
     expect(correctionLink({ ...anomalie, type: 'PointageSansPlanning' })?.path).toBe('/employee-planning');
     expect(correctionLink({ ...anomalie, type: 'DoublonExact' })?.path).toBe('/punches');
     expect(correctionLink({ ...anomalie, type: 'QuasiDoublon' })?.path).toBe('/punches');
-    expect(correctionLink({ ...anomalie, type: 'FerieNonApplique' })).toMatchObject({ path: '/holidays', permission: 'PARAMS:HOLIDAYS', droit: 2 });
+    expect(correctionLink({ ...anomalie, type: 'FerieNonApplique', pointageExiste: true })).toMatchObject({
+      path: '/anomalies',
+      permission: 'PROC:ANOMALIES',
+      droit: 3,
+    });
     expect(Object.keys(CORRECTION_TARGETS)).toHaveLength(7);
     expect(correctionLink({ ...anomalie, type: 'Inconnu' })).toBeNull();
   });
 
-  it('sans paramètres : la page Fériés ne lit ni la date ni le matricule', () => {
-    expect(correctionLink({ ...anomalie, type: 'FerieNonApplique' })?.queryParams).toBeNull();
+  it('férié non appliqué : lien vers Anomalies seulement s’il existe un pointage ce jour-là', () => {
+    const ferie = { ...anomalie, type: 'FerieNonApplique' };
+    expect(correctionLink({ ...ferie, pointageExiste: true })?.queryParams).toEqual({ du: '2025-11-03', au: '2025-11-04', matricule: '777' });
+    // Aucun pointage, ou information absente : aucun lien (et aucune erreur).
+    expect(correctionLink({ ...ferie, pointageExiste: false })).toBeNull();
+    expect(correctionLink({ ...ferie, pointageExiste: null })).toBeNull();
+    expect(correctionLink(ferie)).toBeNull();
+    expect(nothingToFix({ ...ferie, pointageExiste: false })).toBe(true);
+    expect(nothingToFix({ ...ferie, pointageExiste: true })).toBe(false);
+    expect(nothingToFix({ type: 'PointageIncomplet' })).toBe(false);
+    expect(NOTHING_TO_FIX).toBe('Rien à corriger dans l’application');
   });
 
   it('avec paramètres quand la page cible les lit', () => {
@@ -203,17 +275,12 @@ describe('liens de correction', () => {
       PointageSansPlanning: { path: '/employee-planning', au: du },
       DoublonExact: { path: '/punches', au: lendemain },
       QuasiDoublon: { path: '/punches', au: lendemain },
-      FerieNonApplique: null,
+      FerieNonApplique: { path: '/anomalies', au: lendemain },
     };
     for (const [type, cible] of Object.entries(attendu)) {
-      const link = correctionLink({ ...a, type });
-      if (!cible) {
-        expect(link?.path).toBe('/holidays');
-        expect(link?.queryParams).toBeNull();
-      } else {
-        expect(link?.path).toBe(cible.path);
-        expect(link?.queryParams).toEqual({ du, au: cible.au, matricule: '4171' });
-      }
+      const link = correctionLink({ ...a, type, pointageExiste: true });
+      expect(link?.path).toBe(cible?.path);
+      expect(link?.queryParams).toEqual({ du, au: cible?.au, matricule: '4171' });
     }
   });
 

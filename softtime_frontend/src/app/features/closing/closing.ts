@@ -23,10 +23,14 @@ import {
   DEFAULT_PAGE_SIZE,
   defaultPeriod,
   DISABLED_MESSAGE,
+  excludedEmployeesText,
   formatDay,
+  INFORMATION_RULE,
   isDisabledError,
   NO_ANOMALY,
   NO_CONTROLLED_DAY,
+  NOTHING_TO_FIX,
+  nothingToFix,
   PAGE_SIZES,
   personLabel,
   PURPOSE_NOTE,
@@ -35,6 +39,7 @@ import {
   severitySentence,
   severityTone,
   scoreText,
+  SHOW_INFORMATION_LABEL,
   statusRuleText,
   statusView,
   summarySentences,
@@ -67,6 +72,10 @@ import {
           <input type="checkbox" [checked]="includeComparison()" (change)="onComparison($event)" />
           Comparer avec la période précédente
         </label>
+        <label class="closing-check">
+          <input type="checkbox" [checked]="includeInformation()" (change)="onInformation($event)" />
+          {{ showInformationLabel }}
+        </label>
       </div>
     </soft-card>
 
@@ -92,11 +101,15 @@ import {
             Du {{ day(r.from) }} au {{ day(r.to) }}{{ r.departement ? ' · département ' + r.departement : '' }}
             · {{ r.joursEmployeControles }} jour(s)-employé contrôlé(s)
           </p>
+          @if (excluded(); as texte) {
+            <p class="closing-period closing-excluded" role="note">{{ texte }}</p>
+          }
           <details class="closing-explain">
             <summary>Comment le score et le statut sont calculés</summary>
             <p>{{ r.formule }}</p>
             <p>Chaque anomalie pèse selon sa gravité (poids indiqué dans le tableau ci-dessous).</p>
             <p>{{ statusRule() }}</p>
+            <p>{{ informationRule }}</p>
           </details>
         </soft-card>
 
@@ -154,8 +167,10 @@ import {
 
         <soft-card padding="sm">
           <h2 class="closing-h2">Anomalies à corriger</h2>
-          @if (r.anomalies.total === 0) {
+          @if (r.anomalies.total === 0 && r.nombreAnomalies === 0) {
             <div class="closing-state closing-state--success" role="status">{{ noAnomaly }}</div>
+          } @else if (r.anomalies.total === 0) {
+            <div class="closing-state closing-state--success" role="status">{{ hiddenInformationText() }}</div>
           } @else {
             @if (!r.nomsAffiches) {
               <p class="closing-muted">Les noms ne sont pas affichés sur ce serveur : matricule seul.</p>
@@ -194,6 +209,8 @@ import {
                           } @else {
                             <span class="closing-muted">Accès « {{ l.label }} » requis</span>
                           }
+                        } @else if (noFix(a)) {
+                          <span class="closing-muted">{{ nothingToFixText }}</span>
                         }
                       </td>
                     </tr>
@@ -249,6 +266,7 @@ import {
       .closing-status__hint { color: var(--text-secondary); font-size: 0.9rem; }
       .closing-score__value { font-size: 1.6rem; color: var(--app-text-strong); }
       .closing-period { margin: 4px 0 8px; color: var(--text-secondary); font-size: 0.9rem; }
+      .closing-excluded { color: var(--app-text); }
       .closing-explain summary { cursor: pointer; color: var(--accent); font-size: 0.9rem; }
       .closing-explain p { margin: 8px 0 0; font-size: 0.9rem; color: var(--app-text); }
       .closing-counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
@@ -279,6 +297,9 @@ export class ClosingPage implements OnInit, OnDestroy {
   readonly purposeNote = PURPOSE_NOTE;
   readonly disabledMessage = DISABLED_MESSAGE;
   readonly noAnomaly = NO_ANOMALY;
+  readonly informationRule = INFORMATION_RULE;
+  readonly nothingToFixText = NOTHING_TO_FIX;
+  readonly showInformationLabel = SHOW_INFORMATION_LABEL;
   readonly noControlledDay = NO_CONTROLLED_DAY;
 
   readonly report = signal<ClosingReport | null>(null);
@@ -286,6 +307,7 @@ export class ClosingPage implements OnInit, OnDestroy {
   readonly error = signal<string | null>(null);
   readonly disabled = signal(false);
   readonly includeComparison = signal(false);
+  readonly includeInformation = signal(false);
   readonly page = signal(1);
   readonly pageSize = signal<number>(DEFAULT_PAGE_SIZE);
 
@@ -299,6 +321,12 @@ export class ClosingPage implements OnInit, OnDestroy {
   readonly summary = computed(() => {
     const r = this.report();
     return r ? summarySentences(r) : [];
+  });
+  readonly excluded = computed(() => excludedEmployeesText(this.report()?.salariesSansPlanningExclus));
+  /** Liste vide parce que seules des informations existent (masquées) : message calme, jamais « aucune anomalie ». */
+  readonly hiddenInformationText = computed(() => {
+    const n = countOf(this.report()?.parGravite, 'Information');
+    return `Aucune anomalie à corriger. ${n} ${n > 1 ? 'informations masquées' : 'information masquée'} : cochez « ${SHOW_INFORMATION_LABEL} » pour ${n > 1 ? 'les' : 'la'} voir.`;
   });
   readonly rangeInfo = computed(() => {
     const p = this.report()?.anomalies;
@@ -331,6 +359,12 @@ export class ClosingPage implements OnInit, OnDestroy {
     this.load();
   }
 
+  onInformation(event: Event): void {
+    this.includeInformation.set((event.target as HTMLInputElement).checked);
+    this.page.set(1);
+    this.load();
+  }
+
   onPageSize(event: Event): void {
     this.pageSize.set(Number((event.target as HTMLSelectElement).value) || DEFAULT_PAGE_SIZE);
     this.page.set(1);
@@ -355,6 +389,7 @@ export class ClosingPage implements OnInit, OnDestroy {
         to: this.period.to,
         departement: this.departement,
         includeComparison: this.includeComparison(),
+        includeInformation: this.includeInformation(),
         page: this.page(),
         pageSize: this.pageSize(),
       })
@@ -411,6 +446,10 @@ export class ClosingPage implements OnInit, OnDestroy {
 
   link(a: ClosingAnomalyView): CorrectionLink | null {
     return correctionLink(a);
+  }
+
+  noFix(a: ClosingAnomalyView): boolean {
+    return nothingToFix(a);
   }
 
   /** Lien actif seulement si la page cible est accessible (même règle que le menu). */

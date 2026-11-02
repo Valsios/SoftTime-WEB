@@ -9,7 +9,7 @@ export type ClosingAnomalyType =
   | 'QuasiDoublon'
   | 'FerieNonApplique';
 
-export type ClosingSeverity = 'Mineure' | 'Importante' | 'Critique';
+export type ClosingSeverity = 'Information' | 'Mineure' | 'Importante' | 'Critique';
 
 export type ClosingStatus = 'Pret' | 'ACorriger' | 'Bloquant';
 
@@ -29,6 +29,8 @@ export interface ClosingAnomalyView {
   date: string;
   detail: string;
   heures: number | null;
+  /** Férié non appliqué seulement : un pointage existe ce jour-là pour le salarié (null pour les autres types). */
+  pointageExiste?: boolean | null;
 }
 
 export interface ClosingPage<T> {
@@ -81,6 +83,8 @@ export interface ClosingReport {
   parDepartement: ClosingDepartment[];
   comparaison: ClosingComparison | null;
   nomsAffiches: boolean;
+  /** Salariés sans aucun planning sur la période, non contrôlés par « pointage sans planning ». */
+  salariesSansPlanningExclus?: number;
 }
 
 export interface ClosingQuery {
@@ -89,6 +93,8 @@ export interface ClosingQuery {
   to?: string | null;
   departement?: string | null;
   includeComparison?: boolean;
+  /** Ajoute à la liste les anomalies « Information » (les comptages les incluent toujours). */
+  includeInformation?: boolean;
   page?: number;
   pageSize?: number;
 }

@@ -50,6 +50,7 @@ function toParams(query: ClosingQuery): Record<string, unknown> {
     to: dayToUtcIso(query.to),
     departement: query.departement,
     includeComparison: query.includeComparison ? true : undefined,
+    includeInformation: query.includeInformation ? true : undefined,
     page: query.page,
     pageSize: query.pageSize,
   };
