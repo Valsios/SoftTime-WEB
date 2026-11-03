@@ -12,8 +12,19 @@ namespace SoftTime.Domain.Repositories;
 public interface IRepository<T> where T : class
 {
     IQueryable<T> Query();
+
+    /// <summary>
+    /// Requête en lecture seule (AsNoTracking sur EF Core, convention §8.2) : les entités lues ne sont pas suivies
+    /// et ne doivent pas être modifiées puis sauvegardées. Par défaut (doubles de test) : <see cref="Query"/>.
+    /// </summary>
+    IQueryable<T> QueryReadOnly() => Query();
+
     Task<T?> GetByIdAsync(object id, CancellationToken cancellationToken = default);
     Task<List<T>> ListAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);
+
+    /// <summary>Lecture seule sans suivi des entités (voir <see cref="QueryReadOnly"/>). Par défaut : <see cref="ListAsync"/>.</summary>
+    Task<List<T>> ListReadOnlyAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default)
+        => ListAsync(predicate, cancellationToken);
     Task<List<T>> ListLatestAsync(
         Expression<Func<T, bool>> predicate,
         Expression<Func<T, DateTime?>> orderByDescending,

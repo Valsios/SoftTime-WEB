@@ -49,9 +49,7 @@ export class ReportsService extends ApiService {
   }
 
   private get(path: string, filter: ReportFilter): Observable<ReportRow[]> {
-    return this.http.get<ReportRow[]>(this.url(`/api/reports/${path}`), {
-      params: this.params({ ...filter }),
-    });
+    return this.allPages<ReportRow>(`/api/reports/${path}/paged`, { ...filter });
   }
 
   /** Version paginée d'un état (6 types : pointage, absences, retards, hs-recap, heures-semaine, heures-dimanche). */
@@ -65,7 +63,7 @@ export class ReportsService extends ApiService {
 @Injectable({ providedIn: 'root' })
 export class CanteenService extends ApiService {
   list(req: PeriodRequest): Observable<Canteen[]> {
-    return this.http.get<Canteen[]>(this.url('/api/canteen'), { params: this.params({ ...req }) });
+    return this.allPages<Canteen>('/api/canteen/paged', { ...req });
   }
   /** Liste paginée des cantines calculées. */
   listPaged(filter: PagedPeriodRequest): Observable<PagedResult<Canteen>> {
@@ -77,7 +75,7 @@ export class CanteenService extends ApiService {
     return this.http.post<Canteen[]>(this.url('/api/canteen/compute'), req);
   }
   anomalies(req: PeriodRequest): Observable<CanteenAnomaly[]> {
-    return this.http.get<CanteenAnomaly[]>(this.url('/api/canteen/anomalies'), { params: this.params({ ...req }) });
+    return this.allPages<CanteenAnomaly>('/api/canteen/anomalies/paged', { ...req });
   }
   /** Anomalies cantine paginées (calcul complet côté serveur puis page). */
   anomaliesPaged(filter: PagedPeriodRequest): Observable<PagedResult<CanteenAnomaly>> {
@@ -97,7 +95,7 @@ export class CanteenService extends ApiService {
 @Injectable({ providedIn: 'root' })
 export class TravelService extends ApiService {
   list(req: PeriodRequest): Observable<Travel[]> {
-    return this.http.get<Travel[]>(this.url('/api/travel-expenses'), { params: this.params({ ...req }) });
+    return this.allPages<Travel>('/api/travel-expenses/paged', { ...req });
   }
   /** Liste paginée des frais de déplacement. */
   listPaged(filter: PagedPeriodRequest): Observable<PagedResult<Travel>> {
@@ -120,7 +118,7 @@ export class AuditService extends ApiService {
     return this.http.get<AuditTypeOption[]>(this.url('/api/audit/types'));
   }
   config(): Observable<AuditConfig[]> {
-    return this.http.get<AuditConfig[]>(this.url('/api/audit/config'));
+    return this.allPages<AuditConfig>('/api/audit/config/paged');
   }
   /** Configuration d'audit paginée. */
   configPaged(page: number, pageSize: number, search?: string | null): Observable<PagedResult<AuditConfig>> {
@@ -140,9 +138,7 @@ export class AuditService extends ApiService {
     table?: string;
     action?: string;
   }): Observable<AuditEvent[]> {
-    return this.http.get<AuditEvent[]>(this.url('/api/audit/events'), {
-      params: this.params({ ...filter }),
-    });
+    return this.allPages<AuditEvent>('/api/audit/events/paged', { ...filter });
   }
   /** Journal paginé (count + OFFSET/FETCH côté serveur). */
   eventsPaged(filter: AuditEventFilter): Observable<PagedResult<AuditEvent>> {
@@ -185,9 +181,7 @@ export class HistoryService extends ApiService {
   }
 
   private list<T>(segment: string, filter: ReportFilter): Observable<T[]> {
-    return this.http.get<T[]>(this.url(`/api/history/${segment}`), {
-      params: this.params({ ...filter }),
-    });
+    return this.allPages<T>(`/api/history/${segment}/paged`, { ...filter });
   }
 
   private listPaged<T>(segment: string, filter: ReportFilter): Observable<PagedResult<T>> {

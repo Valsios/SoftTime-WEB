@@ -22,7 +22,7 @@ public class PlanningService : IPlanningService
 
     public async Task<IReadOnlyList<ShiftDto>> ListShiftsAsync(CancellationToken ct = default)
     {
-        var list = await _uow.Repository<T_PLANNING>().ListAsync(_ => true, ct);
+        var list = await _uow.Repository<T_PLANNING>().ListReadOnlyAsync(_ => true, ct);
         return list.Select(ToShiftDto).ToList();
     }
 
@@ -80,10 +80,17 @@ public class PlanningService : IPlanningService
         await _uow.SaveChangesAsync(ct);
     }
 
+    /// <summary>Salariés planifiables, paginés et filtrés (matricule, nom, prénom).</summary>
+    public async Task<PagedResult<PlanningEmployeeDto>> ListEmployeesPagedAsync(int? page, int? pageSize, string? search = null, CancellationToken ct = default)
+    {
+        var rows = await ListEmployeesAsync(ct);
+        return PagedLists.Page(rows.Where(e => SearchText.Matches(search, e.Matricule, e.Nom, e.Prenom)).ToList(), page, pageSize);
+    }
+
     public async Task<IReadOnlyList<PlanningEmployeeDto>> ListEmployeesAsync(CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var cards = await _uow.Repository<T_CARDPAIE>().ListAsync(_ => true, ct);
+        var cards = await _uow.Repository<T_CARDPAIE>().ListReadOnlyAsync(_ => true, ct);
         return cards
             .Where(c => MatchesSage(c.SAGE_BDD))
             .OrderBy(c => c.SAGE_MATRICULE)
@@ -175,7 +182,7 @@ public class PlanningService : IPlanningService
         var sageDb = _tenant.SageDb;
         var counts = (await _planningStats.CountPlannedDaysAsync(sageDb, from, to, ct))
             .ToDictionary(x => x.CardPaieId, x => x.PlannedDays);
-        var cards = await _uow.Repository<T_CARDPAIE>().ListAsync(EmployeeCardPredicate(sageDb), ct);
+        var cards = await _uow.Repository<T_CARDPAIE>().ListReadOnlyAsync(EmployeeCardPredicate(sageDb), ct);
         return cards
             .Where(c => MatchesSage(c.SAGE_BDD))
             .OrderBy(c => c.SAGE_MATRICULE)
@@ -348,6 +355,7 @@ public class PlanningService : IPlanningService
         var imported = 0;
         var skipped = 0;
         var dateHeaders = headers.Skip(1).ToList();
+        var existingByDay = await LoadPlanningByDayAsync(repo, dateHeaders, ct);
         foreach (var row in rows)
         {
             var key = row.GetValueOrDefault(headers[0]) ?? string.Empty;
@@ -400,18 +408,11 @@ public class PlanningService : IPlanningService
 
                 foreach (var card in targets)
                 {
-                    var existantes = await repo.ListAsync(
-                        p => p.IDSAL == card.ID
-                             && p.DateP != null
-                             && p.DateP.Value.Date == date.Date, ct);
-                    var existing = existantes
-                        .Where(p => MatchesSage(p.BDD_SAGE) && MatchesPointeuse(p.BDD_POINTEUSE))
-                        .OrderBy(p => p.ID)
-                        .FirstOrDefault();
+                    var existing = existingByDay.GetValueOrDefault((card.ID, date.Date));
 
                     if (existing == null)
                     {
-                        await repo.AddAsync(new T_PLANNING_SAL
+                        var created = new T_PLANNING_SAL
                         {
                             IDSAL = card.ID,
                             NoSHIFT = noShift,
@@ -422,7 +423,10 @@ public class PlanningService : IPlanningService
                             OffP = off,
                             BDD_SAGE = _tenant.SageDb,
                             BDD_POINTEUSE = _tenant.PointeuseDb
-                        }, ct);
+                        };
+                        await repo.AddAsync(created, ct);
+                        // Même salarié et même jour plus loin dans le fichier : mise à jour, pas de doublon.
+                        existingByDay[(card.ID, date.Date)] = created;
                     }
                     else
                     {
@@ -442,6 +446,26 @@ public class PlanningService : IPlanningService
         await _uow.SaveChangesAsync(ct);
         return new ImportResultDto(imported, skipped,
             $"{imported} ligne(s) de planning importée(s), {skipped} élément(s) ignoré(s).");
+    }
+
+    /// <summary>
+    /// Plannings existants des jours importés, en une requête (au lieu d'une par salarié et par jour), indexés par
+    /// (carte, jour) ; pour un même couple, la ligne d'identifiant le plus petit, comme auparavant.
+    /// </summary>
+    private async Task<Dictionary<(int CardId, DateTime Day), T_PLANNING_SAL>> LoadPlanningByDayAsync(
+        IRepository<T_PLANNING_SAL> repo, IEnumerable<string> dateHeaders, CancellationToken ct)
+    {
+        var index = new Dictionary<(int CardId, DateTime Day), T_PLANNING_SAL>();
+        var days = dateHeaders.Select(h => ExcelCells.TryDate(h, out var d) ? d.Date : (DateTime?)null).OfType<DateTime>().ToList();
+        if (days.Count == 0)
+            return index;
+        var from = days.Min();
+        var to = days.Max().AddDays(1);
+        // Suivies : les lignes trouvées sont mises à jour par l'import.
+        var rows = await repo.ListAsync(p => p.DateP != null && p.DateP >= from && p.DateP < to, ct);
+        foreach (var p in rows.Where(p => MatchesSage(p.BDD_SAGE) && MatchesPointeuse(p.BDD_POINTEUSE)).OrderBy(p => p.ID))
+            index.TryAdd((p.IDSAL, p.DateP!.Value.Date), p);
+        return index;
     }
 
     /// <summary>

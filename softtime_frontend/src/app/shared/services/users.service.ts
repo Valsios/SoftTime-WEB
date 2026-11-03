@@ -7,7 +7,7 @@ import { DbAccess, DepartementService, DepartementServiceOptions, Droit, PagedRe
 @Injectable({ providedIn: 'root' })
 export class UsersService extends ApiService {
   list(): Observable<User[]> {
-    return this.http.get<User[]>(this.url('/api/users'));
+    return this.allPages<User>('/api/users/paged');
   }
   listPaged(page: number, pageSize: number, search?: string | null): Observable<PagedResult<User>> {
     return this.http.get<PagedResult<User>>(this.url('/api/users/paged'), {
@@ -35,7 +35,7 @@ export class UsersService extends ApiService {
 @Injectable({ providedIn: 'root' })
 export class RolesService extends ApiService {
   list(): Observable<Role[]> {
-    return this.http.get<Role[]>(this.url('/api/roles'));
+    return this.allPages<Role>('/api/roles/paged');
   }
   listPaged(page: number, pageSize: number, search?: string | null): Observable<PagedResult<Role>> {
     return this.http.get<PagedResult<Role>>(this.url('/api/roles/paged'), {
@@ -103,7 +103,7 @@ export class DbAccessService extends ApiService {
 @Injectable({ providedIn: 'root' })
 export class SageDatabasesService extends ApiService {
   list(): Observable<SageDb[]> {
-    return this.http.get<SageDb[]>(this.url('/api/sage-databases'));
+    return this.allPages<SageDb>('/api/sage-databases/paged');
   }
   listPaged(page: number, pageSize: number, search?: string | null): Observable<PagedResult<SageDb>> {
     return this.http.get<PagedResult<SageDb>>(this.url('/api/sage-databases/paged'), {

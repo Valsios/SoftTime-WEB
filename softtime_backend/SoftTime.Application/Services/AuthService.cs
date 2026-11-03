@@ -119,6 +119,7 @@ public class AuthService : IAuthService
     public static readonly string[] ReadUserList = { "PARAMS:USERS", "PARAMS:PRIVILEGES", "PARAMS:DB_ACCESS" };
     public static readonly string[] ReadRoles = { "PARAMS:ROLES" };
     public static readonly string[] ReadRoleList = { "PARAMS:USERS", "PARAMS:PRIVILEGES" };
+    public static readonly string[] ReadRolePages = { "PARAMS:ROLES", "PARAMS:USERS", "PARAMS:PRIVILEGES" };
     public static readonly string[] ReadPrivileges = { "PARAMS:PRIVILEGES" };
     public static readonly string[] ReadPrivilegeList = { "PARAMS:PRIVILEGES", "PARAMS:ROLES" };
     public static readonly string[] ReadDbAccess = { "PARAMS:DB_ACCESS" };
@@ -345,7 +346,7 @@ public class AuthService : IAuthService
     public async Task<IReadOnlyList<UserDto>> GetUsersAsync(CancellationToken cancellationToken = default)
     {
         await EnsureCanReadAsync(ReadUserList, cancellationToken);
-        var list = await _uow.Repository<T_RESPONSABLE>().ListAsync(_ => true, cancellationToken);
+        var list = await _uow.Repository<T_RESPONSABLE>().ListReadOnlyAsync(_ => true, cancellationToken);
         return list
             .OrderBy(u => u.NOMRESPONSABLE)
             .ThenBy(u => u.LOGIN)
@@ -356,11 +357,12 @@ public class AuthService : IAuthService
     public async Task<PagedResult<UserDto>> GetUsersPagedAsync(
         int? page, int? pageSize, string? search = null, CancellationToken cancellationToken = default)
     {
-        await EnsureCanReadAsync(ReadUsers, cancellationToken);
+        // Même règle que la liste complète remplacée : les écrans Privilèges et Accès bases lisent aussi les comptes.
+        await EnsureCanReadAsync(ReadUserList, cancellationToken);
         decimal[] roleIds = Array.Empty<decimal>();
         if (SearchText.Terms(search).Count > 0)
         {
-            roleIds = (await _uow.Repository<T_ROLE>().ListAsync(_ => true, cancellationToken))
+            roleIds = (await _uow.Repository<T_ROLE>().ListReadOnlyAsync(_ => true, cancellationToken))
                 .Where(role => SearchText.Matches(search, role.NOMROLE))
                 .Select(role => role.IDROLE)
                 .ToArray();
@@ -400,7 +402,7 @@ public class AuthService : IAuthService
     /// reste vrai après la suppression du dernier compte (seul moyen de sortir d'un verrouillage total).
     /// </summary>
     public async Task<bool> IsFirstRunAsync(CancellationToken cancellationToken = default)
-        => (await _uow.Repository<T_RESPONSABLE>().ListAsync(_ => true, cancellationToken)).Count == 0;
+        => (await _uow.Repository<T_RESPONSABLE>().ListReadOnlyAsync(_ => true, cancellationToken)).Count == 0;
 
     /// <summary>
     /// Crée le premier compte administrateur. Refusé dès qu'un compte existe, et le rôle
@@ -748,7 +750,7 @@ public class AuthService : IAuthService
         decimal id,
         CancellationToken cancellationToken)
     {
-        var autres = await repo.ListAsync(u => u.IDRESPONSABLE != id, cancellationToken);
+        var autres = await repo.ListReadOnlyAsync(u => u.IDRESPONSABLE != id, cancellationToken);
         if (autres.Any(u => string.Equals((u.LOGIN ?? string.Empty).Trim(), login, StringComparison.OrdinalIgnoreCase)))
             throw new FieldValidationException("login", "Ce login est déjà utilisé. Choisissez-en un autre.");
     }
@@ -773,14 +775,15 @@ public class AuthService : IAuthService
     public async Task<IReadOnlyList<RoleDto>> GetRolesAsync(CancellationToken cancellationToken = default)
     {
         await EnsureCanReadAsync(ReadRoleList, cancellationToken);
-        return (await _uow.Repository<T_ROLE>().ListAsync(_ => true, cancellationToken))
+        return (await _uow.Repository<T_ROLE>().ListReadOnlyAsync(_ => true, cancellationToken))
             .Select(r => new RoleDto(r.IDROLE, r.NOMROLE)).ToList();
     }
 
     public async Task<PagedResult<RoleDto>> GetRolesPagedAsync(
         int? page, int? pageSize, string? search = null, CancellationToken cancellationToken = default)
     {
-        await EnsureCanReadAsync(ReadRoles, cancellationToken);
+        // Écran Rôles, et lecture des rôles par les écrans Utilisateurs et Privilèges (liste complète remplacée).
+        await EnsureCanReadAsync(ReadRolePages, cancellationToken);
         return await PagedLists.PageAsync(
             _uow.Repository<T_ROLE>(),
             _ => true,
@@ -839,14 +842,14 @@ public class AuthService : IAuthService
     public async Task<IReadOnlyList<DroitDto>> GetDroitsAsync(CancellationToken cancellationToken = default)
     {
         await EnsureCanReadAsync(ReadPrivilegeList, cancellationToken);
-        return (await _uow.Repository<T_DROIT>().ListAsync(_ => true, cancellationToken))
+        return (await _uow.Repository<T_DROIT>().ListReadOnlyAsync(_ => true, cancellationToken))
             .Select(d => new DroitDto(d.IDDROIT, d.DROIT)).ToList();
     }
 
     public async Task<IReadOnlyList<PrivilegeDto>> GetPrivilegesAsync(decimal? roleId, CancellationToken cancellationToken = default)
     {
         await EnsureCanReadAsync(ReadPrivilegeList, cancellationToken);
-        var list = await _uow.Repository<T_DROIT_ROLE>().ListAsync(
+        var list = await _uow.Repository<T_DROIT_ROLE>().ListReadOnlyAsync(
             p => !roleId.HasValue || p.IDROLE == roleId.Value, cancellationToken);
         return list.Select(p => new PrivilegeDto(p.IDDROITROLE, p.IDROLE, p.IDDROIT)).ToList();
     }
@@ -871,7 +874,7 @@ public class AuthService : IAuthService
     public async Task<IReadOnlyList<DbAccessDto>> GetDbAccessAsync(decimal? userId, CancellationToken cancellationToken = default)
     {
         await EnsureCanReadAsync(ReadDbAccess, cancellationToken);
-        var list = await _uow.Repository<T_BDD_AUTORISE>().ListAsync(
+        var list = await _uow.Repository<T_BDD_AUTORISE>().ListReadOnlyAsync(
             a => !userId.HasValue || a.IDRESPONSABLE == userId.Value, cancellationToken);
         return list.Select(a => new DbAccessDto(a.IDBDDAUTORISE, a.IDRESPONSABLE, a.IDBDD)).ToList();
     }
@@ -1052,7 +1055,7 @@ public class AuthService : IAuthService
     public async Task<RoleDetailedPermissionsDto> GetRoleDetailedPermissionsAsync(decimal roleId, CancellationToken cancellationToken = default)
     {
         await EnsureCanReadAsync(ReadPrivileges, cancellationToken);
-        var roleList = await _uow.Repository<T_ROLE_PERMISSION>().ListAsync(
+        var roleList = await _uow.Repository<T_ROLE_PERMISSION>().ListReadOnlyAsync(
             p => p.IDROLE == roleId && p.IS_GRANTED, cancellationToken);
 
         if (roleList.Count == 0)

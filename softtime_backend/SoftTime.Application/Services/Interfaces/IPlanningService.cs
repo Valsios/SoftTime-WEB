@@ -24,6 +24,9 @@ public interface IPlanningService
 
     Task DeleteShiftAsync(decimal id, CancellationToken ct = default);
 
+    /// <summary>Salariés planifiables, paginés et filtrés (matricule, nom, prénom).</summary>
+    Task<PagedResult<PlanningEmployeeDto>> ListEmployeesPagedAsync(int? page, int? pageSize, string? search = null, CancellationToken ct = default);
+
     Task<IReadOnlyList<PlanningEmployeeDto>> ListEmployeesAsync(CancellationToken ct = default);
 
     Task<IReadOnlyList<EmployeePlanningDto>> ListEmployeePlanningAsync(DateTime from, DateTime to, int? cardId, CancellationToken ct = default);

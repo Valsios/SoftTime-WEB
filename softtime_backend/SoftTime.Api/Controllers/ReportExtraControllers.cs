@@ -17,30 +17,6 @@ public class ReportsController : ControllerBase
     private readonly IReportService _svc;
     public ReportsController(IReportService svc) => _svc = svc;
 
-    [HttpGet("pointage")]
-    public async Task<IActionResult> Pointage([FromQuery] ReportFilter filter, CancellationToken ct)
-        => Ok(await _svc.PointageAsync(filter, ct));
-
-    [HttpGet("absences")]
-    public async Task<IActionResult> Absences([FromQuery] ReportFilter filter, CancellationToken ct)
-        => Ok(await _svc.AbsencesAsync(filter, ct));
-
-    [HttpGet("retards")]
-    public async Task<IActionResult> Retards([FromQuery] ReportFilter filter, CancellationToken ct)
-        => Ok(await _svc.RetardsAsync(filter, ct));
-
-    [HttpGet("hs-recap")]
-    public async Task<IActionResult> HsRecap([FromQuery] ReportFilter filter, CancellationToken ct)
-        => Ok(await _svc.HsRecapAsync(filter, ct));
-
-    [HttpGet("heures-semaine")]
-    public async Task<IActionResult> HeuresSemaine([FromQuery] ReportFilter filter, CancellationToken ct)
-        => Ok(await _svc.HeuresParSemaineAsync(filter, ct));
-
-    [HttpGet("heures-dimanche")]
-    public async Task<IActionResult> HeuresDimanche([FromQuery] ReportFilter filter, CancellationToken ct)
-        => Ok(await _svc.HeuresDimancheAsync(filter, ct));
-
     /// <summary>
     /// Version paginée des 6 états (<c>pointage</c>, <c>absences</c>, <c>retards</c>,
     /// <c>hs-recap</c>, <c>heures-semaine</c>, <c>heures-dimanche</c>) ; 400 pour un autre type.
@@ -69,20 +45,11 @@ public class CanteenController : ControllerBase
     private readonly IExtraService _svc;
     public CanteenController(IExtraService svc) => _svc = svc;
 
-    [HttpGet]
-    public async Task<IActionResult> List([FromQuery] PeriodRequest request, CancellationToken ct)
-        => Ok(await _svc.ListCanteenAsync(request, ct));
-
     /// <summary>Même liste que <c>GET /api/canteen</c>, paginée.</summary>
     [HttpGet("paged")]
     public async Task<IActionResult> ListPaged(
         [FromQuery] PeriodRequest request, [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
         => Ok(await _svc.ListCanteenPagedAsync(request, page, pageSize, ct));
-
-    /// <summary>Anomalies du calcul cantine : pointage contredisant une absence complète.</summary>
-    [HttpGet("anomalies")]
-    public async Task<IActionResult> Anomalies([FromQuery] PeriodRequest request, CancellationToken ct)
-        => Ok(await _svc.ListCanteenAnomaliesAsync(request, ct));
 
     /// <summary>Anomalies cantine paginées (calcul complet puis découpage de la page).</summary>
     [HttpGet("anomalies/paged")]
@@ -114,10 +81,6 @@ public class TravelController : ControllerBase
 {
     private readonly IExtraService _svc;
     public TravelController(IExtraService svc) => _svc = svc;
-
-    [HttpGet]
-    public async Task<IActionResult> List([FromQuery] PeriodRequest request, CancellationToken ct)
-        => Ok(await _svc.ListTravelAsync(request, ct));
 
     /// <summary>Même liste que <c>GET /api/travel-expenses</c>, paginée.</summary>
     [HttpGet("paged")]
@@ -154,9 +117,6 @@ public class AuditController : ControllerBase
     [HttpGet("types")]
     public IActionResult GetTypes() => Ok(_svc.ListAllowedTypes());
 
-    [HttpGet("config")]
-    public async Task<IActionResult> GetConfig(CancellationToken ct) => Ok(await _svc.ListConfigAsync(ct));
-
     /// <summary>Configuration d'audit paginée.</summary>
     [HttpGet("config/paged")]
     public async Task<IActionResult> GetConfigPaged(
@@ -181,15 +141,6 @@ public class AuditController : ControllerBase
         await _svc.SaveConfigAsync(dto with { Id = id }, ct);
         return NoContent();
     }
-
-    [HttpGet("events")]
-    public async Task<IActionResult> GetEvents(
-        [FromQuery] DateTime? from,
-        [FromQuery] DateTime? to,
-        [FromQuery] string? table,
-        [FromQuery] string? action,
-        CancellationToken ct)
-        => Ok(await _svc.ListEventsAsync(from, to, table, action, ct));
 
     /// <summary>Journal d'audit paginé (count + OFFSET/FETCH SQL sur le filtre complet).</summary>
     [HttpGet("events/paged")]

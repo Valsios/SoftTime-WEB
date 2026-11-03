@@ -118,7 +118,7 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
         ("lookup", "GET", "/api/sage-databases/lookup/1", null, true),
         ("lookup-batch", "POST", "/api/sage-databases/lookup-batch", """["1"]""", true),
         ("departement-service-options", "GET", "/api/sage-databases/departement-service-options", null, true),
-        ("cardpaie GET", "GET", "/api/cardpaie", null, true),
+        ("cardpaie GET", "GET", "/api/cardpaie/paged", null, true),
         ("sage-databases GET", "GET", "/api/sage-databases", null, false),
         ("sage-databases GET paged", "GET", "/api/sage-databases/paged", null, false),
         ("pointeuse-databases GET", "GET", "/api/pointeuse-databases", null, false),

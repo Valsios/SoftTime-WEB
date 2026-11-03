@@ -325,7 +325,7 @@ public sealed class MlPredictionService : IMlPredictionService
 
     private async Task<Dictionary<int, int>> LoadCategoriesAsync(string sage, CancellationToken ct)
     {
-        var affectations = await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == sage, ct);
+        var affectations = await _uow.Repository<T_CAT_SAL>().ListReadOnlyAsync(a => a.BDD_SAGE == sage, ct);
         return affectations
             .GroupBy(a => a.MATRICULE_SAGE)
             .ToDictionary(g => g.Key, g => g.First().ID_CATEG);

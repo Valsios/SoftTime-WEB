@@ -22,8 +22,8 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
     // Une route d'usage par famille : catalogue, traitements, activation (exemptée du middleware), pointeuse.
     private static readonly Dictionary<string, (string Method, string Url, string? Body, bool NeedsPointeuse)> Routes = new()
     {
-        ["catalogue (GET cardpaie)"] = ("GET", "/api/cardpaie", null, false),
-        ["traitements (GET shifts)"] = ("GET", "/api/shifts", null, false),
+        ["catalogue (GET cardpaie)"] = ("GET", "/api/cardpaie/paged", null, false),
+        ["traitements (GET shifts)"] = ("GET", "/api/shifts/paged", null, false),
         ["activation (POST sage-databases/activate)"] = ("POST", "/api/sage-databases/activate", null, false),
         ["pointeuse (POST punches/import-clock)"] = ("POST", "/api/punches/import-clock", """{"matriculeFrom":null,"matriculeTo":null,"from":"2026-01-01T00:00:00","to":"2026-01-02T00:00:00"}""", true),
     };

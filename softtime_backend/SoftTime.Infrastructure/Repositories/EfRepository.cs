@@ -25,6 +25,11 @@ public class EfRepository<T> : IRepository<T> where T : class
 
     public IQueryable<T> Query() => _set.AsQueryable();
 
+    public IQueryable<T> QueryReadOnly() => _set.AsNoTracking();
+
+    public Task<List<T>> ListReadOnlyAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default)
+        => _set.AsNoTracking().Where(predicate).ToListAsync(cancellationToken);
+
     public async Task<T?> GetByIdAsync(object id, CancellationToken cancellationToken = default)
         => await _set.FindAsync(new[] { id }, cancellationToken);
 

@@ -24,10 +24,6 @@ public class SageDatabasesController : ControllerBase
         _configAuth = configAuth;
     }
 
-    /// <summary>Bases SAGE visibles par le compte connecté (droits détaillés de lecture).</summary>
-    [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _listing.ListSageAsync(ct));
-
     [HttpGet("paged")]
     public async Task<IActionResult> GetPaged(
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
@@ -124,10 +120,6 @@ public class PointeuseDatabasesController : ControllerBase
         _listing = listing;
         _configAuth = configAuth;
     }
-
-    /// <summary>Bases pointeuse visibles par le compte connecté (droits détaillés de lecture).</summary>
-    [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _listing.ListPointeuseAsync(ct));
 
     [HttpGet("paged")]
     public async Task<IActionResult> GetPaged(
@@ -231,9 +223,6 @@ public class CardPaieController : ControllerBase
         _files = files;
     }
 
-    [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListCardsAsync(ct));
-
     [HttpGet("paged")]
     public async Task<IActionResult> GetPaged(
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
@@ -297,9 +286,6 @@ public class CategoriesController : ControllerBase
     private readonly ICatalogService _svc;
     public CategoriesController(ICatalogService svc) => _svc = svc;
 
-    [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListCategoriesAsync(ct));
-
     [HttpGet("paged")]
     public async Task<IActionResult> GetPaged(
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
@@ -337,10 +323,6 @@ public class AffectationsController : ControllerBase
         _files = files;
     }
 
-    [HttpGet]
-    public async Task<IActionResult> GetAll([FromQuery] int? categoryId, CancellationToken ct)
-        => Ok(await _svc.ListAffectationsAsync(categoryId, ct));
-
     [HttpGet("paged")]
     public async Task<IActionResult> GetPaged(
         [FromQuery] int? categoryId,
@@ -355,14 +337,6 @@ public class AffectationsController : ControllerBase
     [HttpGet("options")]
     public async Task<IActionResult> GetOptions(CancellationToken ct)
         => Ok(await _svc.GetAffectationOptionsAsync(ct));
-
-    [HttpGet("all")]
-    public async Task<IActionResult> GetAllRows(
-        [FromQuery] int? categoryId,
-        [FromQuery] string? departement,
-        [FromQuery] string? service,
-        CancellationToken ct)
-        => Ok(await _svc.ListAllAffectationsAsync(categoryId, departement, service, ct));
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] AffectationDto dto, CancellationToken ct)
@@ -398,10 +372,6 @@ public class TolerancesController : ControllerBase
     private readonly ICatalogService _svc;
     public TolerancesController(ICatalogService svc) => _svc = svc;
 
-    [HttpGet]
-    public async Task<IActionResult> GetAll([FromQuery] int? categoryId, CancellationToken ct)
-        => Ok(await _svc.ListTolerancesAsync(categoryId, ct));
-
     [HttpGet("paged")]
     public async Task<IActionResult> GetPaged(
         [FromQuery] int? categoryId, [FromQuery] int? page, [FromQuery] int? pageSize,
@@ -433,9 +403,6 @@ public class HolidaysController : ControllerBase
 {
     private readonly ICatalogService _svc;
     public HolidaysController(ICatalogService svc) => _svc = svc;
-
-    [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListHolidaysAsync(ct));
 
     [HttpGet("paged")]
     public async Task<IActionResult> GetPaged(
@@ -475,9 +442,6 @@ public class MajorationsController : ControllerBase
     private readonly ICatalogService _svc;
     public MajorationsController(ICatalogService svc) => _svc = svc;
 
-    [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListMajorationsAsync(ct));
-
     [HttpGet("paged")]
     public async Task<IActionResult> GetPaged(
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
@@ -497,9 +461,6 @@ public class AbsenceCodesController : ControllerBase
 {
     private readonly ICatalogService _svc;
     public AbsenceCodesController(ICatalogService svc) => _svc = svc;
-
-    [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListAbsenceCodesAsync(ct));
 
     [HttpGet("paged")]
     public async Task<IActionResult> GetPaged(
@@ -531,9 +492,6 @@ public class CodeConstantesController : ControllerBase
 {
     private readonly ICatalogService _svc;
     public CodeConstantesController(ICatalogService svc) => _svc = svc;
-
-    [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListCodeConstantesAsync(ct));
 
     [HttpGet("paged")]
     public async Task<IActionResult> GetPaged(

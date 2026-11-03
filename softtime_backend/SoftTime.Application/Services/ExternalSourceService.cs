@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using SoftTime.Application.Abstractions;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
@@ -58,11 +58,11 @@ public sealed class ExternalSourceService : IExternalSourceService
     private async Task<(string? Table, Dictionary<string, string> RoleToColumn)> LoadRoleMapAsync(bool isSage, int connectionId, string entityKind, CancellationToken ct)
     {
         var entities = isSage
-            ? await _uow.Repository<T_SOURCE_ENTITY_MAPPING>().ListAsync(m => m.SageDbId == connectionId && m.EntityKind == entityKind, ct)
-            : await _uow.Repository<T_SOURCE_ENTITY_MAPPING>().ListAsync(m => m.PointeuseDbId == connectionId && m.EntityKind == entityKind, ct);
+            ? await _uow.Repository<T_SOURCE_ENTITY_MAPPING>().ListReadOnlyAsync(m => m.SageDbId == connectionId && m.EntityKind == entityKind, ct)
+            : await _uow.Repository<T_SOURCE_ENTITY_MAPPING>().ListReadOnlyAsync(m => m.PointeuseDbId == connectionId && m.EntityKind == entityKind, ct);
         var entity = entities.FirstOrDefault()
             ?? throw new DomainException($"Aucun mapping '{entityKind}' configuré pour cette base.");
-        var fields = await _uow.Repository<T_SOURCE_FIELD_MAPPING>().ListAsync(f => f.EntityMappingId == entity.Id, ct);
+        var fields = await _uow.Repository<T_SOURCE_FIELD_MAPPING>().ListReadOnlyAsync(f => f.EntityMappingId == entity.Id, ct);
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var f in fields)
             if (!string.IsNullOrWhiteSpace(f.SourceColumn))

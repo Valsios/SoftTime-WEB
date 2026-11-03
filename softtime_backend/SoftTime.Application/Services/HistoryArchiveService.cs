@@ -115,7 +115,7 @@ public class HistoryArchiveService : IHistoryArchiveService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageDb = _tenant.SageDb;
-        var rows = await _uow.Repository<T_HISTORIQUE_POINTAGE>().ListAsync(
+        var rows = await _uow.Repository<T_HISTORIQUE_POINTAGE>().ListReadOnlyAsync(
             h => h.NOM_BDD_SAGE == sageDb
                  && h.DATE_SUPPRESSION >= filter.From
                  && h.DATE_SUPPRESSION <= filter.To, ct);
@@ -130,7 +130,7 @@ public class HistoryArchiveService : IHistoryArchiveService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageDb = _tenant.SageDb;
-        var rows = await _uow.Repository<T_HISTORIQUE_ANOMALIE>().ListAsync(
+        var rows = await _uow.Repository<T_HISTORIQUE_ANOMALIE>().ListReadOnlyAsync(
             h => h.BDD_SAGE == sageDb
                  && h.DATE_SUPPRESSION >= filter.From
                  && h.DATE_SUPPRESSION <= filter.To, ct);
@@ -146,7 +146,7 @@ public class HistoryArchiveService : IHistoryArchiveService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageDb = _tenant.SageDb;
-        var rows = await _uow.Repository<T_HISTORIQUE_HS>().ListAsync(
+        var rows = await _uow.Repository<T_HISTORIQUE_HS>().ListReadOnlyAsync(
             h => h.BDD_SAGE == sageDb
                  && h.DATE_SUPPRESSION >= filter.From
                  && h.DATE_SUPPRESSION <= filter.To, ct);

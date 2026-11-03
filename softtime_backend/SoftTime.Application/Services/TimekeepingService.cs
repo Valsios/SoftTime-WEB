@@ -25,7 +25,7 @@ public class TimekeepingService : ITimekeepingService
     public async Task<IReadOnlyList<PunchDto>> ListPunchesAsync(PeriodRequest filter, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var list = await _uow.Repository<T_POINTAGE>().ListAsync(PunchPredicate(filter, _tenant.SageDb), ct);
+        var list = await _uow.Repository<T_POINTAGE>().ListReadOnlyAsync(PunchPredicate(filter, _tenant.SageDb), ct);
         return list.Select(ToPunchDto).ToList();
     }
 
@@ -196,7 +196,7 @@ public class TimekeepingService : ITimekeepingService
     /// opérations de masse (import, validation d'anomalies) au lieu d'une requête par ligne.
     /// </summary>
     private async Task<HashSet<(string Cle, DateTime Lundi)>> ChargerSemainesValideesAsync(string sageDb, CancellationToken ct)
-        => (await _uow.Repository<T_HS_VALIDER>().ListAsync(
+        => (await _uow.Repository<T_HS_VALIDER>().ListReadOnlyAsync(
                 v => v.BDD_SAGE == sageDb && v.VALIDATION_HS == true && v.DATE_DEB != null, ct))
             .Where(v => !string.IsNullOrWhiteSpace(v.MATRICULES))
             .Select(v => (MatriculeIdentity.Cle(v.MATRICULES), v.DATE_DEB!.Value.Date))
@@ -377,7 +377,7 @@ public class TimekeepingService : ITimekeepingService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         // Les anomalies sans date (importées sans date exploitable) ne doivent pas rester invisibles.
-        var list = await _uow.Repository<T_HEUREANOMALIE>().ListAsync(AnomalyPredicate(filter, _tenant.SageDb), ct);
+        var list = await _uow.Repository<T_HEUREANOMALIE>().ListReadOnlyAsync(AnomalyPredicate(filter, _tenant.SageDb), ct);
         return list.Select(MapAnomaly).ToList();
     }
 
@@ -598,7 +598,7 @@ public class TimekeepingService : ITimekeepingService
     public async Task<IReadOnlyList<CorrectedHourDto>> ListCorrectionsAsync(PeriodRequest filter, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var list = await _uow.Repository<T_HEURECORRIGER>().ListAsync(CorrectionPredicate(filter, _tenant.SageDb), ct);
+        var list = await _uow.Repository<T_HEURECORRIGER>().ListReadOnlyAsync(CorrectionPredicate(filter, _tenant.SageDb), ct);
         return list.Select(MapCorrection).ToList();
     }
 

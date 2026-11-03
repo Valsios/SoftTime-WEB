@@ -151,7 +151,7 @@ public class OvertimeService : IOvertimeService
         var cards = await TargetCards(request, ct);
         var targetMatricules = cards.Select(c => c.SAGE_MATRICULE).Where(m => !string.IsNullOrEmpty(m)).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var list = await _uow.Repository<T_HSExoImp>().ListAsync(h =>
+        var list = await _uow.Repository<T_HSExoImp>().ListReadOnlyAsync(h =>
             h.BDD_SAGE == _tenant.SageDb
             && h.PeriodeDebut <= request.To.Date
             && h.PeriodeFin >= request.From.Date

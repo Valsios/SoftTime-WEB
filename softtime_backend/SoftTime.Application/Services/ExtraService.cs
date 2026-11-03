@@ -43,7 +43,7 @@ public class ExtraService : IExtraService
         var to = request.To.Date;
         var matriculeFrom = request.MatriculeFrom;
         var matriculeTo = request.MatriculeTo;
-        var list = await _uow.Repository<T_CANTINE>().ListAsync(
+        var list = await _uow.Repository<T_CANTINE>().ListReadOnlyAsync(
             c => c.NOM_BDD_SAGE == sageDb
                  && c.DATEDEB >= from
                  && c.DATEFIN <= to
@@ -93,7 +93,7 @@ public class ExtraService : IExtraService
         var to = request.To.Date;
         var matriculeFrom = request.MatriculeFrom;
         var matriculeTo = request.MatriculeTo;
-        var list = await _uow.Repository<T_FRAIS>().ListAsync(
+        var list = await _uow.Repository<T_FRAIS>().ListReadOnlyAsync(
             c => c.NOM_BDD_SAGE == sageDb
                  && c.DATEDEB >= from
                  && c.DATEFIN <= to

@@ -107,9 +107,6 @@ public class UsersController : ControllerBase
         _user = user;
     }
 
-    [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _auth.GetUsersAsync(ct));
-
     [HttpGet("paged")]
     public async Task<IActionResult> GetPaged(
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
@@ -157,9 +154,6 @@ public class RolesController : ControllerBase
 {
     private readonly IAuthService _auth;
     public RolesController(IAuthService auth) => _auth = auth;
-
-    [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _auth.GetRolesAsync(ct));
 
     [HttpGet("paged")]
     public async Task<IActionResult> GetPaged(

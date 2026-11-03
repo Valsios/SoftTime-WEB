@@ -24,11 +24,10 @@ public class SensitiveReadsHttpTests : IClassFixture<ApiFactory>
     // Route → profils (porte 2 + bonne permission) qui y accèdent. Tous les autres comptes à porte 2 sont refusés.
     private static readonly Dictionary<string, (string Url, string[] Allowed)> Routes = new()
     {
-        ["GET users"] = ("/api/users", new[] { U, P, D }),
-        ["GET users/paged"] = ("/api/users/paged", new[] { U }),
+        // Liste paginée seule (la liste complète est supprimée) : écrans Utilisateurs, Privilèges et Accès bases.
+        ["GET users/paged"] = ("/api/users/paged", new[] { U, P, D }),
         ["GET users/{id}"] = ("/api/users/10052", new[] { U }),
-        ["GET roles"] = ("/api/roles", new[] { U, P }),
-        ["GET roles/paged"] = ("/api/roles/paged", new[] { R }),
+        ["GET roles/paged"] = ("/api/roles/paged", new[] { U, R, P }),
         ["GET privileges/droits"] = ("/api/privileges/droits", new[] { P, R }),
         ["GET privileges?roleId"] = ("/api/privileges?roleId=91", new[] { P, R }),
         ["GET privileges/user/{id}"] = ("/api/privileges/user/10052", new[] { P }),

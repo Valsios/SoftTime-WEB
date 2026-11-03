@@ -283,12 +283,12 @@ public class DashboardService : IDashboardService
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageDb = _tenant.SageDb;
 
-        var cartes = await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == sageDb, ct);
+        var cartes = await _uow.Repository<T_CARDPAIE>().ListReadOnlyAsync(c => c.SAGE_BDD == sageDb, ct);
 
-        var categorieParCarte = (await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == sageDb, ct))
+        var categorieParCarte = (await _uow.Repository<T_CAT_SAL>().ListReadOnlyAsync(a => a.BDD_SAGE == sageDb, ct))
             .GroupBy(a => a.MATRICULE_SAGE)
             .ToDictionary(g => g.Key, g => g.First().ID_CATEG);
-        var categoriesParId = (await _uow.Repository<T_CATEGORIE>().ListAsync(_ => true, ct))
+        var categoriesParId = (await _uow.Repository<T_CATEGORIE>().ListReadOnlyAsync(_ => true, ct))
             .GroupBy(c => c.IDCATEGORIE)
             .ToDictionary(g => g.Key, g => g.First());
 
@@ -317,9 +317,9 @@ public class DashboardService : IDashboardService
     private async Task<DashboardKpiDto> BuildKpiAsync(
         string sageDb, DateTime from, DateTime to, int cartesActives, PeriodeMetrics metrics, CancellationToken ct)
     {
-        var anomalies = (await _uow.Repository<T_HEUREANOMALIE>().ListAsync(
+        var anomalies = (await _uow.Repository<T_HEUREANOMALIE>().ListReadOnlyAsync(
             a => a.BDD_SAGE == sageDb && a.DATE_POINTAGE_IN >= from && a.DATE_POINTAGE_IN <= to, ct)).Count;
-        var corrections = await _uow.Repository<T_HEURECORRIGER>().ListAsync(
+        var corrections = await _uow.Repository<T_HEURECORRIGER>().ListReadOnlyAsync(
             h => h.BDD_SAGE == sageDb && h.DATE_POINTAGE_IN >= from && h.DATE_POINTAGE_IN <= to, ct);
         var manuelles = corrections.Count(h =>
             string.Equals(h.ORIGINE, PunchProcessingConfiguration.OrigineManuel, StringComparison.OrdinalIgnoreCase));
