@@ -47,6 +47,26 @@ public static class SchemaPresenceGuard
         }
     }
 
+    public const string MissingAccountSecurityMessage =
+        "La sécurité des comptes est absente (jetons de rafraîchissement, verrouillage) : activez Database:AutoMigrate (développement) "
+        + "ou exécutez migrations/versions/004_securite_comptes.sql.";
+
+    /// <summary>Sans la migration 004, la lecture de T_RESPONSABLE échouerait sur une colonne inconnue : connexion impossible.</summary>
+    public static async Task EnsureAccountSecurityAsync(IUnitOfWork uow, CancellationToken ct)
+    {
+        try
+        {
+            await uow.ExecuteSqlAsync(GuardedSql("T_REFRESH_TOKEN", $"""
+                IF COL_LENGTH(N'dbo.T_RESPONSABLE', N'TENTATIVES_ECHOUEES') IS NULL OR COL_LENGTH(N'dbo.T_RESPONSABLE', N'VERROUILLE_JUSQUA') IS NULL
+                    THROW 51990, N'{Marker}: dbo.T_RESPONSABLE', 1;
+                """), ct);
+        }
+        catch (Exception ex) when (ex.Message.Contains(Marker, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(MissingAccountSecurityMessage);
+        }
+    }
+
     public static string GuardedSql(string table, string sql) => $"""
         IF OBJECT_ID(N'dbo.{table}', N'U') IS NULL
             THROW 51990, N'{Marker}: dbo.{table}', 1;

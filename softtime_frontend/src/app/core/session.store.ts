@@ -4,6 +4,7 @@ import { stripDatabasePasswords } from '../shared/utils/connection-password';
 import { AccessContext, canAccess, decodeTokenGates, gateAllows, hasUsableDatabase } from './access.logic';
 
 const TOKEN_KEY = 'st_token';
+const REFRESH_KEY = 'st_refresh';
 const SESSION_KEY = 'st_session';
 const SAGE_KEY = 'st_sage_db';
 const POINTEUSE_KEY = 'st_pointeuse_db';
@@ -24,6 +25,7 @@ interface StoredSession {
 @Injectable({ providedIn: 'root' })
 export class SessionStore {
   private readonly _token = signal<string | null>(localStorage.getItem(TOKEN_KEY));
+  private readonly _refreshToken = signal<string | null>(localStorage.getItem(REFRESH_KEY));
   private readonly _session = signal<StoredSession | null>(this.readSession());
   readonly activeSageDb = signal<string | null>(localStorage.getItem(SAGE_KEY));
   readonly activePointeuseDb = signal<string | null>(localStorage.getItem(POINTEUSE_KEY));
@@ -33,6 +35,7 @@ export class SessionStore {
   );
 
   readonly token = this._token.asReadonly();
+  readonly refreshToken = this._refreshToken.asReadonly();
   readonly session = this._session.asReadonly();
   readonly isAuthenticated = computed(() => !!this._token());
   readonly rights = computed(() => this._session()?.rights ?? []);
@@ -85,9 +88,8 @@ export class SessionStore {
       permissions: res.permissions ?? [],
       permissionsCustomized: res.permissionsCustomized ?? false,
     };
-    this._token.set(res.token);
+    this.setTokens(res.token, res.refreshToken ?? null);
     this._session.set(session);
-    localStorage.setItem(TOKEN_KEY, res.token);
     localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 
     const allowed = (session.authorizedDatabases ?? [])
@@ -97,6 +99,15 @@ export class SessionStore {
     if (!current || !allowed.includes(current)) {
       this.setActiveSageDb(allowed[0] ?? null);
     }
+  }
+
+  /** Nouvelle paire de jetons (connexion ou rafraîchissement) ; l'ancien jeton de rafraîchissement est révoqué côté serveur. */
+  setTokens(token: string, refreshToken: string | null): void {
+    this._token.set(token);
+    this._refreshToken.set(refreshToken);
+    localStorage.setItem(TOKEN_KEY, token);
+    if (refreshToken) localStorage.setItem(REFRESH_KEY, refreshToken);
+    else localStorage.removeItem(REFRESH_KEY);
   }
 
   setActiveSageDb(nomBd: string | null): void {
@@ -159,10 +170,12 @@ export class SessionStore {
 
   clear(): void {
     this._token.set(null);
+    this._refreshToken.set(null);
     this._session.set(null);
     this.activeSageDb.set(null);
     this.activePointeuseDb.set(null);
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
     localStorage.removeItem(SESSION_KEY);
     localStorage.removeItem(SAGE_KEY);
     localStorage.removeItem(POINTEUSE_KEY);

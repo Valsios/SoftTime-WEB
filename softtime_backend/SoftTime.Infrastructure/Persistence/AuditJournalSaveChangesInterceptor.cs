@@ -17,14 +17,14 @@ namespace SoftTime.Infrastructure.Persistence;
 public sealed class AuditJournalSaveChangesInterceptor : SaveChangesInterceptor
 {
     /// <summary>
-    /// Tables jamais journalisées : journaux eux-mêmes, historiques, et <c>T_AUDIT_DROIT</c> qui est déjà le journal
-    /// spécialisé des changements de droits.
+    /// Tables jamais journalisées : journaux eux-mêmes, historiques, <c>T_AUDIT_DROIT</c> qui est déjà le journal
+    /// spécialisé des changements de droits, et <c>T_REFRESH_TOKEN</c> (une ligne par connexion et par rafraîchissement).
     /// </summary>
     private static readonly HashSet<string> ExcludedTables = new(StringComparer.OrdinalIgnoreCase)
     {
         "suivi_SUIVI", "suivi_T", "suivi_TBLCLN", "suivi_JOURNAL",
         "T_HISTORIQUE_POINTAGE", "T_HISTORIQUE_ANOMALIE", "T_HISTORIQUE_HS",
-        "T_AUDIT_DROIT"
+        "T_AUDIT_DROIT", "T_REFRESH_TOKEN"
     };
 
     private readonly ICurrentUser _user;

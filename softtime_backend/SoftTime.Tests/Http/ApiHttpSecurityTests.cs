@@ -188,7 +188,7 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     #region V5 : endpoints sans garde
 
     [Fact]
-    public void V5_Endpoints_without_Authorize_in_touched_controllers_are_only_the_four_auth_routes()
+    public void V5_Endpoints_without_Authorize_in_touched_controllers_are_only_the_anonymous_auth_routes()
     {
         var actions = _f.Services.GetRequiredService<EndpointDataSource>().Endpoints
             .OfType<RouteEndpoint>()
@@ -218,7 +218,10 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
         foreach (var a in anonymous) ApiFactory.Report($"V5|sans Authorize|{a}");
         foreach (var a in authorizeOnly) ApiFactory.Report($"V5|Authorize seul|{a}");
 
-        Assert.Equal(4, anonymous.Count);
+        // Connexion, rafraîchissement et déconnexion (sans jeton d'accès valide par nature), démarrage initial, politique.
+        Assert.Equal(
+            new[] { "CreateAdmin", "GetPasswordPolicy", "IsFirstRun", "Login", "Logout", "Refresh" },
+            anonymous.Select(a => a.Split(' ')[0]).Select(a => a["AuthController.".Length..]).OrderBy(a => a, StringComparer.Ordinal).ToArray());
         Assert.All(anonymous, a => Assert.StartsWith("AuthController.", a));
     }
 
