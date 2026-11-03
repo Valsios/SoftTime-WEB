@@ -25,7 +25,10 @@ et n'est pas concerné.
 
 1. Lancer l'API comme d'habitude (`dotnet run` dans `SoftTime.Api`, ou depuis Visual Studio) : le profil `http`
    utilise `ASPNETCORE_ENVIRONMENT=Development`, donc `appsettings.Development.json` s'applique et
-   `Database:AutoMigrate` vaut `true`. Votre `appsettings.json` local (chaîne de connexion) n'est pas modifié.
+   `Database:AutoMigrate` vaut `true`. La chaîne de connexion et la clé JWT ne sont **plus** dans `appsettings.json` :
+   définissez-les une fois par poste dans les secrets utilisateur (dans `SoftTime.Api`) :
+   `dotnet user-secrets set "ConnectionStrings:SoftTime" "<chaîne>"` et
+   `dotnet user-secrets set "Jwt:Key" "<au moins 32 caractères aléatoires>"`. Sans eux, l'API refuse de démarrer.
 2. Regarder la ligne du journal au démarrage :
    - `Migrations de schéma : N script(s) appliqué(s), M déjà à jour.` : tout est en ordre ;
    - `Migrations de schéma désactivées (Database:AutoMigrate = false).` : l'activation est coupée (autre
@@ -39,8 +42,9 @@ destructifs, mais seule la sauvegarde permet un retour arrière fiable.
 ## Première installation (base vide)
 
 1. Créer une base vide (`CREATE DATABASE <nom>`) et la renseigner dans la chaîne de connexion locale
-   (`ConnectionStrings:SoftTime` de votre `appsettings.json`, jamais dans le dépôt).
-2. Lancer l'API avec `Database:AutoMigrate = true` : elle crée tout le schéma (001, 002, 003), le schéma `ml` du moteur
+   (`ConnectionStrings:SoftTime` en secret utilisateur ou variable d'environnement `ConnectionStrings__SoftTime`,
+   jamais dans le dépôt), avec la clé `Jwt:Key`.
+2. Lancer l'API avec `Database:AutoMigrate = true` : elle crée tout le schéma (001 à 004), le schéma `ml` du moteur
    prédictif, le rôle 1 « Administrateur », les six droits et les données de départ. Aucun compte n'est créé.
 3. Créer le premier administrateur : `GET /api/auth/is-first-run` répond `true`, puis
    `POST /api/auth/create-admin` (nom, login, mot de passe conforme à la politique). Ensuite `is-first-run` répond `false`.

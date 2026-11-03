@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using SoftTime.Api.Authorization;
+using SoftTime.Api.Security;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Security;
@@ -21,12 +23,35 @@ public class AuthController : ControllerBase
         _user = user;
     }
 
-    /// <summary>POST — Authentification (LOGIN/PASSWORD T_RESPONSABLE). Retourne le JWT.</summary>
+    /// <summary>
+    /// POST — Authentification (LOGIN/PASSWORD T_RESPONSABLE). Retourne le jeton d'accès (courte durée) et le jeton
+    /// de rafraîchissement. Compte verrouillé après plusieurs échecs (403), requêtes limitées par adresse IP (429).
+    /// </summary>
     [AllowAnonymous]
+    [EnableRateLimiting(AuthRateLimit.Policy)]
     [HttpPost("login")]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<LoginResponse>> Login([FromBody] LoginRequest request, CancellationToken ct)
         => Ok(await _auth.LoginAsync(request, ct));
+
+    /// <summary>POST — Échange le jeton de rafraîchissement contre une nouvelle paire (rotation). 401 si invalide.</summary>
+    [AllowAnonymous]
+    [EnableRateLimiting(AuthRateLimit.Policy)]
+    [HttpPost("refresh")]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<LoginResponse>> Refresh([FromBody] RefreshTokenRequest request, CancellationToken ct)
+        => Ok(await _auth.RefreshAsync(request.RefreshToken, ct));
+
+    /// <summary>POST — Déconnexion : révoque le jeton de rafraîchissement (anonyme : le jeton d'accès peut avoir expiré).</summary>
+    [AllowAnonymous]
+    [EnableRateLimiting(AuthRateLimit.Policy)]
+    [HttpPost("logout")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> Logout([FromBody] RefreshTokenRequest request, CancellationToken ct)
+    {
+        await _auth.LogoutAsync(request.RefreshToken, ct);
+        return NoContent();
+    }
 
     /// <summary>GET — Profil courant + bases SAGE autorisées.</summary>
     [Authorize]
@@ -53,6 +78,7 @@ public class AuthController : ControllerBase
     /// Envoie les identifiants par e-mail si la configuration SMTP est renseignee.
     /// </summary>
     [AllowAnonymous]
+    [EnableRateLimiting(AuthRateLimit.Policy)]
     [HttpPost("create-admin")]
     [ProducesResponseType(typeof(AdminSetupResultDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<AdminSetupResultDto>> CreateAdmin([FromBody] AdminSetupDto dto, CancellationToken ct)

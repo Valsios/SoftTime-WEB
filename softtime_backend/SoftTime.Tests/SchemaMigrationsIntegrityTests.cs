@@ -35,7 +35,7 @@ public class SchemaMigrationsIntegrityTests
     public void Script003_IsEmbeddedAfter002_AndIsReplayableAndNonDestructive()
     {
         var scripts = new EmbeddedMigrationScriptSource().Load();
-        Assert.Equal(new[] { 1, 2, 3 }, scripts.Select(s => s.Version).ToArray());
+        Assert.Equal(new[] { 1, 2, 3, 4 }, scripts.Select(s => s.Version).ToArray());
         var journal = Assert.Single(scripts, s => s.Version == 3);
 
         Assert.Equal("003_journal_central.sql", journal.Name);
@@ -53,6 +53,27 @@ public class SchemaMigrationsIntegrityTests
         foreach (var other in new[] { "suivi_SUIVI", "suivi_TBLCLN", "T_AUDIT_DROIT", "TRIGGER" })
             Assert.DoesNotContain(other, code, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Password", journal.Content, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ---------- Script 004 ----------
+
+    [Fact]
+    public void Script004_AddsAccountSecurityStorage_OnlyByAdditions()
+    {
+        var scripts = new EmbeddedMigrationScriptSource().Load();
+        var security = Assert.Single(scripts, s => s.Version == 4);
+
+        Assert.Equal("004_securite_comptes.sql", security.Name);
+        foreach (var forbidden in new[] { "DROP ", "DELETE", "TRUNCATE", "ALTER COLUMN", "USE [", "CREATE DATABASE", "UPDATE ", "INSERT " })
+            Assert.DoesNotContain(forbidden, security.Content, StringComparison.OrdinalIgnoreCase);
+        // Rejouable : chaque objet est testé avant création.
+        Assert.Contains("OBJECT_ID(N'dbo.T_REFRESH_TOKEN', N'U') IS NULL", security.Content);
+        Assert.Contains("COL_LENGTH(N'dbo.T_RESPONSABLE', N'TENTATIVES_ECHOUEES') IS NULL", security.Content);
+        Assert.Contains("COL_LENGTH(N'dbo.T_RESPONSABLE', N'VERROUILLE_JUSQUA') IS NULL", security.Content);
+        Assert.Contains("name = N'UX_T_REFRESH_TOKEN_Hash'", security.Content);
+        // Seule l'empreinte du jeton est stockée.
+        Assert.Contains("TOKEN_HASH        char(64)", security.Content);
+        Assert.DoesNotContain("Password", security.Content, StringComparison.OrdinalIgnoreCase);
     }
 
     // ---------- Journal de démarrage ----------

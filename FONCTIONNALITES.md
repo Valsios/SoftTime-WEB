@@ -9,7 +9,22 @@ L’accès est filtré par **rôle** (6 droits) et par **société SAGE** active
 
 ## 1. Authentification et contexte
 
-- Connexion JWT (utilisateurs `T_RESPONSABLE`).
+- Connexion JWT (utilisateurs `T_RESPONSABLE`) : jeton d'accès de **30 min** (`Jwt:AccessTokenMinutes`, aucune
+  marge d'horloge) et **jeton de rafraîchissement** de 7 jours (`Security:RefreshTokenDays`), renouvelé à chaque
+  usage (`POST /api/auth/refresh`) et révoqué à la déconnexion (`POST /api/auth/logout`). Seule son empreinte
+  SHA-256 est stockée (`T_REFRESH_TOKEN`, migration 004). Un jeton déjà remplacé qui revient (vol probable) ferme
+  toutes les sessions du compte ; un changement de mot de passe aussi. Le client rafraîchit seul la session sur un 401.
+- **Verrouillage** : après 5 échecs consécutifs (`Security:MaxFailedLoginAttempts`), le compte est bloqué 15 min
+  (`Security:LockoutMinutes`, réponse 403) ; un nouveau mot de passe défini par un administrateur le débloque.
+  Connexion, rafraîchissement et création initiale sont limités à 20 requêtes/min par adresse IP (429).
+- **Hachage BCrypt** (coût 12). Les anciens hachages PBKDF2 et les mots de passe historiques en clair sont
+  convertis en BCrypt à la connexion suivante.
+- **Secrets** : aucune chaîne de connexion ni clé JWT dans `appsettings.json`. En développement :
+  `dotnet user-secrets set "ConnectionStrings:SoftTime" "..."` et `dotnet user-secrets set "Jwt:Key" "..."`
+  (dans `SoftTime.Api`) ; ailleurs, variables d'environnement `ConnectionStrings__SoftTime` et `Jwt__Key`.
+  L'API refuse de démarrer sans clé JWT d'au moins 32 caractères.
+- **HTTP** : CORS limité aux origines de `Cors:AllowedOrigins` ; HSTS et redirection HTTPS hors développement ;
+  en-têtes `X-Content-Type-Options`, `X-Frame-Options`, CSP ; Swagger exposé en développement seulement.
 - **Démarrage initial** : tant qu'aucun compte n'existe, l'écran de connexion bascule sur la création du
   premier **administrateur** (`GET /api/auth/is-first-run`, `POST /api/auth/create-admin`). Le serveur
   refuse toute seconde création.
