@@ -14,8 +14,8 @@ import { RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { errorMessage } from '../../core/error.logic';
 import { SessionStore } from '../../core/session.store';
-import { PageHeader, PeriodFilter, SoftBadge, SoftCard, SoftTabs, SoftToggle, TabItem } from '../../shared/components';
-import { ClosingAnomalyView, ClosingReport, PeriodRequest } from '../../shared/models';
+import { Column, DataTable, DataTableCell, PageHeader, PeriodFilter, SoftBadge, SoftCard, SoftTabs, SoftToggle, TabItem } from '../../shared/components';
+import { ClosingAnomalyView, ClosingReport, PageChangeEvent, PeriodRequest } from '../../shared/models';
 import { ClosingService } from '../../shared/services/closing.service';
 import {
   correctionLink,
@@ -32,7 +32,6 @@ import {
   NO_CONTROLLED_DAY,
   NOTHING_TO_FIX,
   nothingToFix,
-  PAGE_SIZES,
   personLabel,
   PURPOSE_NOTE,
   SEVERITIES,
@@ -54,7 +53,7 @@ import {
 @Component({
   selector: 'app-closing',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, PageHeader, PeriodFilter, SoftCard, SoftBadge, SoftTabs, SoftToggle, RouterLink],
+  imports: [FormsModule, PageHeader, PeriodFilter, SoftCard, SoftBadge, SoftTabs, SoftToggle, RouterLink, DataTable, DataTableCell],
   template: `
     <page-header title="Clôture de paie" subtitle="Contrôle des données de la période avant la clôture">
       <label class="closing-switch">
@@ -178,67 +177,35 @@ import {
             @if (!r.nomsAffiches) {
               <p class="closing-muted">Les noms ne sont pas affichés sur ce serveur : matricule seul.</p>
             }
-            <div class="soft-table-wrap">
-              <table class="soft-table">
-                <caption class="closing-sr">Anomalies de la période, page {{ r.anomalies.page }} sur {{ r.anomalies.totalPages }}</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Gravité</th>
-                    <th scope="col">Type</th>
-                    <th scope="col">Matricule</th>
-                    <th scope="col">Salarié</th>
-                    <th scope="col">Département</th>
-                    <th scope="col">Date</th>
-                    <th scope="col">Détail</th>
-                    <th scope="col">Correction</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (a of r.anomalies.items; track $index) {
-                    <tr>
-                      <td><soft-badge [variant]="tone(a.gravite)">{{ severityText(a.gravite) }}</soft-badge></td>
-                      <td>{{ type(a.type) }}</td>
-                      <td>{{ a.matricule }}</td>
-                      <td>{{ person(a) }}</td>
-                      <td>{{ a.departement || '—' }}</td>
-                      <td>{{ day(a.date) }}</td>
-                      <td>{{ a.detail }}</td>
-                      <td>
-                        @if (link(a); as l) {
-                          @if (canOpen(l)) {
-                            <a class="soft-btn soft-btn--ghost soft-btn--sm closing-fix" [routerLink]="l.path" [queryParams]="l.queryParams" [attr.aria-label]="l.ariaLabel">
-                              Corriger
-                            </a>
-                          } @else {
-                            <span class="closing-muted">Accès « {{ l.label }} » requis</span>
-                          }
-                        } @else if (noFix(a)) {
-                          <span class="closing-muted">{{ nothingToFixText }}</span>
-                        }
-                      </td>
-                    </tr>
+            <data-table
+              [columns]="columns"
+              [rows]="rows()"
+              [caption]="anomaliesCaption()"
+              [searchable]="false"
+              [serverSide]="true"
+              [total]="r.anomalies.total"
+              [serverPage]="page()"
+              [serverPageSize]="pageSize()"
+              [loading]="loading()"
+              (pageChange)="onPageChange($event)"
+            >
+              <ng-template dataTableCell="gravite" let-row>
+                <soft-badge [variant]="tone(view(row).gravite)">{{ severityText(view(row).gravite) }}</soft-badge>
+              </ng-template>
+              <ng-template dataTableCell="correction" let-row>
+                @if (link(view(row)); as l) {
+                  @if (canOpen(l)) {
+                    <a class="soft-btn soft-btn--ghost soft-btn--sm closing-fix" [routerLink]="l.path" [queryParams]="l.queryParams" [attr.aria-label]="l.ariaLabel">
+                      Corriger
+                    </a>
+                  } @else {
+                    <span class="closing-muted">Accès « {{ l.label }} » requis</span>
                   }
-                </tbody>
-              </table>
-            </div>
-            <div class="soft-pagination-wrap">
-              <div class="soft-pagination-info" aria-live="polite">{{ rangeInfo() }}</div>
-              <label class="soft-pagination-size">
-                Lignes par page
-                <select [value]="pageSize()" (change)="onPageSize($event)">
-                  @for (size of pageSizes; track size) {
-                    <option [value]="size" [selected]="size === pageSize()">{{ size }}</option>
-                  }
-                </select>
-              </label>
-              <nav class="soft-pagination-nav" aria-label="Pagination des anomalies">
-                <button type="button" class="soft-page-btn" [disabled]="page() <= 1 || loading()" (click)="goTo(1)" aria-label="Première page">&laquo;</button>
-                <button type="button" class="soft-page-btn" [disabled]="page() <= 1 || loading()" (click)="goTo(page() - 1)" aria-label="Page précédente">&lsaquo;</button>
-                <span class="soft-pagination-info">Page {{ page() }} / {{ r.anomalies.totalPages }}</span>
-                <button type="button" class="soft-page-btn" [disabled]="page() >= r.anomalies.totalPages || loading()" (click)="goTo(page() + 1)" aria-label="Page suivante">&rsaquo;</button>
-                <button type="button" class="soft-page-btn" [disabled]="page() >= r.anomalies.totalPages || loading()" (click)="goTo(r.anomalies.totalPages)" aria-label="Dernière page">&raquo;</button>
-              </nav>
-            </div>
+                } @else if (noFix(view(row))) {
+                  <span class="closing-muted">{{ nothingToFixText }}</span>
+                }
+              </ng-template>
+            </data-table>
           }
         </soft-card>
       } @else {
@@ -298,7 +265,17 @@ export class ClosingPage implements OnInit, OnDestroy {
   /** Filtre partagé, positionné sur le mois précédent avant son premier rendu. */
   @ViewChild(PeriodFilter, { static: true }) private filter?: PeriodFilter;
 
-  readonly pageSizes = PAGE_SIZES;
+  /** Colonnes du tableau partagé : la gravité et la correction passent par des gabarits de cellule. */
+  readonly columns: Column[] = [
+    { key: 'gravite', label: 'Gravité', format: (v) => severityLabel(String(v)) },
+    { key: 'type', label: 'Type', format: (v) => typeLabel(String(v)) },
+    { key: 'matricule', label: 'Matricule' },
+    { key: 'salarie', label: 'Salarié' },
+    { key: 'departement', label: 'Département', format: (v) => (v ? String(v) : '—') },
+    { key: 'date', label: 'Date', format: (v) => formatDay(String(v)) },
+    { key: 'detail', label: 'Détail' },
+    { key: 'correction', label: 'Correction', format: () => '' },
+  ];
   readonly severities = SEVERITIES;
   readonly purposeNote = PURPOSE_NOTE;
   readonly disabledMessage = DISABLED_MESSAGE;
@@ -346,11 +323,13 @@ export class ClosingPage implements OnInit, OnDestroy {
     const n = countOf(this.report()?.parGravite, 'Information');
     return `Aucune anomalie à corriger. ${n} ${n > 1 ? 'informations masquées' : 'information masquée'} : ouvrez l’onglet « Avec informations » pour ${n > 1 ? 'les' : 'la'} voir.`;
   });
-  readonly rangeInfo = computed(() => {
+  /** Lignes de la page courante pour le tableau partagé (le nom affiché suit le masquage serveur). */
+  readonly rows = computed<Record<string, unknown>[]>(() =>
+    (this.report()?.anomalies.items ?? []).map((a) => ({ ...a, salarie: personLabel(a) })),
+  );
+  readonly anomaliesCaption = computed(() => {
     const p = this.report()?.anomalies;
-    if (!p || p.total === 0) return '';
-    const debut = (p.page - 1) * p.pageSize + 1;
-    return `${debut}–${Math.min(p.page * p.pageSize, p.total)} sur ${p.total} anomalie(s)`;
+    return p ? `Anomalies de la période, page ${p.page} sur ${p.totalPages}` : null;
   });
 
   ngOnInit(): void {
@@ -386,10 +365,15 @@ export class ClosingPage implements OnInit, OnDestroy {
     this.load();
   }
 
-  onPageSize(event: Event): void {
-    this.pageSize.set(Number((event.target as HTMLSelectElement).value) || DEFAULT_PAGE_SIZE);
-    this.page.set(1);
-    this.load();
+  /** Navigation du tableau partagé : un changement de taille revient à la page 1. */
+  onPageChange(e: PageChangeEvent): void {
+    if (e.pageSize !== this.pageSize()) {
+      this.pageSize.set(e.pageSize || DEFAULT_PAGE_SIZE);
+      this.page.set(1);
+      this.load();
+      return;
+    }
+    this.goTo(e.page);
   }
 
   goTo(page: number): void {
@@ -449,12 +433,9 @@ export class ClosingPage implements OnInit, OnDestroy {
     return severityLabel(severity);
   }
 
-  type(t: string): string {
-    return typeLabel(t);
-  }
-
-  person(a: ClosingAnomalyView): string {
-    return personLabel(a);
+  /** Les lignes du tableau partagé sont les anomalies elles-mêmes (plus le nom affiché). */
+  view(row: Record<string, unknown>): ClosingAnomalyView {
+    return row as unknown as ClosingAnomalyView;
   }
 
   day(value: string): string {

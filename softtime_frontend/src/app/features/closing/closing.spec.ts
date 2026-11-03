@@ -193,10 +193,10 @@ describe('page Clôture de paie : niveau Information', () => {
     expect(el.querySelectorAll<HTMLElement>('[role="tab"]')[1].getAttribute('aria-selected')).toBe('true');
   });
 
-  it('les légendes masquées (position absolue) ont un ancêtre positionné : la page ne déborde pas du cadre', () => {
+  it('les légendes masquées (position absolue, dont celle du tableau partagé) ont un ancêtre positionné : la page ne déborde pas du cadre', () => {
     const { el } = creer([avecInformations()]);
     const hote = el.querySelector('app-closing') ?? el;
-    const captions = Array.from(el.querySelectorAll<HTMLElement>('caption.closing-sr'));
+    const captions = Array.from(el.querySelectorAll<HTMLElement>('caption'));
 
     expect(captions.length).toBeGreaterThan(0);
     // Sans ancêtre positionné, une légende absolue étendrait le document au-delà du cadre de l’application.
@@ -260,5 +260,43 @@ describe('page Clôture de paie : niveau Information', () => {
     expect(message).toContain('Aucune anomalie à corriger');
     expect(message).toContain('2 informations masquées');
     expect(message).not.toContain('Aucune anomalie détectée');
+  });
+
+  it('tableau partagé : légende lisible par les lecteurs d’écran, sans recherche, pagination serveur à 50 par défaut', () => {
+    const { el, requetes } = creer([avecInformations({ anomalies: { items: [anomalie({})], total: 120, page: 1, pageSize: 50, totalPages: 3 } })]);
+    const legende = Array.from(el.querySelectorAll('caption')).map((c) => c.textContent?.trim());
+
+    expect(legende).toContain('Anomalies de la période, page 1 sur 3');
+    expect(el.querySelector('.soft-table-search')).toBeNull();
+    expect(requetes[0].pageSize).toBe(50);
+    expect(el.querySelector('.soft-pagination-info')?.textContent).toContain('sur 120 résultats');
+    const tailles = Array.from(el.querySelectorAll('.soft-pagination-size option')).map((o) => o.textContent?.trim());
+    expect(tailles).toEqual(['10', '25', '50', '100']);
+  });
+
+  it('tableau partagé : page suivante et changement de taille relancent l’analyse (taille : retour page 1)', () => {
+    const rapp = avecInformations({ anomalies: { items: [anomalie({})], total: 120, page: 1, pageSize: 50, totalPages: 3 } });
+    const { fixture, el, requetes } = creer([rapp, rapp, rapp]);
+
+    el.querySelector<HTMLElement>('button[aria-label="Page suivante"]')!.click();
+    fixture.detectChanges();
+    expect(requetes[1].page).toBe(2);
+
+    const select = el.querySelector<HTMLSelectElement>('.soft-pagination-size select')!;
+    select.value = '25';
+    select.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    expect(requetes[2].pageSize).toBe(25);
+    expect(requetes[2].page).toBe(1);
+  });
+
+  it('tableau partagé : badge de gravité et noms masqués (matricule seul) conservés', () => {
+    const { el } = creer([rapport({ nomsAffiches: false }, [anomalie({ matricule: '777', nom: null, prenom: null })])]);
+    const ligne = el.querySelector('tbody tr')!;
+
+    expect(ligne.querySelector('.soft-badge')?.textContent).toContain('Critique');
+    expect(ligne.textContent).toContain('Pointage manquant');
+    expect(ligne.querySelectorAll('td')[3].textContent?.trim()).toBe('777');
+    expect(el.textContent).toContain('Les noms ne sont pas affichés sur ce serveur');
   });
 });

@@ -4,7 +4,6 @@
  */
 import { ClosingComparison, ClosingCount, ClosingReport, ClosingStatus } from '../../shared/models';
 
-export const PAGE_SIZES = [25, 50, 100, 200] as const;
 export const DEFAULT_PAGE_SIZE = 50;
 export const NO_CONTROLLED_DAY = 'Aucun jour contrôlé sur cette période';
 export const NO_ANOMALY = 'Aucune anomalie détectée : les données de la période sont prêtes pour la clôture.';
