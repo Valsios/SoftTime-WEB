@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
@@ -17,29 +17,29 @@ namespace SoftTime.Application.Services;
 /// charge le contexte, applique le périmètre puis persiste <c>T_HS_VALIDER</c>, <c>T_HSSemaine</c>
 /// et <c>T_HSExoImp</c>.
 /// </summary>
-public class OvertimeService
+public class OvertimeService : IOvertimeService
 {
     private readonly IUnitOfWork _uow;
-    private readonly TenantConnectionService _tenant;
+    private readonly ITenantConnectionService _tenant;
     private readonly IExternalSourceService _externalSource;
-    private readonly PayrollWriterResolver _payrollWriters;
-    private readonly HistoryArchiveService _history;
-    private readonly SageLeaveCalendar _leaves;
+    private readonly IPayrollWriterResolver _payrollWriters;
+    private readonly IHistoryArchiveService _history;
+    private readonly ISageLeaveCalendar _leaves;
     private readonly ICurrentUser? _user;
     private readonly ILogger<OvertimeService> _logger;
 
-    public OvertimeService(IUnitOfWork uow, TenantConnectionService tenant, IExternalSourceService externalSource, PayrollWriterResolver payrollWriters, HistoryArchiveService history, SageLeaveCalendar leaves)
+    public OvertimeService(IUnitOfWork uow, ITenantConnectionService tenant, IExternalSourceService externalSource, IPayrollWriterResolver payrollWriters, IHistoryArchiveService history, ISageLeaveCalendar leaves)
         : this(uow, tenant, externalSource, payrollWriters, history, leaves, null)
     {
     }
 
     public OvertimeService(
         IUnitOfWork uow,
-        TenantConnectionService tenant,
+        ITenantConnectionService tenant,
         IExternalSourceService externalSource,
-        PayrollWriterResolver payrollWriters,
-        HistoryArchiveService history,
-        SageLeaveCalendar leaves,
+        IPayrollWriterResolver payrollWriters,
+        IHistoryArchiveService history,
+        ISageLeaveCalendar leaves,
         ICurrentUser? user,
         ILogger<OvertimeService>? logger = null)
     {

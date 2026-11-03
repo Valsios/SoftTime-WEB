@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
@@ -42,7 +42,7 @@ public sealed class EffectiveRightsCache
 /// Lit en base ce qu'il faut pour calculer les droits effectifs d'un compte (étape 3B) et les met en cache.
 /// Les erreurs de lecture remontent à l'appelant, qui doit REFUSER l'accès (échec fermé).
 /// </summary>
-public sealed class EffectiveRightsService
+public sealed class EffectiveRightsService : IEffectiveRightsService
 {
     private readonly IUnitOfWork _uow;
     private readonly EffectiveRightsCache _cache;

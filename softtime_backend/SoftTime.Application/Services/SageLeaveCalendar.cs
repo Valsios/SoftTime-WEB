@@ -1,4 +1,4 @@
-using SoftTime.Application.Abstractions;
+﻿using SoftTime.Application.Abstractions;
 using SoftTime.Domain.Models;
 using SoftTime.Domain.Services;
 
@@ -21,12 +21,12 @@ namespace SoftTime.Application.Services;
 /// Partagé par la validation semaine (<see cref="OvertimeService"/>) et le tableau de bord
 /// analytique (<see cref="DashboardService"/>) afin que les deux écrans comptent les mêmes journées.
 /// </summary>
-public sealed class SageLeaveCalendar
+public sealed class SageLeaveCalendar : ISageLeaveCalendar
 {
-    private readonly TenantConnectionService _tenant;
+    private readonly ITenantConnectionService _tenant;
     private readonly IExternalSourceService _externalSource;
 
-    public SageLeaveCalendar(TenantConnectionService tenant, IExternalSourceService externalSource)
+    public SageLeaveCalendar(ITenantConnectionService tenant, IExternalSourceService externalSource)
     {
         _tenant = tenant;
         _externalSource = externalSource;

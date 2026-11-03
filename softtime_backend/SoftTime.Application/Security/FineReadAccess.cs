@@ -1,4 +1,4 @@
-using SoftTime.Application.Abstractions;
+﻿using SoftTime.Application.Abstractions;
 using SoftTime.Application.Services;
 
 namespace SoftTime.Application.Security;
@@ -10,7 +10,7 @@ namespace SoftTime.Application.Security;
 public static class FineReadAccess
 {
     public static async Task EnsureAsync(
-        ICurrentUser user, EffectiveRightsService rights, int gate, string permission, CancellationToken cancellationToken = default)
+        ICurrentUser user, IEffectiveRightsService rights, int gate, string permission, CancellationToken cancellationToken = default)
     {
         if (AdminAccess.IsAdmin(user)) return;
         if (user.UserId is not decimal uid)

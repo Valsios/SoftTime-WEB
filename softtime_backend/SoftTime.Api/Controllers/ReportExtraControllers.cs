@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SoftTime.Api.Authorization;
 using SoftTime.Application.Abstractions;
@@ -14,14 +14,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("Reports")]
 public class ReportsController : ControllerBase
 {
-    private readonly ReportService _svc;
-    public ReportsController(ReportService svc) => _svc = svc;
-
-    /// <summary>Types exposés par l'endpoint paginé générique (liste blanche).</summary>
-    private static readonly HashSet<string> PagedReportTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "pointage", "absences", "retards", "hs-recap", "heures-semaine", "heures-dimanche"
-    };
+    private readonly IReportService _svc;
+    public ReportsController(IReportService svc) => _svc = svc;
 
     [HttpGet("pointage")]
     public async Task<IActionResult> Pointage([FromQuery] ReportFilter filter, CancellationToken ct)
@@ -49,7 +43,7 @@ public class ReportsController : ControllerBase
 
     /// <summary>
     /// Version paginée des 6 états (<c>pointage</c>, <c>absences</c>, <c>retards</c>,
-    /// <c>hs-recap</c>, <c>heures-semaine</c>, <c>heures-dimanche</c>).
+    /// <c>hs-recap</c>, <c>heures-semaine</c>, <c>heures-dimanche</c>) ; 400 pour un autre type.
     /// </summary>
     [HttpGet("{type}/paged")]
     public async Task<IActionResult> Paged(
@@ -58,12 +52,7 @@ public class ReportsController : ControllerBase
         [FromQuery] int? page,
         [FromQuery] int? pageSize,
         CancellationToken ct)
-    {
-        var normalized = type.Trim().ToLowerInvariant();
-        if (!PagedReportTypes.Contains(normalized))
-            return BadRequest($"Type de rapport inconnu : {type}.");
-        return Ok(await _svc.PagedAsync(normalized, filter, page, pageSize, ct));
-    }
+        => Ok(await _svc.PagedAsync(type, filter, page, pageSize, ct));
 
     [HttpGet("leave")]
     public async Task<IActionResult> Leave([FromQuery] string matricule, [FromQuery] DateTime date, CancellationToken ct)
@@ -77,8 +66,8 @@ public class ReportsController : ControllerBase
 [Tags("Canteen")]
 public class CanteenController : ControllerBase
 {
-    private readonly ExtraService _svc;
-    public CanteenController(ExtraService svc) => _svc = svc;
+    private readonly IExtraService _svc;
+    public CanteenController(IExtraService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] PeriodRequest request, CancellationToken ct)
@@ -123,8 +112,8 @@ public class CanteenController : ControllerBase
 [Tags("TravelExpenses")]
 public class TravelController : ControllerBase
 {
-    private readonly ExtraService _svc;
-    public TravelController(ExtraService svc) => _svc = svc;
+    private readonly IExtraService _svc;
+    public TravelController(IExtraService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] PeriodRequest request, CancellationToken ct)
@@ -153,10 +142,10 @@ public class TravelController : ControllerBase
 [Tags("Audit")]
 public class AuditController : ControllerBase
 {
-    private readonly AuditService _svc;
+    private readonly IAuditService _svc;
     private readonly ICurrentUser _user;
 
-    public AuditController(AuditService svc, ICurrentUser user)
+    public AuditController(IAuditService svc, ICurrentUser user)
     {
         _svc = svc;
         _user = user;

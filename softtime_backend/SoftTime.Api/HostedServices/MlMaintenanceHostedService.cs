@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Options;
+﻿using Microsoft.Extensions.Options;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
@@ -14,13 +14,13 @@ namespace SoftTime.Api.HostedServices;
 public sealed class MlMaintenanceHostedService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly MlJobCoordinator _jobs;
+    private readonly IMlJobCoordinator _jobs;
     private readonly MlOptions _options;
     private readonly ILogger<MlMaintenanceHostedService> _logger;
 
     public MlMaintenanceHostedService(
         IServiceScopeFactory scopeFactory,
-        MlJobCoordinator jobs,
+        IMlJobCoordinator jobs,
         IOptions<MlOptions> options,
         ILogger<MlMaintenanceHostedService> logger)
     {
@@ -100,7 +100,7 @@ public sealed class MlMaintenanceHostedService : BackgroundService
                     // Avant toute résolution d'ICurrentUser : le scope n'a pas d'utilisateur HTTP.
                     scope.ServiceProvider.GetRequiredService<SystemExecution>().Enable();
                     scope.ServiceProvider.GetRequiredService<ICompanyContext>().Set(tenant, null);
-                    var pipeline = scope.ServiceProvider.GetRequiredService<MlPipelineService>();
+                    var pipeline = scope.ServiceProvider.GetRequiredService<IMlPipelineService>();
                     var result = await pipeline.RunAsync(job.FullRefresh, job.Train, ct);
                     _logger.LogInformation(
                         "ML {Tenant} : {Etat} — {Message}", tenant, result.Etat, result.Message);

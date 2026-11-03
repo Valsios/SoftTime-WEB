@@ -1,4 +1,4 @@
-using SoftTime.Application.DTOs;
+﻿using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
@@ -25,7 +25,7 @@ namespace SoftTime.Application.Services;
 ///   <item>seuls des matricules (clé canonique) sont manipulés : aucun nom ni prénom.</item>
 /// </list>
 /// </summary>
-public class ClosingService
+public class ClosingService : IClosingService
 {
     /// <summary>Longueur maximale par défaut de la période analysée, bornes comprises (réglage Closing:MaxPeriodDays).</summary>
     public const int MaxPeriodDays = ClosingOptions.PlafondPeriodDays;
@@ -38,15 +38,15 @@ public class ClosingService
     private static readonly IReadOnlyList<ClosingSeverity> Gravites = Enum.GetValues<ClosingSeverity>();
 
     private readonly IUnitOfWork _uow;
-    private readonly TenantConnectionService _tenant;
-    private readonly SageLeaveCalendar _leaves;
+    private readonly ITenantConnectionService _tenant;
+    private readonly ISageLeaveCalendar _leaves;
     private readonly TimeProvider _horloge;
     private readonly ClosingOptions _reglages;
 
     public ClosingService(
         IUnitOfWork uow,
-        TenantConnectionService tenant,
-        SageLeaveCalendar leaves,
+        ITenantConnectionService tenant,
+        ISageLeaveCalendar leaves,
         TimeProvider? horloge = null,
         ClosingOptions? reglages = null)
     {

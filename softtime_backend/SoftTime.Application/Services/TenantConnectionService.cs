@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Security;
 using SoftTime.Domain.Entities.SoftTime;
@@ -7,14 +7,14 @@ using SoftTime.Domain.Services;
 
 namespace SoftTime.Application.Services;
 
-public class TenantConnectionService
+public class TenantConnectionService : ITenantConnectionService
 {
     public const string AccessDenied = "Vous n'avez pas accès à cette base.";
 
     private readonly IUnitOfWork _uow;
     private readonly ICompanyContext _company;
     private readonly ICurrentUser _user;
-    private readonly EffectiveRightsService _rights;
+    private readonly IEffectiveRightsService _rights;
     private readonly ILogger<TenantConnectionService> _logger;
 
     // Droits effectifs lus par EnsureAuthorizedAsync pour cette requête (null : administrateur, ou contrôle pas encore fait).
@@ -22,7 +22,7 @@ public class TenantConnectionService
 
     public TenantConnectionService(
         IUnitOfWork uow, ICompanyContext company, ICurrentUser user,
-        EffectiveRightsService rights, ILogger<TenantConnectionService> logger)
+        IEffectiveRightsService rights, ILogger<TenantConnectionService> logger)
     {
         _uow = uow;
         _company = company;

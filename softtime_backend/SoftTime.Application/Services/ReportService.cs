@@ -1,4 +1,4 @@
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using Microsoft.Extensions.Logging;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
@@ -9,19 +9,19 @@ using SoftTime.Domain.Services;
 
 namespace SoftTime.Application.Services;
 
-public class ReportService
+public class ReportService : IReportService
 {
     private readonly IUnitOfWork _uow;
-    private readonly TenantConnectionService _tenant;
+    private readonly ITenantConnectionService _tenant;
     private readonly IExternalSourceService _externalSource;
-    private readonly SageLeaveCalendar _leaves;
+    private readonly ISageLeaveCalendar _leaves;
     private readonly ILogger<ReportService> _logger;
 
     public ReportService(
         IUnitOfWork uow,
-        TenantConnectionService tenant,
+        ITenantConnectionService tenant,
         IExternalSourceService externalSource,
-        SageLeaveCalendar leaves,
+        ISageLeaveCalendar leaves,
         ILogger<ReportService> logger)
     {
         _uow = uow;
@@ -204,10 +204,20 @@ public class ReportService
             ct);
     }
 
-    /// <summary>Dispatcher du endpoint générique <c>GET /api/reports/{type}/paged</c>.</summary>
+    /// <summary>États proposés par <c>GET /api/reports/{type}/paged</c>.</summary>
+    public static readonly IReadOnlySet<string> PagedReportTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "pointage", "absences", "retards", "hs-recap", "heures-semaine", "heures-dimanche"
+    };
+
+    /// <summary>Dispatcher du endpoint générique <c>GET /api/reports/{type}/paged</c> (type insensible à la casse).</summary>
     public async Task<PagedResult<object>> PagedAsync(
         string type, ReportFilter filter, int? page, int? pageSize, CancellationToken ct = default)
     {
+        var requested = type;
+        type = (type ?? string.Empty).Trim().ToLowerInvariant();
+        if (!PagedReportTypes.Contains(type))
+            throw new DomainException($"Type de rapport inconnu : {requested}.");
         if (SearchText.Terms(filter.Search).Count > 0)
         {
             IReadOnlyList<object> rows = type switch
@@ -218,7 +228,7 @@ public class ReportService
                 "hs-recap" => (await HsRecapAsync(filter, ct)).Cast<object>().ToList(),
                 "heures-semaine" => (await HeuresParSemaineAsync(filter, ct)).ToList(),
                 "heures-dimanche" => (await HeuresDimancheAsync(filter, ct)).ToList(),
-                _ => throw new ArgumentException($"Type de rapport inconnu : {type}.")
+                _ => throw new DomainException($"Type de rapport inconnu : {type}.")
             };
             var filtered = rows
                 .Where(row => SearchText.MatchesObject(filter.Search, row))
@@ -234,7 +244,7 @@ public class ReportService
             "hs-recap" => await HsRecapPagedAsync(filter, page, pageSize, ct),
             "heures-semaine" => await HeuresSemainePagedAsync(filter, page, pageSize, ct),
             "heures-dimanche" => await HeuresDimanchePagedAsync(filter, page, pageSize, ct),
-            _ => throw new ArgumentException($"Type de rapport inconnu : {type}.")
+            _ => throw new DomainException($"Type de rapport inconnu : {type}.")
         };
     }
 

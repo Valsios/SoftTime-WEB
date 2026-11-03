@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using SoftTime.Application.Abstractions;
@@ -16,11 +16,11 @@ public sealed class OtherPayrollWriter : IPayrollWriter
         "bigint", "int", "smallint", "tinyint", "decimal", "numeric", "money", "smallmoney", "float", "real"
     };
     private readonly IUnitOfWork _uow;
-    private readonly TenantConnectionService _tenant;
+    private readonly ITenantConnectionService _tenant;
     private readonly IAuditTrail _auditTrail;
     private readonly ILogger<OtherPayrollWriter> _logger;
 
-    public OtherPayrollWriter(IUnitOfWork uow, TenantConnectionService tenant, IAuditTrail auditTrail, ILogger<OtherPayrollWriter> logger)
+    public OtherPayrollWriter(IUnitOfWork uow, ITenantConnectionService tenant, IAuditTrail auditTrail, ILogger<OtherPayrollWriter> logger)
     {
         _uow = uow;
         _tenant = tenant;

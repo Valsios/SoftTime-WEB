@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using Microsoft.Extensions.Options;
 using SoftTime.Application.Security;
 using SoftTime.Domain.Entities.SoftTime;
@@ -14,7 +14,7 @@ public sealed record RefreshTokenRotation(decimal UserId, string RefreshToken);
 /// (un jeton déjà remplacé qui revient révoque toutes les sessions du compte). Seule l'empreinte SHA-256 est stockée.
 /// Les écritures sont mises en attente : l'appelant valide avec <see cref="IUnitOfWork.SaveChangesAsync"/>.
 /// </summary>
-public class RefreshTokenService
+public class RefreshTokenService : IRefreshTokenService
 {
     public const string InvalidTokenMessage = "Session expirée. Veuillez vous reconnecter.";
     private const int TokenBytes = 64;

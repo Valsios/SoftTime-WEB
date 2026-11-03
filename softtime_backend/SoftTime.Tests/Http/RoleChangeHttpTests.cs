@@ -96,7 +96,7 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
     {
         using (var scope = _f.Services.CreateScope())
         {
-            var rights = await scope.ServiceProvider.GetRequiredService<EffectiveRightsService>().GetAsync(10081);   // met en cache
+            var rights = await scope.ServiceProvider.GetRequiredService<IEffectiveRightsService>().GetAsync(10081);   // met en cache
             Assert.True(rights.Has("PROC:SHIFTS"));
         }
         var otherRows = Rows(10083);
@@ -110,7 +110,7 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
         Assert.Equal(otherRows, Rows(10083));                                       // un autre compte n'est pas touché
         Assert.Contains(_f.Store.GetRepo<T_AUDIT_DROIT>().Items, a => a.ID_CIBLE == 10081 && a.ACTION == "RESET_USER_PERMS");
         using var after = _f.Services.CreateScope();
-        var fresh = await after.ServiceProvider.GetRequiredService<EffectiveRightsService>().GetAsync(10081);
+        var fresh = await after.ServiceProvider.GetRequiredService<IEffectiveRightsService>().GetAsync(10081);
         Assert.False(fresh.Has("PROC:SHIFTS"));                                     // le cache a été invalidé
     }
 

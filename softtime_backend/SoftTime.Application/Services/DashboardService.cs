@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
@@ -16,13 +16,16 @@ namespace SoftTime.Application.Services;
 /// des tolérances — exactement les mêmes règles que <see cref="OvertimeService"/> pour la semaine,
 /// afin que le tableau de bord ne raconte pas autre chose que la paie.
 /// </summary>
-public class DashboardService
+public class DashboardService : IDashboardService
 {
-    private readonly IUnitOfWork _uow;
-    private readonly TenantConnectionService _tenant;
-    private readonly SageLeaveCalendar _leaves;
+    /// <summary>Granularité retenue quand l'écran n'en précise pas.</summary>
+    public const string DefaultPeriode = "mensuelle";
 
-    public DashboardService(IUnitOfWork uow, TenantConnectionService tenant, SageLeaveCalendar leaves)
+    private readonly IUnitOfWork _uow;
+    private readonly ITenantConnectionService _tenant;
+    private readonly ISageLeaveCalendar _leaves;
+
+    public DashboardService(IUnitOfWork uow, ITenantConnectionService tenant, ISageLeaveCalendar leaves)
     {
         _uow = uow;
         _tenant = tenant;
@@ -30,9 +33,10 @@ public class DashboardService
     }
 
     public async Task<DashboardStatsDto> GetStatsAsync(
-        PeriodRequest filter, string? categorie, string periode, CancellationToken ct = default)
+        PeriodRequest filter, string? categorie, string? periode, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
+        periode = string.IsNullOrWhiteSpace(periode) ? DefaultPeriode : periode;
         var sageDb = _tenant.SageDb;
         var from = filter.From.Date;
         var to = filter.To.Date;

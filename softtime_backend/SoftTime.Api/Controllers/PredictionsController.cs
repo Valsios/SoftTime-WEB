@@ -1,17 +1,13 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SoftTime.Api.Authorization;
-using SoftTime.Application.Abstractions;
-using SoftTime.Application.Security;
-using SoftTime.Application.Services;
-using SoftTime.Domain;
 
 namespace SoftTime.Api.Controllers;
 
 /// <summary>
 /// Moteur prédictif : état, prévisions d'absence et d'heures supplémentaires, déclenchement
-/// des traitements. La lecture est ouverte à tout utilisateur authentifié disposant de
-/// <c>REPORTS:PREDICTIONS</c> ; les traitements sont réservés au droit Paramètres (ou admin).
+/// des traitements. La lecture exige <c>REPORTS:PREDICTIONS</c> (ou l'administrateur) ; les traitements
+/// sont réservés à l'administrateur (409 si un traitement est déjà en cours).
 /// </summary>
 [ApiController]
 [Authorize]
@@ -19,39 +15,15 @@ namespace SoftTime.Api.Controllers;
 [Tags("Prévisions")]
 public class PredictionsController : ControllerBase
 {
-    private readonly MlPredictionService _predictions;
-    private readonly MlJobCoordinator _jobs;
-    private readonly ICurrentUser _user;
-    private readonly ICompanyContext _company;
-    private readonly EffectiveRightsService _rights;
+    private readonly IPredictionsService _predictions;
 
-    public PredictionsController(
-        MlPredictionService predictions,
-        MlJobCoordinator jobs,
-        ICurrentUser user,
-        ICompanyContext company,
-        EffectiveRightsService rights)
-    {
-        _predictions = predictions;
-        _jobs = jobs;
-        _user = user;
-        _company = company;
-        _rights = rights;
-    }
+    public PredictionsController(IPredictionsService predictions) => _predictions = predictions;
 
     [HttpGet("status")]
-    public async Task<IActionResult> Status(CancellationToken ct)
-    {
-        await EnsureCanReadAsync(ct);
-        return Ok(await _predictions.GetStatusAsync(ct));
-    }
+    public async Task<IActionResult> Status(CancellationToken ct) => Ok(await _predictions.GetStatusAsync(ct));
 
     [HttpGet("job")]
-    public async Task<IActionResult> Job(CancellationToken ct)
-    {
-        await EnsureCanReadAsync(ct);
-        return Ok(_jobs.State);
-    }
+    public async Task<IActionResult> Job(CancellationToken ct) => Ok(await _predictions.GetJobAsync(ct));
 
     [HttpGet("absence")]
     public async Task<IActionResult> Absence(
@@ -60,51 +32,24 @@ public class PredictionsController : ControllerBase
         [FromQuery] string? departement,
         [FromQuery] int? categorie,
         CancellationToken ct)
-    {
-        await EnsureCanReadAsync(ct);
-
-        var debut = (from ?? DateTime.Today).Date;
-        var fin = (to ?? debut.AddDays(14)).Date;
-        if (fin < debut)
-            fin = debut;
-        return Ok(await _predictions.GetAbsenceForecastsAsync(debut, fin, departement, categorie, ct));
-    }
+        => Ok(await _predictions.GetAbsenceAsync(from, to, departement, categorie, ct));
 
     [HttpGet("overtime")]
     public async Task<IActionResult> Overtime([FromQuery] DateTime? week, CancellationToken ct)
-    {
-        await EnsureCanReadAsync(ct);
-        return Ok(await _predictions.GetHsForecastsAsync((week ?? DateTime.Today).Date, ct));
-    }
+        => Ok(await _predictions.GetOvertimeAsync(week, ct));
 
     /// <summary>Rafraîchit la fenêtre glissante (12 semaines par défaut) et régénère les prévisions.</summary>
     [RequireAdmin]
     [HttpPost("refresh")]
-    public IActionResult Refresh() => Enqueue(new MlJobRequest(_company.SageDatabase, FullRefresh: false, Train: false),
-        "Rafraîchissement des données et des prévisions programmé.");
+    public IActionResult Refresh() => Accepted(new { message = _predictions.Schedule(PredictionJob.Refresh) });
 
     /// <summary>Reconstruit tout l'historique (premier déploiement), réentraîne et régénère.</summary>
     [RequireAdmin]
     [HttpPost("backfill")]
-    public IActionResult Backfill() => Enqueue(new MlJobRequest(_company.SageDatabase, FullRefresh: true, Train: true),
-        "Reconstruction complète de la base analytique programmée.");
+    public IActionResult Backfill() => Accepted(new { message = _predictions.Schedule(PredictionJob.Backfill) });
 
     /// <summary>Réentraîne les modèles actifs.</summary>
     [RequireAdmin]
     [HttpPost("train")]
-    public IActionResult Train() => Enqueue(new MlJobRequest(_company.SageDatabase, FullRefresh: false, Train: true),
-        "Réentraînement programmé.");
-
-    /// <summary>Lecture des prévisions : administrateur, ou porte 6 ET permission REPORTS:PREDICTIONS effective.</summary>
-    private Task EnsureCanReadAsync(CancellationToken ct)
-        => FineReadAccess.EnsureAsync(_user, _rights, Rights.Reports, "REPORTS:PREDICTIONS", ct);
-
-    private IActionResult Enqueue(MlJobRequest job, string message)
-    {
-        AdminAccess.Require(_user);
-
-        return _jobs.TryEnqueue(job)
-            ? Accepted(new { message })
-            : Conflict(new { message = "Un traitement ML est déjà en cours." });
-    }
+    public IActionResult Train() => Accepted(new { message = _predictions.Schedule(PredictionJob.Train) });
 }

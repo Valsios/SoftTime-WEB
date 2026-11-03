@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using SoftTime.Application.Abstractions;
 using SoftTime.Domain.Services;
 
@@ -11,7 +11,7 @@ namespace SoftTime.Application.Services;
 internal static class SageCivilites
 {
     public static async Task<Dictionary<string, byte?>> ChargerAsync(
-        TenantConnectionService tenant, IExternalSourceService externalSource, ILogger logger, CancellationToken ct)
+        ITenantConnectionService tenant, IExternalSourceService externalSource, ILogger logger, CancellationToken ct)
     {
         var civilites = new Dictionary<string, byte?>(StringComparer.Ordinal);
         try

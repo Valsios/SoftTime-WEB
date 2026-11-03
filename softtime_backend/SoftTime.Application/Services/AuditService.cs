@@ -1,11 +1,11 @@
-using SoftTime.Application.DTOs;
+﻿using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
 
 namespace SoftTime.Application.Services;
 
-public class AuditService
+public class AuditService : IAuditService
 {
     private readonly IUnitOfWork _uow;
 

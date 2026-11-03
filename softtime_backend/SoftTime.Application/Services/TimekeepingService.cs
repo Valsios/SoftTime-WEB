@@ -1,4 +1,4 @@
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
@@ -7,14 +7,14 @@ using SoftTime.Domain.Services;
 
 namespace SoftTime.Application.Services;
 
-public class TimekeepingService
+public class TimekeepingService : ITimekeepingService
 {
     private readonly IUnitOfWork _uow;
-    private readonly TenantConnectionService _tenant;
+    private readonly ITenantConnectionService _tenant;
     private readonly IExternalSourceService _externalSource;
-    private readonly HistoryArchiveService _history;
+    private readonly IHistoryArchiveService _history;
 
-    public TimekeepingService(IUnitOfWork uow, TenantConnectionService tenant, IExternalSourceService externalSource, HistoryArchiveService history)
+    public TimekeepingService(IUnitOfWork uow, ITenantConnectionService tenant, IExternalSourceService externalSource, IHistoryArchiveService history)
     {
         _uow = uow;
         _tenant = tenant;

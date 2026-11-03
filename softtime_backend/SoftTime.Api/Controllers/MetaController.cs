@@ -14,7 +14,13 @@ public class MetaController : ControllerBase
     /// En-têtes: Authorization Bearer, X-Sage-Database, X-Pointeuse-Database.
     /// </summary>
     [HttpGet("endpoints")]
-    public IActionResult Endpoints() => Ok(new
+    public IActionResult Endpoints() => Ok(ApiCatalog.Describe());
+}
+
+public static class ApiCatalog
+{
+    /// <summary>En-têtes attendus, numéros des droits et liste des endpoints.</summary>
+    public static object Describe() => new
     {
         headers = new
         {
@@ -31,12 +37,9 @@ public class MetaController : ControllerBase
             traceability = 5,
             reports = 6
         },
-        endpoints = ApiCatalog.All
-    });
-}
+        endpoints = All
+    };
 
-public static class ApiCatalog
-{
     public static readonly object[] All =
     {
         E("Auth", "POST", "/api/auth/login", "Login, retourne JWT + jeton de rafraîchissement"),

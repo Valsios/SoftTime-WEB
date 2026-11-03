@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Security;
 using SoftTime.Application.Services;
@@ -10,7 +10,7 @@ public class TenantMiddleware
     private readonly RequestDelegate _next;
     public TenantMiddleware(RequestDelegate next) => _next = next;
 
-    public async Task InvokeAsync(HttpContext context, ICompanyContext company, ICurrentUser user, TenantConnectionService tenant)
+    public async Task InvokeAsync(HttpContext context, ICompanyContext company, ICurrentUser user, ITenantConnectionService tenant)
     {
         var sage = context.Request.Headers["X-Sage-Database"].FirstOrDefault();
         var pte = context.Request.Headers["X-Pointeuse-Database"].FirstOrDefault();

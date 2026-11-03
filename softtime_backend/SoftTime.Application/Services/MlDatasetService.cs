@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using SoftTime.Application.Abstractions;
 using SoftTime.Domain.Entities.Ml;
 using SoftTime.Domain.Entities.SoftTime;
@@ -19,11 +19,11 @@ public sealed record MlDatasetBuildResult(int DailyRows, int WeeklyRows, DateTim
 /// réimplémentation. Les features sont calculées avec les données connues avant la date cible
 /// (as-of J-1) ; le planning du jour et les fériés sont autorisés car connus à l'avance.
 /// </summary>
-public sealed class MlDatasetService
+public sealed class MlDatasetService : IMlDatasetService
 {
     private readonly IUnitOfWork _uow;
-    private readonly TenantConnectionService _tenant;
-    private readonly SageLeaveCalendar _leaves;
+    private readonly ITenantConnectionService _tenant;
+    private readonly ISageLeaveCalendar _leaves;
     private readonly IExternalSourceService _externalSource;
     private readonly IMlStore _store;
     private readonly MlOptions _options;
@@ -31,8 +31,8 @@ public sealed class MlDatasetService
 
     public MlDatasetService(
         IUnitOfWork uow,
-        TenantConnectionService tenant,
-        SageLeaveCalendar leaves,
+        ITenantConnectionService tenant,
+        ISageLeaveCalendar leaves,
         IExternalSourceService externalSource,
         IMlStore store,
         MlOptions options,

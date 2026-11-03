@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SoftTime.Api.Authorization;
 using SoftTime.Application.DTOs;
@@ -11,9 +11,9 @@ namespace SoftTime.Api.Controllers;
 [Tags("Discovery")]
 public class DiscoveryController : ControllerBase
 {
-    private readonly CatalogService _svc;
-    private readonly DatabaseConfigurationAuthorizer _configAuth;
-    public DiscoveryController(CatalogService svc, DatabaseConfigurationAuthorizer configAuth)
+    private readonly ICatalogService _svc;
+    private readonly IDatabaseConfigurationAuthorizer _configAuth;
+    public DiscoveryController(ICatalogService svc, IDatabaseConfigurationAuthorizer configAuth)
     {
         _svc = svc;
         _configAuth = configAuth;

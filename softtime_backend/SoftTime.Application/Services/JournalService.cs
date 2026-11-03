@@ -1,4 +1,4 @@
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Security;
@@ -14,7 +14,7 @@ namespace SoftTime.Application.Services;
 /// masquées à la lecture par <see cref="AuditMaskingPolicy"/>, même si une ancienne ligne a été stockée en clair.
 /// Ce service n'écrit jamais : aucune modification ni suppression du journal n'est exposée.
 /// </summary>
-public class JournalService
+public class JournalService : IJournalService
 {
     public const int DefaultPageSize = 50;
     public const int MaxPageSize = 200;
@@ -25,9 +25,9 @@ public class JournalService
 
     private readonly IUnitOfWork _uow;
     private readonly ICurrentUser _user;
-    private readonly EffectiveRightsService _rights;
+    private readonly IEffectiveRightsService _rights;
 
-    public JournalService(IUnitOfWork uow, ICurrentUser user, EffectiveRightsService rights)
+    public JournalService(IUnitOfWork uow, ICurrentUser user, IEffectiveRightsService rights)
     {
         _uow = uow;
         _user = user;

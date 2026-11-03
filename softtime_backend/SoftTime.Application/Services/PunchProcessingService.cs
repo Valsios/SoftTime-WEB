@@ -1,4 +1,4 @@
-using SoftTime.Application.DTOs;
+﻿using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
@@ -31,15 +31,15 @@ namespace SoftTime.Application.Services;
 ///   <item>les jours non travaillés sans pointage ne produisent ni heure ni anomalie.</item>
 /// </list>
 /// </summary>
-public class PunchProcessingService
+public class PunchProcessingService : IPunchProcessingService
 {
     private static readonly IReadOnlyDictionary<DateTime, PunchPlanningWindow> SansPlanning =
         new Dictionary<DateTime, PunchPlanningWindow>();
 
     private readonly IUnitOfWork _uow;
-    private readonly TenantConnectionService _tenant;
+    private readonly ITenantConnectionService _tenant;
 
-    public PunchProcessingService(IUnitOfWork uow, TenantConnectionService tenant)
+    public PunchProcessingService(IUnitOfWork uow, ITenantConnectionService tenant)
     {
         _uow = uow;
         _tenant = tenant;

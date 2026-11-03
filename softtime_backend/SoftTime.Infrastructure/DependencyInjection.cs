@@ -7,6 +7,7 @@ using SoftTime.Application.Abstractions;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
+using SoftTime.Infrastructure.Excel;
 using SoftTime.Infrastructure.Integrations;
 using SoftTime.Infrastructure.Security;
 using SoftTime.Infrastructure.MachineLearning;
@@ -61,6 +62,9 @@ public static class DependencyInjection
         services.AddScoped<IPunchAggregate, PunchAggregate>();
         services.AddScoped<IPlanningStatisticsReader, PlanningStatisticsReader>();
         services.AddScoped<IEmailService, EmailService>();
+        services.AddSingleton<IImportFileReader, ImportFileReader>();
+        services.AddSingleton<IExcelExportService, ExcelExportService>();
+        services.AddSingleton<IImportTemplateService, ImportTemplateService>();
         // BCrypt remplace le hacheur Identity enregistré par AddApplication (les anciens hachages migrent à la connexion).
         services.Replace(ServiceDescriptor.Scoped<IPasswordHasher<T_RESPONSABLE>, BcryptPasswordHasher>());
 

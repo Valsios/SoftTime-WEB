@@ -1,10 +1,9 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SoftTime.Api.Authorization;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Services;
-using SoftTime.Infrastructure.Excel;
 
 namespace SoftTime.Api.Controllers;
 
@@ -14,47 +13,25 @@ namespace SoftTime.Api.Controllers;
 [Tags("SageDatabases")]
 public class SageDatabasesController : ControllerBase
 {
-    private readonly CatalogService _svc;
-    private readonly AuthService _auth;
-    private readonly ICurrentUser _user;
-    private readonly DatabaseConfigurationAuthorizer _configAuth;
+    private readonly ICatalogService _svc;
+    private readonly IDatabaseListingService _listing;
+    private readonly IDatabaseConfigurationAuthorizer _configAuth;
 
-    public SageDatabasesController(CatalogService svc, AuthService auth, ICurrentUser user, DatabaseConfigurationAuthorizer configAuth)
+    public SageDatabasesController(ICatalogService svc, IDatabaseListingService listing, IDatabaseConfigurationAuthorizer configAuth)
     {
         _svc = svc;
-        _auth = auth;
-        _user = user;
+        _listing = listing;
         _configAuth = configAuth;
     }
 
+    /// <summary>Bases SAGE visibles par le compte connecté (droits détaillés de lecture).</summary>
     [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct)
-    {
-        var list = await _svc.ListSageAsync(ct);
-        if (_user.UserId is decimal uid)
-        {
-            var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
-            if (p.IsCustomized)
-            {
-                list = list.Where(s => !string.IsNullOrEmpty(s.NomBd) && p.GrantedPermissions.Contains($"SAGE:{s.NomBd}:READ")).ToList();
-            }
-        }
-        return Ok(list);
-    }
+    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _listing.ListSageAsync(ct));
 
     [HttpGet("paged")]
     public async Task<IActionResult> GetPaged(
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
-    {
-        IReadOnlyCollection<string>? allowed = null;
-        if (_user.UserId is decimal uid)
-        {
-            var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
-            if (p.IsCustomized)
-                allowed = DatabasePermissionNames.Read(p.GrantedPermissions, "SAGE");
-        }
-        return Ok(await _svc.ListSagePagedAsync(allowed, page, pageSize, search, ct));
-    }
+        => Ok(await _listing.ListSagePagedAsync(page, pageSize, search, ct));
 
     [HttpPost]
     [RequireDroit(Droit.Databases)]
@@ -106,8 +83,8 @@ public class SageDatabasesController : ControllerBase
 [Tags("PayrollWriteConfiguration")]
 public class PayrollWriteConfigurationController : ControllerBase
 {
-    private readonly CatalogService _svc;
-    public PayrollWriteConfigurationController(CatalogService svc) => _svc = svc;
+    private readonly ICatalogService _svc;
+    public PayrollWriteConfigurationController(ICatalogService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListPayrollWriteConfigurationsAsync(ct));
@@ -137,47 +114,25 @@ public class PayrollWriteConfigurationController : ControllerBase
 [Tags("PointeuseDatabases")]
 public class PointeuseDatabasesController : ControllerBase
 {
-    private readonly CatalogService _svc;
-    private readonly AuthService _auth;
-    private readonly ICurrentUser _user;
-    private readonly DatabaseConfigurationAuthorizer _configAuth;
+    private readonly ICatalogService _svc;
+    private readonly IDatabaseListingService _listing;
+    private readonly IDatabaseConfigurationAuthorizer _configAuth;
 
-    public PointeuseDatabasesController(CatalogService svc, AuthService auth, ICurrentUser user, DatabaseConfigurationAuthorizer configAuth)
+    public PointeuseDatabasesController(ICatalogService svc, IDatabaseListingService listing, IDatabaseConfigurationAuthorizer configAuth)
     {
         _svc = svc;
-        _auth = auth;
-        _user = user;
+        _listing = listing;
         _configAuth = configAuth;
     }
 
+    /// <summary>Bases pointeuse visibles par le compte connecté (droits détaillés de lecture).</summary>
     [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct)
-    {
-        var list = await _svc.ListPointeuseAsync(ct);
-        if (_user.UserId is decimal uid)
-        {
-            var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
-            if (p.IsCustomized)
-            {
-                list = list.Where(s => !string.IsNullOrEmpty(s.NomBd) && p.GrantedPermissions.Contains($"POINTEUSE:{s.NomBd}:READ")).ToList();
-            }
-        }
-        return Ok(list);
-    }
+    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _listing.ListPointeuseAsync(ct));
 
     [HttpGet("paged")]
     public async Task<IActionResult> GetPaged(
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
-    {
-        IReadOnlyCollection<string>? allowed = null;
-        if (_user.UserId is decimal uid)
-        {
-            var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
-            if (p.IsCustomized)
-                allowed = DatabasePermissionNames.Read(p.GrantedPermissions, "POINTEUSE");
-        }
-        return Ok(await _svc.ListPointeusePagedAsync(allowed, page, pageSize, search, ct));
-    }
+        => Ok(await _listing.ListPointeusePagedAsync(page, pageSize, search, ct));
 
     [HttpPost]
     [RequireDroit(Droit.Databases)]
@@ -213,8 +168,8 @@ public class PointeuseDatabasesController : ControllerBase
 [Tags("ClockParams")]
 public class ClockParamsController : ControllerBase
 {
-    private readonly CatalogService _svc;
-    public ClockParamsController(CatalogService svc) => _svc = svc;
+    private readonly ICatalogService _svc;
+    public ClockParamsController(ICatalogService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> Get(CancellationToken ct) => Ok(await _svc.GetClockAsync(ct));
@@ -231,8 +186,8 @@ public class ClockParamsController : ControllerBase
 [Tags("CorrespondenceMode")]
 public class CorrespondenceModeController : ControllerBase
 {
-    private readonly CatalogService _svc;
-    public CorrespondenceModeController(CatalogService svc) => _svc = svc;
+    private readonly ICatalogService _svc;
+    public CorrespondenceModeController(ICatalogService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> Get(CancellationToken ct) => Ok(await _svc.GetCorrespondenceAsync(ct));
@@ -249,8 +204,8 @@ public class CorrespondenceModeController : ControllerBase
 [Tags("DepartementService")]
 public class DepartementServiceController : ControllerBase
 {
-    private readonly CatalogService _svc;
-    public DepartementServiceController(CatalogService svc) => _svc = svc;
+    private readonly ICatalogService _svc;
+    public DepartementServiceController(ICatalogService svc) => _svc = svc;
 
     [HttpGet("lookup/{matricule}")]
     public async Task<IActionResult> Lookup(string matricule, CancellationToken ct)
@@ -267,8 +222,14 @@ public class DepartementServiceController : ControllerBase
 [Tags("CardPaie")]
 public class CardPaieController : ControllerBase
 {
-    private readonly CatalogService _svc;
-    public CardPaieController(CatalogService svc) => _svc = svc;
+    private readonly ICatalogService _svc;
+    private readonly IImportFileReader _files;
+
+    public CardPaieController(ICatalogService svc, IImportFileReader files)
+    {
+        _svc = svc;
+        _files = files;
+    }
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListCardsAsync(ct));
@@ -321,16 +282,8 @@ public class CardPaieController : ControllerBase
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> ImportCsv(IFormFile file, CancellationToken ct)
     {
-        using var reader = new StreamReader(file.OpenReadStream());
-        var text = await reader.ReadToEndAsync(ct);
-        var lines = text.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(l =>
-            {
-                var sep = l.Contains(';') ? ';' : ',';
-                return l.Split(sep).Select(p => p.Trim().Trim('"')).ToArray();
-            })
-            .ToList();
-        return Ok(await _svc.ImportCorrespondencesCsvAsync(lines, ct));
+        await using var stream = file.OpenReadStream();
+        return Ok(await _svc.ImportCorrespondencesCsvAsync(await _files.ReadCsvLinesAsync(stream, ct), ct));
     }
 }
 
@@ -341,8 +294,8 @@ public class CardPaieController : ControllerBase
 [Tags("Categories")]
 public class CategoriesController : ControllerBase
 {
-    private readonly CatalogService _svc;
-    public CategoriesController(CatalogService svc) => _svc = svc;
+    private readonly ICatalogService _svc;
+    public CategoriesController(ICatalogService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListCategoriesAsync(ct));
@@ -375,8 +328,14 @@ public class CategoriesController : ControllerBase
 [Tags("Affectations")]
 public class AffectationsController : ControllerBase
 {
-    private readonly CatalogService _svc;
-    public AffectationsController(CatalogService svc) => _svc = svc;
+    private readonly ICatalogService _svc;
+    private readonly IImportFileReader _files;
+
+    public AffectationsController(ICatalogService svc, IImportFileReader files)
+    {
+        _svc = svc;
+        _files = files;
+    }
 
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] int? categoryId, CancellationToken ct)
@@ -425,7 +384,7 @@ public class AffectationsController : ControllerBase
     public async Task<IActionResult> ImportExcel(IFormFile file, CancellationToken ct)
     {
         await using var s = file.OpenReadStream();
-        return Ok(await _svc.ImportAffectationsExcelAsync(ExcelHelper.ReadFirstSheet(s), ct));
+        return Ok(await _svc.ImportAffectationsExcelAsync(_files.ReadExcelRows(s), ct));
     }
 }
 
@@ -436,8 +395,8 @@ public class AffectationsController : ControllerBase
 [Tags("Tolerances")]
 public class TolerancesController : ControllerBase
 {
-    private readonly CatalogService _svc;
-    public TolerancesController(CatalogService svc) => _svc = svc;
+    private readonly ICatalogService _svc;
+    public TolerancesController(ICatalogService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] int? categoryId, CancellationToken ct)
@@ -472,8 +431,8 @@ public class TolerancesController : ControllerBase
 [Tags("Holidays")]
 public class HolidaysController : ControllerBase
 {
-    private readonly CatalogService _svc;
-    public HolidaysController(CatalogService svc) => _svc = svc;
+    private readonly ICatalogService _svc;
+    public HolidaysController(ICatalogService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListHolidaysAsync(ct));
@@ -513,8 +472,8 @@ public class HolidaysController : ControllerBase
 [Tags("Majorations")]
 public class MajorationsController : ControllerBase
 {
-    private readonly CatalogService _svc;
-    public MajorationsController(CatalogService svc) => _svc = svc;
+    private readonly ICatalogService _svc;
+    public MajorationsController(ICatalogService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListMajorationsAsync(ct));
@@ -536,8 +495,8 @@ public class MajorationsController : ControllerBase
 [Tags("AbsenceCodes")]
 public class AbsenceCodesController : ControllerBase
 {
-    private readonly CatalogService _svc;
-    public AbsenceCodesController(CatalogService svc) => _svc = svc;
+    private readonly ICatalogService _svc;
+    public AbsenceCodesController(ICatalogService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListAbsenceCodesAsync(ct));
@@ -570,8 +529,8 @@ public class AbsenceCodesController : ControllerBase
 [Tags("CodeConstantes")]
 public class CodeConstantesController : ControllerBase
 {
-    private readonly CatalogService _svc;
-    public CodeConstantesController(CatalogService svc) => _svc = svc;
+    private readonly ICatalogService _svc;
+    public CodeConstantesController(ICatalogService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListCodeConstantesAsync(ct));
@@ -594,24 +553,4 @@ public class CodeConstantesController : ControllerBase
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] CodeConstanteDto dto, CancellationToken ct)
         => Ok(await _svc.SaveCodeConstanteAsync(dto with { Id = id }, ct));
-}
-
-/// <summary>
-/// Extrait les noms de bases autorisées à partir des permissions détaillées
-/// (<c>SAGE:{nom}:READ</c> / <c>POINTEUSE:{nom}:READ</c>).
-/// </summary>
-internal static class DatabasePermissionNames
-{
-    public static IReadOnlyCollection<string> Read(IEnumerable<string> permissions, string system)
-    {
-        var prefix = system + ":";
-        return permissions
-            .Where(p => p.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-                        && p.EndsWith(":READ", StringComparison.OrdinalIgnoreCase))
-            .Select(p => p.Split(':'))
-            .Where(parts => parts.Length == 3)
-            .Select(parts => parts[1])
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-    }
 }

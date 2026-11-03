@@ -91,7 +91,7 @@ public class ClosingServiceIntegrationTests
         Mesurer("QuasiDoublons", () => PayrollClosingRules.QuasiDoublons(d.Pointages, debut, fin));
         Mesurer("FeriesNonAppliques", () => PayrollClosingRules.FeriesNonAppliques(d.Cartes, d.Plannings, d.Corrections, d.Feries, debut, fin, d.DateDuJour));
         Mesurer("AbsenceReportRules.Calculer", () => AbsenceReportRules.Calculer(d.Plannings, d.Cartes, d.Corrections, d.Conges, d.Feries, debut, fin, d.DateDuJour));
-        Mesurer("chargement_conges_SAGE", () => scope.ServiceProvider.GetRequiredService<SageLeaveCalendar>().LoadAsync().GetAwaiter().GetResult());
+        Mesurer("chargement_conges_SAGE", () => scope.ServiceProvider.GetRequiredService<ISageLeaveCalendar>().LoadAsync().GetAwaiter().GetResult());
 
         var process = Process.GetCurrentProcess();
         process.Refresh();

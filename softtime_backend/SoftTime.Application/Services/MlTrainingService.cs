@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using SoftTime.Application.Abstractions;
 using SoftTime.Domain.Entities.Ml;
@@ -22,7 +22,7 @@ public sealed record MlTrainingOutcome(
 /// s'il bat la baseline statistique et les seuils minimaux ; sinon l'ancien modèle reste actif et
 /// l'état passe explicitement à « Baseline ».
 /// </summary>
-public sealed class MlTrainingService
+public sealed class MlTrainingService : IMlTrainingService
 {
     private readonly IMlStore _store;
     private readonly IMlTrainer _trainer;

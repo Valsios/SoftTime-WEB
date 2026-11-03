@@ -441,7 +441,8 @@ export class PredictionsPage implements OnInit {
         this.info.set(result.message);
         this.load();
       },
-      error: (err) => this.error.set(err?.error?.message ?? 'Action refusée.'),
+      // Corps d'erreur de l'API : { error } (middleware global, ex. 409 « traitement déjà en cours »).
+      error: (err) => this.error.set(err?.error?.error ?? err?.error?.message ?? 'Action refusée.'),
     });
   }
 

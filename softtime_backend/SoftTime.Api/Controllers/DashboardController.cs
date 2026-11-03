@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Services;
@@ -15,9 +15,9 @@ namespace SoftTime.Api.Controllers;
 [Tags("Dashboard")]
 public class DashboardController : ControllerBase
 {
-    private readonly DashboardService _svc;
+    private readonly IDashboardService _svc;
 
-    public DashboardController(DashboardService svc) => _svc = svc;
+    public DashboardController(IDashboardService svc) => _svc = svc;
 
     [HttpGet("stats")]
     public async Task<IActionResult> Stats(
@@ -29,11 +29,7 @@ public class DashboardController : ControllerBase
         [FromQuery] string? categorie,
         [FromQuery] string? periode,
         CancellationToken ct)
-        => Ok(await _svc.GetStatsAsync(
-            new PeriodRequest(matriculeFrom, matriculeTo, from, to, departement),
-            categorie,
-            string.IsNullOrWhiteSpace(periode) ? "mensuelle" : periode,
-            ct));
+        => Ok(await _svc.GetStatsAsync(new PeriodRequest(matriculeFrom, matriculeTo, from, to, departement), categorie, periode, ct));
 
     /// <summary>Valeurs proposées par les filtres (départements, catégories de personnel).</summary>
     [HttpGet("filters")]

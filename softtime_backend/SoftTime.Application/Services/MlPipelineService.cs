@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Models.Ml;
 
@@ -8,20 +8,20 @@ namespace SoftTime.Application.Services;
 /// Orchestration d'un cycle pour la société active : rafraîchissement de l'ETL (incrémental ou
 /// complet par trimestres), entraînement éventuel, puis génération des prédictions.
 /// </summary>
-public sealed class MlPipelineService
+public sealed class MlPipelineService : IMlPipelineService
 {
-    private readonly MlDatasetService _dataset;
-    private readonly MlTrainingService _training;
-    private readonly MlPredictionService _prediction;
-    private readonly TenantConnectionService _tenant;
+    private readonly IMlDatasetService _dataset;
+    private readonly IMlTrainingService _training;
+    private readonly IMlPredictionService _prediction;
+    private readonly ITenantConnectionService _tenant;
     private readonly MlOptions _options;
     private readonly ILogger<MlPipelineService> _logger;
 
     public MlPipelineService(
-        MlDatasetService dataset,
-        MlTrainingService training,
-        MlPredictionService prediction,
-        TenantConnectionService tenant,
+        IMlDatasetService dataset,
+        IMlTrainingService training,
+        IMlPredictionService prediction,
+        ITenantConnectionService tenant,
         MlOptions options,
         ILogger<MlPipelineService> logger)
     {

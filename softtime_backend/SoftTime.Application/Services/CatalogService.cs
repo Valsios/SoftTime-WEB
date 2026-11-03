@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using AutoMapper;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -13,18 +13,18 @@ using SoftTime.Application.Security;
 
 namespace SoftTime.Application.Services;
 
-public class CatalogService
+public class CatalogService : ICatalogService
 {
     private readonly IUnitOfWork _uow;
     private readonly IMapper _mapper;
-    private readonly TenantConnectionService _tenant;
+    private readonly ITenantConnectionService _tenant;
     private readonly IExternalSourceService _externalSource;
     private readonly IExternalDiscoveryService _discovery;
-    private readonly DatabaseConfigurationAuthorizer _configAuth;
-    private readonly EffectiveRightsService _effectiveRights;
+    private readonly IDatabaseConfigurationAuthorizer _configAuth;
+    private readonly IEffectiveRightsService _effectiveRights;
     private readonly ILogger<CatalogService> _logger;
 
-    public CatalogService(IUnitOfWork uow, IMapper mapper, TenantConnectionService tenant, IExternalSourceService externalSource, IExternalDiscoveryService discovery, DatabaseConfigurationAuthorizer configAuth, EffectiveRightsService effectiveRights, ILogger<CatalogService>? logger = null)
+    public CatalogService(IUnitOfWork uow, IMapper mapper, ITenantConnectionService tenant, IExternalSourceService externalSource, IExternalDiscoveryService discovery, IDatabaseConfigurationAuthorizer configAuth, IEffectiveRightsService effectiveRights, ILogger<CatalogService>? logger = null)
     {
         _logger = logger ?? NullLogger<CatalogService>.Instance;
         _uow = uow;

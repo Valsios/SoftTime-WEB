@@ -1,9 +1,9 @@
-using SoftTime.Application.Abstractions;
+﻿using SoftTime.Application.Abstractions;
 using SoftTime.Domain.Entities.SoftTime;
 
 namespace SoftTime.Application.Services;
 
-public sealed class PayrollWriterResolver
+public sealed class PayrollWriterResolver : IPayrollWriterResolver
 {
     private readonly IReadOnlyList<IPayrollWriter> _writers;
 

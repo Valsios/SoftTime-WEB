@@ -1,4 +1,4 @@
-using SoftTime.Application.Abstractions;
+﻿using SoftTime.Application.Abstractions;
 using SoftTime.Domain;
 
 namespace SoftTime.Application.Services;
@@ -11,12 +11,12 @@ public enum DatabaseConfigAction { Create, Update, Delete }
 /// Autorise la configuration (ajout, modification, suppression, test, découverte) des bases SAGE et pointeuse.
 /// Hors administrateur, exige la porte Bases ET la permission fine, que le compte soit personnalisé ou non.
 /// </summary>
-public class DatabaseConfigurationAuthorizer
+public class DatabaseConfigurationAuthorizer : IDatabaseConfigurationAuthorizer
 {
     private readonly ICurrentUser _user;
-    private readonly AuthService _auth;
+    private readonly IAuthService _auth;
 
-    public DatabaseConfigurationAuthorizer(ICurrentUser user, AuthService auth)
+    public DatabaseConfigurationAuthorizer(ICurrentUser user, IAuthService auth)
     {
         _user = user;
         _auth = auth;

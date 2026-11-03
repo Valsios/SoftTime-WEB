@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
@@ -15,22 +15,22 @@ namespace SoftTime.Application.Services;
 /// les lectures HTTP ne font que filtrer <c>ml.Prediction</c>, ce qui garde l'API rapide et
 /// indépendante du chargement des modèles.
 /// </summary>
-public sealed class MlPredictionService
+public sealed class MlPredictionService : IMlPredictionService
 {
-    private readonly MlDatasetService _dataset;
+    private readonly IMlDatasetService _dataset;
     private readonly IMlStore _store;
     private readonly IMlPredictor _predictor;
     private readonly IUnitOfWork _uow;
-    private readonly TenantConnectionService _tenant;
+    private readonly ITenantConnectionService _tenant;
     private readonly MlOptions _options;
     private readonly ILogger<MlPredictionService> _logger;
 
     public MlPredictionService(
-        MlDatasetService dataset,
+        IMlDatasetService dataset,
         IMlStore store,
         IMlPredictor predictor,
         IUnitOfWork uow,
-        TenantConnectionService tenant,
+        ITenantConnectionService tenant,
         MlOptions options,
         ILogger<MlPredictionService> logger)
     {

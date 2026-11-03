@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Services;
@@ -17,9 +17,9 @@ namespace SoftTime.Api.Controllers;
 [Tags("Audit")]
 public class JournalController : ControllerBase
 {
-    private readonly JournalService _journal;
+    private readonly IJournalService _journal;
 
-    public JournalController(JournalService journal) => _journal = journal;
+    public JournalController(IJournalService journal) => _journal = journal;
 
     /// <summary>Lignes du journal, les plus récentes d'abord (pagination SQL, 50 par défaut, 200 au plus).</summary>
     [HttpGet]

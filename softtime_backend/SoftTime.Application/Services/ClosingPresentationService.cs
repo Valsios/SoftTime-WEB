@@ -1,4 +1,4 @@
-using SoftTime.Application.DTOs;
+﻿using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
@@ -12,13 +12,13 @@ namespace SoftTime.Application.Services;
 /// petit ID comme les états), en UNE requête ensembliste. Avec <c>Closing:ShowNames = false</c>,
 /// aucune lecture : matricule seul, nom et prénom <c>null</c>. Lecture seule.
 /// </summary>
-public class ClosingPresentationService
+public class ClosingPresentationService : IClosingPresentationService
 {
     private readonly IUnitOfWork _uow;
-    private readonly TenantConnectionService _tenant;
+    private readonly ITenantConnectionService _tenant;
     private readonly ClosingOptions _reglages;
 
-    public ClosingPresentationService(IUnitOfWork uow, TenantConnectionService tenant, ClosingOptions? reglages = null)
+    public ClosingPresentationService(IUnitOfWork uow, ITenantConnectionService tenant, ClosingOptions? reglages = null)
     {
         _uow = uow;
         _tenant = tenant;

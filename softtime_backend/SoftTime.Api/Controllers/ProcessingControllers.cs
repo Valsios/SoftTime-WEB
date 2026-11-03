@@ -1,9 +1,9 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Services;
-using SoftTime.Infrastructure.Excel;
 
 namespace SoftTime.Api.Controllers;
 
@@ -14,8 +14,14 @@ namespace SoftTime.Api.Controllers;
 [Tags("Shifts")]
 public class ShiftsController : ControllerBase
 {
-    private readonly PlanningService _svc;
-    public ShiftsController(PlanningService svc) => _svc = svc;
+    private readonly IPlanningService _svc;
+    private readonly IImportFileReader _files;
+
+    public ShiftsController(IPlanningService svc, IImportFileReader files)
+    {
+        _svc = svc;
+        _files = files;
+    }
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListShiftsAsync(ct));
@@ -46,7 +52,7 @@ public class ShiftsController : ControllerBase
     public async Task<IActionResult> ImportExcel(IFormFile file, CancellationToken ct)
     {
         await using var s = file.OpenReadStream();
-        return Ok(await _svc.ImportShiftsExcelAsync(ExcelHelper.ReadFirstSheet(s), ct));
+        return Ok(await _svc.ImportShiftsExcelAsync(_files.ReadExcelRows(s), ct));
     }
 }
 
@@ -57,8 +63,14 @@ public class ShiftsController : ControllerBase
 [Tags("EmployeePlanning")]
 public class EmployeePlanningController : ControllerBase
 {
-    private readonly PlanningService _svc;
-    public EmployeePlanningController(PlanningService svc) => _svc = svc;
+    private readonly IPlanningService _svc;
+    private readonly IImportFileReader _files;
+
+    public EmployeePlanningController(IPlanningService svc, IImportFileReader files)
+    {
+        _svc = svc;
+        _files = files;
+    }
 
     [HttpGet("employees")]
     public async Task<IActionResult> Employees(CancellationToken ct)
@@ -133,11 +145,7 @@ public class EmployeePlanningController : ControllerBase
     public async Task<IActionResult> ImportExcel(IFormFile file, CancellationToken ct)
     {
         await using var stream = file.OpenReadStream();
-        var rows = ExcelHelper.ReadFirstSheet(stream);
-        var headers = rows.Count > 0 ? rows[0].Keys.ToList() : new List<string>();
-        if (headers.Count == 0)
-            return BadRequest("Fichier Excel vide ou sans en-têtes.");
-        return Ok(await _svc.ImportExcelAsync(rows, headers, ct));
+        return Ok(await _svc.ImportExcelAsync(_files.ReadExcelRows(stream), ct));
     }
 
     /// <summary>
@@ -147,7 +155,10 @@ public class EmployeePlanningController : ControllerBase
     [HttpPost("generate-from-category")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> GenerateFromCategory(IFormFile file, CancellationToken ct)
-        => Ok(await _svc.GenerateFromCategoryCsvAsync(await ReadCsvAsync(file, ct), ct));
+    {
+        await using var stream = file.OpenReadStream();
+        return Ok(await _svc.GenerateFromCategoryCsvAsync(await _files.ReadCsvLinesAsync(stream, ct), ct));
+    }
 
     /// <summary>
     /// Génère le planning d'une semaine pour un ou plusieurs salariés.
@@ -156,20 +167,9 @@ public class EmployeePlanningController : ControllerBase
     [HttpPost("generate")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> Generate(IFormFile file, CancellationToken ct)
-        => Ok(await _svc.GenerateFromMatriculeCsvAsync(await ReadCsvAsync(file, ct), ct));
-
-    /// <summary>Lecture d'un CSV point-virgule (ou virgule) en lignes de cellules nettoyées.</summary>
-    private static async Task<IReadOnlyList<string[]>> ReadCsvAsync(IFormFile file, CancellationToken ct)
     {
-        using var reader = new StreamReader(file.OpenReadStream());
-        var text = await reader.ReadToEndAsync(ct);
-        return text.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(l =>
-            {
-                var sep = l.Contains(';') ? ';' : ',';
-                return l.Split(sep).Select(p => p.Trim().Trim('"')).ToArray();
-            })
-            .ToList();
+        await using var stream = file.OpenReadStream();
+        return Ok(await _svc.GenerateFromMatriculeCsvAsync(await _files.ReadCsvLinesAsync(stream, ct), ct));
     }
 }
 
@@ -180,12 +180,15 @@ public class EmployeePlanningController : ControllerBase
 [Tags("Punches")]
 public class PunchesController : ControllerBase
 {
-    private readonly TimekeepingService _svc;
-    private readonly PunchProcessingService _processing;
-    public PunchesController(TimekeepingService svc, PunchProcessingService processing)
+    private readonly ITimekeepingService _svc;
+    private readonly IPunchProcessingService _processing;
+    private readonly IImportFileReader _files;
+
+    public PunchesController(ITimekeepingService svc, IPunchProcessingService processing, IImportFileReader files)
     {
         _svc = svc;
         _processing = processing;
+        _files = files;
     }
 
     [HttpGet]
@@ -224,7 +227,7 @@ public class PunchesController : ControllerBase
     public async Task<IActionResult> ImportExcel(IFormFile file, CancellationToken ct)
     {
         await using var s = file.OpenReadStream();
-        return Ok(await _svc.ImportPunchesExcelAsync(ExcelHelper.ReadFirstSheet(s), ct));
+        return Ok(await _svc.ImportPunchesExcelAsync(_files.ReadExcelRows(s), ct));
     }
 }
 
@@ -235,8 +238,8 @@ public class PunchesController : ControllerBase
 [Tags("Anomalies")]
 public class AnomaliesController : ControllerBase
 {
-    private readonly TimekeepingService _svc;
-    public AnomaliesController(TimekeepingService svc) => _svc = svc;
+    private readonly ITimekeepingService _svc;
+    public AnomaliesController(ITimekeepingService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery] PeriodRequest filter, CancellationToken ct)
@@ -279,8 +282,14 @@ public class AnomaliesController : ControllerBase
 [Tags("CorrectedHours")]
 public class CorrectedHoursController : ControllerBase
 {
-    private readonly TimekeepingService _svc;
-    public CorrectedHoursController(TimekeepingService svc) => _svc = svc;
+    private readonly ITimekeepingService _svc;
+    private readonly IImportFileReader _files;
+
+    public CorrectedHoursController(ITimekeepingService svc, IImportFileReader files)
+    {
+        _svc = svc;
+        _files = files;
+    }
 
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery] PeriodRequest filter, CancellationToken ct)
@@ -314,7 +323,7 @@ public class CorrectedHoursController : ControllerBase
     public async Task<IActionResult> ImportExcel(IFormFile file, CancellationToken ct)
     {
         await using var s = file.OpenReadStream();
-        return Ok(await _svc.ImportCorrectionsExcelAsync(ExcelHelper.ReadFirstSheet(s), ct));
+        return Ok(await _svc.ImportCorrectionsExcelAsync(_files.ReadExcelRows(s), ct));
     }
 }
 
@@ -325,8 +334,8 @@ public class CorrectedHoursController : ControllerBase
 [Tags("WeeklyValidation")]
 public class WeeklyValidationController : ControllerBase
 {
-    private readonly OvertimeService _svc;
-    public WeeklyValidationController(OvertimeService svc) => _svc = svc;
+    private readonly IOvertimeService _svc;
+    public WeeklyValidationController(IOvertimeService svc) => _svc = svc;
 
     [HttpPost("preview")]
     public async Task<IActionResult> Preview([FromBody] PeriodRequest request, CancellationToken ct)
@@ -371,8 +380,8 @@ public class WeeklyValidationController : ControllerBase
 [Tags("Overtime")]
 public class OvertimeController : ControllerBase
 {
-    private readonly OvertimeService _svc;
-    public OvertimeController(OvertimeService svc) => _svc = svc;
+    private readonly IOvertimeService _svc;
+    public OvertimeController(IOvertimeService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> List(

@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SoftTime.Api.Authorization;
 using SoftTime.Application.DTOs;
@@ -18,9 +18,9 @@ namespace SoftTime.Api.Controllers;
 [Tags("History")]
 public class HistoryController : ControllerBase
 {
-    private readonly HistoryArchiveService _svc;
+    private readonly IHistoryArchiveService _svc;
 
-    public HistoryController(HistoryArchiveService svc) => _svc = svc;
+    public HistoryController(IHistoryArchiveService svc) => _svc = svc;
 
     [HttpGet("pointages")]
     public async Task<IActionResult> Pointages([FromQuery] PeriodRequest filter, CancellationToken ct)

@@ -1,4 +1,4 @@
-using SoftTime.Application.Abstractions;
+﻿using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
@@ -7,7 +7,7 @@ using SoftTime.Domain.Services;
 
 namespace SoftTime.Application.Services;
 
-public class ExtraService
+public class ExtraService : IExtraService
 {
     /// <summary>Constante SAGE portant le cumul cantine (même code que le desktop).</summary>
     public const string CodeConstanteCantine = "CANTINE_CODE";
@@ -16,14 +16,14 @@ public class ExtraService
     public const string CodeConstanteFrais = "HA06";
 
     private readonly IUnitOfWork _uow;
-    private readonly TenantConnectionService _tenant;
+    private readonly ITenantConnectionService _tenant;
     private readonly IPunchAggregate _punches;
     private readonly IExternalSourceService _externalSource;
     private readonly ISagePayrollWriter _sageWriter;
 
     public ExtraService(
         IUnitOfWork uow,
-        TenantConnectionService tenant,
+        ITenantConnectionService tenant,
         IPunchAggregate punches,
         IExternalSourceService externalSource,
         ISagePayrollWriter sageWriter)

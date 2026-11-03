@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using SoftTime.Api.Authorization;
@@ -15,9 +15,9 @@ namespace SoftTime.Api.Controllers;
 [Tags("Auth")]
 public class AuthController : ControllerBase
 {
-    private readonly AuthService _auth;
+    private readonly IAuthService _auth;
     private readonly ICurrentUser _user;
-    public AuthController(AuthService auth, ICurrentUser user)
+    public AuthController(IAuthService auth, ICurrentUser user)
     {
         _auth = auth;
         _user = user;
@@ -59,9 +59,7 @@ public class AuthController : ControllerBase
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<LoginResponse>> Me(CancellationToken ct)
     {
-        if (_user.UserId is not decimal id)
-            return Unauthorized();
-        return Ok(await _auth.GetMeAsync(id, ct));
+        return Ok(await _auth.GetMeAsync(_user.RequireUserId(), ct));
     }
 
     /// <summary>
@@ -101,9 +99,9 @@ public class AuthController : ControllerBase
 [Tags("Users")]
 public class UsersController : ControllerBase
 {
-    private readonly AuthService _auth;
+    private readonly IAuthService _auth;
     private readonly ICurrentUser _user;
-    public UsersController(AuthService auth, ICurrentUser user)
+    public UsersController(IAuthService auth, ICurrentUser user)
     {
         _auth = auth;
         _user = user;
@@ -124,19 +122,15 @@ public class UsersController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] UserDto dto, CancellationToken ct)
     {
-        if (_user.UserId is not decimal currentUserId)
-            return Unauthorized();
-        return Ok(await _auth.SaveUserAsync(currentUserId, dto with { Id = 0 }, ct));
+        return Ok(await _auth.SaveUserAsync(_user.RequireUserId(), dto with { Id = 0 }, ct));
     }
 
     [RequireAdmin]
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(decimal id, [FromBody] UserDto dto, CancellationToken ct)
     {
-        if (_user.UserId is not decimal currentUserId)
-            return Unauthorized();
         // Confirmation requise : RoleChangeConfirmationRequiredException → 409 avec l'aperçu en corps (middleware global).
-        return Ok(await _auth.SaveUserAsync(currentUserId, dto with { Id = id }, ct));
+        return Ok(await _auth.SaveUserAsync(_user.RequireUserId(), dto with { Id = id }, ct));
     }
 
     /// <summary>Aperçu d'un changement de rôle (lecture seule) : ajustements personnels qui seraient effacés.</summary>
@@ -149,9 +143,7 @@ public class UsersController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(decimal id, CancellationToken ct)
     {
-        if (_user.UserId is not decimal currentUserId)
-            return Unauthorized();
-        await _auth.DeleteUserAsync(currentUserId, id, ct);
+        await _auth.DeleteUserAsync(_user.RequireUserId(), id, ct);
         return NoContent();
     }
 }
@@ -163,8 +155,8 @@ public class UsersController : ControllerBase
 [Tags("Roles")]
 public class RolesController : ControllerBase
 {
-    private readonly AuthService _auth;
-    public RolesController(AuthService auth) => _auth = auth;
+    private readonly IAuthService _auth;
+    public RolesController(IAuthService auth) => _auth = auth;
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _auth.GetRolesAsync(ct));
@@ -200,9 +192,9 @@ public class RolesController : ControllerBase
 [Tags("Privileges")]
 public class PrivilegesController : ControllerBase
 {
-    private readonly AuthService _auth;
+    private readonly IAuthService _auth;
     private readonly ICurrentUser _user;
-    public PrivilegesController(AuthService auth, ICurrentUser user)
+    public PrivilegesController(IAuthService auth, ICurrentUser user)
     {
         _auth = auth;
         _user = user;
@@ -235,9 +227,7 @@ public class PrivilegesController : ControllerBase
     [HttpPut("user/{userId}")]
     public async Task<IActionResult> SaveUserPermissions(decimal userId, [FromBody] SaveUserDetailedPermissionsRequest request, CancellationToken ct)
     {
-        if (_user.UserId is not decimal currentUserId)
-            return Unauthorized();
-        await _auth.SaveUserDetailedPermissionsAsync(currentUserId, userId, request.GrantedPermissions, ct);
+        await _auth.SaveUserDetailedPermissionsAsync(_user.RequireUserId(), userId, request.GrantedPermissions, ct);
         return NoContent();
     }
 
@@ -248,9 +238,7 @@ public class PrivilegesController : ControllerBase
     [HttpPut("role/{roleId}")]
     public async Task<IActionResult> SaveRolePermissions(decimal roleId, [FromBody] SaveRoleDetailedPermissionsRequest request, CancellationToken ct)
     {
-        if (_user.UserId is not decimal currentUserId)
-            return Unauthorized();
-        await _auth.SaveRoleDetailedPermissionsAsync(currentUserId, roleId, request.GrantedPermissions, ct);
+        await _auth.SaveRoleDetailedPermissionsAsync(_user.RequireUserId(), roleId, request.GrantedPermissions, ct);
         return NoContent();
     }
 
@@ -258,9 +246,7 @@ public class PrivilegesController : ControllerBase
     [HttpPost("user/{userId}/reset")]
     public async Task<IActionResult> ResetUserPermissions(decimal userId, CancellationToken ct)
     {
-        if (_user.UserId is not decimal currentUserId)
-            return Unauthorized();
-        await _auth.ResetUserDetailedPermissionsAsync(currentUserId, userId, ct);
+        await _auth.ResetUserDetailedPermissionsAsync(_user.RequireUserId(), userId, ct);
         return NoContent();
     }
 }
@@ -272,8 +258,8 @@ public class PrivilegesController : ControllerBase
 [Tags("Privileges")]
 public class AuditDroitController : ControllerBase
 {
-    private readonly AuthService _auth;
-    public AuditDroitController(AuthService auth) => _auth = auth;
+    private readonly IAuthService _auth;
+    public AuditDroitController(IAuthService auth) => _auth = auth;
 
     [HttpGet]
     public async Task<IActionResult> Get(
@@ -292,8 +278,8 @@ public class AuditDroitController : ControllerBase
 [Tags("DbAccess")]
 public class DbAccessController : ControllerBase
 {
-    private readonly AuthService _auth;
-    public DbAccessController(AuthService auth) => _auth = auth;
+    private readonly IAuthService _auth;
+    public DbAccessController(IAuthService auth) => _auth = auth;
 
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery] decimal? userId, CancellationToken ct)

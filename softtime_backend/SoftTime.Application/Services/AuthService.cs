@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -16,7 +16,7 @@ using SoftTime.Domain;
 
 namespace SoftTime.Application.Services;
 
-public class AuthService
+public class AuthService : IAuthService
 {
     /// <summary>Rôle d'administration attendu lors du démarrage initial (voir le script de base saine).</summary>
     public const string RoleAdministrateur = "Administrateur";
@@ -101,8 +101,8 @@ public class AuthService
     private readonly IPasswordHasher<T_RESPONSABLE> _passwordHasher;
     // Appelant HTTP, obligatoire : aucune écriture sur un autre compte sans contrôle d'administrateur.
     private readonly ICurrentUser _currentUser;
-    private readonly EffectiveRightsService _effectiveRights;
-    private readonly RefreshTokenService _refreshTokens;
+    private readonly IEffectiveRightsService _effectiveRights;
+    private readonly IRefreshTokenService _refreshTokens;
     private readonly AccountSecurityOptions _security;
 
     public const string InvalidCredentialsMessage = "Identifiants invalides.";
@@ -158,9 +158,9 @@ public class AuthService
         IMapper mapper,
         IEmailService email,
         ICurrentUser currentUser,
-        EffectiveRightsService effectiveRights,
+        IEffectiveRightsService effectiveRights,
         IPasswordHasher<T_RESPONSABLE>? passwordHasher = null,
-        RefreshTokenService? refreshTokens = null,
+        IRefreshTokenService? refreshTokens = null,
         IOptions<AccountSecurityOptions>? securityOptions = null)
     {
         _uow = uow;

@@ -17,35 +17,37 @@ public static class DependencyInjection
         services.AddAutoMapper(typeof(MappingProfile).Assembly);
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
         services.AddScoped<IPasswordHasher<T_RESPONSABLE>, PasswordHasher<T_RESPONSABLE>>();
-        services.AddScoped<TenantConnectionService>();
-        services.AddScoped<RefreshTokenService>();
-        services.AddScoped<AuthService>();
+        services.AddScoped<ITenantConnectionService, TenantConnectionService>();
+        services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+        services.AddScoped<IAuthService, AuthService>();
         services.AddSingleton<EffectiveRightsCache>();
-        services.AddScoped<EffectiveRightsService>();
-        services.AddScoped<DatabaseConfigurationAuthorizer>();
-        services.AddScoped<CatalogService>();
+        services.AddScoped<IEffectiveRightsService, EffectiveRightsService>();
+        services.AddScoped<IDatabaseConfigurationAuthorizer, DatabaseConfigurationAuthorizer>();
+        services.AddScoped<ICatalogService, CatalogService>();
+        services.AddScoped<IDatabaseListingService, DatabaseListingService>();
         services.AddScoped<IExternalSourceService, ExternalSourceService>();
-        services.AddScoped<SageLeaveCalendar>();
-        services.AddScoped<PlanningService>();
-        services.AddScoped<TimekeepingService>();
-        services.AddScoped<PunchProcessingService>();
-        services.AddScoped<HistoryArchiveService>();
-        services.AddScoped<OvertimeService>();
-        services.AddScoped<PayrollWriterResolver>();
-        services.AddScoped<ReportService>();
-        services.AddScoped<DashboardService>();
-        services.AddScoped<ExtraService>();
-        services.AddScoped<AuditService>();
-        services.AddScoped<JournalService>();
+        services.AddScoped<ISageLeaveCalendar, SageLeaveCalendar>();
+        services.AddScoped<IPlanningService, PlanningService>();
+        services.AddScoped<ITimekeepingService, TimekeepingService>();
+        services.AddScoped<IPunchProcessingService, PunchProcessingService>();
+        services.AddScoped<IHistoryArchiveService, HistoryArchiveService>();
+        services.AddScoped<IOvertimeService, OvertimeService>();
+        services.AddScoped<IPayrollWriterResolver, PayrollWriterResolver>();
+        services.AddScoped<IReportService, ReportService>();
+        services.AddScoped<IDashboardService, DashboardService>();
+        services.AddScoped<IExtraService, ExtraService>();
+        services.AddScoped<IAuditService, AuditService>();
+        services.AddScoped<IJournalService, JournalService>();
 
         // Moteur prédictif : options liées à la section « Ml », services de la base analytique.
         services.AddOptions();
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<MlOptions>>().Value);
-        services.AddScoped<MlDatasetService>();
-        services.AddScoped<MlTrainingService>();
-        services.AddScoped<MlPredictionService>();
-        services.AddScoped<MlPipelineService>();
-        services.AddSingleton<MlJobCoordinator>();
+        services.AddScoped<IMlDatasetService, MlDatasetService>();
+        services.AddScoped<IMlTrainingService, MlTrainingService>();
+        services.AddScoped<IMlPredictionService, MlPredictionService>();
+        services.AddScoped<IMlPipelineService, MlPipelineService>();
+        services.AddSingleton<IMlJobCoordinator, MlJobCoordinator>();
+        services.AddScoped<IPredictionsService, PredictionsService>();
 
         // Clôture de paie assistée : réglages de la section « Closing » (valeurs par défaut en code),
         // refus du démarrage si un réglage est invalide ; analyse et présentation en lecture seule.
@@ -54,8 +56,9 @@ public static class DependencyInjection
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<ClosingOptions>, ClosingOptionsValidator>();
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<ClosingOptions>>().Value);
-        services.AddScoped<ClosingService>();
-        services.AddScoped<ClosingPresentationService>();
+        services.AddScoped<IClosingService, ClosingService>();
+        services.AddScoped<IClosingPresentationService, ClosingPresentationService>();
+        services.AddScoped<IClosingReportService, ClosingReportService>();
         return services;
     }
 }

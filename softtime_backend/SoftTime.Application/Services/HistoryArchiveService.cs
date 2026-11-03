@@ -1,4 +1,4 @@
-using SoftTime.Application.DTOs;
+﻿using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
 
@@ -16,12 +16,12 @@ namespace SoftTime.Application.Services;
 /// l'autorisation et le périmètre des lignes. Les lectures et purges d'archive, elles, revérifient
 /// le tenant.
 /// </summary>
-public class HistoryArchiveService
+public class HistoryArchiveService : IHistoryArchiveService
 {
     private readonly IUnitOfWork _uow;
-    private readonly TenantConnectionService _tenant;
+    private readonly ITenantConnectionService _tenant;
 
-    public HistoryArchiveService(IUnitOfWork uow, TenantConnectionService tenant)
+    public HistoryArchiveService(IUnitOfWork uow, ITenantConnectionService tenant)
     {
         _uow = uow;
         _tenant = tenant;

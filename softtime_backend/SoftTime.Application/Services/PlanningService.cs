@@ -1,4 +1,4 @@
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
@@ -7,13 +7,13 @@ using SoftTime.Domain.Services;
 
 namespace SoftTime.Application.Services;
 
-public class PlanningService
+public class PlanningService : IPlanningService
 {
     private readonly IUnitOfWork _uow;
-    private readonly TenantConnectionService _tenant;
+    private readonly ITenantConnectionService _tenant;
     private readonly IPlanningStatisticsReader _planningStats;
 
-    public PlanningService(IUnitOfWork uow, TenantConnectionService tenant, IPlanningStatisticsReader planningStats)
+    public PlanningService(IUnitOfWork uow, ITenantConnectionService tenant, IPlanningStatisticsReader planningStats)
     {
         _uow = uow;
         _tenant = tenant;
@@ -317,6 +317,15 @@ public class PlanningService
         var e = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException();
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Import Excel du planning : en-têtes lus sur la première ligne ; fichier sans en-tête refusé (400).</summary>
+    public Task<ImportResultDto> ImportExcelAsync(IReadOnlyList<Dictionary<string, string>> rows, CancellationToken ct = default)
+    {
+        var headers = rows.Count > 0 ? rows[0].Keys.ToList() : new List<string>();
+        if (headers.Count == 0)
+            throw new DomainException("Fichier Excel vide ou sans en-têtes.");
+        return ImportExcelAsync(rows, headers, ct);
     }
 
     public async Task<ImportResultDto> ImportExcelAsync(IReadOnlyList<Dictionary<string, string>> rows, IReadOnlyList<string> headers, CancellationToken ct = default)

@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using SoftTime.Application.ImportTemplates;
-using SoftTime.Infrastructure.Excel;
+using SoftTime.Application.Abstractions;
 
 namespace SoftTime.Api.Controllers;
 
@@ -16,19 +15,19 @@ namespace SoftTime.Api.Controllers;
 [Tags("ImportTemplates")]
 public class ImportTemplatesController : ControllerBase
 {
+    private readonly IImportTemplateService _templates;
+
+    public ImportTemplatesController(IImportTemplateService templates) => _templates = templates;
+
     /// <summary>Liste des modèles : libellé, format, colonnes, exemple et règles.</summary>
     [HttpGet]
-    public IActionResult List()
-        => Ok(ImportTemplateCatalog.All().Select(ImportTemplateCatalog.ToDto).ToList());
+    public IActionResult List() => Ok(_templates.List());
 
-    /// <summary>Télécharge le modèle (.xlsx ou .csv) d'une clé du catalogue.</summary>
+    /// <summary>Télécharge le modèle (.xlsx ou .csv) d'une clé du catalogue (404 si la clé est inconnue).</summary>
     [HttpGet("{key}")]
     public IActionResult Download(string key)
     {
-        var template = ImportTemplateCatalog.Find(key);
-        if (template is null)
-            return NotFound($"Modèle d'import inconnu : {key}.");
-
-        return File(ImportTemplateFile.Build(template), ImportTemplateFile.Mime(template), template.FileName);
+        var file = _templates.Download(key);
+        return File(file.Content, file.ContentType, file.FileName);
     }
 }
