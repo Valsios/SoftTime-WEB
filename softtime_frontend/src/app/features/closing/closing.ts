@@ -55,7 +55,7 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FormsModule, PageHeader, PeriodFilter, SoftCard, SoftBadge, SoftTabs, SoftToggle, RouterLink, DataTable, DataTableCell],
   template: `
-    <page-header title="Clôture de paie" subtitle="Contrôle des données de la période avant la clôture">
+    <page-header title="Contrôle avant paie" subtitle="Contrôle des données de la période avant la clôture">
       <label class="closing-switch">
         <span>Comparer avec la période précédente</span>
         <soft-toggle [ngModel]="includeComparison()" (ngModelChange)="onComparison($event)" name="comparaison"></soft-toggle>

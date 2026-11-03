@@ -82,7 +82,7 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: 'REPORTS:PREDICTIONS',
       },
       {
-        label: 'Clôture de paie',
+        label: 'Contrôle avant paie',
         path: '/closing',
         icon: 'check-circle',
         droit: Droit.Reports,

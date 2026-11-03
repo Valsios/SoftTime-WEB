@@ -12,7 +12,7 @@ export const NOTHING_TO_FIX = 'Rien à corriger dans l’application';
 /** Rôle du niveau « Information » dans l'explication dépliable du score et du statut. */
 export const INFORMATION_RULE =
   'Une anomalie « Information » n’a pas d’effet sur la paie : elle figure dans les comptages et, si la case est cochée, dans la liste, mais elle n’entre ni dans le score (poids 0 par défaut) ni dans le statut.';
-export const DISABLED_MESSAGE = 'La clôture de paie assistée est désactivée sur ce serveur (réglage Closing:Enabled).';
+export const DISABLED_MESSAGE = 'Le contrôle avant paie est désactivé sur ce serveur (réglage Closing:Enabled).';
 export const PURPOSE_NOTE = 'Outil d’aide à la clôture : à utiliser pour corriger les données, pas pour sanctionner.';
 
 /** Ordre d'affichage des types, identique à l'énumération du serveur. */

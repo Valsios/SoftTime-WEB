@@ -1391,7 +1391,7 @@ export class PrivilegesPage implements OnInit {
       items: [
         { code: 'REPORTS:REPORTS', label: 'Rapports et exports' },
         { code: 'REPORTS:PREDICTIONS', label: 'Prévisions' },
-        { code: 'REPORTS:CLOSING', label: 'Clôture' },
+        { code: 'REPORTS:CLOSING', label: 'Contrôle avant paie' },
       ],
     },
   ];

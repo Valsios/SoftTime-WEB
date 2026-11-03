@@ -1,4 +1,6 @@
-# Clôture de paie assistée — où modifier quoi
+# Contrôle avant paie assisté — où modifier quoi
+
+*Anciennement : Clôture de paie.*
 
 Route de lecture : `GET api/closing/analysis?from=&to=&departement=&includeComparison=&includeInformation=&page=&pageSize=`
 (en-tête `X-Sage-Database` requis). Accès : administrateur, ou porte 6 + permission `REPORTS:CLOSING`

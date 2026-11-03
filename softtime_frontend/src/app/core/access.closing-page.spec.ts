@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { NAV_SECTIONS } from '../layout/nav';
 import { AccessContext, canAccess, visibleSections } from './access.logic';
 
-// Menu « Clôture de paie » et garde de la route /closing : même règle que le serveur (porte 6 ET REPORTS:CLOSING).
+// Menu « Contrôle avant paie » et garde de la route /closing : même règle que le serveur (porte 6 ET REPORTS:CLOSING).
 const ctx = (over: Partial<AccessContext>): AccessContext => ({
   roleId: 10034,
   permissions: [],
@@ -21,11 +21,11 @@ const visible = (c: AccessContext) =>
 const ROUTE = { permission: 'REPORTS:CLOSING', droit: 6 };
 const guardAllows = (c: AccessContext) => canAccess(c, ROUTE.permission, ROUTE.droit);
 
-describe('menu et garde « Clôture de paie »', () => {
+describe('menu et garde « Contrôle avant paie »', () => {
   it('l’élément de menu est dans la section États, porte 6 et REPORTS:CLOSING', () => {
     const etats = NAV_SECTIONS.find((s) => s.title === 'États');
     expect(etats?.items.find((i) => i.path === '/closing')).toMatchObject({
-      label: 'Clôture de paie',
+      label: 'Contrôle avant paie',
       droit: 6,
       permission: 'REPORTS:CLOSING',
     });

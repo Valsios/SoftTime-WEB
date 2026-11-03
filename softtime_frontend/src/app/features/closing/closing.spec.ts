@@ -76,7 +76,7 @@ function creer(rapports: ClosingReport[]) {
   return { fixture, el, requetes };
 }
 
-describe('page Clôture de paie : niveau Information', () => {
+describe('page Contrôle avant paie : niveau Information', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('affiche quatre cartes de gravité dont « Information » (badge neutre, avec texte)', () => {

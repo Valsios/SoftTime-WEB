@@ -53,7 +53,7 @@ const DROIT_LABELS: Record<number, string> = {
     </div>
 
     @if (closingCard(); as c) {
-      <h2 class="dash-section-title">Clôture de paie</h2>
+      <h2 class="dash-section-title">Contrôle avant paie</h2>
       <div class="dash-links">
         <soft-card>
           <div class="dash-closing">
@@ -156,7 +156,7 @@ export class Dashboard {
   private readonly closing = inject(ClosingService);
   private readonly closingDestroy = inject(DestroyRef);
 
-  /** Carte « Clôture de paie » : absente sans le droit, pendant le chargement et en cas d'échec (silencieux). */
+  /** Carte « Contrôle avant paie » : absente sans le droit, pendant le chargement et en cas d'échec (silencieux). */
   readonly closingCard = signal<ReturnType<typeof dashboardCardView> | null>(null);
 
   constructor() {
