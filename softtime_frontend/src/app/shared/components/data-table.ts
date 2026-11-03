@@ -87,6 +87,9 @@ const SERVER_PAGE_SIZES = [10, 25, 50, 100] as const;
       } @else {
         <div class="soft-table-wrap">
           <table class="soft-table">
+            @if (caption()) {
+              <caption style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0">{{ caption() }}</caption>
+            }
             <thead>
               <tr>
                 @if (selectable()) {
@@ -278,6 +281,9 @@ const SERVER_PAGE_SIZES = [10, 25, 50, 100] as const;
       } @else {
         <div class="soft-table-wrap">
           <table class="soft-table">
+            @if (caption()) {
+              <caption style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0">{{ caption() }}</caption>
+            }
             <thead>
               <tr>
                 @if (selectable()) {
@@ -514,6 +520,8 @@ export class DataTable {
   readonly loading = input(false);
   readonly trackKey = input('id');
   readonly emptyText = input('Aucune donnée.');
+  /** Légende du tableau, réservée aux lecteurs d'écran (masquée visuellement). Absente : aucun <caption>. */
+  readonly caption = input<string | null>(null);
   readonly selectable = input(false);
   readonly selectedKeys = model<string[]>([]);
   readonly actionsTpl =
