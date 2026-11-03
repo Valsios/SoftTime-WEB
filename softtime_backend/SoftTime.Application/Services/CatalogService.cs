@@ -1,5 +1,7 @@
 using System.Text.RegularExpressions;
 using AutoMapper;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.Sage;
 using SoftTime.Domain.Entities.SoftTime;
@@ -20,9 +22,11 @@ public class CatalogService
     private readonly IExternalDiscoveryService _discovery;
     private readonly DatabaseConfigurationAuthorizer _configAuth;
     private readonly EffectiveRightsService _effectiveRights;
+    private readonly ILogger<CatalogService> _logger;
 
-    public CatalogService(IUnitOfWork uow, IMapper mapper, TenantConnectionService tenant, IExternalSourceService externalSource, IExternalDiscoveryService discovery, DatabaseConfigurationAuthorizer configAuth, EffectiveRightsService effectiveRights)
+    public CatalogService(IUnitOfWork uow, IMapper mapper, TenantConnectionService tenant, IExternalSourceService externalSource, IExternalDiscoveryService discovery, DatabaseConfigurationAuthorizer configAuth, EffectiveRightsService effectiveRights, ILogger<CatalogService>? logger = null)
     {
+        _logger = logger ?? NullLogger<CatalogService>.Instance;
         _uow = uow;
         _mapper = mapper;
         _tenant = tenant;
@@ -56,13 +60,13 @@ public class CatalogService
             await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, dto.NomBd, ct);
         else
         {
-            var current = await _uow.Repository<T_BDD_SAGE>().GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
+            var current = await _uow.Repository<T_BDD_SAGE>().GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
             await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Update, current.NOM_BD, ct);
         }
         if (dto.TypeBase != "STANDARD" && dto.TypeBase != "AUTRE")
-            throw new InvalidOperationException("TypeBase doit valoir 'STANDARD' ou 'AUTRE'.");
+            throw new DomainException("TypeBase doit valoir 'STANDARD' ou 'AUTRE'.");
         if (dto.TypeBase == "AUTRE" && (dto.Mappings is null || dto.Mappings.Count == 0))
-            throw new InvalidOperationException("Une base 'Autre' nécessite au minimum un mapping de source.");
+            throw new DomainException("Une base 'Autre' nécessite au minimum un mapping de source.");
         await EnsureMappingSchemaAsync(ct);
         var repo = _uow.Repository<T_BDD_SAGE>();
         var doublon = (await repo.ListAsync(
@@ -70,7 +74,7 @@ public class CatalogService
                  && s.SERVEUR == dto.Serveur
                  && s.NOM_BD == dto.NomBd, ct)).Any();
         if (doublon)
-            throw new InvalidOperationException("Cette base (serveur + nom) est déjà enregistrée.");
+            throw new DomainException("Cette base (serveur + nom) est déjà enregistrée.");
         T_BDD_SAGE entity;
         if (dto.Id == 0)
         {
@@ -79,7 +83,7 @@ public class CatalogService
         }
         else
         {
-            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
+            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
             entity.SERVEUR = dto.Serveur;
             entity.TLOGIN = dto.Login;
             if (!string.IsNullOrEmpty(dto.Password)) entity.TMDP = dto.Password;
@@ -100,6 +104,17 @@ public class CatalogService
     }
     // Verifie la connexion et, en mode STANDARD, la presence des tables attendues par le reste de l'application.
     private static readonly string[] SageStandardTables = { "T_SAL", "T_HST_AFFECTATION", "T_DEPARTEMENT", "T_GHRCAL_SOCIETE", "T_CST" };
+
+    /// <summary>
+    /// Échec d'un test de connexion : journalisé avec l'exception complète ; le client ne reçoit que la cause lisible
+    /// d'une erreur métier (identifiants refusés, serveur injoignable…), jamais le texte technique d'une autre erreur.
+    /// </summary>
+    private ConnectionTestResultDto ConnectionFailure(string prefix, Exception exception, string? server, string? database)
+    {
+        _logger.LogWarning(exception, "{Prefix} : serveur {Server}, base {Database}.", prefix, server, database);
+        var reason = exception is DomainException ? exception.Message : "erreur inattendue (détail dans le journal du serveur).";
+        return new ConnectionTestResultDto(false, $"{prefix} : {reason}");
+    }
     public async Task<ConnectionTestResultDto> TestSageConnectionAsync(TestSageConnectionDto dto, CancellationToken ct = default)
     {
         var password = await ResolveStoredPasswordAsync("SAGE", dto.Id, dto.Serveur, dto.SqlAuth, dto.Login, dto.Password, ct);
@@ -110,9 +125,9 @@ public class CatalogService
         {
             tables = await _discovery.ListTablesAsync(dto.Serveur, dto.NomBd, dto.SqlAuth ?? true, dto.Login, password, ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return new ConnectionTestResultDto(false, $"Connexion impossible : {ex.Message}");
+            return ConnectionFailure("Connexion impossible", ex, dto.Serveur, dto.NomBd);
         }
         if (dto.TypeBase == "AUTRE")
         {
@@ -142,7 +157,7 @@ public class CatalogService
     public async Task DeleteSageAsync(int id, CancellationToken ct = default)
     {
         var repo = _uow.Repository<T_BDD_SAGE>();
-        var e = await repo.GetByIdAsync(id, ct) ?? throw new KeyNotFoundException();
+        var e = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException();
         await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Delete, e.NOM_BD, ct);
         await RemoveMappingsAsync(true, id, ct);
         repo.Remove(e);
@@ -189,13 +204,13 @@ public class CatalogService
             await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Create, dto.NomBd, ct);
         else
         {
-            var current = await _uow.Repository<T_BDD_POINTEUSE>().GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
+            var current = await _uow.Repository<T_BDD_POINTEUSE>().GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
             await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Update, current.NOM_BD, ct);
         }
         if (dto.TypeBase != "STANDARD" && dto.TypeBase != "AUTRE")
-            throw new InvalidOperationException("TypeBase doit valoir 'STANDARD' ou 'AUTRE'.");
+            throw new DomainException("TypeBase doit valoir 'STANDARD' ou 'AUTRE'.");
         if (dto.TypeBase == "AUTRE" && (dto.Mappings is null || dto.Mappings.Count == 0))
-            throw new InvalidOperationException("Une base 'Autre' nécessite au minimum un mapping de source.");
+            throw new DomainException("Une base 'Autre' nécessite au minimum un mapping de source.");
         await EnsureMappingSchemaAsync(ct);
         var repo = _uow.Repository<T_BDD_POINTEUSE>();
         var doublon = (await repo.ListAsync(
@@ -203,7 +218,7 @@ public class CatalogService
                  && p.SERVEUR == dto.Serveur
                  && p.NOM_BD == dto.NomBd, ct)).Any();
         if (doublon)
-            throw new InvalidOperationException("Cette base (serveur + nom) est déjà enregistrée.");
+            throw new DomainException("Cette base (serveur + nom) est déjà enregistrée.");
         if (dto.Active == true)
         {
             var all = await repo.ListAsync(_ => true, ct);
@@ -221,7 +236,7 @@ public class CatalogService
         }
         else
         {
-            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
+            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
             entity.SERVEUR = dto.Serveur;
             entity.TLOGIN = dto.Login;
             if (!string.IsNullOrEmpty(dto.Password)) entity.TMDP = dto.Password;
@@ -253,9 +268,9 @@ public class CatalogService
         {
             tables = await _discovery.ListTablesAsync(dto.Serveur, dto.NomBd, dto.SqlAuth ?? true, dto.Login, password, ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return new ConnectionTestResultDto(false, $"Connexion impossible : {ex.Message}");
+            return ConnectionFailure("Connexion impossible", ex, dto.Serveur, dto.NomBd);
         }
         if (dto.TypeBase == "AUTRE")
         {
@@ -285,7 +300,7 @@ public class CatalogService
     public async Task DeletePointeuseAsync(int id, CancellationToken ct = default)
     {
         var repo = _uow.Repository<T_BDD_POINTEUSE>();
-        var e = await repo.GetByIdAsync(id, ct) ?? throw new KeyNotFoundException();
+        var e = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException();
         await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Delete, e.NOM_BD, ct);
         await RemoveMappingsAsync(false, id, ct);
         repo.Remove(e);
@@ -320,7 +335,7 @@ public class CatalogService
     public async Task<DepartementServiceDto> GetDepartementServiceAsync(string matricule, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(matricule))
-            throw new InvalidOperationException("Le matricule est requis.");
+            throw new DomainException("Le matricule est requis.");
         return await LookupFromSageAsync(matricule, ct);
     }
 
@@ -446,7 +461,7 @@ public class CatalogService
         await _tenant.EnsureAuthorizedAsync(ct);
         var database = await _tenant.GetSageRowAsync(ct);
         if (!string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("La configuration d'écriture dynamique est réservée aux bases AUTRE.");
+            throw new DomainException("La configuration d'écriture dynamique est réservée aux bases AUTRE.");
         await PayrollWritingConfiguration.EnsureStorageAsync(_uow, ct);
         var category = PayrollWritingConfiguration.NormalizeCategory(dto.Categorie);
         PayrollWritingConfiguration.ValidateIdentifier(dto.TableCible, "La table cible", allowQualifiedTable: true);
@@ -455,7 +470,7 @@ public class CatalogService
         var repo = _uow.Repository<T_PAIE_ECRITURE>();
         var current = await repo.ListAsync(c => c.BDD_SAGE == _tenant.SageDb, ct);
         if (current.Any(c => c.ID != dto.Id && string.Equals(c.CATEGORIE, category, StringComparison.OrdinalIgnoreCase)))
-            throw new InvalidOperationException($"La catégorie {category} est déjà configurée pour cette base.");
+            throw new DomainException($"La catégorie {category} est déjà configurée pour cette base.");
         T_PAIE_ECRITURE entity;
         if (dto.Id == 0)
         {
@@ -464,9 +479,9 @@ public class CatalogService
         }
         else
         {
-            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
+            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
             if (!string.Equals(entity.BDD_SAGE, _tenant.SageDb, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Cette configuration appartient à une autre base.");
+                throw new DomainException("Cette configuration appartient à une autre base.");
             repo.Update(entity);
         }
         entity.TABLE_CIBLE = dto.TableCible!.Trim();
@@ -481,9 +496,9 @@ public class CatalogService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         await PayrollWritingConfiguration.EnsureStorageAsync(_uow, ct);
-        var entity = await _uow.Repository<T_PAIE_ECRITURE>().GetByIdAsync(id, ct) ?? throw new KeyNotFoundException();
+        var entity = await _uow.Repository<T_PAIE_ECRITURE>().GetByIdAsync(id, ct) ?? throw new NotFoundException();
         if (!string.Equals(entity.BDD_SAGE, _tenant.SageDb, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Cette configuration appartient à une autre base.");
+            throw new DomainException("Cette configuration appartient à une autre base.");
         _uow.Repository<T_PAIE_ECRITURE>().Remove(entity);
         await _uow.SaveChangesAsync(ct);
     }
@@ -518,9 +533,9 @@ public class CatalogService
                 ? new ConnectionTestResultDto(true, "Configuration d'écriture valide.")
                 : new ConnectionTestResultDto(false, $"La colonne {missingColumn} n'existe pas.");
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return new ConnectionTestResultDto(false, $"Validation impossible : {ex.Message}");
+            return ConnectionFailure("Validation impossible", ex, database.SERVEUR, database.NOM_BD);
         }
     }
 
@@ -562,17 +577,17 @@ public class CatalogService
     {
         var database = await _tenant.GetSageRowAsync(ct);
         if (!string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Cette liste est réservée aux bases AUTRE.");
+            throw new DomainException("Cette liste est réservée aux bases AUTRE.");
         var entity = (await _uow.Repository<T_SOURCE_ENTITY_MAPPING>()
                 .ListAsync(m => m.SageDbId == database.ID && m.EntityKind == "CONSTANT", ct))
             .FirstOrDefault();
         if (entity is null || string.IsNullOrWhiteSpace(entity.SourceTable))
-            throw new InvalidOperationException("Configurez d'abord le mapping « Code constante » (table et colonne) dans Bases RH / paie.");
+            throw new DomainException("Configurez d'abord le mapping « Code constante » (table et colonne) dans Bases RH / paie.");
         var field = (await _uow.Repository<T_SOURCE_FIELD_MAPPING>()
                 .ListAsync(f => f.EntityMappingId == entity.Id && f.FieldRoleCode == "SAGE_CST_CODE", ct))
             .FirstOrDefault();
         if (field is null || string.IsNullOrWhiteSpace(field.SourceColumn))
-            throw new InvalidOperationException("La colonne de code constante n'est pas mappée (rôle SAGE_CST_CODE).");
+            throw new DomainException("La colonne de code constante n'est pas mappée (rôle SAGE_CST_CODE).");
         return (entity.SourceTable!.Trim(), field.SourceColumn!.Trim());
     }
 
@@ -613,12 +628,12 @@ public class CatalogService
         bool storedSqlAuth;
         if (isSage)
         {
-            var row = await _uow.Repository<T_BDD_SAGE>().GetByIdAsync(id.Value, ct) ?? throw new KeyNotFoundException();
+            var row = await _uow.Repository<T_BDD_SAGE>().GetByIdAsync(id.Value, ct) ?? throw new NotFoundException();
             (storedServeur, storedLogin, storedPassword, storedName, storedSqlAuth) = (row.SERVEUR, row.TLOGIN, row.TMDP, row.NOM_BD, row.TYPE_AUTH == true);
         }
         else
         {
-            var row = await _uow.Repository<T_BDD_POINTEUSE>().GetByIdAsync(id.Value, ct) ?? throw new KeyNotFoundException();
+            var row = await _uow.Repository<T_BDD_POINTEUSE>().GetByIdAsync(id.Value, ct) ?? throw new NotFoundException();
             (storedServeur, storedLogin, storedPassword, storedName, storedSqlAuth) = (row.SERVEUR, row.TLOGIN, row.TMDP, row.NOM_BD, row.TYPE_AUTH == true);
         }
 
@@ -627,7 +642,7 @@ public class CatalogService
                          && string.Equals((serveur ?? string.Empty).Trim(), (storedServeur ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase)
                          && string.Equals((login ?? string.Empty).Trim(), (storedLogin ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase);
         if (!sameTarget)
-            throw new InvalidOperationException("Le serveur, le login ou le mode d'authentification a changé : saisissez le mot de passe pour utiliser cette connexion.");
+            throw new DomainException("Le serveur, le login ou le mode d'authentification a changé : saisissez le mot de passe pour utiliser cette connexion.");
         return storedPassword;
     }
 
@@ -821,7 +836,7 @@ public class CatalogService
     private static void ValidateSourceIdentifier(string? name)
     {
         if (!string.IsNullOrWhiteSpace(name) && !SafeSourceIdentifier.IsMatch(name))
-            throw new InvalidOperationException($"Identifiant source invalide : {name}");
+            throw new DomainException($"Identifiant source invalide : {name}");
     }
 
     private async Task ValidateMappingsAsync(bool isSage, IReadOnlyList<SourceEntityMappingDto> mappings, CancellationToken ct)
@@ -831,7 +846,7 @@ public class CatalogService
         foreach (var m in mappings.Where(x => !string.IsNullOrWhiteSpace(x.EntityKind)))
         {
             if (string.IsNullOrWhiteSpace(m.SourceTable))
-                throw new InvalidOperationException($"La table source est requise pour '{m.EntityKind}'.");
+                throw new DomainException($"La table source est requise pour '{m.EntityKind}'.");
             ValidateSourceIdentifier(m.SourceTable);
             var fields = m.Fields ?? Array.Empty<SourceFieldMappingDto>();
             foreach (var f in fields)
@@ -845,7 +860,7 @@ public class CatalogService
                 .Select(r => r.Code)
                 .ToList();
             if (missing.Count > 0)
-                throw new InvalidOperationException($"Champs obligatoires non mappés pour '{m.EntityKind}' : {string.Join(", ", missing)}.");
+                throw new DomainException($"Champs obligatoires non mappés pour '{m.EntityKind}' : {string.Join(", ", missing)}.");
         }
     }
 
@@ -1392,10 +1407,11 @@ public class CatalogService
             {
                 throw;
             }
-            catch
+            catch (Exception ex)
             {
-                // Source RH/paie indisponible : on laisse département/service vides plutôt que
-                // de faire échouer toute la page (même tolérance que l'ancien enrichissement front).
+                // Source RH/paie indisponible : département/service restent vides plutôt que de faire échouer
+                // toute la page (même tolérance que l'ancien enrichissement front), mais la panne est journalisée.
+                _logger.LogWarning(ex, "Département/service indisponibles pour {Count} matricule(s) : source RH/paie injoignable.", chunk.Length);
             }
         }
         return result;
@@ -1458,7 +1474,7 @@ public class CatalogService
         }
         else
         {
-            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
+            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
             _mapper.Map(dto, entity);
             repo.Update(entity);
         }
@@ -1469,7 +1485,7 @@ public class CatalogService
     public async Task DeleteCardAsync(int id, CancellationToken ct = default)
     {
         var repo = _uow.Repository<T_CARDPAIE>();
-        var e = await repo.GetByIdAsync(id, ct) ?? throw new KeyNotFoundException();
+        var e = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException();
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
     }
@@ -1484,7 +1500,7 @@ public class CatalogService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         if (string.IsNullOrWhiteSpace(matriculeSage))
-            throw new InvalidOperationException("Matricule SAGE requis.");
+            throw new DomainException("Matricule SAGE requis.");
         var sage = _tenant.SageDb;
         var repo = _uow.Repository<T_CARDPAIE>();
         var candidates = (await repo.ListAsync(c =>
@@ -1494,7 +1510,7 @@ public class CatalogService
                         || MatriculeIdentity.MemeSalarie(c.POINTEUSE_NUMERO, matriculePointeuse))
             .ToList();
         if (candidates.Count == 0)
-            throw new KeyNotFoundException($"Aucune correspondance {matriculeSage} ↔ {matriculePointeuse ?? "*"} sur la base {sage}.");
+            throw new NotFoundException($"Aucune correspondance {matriculeSage} ↔ {matriculePointeuse ?? "*"} sur la base {sage}.");
         repo.RemoveRange(candidates);
         await _uow.SaveChangesAsync(ct);
         return candidates.Count;
@@ -1507,7 +1523,7 @@ public class CatalogService
         var pteRow = await _tenant.GetPointeuseRowAsync(ct);
         var mode = await GetCorrespondenceAsync(ct);
         if (mode.Active)
-            throw new InvalidOperationException(
+            throw new DomainException(
                 "Le mode correspondance manuelle est actif pour cette paire de bases : la synchronisation automatique est désactivée. Désactivez le mode pour la relancer.");
         return await SyncCardPaieCoreAsync(sageRow, pteRow, ct);
     }
@@ -1713,13 +1729,13 @@ public class CatalogService
         var cardRepo = _uow.Repository<T_CARDPAIE>();
         var supervisorCard = await cardRepo.GetByIdAsync(dto.SupervisorCardId, ct);
         if (supervisorCard == null)
-            throw new KeyNotFoundException($"Carte superviseur introuvable (ID={dto.SupervisorCardId}).");
+            throw new NotFoundException($"Carte superviseur introuvable (ID={dto.SupervisorCardId}).");
 
         if (string.IsNullOrWhiteSpace(dto.Intitule))
-            throw new InvalidOperationException("L'intitulé de la catégorie est obligatoire.");
+            throw new DomainException("L'intitulé de la catégorie est obligatoire.");
 
         if (dto.HeuresSemaine <= 0)
-            throw new InvalidOperationException("Le nombre d'heures par semaine doit être supérieur à 0.");
+            throw new DomainException("Le nombre d'heures par semaine doit être supérieur à 0.");
 
         var repo = _uow.Repository<T_CATEGORIE>();
         T_CATEGORIE entity;
@@ -1738,7 +1754,7 @@ public class CatalogService
         }
         else
         {
-            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
+            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
             entity.INTITULE = dto.Intitule;
             entity.ID_CARDPAIE = dto.SupervisorCardId;
             entity.PAUSE = dto.Pause;
@@ -1752,7 +1768,7 @@ public class CatalogService
     public async Task DeleteCategoryAsync(int id, CancellationToken ct = default)
     {
         var repo = _uow.Repository<T_CATEGORIE>();
-        var e = await repo.GetByIdAsync(id, ct) ?? throw new KeyNotFoundException();
+        var e = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException();
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
     }
@@ -1772,11 +1788,11 @@ public class CatalogService
 
         var cardExists = await _uow.Repository<T_CARDPAIE>().GetByIdAsync(dto.CardPaieId, ct);
         if (cardExists == null)
-            throw new KeyNotFoundException($"Carte salarié introuvable (ID={dto.CardPaieId}).");
+            throw new NotFoundException($"Carte salarié introuvable (ID={dto.CardPaieId}).");
 
         var categoryExists = await _uow.Repository<T_CATEGORIE>().GetByIdAsync(dto.CategoryId, ct);
         if (categoryExists == null)
-            throw new KeyNotFoundException($"Catégorie introuvable (ID={dto.CategoryId}).");
+            throw new NotFoundException($"Catégorie introuvable (ID={dto.CategoryId}).");
 
         var repo = _uow.Repository<T_CAT_SAL>();
         T_CAT_SAL entity;
@@ -1804,7 +1820,7 @@ public class CatalogService
         }
         else
         {
-            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
+            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
             entity.MATRICULE_SAGE = dto.CardPaieId;
             entity.ID_CATEG = dto.CategoryId;
             repo.Update(entity);
@@ -1904,7 +1920,7 @@ public class CatalogService
     public async Task DeleteAffectationAsync(int id, CancellationToken ct = default)
     {
         var repo = _uow.Repository<T_CAT_SAL>();
-        var e = await repo.GetByIdAsync(id, ct) ?? throw new KeyNotFoundException();
+        var e = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException();
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
     }
@@ -1920,13 +1936,13 @@ public class CatalogService
     {
         var categoryExists = await _uow.Repository<T_CATEGORIE>().GetByIdAsync(dto.CategoryId, ct);
         if (categoryExists == null)
-            throw new KeyNotFoundException($"Catégorie introuvable (ID={dto.CategoryId}).");
+            throw new NotFoundException($"Catégorie introuvable (ID={dto.CategoryId}).");
 
         if (dto.Tolerance < 0)
-            throw new InvalidOperationException("La tolérance d'entrée ne peut pas être négative.");
+            throw new DomainException("La tolérance d'entrée ne peut pas être négative.");
 
         if (dto.Sortie < 0)
-            throw new InvalidOperationException("La tolérance de sortie ne peut pas être négative.");
+            throw new DomainException("La tolérance de sortie ne peut pas être négative.");
 
         var repo = _uow.Repository<T_TOLERANCE>();
         T_TOLERANCE entity;
@@ -1943,7 +1959,7 @@ public class CatalogService
         }
         else
         {
-            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
+            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
             entity.IDCATEGORIE = dto.CategoryId;
             entity.TOLERANCE = dto.Tolerance;
             entity.TYPES_TOL = dto.TypesTol;
@@ -1957,7 +1973,7 @@ public class CatalogService
     public async Task DeleteToleranceAsync(int id, CancellationToken ct = default)
     {
         var repo = _uow.Repository<T_TOLERANCE>();
-        var e = await repo.GetByIdAsync(id, ct) ?? throw new KeyNotFoundException();
+        var e = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException();
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
     }
@@ -1993,7 +2009,7 @@ public class CatalogService
         }
         else
         {
-            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
+            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
             entity.INTITULE = dto.Intitule;
             entity.DATE = dto.Date;
             repo.Update(entity);
@@ -2005,7 +2021,7 @@ public class CatalogService
     public async Task DeleteHolidayAsync(int id, CancellationToken ct = default)
     {
         var repo = _uow.Repository<T_FERIE>();
-        var e = await repo.GetByIdAsync(id, ct) ?? throw new KeyNotFoundException();
+        var e = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException();
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
     }
@@ -2038,7 +2054,7 @@ public class CatalogService
     public async Task<MajorationDto> SaveMajorationAsync(MajorationDto dto, CancellationToken ct = default)
     {
         var repo = _uow.Repository<T_MAJORATION>();
-        var entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
+        var entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
         entity.Cotation = dto.Cotation;
         repo.Update(entity);
         await _uow.SaveChangesAsync(ct);
@@ -2062,7 +2078,7 @@ public class CatalogService
         }
         else
         {
-            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
+            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
             entity.INTITULE_ABSENCE = dto.Intitule;
             entity.NOT_PAY = dto.NotPay;
             repo.Update(entity);
@@ -2083,7 +2099,8 @@ public class CatalogService
         if (string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase))
         {
             try { mappedTable = (await GetOtherCodeConstantMappingAsync(ct)).Table; }
-            catch (InvalidOperationException) { mappedTable = null; }
+            // Mapping « Code constante » pas encore configuré (cas normal d'une base AUTRE neuve) : pas de pré-sélection.
+            catch (DomainException) { mappedTable = null; }
         }
         return list
             .OrderBy(c => order.TryGetValue(c.CATEGORIE, out var i) ? i : 99)
@@ -2096,7 +2113,7 @@ public class CatalogService
         await _tenant.EnsureAuthorizedAsync(ct);
         var code = (dto.CodeConstante ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(code))
-            throw new InvalidOperationException("Le code constante SAGE est requis.");
+            throw new DomainException("Le code constante SAGE est requis.");
         var database = await _tenant.GetSageRowAsync(ct);
         if (string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase))
         {
@@ -2104,10 +2121,10 @@ public class CatalogService
             // exister dans la colonne mappee (role SAGE_CST_CODE) de la table cible.
             var values = await ListMappedCodeConstantValuesAsync(ct);
             if (!values.Contains(code, StringComparer.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Le code constante sélectionné n'existe pas dans la table mappée.");
+                throw new DomainException("Le code constante sélectionné n'existe pas dans la table mappée.");
         }
         var repo = _uow.Repository<T_CODE_CONSTANTE>();
-        var entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
+        var entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
         entity.CODE_CONSTANTE = code;
         repo.Update(entity);
         await _uow.SaveChangesAsync(ct);

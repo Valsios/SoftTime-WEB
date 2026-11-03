@@ -169,7 +169,7 @@ public class AuthServiceSecurityTests
     [Fact]
     public async Task CreateAdminAsync_WithWeakPassword_ThrowsAndDoesNotCreateAccount()
     {
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
             _auth.CreateAdminAsync(new AdminSetupDto("Admin User", "admin", "weakpass", null)));
 
         Assert.Contains("règles de sécurité", ex.Message);
@@ -281,7 +281,7 @@ public class AuthServiceSecurityTests
         };
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
 
-        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        var ex = await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _auth.LoginAsync(new LoginRequest("admin", "WrongPassword!")));
 
         Assert.Equal("Identifiants invalides.", ex.Message);
@@ -290,7 +290,7 @@ public class AuthServiceSecurityTests
     [Fact]
     public async Task LoginAsync_WithNonExistentUser_ThrowsUnauthorized()
     {
-        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        var ex = await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _auth.LoginAsync(new LoginRequest("ghost", "SomePassword")));
 
         Assert.Equal("Identifiants invalides.", ex.Message);
@@ -303,7 +303,7 @@ public class AuthServiceSecurityTests
     [InlineData("admin", null)]
     public async Task LoginAsync_WithEmptyCredentials_ThrowsUnauthorized(string? login, string? password)
     {
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _auth.LoginAsync(new LoginRequest(login!, password!)));
     }
 
@@ -322,7 +322,7 @@ public class AuthServiceSecurityTests
         };
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
 
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _auth.LoginAsync(new LoginRequest(injectionLogin, "Secret")));
     }
 
@@ -401,7 +401,7 @@ public class AuthServiceSecurityTests
         };
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
 
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _auth.LoginAsync(new LoginRequest("v2user_wrong", "completely_wrong_pwd")));
 
         // V2 hash must remain intact in DB
@@ -443,7 +443,7 @@ public class AuthServiceSecurityTests
         };
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
 
-        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        var ex = await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _auth.LoginAsync(new LoginRequest("corrupt", "some_guess")));
 
         Assert.Equal("Identifiants invalides.", ex.Message);
@@ -504,7 +504,7 @@ public class AuthServiceSecurityTests
         Assert.Equal("migrated_admin", authResponse.Login);
 
         // Authenticate with wrong password fails
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _auth.LoginAsync(new LoginRequest("migrated_admin", "WrongGuess")));
     }
 
@@ -640,11 +640,11 @@ public class AuthServiceSecurityTests
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
 
         // Attempting to log in by submitting the raw MD5 hash must fail
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _auth.LoginAsync(new LoginRequest("md5_locked_user", md5Hash)));
 
         // Attempting with arbitrary password also fails
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _auth.LoginAsync(new LoginRequest("md5_locked_user", "secret")));
 
         // Value in DB is untouched

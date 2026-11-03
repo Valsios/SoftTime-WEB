@@ -277,7 +277,7 @@ public class ReportService
     private static void EnsureMondayToSunday(ReportFilter filter)
     {
         if (!OvertimeRules.IsMondayToSundayWeek(filter.From, filter.To))
-            throw new InvalidOperationException("La semaine doit aller du lundi au dimanche.");
+            throw new DomainException("La semaine doit aller du lundi au dimanche.");
     }
 
     private static Expression<Func<T_HEURECORRIGER, bool>> PointagePredicate(ReportFilter filter, string sageDb)

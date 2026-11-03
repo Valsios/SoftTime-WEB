@@ -59,7 +59,7 @@ public class AuditServiceTests
     {
         var dto = new AuditConfigDto(0, "T_EMPLOYEE", "NOM", invalidType, true, "SOFTTIME_SUITE");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => _service.SaveConfigAsync(dto));
+        await Assert.ThrowsAsync<DomainException>(() => _service.SaveConfigAsync(dto));
 
         var repo = _uow.GetRepo<suivi_TBLCLN>();
         Assert.Empty(repo.Items);
@@ -128,7 +128,7 @@ public class AuditServiceTests
 
         var dto = new AuditConfigDto(10, "T_TEST", "COL1", "invalid_type", true, "SOFTTIME_SUITE");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => _service.SaveConfigAsync(dto));
+        await Assert.ThrowsAsync<DomainException>(() => _service.SaveConfigAsync(dto));
 
         Assert.Equal("varchar", existing.TYPES);
     }
@@ -138,7 +138,7 @@ public class AuditServiceTests
     {
         var dto = new AuditConfigDto(999, "T_TEST", "COL1", "int", true, "SOFTTIME_SUITE");
 
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => _service.SaveConfigAsync(dto));
+        await Assert.ThrowsAsync<NotFoundException>(() => _service.SaveConfigAsync(dto));
     }
 
     #region In-Memory Test Doubles

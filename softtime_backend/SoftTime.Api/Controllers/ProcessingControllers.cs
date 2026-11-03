@@ -112,20 +112,13 @@ public class EmployeePlanningController : ControllerBase
         => SavePlanningAsync(rows, ct);
 
     /// <summary>
-    /// Une ligne incohérente (date manquante, shift inconnu, heures absentes) est une erreur de
-    /// saisie : elle doit remonter en 400, pas en 500.
+    /// Une ligne incohérente (date manquante, shift inconnu, heures absentes) lève une DomainException :
+    /// le middleware global la renvoie en 400 avec le message.
     /// </summary>
     private async Task<IActionResult> SavePlanningAsync(List<EmployeePlanningDto> rows, CancellationToken ct)
     {
-        try
-        {
-            await _svc.SaveEmployeePlanningAsync(rows, ct);
-            return NoContent();
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(ex.Message);
-        }
+        await _svc.SaveEmployeePlanningAsync(rows, ct);
+        return NoContent();
     }
 
     [HttpDelete("{id:int}")]

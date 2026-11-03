@@ -160,7 +160,7 @@ public class PlanningServiceTests
     {
         var contexte = new Contexte();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<DomainException>(() =>
             contexte.Service.SaveEmployeePlanningAsync(new[]
             {
                 new EmployeePlanningDto(0, 1, 99, Lundi, null, null, null, false)
@@ -172,7 +172,7 @@ public class PlanningServiceTests
     {
         var contexte = new Contexte();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<DomainException>(() =>
             contexte.Service.SaveEmployeePlanningAsync(new[]
             {
                 new EmployeePlanningDto(0, 1, null, Lundi, null, null, null, false)

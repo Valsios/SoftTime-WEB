@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.Sage;
@@ -24,6 +26,7 @@ public class OvertimeService
     private readonly HistoryArchiveService _history;
     private readonly SageLeaveCalendar _leaves;
     private readonly ICurrentUser? _user;
+    private readonly ILogger<OvertimeService> _logger;
 
     public OvertimeService(IUnitOfWork uow, TenantConnectionService tenant, IExternalSourceService externalSource, PayrollWriterResolver payrollWriters, HistoryArchiveService history, SageLeaveCalendar leaves)
         : this(uow, tenant, externalSource, payrollWriters, history, leaves, null)
@@ -37,8 +40,10 @@ public class OvertimeService
         PayrollWriterResolver payrollWriters,
         HistoryArchiveService history,
         SageLeaveCalendar leaves,
-        ICurrentUser? user)
+        ICurrentUser? user,
+        ILogger<OvertimeService>? logger = null)
     {
+        _logger = logger ?? NullLogger<OvertimeService>.Instance;
         _uow = uow;
         _tenant = tenant;
         _externalSource = externalSource;
@@ -446,7 +451,7 @@ public class OvertimeService
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageRow = await _tenant.GetSageRowAsync(ct);
         if (!string.Equals(sageRow.TYPE_BASE, "STANDARD", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException(
+            throw new DomainException(
                 "La synchronisation SAGE est disponible uniquement pour une base STANDARD. Utilisez la synchronisation de paie pour une base AUTRE.");
         await SyncPayrollAsync(request, ct);
     }
@@ -574,13 +579,13 @@ public class OvertimeService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         if (string.IsNullOrWhiteSpace(matricule))
-            throw new InvalidOperationException("Matricule requis.");
+            throw new DomainException("Matricule requis.");
         if (from == default || to == default)
-            throw new InvalidOperationException("Période requise (du … au …).");
+            throw new DomainException("Période requise (du … au …).");
         var debut = from.Date;
         var fin = to.Date;
         if (fin < debut)
-            throw new InvalidOperationException("La date de fin doit suivre la date de début.");
+            throw new DomainException("La date de fin doit suivre la date de début.");
 
         var cle = MatriculeIdentity.Cle(matricule);
         var ctx = await ChargerContexteAsync(new PeriodRequest(null, null, debut, fin), avecExistantes: false, ct);
@@ -868,7 +873,7 @@ public class OvertimeService
 
     /// <summary>La civilité n'est chargée que si la période contient un 8 mars (évite un appel SAGE systématique).</summary>
     private Task<Dictionary<string, byte?>> ChargerCivilitesAsync(CancellationToken ct)
-        => SageCivilites.ChargerAsync(_tenant, _externalSource, ct);
+        => SageCivilites.ChargerAsync(_tenant, _externalSource, _logger, ct);
 
     private async Task<Dictionary<string, int>> ChargerNumSalAsync(CancellationToken ct)
     {
@@ -883,9 +888,10 @@ public class OvertimeService
                     resultat[cle] = (int)employe.EmployeeId;
             }
         }
-        catch
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // SAGE optionnel pour l'aperçu : le numéro de salarié restera nul.
+            // SAGE optionnel pour l'aperçu : le numéro de salarié restera nul, la panne est journalisée.
+            _logger.LogWarning(ex, "Numéros de salarié SAGE indisponibles : l'aperçu des heures supplémentaires est affiché sans eux.");
         }
         return resultat;
     }
@@ -921,7 +927,7 @@ public class OvertimeService
         var periode = calcules[0];
         var matricules = string.Join(", ", calcules.Select(h => h.Matricule).Distinct().Take(5))
                          + (calcules.Count > 5 ? "…" : string.Empty);
-        throw new InvalidOperationException(
+        throw new DomainException(
             $"La semaine du {lundi:dd/MM/yyyy} est incluse dans le calcul EXO/IMPO du "
             + $"{periode.PeriodeDebut:dd/MM/yyyy} au {periode.PeriodeFin:dd/MM/yyyy} ({matricules}) : "
             + "purgez d'abord les heures supplémentaires de cette période.");
@@ -939,15 +945,15 @@ public class OvertimeService
     private static void EnsureMondayToSunday(PeriodRequest request)
     {
         if (!OvertimeRules.IsMondayToSundayWeek(request.From, request.To))
-            throw new InvalidOperationException("La période doit être un lundi–dimanche (7 jours).");
+            throw new DomainException("La période doit être un lundi–dimanche (7 jours).");
     }
 
     private static void EnsureMaxOneMonth(PeriodRequest request)
     {
         if (request.To.Date < request.From.Date)
-            throw new InvalidOperationException("La date de début doit être antérieure ou égale à la date de fin.");
+            throw new DomainException("La date de début doit être antérieure ou égale à la date de fin.");
         if (!OvertimeRules.IsMaxOneMonth(request.From, request.To))
-            throw new InvalidOperationException("La période sélectionnée ne doit pas dépasser un mois.");
+            throw new DomainException("La période sélectionnée ne doit pas dépasser un mois.");
     }
 
     /// <summary>

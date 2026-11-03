@@ -205,7 +205,7 @@ public class ClosingSettingsTests
     {
         var service = Service(Lus(("Closing:MaxPeriodDays", "7")));
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<DomainException>(() =>
             service.AnalyserAsync(new ClosingAnalysisRequest(Lundi, Lundi.AddDays(7))));
         await service.AnalyserAsync(new ClosingAnalysisRequest(Lundi, Lundi.AddDays(6)));
     }

@@ -51,12 +51,12 @@ public class PunchProcessingService
         await PunchProcessingConfiguration.EnsureStorageAsync(_uow, ct);
 
         if (request.From == default || request.To == default)
-            throw new InvalidOperationException("La période (from/to) est requise pour traiter les pointages.");
+            throw new DomainException("La période (from/to) est requise pour traiter les pointages.");
         if (request.To.Date < request.From.Date)
-            throw new InvalidOperationException("La date de fin doit être postérieure ou égale à la date de début.");
+            throw new DomainException("La date de fin doit être postérieure ou égale à la date de début.");
 
         var clock = (await _uow.Repository<T_CLOCK>().ListAsync(_ => true, ct)).FirstOrDefault()
-            ?? throw new InvalidOperationException("Paramètre pointeuse (T_CLOCK) manquant.");
+            ?? throw new DomainException("Paramètre pointeuse (T_CLOCK) manquant.");
         var multiPointage = clock.MULTIPOINT == true;
 
         var sageDb = _tenant.SageDb;

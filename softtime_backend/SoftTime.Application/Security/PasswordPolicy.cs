@@ -77,11 +77,11 @@ public static class PasswordPolicy
         return new PasswordPolicyValidation(violations.Count == 0, violations);
     }
 
-    /// <summary>Valide le mot de passe et lève une <see cref="InvalidOperationException"/> (HTTP 400) si nécessaire.</summary>
+    /// <summary>Valide le mot de passe et lève une <see cref="DomainException"/> (HTTP 400) si nécessaire.</summary>
     public static void EnsureValid(string? password)
     {
         var validation = Validate(password);
         if (!validation.IsValid)
-            throw new InvalidOperationException(validation.ErrorMessage);
+            throw new DomainException(validation.ErrorMessage);
     }
 }

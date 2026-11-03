@@ -126,7 +126,7 @@ public class PasswordPolicyTests
     [Fact]
     public void EnsureValid_WithWeakPassword_ThrowsInvalidOperationException()
     {
-        var ex = Assert.Throws<InvalidOperationException>(() => PasswordPolicy.EnsureValid("password"));
+        var ex = Assert.Throws<DomainException>(() => PasswordPolicy.EnsureValid("password"));
 
         Assert.Contains("règles de sécurité", ex.Message);
     }

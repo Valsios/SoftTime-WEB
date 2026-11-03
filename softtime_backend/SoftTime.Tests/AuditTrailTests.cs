@@ -158,7 +158,7 @@ public class AuditTrailTests
         var audit = new CapturingAuditTrail();
         var writer = new TestStandardWriter(new SagePayrollWriter(), audit);
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => writer.WriteAsync(Database(), Rows(), Context()));
+        var exception = await Assert.ThrowsAsync<DomainException>(() => writer.WriteAsync(Database(), Rows(), Context()));
 
         Assert.Contains("Constante SAGE HS01 introuvable", exception.Message);
         var summary = Assert.Single(audit.Entries);

@@ -74,8 +74,8 @@ public class AuditConfigurationRulesTests
     [Fact]
     public void Normalize_WithNullOrInvalid_ThrowsInvalidOperationException()
     {
-        Assert.Throws<InvalidOperationException>(() => AuditConfigurationRules.Normalize(null!));
-        Assert.Throws<InvalidOperationException>(() => AuditConfigurationRules.Normalize("not_a_type"));
+        Assert.Throws<DomainException>(() => AuditConfigurationRules.Normalize(null!));
+        Assert.Throws<DomainException>(() => AuditConfigurationRules.Normalize("not_a_type"));
     }
 
     [Theory]
@@ -84,7 +84,7 @@ public class AuditConfigurationRulesTests
     [InlineData("   ")]
     public void Valider_WithEmptyOrNull_ThrowsInvalidOperationException(string? type)
     {
-        var ex = Assert.Throws<InvalidOperationException>(() => AuditConfigurationRules.Valider(type));
+        var ex = Assert.Throws<DomainException>(() => AuditConfigurationRules.Valider(type));
         Assert.Contains("obligatoire", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -94,7 +94,7 @@ public class AuditConfigurationRulesTests
     [InlineData("image")]
     public void Valider_WithExcludedType_ThrowsInvalidOperationException(string type)
     {
-        var ex = Assert.Throws<InvalidOperationException>(() => AuditConfigurationRules.Valider(type));
+        var ex = Assert.Throws<DomainException>(() => AuditConfigurationRules.Valider(type));
         Assert.Contains("exclu", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -103,7 +103,7 @@ public class AuditConfigurationRulesTests
     [InlineData("custom_sql_type")]
     public void Valider_WithUnknownType_ThrowsInvalidOperationException(string type)
     {
-        var ex = Assert.Throws<InvalidOperationException>(() => AuditConfigurationRules.Valider(type));
+        var ex = Assert.Throws<DomainException>(() => AuditConfigurationRules.Valider(type));
         Assert.Contains("pas autorisé", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 

@@ -82,7 +82,7 @@ public class TimekeepingService
         var sageDb = _tenant.SageDb;
         var repo = _uow.Repository<T_POINTAGE>();
         var entity = (await repo.ListAsync(p => p.IDPOINTAGE == id && p.NOM_BDD_SAGE == sageDb, ct)).FirstOrDefault()
-            ?? throw new KeyNotFoundException($"Pointage introuvable (ID={id}).");
+            ?? throw new NotFoundException($"Pointage introuvable (ID={id}).");
 
         var jour = dto.Date?.Date ?? entity.DATE_POINTAGE?.Date;
         await RefuserSiSemaineValideeAsync(sageDb, entity.MATRICULE_SAGE, jour, ct);
@@ -112,9 +112,9 @@ public class TimekeepingService
         // Garde indispensable : sans période explicite, FROM/TO valent DateTime.MinValue et la purge
         // porterait sur l'intégralité des pointages.
         if (request.From == default || request.To == default)
-            throw new InvalidOperationException("La période (from/to) est requise pour purger.");
+            throw new DomainException("La période (from/to) est requise pour purger.");
         if (request.To.Date < request.From.Date)
-            throw new InvalidOperationException("La date de fin doit être postérieure ou égale à la date de début.");
+            throw new DomainException("La date de fin doit être postérieure ou égale à la date de début.");
 
         var sageDb = _tenant.SageDb;
         var from = request.From.Date;
@@ -124,13 +124,13 @@ public class TimekeepingService
         var validees = (await _uow.Repository<T_HS_VALIDER>().ListAsync(
             v => v.BDD_SAGE == sageDb && v.VALIDATION_HS == true && v.DATE_DEB >= from && v.DATE_DEB <= to, ct)).Count;
         if (validees > 0)
-            throw new InvalidOperationException(
+            throw new DomainException(
                 $"La période contient {validees} semaine(s) validée(s) : annulez la validation avant de purger.");
 
         var hsExistants = (await _uow.Repository<T_HSExoImp>().ListAsync(
             h => h.BDD_SAGE == sageDb && h.PeriodeDebut >= from && h.PeriodeFin <= to, ct)).Count;
         if (hsExistants > 0)
-            throw new InvalidOperationException(
+            throw new DomainException(
                 "Des calculs EXO/IMPO existent sur la période : purgez les heures supplémentaires avant de purger les pointages.");
 
         var pointages = (await _uow.Repository<T_POINTAGE>().ListAsync(
@@ -187,7 +187,7 @@ public class TimekeepingService
         var semaines = await _uow.Repository<T_HS_VALIDER>().ListAsync(
             v => v.BDD_SAGE == sageDb && v.DATE_DEB == lundi && v.VALIDATION_HS == true, ct);
         if (semaines.Any(v => MemeIdentifiant(v.MATRICULES, matricule)))
-            throw new InvalidOperationException(
+            throw new DomainException(
                 $"La semaine du {lundi:dd/MM/yyyy} est validée : annulez la validation avant de modifier les pointages.");
     }
 
@@ -223,12 +223,12 @@ public class TimekeepingService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         if (request.From == default || request.To == default)
-            throw new InvalidOperationException("La période (from/to) est requise pour importer les pointages.");
+            throw new DomainException("La période (from/to) est requise pour importer les pointages.");
         if (request.To.Date < request.From.Date)
-            throw new InvalidOperationException("La date de fin doit être postérieure ou égale à la date de début.");
+            throw new DomainException("La date de fin doit être postérieure ou égale à la date de début.");
 
         _ = (await _uow.Repository<T_CLOCK>().ListAsync(_ => true, ct)).FirstOrDefault()
-            ?? throw new InvalidOperationException("Paramètre pointeuse (T_CLOCK) manquant.");
+            ?? throw new DomainException("Paramètre pointeuse (T_CLOCK) manquant.");
         var pteRow = await _tenant.GetPointeuseRowAsync(ct);
         var cards = (await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == _tenant.SageDb, ct))
             .Where(c => MatchesPointeuse(c.POINTEUSE_BDD, _tenant.PointeuseDb))
@@ -428,7 +428,7 @@ public class TimekeepingService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var entity = await LoadAnomalyAsync(id, ct)
-            ?? throw new KeyNotFoundException($"Anomalie introuvable (ID={id}).");
+            ?? throw new NotFoundException($"Anomalie introuvable (ID={id}).");
 
         var dateIn = dto.DateIn?.Date ?? entity.DATE_POINTAGE_IN?.Date;
         var dateOut = dto.DateOut?.Date ?? entity.DATE_POINTAGE_OUT?.Date;
@@ -467,7 +467,7 @@ public class TimekeepingService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         if (ids is null || ids.Count == 0)
-            throw new InvalidOperationException("Aucune anomalie sélectionnée.");
+            throw new DomainException("Aucune anomalie sélectionnée.");
 
         var cible = ids.ToHashSet();
         var anomalies = (await _uow.Repository<T_HEUREANOMALIE>()
@@ -475,7 +475,7 @@ public class TimekeepingService
             .Where(a => cible.Contains(a.ID))
             .ToList();
         if (anomalies.Count == 0)
-            throw new InvalidOperationException("Aucune anomalie trouvée pour les identifiants fournis.");
+            throw new DomainException("Aucune anomalie trouvée pour les identifiants fournis.");
 
         // Une absence de la journée complète (matin et après-midi) se valide sans heures : c'est
         // l'arbitrage « le salarié était absent ». Des heures saisies en plus seraient payées.
@@ -486,7 +486,7 @@ public class TimekeepingService
         {
             var detail = string.Join(", ", contradictoires.Take(5)
                 .Select(a => $"{a.MATRICULE_SAGE} du {a.DATE_POINTAGE_IN?.ToString("dd/MM/yyyy") ?? "?"}"));
-            throw new InvalidOperationException(
+            throw new DomainException(
                 $"Absence de la journée complète et heures saisies pour : {detail}. Retirez les heures ou l'absence avant de valider.");
         }
 
@@ -497,7 +497,7 @@ public class TimekeepingService
         {
             var detail = string.Join(", ", incompletes.Take(5)
                 .Select(a => $"{a.MATRICULE_SAGE} du {a.DATE_POINTAGE_IN?.ToString("dd/MM/yyyy") ?? "?"}"));
-            throw new InvalidOperationException(
+            throw new DomainException(
                 $"Heure d'entrée ou de sortie manquante pour : {detail}. Renseignez-les avant de valider.");
         }
 
@@ -510,7 +510,7 @@ public class TimekeepingService
         {
             var detail = string.Join(", ", verrouillees.Take(5)
                 .Select(a => $"{a.MATRICULE_SAGE} du {a.DATE_POINTAGE_IN:dd/MM/yyyy}"));
-            throw new InvalidOperationException(
+            throw new DomainException(
                 $"Semaine validée pour : {detail}. Annulez la validation avant de modifier les heures.");
         }
 
@@ -550,7 +550,7 @@ public class TimekeepingService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var repo = _uow.Repository<T_HEUREANOMALIE>();
-        var e = await LoadAnomalyAsync(id, ct) ?? throw new KeyNotFoundException();
+        var e = await LoadAnomalyAsync(id, ct) ?? throw new NotFoundException();
         await _history.ArchiveAnomaliesAsync(new[] { e }, ct);
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
@@ -577,7 +577,7 @@ public class TimekeepingService
         var entree = dateIn.Value.Date.Add(hEntree.Value);
         var sortie = dateOut.Value.Date.Add(hSortie.Value);
         if (sortie <= entree)
-            throw new InvalidOperationException("La sortie doit être postérieure à l'entrée.");
+            throw new DomainException("La sortie doit être postérieure à l'entrée.");
 
         if (dateIn.Value.Date != dateOut.Value.Date)
             return;
@@ -585,7 +585,7 @@ public class TimekeepingService
         {
             var t = dateIn.Value.Date.Add(pause);
             if (t < entree || t > sortie)
-                throw new InvalidOperationException(
+                throw new DomainException(
                     "Les heures de pause doivent être comprises entre l'entrée et la sortie.");
         }
     }
@@ -663,7 +663,7 @@ public class TimekeepingService
         }
         else
         {
-            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
+            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
             await RefuserSiSemaineValideeAsync(sageDb, entity.MATRICULE_SAGE, entity.DATE_POINTAGE_IN, ct);
             entity.ORIGINE = PunchProcessingConfiguration.OrigineManuel;
             Apply(dto, entity);
@@ -679,7 +679,7 @@ public class TimekeepingService
         var repo = _uow.Repository<T_HEURECORRIGER>();
         var sageDb = _tenant.SageDb;
         var e = (await repo.ListAsync(h => h.ID == id && h.BDD_SAGE == sageDb, ct)).FirstOrDefault()
-                ?? throw new KeyNotFoundException();
+                ?? throw new NotFoundException();
         await RefuserSiSemaineValideeAsync(sageDb, e.MATRICULE_SAGE, e.DATE_POINTAGE_IN, ct);
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);

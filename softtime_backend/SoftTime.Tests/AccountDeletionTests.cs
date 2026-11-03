@@ -75,7 +75,7 @@ public class AccountDeletionTests
     public async Task Self_deletion_is_refused_and_no_row_is_removed()
     {
         var before = _store.Snapshot();
-        await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.DeleteUserAsync(1, 1));
+        await Assert.ThrowsAsync<DomainException>(() => _auth.DeleteUserAsync(1, 1));
         Assert.Equal(before, _store.Snapshot());
         Assert.Equal(0, _uow.SaveCount);
     }
@@ -85,7 +85,7 @@ public class AccountDeletionTests
     {
         _store.GetRepo<T_USER_PERMISSION>().Items.Add(new T_USER_PERMISSION { IDRESPONSABLE = 1, PERMISSION_CODE = "PROC:SHIFTS", IS_GRANTED = true });
         var before = _store.Snapshot();
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.DeleteUserAsync(1));   // surcharge sans appelant
+        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.DeleteUserAsync(1));   // surcharge sans appelant
         Assert.Equal("Impossible de supprimer le dernier administrateur.", ex.Message);
         Assert.Equal(before, _store.Snapshot());
     }
@@ -103,7 +103,7 @@ public class AccountDeletionTests
     public async Task Unknown_account_deletes_nothing()
     {
         var before = _store.Snapshot();
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => _auth.DeleteUserAsync(1, 999));
+        await Assert.ThrowsAsync<NotFoundException>(() => _auth.DeleteUserAsync(1, 999));
         Assert.Equal(before, _store.Snapshot());
     }
 

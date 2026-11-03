@@ -16,13 +16,13 @@ public class OtherPointeuseReader : IPointeuseReader
     {
         foreach (var id in ids)
             if (!string.IsNullOrWhiteSpace(id) && !SafeIdentifier.IsMatch(id))
-                throw new InvalidOperationException($"Nom de table/colonne invalide dans le mapping pointeuse 'Autre' : {id}");
+                throw new DomainException($"Nom de table/colonne invalide dans le mapping pointeuse 'Autre' : {id}");
     }
 
     public async Task<IReadOnlyList<NormalizedPointeuseUser>> ListUsersAsync(T_BDD_POINTEUSE pteRow, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(pteRow.MAP_USER_TABLE) || string.IsNullOrWhiteSpace(pteRow.MAP_USER_COL_ID))
-            throw new InvalidOperationException("Mapping incomplet pour la base pointeuse 'Autre' : table et colonne ID utilisateur requises.");
+            throw new DomainException("Mapping incomplet pour la base pointeuse 'Autre' : table et colonne ID utilisateur requises.");
 
         ValidateIdentifiers(pteRow.MAP_USER_TABLE, pteRow.MAP_USER_COL_ID, pteRow.MAP_USER_COL_BADGE, pteRow.MAP_USER_COL_SSN, pteRow.MAP_USER_COL_NOM);
 
@@ -59,7 +59,7 @@ public class OtherPointeuseReader : IPointeuseReader
     {
         if (string.IsNullOrWhiteSpace(pteRow.MAP_PUNCH_TABLE) || string.IsNullOrWhiteSpace(pteRow.MAP_PUNCH_COL_USER_ID)
             || string.IsNullOrWhiteSpace(pteRow.MAP_PUNCH_COL_DATETIME))
-            throw new InvalidOperationException("Mapping incomplet pour les pointages 'Autre' : table, colonne utilisateur et colonne date/heure requises.");
+            throw new DomainException("Mapping incomplet pour les pointages 'Autre' : table, colonne utilisateur et colonne date/heure requises.");
 
         ValidateIdentifiers(pteRow.MAP_PUNCH_TABLE, pteRow.MAP_PUNCH_COL_USER_ID, pteRow.MAP_PUNCH_COL_DATETIME, pteRow.MAP_PUNCH_COL_TYPE);
 

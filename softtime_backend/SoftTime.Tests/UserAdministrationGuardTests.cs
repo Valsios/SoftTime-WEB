@@ -37,12 +37,12 @@ public class UserAdministrationGuardTests
         var svc = Service(2, 3);
         var before = _uow.Snapshot();
 
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SaveUserAsync(2, NewUserDto));
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SaveUserAsync(2, new UserDto(3, 3, "Cible", "cible", null, "ValidP@ss123!")));
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.DeleteUserAsync(2, 3));
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SetDbAccessAsync(3, new[] { 1 }));
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SaveUserDetailedPermissionsAsync(2, 3, new[] { "PROC:SHIFTS" }));
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.ResetUserDetailedPermissionsAsync(2, 3));
+        await Assert.ThrowsAsync<ForbiddenException>(() => svc.SaveUserAsync(2, NewUserDto));
+        await Assert.ThrowsAsync<ForbiddenException>(() => svc.SaveUserAsync(2, new UserDto(3, 3, "Cible", "cible", null, "ValidP@ss123!")));
+        await Assert.ThrowsAsync<ForbiddenException>(() => svc.DeleteUserAsync(2, 3));
+        await Assert.ThrowsAsync<ForbiddenException>(() => svc.SetDbAccessAsync(3, new[] { 1 }));
+        await Assert.ThrowsAsync<ForbiddenException>(() => svc.SaveUserDetailedPermissionsAsync(2, 3, new[] { "PROC:SHIFTS" }));
+        await Assert.ThrowsAsync<ForbiddenException>(() => svc.ResetUserDetailedPermissionsAsync(2, 3));
 
         Assert.Equal(before, _uow.Snapshot());
     }
@@ -65,8 +65,8 @@ public class UserAdministrationGuardTests
     {
         var svc = Service(1, 1);
         // Pas d'auto-modification du rôle, pas de suppression de son propre compte.
-        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.SaveUserAsync(1, new UserDto(1, 2, "Admin", "admin", null, null)));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.DeleteUserAsync(1, 1));
+        await Assert.ThrowsAsync<DomainException>(() => svc.SaveUserAsync(1, new UserDto(1, 2, "Admin", "admin", null, null)));
+        await Assert.ThrowsAsync<DomainException>(() => svc.DeleteUserAsync(1, 1));
     }
 
 
@@ -78,13 +78,13 @@ public class UserAdministrationGuardTests
         var svc = Service(4, 4);
         var before = _uow.Snapshot();
 
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SaveUserAsync(4, new UserDto(0, 1, "Nouvel admin", "nouvel", null, "ValidP@ss123!")));
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SaveUserAsync(4, new UserDto(3, 1, "Cible", "cible", null, null)));
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SaveUserDetailedPermissionsAsync(4, 3, new[] { "PROC:SHIFTS" }));
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.ResetUserDetailedPermissionsAsync(4, 3));
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SetDbAccessAsync(3, new[] { 1 }));
+        await Assert.ThrowsAsync<ForbiddenException>(() => svc.SaveUserAsync(4, new UserDto(0, 1, "Nouvel admin", "nouvel", null, "ValidP@ss123!")));
+        await Assert.ThrowsAsync<ForbiddenException>(() => svc.SaveUserAsync(4, new UserDto(3, 1, "Cible", "cible", null, null)));
+        await Assert.ThrowsAsync<ForbiddenException>(() => svc.SaveUserDetailedPermissionsAsync(4, 3, new[] { "PROC:SHIFTS" }));
+        await Assert.ThrowsAsync<ForbiddenException>(() => svc.ResetUserDetailedPermissionsAsync(4, 3));
+        await Assert.ThrowsAsync<ForbiddenException>(() => svc.SetDbAccessAsync(3, new[] { 1 }));
         // Même un rôle nommé comme l'administrateur ne peut pas modifier son propre compte de droits.
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SaveUserDetailedPermissionsAsync(4, 4, new[] { "PARAMS:USERS" }));
+        await Assert.ThrowsAsync<ForbiddenException>(() => svc.SaveUserDetailedPermissionsAsync(4, 4, new[] { "PARAMS:USERS" }));
         Assert.Equal(before, _uow.Snapshot());
     }
 
@@ -97,16 +97,16 @@ public class UserAdministrationGuardTests
         var before = _uow.Snapshot();
 
         // Créer, modifier, attribuer le rôle 1, rétrograder le compte 1 : la garde refuse avant tout contrôle interne.
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SaveUserAsync(4, new UserDto(0, 2, "Nouveau", "nouveau", null, "ValidP@ss123!")));
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SaveUserAsync(4, new UserDto(3, 2, "Cible modifiée", "cible", null, null)));
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SaveUserAsync(4, new UserDto(3, 1, "Cible", "cible", null, null)));
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SaveUserAsync(4, new UserDto(1, 2, "Admin", "admin", null, null)));
+        await Assert.ThrowsAsync<ForbiddenException>(() => svc.SaveUserAsync(4, new UserDto(0, 2, "Nouveau", "nouveau", null, "ValidP@ss123!")));
+        await Assert.ThrowsAsync<ForbiddenException>(() => svc.SaveUserAsync(4, new UserDto(3, 2, "Cible modifiée", "cible", null, null)));
+        await Assert.ThrowsAsync<ForbiddenException>(() => svc.SaveUserAsync(4, new UserDto(3, 1, "Cible", "cible", null, null)));
+        await Assert.ThrowsAsync<ForbiddenException>(() => svc.SaveUserAsync(4, new UserDto(1, 2, "Admin", "admin", null, null)));
         // Supprimer, accès aux bases, droits, réinitialisation.
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.DeleteUserAsync(4, 3));
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.DeleteUserAsync(4, 1));
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SetDbAccessAsync(3, new[] { 1 }));
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.SaveUserDetailedPermissionsAsync(4, 3, new[] { "PROC:SHIFTS" }));
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => svc.ResetUserDetailedPermissionsAsync(4, 3));
+        await Assert.ThrowsAsync<ForbiddenException>(() => svc.DeleteUserAsync(4, 3));
+        await Assert.ThrowsAsync<ForbiddenException>(() => svc.DeleteUserAsync(4, 1));
+        await Assert.ThrowsAsync<ForbiddenException>(() => svc.SetDbAccessAsync(3, new[] { 1 }));
+        await Assert.ThrowsAsync<ForbiddenException>(() => svc.SaveUserDetailedPermissionsAsync(4, 3, new[] { "PROC:SHIFTS" }));
+        await Assert.ThrowsAsync<ForbiddenException>(() => svc.ResetUserDetailedPermissionsAsync(4, 3));
 
         Assert.Equal(before, _uow.Snapshot());
     }
@@ -118,9 +118,9 @@ public class UserAdministrationGuardTests
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 4, IDROLE = 4, LOGIN = "customadmin" });
         var before = _uow.Snapshot();
 
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() =>
+        await Assert.ThrowsAsync<ForbiddenException>(() =>
             Service(4, 4).SaveUserAsync(4, new UserDto(4, 1, "customadmin", "customadmin", null, null)));   // vers le rôle 1
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() =>
+        await Assert.ThrowsAsync<ForbiddenException>(() =>
             Service(4, 4).SaveUserAsync(4, new UserDto(4, 2, "customadmin", "customadmin", null, null)));   // vers un autre rôle
 
         Assert.Equal(before, _uow.Snapshot());
@@ -131,13 +131,13 @@ public class UserAdministrationGuardTests
     public async Task Role_1_stays_protected_against_deleting_itself_and_removing_the_last_administrator()
     {
         var svc = Service(1, 1);
-        var own = await Assert.ThrowsAsync<InvalidOperationException>(() => svc.DeleteUserAsync(1, 1));
+        var own = await Assert.ThrowsAsync<DomainException>(() => svc.DeleteUserAsync(1, 1));
         Assert.Equal("Vous ne pouvez pas supprimer votre propre compte.", own.Message);
 
         // Dernier administrateur : suppression et rétrogradation refusées (surcharges sans appelant, utilisées par les tests historiques).
-        var delete = await Assert.ThrowsAsync<InvalidOperationException>(() => svc.DeleteUserAsync(1));
+        var delete = await Assert.ThrowsAsync<DomainException>(() => svc.DeleteUserAsync(1));
         Assert.Equal("Impossible de supprimer le dernier administrateur.", delete.Message);
-        var demote = await Assert.ThrowsAsync<InvalidOperationException>(() => svc.SaveUserAsync(new UserDto(1, 2, "Admin", "admin", null, null)));
+        var demote = await Assert.ThrowsAsync<DomainException>(() => svc.SaveUserAsync(new UserDto(1, 2, "Admin", "admin", null, null)));
         Assert.Equal("Impossible de rétrograder le dernier administrateur.", demote.Message);
         Assert.Contains(_uow.GetRepo<T_RESPONSABLE>().Items, u => u.IDRESPONSABLE == 1 && u.IDROLE == 1);
     }

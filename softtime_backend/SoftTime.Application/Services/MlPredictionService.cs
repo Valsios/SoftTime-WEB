@@ -364,16 +364,18 @@ public sealed class MlPredictionService
         return null;
     }
 
-    private static MlMetrics? LireMetriques(T_ML_MODELE model)
+    /// <summary>Métriques du modèle ; un JSON illisible est journalisé et le statut s'affiche sans métriques.</summary>
+    private MlMetrics? LireMetriques(T_ML_MODELE model)
     {
+        if (string.IsNullOrWhiteSpace(model.MetriquesJson))
+            return null;
         try
         {
-            return string.IsNullOrWhiteSpace(model.MetriquesJson)
-                ? null
-                : JsonSerializer.Deserialize<MlMetrics>(model.MetriquesJson);
+            return JsonSerializer.Deserialize<MlMetrics>(model.MetriquesJson);
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
+            _logger.LogWarning(ex, "Métriques illisibles pour le modèle {ModelId} : statut affiché sans métriques.", model.Id);
             return null;
         }
     }

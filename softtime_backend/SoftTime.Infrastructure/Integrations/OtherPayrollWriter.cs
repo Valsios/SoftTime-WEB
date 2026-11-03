@@ -51,7 +51,7 @@ public sealed class OtherPayrollWriter : IPayrollWriter
             {
                 var affected = await UpdateAsync(connection, transaction, plan, category, row, ct);
                 if (affected != 1)
-                    throw new InvalidOperationException($"La synchronisation a été annulée : {affected} ligne(s) mise(s) à jour pour le matricule {row.Matricule} et la catégorie {category}; une seule ligne était attendue.");
+                    throw new DomainException($"La synchronisation a été annulée : {affected} ligne(s) mise(s) à jour pour le matricule {row.Matricule} et la catégorie {category}; une seule ligne était attendue.");
                 updates++;
                 categoryCounts[category] += affected;
             }
@@ -142,20 +142,20 @@ public sealed class OtherPayrollWriter : IPayrollWriter
             result[reader.GetString(0)] = new ColumnInfo(reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetByte(2), reader.IsDBNull(3) ? null : reader.GetInt32(3));
         }
         if (result.Count == 0)
-            throw new InvalidOperationException($"La table {plan.Table} n'existe pas.");
+            throw new DomainException($"La table {plan.Table} n'existe pas.");
         return result;
     }
 
     private static void ValidateColumns(WritePlan plan, IReadOnlyDictionary<string, ColumnInfo> columns)
     {
         if (!columns.ContainsKey(plan.MatriculeColumn))
-            throw new InvalidOperationException($"La colonne {plan.MatriculeColumn} n'existe pas.");
+            throw new DomainException($"La colonne {plan.MatriculeColumn} n'existe pas.");
         foreach (var (category, column) in plan.ValueColumns)
         {
             if (!columns.TryGetValue(column, out var info))
-                throw new InvalidOperationException($"La colonne {column} de la catégorie {category} n'existe pas.");
+                throw new DomainException($"La colonne {column} de la catégorie {category} n'existe pas.");
             if (!NumericTypes.Contains(info.DataType))
-                throw new InvalidOperationException($"La colonne {column} de la catégorie {category} doit être numérique.");
+                throw new DomainException($"La colonne {column} de la catégorie {category} doit être numérique.");
         }
     }
 
@@ -163,7 +163,7 @@ public sealed class OtherPayrollWriter : IPayrollWriter
     {
         var sourceDuplicates = rows.GroupBy(r => r.Matricule?.Trim(), StringComparer.OrdinalIgnoreCase).FirstOrDefault(g => string.IsNullOrWhiteSpace(g.Key) || g.Count() > 1);
         if (sourceDuplicates != null)
-            throw new InvalidOperationException(string.IsNullOrWhiteSpace(sourceDuplicates.Key)
+            throw new DomainException(string.IsNullOrWhiteSpace(sourceDuplicates.Key)
                 ? "Un résultat d'heures supplémentaires ne contient pas de matricule."
                 : $"Plusieurs résultats d'heures supplémentaires correspondent au matricule {sourceDuplicates.Key}.");
         foreach (var row in rows)
@@ -172,7 +172,7 @@ public sealed class OtherPayrollWriter : IPayrollWriter
             var value = OvertimePayrollCategoryMapper.ValueFor(category, row);
             var target = columns[plan.ValueColumns[category]];
             if (!CanStore(value, target))
-                throw new InvalidOperationException($"La valeur {value} du matricule {row.Matricule} n'est pas compatible avec la colonne {plan.ValueColumns[category]}.");
+                throw new DomainException($"La valeur {value} du matricule {row.Matricule} n'est pas compatible avec la colonne {plan.ValueColumns[category]}.");
         }
     }
 
@@ -200,9 +200,9 @@ public sealed class OtherPayrollWriter : IPayrollWriter
             cmd.Parameters.Add("@matricule", SqlDbType.NVarChar, 256).Value = row.Matricule!.Trim();
             var count = Convert.ToInt64(await cmd.ExecuteScalarAsync(ct));
             if (count == 0)
-                throw new InvalidOperationException($"Aucune ligne de paie trouvée pour le matricule {row.Matricule}.");
+                throw new DomainException($"Aucune ligne de paie trouvée pour le matricule {row.Matricule}.");
             if (count > 1)
-                throw new InvalidOperationException($"Plusieurs lignes de paie correspondent au matricule {row.Matricule}.");
+                throw new DomainException($"Plusieurs lignes de paie correspondent au matricule {row.Matricule}.");
         }
     }
 

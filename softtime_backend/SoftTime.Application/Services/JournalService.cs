@@ -62,7 +62,7 @@ public class JournalService
 
         var repo = _uow.Repository<suivi_JOURNAL>();
         var row = (await repo.ToListAsync(repo.Query().Where(e => e.Id == id).Take(1), ct)).FirstOrDefault()
-                  ?? throw new KeyNotFoundException("Ligne de journal introuvable.");
+                  ?? throw new NotFoundException("Ligne de journal introuvable.");
         return ToDto(row);
     }
 

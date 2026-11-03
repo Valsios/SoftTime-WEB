@@ -360,9 +360,9 @@ public class OvertimeServiceTests
             new PeriodRequest(null, null, new DateTime(2026, 9, 1), new DateTime(2026, 9, 30)));
 
         var annulation = new WeeklyValidationRequest(null, null, Lundi, Dimanche, new[] { "001" });
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        await Assert.ThrowsAsync<DomainException>(
             () => contexte.Service.ValidateWeekAsync(annulation, false));
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        await Assert.ThrowsAsync<DomainException>(
             () => contexte.Service.PurgeValidationAsync(new PeriodRequest(null, null, Lundi, Dimanche)));
 
         Assert.True(Assert.Single(contexte.Semaines).VALIDATION_HS);

@@ -56,10 +56,10 @@ public class AccountSecurityTests
     {
         // Arrange
         for (var i = 0; i < _options.MaxFailedLoginAttempts; i++)
-            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => _sut.LoginAsync(new LoginRequest("agent", "wrong")));
+            await Assert.ThrowsAsync<UnauthorizedException>(() => _sut.LoginAsync(new LoginRequest("agent", "wrong")));
 
         // Act
-        var ex = await Assert.ThrowsAsync<ForbiddenOperationException>(() => _sut.LoginAsync(new LoginRequest("agent", Password)));
+        var ex = await Assert.ThrowsAsync<ForbiddenException>(() => _sut.LoginAsync(new LoginRequest("agent", Password)));
 
         // Assert
         Assert.StartsWith("Compte temporairement verrouillé", ex.Message);
@@ -71,7 +71,7 @@ public class AccountSecurityTests
     public async Task LoginAsync_SuccessAfterFailures_ResetsFailureCounter()
     {
         // Arrange
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => _sut.LoginAsync(new LoginRequest("agent", "wrong")));
+        await Assert.ThrowsAsync<UnauthorizedException>(() => _sut.LoginAsync(new LoginRequest("agent", "wrong")));
         Assert.Equal(1, User(2).TENTATIVES_ECHOUEES);
 
         // Act
@@ -100,8 +100,8 @@ public class AccountSecurityTests
     public async Task LoginAsync_UnknownLogin_ThrowsSameMessageAsWrongPassword()
     {
         // Act
-        var unknown = await Assert.ThrowsAsync<UnauthorizedAccessException>(() => _sut.LoginAsync(new LoginRequest("inconnu", Password)));
-        var wrong = await Assert.ThrowsAsync<UnauthorizedAccessException>(() => _sut.LoginAsync(new LoginRequest("agent", "wrong")));
+        var unknown = await Assert.ThrowsAsync<UnauthorizedException>(() => _sut.LoginAsync(new LoginRequest("inconnu", Password)));
+        var wrong = await Assert.ThrowsAsync<UnauthorizedException>(() => _sut.LoginAsync(new LoginRequest("agent", "wrong")));
 
         // Assert
         Assert.Equal(AuthService.InvalidCredentialsMessage, unknown.Message);
@@ -138,7 +138,7 @@ public class AccountSecurityTests
         var refreshed = await _sut.RefreshAsync(login.RefreshToken);
 
         // Act
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => _sut.RefreshAsync(login.RefreshToken));
+        await Assert.ThrowsAsync<UnauthorizedException>(() => _sut.RefreshAsync(login.RefreshToken));
 
         // Assert
         Assert.Null(StoredToken(refreshed.RefreshToken!).DATE_REVOCATION);
@@ -153,7 +153,7 @@ public class AccountSecurityTests
         StoredToken(login.RefreshToken!).DATE_REVOCATION = DateTime.UtcNow.AddMinutes(-5);
 
         // Act
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => _sut.RefreshAsync(login.RefreshToken));
+        await Assert.ThrowsAsync<UnauthorizedException>(() => _sut.RefreshAsync(login.RefreshToken));
 
         // Assert
         Assert.NotNull(StoredToken(refreshed.RefreshToken!).DATE_REVOCATION);
@@ -169,7 +169,7 @@ public class AccountSecurityTests
         await _sut.LogoutAsync(first.RefreshToken);
 
         // Act
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => _sut.RefreshAsync(first.RefreshToken));
+        await Assert.ThrowsAsync<UnauthorizedException>(() => _sut.RefreshAsync(first.RefreshToken));
 
         // Assert
         Assert.NotNull(StoredToken(second.RefreshToken!).DATE_REVOCATION);
@@ -183,7 +183,7 @@ public class AccountSecurityTests
         StoredToken(login.RefreshToken!).DATE_EXPIRATION = DateTime.UtcNow.AddSeconds(-1);
 
         // Act
-        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() => _sut.RefreshAsync(login.RefreshToken));
+        var ex = await Assert.ThrowsAsync<UnauthorizedException>(() => _sut.RefreshAsync(login.RefreshToken));
 
         // Assert
         Assert.Equal(RefreshTokenService.InvalidTokenMessage, ex.Message);
@@ -196,7 +196,7 @@ public class AccountSecurityTests
     public async Task RefreshAsync_MissingOrUnknownToken_ThrowsUnauthorized(string? token)
     {
         // Act
-        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() => _sut.RefreshAsync(token));
+        var ex = await Assert.ThrowsAsync<UnauthorizedException>(() => _sut.RefreshAsync(token));
 
         // Assert
         Assert.Equal(RefreshTokenService.InvalidTokenMessage, ex.Message);
@@ -213,7 +213,7 @@ public class AccountSecurityTests
         var act = () => _sut.RefreshAsync(login.RefreshToken);
 
         // Assert
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(act);
+        await Assert.ThrowsAsync<UnauthorizedException>(act);
     }
 
     [Fact]

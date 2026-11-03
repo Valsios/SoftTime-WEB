@@ -52,67 +52,61 @@ public static class PasswordSecurityHelper
         // 3. Détection des formats Identity V2 et V3 par inspection de la structure binaire décodée
         if (trimmed.Length >= 4 && trimmed.Length % 4 == 0 && IsBase64Chars(trimmed))
         {
-            try
+            // Tampon sur le tas (taille de la chaîne) : aucun débordement de pile, et rien ici ne peut lever d'exception.
+            Span<byte> buffer = new byte[trimmed.Length];
+            if (Convert.TryFromBase64String(trimmed, buffer, out var bytesWritten))
             {
-                Span<byte> buffer = stackalloc byte[trimmed.Length];
-                if (Convert.TryFromBase64String(trimmed, buffer, out var bytesWritten))
+                // Format Identity V2 (ASP.NET Identity 1.x / 2.x) :
+                // 49 octets = 0x00 (header) + 16 octets salt + 32 octets subkey (HMAC-SHA1).
+                // Représentation Base64 exacte = 68 caractères.
+                if (bytesWritten == 49 && buffer[0] == 0x00 && trimmed.Length == 68)
                 {
-                    // Format Identity V2 (ASP.NET Identity 1.x / 2.x) :
-                    // 49 octets = 0x00 (header) + 16 octets salt + 32 octets subkey (HMAC-SHA1).
-                    // Représentation Base64 exacte = 68 caractères.
-                    if (bytesWritten == 49 && buffer[0] == 0x00 && trimmed.Length == 68)
-                    {
-                        return PasswordClassification.IdentityV2;
-                    }
-
-                    // Format Identity V3 (ASP.NET Core Identity) :
-                    // Octet 0 : 0x01 (marqueur V3)
-                    // Octets 1..4 : PRF (uint big-endian : 0=HMACSHA1, 1=HMACSHA256, 2=HMACSHA512)
-                    // Octets 5..8 : Nombre d'itérations (uint big-endian >= 1)
-                    // Octets 9..12 : Taille du sel en octets (uint big-endian >= 16)
-                    // Octets 13..13+saltLength-1 : Sel
-                    // Octets restants : Sous-clé PBKDF2 (>= 16 octets)
-                    // Longueur totale minimale = 1 + 4 + 4 + 4 + 16 + 16 = 45 octets binaires.
-                    // Cas standard .NET 8 (HMAC-SHA256, 128b salt, 256b subkey) = 61 octets = 84 caractères Base64.
-                    // Cas HMAC-SHA512 (512b subkey) = 93 octets = 124 caractères Base64.
-                    if (bytesWritten >= 45 && buffer[0] == 0x01)
-                    {
-                        var prf = ReadNetworkByteOrder(buffer, 1);
-                        var iterCount = ReadNetworkByteOrder(buffer, 5);
-                        var saltLength = ReadNetworkByteOrder(buffer, 9);
-
-                        if (prf <= 2 && iterCount >= 1 && saltLength >= 16 && bytesWritten >= 13 + saltLength + 16)
-                        {
-                            return PasswordClassification.IdentityV3;
-                        }
-
-                        // Commençait par le marqueur V3 (0x01) mais avec des métadonnées invalides ou tronquées
-                        return PasswordClassification.AmbiguousOrMalformed;
-                    }
-
-                    // Commençait par un marqueur Identity (0x00 ou 0x01) mais taille ou structure invalide
-                    if (bytesWritten > 0 && (buffer[0] == 0x00 || buffer[0] == 0x01))
-                    {
-                        return PasswordClassification.AmbiguousOrMalformed;
-                    }
-
-                    // Digest binaire brut encodé en Base64 (MD5=16B, SHA-1=20B, SHA-256=32B, SHA-512=64B)
-                    if ((bytesWritten == 16 || bytesWritten == 20 || bytesWritten == 32 || bytesWritten == 64)
-                        && trimmed.EndsWith('='))
-                    {
-                        return PasswordClassification.UnrecognizedHash;
-                    }
-
-                    // Chaîne Base64 longue avec padding '=' non reconnue : potentielle empreinte inconnue ou corrompue
-                    if (trimmed.Length >= 40 && trimmed.EndsWith('='))
-                    {
-                        return PasswordClassification.AmbiguousOrMalformed;
-                    }
+                    return PasswordClassification.IdentityV2;
                 }
-            }
-            catch
-            {
-                // En cas d'erreur de décodage, continuer vers l'analyse de forme
+
+                // Format Identity V3 (ASP.NET Core Identity) :
+                // Octet 0 : 0x01 (marqueur V3)
+                // Octets 1..4 : PRF (uint big-endian : 0=HMACSHA1, 1=HMACSHA256, 2=HMACSHA512)
+                // Octets 5..8 : Nombre d'itérations (uint big-endian >= 1)
+                // Octets 9..12 : Taille du sel en octets (uint big-endian >= 16)
+                // Octets 13..13+saltLength-1 : Sel
+                // Octets restants : Sous-clé PBKDF2 (>= 16 octets)
+                // Longueur totale minimale = 1 + 4 + 4 + 4 + 16 + 16 = 45 octets binaires.
+                // Cas standard .NET 8 (HMAC-SHA256, 128b salt, 256b subkey) = 61 octets = 84 caractères Base64.
+                // Cas HMAC-SHA512 (512b subkey) = 93 octets = 124 caractères Base64.
+                if (bytesWritten >= 45 && buffer[0] == 0x01)
+                {
+                    var prf = ReadNetworkByteOrder(buffer, 1);
+                    var iterCount = ReadNetworkByteOrder(buffer, 5);
+                    var saltLength = ReadNetworkByteOrder(buffer, 9);
+
+                    if (prf <= 2 && iterCount >= 1 && saltLength >= 16 && bytesWritten >= 13 + saltLength + 16)
+                    {
+                        return PasswordClassification.IdentityV3;
+                    }
+
+                    // Commençait par le marqueur V3 (0x01) mais avec des métadonnées invalides ou tronquées
+                    return PasswordClassification.AmbiguousOrMalformed;
+                }
+
+                // Commençait par un marqueur Identity (0x00 ou 0x01) mais taille ou structure invalide
+                if (bytesWritten > 0 && (buffer[0] == 0x00 || buffer[0] == 0x01))
+                {
+                    return PasswordClassification.AmbiguousOrMalformed;
+                }
+
+                // Digest binaire brut encodé en Base64 (MD5=16B, SHA-1=20B, SHA-256=32B, SHA-512=64B)
+                if ((bytesWritten == 16 || bytesWritten == 20 || bytesWritten == 32 || bytesWritten == 64)
+                    && trimmed.EndsWith('='))
+                {
+                    return PasswordClassification.UnrecognizedHash;
+                }
+
+                // Chaîne Base64 longue avec padding '=' non reconnue : potentielle empreinte inconnue ou corrompue
+                if (trimmed.Length >= 40 && trimmed.EndsWith('='))
+                {
+                    return PasswordClassification.AmbiguousOrMalformed;
+                }
             }
         }
 

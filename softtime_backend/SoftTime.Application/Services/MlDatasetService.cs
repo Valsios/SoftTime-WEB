@@ -57,7 +57,7 @@ public sealed class MlDatasetService
         from = from.Date;
         to = to.Date;
         if (to < from)
-            throw new InvalidOperationException("La date de fin doit suivre la date de début.");
+            throw new DomainException("La date de fin doit suivre la date de début.");
 
         var ctx = await LoadContextAsync(from, to, ct);
         Prepare(ctx);
@@ -188,7 +188,7 @@ public sealed class MlDatasetService
 
         var conges = await _leaves.LoadAsync(ct);
         var civilites = OvertimeDayRules.ContientHuitMars(warmupFrom, to)
-            ? await SageCivilites.ChargerAsync(_tenant, _externalSource, ct)
+            ? await SageCivilites.ChargerAsync(_tenant, _externalSource, _logger, ct)
             : new Dictionary<string, byte?>(StringComparer.Ordinal);
 
         var validees = (await _uow.Repository<T_HS_VALIDER>().ListAsync(

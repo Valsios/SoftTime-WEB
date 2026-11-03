@@ -25,6 +25,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers()
     .AddJsonOptions(o => SoftTimeJsonOptions.Configure(o.JsonSerializerOptions));
+// Mêmes options pour les réponses écrites hors MVC (middleware d'erreurs, limitation) que pour les contrôleurs.
+builder.Services.ConfigureHttpJsonOptions(o => SoftTimeJsonOptions.Configure(o.SerializerOptions));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {

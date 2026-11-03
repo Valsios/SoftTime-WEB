@@ -90,15 +90,15 @@ public class ClosingService
     internal static void Valider(ClosingAnalysisRequest request, int maxPeriodDays = MaxPeriodDays)
     {
         if (request.From == default || request.To == default)
-            throw new InvalidOperationException("La période (from/to) est requise pour analyser la clôture.");
+            throw new DomainException("La période (from/to) est requise pour analyser la clôture.");
         if (request.To.Date < request.From.Date)
-            throw new InvalidOperationException("La date de fin doit être postérieure ou égale à la date de début.");
+            throw new DomainException("La date de fin doit être postérieure ou égale à la date de début.");
         if (LongueurJours(request.From, request.To) > maxPeriodDays)
-            throw new InvalidOperationException($"La période analysée ne peut pas dépasser {maxPeriodDays} jours.");
+            throw new DomainException($"La période analysée ne peut pas dépasser {maxPeriodDays} jours.");
         if (request.Page is < 1)
-            throw new InvalidOperationException("Le numéro de page doit être supérieur ou égal à 1.");
+            throw new DomainException("Le numéro de page doit être supérieur ou égal à 1.");
         if (request.PageSize is < 1)
-            throw new InvalidOperationException("La taille de page doit être supérieure ou égale à 1.");
+            throw new DomainException("La taille de page doit être supérieure ou égale à 1.");
     }
 
     /// <summary>
@@ -119,7 +119,7 @@ public class ClosingService
         var fin = request.To.Date;
 
         var clock = (await _uow.Repository<T_CLOCK>().ListAsync(_ => true, ct)).FirstOrDefault()
-            ?? throw new InvalidOperationException("Paramètre pointeuse (T_CLOCK) manquant.");
+            ?? throw new DomainException("Paramètre pointeuse (T_CLOCK) manquant.");
 
         var cartes = (await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == sageDb, ct))
             .Where(c => CorrespondPointeuse(c.POINTEUSE_BDD, pointeuseDb))

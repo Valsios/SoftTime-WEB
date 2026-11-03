@@ -35,7 +35,7 @@ public class StandardPayrollWriter : IPayrollWriter
         var codes = await _catalog.GetOvertimeSageCodesAsync(ct);
         foreach (var code in new[] { codes.Exo130, codes.Exo150, codes.I130, codes.I150, codes.Ferie, codes.Dim, codes.Nuit })
             if (!constants.Any(c => string.Equals(c.CodeConstante?.Trim(), code, StringComparison.OrdinalIgnoreCase)))
-                throw new InvalidOperationException($"Constante SAGE {code} introuvable.");
+                throw new DomainException($"Constante SAGE {code} introuvable.");
         return new PayrollWriteResultDto(database.NOM_BD ?? string.Empty, "STANDARD", 0, 0, "Configuration SAGE valide.");
     }
 

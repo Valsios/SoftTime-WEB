@@ -45,7 +45,7 @@ public class CreateAdminFirstRunTests
     {
         _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 2, NOMROLE = "Administrateur" });
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.CreateAdminAsync(Dto));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.CreateAdminAsync(Dto));
 
         Assert.Equal(Missing, ex.Message);
         Assert.Empty(_uow.GetRepo<T_RESPONSABLE>().Items);
@@ -58,7 +58,7 @@ public class CreateAdminFirstRunTests
         _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 5, IDROLE = 1, LOGIN = "deja" });
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.CreateAdminAsync(Dto));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.CreateAdminAsync(Dto));
 
         Assert.StartsWith("Des comptes existent déjà", ex.Message);
         Assert.Single(_uow.GetRepo<T_RESPONSABLE>().Items);
@@ -67,7 +67,7 @@ public class CreateAdminFirstRunTests
     [Fact]
     public async Task Database_without_any_role_is_refused()
     {
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.CreateAdminAsync(Dto));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.CreateAdminAsync(Dto));
 
         Assert.Equal(Missing, ex.Message);
         Assert.Empty(_uow.GetRepo<T_RESPONSABLE>().Items);

@@ -10,5 +10,5 @@ public class PointeuseReaderResolver
 
     public IPointeuseReader Resolve(T_BDD_POINTEUSE pteRow)
         => _readers.FirstOrDefault(r => r.CanHandle(pteRow))
-           ?? throw new InvalidOperationException($"Aucun lecteur pointeuse ne gère le type de base '{pteRow.TYPE_BASE}'.");
+           ?? throw new DomainException($"Aucun lecteur pointeuse ne gère le type de base '{pteRow.TYPE_BASE}'.");
 }

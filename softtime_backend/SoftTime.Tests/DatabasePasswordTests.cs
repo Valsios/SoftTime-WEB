@@ -134,9 +134,9 @@ public class DatabasePasswordTests
     [Fact]
     public async Task Stored_password_is_never_sent_to_another_server_or_login()
     {
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<DomainException>(() =>
             Admin().TestSageConnectionAsync(new TestSageConnectionDto("autre-serveur", true, "sa", null, "BASE1", "STANDARD", null, 7)));
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<DomainException>(() =>
             Admin().TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "autre-login", null, "BASE1", "STANDARD", null, 7)));
         Assert.Null(_discovery.LastPassword);
     }
@@ -158,7 +158,7 @@ public class DatabasePasswordTests
         // Compte avec la porte Bases mais seulement la lecture : l'usage du mot de passe stocké est refusé.
         _uow.GetRepo<T_USER_PERMISSION>().Items.Add(new T_USER_PERMISSION { IDRESPONSABLE = 2, PERMISSION_CODE = "SAGE:BASE1:READ", IS_GRANTED = true });
         var svc = Catalog(2, 5, Rights.Databases);
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() =>
+        await Assert.ThrowsAsync<ForbiddenException>(() =>
             svc.TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "sa", null, "BASE1", "STANDARD", null, 7)));
         Assert.Null(_discovery.LastPassword);
 

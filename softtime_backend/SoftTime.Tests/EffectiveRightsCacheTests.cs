@@ -114,7 +114,7 @@ public class EffectiveRightsCacheTests
             Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
 
         failing.Fail = true;
-        var ex = await Assert.ThrowsAsync<ForbiddenOperationException>(() => tenant.EnsureAuthorizedAsync());
+        var ex = await Assert.ThrowsAsync<ForbiddenException>(() => tenant.EnsureAuthorizedAsync());
         Assert.Equal(TenantConnectionService.AccessDenied, ex.Message);
         Assert.DoesNotContain("SECRET-CONNECTION-STRING", ex.Message);
 
@@ -133,7 +133,7 @@ public class EffectiveRightsCacheTests
         var tenant = new TenantConnectionService(_store, new Company("BASE1"), new NoUser(), _rights,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
         _store.GetRepo<T_BDD_SAGE>().Items.Single().NOM_BD = "BASE1";
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => tenant.EnsureAuthorizedAsync());
+        await Assert.ThrowsAsync<ForbiddenException>(() => tenant.EnsureAuthorizedAsync());
     }
 
     private sealed class NoUser : ICurrentUser

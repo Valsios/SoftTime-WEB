@@ -60,7 +60,7 @@ public class PlanningService
         }
         else
         {
-            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
+            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
             entity.NoSHIFT = dto.NoShift;
             entity.HA = dto.Ha;
             entity.PAUSE = dto.Pause;
@@ -75,7 +75,7 @@ public class PlanningService
     public async Task DeleteShiftAsync(decimal id, CancellationToken ct = default)
     {
         var repo = _uow.Repository<T_PLANNING>();
-        var e = await repo.GetByIdAsync(id, ct) ?? throw new KeyNotFoundException();
+        var e = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException();
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
     }
@@ -230,24 +230,24 @@ public class PlanningService
         foreach (var dto in rows)
         {
             if (!dto.DateP.HasValue)
-                throw new InvalidOperationException("La date du planning est requise.");
+                throw new DomainException("La date du planning est requise.");
             if (!cards.ContainsKey(dto.CardPaieId))
-                throw new InvalidOperationException($"Salarié introuvable pour la carte {dto.CardPaieId}.");
+                throw new DomainException($"Salarié introuvable pour la carte {dto.CardPaieId}.");
 
             var date = dto.DateP.Value.Date;
             var shift = dto.NoShift is int noShift
                 ? shifts.FirstOrDefault(s => s.NoSHIFT == noShift)
                 : null;
             if (dto.NoShift is int shiftDemande && shift is null)
-                throw new InvalidOperationException($"Shift {shiftDemande} introuvable.");
+                throw new DomainException($"Shift {shiftDemande} introuvable.");
 
             T_PLANNING_SAL? entity = null;
             if (dto.Id != 0)
             {
                 entity = await repo.GetByIdAsync(dto.Id, ct)
-                    ?? throw new InvalidOperationException($"Planning {dto.Id} introuvable.");
+                    ?? throw new DomainException($"Planning {dto.Id} introuvable.");
                 if (!MatchesSage(entity.BDD_SAGE) || !MatchesPointeuse(entity.BDD_POINTEUSE))
-                    throw new InvalidOperationException("Planning hors du périmètre de la base active.");
+                    throw new DomainException("Planning hors du périmètre de la base active.");
             }
 
             if (entity is null)
@@ -274,7 +274,7 @@ public class PlanningService
                 var debut = dto.Ha?.TimeOfDay ?? shift?.HA ?? entity?.HA?.TimeOfDay;
                 var fin = dto.Hd?.TimeOfDay ?? shift?.HD ?? entity?.HD?.TimeOfDay;
                 if (!PlanningGenerationRules.TryIntervalle(date, debut, fin, out ha, out hd))
-                    throw new InvalidOperationException(
+                    throw new DomainException(
                         $"Heures d'entrée/sortie manquantes ou invalides pour le planning du {date:dd/MM/yyyy}.");
                 pause = dto.Pause ?? shift?.PAUSE ?? entity?.Pause ?? TimeSpan.Zero;
             }
@@ -314,7 +314,7 @@ public class PlanningService
     public async Task DeleteEmployeePlanningAsync(int id, CancellationToken ct = default)
     {
         var repo = _uow.Repository<T_PLANNING_SAL>();
-        var e = await repo.GetByIdAsync(id, ct) ?? throw new KeyNotFoundException();
+        var e = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException();
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
     }

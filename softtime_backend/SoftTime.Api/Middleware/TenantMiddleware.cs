@@ -28,25 +28,22 @@ public class TenantMiddleware
                    || path.Contains("/api/meta", StringComparison.OrdinalIgnoreCase)
                    || path.Contains("/swagger", StringComparison.OrdinalIgnoreCase)
                    || path.Contains("/health", StringComparison.OrdinalIgnoreCase);
+        // Base refusée : ForbiddenException, traduite en 403 par ExceptionHandlingMiddleware.
         if (!skip && context.User.Identity?.IsAuthenticated == true && !string.IsNullOrWhiteSpace(sage))
-        {
-            try
-            {
-                await tenant.EnsureAuthorizedAsync(context.RequestAborted);
-            }
-            catch (UnauthorizedAccessException)
-            {
-                context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                await context.Response.WriteAsJsonAsync(new { error = "Base SAGE non autorisée." });
-                return;
-            }
-        }
+            await tenant.EnsureAuthorizedAsync(context.RequestAborted);
         await _next(context);
     }
 }
 
+/// <summary>
+/// Middleware global des erreurs (convention §6.1.1) : chaque exception métier (<see cref="DomainException"/>
+/// et ses sous-types) devient un code HTTP avec son message ; toute autre exception est un bug, journalisée
+/// avec sa pile et renvoyée en 500 sans aucun détail technique.
+/// </summary>
 public class ExceptionHandlingMiddleware
 {
+    public const string InternalErrorMessage = "Erreur interne.";
+
     private readonly RequestDelegate _next;
     private readonly ILogger<ExceptionHandlingMiddleware> _logger;
     public ExceptionHandlingMiddleware(RequestDelegate next, ILogger<ExceptionHandlingMiddleware> logger)
@@ -61,38 +58,38 @@ public class ExceptionHandlingMiddleware
         {
             await _next(context);
         }
-        catch (ForbiddenOperationException ex)
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
         {
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            await context.Response.WriteAsJsonAsync(new { error = ex.Message });
+            // Client parti : rien à répondre ni à signaler.
         }
-        catch (UnauthorizedAccessException ex)
+        catch (DomainException ex) when (!context.Response.HasStarted)
         {
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            await context.Response.WriteAsJsonAsync(new { error = ex.Message });
+            context.Response.StatusCode = StatusCodeOf(ex);
+            await context.Response.WriteAsJsonAsync(BodyOf(ex));
         }
-        catch (KeyNotFoundException ex)
+        catch (Exception ex) when (!context.Response.HasStarted)
         {
-            context.Response.StatusCode = StatusCodes.Status404NotFound;
-            await context.Response.WriteAsJsonAsync(new { error = ex.Message });
-        }
-        catch (FieldValidationException ex)
-        {
-            context.Response.StatusCode = StatusCodes.Status400BadRequest;
-            await context.Response.WriteAsJsonAsync(new { error = ex.Message, field = ex.Field });
-        }
-        catch (InvalidOperationException ex)
-        {
-            context.Response.StatusCode = StatusCodes.Status400BadRequest;
-            await context.Response.WriteAsJsonAsync(new { error = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unhandled");
+            _logger.LogError(ex, "Erreur non gérée sur {Method} {Path}", context.Request.Method, context.Request.Path);
             context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-            await context.Response.WriteAsJsonAsync(new { error = "Erreur interne." });
+            await context.Response.WriteAsJsonAsync(new { error = InternalErrorMessage });
         }
     }
+
+    public static int StatusCodeOf(DomainException exception) => exception switch
+    {
+        NotFoundException => StatusCodes.Status404NotFound,
+        UnauthorizedException => StatusCodes.Status401Unauthorized,
+        ForbiddenException => StatusCodes.Status403Forbidden,
+        ConflictException => StatusCodes.Status409Conflict,
+        _ => StatusCodes.Status400BadRequest
+    };
+
+    private static object BodyOf(DomainException exception) => exception switch
+    {
+        FieldValidationException field => new { error = field.Message, field = field.Field },
+        ConflictException { Details: { } details } => details,
+        _ => new { error = exception.Message }
+    };
 }
 
 public class DroitRequirementAttribute : Attribute

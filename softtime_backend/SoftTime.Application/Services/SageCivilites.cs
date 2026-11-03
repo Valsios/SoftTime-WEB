@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using SoftTime.Application.Abstractions;
 using SoftTime.Domain.Services;
 
@@ -10,7 +11,7 @@ namespace SoftTime.Application.Services;
 internal static class SageCivilites
 {
     public static async Task<Dictionary<string, byte?>> ChargerAsync(
-        TenantConnectionService tenant, IExternalSourceService externalSource, CancellationToken ct)
+        TenantConnectionService tenant, IExternalSourceService externalSource, ILogger logger, CancellationToken ct)
     {
         var civilites = new Dictionary<string, byte?>(StringComparer.Ordinal);
         try
@@ -23,9 +24,10 @@ internal static class SageCivilites
                     civilites[cle] = employe.Civilite;
             }
         }
-        catch
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // SAGE indisponible : sans civilité, la règle du 8 mars n'est pas appliquée.
+            // SAGE indisponible : sans civilité, la règle du 8 mars n'est pas appliquée ; la panne est journalisée.
+            logger.LogWarning(ex, "Civilités SAGE indisponibles : la règle du 8 mars n'est pas appliquée.");
         }
         return civilites;
     }
