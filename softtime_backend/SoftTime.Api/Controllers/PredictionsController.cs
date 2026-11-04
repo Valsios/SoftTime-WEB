@@ -60,6 +60,22 @@ public class PredictionsController : ControllerBase
         return Ok(await _predictions.GetHsForecastsAsync((week ?? DateTime.Today).Date, ct));
     }
 
+    /// <summary>Totaux HS prévus par semaine sur l'horizon.</summary>
+    [HttpGet("overtime/horizon")]
+    public async Task<IActionResult> OvertimeHorizon(CancellationToken ct)
+    {
+        await EnsureCanReadAsync(ct);
+        return Ok(await _predictions.GetHsHorizonAsync(ct));
+    }
+
+    /// <summary>Prévu / réel des dernières semaines terminées.</summary>
+    [HttpGet("overtime/accuracy")]
+    public async Task<IActionResult> OvertimeAccuracy([FromQuery] int? weeks, CancellationToken ct)
+    {
+        await EnsureCanReadAsync(ct);
+        return Ok(await _predictions.GetHsAccuracyAsync(weeks ?? 8, ct));
+    }
+
     /// <summary>Rafraîchit la fenêtre glissante (12 semaines par défaut) et régénère les prévisions.</summary>
     [RequireAdmin]
     [HttpPost("refresh")]

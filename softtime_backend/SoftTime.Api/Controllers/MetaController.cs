@@ -194,6 +194,8 @@ public static class ApiCatalog
         E("Predictions", "GET", "/api/predictions/status", "État du moteur prédictif et modèles actifs"),
         E("Predictions", "GET", "/api/predictions/job", "État du dernier traitement ML"),
         E("Predictions", "GET", "/api/predictions/overtime?week=", "Heures supplémentaires prévues par salarié"),
+        E("Predictions", "GET", "/api/predictions/overtime/horizon", "Totaux HS prévus par semaine sur l'horizon"),
+        E("Predictions", "GET", "/api/predictions/overtime/accuracy?weeks=", "Prévu / réel HS des dernières semaines terminées"),
         E("Predictions", "POST", "/api/predictions/refresh", "Rafraîchir la fenêtre glissante et les prévisions"),
         E("Predictions", "POST", "/api/predictions/train", "Réentraîner les modèles (admin)"),
         E("Predictions", "POST", "/api/predictions/backfill", "Reconstruire tout l'historique (admin)"),

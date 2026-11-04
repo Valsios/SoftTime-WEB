@@ -24,6 +24,8 @@ public sealed record MlStatusDto(
     string Etat,
     string? Message,
     DateTime? DerniereGeneration,
+    // Plafond hebdomadaire des HS exonérées (au-delà, imposables) : seuil de pilotage.
+    decimal PlafondHsExonere,
     IReadOnlyList<MlModelDto> Modeles);
 
 public sealed record MlHsForecastDto(
@@ -37,6 +39,25 @@ public sealed record MlHsForecastDto(
     decimal BorneHaute,
     double ProbabiliteDepassement,
     byte Niveau);
+
+/// <summary>Totaux HS prévus d'une semaine de l'horizon.</summary>
+public sealed record MlHsWeekDto(
+    DateTime SemaineDebut,
+    int Salaries,
+    // Salariés dont les HS prévues dépassent le plafond exonéré.
+    int AuDelaPlafond,
+    decimal HeuresPrevues,
+    decimal BorneBasse,
+    decimal BorneHaute);
+
+/// <summary>Prévu / réel d'une semaine terminée (salariés présents des deux côtés).</summary>
+public sealed record MlHsAccuracyDto(
+    DateTime SemaineDebut,
+    int Salaries,
+    decimal HeuresPrevues,
+    decimal HeuresReelles,
+    decimal EcartMoyen,
+    double Couverture);
 
 public sealed record MlMetricsDto(
     double? Auc,

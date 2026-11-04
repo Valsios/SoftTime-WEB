@@ -22,7 +22,7 @@ public class PredictionsHttpTests : IClassFixture<ApiFactory>
     // Lectures de prévisions (celles qui lisent des données par personne, plus l'état du moteur).
     public static IEnumerable<object[]> Reads()
     {
-        foreach (var url in new[] { "/api/predictions/status", "/api/predictions/job", "/api/predictions/overtime" })
+        foreach (var url in new[] { "/api/predictions/status", "/api/predictions/job", "/api/predictions/overtime", "/api/predictions/overtime/horizon", "/api/predictions/overtime/accuracy" })
             foreach (var profile in new[] { "admin", "predreader", "prednobase", "gate6only", "user1", "param2", "joel", "anonyme" })
                 yield return new object[] { url, profile };
     }

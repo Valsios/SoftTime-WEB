@@ -164,8 +164,21 @@ public sealed class EfMlStore : IMlStore
         if (toPurge.Count == 0)
             return;
 
-        await _db.Prediction.Where(p => toPurge.Contains(p.ModeleId)).ExecuteDeleteAsync(ct);
-        await _db.Modele.Where(m => toPurge.Contains(m.Id)).ExecuteDeleteAsync(ct);
+        // Les prévisions des semaines passées servent au suivi prévu / réel : un modèle encore
+        // référencé garde sa ligne (sans le binaire, seule partie volumineuse) au lieu d'emporter
+        // l'historique avec lui.
+        var references = await _db.Prediction
+            .Where(p => toPurge.Contains(p.ModeleId))
+            .Select(p => p.ModeleId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        await _db.Modele
+            .Where(m => references.Contains(m.Id) && m.ModeleBinaire != null)
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.ModeleBinaire, (byte[]?)null), ct);
+        await _db.Modele
+            .Where(m => toPurge.Contains(m.Id) && !references.Contains(m.Id))
+            .ExecuteDeleteAsync(ct);
     }
 
     // ------------------------------------------------------------------ lecture

@@ -202,12 +202,21 @@ activé que s'il bat la baseline statistique ; sinon l'ancien modèle reste acti
 - **Rafraîchissement** : service d'arrière-plan (quotidien) + jobs admin. Fenêtre glissante de
   12 semaines pour absorber les corrections tardives ; backfill complet par trimestres au premier
   déploiement. Les lignes anciennes restent figées (snapshot).
-- **Page `/predictions`** (États, permission `REPORTS:PREDICTIONS`) : état du moteur, HS prévues de la
-  semaine (total et fourchette, salariés concernés, département le plus chargé, précision du modèle
-  en heures), vue **par département** (barre, part du total ; un clic filtre la liste) puis détail
-  par salarié avec fourchette et probabilité d'HS, historique des modèles. La prévision d'absence
+- **Page `/predictions`** (États, permission `REPORTS:PREDICTIONS`) : état du moteur, **horizon de 4
+  semaines** (total prévu et salariés au-delà de 20 h par semaine, « planning non saisi » quand rien n'est prévisible ; un clic
+  choisit la semaine analysée), HS prévues de la
+  semaine choisie (total et fourchette, salariés au-delà du plafond exonéré de 20 h —
+  `OvertimeRules.ExemptCeilingHours`, au-delà les HS deviennent imposables —, département le plus
+  chargé, précision —
+  constatée dès qu'une semaine est comparable, sinon mesurée à l'entraînement
+  — en heures), vue **par département** (barre, part du total ; un clic filtre la liste) puis détail
+  par salarié avec fourchette et probabilité d'HS, **prévu / réel** des 8 dernières semaines
+  terminées (écart moyen par salarié, part du réel dans la fourchette, biais du total ; la dernière
+  prévision émise pour la semaine est comparée aux HS de `ml.SalarieSemaine`), historique des
+  modèles. Les prévisions passées sont conservées sur `HistoryMonths` : la purge des anciens
+  modèles ne retire que leur binaire tant que des prévisions y renvoient. La prévision d'absence
   a été retirée (peu exploitable) ; les modèles d'absence déjà entraînés restent en base, ignorés.
-- **API** : `GET /api/predictions/status|job|overtime`, `POST /api/predictions/refresh|train|backfill`.
+- **API** : `GET /api/predictions/status|job|overtime|overtime/horizon|overtime/accuracy`, `POST /api/predictions/refresh|train|backfill`.
 - **Migrations** : EF Core versionnées (`SoftTime.Infrastructure/Migrations/Ml`,
   `AddMlPredictionSchema`) et script idempotent `migrations/AddMlPredictionSchema.sql`
   (voir `migrations/README.md`).

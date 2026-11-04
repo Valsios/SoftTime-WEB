@@ -1,7 +1,14 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { forkJoin } from 'rxjs';
-import { MlHsForecast, MlJobState, MlModelInfo, MlStatus } from '../../shared/models';
+import {
+  MlHsAccuracy,
+  MlHsForecast,
+  MlHsWeek,
+  MlJobState,
+  MlModelInfo,
+  MlStatus,
+} from '../../shared/models';
 import { PredictionsService } from '../../shared/services/predictions.service';
 import {
   Column,
@@ -18,7 +25,7 @@ import { fmtDate as formatIsoDate } from '../../shared/utils/date';
 interface HsDepartement {
   nom: string;
   salaries: number;
-  probables: number;
+  auDelaPlafond: number;
   heures: number;
   borneBasse: number;
   borneHaute: number;
@@ -26,6 +33,9 @@ interface HsDepartement {
 }
 
 const SANS_DEPARTEMENT = 'Sans département';
+
+/** Heures à une décimale, séparateurs français (16 248,1). */
+const HEURES = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 /**
  * Moteur prédictif : état des modèles et heures supplémentaires prévues pour la semaine, par
@@ -86,7 +96,39 @@ const SANS_DEPARTEMENT = 'Sans département';
         le modèle ne bat pas encore la baseline. Lancez « Reconstruire l'historique » puis « Réentraîner ».
       </div>
     } @else {
-      <div class="pred-kpis">
+      <soft-card variant="bordered" padding="sm">
+        <div class="pred-section-head">
+          <h2>Horizon</h2>
+          <span>Choisissez la semaine à analyser</span>
+        </div>
+        <div class="pred-weeks">
+          @for (w of horizon(); track w.semaineDebut; let i = $index) {
+            <button
+              type="button"
+              class="pred-week"
+              [class.pred-week--active]="estSemaineChoisie(w.semaineDebut)"
+              [class.pred-week--empty]="w.salaries === 0"
+              [attr.aria-pressed]="estSemaineChoisie(w.semaineDebut)"
+              (click)="choisirSemaine(w.semaineDebut)"
+            >
+              <span class="pred-week__label">{{ i === 0 ? 'Cette semaine' : 'S+' + i }}</span>
+              <small>du {{ jourCourt(w.semaineDebut) }}</small>
+              <span class="pred-week__bar" aria-hidden="true">
+                <span class="pred-week__fill" [style.height.%]="barreSemaine(w.heuresPrevues)"></span>
+              </span>
+              @if (w.salaries > 0) {
+                <strong>{{ heures(w.heuresPrevues) }}</strong>
+                <small>{{ w.salaries }} salarié(s) · {{ w.auDelaPlafond }} > {{ plafond() }} h</small>
+              } @else {
+                <strong>—</strong>
+                <small>planning non saisi</small>
+              }
+            </button>
+          }
+        </div>
+      </soft-card>
+
+      <div class="pred-kpis" [class.pred-loading]="hsLoading()" [attr.aria-busy]="hsLoading()">
         <soft-card variant="bordered">
           <div class="pred-kpi">
             <span>HS prévues ({{ semaineLabel() }})</span>
@@ -96,9 +138,9 @@ const SANS_DEPARTEMENT = 'Sans département';
         </soft-card>
         <soft-card variant="bordered">
           <div class="pred-kpi">
-            <span>Salariés concernés</span>
-            <strong>{{ salariesConcernes() }} / {{ hs().length }}</strong>
-            <small>probabilité d'HS moyenne ou élevée</small>
+            <span>Au-delà de {{ plafond() }} h</span>
+            <strong>{{ auDelaPlafond() }} / {{ hs().length }}</strong>
+            <small>salariés dont les HS deviennent imposables</small>
           </div>
         </soft-card>
         <soft-card variant="bordered">
@@ -116,8 +158,8 @@ const SANS_DEPARTEMENT = 'Sans département';
         <soft-card variant="bordered">
           <div class="pred-kpi">
             <span>Précision du modèle</span>
-            <strong>{{ precision() }}</strong>
-            <small>écart moyen par salarié et par semaine</small>
+            <strong>{{ precision().valeur }}</strong>
+            <small>{{ precision().source }}</small>
           </div>
         </soft-card>
       </div>
@@ -127,8 +169,12 @@ const SANS_DEPARTEMENT = 'Sans département';
           <h2>Par département</h2>
           <span>Cliquez sur un département pour voir ses salariés</span>
         </div>
-        @if (departements().length === 0) {
-          <div class="pred-empty">Aucune prévision HS : planning de la semaine incomplet ou modèle indisponible.</div>
+        @if (hsLoading()) {
+          <div class="pred-empty">Chargement de la semaine…</div>
+        } @else if (departements().length === 0) {
+          <div class="pred-empty">
+            Aucune prévision pour cette semaine : le planning n'est pas encore saisi ou le modèle est indisponible.
+          </div>
         } @else {
           <div class="pred-depts">
             @for (d of departements(); track d.nom) {
@@ -143,8 +189,8 @@ const SANS_DEPARTEMENT = 'Sans département';
                   <strong>{{ d.nom }}</strong>
                   <small>
                     {{ d.salaries }} salarié{{ d.salaries > 1 ? 's' : '' }}
-                    @if (d.probables > 0) {
-                      · {{ d.probables }} probable{{ d.probables > 1 ? 's' : '' }}
+                    @if (d.auDelaPlafond > 0) {
+                      · {{ d.auDelaPlafond }} > {{ plafond() }} h
                     }
                   </small>
                 </span>
@@ -192,6 +238,53 @@ const SANS_DEPARTEMENT = 'Sans département';
             </soft-badge>
           </ng-template>
         </data-table>
+      </soft-card>
+
+      <soft-card variant="bordered" padding="sm">
+        <div class="pred-section-head">
+          <h2>Prévu / réel</h2>
+          <span>Semaines terminées : dernière prévision émise comparée aux HS constatées</span>
+        </div>
+        @if (suivi().length === 0) {
+          <div class="pred-empty">
+            Pas encore d'historique : la comparaison apparaît dès qu'une semaine prévue est terminée et recalculée.
+          </div>
+        } @else {
+          <div class="pred-accuracy">
+            <div>
+              <span>Écart moyen par salarié</span>
+              <strong>± {{ heures(suiviSynthese().ecartMoyen) }}</strong>
+            </div>
+            <div>
+              <span>Réel dans la fourchette</span>
+              <strong>{{ pct(suiviSynthese().couverture) }}</strong>
+            </div>
+            <div>
+              <span>Total prévu → réel</span>
+              <strong>{{ heures(suiviSynthese().prevu) }} → {{ heures(suiviSynthese().reel) }}</strong>
+            </div>
+            <div>
+              <span>Biais</span>
+              <strong [class]="ecartClass(suiviSynthese().reel - suiviSynthese().prevu)">
+                {{ biaisLabel(suiviSynthese().prevu, suiviSynthese().reel) }}
+              </strong>
+            </div>
+          </div>
+          <data-table
+            [columns]="suiviColumns"
+            [rows]="suiviRows()"
+            trackKey="semaineDebut"
+            [searchable]="false"
+            [paginate]="false"
+            emptyText="Aucune semaine comparable."
+          >
+            <ng-template dataTableCell="ecart" let-row>
+              <span [class]="ecartClass(suiviLigne(row).heuresReelles - suiviLigne(row).heuresPrevues)">
+                {{ ecartSigne(suiviLigne(row).heuresReelles - suiviLigne(row).heuresPrevues) }}
+              </span>
+            </ng-template>
+          </data-table>
+        }
       </soft-card>
     }
 
@@ -411,6 +504,92 @@ const SANS_DEPARTEMENT = 'Sans département';
         font-size: 12.5px;
         cursor: pointer;
       }
+      .pred-weeks {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+        gap: 8px;
+        padding: 0 8px 8px;
+      }
+      .pred-week {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+        padding: 10px 12px;
+        border: 1px solid var(--app-border);
+        border-radius: var(--radius-md);
+        background: none;
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+      .pred-week:hover {
+        background: var(--primary-50);
+      }
+      .pred-week--active {
+        border-color: var(--primary-300);
+        background: var(--primary-50);
+      }
+      .pred-week--empty strong {
+        color: var(--text-muted);
+      }
+      .pred-week__label {
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .pred-week small {
+        font-size: 11.5px;
+        color: var(--text-muted);
+      }
+      .pred-week strong {
+        font-size: 18px;
+        font-family: var(--font-heading);
+      }
+      .pred-week__bar {
+        display: flex;
+        align-items: flex-end;
+        width: 100%;
+        height: 36px;
+        border-bottom: 1px solid var(--app-border);
+      }
+      .pred-week__fill {
+        display: block;
+        width: 100%;
+        border-radius: 4px 4px 0 0;
+        background: var(--primary-500);
+      }
+      .pred-accuracy {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 12px;
+        padding: 0 8px 12px;
+      }
+      .pred-accuracy div {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .pred-accuracy span {
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+      .pred-accuracy strong {
+        font-size: 17px;
+        font-family: var(--font-heading);
+      }
+      .pred-ecart--plus {
+        color: var(--danger-700, #b91c1c);
+      }
+      .pred-ecart--moins {
+        color: var(--success-700, #15803d);
+      }
+      .pred-loading {
+        opacity: 0.5;
+        transition: opacity 0.15s;
+      }
       .pred-empty {
         padding: 18px;
         text-align: center;
@@ -438,8 +617,13 @@ export class PredictionsPage implements OnInit {
 
   readonly status = signal<MlStatus | null>(null);
   readonly hs = signal<MlHsForecast[]>([]);
+  readonly horizon = signal<MlHsWeek[]>([]);
+  readonly suivi = signal<MlHsAccuracy[]>([]);
   readonly job = signal<MlJobState | null>(null);
   readonly loading = signal(false);
+  readonly hsLoading = signal(false);
+  /** Lundi (AAAA-MM-JJ) de la semaine analysée ; null : semaine en cours. */
+  readonly semaine = signal<string | null>(null);
   readonly error = signal<string | null>(null);
   readonly info = signal<string | null>(null);
   /** Département sélectionné dans la vue agrégée ; filtre la liste des salariés. */
@@ -454,6 +638,21 @@ export class PredictionsPage implements OnInit {
     return lignes as unknown as Record<string, unknown>[];
   });
   readonly modeleRows = computed(() => this.modeles() as unknown as Record<string, unknown>[]);
+  readonly suiviRows = computed(() => this.suivi() as unknown as Record<string, unknown>[]);
+
+  readonly suiviColumns: Column[] = [
+    { key: 'semaineDebut', label: 'Semaine', format: (v) => `du ${this.jourCourt(v as string)}` },
+    { key: 'salaries', label: 'Salariés' },
+    { key: 'heuresPrevues', label: 'Prévu', format: (v) => this.heures(v as number) },
+    { key: 'heuresReelles', label: 'Réel', format: (v) => this.heures(v as number) },
+    {
+      key: 'ecart',
+      label: 'Écart',
+      format: (_, row) => this.ecartSigne(this.suiviLigne(row).heuresReelles - this.suiviLigne(row).heuresPrevues),
+    },
+    { key: 'ecartMoyen', label: 'Écart moyen / salarié', format: (v) => `± ${this.heures(v as number)}` },
+    { key: 'couverture', label: 'Dans la fourchette', format: (v) => this.pct(v as number) },
+  ];
 
   readonly hsColumns: Column[] = [
     { key: 'salarie', label: 'Salarié', format: (_, row) => this.salarieTexte(row) },
@@ -484,16 +683,18 @@ export class PredictionsPage implements OnInit {
   readonly hsTotal = computed(() => this.hs().reduce((sum, h) => sum + h.heuresPrevues, 0));
   readonly hsBasse = computed(() => this.hs().reduce((sum, h) => sum + h.borneBasse, 0));
   readonly hsHaute = computed(() => this.hs().reduce((sum, h) => sum + h.borneHaute, 0));
-  readonly salariesConcernes = computed(() => this.hs().filter((h) => h.niveau >= 2).length);
+  /** Plafond hebdomadaire des HS exonérées (OvertimeRules.ExemptCeilingHours côté serveur). */
+  readonly plafond = computed(() => this.status()?.plafondHsExonere ?? 20);
+  readonly auDelaPlafond = computed(() => this.hs().filter((h) => h.heuresPrevues > this.plafond()).length);
 
   readonly departements = computed<HsDepartement[]>(() => {
     const total = this.hsTotal();
     const groupes = new Map<string, HsDepartement>();
     for (const h of this.hs()) {
       const nom = this.nomDepartement(h);
-      const d = groupes.get(nom) ?? { nom, salaries: 0, probables: 0, heures: 0, borneBasse: 0, borneHaute: 0, part: 0 };
+      const d = groupes.get(nom) ?? { nom, salaries: 0, auDelaPlafond: 0, heures: 0, borneBasse: 0, borneHaute: 0, part: 0 };
       d.salaries++;
-      if (h.niveau >= 2) d.probables++;
+      if (h.heuresPrevues > this.plafond()) d.auDelaPlafond++;
       d.heures += h.heuresPrevues;
       d.borneBasse += h.borneBasse;
       d.borneHaute += h.borneHaute;
@@ -508,16 +709,49 @@ export class PredictionsPage implements OnInit {
     return premier && premier.heures > 0 ? premier : null;
   });
 
-  /** Écart moyen (MAE) du modèle de montant actif, mesuré sur les semaines de test. */
+  /** Synthèse prévu / réel, pondérée par le nombre de salariés comparés chaque semaine. */
+  readonly suiviSynthese = computed(() => {
+    const lignes = this.suivi();
+    const salaries = lignes.reduce((sum, s) => sum + s.salaries, 0);
+    const pondere = (f: (s: MlHsAccuracy) => number) =>
+      salaries > 0 ? lignes.reduce((sum, s) => sum + f(s) * s.salaries, 0) / salaries : 0;
+    return {
+      semaines: lignes.length,
+      ecartMoyen: pondere((s) => s.ecartMoyen),
+      couverture: pondere((s) => s.couverture),
+      prevu: lignes.reduce((sum, s) => sum + s.heuresPrevues, 0),
+      reel: lignes.reduce((sum, s) => sum + s.heuresReelles, 0),
+    };
+  });
+
+  /**
+   * Précision affichée : l'écart constaté en conditions réelles dès qu'une semaine est comparable,
+   * sinon l'écart mesuré sur les semaines de test à l'entraînement.
+   */
   readonly precision = computed(() => {
+    const synthese = this.suiviSynthese();
+    if (synthese.semaines > 0) {
+      return {
+        valeur: `± ${this.heures(synthese.ecartMoyen)}`,
+        source: `constaté sur ${synthese.semaines} semaine(s) terminée(s)`,
+      };
+    }
     const model = this.modeles().find((m) => m.estActif && m.typeModele === 'HsMontant');
     const mae = this.metric(model, 'mae');
-    return mae == null ? '—' : `± ${this.heures(mae)}`;
+    return {
+      valeur: mae == null ? '—' : `± ${this.heures(mae)}`,
+      source: "mesuré à l'entraînement, par salarié et par semaine",
+    };
   });
+  /** Lundi de la semaine affichée : choix de l'utilisateur, sinon première semaine de l'horizon. */
+  readonly semaineAffichee = computed(
+    () => this.semaine() ?? this.jourIso(this.horizon()[0]?.semaineDebut ?? this.hs()[0]?.semaineDebut),
+  );
   readonly semaineLabel = computed(() => {
-    const semaine = this.hs()[0]?.semaineDebut;
+    const semaine = this.semaineAffichee();
     return semaine ? `semaine du ${this.jourCourt(semaine)}` : 'semaine en cours';
   });
+  private readonly horizonMax = computed(() => Math.max(0, ...this.horizon().map((w) => w.heuresPrevues)));
 
   ngOnInit(): void {
     this.load();
@@ -528,17 +762,17 @@ export class PredictionsPage implements OnInit {
     this.error.set(null);
     forkJoin({
       status: this.api.status(),
-      hs: this.api.overtime(),
+      horizon: this.api.horizon(),
+      suivi: this.api.accuracy(),
+      hs: this.api.overtime(this.semaine() ?? undefined),
       job: this.api.job(),
     }).subscribe({
       next: (result) => {
         this.status.set(result.status);
-        this.hs.set(result.hs);
+        this.horizon.set(result.horizon);
+        this.suivi.set(result.suivi);
         this.job.set(result.job);
-        // Un filtre sur un département disparu des prévisions viderait la liste sans raison visible.
-        if (!result.hs.some((h) => this.nomDepartement(h) === this.departementFiltre())) {
-          this.departementFiltre.set(null);
-        }
+        this.appliquerSemaine(result.hs);
         this.loading.set(false);
       },
       error: (err) => {
@@ -559,6 +793,42 @@ export class PredictionsPage implements OnInit {
       },
       error: (err) => this.error.set(err?.error?.message ?? 'Action refusée.'),
     });
+  }
+
+  /** Charge les prévisions par salarié d'une semaine de l'horizon. */
+  choisirSemaine(semaineDebut: string): void {
+    const lundi = this.jourIso(semaineDebut);
+    if (!lundi || lundi === this.semaineAffichee()) return;
+    this.semaine.set(lundi);
+    this.hsLoading.set(true);
+    this.api.overtime(lundi).subscribe({
+      next: (hs) => {
+        this.appliquerSemaine(hs);
+        this.hsLoading.set(false);
+      },
+      error: (err) => {
+        this.error.set(err?.error?.message ?? 'Impossible de charger la semaine.');
+        this.hsLoading.set(false);
+      },
+    });
+  }
+
+  estSemaineChoisie(semaineDebut: string): boolean {
+    return this.jourIso(semaineDebut) === this.semaineAffichee();
+  }
+
+  /** Hauteur de la barre d'une semaine, relative à la semaine la plus chargée de l'horizon. */
+  barreSemaine(heures: number): number {
+    const max = this.horizonMax();
+    return max > 0 && heures > 0 ? Math.max(4, (heures / max) * 100) : 0;
+  }
+
+  private appliquerSemaine(hs: MlHsForecast[]): void {
+    this.hs.set(hs);
+    // Un filtre sur un département absent de la semaine viderait la liste sans raison visible.
+    if (!hs.some((h) => this.nomDepartement(h) === this.departementFiltre())) {
+      this.departementFiltre.set(null);
+    }
   }
 
   /** Sélectionne un département (un second clic le désélectionne). */
@@ -588,7 +858,30 @@ export class PredictionsPage implements OnInit {
   }
 
   heures(value: number | null | undefined): string {
-    return `${(value ?? 0).toFixed(1)} h`;
+    return `${HEURES.format(value ?? 0)} h`;
+  }
+
+  /** Écart réel − prévu signé : positif, plus d'HS que prévu. */
+  ecartSigne(ecart: number): string {
+    return `${ecart > 0 ? '+' : ecart < 0 ? '−' : ''}${this.heures(Math.abs(ecart))}`;
+  }
+
+  ecartClass(ecart: number): string {
+    if (ecart > 0.05) return 'pred-ecart--plus';
+    if (ecart < -0.05) return 'pred-ecart--moins';
+    return '';
+  }
+
+  /** Sens global de l'erreur : le modèle sous-estime ou surestime le total. */
+  biaisLabel(prevu: number, reel: number): string {
+    if (prevu <= 0) return reel > 0 ? 'Sous-estimé' : '—';
+    const ratio = (reel - prevu) / prevu;
+    if (Math.abs(ratio) < 0.05) return 'Équilibré';
+    return `${ratio > 0 ? 'Sous-estimé' : 'Surestimé'} de ${this.pct(Math.abs(ratio))}`;
+  }
+
+  private jourIso(value: string | null | undefined): string | null {
+    return value ? String(value).slice(0, 10) : null;
   }
 
   etatLabel(): string {
@@ -624,6 +917,10 @@ export class PredictionsPage implements OnInit {
   // Lignes du data-table, typées pour les modèles de cellule.
   hsLigne(row: Record<string, unknown>): MlHsForecast {
     return row as unknown as MlHsForecast;
+  }
+
+  suiviLigne(row: Record<string, unknown>): MlHsAccuracy {
+    return row as unknown as MlHsAccuracy;
   }
 
   modele(row: Record<string, unknown>): MlModelInfo {

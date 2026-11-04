@@ -70,8 +70,13 @@ public sealed class MlPredictionService
             return new MlPipelineResultDto("Baseline", raison, 0, 0, 0);
         }
 
-        // La prévision d'absence n'est plus produite : on retire les lignes héritées de l'horizon.
-        await _store.ReplacePredictionsAsync(sage, MlModelType.Absence, today, absenceTo, Array.Empty<T_ML_PREDICTION>(), ct);
+        // La prévision d'absence n'est plus produite : on retire toutes les lignes héritées.
+        await _store.ReplacePredictionsAsync(sage, MlModelType.Absence, DebutRetention, absenceTo, Array.Empty<T_ML_PREDICTION>(), ct);
+
+        // Les semaines passées restent pour le suivi prévu / réel, dans la limite de l'historique.
+        var finRetention = MondayOf(today.AddMonths(-Math.Max(1, _options.HistoryMonths))).AddDays(-1);
+        await _store.ReplacePredictionsAsync(sage, MlModelType.HsProbabilite, DebutRetention, finRetention, Array.Empty<T_ML_PREDICTION>(), ct);
+        await _store.ReplacePredictionsAsync(sage, MlModelType.HsMontant, DebutRetention, finRetention, Array.Empty<T_ML_PREDICTION>(), ct);
 
         var hsCount = 0;
         var weeklyRows = 0;
@@ -182,6 +187,7 @@ public sealed class MlPredictionService
             etat,
             message,
             derniereGeneration,
+            OvertimeRules.ExemptCeilingHours,
             models.Select(ToDto).ToList());
     }
 
@@ -226,7 +232,87 @@ public sealed class MlPredictionService
         return resultat.OrderByDescending(r => r.HeuresPrevues).ToList();
     }
 
+    /// <summary>
+    /// Totaux HS par semaine sur l'horizon (semaine en cours comprise). Les semaines sans
+    /// prévision (planning pas encore saisi) sont renvoyées à zéro pour que l'écran l'explique.
+    /// </summary>
+    public async Task<IReadOnlyList<MlHsWeekDto>> GetHsHorizonAsync(CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var sage = _tenant.SageDb;
+        var debut = MondayOf(DateTime.Today);
+        var semaines = Math.Max(1, _options.ForecastHorizonWeeks);
+        var fin = debut.AddDays(7 * semaines - 1);
+
+        var montants = await _store.GetPredictionsAsync(sage, MlModelType.HsMontant, debut, fin, ct);
+
+        return Enumerable.Range(0, semaines)
+            .Select(i =>
+            {
+                var lundi = debut.AddDays(7 * i);
+                var lignes = montants.Where(p => p.Cible.Date == lundi).ToList();
+                return new MlHsWeekDto(
+                    lundi,
+                    lignes.Count,
+                    lignes.Count(p => (p.ValeurPrevue ?? 0m) > OvertimeRules.ExemptCeilingHours),
+                    lignes.Sum(p => p.ValeurPrevue ?? 0m),
+                    lignes.Sum(p => p.BorneBasse ?? 0m),
+                    lignes.Sum(p => p.BorneHaute ?? 0m));
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// Prévu / réel des dernières semaines terminées : la dernière prévision émise pour chaque
+    /// salarié est comparée aux HS de la base analytique (validées, sinon calculées). Seuls les
+    /// salariés présents des deux côtés sont comparés.
+    /// </summary>
+    public async Task<IReadOnlyList<MlHsAccuracyDto>> GetHsAccuracyAsync(int semaines, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var sage = _tenant.SageDb;
+        var finDerniere = MondayOf(DateTime.Today).AddDays(-1);
+        var debut = MondayOf(DateTime.Today).AddDays(-7 * Math.Clamp(semaines, 1, 26));
+
+        var montants = await _store.GetPredictionsAsync(sage, MlModelType.HsMontant, debut, finDerniere, ct);
+        if (montants.Count == 0)
+            return Array.Empty<MlHsAccuracyDto>();
+
+        var reels = (await _store.GetWeeklyAsync(sage, debut, finDerniere, ct))
+            .ToDictionary(w => (w.Matricule, w.SemaineDebut.Date), w => w.HS);
+
+        var resultat = new List<MlHsAccuracyDto>();
+        foreach (var semaine in montants.GroupBy(p => p.Cible.Date).OrderByDescending(g => g.Key))
+        {
+            var paires = semaine
+                .Where(p => reels.ContainsKey((p.Matricule, semaine.Key)))
+                .Select(p => (Prevision: p, Reel: reels[(p.Matricule, semaine.Key)]))
+                .ToList();
+            if (paires.Count == 0)
+                continue;
+
+            var prevu = paires.Sum(x => x.Prevision.ValeurPrevue ?? 0m);
+            var reel = paires.Sum(x => x.Reel);
+            var ecartMoyen = paires.Average(x => Math.Abs((x.Prevision.ValeurPrevue ?? 0m) - x.Reel));
+            var dansFourchette = paires.Count(x =>
+                x.Reel >= (x.Prevision.BorneBasse ?? 0m) && x.Reel <= (x.Prevision.BorneHaute ?? 0m));
+
+            resultat.Add(new MlHsAccuracyDto(
+                semaine.Key,
+                paires.Count,
+                Math.Round(prevu, 2),
+                Math.Round(reel, 2),
+                Math.Round(ecartMoyen, 2),
+                Math.Round((double)dansFourchette / paires.Count, 4)));
+        }
+
+        return resultat;
+    }
+
     // ------------------------------------------------------------------ utilitaires
+
+    /// <summary>Borne basse des purges de prédictions (avant toute donnée possible).</summary>
+    private static readonly DateTime DebutRetention = new(2000, 1, 1);
 
     private async Task<Dictionary<string, T_CARDPAIE>> LoadCardsAsync(string sage, CancellationToken ct)
     {
