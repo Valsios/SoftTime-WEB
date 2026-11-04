@@ -1,14 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '../../core/api';
-import { MlAbsenceForecast, MlHsForecast, MlJobState, MlStatus } from '../models';
-
-export interface MlAbsenceQuery {
-  from?: string;
-  to?: string;
-  departement?: string | null;
-  categorie?: number | null;
-}
+import { MlHsForecast, MlJobState, MlStatus } from '../models';
 
 /** Moteur prédictif : état, prévisions et déclenchement des traitements. */
 @Injectable({ providedIn: 'root' })
@@ -19,12 +12,6 @@ export class PredictionsService extends ApiService {
 
   job(): Observable<MlJobState> {
     return this.http.get<MlJobState>(this.url('/api/predictions/job'));
-  }
-
-  absence(query: MlAbsenceQuery = {}): Observable<MlAbsenceForecast[]> {
-    return this.http.get<MlAbsenceForecast[]>(this.url('/api/predictions/absence'), {
-      params: this.params({ ...query }),
-    });
   }
 
   overtime(week?: string): Observable<MlHsForecast[]> {

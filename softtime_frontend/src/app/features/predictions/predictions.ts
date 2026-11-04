@@ -1,13 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { forkJoin } from 'rxjs';
-import {
-  MlAbsenceForecast,
-  MlHsForecast,
-  MlJobState,
-  MlModelInfo,
-  MlStatus,
-} from '../../shared/models';
+import { MlHsForecast, MlJobState, MlModelInfo, MlStatus } from '../../shared/models';
 import { PredictionsService } from '../../shared/services/predictions.service';
 import {
   Column,
@@ -20,10 +14,23 @@ import {
 } from '../../shared/components';
 import { fmtDate as formatIsoDate } from '../../shared/utils/date';
 
+/** Heures supplémentaires prévues d'un département (agrégat des lignes salarié). */
+interface HsDepartement {
+  nom: string;
+  salaries: number;
+  probables: number;
+  heures: number;
+  borneBasse: number;
+  borneHaute: number;
+  part: number;
+}
+
+const SANS_DEPARTEMENT = 'Sans département';
+
 /**
- * Moteur prédictif : état des modèles, risque d'absence sur les prochains jours et heures
- * supplémentaires prévues. Les prédictions sont précalculées côté serveur ; cette page ne fait
- * que les filtrer et les présenter.
+ * Moteur prédictif : état des modèles et heures supplémentaires prévues pour la semaine, par
+ * département puis par salarié. Les prédictions sont précalculées côté serveur ; cette page ne
+ * fait que les agréger, les filtrer et les présenter.
  */
 @Component({
   selector: 'app-predictions',
@@ -32,7 +39,7 @@ import { fmtDate as formatIsoDate } from '../../shared/utils/date';
   template: `
     <page-header
       title="Prévisions"
-      subtitle="Absentéisme et heures supplémentaires estimés par le moteur ML.NET"
+      subtitle="Heures supplémentaires attendues cette semaine, estimées par le moteur ML.NET"
     >
       <soft-button variant="secondary" (click)="load()" [disabled]="loading()">Actualiser</soft-button>
       <soft-button variant="secondary" (click)="action('refresh')" [disabled]="job()?.running ?? false">
@@ -75,71 +82,96 @@ import { fmtDate as formatIsoDate } from '../../shared/utils/date';
       </div>
     } @else if (status()?.etat === 'Baseline') {
       <div class="pred-empty">
-        Aucun modèle actif pour cette société : les données sont insuffisantes ou le modèle ne bat pas
-        encore la baseline. Lancez « Reconstruire l'historique » puis « Réentraîner ».
+        Aucun modèle d'heures supplémentaires actif pour cette société : les données sont insuffisantes ou
+        le modèle ne bat pas encore la baseline. Lancez « Reconstruire l'historique » puis « Réentraîner ».
       </div>
     } @else {
       <div class="pred-kpis">
         <soft-card variant="bordered">
           <div class="pred-kpi">
-            <span>Salariés à risque élevé</span>
-            <strong>{{ salariesARisque() }}</strong>
+            <span>HS prévues ({{ semaineLabel() }})</span>
+            <strong>{{ heures(hsTotal()) }}</strong>
+            <small>fourchette {{ heures(hsBasse()) }} – {{ heures(hsHaute()) }}</small>
           </div>
         </soft-card>
         <soft-card variant="bordered">
           <div class="pred-kpi">
-            <span>Risque moyen (14 j)</span>
-            <strong>{{ pct(risqueMoyen()) }}</strong>
+            <span>Salariés concernés</span>
+            <strong>{{ salariesConcernes() }} / {{ hs().length }}</strong>
+            <small>probabilité d'HS moyenne ou élevée</small>
           </div>
         </soft-card>
         <soft-card variant="bordered">
           <div class="pred-kpi">
-            <span>HS prévues (semaine)</span>
-            <strong>{{ hsTotal().toFixed(1) }} h</strong>
+            <span>Département le plus chargé</span>
+            @if (departementMax(); as d) {
+              <strong class="pred-kpi__text" [title]="d.nom">{{ d.nom }}</strong>
+              <small>{{ heures(d.heures) }} · {{ pct(d.part) }} du total</small>
+            } @else {
+              <strong>—</strong>
+              <small>aucune HS prévue</small>
+            }
           </div>
         </soft-card>
         <soft-card variant="bordered">
           <div class="pred-kpi">
-            <span>Qualité du modèle d'absence</span>
-            <strong>{{ absenceQualite() }}</strong>
+            <span>Précision du modèle</span>
+            <strong>{{ precision() }}</strong>
+            <small>écart moyen par salarié et par semaine</small>
           </div>
         </soft-card>
       </div>
 
       <soft-card variant="bordered" padding="sm">
         <div class="pred-section-head">
-          <h2>Absences prévues</h2>
-          <span>{{ absences().length }} salarié(s) · horizon {{ horizonJours }} jours</span>
+          <h2>Par département</h2>
+          <span>Cliquez sur un département pour voir ses salariés</span>
         </div>
-        <data-table
-          [columns]="absenceColumns"
-          [rows]="absenceRows()"
-          trackKey="matricule"
-          searchPlaceholder="Rechercher un salarié, un matricule, un département…"
-          emptyText="Aucune prévision d'absence sur l'horizon."
-        >
-          <ng-template dataTableCell="salarie" let-row>
-            <ng-container *ngTemplateOutlet="salarieCell; context: { $implicit: row }"></ng-container>
-          </ng-template>
-          <ng-template dataTableCell="risque" let-row>
-            <soft-badge [variant]="niveauVariant(absence(row).niveau)">{{ pct(absence(row).risque) }}</soft-badge>
-          </ng-template>
-          <ng-template dataTableCell="jours" let-row>
-            <span class="pred-days">
-              @for (j of absence(row).jours; track j.date) {
-                <span class="pred-day" [class]="'pred-day pred-day--' + niveauClass(j.niveau)">
-                  {{ jourCourt(j.date) }} · {{ pct(j.probabilite) }}
+        @if (departements().length === 0) {
+          <div class="pred-empty">Aucune prévision HS : planning de la semaine incomplet ou modèle indisponible.</div>
+        } @else {
+          <div class="pred-depts">
+            @for (d of departements(); track d.nom) {
+              <button
+                type="button"
+                class="pred-dept"
+                [class.pred-dept--active]="departementFiltre() === d.nom"
+                [attr.aria-pressed]="departementFiltre() === d.nom"
+                (click)="filtrerDepartement(d.nom)"
+              >
+                <span class="pred-dept__name">
+                  <strong>{{ d.nom }}</strong>
+                  <small>
+                    {{ d.salaries }} salarié{{ d.salaries > 1 ? 's' : '' }}
+                    @if (d.probables > 0) {
+                      · {{ d.probables }} probable{{ d.probables > 1 ? 's' : '' }}
+                    }
+                  </small>
                 </span>
-              }
-            </span>
-          </ng-template>
-        </data-table>
+                <span class="pred-dept__bar" aria-hidden="true">
+                  <span class="pred-dept__fill" [style.width.%]="barre(d)"></span>
+                </span>
+                <span class="pred-dept__value">
+                  <strong>{{ heures(d.heures) }}</strong>
+                  <small>{{ heures(d.borneBasse) }} – {{ heures(d.borneHaute) }}</small>
+                </span>
+                <span class="pred-dept__share">{{ pct(d.part) }}</span>
+              </button>
+            }
+          </div>
+        }
       </soft-card>
 
       <soft-card variant="bordered" padding="sm">
         <div class="pred-section-head">
-          <h2>Heures supplémentaires prévues</h2>
-          <span>{{ semaineLabel() }}</span>
+          <h2>Par salarié</h2>
+          @if (departementFiltre(); as filtre) {
+            <button type="button" class="pred-filter" (click)="filtrerDepartement(null)" title="Retirer le filtre">
+              {{ filtre }} <span aria-hidden="true">✕</span>
+            </button>
+          } @else {
+            <span>{{ hs().length }} salarié(s) · {{ semaineLabel() }}</span>
+          }
         </div>
         <data-table
           [columns]="hsColumns"
@@ -152,11 +184,11 @@ import { fmtDate as formatIsoDate } from '../../shared/utils/date';
             <ng-container *ngTemplateOutlet="salarieCell; context: { $implicit: row }"></ng-container>
           </ng-template>
           <ng-template dataTableCell="heuresPrevues" let-row>
-            <strong>{{ hsLigne(row).heuresPrevues.toFixed(1) }} h</strong>
+            <strong>{{ heures(hsLigne(row).heuresPrevues) }}</strong>
           </ng-template>
           <ng-template dataTableCell="probabiliteDepassement" let-row>
             <soft-badge [variant]="niveauVariant(hsLigne(row).niveau)">
-              {{ pct(hsLigne(row).probabiliteDepassement) }}
+              {{ niveauLabel(hsLigne(row).niveau) }} · {{ pct(hsLigne(row).probabiliteDepassement) }}
             </soft-badge>
           </ng-template>
         </data-table>
@@ -259,6 +291,7 @@ import { fmtDate as formatIsoDate } from '../../shared/utils/date';
         display: flex;
         flex-direction: column;
         gap: 6px;
+        min-width: 0;
       }
       .pred-kpi span {
         font-size: 12px;
@@ -269,6 +302,15 @@ import { fmtDate as formatIsoDate } from '../../shared/utils/date';
       .pred-kpi strong {
         font-size: 22px;
         font-family: var(--font-heading);
+      }
+      .pred-kpi__text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .pred-kpi small {
+        font-size: 12px;
+        color: var(--text-muted);
       }
       .pred-section-head {
         display: flex;
@@ -290,37 +332,103 @@ import { fmtDate as formatIsoDate } from '../../shared/utils/date';
         color: var(--text-muted);
         font-size: 11.5px;
       }
-      .pred-days {
+      .pred-depts {
         display: flex;
-        flex-wrap: wrap;
+        flex-direction: column;
         gap: 4px;
+        padding: 0 8px 8px;
       }
-      .pred-day {
-        padding: 2px 6px;
-        border-radius: 999px;
-        font-size: 11.5px;
+      .pred-dept {
+        display: grid;
+        grid-template-columns: minmax(140px, 1.2fr) minmax(80px, 2fr) minmax(90px, auto) 48px;
+        align-items: center;
+        gap: 14px;
+        width: 100%;
+        padding: 8px 10px;
         border: 1px solid transparent;
+        border-radius: var(--radius-md);
+        background: none;
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
       }
-      .pred-day--high {
-        background: var(--danger-50, #fef2f2);
-        color: var(--danger-700, #b91c1c);
-        border-color: var(--danger-200, #fecaca);
+      .pred-dept:hover {
+        background: var(--primary-50);
       }
-      .pred-day--mid {
-        background: var(--warning-50, #fffbeb);
-        color: var(--warning-700, #b45309);
-        border-color: var(--warning-200, #fde68a);
+      .pred-dept--active {
+        border-color: var(--primary-300);
+        background: var(--primary-50);
       }
-      .pred-day--low {
-        background: var(--success-50, #f0fdf4);
-        color: var(--success-700, #15803d);
-        border-color: var(--success-200, #bbf7d0);
+      .pred-dept__name,
+      .pred-dept__value {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+      .pred-dept__name strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 13.5px;
+      }
+      .pred-dept__name small,
+      .pred-dept__value small {
+        color: var(--text-muted);
+        font-size: 11.5px;
+      }
+      .pred-dept__value {
+        text-align: right;
+      }
+      .pred-dept__bar {
+        height: 8px;
+        border-radius: 999px;
+        background: var(--app-border);
+        overflow: hidden;
+      }
+      .pred-dept__fill {
+        display: block;
+        height: 100%;
+        border-radius: 999px;
+        background: var(--primary-500);
+      }
+      .pred-dept__share {
+        font-size: 12.5px;
+        color: var(--text-muted);
+        text-align: right;
+      }
+      .pred-filter {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 10px;
+        border: 1px solid var(--primary-300);
+        border-radius: 999px;
+        background: var(--primary-50);
+        color: inherit;
+        font: inherit;
+        font-size: 12.5px;
+        cursor: pointer;
       }
       .pred-empty {
         padding: 18px;
         text-align: center;
         color: var(--text-muted);
         font-size: 13px;
+      }
+      @media (max-width: 640px) {
+        .pred-dept {
+          grid-template-columns: 1fr auto;
+          gap: 6px 12px;
+        }
+        .pred-dept__bar {
+          grid-column: 1 / -1;
+          grid-row: 2;
+        }
+        .pred-dept__share {
+          display: none;
+        }
       }
     `,
   ],
@@ -329,54 +437,37 @@ export class PredictionsPage implements OnInit {
   private readonly api = inject(PredictionsService);
 
   readonly status = signal<MlStatus | null>(null);
-  readonly absences = signal<MlAbsenceForecast[]>([]);
   readonly hs = signal<MlHsForecast[]>([]);
   readonly job = signal<MlJobState | null>(null);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly info = signal<string | null>(null);
-
-  readonly horizonJours = 14;
+  /** Département sélectionné dans la vue agrégée ; filtre la liste des salariés. */
+  readonly departementFiltre = signal<string | null>(null);
 
   readonly modeles = computed<MlModelInfo[]>(() => this.status()?.modeles ?? []);
 
   // Tableaux partagés (data-table) : le texte des colonnes (format) sert aussi à la recherche.
-  readonly absenceRows = computed(() => this.absences() as unknown as Record<string, unknown>[]);
-  readonly hsRows = computed(() => this.hs() as unknown as Record<string, unknown>[]);
+  readonly hsRows = computed(() => {
+    const filtre = this.departementFiltre();
+    const lignes = filtre ? this.hs().filter((h) => this.nomDepartement(h) === filtre) : this.hs();
+    return lignes as unknown as Record<string, unknown>[];
+  });
   readonly modeleRows = computed(() => this.modeles() as unknown as Record<string, unknown>[]);
-
-  readonly absenceColumns: Column[] = [
-    { key: 'salarie', label: 'Salarié', format: (_, row) => this.salarieTexte(row) },
-    { key: 'departement', label: 'Département', format: (v) => (v as string | null) || '—' },
-    {
-      key: 'risque',
-      label: 'Risque',
-      format: (_, row) => `${this.pct(this.absence(row).risque)} ${this.niveauLabel(this.absence(row).niveau)}`,
-    },
-    {
-      key: 'jours',
-      label: 'Jours à risque',
-      format: (_, row) =>
-        this.absence(row)
-          .jours.map((j) => `${this.jourCourt(j.date)} · ${this.pct(j.probabilite)}`)
-          .join(', '),
-    },
-  ];
 
   readonly hsColumns: Column[] = [
     { key: 'salarie', label: 'Salarié', format: (_, row) => this.salarieTexte(row) },
     { key: 'departement', label: 'Département', format: (v) => (v as string | null) || '—' },
-    { key: 'heuresPrevues', label: 'HS prévues', format: (v) => `${(v as number).toFixed(1)} h` },
+    { key: 'heuresPrevues', label: 'HS prévues', format: (v) => this.heures(v as number) },
     {
       key: 'intervalle',
-      label: 'Intervalle',
-      format: (_, row) =>
-        `${this.hsLigne(row).borneBasse.toFixed(1)} – ${this.hsLigne(row).borneHaute.toFixed(1)} h`,
+      label: 'Fourchette',
+      format: (_, row) => `${this.heures(this.hsLigne(row).borneBasse)} – ${this.heures(this.hsLigne(row).borneHaute)}`,
     },
     {
       key: 'probabiliteDepassement',
-      label: 'P(dépassement)',
-      format: (v, row) => `${this.pct(v as number)} ${this.niveauLabel(this.hsLigne(row).niveau)}`,
+      label: "Probabilité d'HS",
+      format: (v, row) => `${this.niveauLabel(this.hsLigne(row).niveau)} ${this.pct(v as number)}`,
     },
   ];
 
@@ -389,16 +480,39 @@ export class PredictionsPage implements OnInit {
     { key: 'metriques', label: 'Métriques', format: (_, row) => this.metricLabel(this.modele(row)) },
     { key: 'commentaire', label: 'Commentaire', format: (v) => (v as string | null) || '—' },
   ];
-  readonly salariesARisque = computed(() => this.absences().filter((a) => a.niveau >= 3).length);
-  readonly risqueMoyen = computed(() => {
-    const list = this.absences();
-    return list.length ? list.reduce((sum, a) => sum + a.risque, 0) / list.length : 0;
-  });
+
   readonly hsTotal = computed(() => this.hs().reduce((sum, h) => sum + h.heuresPrevues, 0));
-  readonly absenceQualite = computed(() => {
-    const model = this.modeles().find((m) => m.estActif && m.typeModele === 'Absence');
-    const auc = this.metric(model, 'auc');
-    return auc == null ? '—' : auc.toFixed(3);
+  readonly hsBasse = computed(() => this.hs().reduce((sum, h) => sum + h.borneBasse, 0));
+  readonly hsHaute = computed(() => this.hs().reduce((sum, h) => sum + h.borneHaute, 0));
+  readonly salariesConcernes = computed(() => this.hs().filter((h) => h.niveau >= 2).length);
+
+  readonly departements = computed<HsDepartement[]>(() => {
+    const total = this.hsTotal();
+    const groupes = new Map<string, HsDepartement>();
+    for (const h of this.hs()) {
+      const nom = this.nomDepartement(h);
+      const d = groupes.get(nom) ?? { nom, salaries: 0, probables: 0, heures: 0, borneBasse: 0, borneHaute: 0, part: 0 };
+      d.salaries++;
+      if (h.niveau >= 2) d.probables++;
+      d.heures += h.heuresPrevues;
+      d.borneBasse += h.borneBasse;
+      d.borneHaute += h.borneHaute;
+      groupes.set(nom, d);
+    }
+    return [...groupes.values()]
+      .map((d) => ({ ...d, part: total > 0 ? d.heures / total : 0 }))
+      .sort((a, b) => b.heures - a.heures || a.nom.localeCompare(b.nom));
+  });
+  readonly departementMax = computed(() => {
+    const premier = this.departements()[0];
+    return premier && premier.heures > 0 ? premier : null;
+  });
+
+  /** Écart moyen (MAE) du modèle de montant actif, mesuré sur les semaines de test. */
+  readonly precision = computed(() => {
+    const model = this.modeles().find((m) => m.estActif && m.typeModele === 'HsMontant');
+    const mae = this.metric(model, 'mae');
+    return mae == null ? '—' : `± ${this.heures(mae)}`;
   });
   readonly semaineLabel = computed(() => {
     const semaine = this.hs()[0]?.semaineDebut;
@@ -414,15 +528,17 @@ export class PredictionsPage implements OnInit {
     this.error.set(null);
     forkJoin({
       status: this.api.status(),
-      absences: this.api.absence({}),
       hs: this.api.overtime(),
       job: this.api.job(),
     }).subscribe({
       next: (result) => {
         this.status.set(result.status);
-        this.absences.set(result.absences);
         this.hs.set(result.hs);
         this.job.set(result.job);
+        // Un filtre sur un département disparu des prévisions viderait la liste sans raison visible.
+        if (!result.hs.some((h) => this.nomDepartement(h) === this.departementFiltre())) {
+          this.departementFiltre.set(null);
+        }
         this.loading.set(false);
       },
       error: (err) => {
@@ -445,6 +561,17 @@ export class PredictionsPage implements OnInit {
     });
   }
 
+  /** Sélectionne un département (un second clic le désélectionne). */
+  filtrerDepartement(nom: string | null): void {
+    this.departementFiltre.set(nom === this.departementFiltre() ? null : nom);
+  }
+
+  /** Largeur de la barre, relative au département le plus chargé. */
+  barre(d: HsDepartement): number {
+    const max = this.departements()[0]?.heures ?? 0;
+    return max > 0 ? Math.max(2, (d.heures / max) * 100) : 0;
+  }
+
   fmtDate(value: string | null | undefined): string {
     return formatIsoDate(value);
   }
@@ -458,6 +585,10 @@ export class PredictionsPage implements OnInit {
 
   pct(value: number | null | undefined): string {
     return `${Math.round((value ?? 0) * 100)} %`;
+  }
+
+  heures(value: number | null | undefined): string {
+    return `${(value ?? 0).toFixed(1)} h`;
   }
 
   etatLabel(): string {
@@ -483,24 +614,14 @@ export class PredictionsPage implements OnInit {
     return 'success';
   }
 
-  niveauClass(niveau: number): string {
-    if (niveau >= 3) return 'high';
-    if (niveau >= 2) return 'mid';
-    return 'low';
-  }
-
-  /** Texte du niveau, pour que la recherche trouve « élevé », « moyen » ou « faible ». */
+  /** Texte du niveau, pour que la recherche trouve « élevée », « moyenne » ou « faible ». */
   niveauLabel(niveau: number): string {
-    if (niveau >= 3) return 'élevé';
-    if (niveau >= 2) return 'moyen';
-    return 'faible';
+    if (niveau >= 3) return 'Élevée';
+    if (niveau >= 2) return 'Moyenne';
+    return 'Faible';
   }
 
   // Lignes du data-table, typées pour les modèles de cellule.
-  absence(row: Record<string, unknown>): MlAbsenceForecast {
-    return row as unknown as MlAbsenceForecast;
-  }
-
   hsLigne(row: Record<string, unknown>): MlHsForecast {
     return row as unknown as MlHsForecast;
   }
@@ -509,14 +630,16 @@ export class PredictionsPage implements OnInit {
     return row as unknown as MlModelInfo;
   }
 
+  private nomDepartement(h: MlHsForecast): string {
+    return h.departement?.trim() || SANS_DEPARTEMENT;
+  }
+
   private salarieTexte(row: Record<string, unknown>): string {
     return [row['nom'], row['prenom'], row['matricule']].filter(Boolean).join(' ');
   }
 
   typeLabel(type: string): string {
     switch (type) {
-      case 'Absence':
-        return 'Absence';
       case 'HsProbabilite':
         return 'HS — probabilité';
       case 'HsMontant':

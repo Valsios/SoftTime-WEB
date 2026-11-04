@@ -193,7 +193,6 @@ public static class ApiCatalog
         E("Dashboard", "GET", "/api/dashboard/filters", "Valeurs des filtres (départements, catégories)"),
         E("Predictions", "GET", "/api/predictions/status", "État du moteur prédictif et modèles actifs"),
         E("Predictions", "GET", "/api/predictions/job", "État du dernier traitement ML"),
-        E("Predictions", "GET", "/api/predictions/absence?from=&to=&departement=&categorie=", "Prévisions d'absence par salarié et par jour"),
         E("Predictions", "GET", "/api/predictions/overtime?week=", "Heures supplémentaires prévues par salarié"),
         E("Predictions", "POST", "/api/predictions/refresh", "Rafraîchir la fenêtre glissante et les prévisions"),
         E("Predictions", "POST", "/api/predictions/train", "Réentraîner les modèles (admin)"),

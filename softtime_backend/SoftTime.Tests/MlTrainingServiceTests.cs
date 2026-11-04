@@ -7,7 +7,7 @@ using SoftTime.Domain.Models.Ml;
 namespace SoftTime.Tests;
 
 /// <summary>
-/// Vérifie la politique d'activation : données insuffisantes → baseline, modèle sous la porte
+/// Vérifie la politique d'activation des modèles HS : données insuffisantes → baseline, modèle sous la porte
 /// qualité → rejeté sans casser l'ancien modèle, modèle au-dessus → activé.
 /// </summary>
 public class MlTrainingServiceTests
@@ -23,7 +23,7 @@ public class MlTrainingServiceTests
         var outcome = await service.TrainAsync(Sage);
 
         Assert.Equal("Baseline", outcome.Etat);
-        Assert.Null(outcome.Absence);
+        Assert.Null(outcome.HsProbabilite);
         Assert.Null(outcome.HsMontant);
         Assert.NotEmpty(store.Models);
         Assert.All(store.Models, m => Assert.Equal(MlModelStatus.Rejete, m.Statut));
@@ -44,10 +44,11 @@ public class MlTrainingServiceTests
         var outcome = await service.TrainAsync(Sage);
 
         Assert.Equal("Pret", outcome.Etat);
-        Assert.True(outcome.Absence is { EstActif: true });
+        Assert.True(outcome.HsProbabilite is { EstActif: true });
         Assert.True(outcome.HsMontant is { EstActif: true });
-        Assert.Contains(store.Models, m => m.TypeModele == MlModelTypes.Absence && m.EstActif);
         Assert.Contains(store.Models, m => m.TypeModele == MlModelTypes.HsMontant && m.EstActif);
+        // La prévision d'absence n'est plus entraînée.
+        Assert.DoesNotContain(store.Models, m => m.TypeModele == MlModelTypes.Absence);
     }
 
     [Fact]
@@ -58,7 +59,7 @@ public class MlTrainingServiceTests
         store.Models.Add(new T_ML_MODELE
         {
             BddSage = Sage,
-            TypeModele = MlModelTypes.Absence,
+            TypeModele = MlModelTypes.HsMontant,
             Version = "ancien",
             Algorithme = "Fake",
             Statut = MlModelStatus.Active,
@@ -74,17 +75,18 @@ public class MlTrainingServiceTests
 
         var trainer = new FakeMlTrainer
         {
-            AbsenceResult = new MlTrainingResult(true, "Fake", new byte[] { 1, 2, 3 },
-                new MlMetrics(Auc: 0.50, TestRows: 50, TestPositives: 10), null)
+            AmountResult = new MlTrainingResult(true, "Fake", new byte[] { 1, 2, 3 },
+                new MlMetrics(Mae: 2.0, TestRows: 50, TestPositives: 10), null)
         };
         var service = new MlTrainingService(store, trainer, Options(), NullLogger<MlTrainingService>.Instance);
 
         var outcome = await service.TrainAsync(Sage);
 
-        Assert.False(outcome.Absence is { EstActif: true });
-        Assert.Equal(1, store.Models.Count(m => m.TypeModele == MlModelTypes.Absence && m.EstActif));
-        Assert.Equal("ancien", store.Models.Single(m => m.TypeModele == MlModelTypes.Absence && m.EstActif).Version);
-        Assert.Contains(store.Models, m => m.TypeModele == MlModelTypes.Absence && m.Statut == MlModelStatus.Rejete);
+        Assert.Equal("Baseline", outcome.Etat);
+        Assert.False(outcome.HsMontant is { EstActif: true });
+        Assert.Equal(1, store.Models.Count(m => m.TypeModele == MlModelTypes.HsMontant && m.EstActif));
+        Assert.Equal("ancien", store.Models.Single(m => m.TypeModele == MlModelTypes.HsMontant && m.EstActif).Version);
+        Assert.Contains(store.Models, m => m.TypeModele == MlModelTypes.HsMontant && m.Statut == MlModelStatus.Rejete);
     }
 
     private static MlOptions Options() => new()

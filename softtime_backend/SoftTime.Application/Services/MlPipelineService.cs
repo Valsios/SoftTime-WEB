@@ -70,8 +70,8 @@ public sealed class MlPipelineService
         var predictions = await _prediction.GenerateAsync(ct);
 
         _logger.LogInformation(
-            "Pipeline ML {Sage} : {Daily} jours, {Weekly} semaines, {Absence} prédictions absence, {Hs} prédictions HS.",
-            sage, dailyRows, weeklyRows, predictions.AbsencePredictions, predictions.HsPredictions);
+            "Pipeline ML {Sage} : {Daily} jours, {Weekly} semaines, {Hs} prédictions HS.",
+            sage, dailyRows, weeklyRows, predictions.HsPredictions);
 
         var message = string.Join(" ", new[] { trainingMessage, predictions.Message }
             .Where(m => !string.IsNullOrWhiteSpace(m)));
@@ -81,7 +81,6 @@ public sealed class MlPipelineService
             message,
             dailyRows,
             weeklyRows,
-            predictions.AbsencePredictions,
             predictions.HsPredictions);
     }
 

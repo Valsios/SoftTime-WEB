@@ -22,7 +22,7 @@ public class PredictionsHttpTests : IClassFixture<ApiFactory>
     // Lectures de prévisions (celles qui lisent des données par personne, plus l'état du moteur).
     public static IEnumerable<object[]> Reads()
     {
-        foreach (var url in new[] { "/api/predictions/status", "/api/predictions/job", "/api/predictions/absence", "/api/predictions/overtime" })
+        foreach (var url in new[] { "/api/predictions/status", "/api/predictions/job", "/api/predictions/overtime" })
             foreach (var profile in new[] { "admin", "predreader", "prednobase", "gate6only", "user1", "param2", "joel", "anonyme" })
                 yield return new object[] { url, profile };
     }
@@ -67,7 +67,7 @@ public class PredictionsHttpTests : IClassFixture<ApiFactory>
     public async Task A_refused_read_writes_nothing()
     {
         var before = _f.Snapshot();
-        await _http.SendAsync(_f.Request("gate6only", HttpMethod.Get, "/api/predictions/absence", sageHeader: ApiFactory.SageName));
+        await _http.SendAsync(_f.Request("gate6only", HttpMethod.Get, "/api/predictions/overtime", sageHeader: ApiFactory.SageName));
         Assert.Equal(before, _f.Snapshot());
     }
 

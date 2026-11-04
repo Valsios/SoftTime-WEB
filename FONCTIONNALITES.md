@@ -185,15 +185,15 @@ analytique dédiée au schéma `ml` (ou une base séparée via `ConnectionString
 par un ETL qui rejoue les règles existantes (`AbsenceReportRules`, `OvertimeCalculator`).
 
 - **`ml.SalarieJour`** : grain salarié × jour ; features calculées *as-of J-1* (calendrier, salarié,
-  historique 7/30/90 jours, collectif) et labels d'absence reconstruits. L'absence n'étant pas
-  stockée dans la base fonctionnelle, elle est recalculée pour l'historique puis figée.
+  historique 7/30/90 jours, collectif). Elle sert à construire les features hebdomadaires HS et à
+  écarter les jours sans pointage collectif (trous d'import) de l'entraînement.
 - **`ml.SalarieSemaine`** : grain salarié × semaine ISO ; label HS = valeur validée de
   `T_HS_VALIDER` si elle existe, sinon résultat de `OvertimeCalculator`.
 - **`ml.Modele`** : registre versionné (binaire ML.NET, hash du contrat de features, métriques,
   statut). Un seul modèle actif par société et par type.
-- **`ml.Prediction`** : prédictions précalculées (absence par jour ; HS par semaine) et relues par l'API.
+- **`ml.Prediction`** : prédictions précalculées (HS par semaine) et relues par l'API.
 
-Trois modèles par société : **absence** (classification binaire), **P(HS > 0)** et **montant HS**
+Deux modèles par société : **P(HS > 0)** (classification) et **montant HS**
 (régression). Entraînement `FastTree` (ML.NET, sans dépendance native) sur les 18 derniers mois,
 découpage **chronologique** (dernières semaines en test) et **porte qualité** : un modèle n'est
 activé que s'il bat la baseline statistique ; sinon l'ancien modèle reste actif et l'écran affiche
@@ -202,9 +202,12 @@ activé que s'il bat la baseline statistique ; sinon l'ancien modèle reste acti
 - **Rafraîchissement** : service d'arrière-plan (quotidien) + jobs admin. Fenêtre glissante de
   12 semaines pour absorber les corrections tardives ; backfill complet par trimestres au premier
   déploiement. Les lignes anciennes restent figées (snapshot).
-- **Page `/predictions`** (États, permission `REPORTS:PREDICTIONS`) : état du moteur, salariés à
-  risque, jours à risque, HS prévues avec intervalle et P(dépassement), historique des modèles.
-- **API** : `GET /api/predictions/status|job|absence|overtime`, `POST /api/predictions/refresh|train|backfill`.
+- **Page `/predictions`** (États, permission `REPORTS:PREDICTIONS`) : état du moteur, HS prévues de la
+  semaine (total et fourchette, salariés concernés, département le plus chargé, précision du modèle
+  en heures), vue **par département** (barre, part du total ; un clic filtre la liste) puis détail
+  par salarié avec fourchette et probabilité d'HS, historique des modèles. La prévision d'absence
+  a été retirée (peu exploitable) ; les modèles d'absence déjà entraînés restent en base, ignorés.
+- **API** : `GET /api/predictions/status|job|overtime`, `POST /api/predictions/refresh|train|backfill`.
 - **Migrations** : EF Core versionnées (`SoftTime.Infrastructure/Migrations/Ml`,
   `AddMlPredictionSchema`) et script idempotent `migrations/AddMlPredictionSchema.sql`
   (voir `migrations/README.md`).

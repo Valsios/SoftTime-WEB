@@ -10,14 +10,13 @@ namespace SoftTime.Application.Services;
 public sealed record MlTrainingOutcome(
     string Etat,
     string Message,
-    T_ML_MODELE? Absence,
     T_ML_MODELE? HsProbabilite,
     T_ML_MODELE? HsMontant,
-    MlMetrics? AbsenceMetrics,
     MlMetrics? HsMetrics);
 
 /// <summary>
-/// Entraînement des trois modèles à partir de la base analytique. Le découpage est chronologique :
+/// Entraînement des deux modèles d'heures supplémentaires (probabilité et montant) à partir de
+/// la base analytique. Le découpage est chronologique :
 /// les dernières semaines servent de test, jamais un tirage aléatoire. Un modèle n'est activé que
 /// s'il bat la baseline statistique et les seuils minimaux ; sinon l'ancien modèle reste actif et
 /// l'état passe explicitement à « Baseline ».
@@ -55,86 +54,10 @@ public sealed class MlTrainingService
                 "ML {Sage} : {Count} jour(s) sans pointage collectif écartés de l'entraînement.",
                 bddSage, joursSansPointage.Count);
 
-        var absence = await TrainAbsenceAsync(bddSage, daily, joursSansPointage, from, to, ct);
         var hs = await TrainHsAsync(bddSage, joursSansPointage, from, to, ct);
+        var etat = hs.HsMontant?.EstActif == true ? "Pret" : "Baseline";
 
-        var etat = absence.Absence?.EstActif == true || hs.HsMontant?.EstActif == true
-            ? "Pret"
-            : "Baseline";
-        var message = string.Join(" ", new[] { absence.Message, hs.Message }.Where(m => !string.IsNullOrWhiteSpace(m)));
-
-        return new MlTrainingOutcome(
-            etat,
-            message,
-            absence.Absence,
-            hs.HsProbabilite,
-            hs.HsMontant,
-            absence.AbsenceMetrics,
-            hs.HsMetrics);
-    }
-
-    // ------------------------------------------------------------------ absence
-
-    private async Task<AbsenceOutcome> TrainAbsenceAsync(
-        string bddSage, IReadOnlyList<T_ML_SALARIE_JOUR> daily, IReadOnlySet<DateTime> joursSansPointage,
-        DateTime from, DateTime to, CancellationToken ct)
-    {
-        var rows = daily
-            .Where(d => d.EstJourPlanifie && !joursSansPointage.Contains(d.Date.Date))
-            .OrderBy(d => d.Date)
-            .ToList();
-
-        var positifs = rows.Count(d => d.AbsenceNonJustifiee);
-        if (rows.Count < _options.MinDailyRows || positifs < _options.MinAbsencePositives)
-        {
-            var reason = $"Absence : données insuffisantes ({rows.Count} jours planifiés, {positifs} absences ; " +
-                         $"minimum {_options.MinDailyRows}/{_options.MinAbsencePositives}).";
-            _logger.LogInformation("{Reason}", reason);
-            await PersistRejectionAsync(bddSage, MlModelType.Absence, reason, rows.Count, positifs, from, to, ct);
-            return new AbsenceOutcome(null, null, reason);
-        }
-
-        var testStart = to.AddDays(-7 * _options.TestWindowWeeks);
-        var train = rows.Where(d => d.Date < testStart).Select(MlSampleMapper.ToAbsence).ToList();
-        var test = rows.Where(d => d.Date >= testStart).Select(MlSampleMapper.ToAbsence).ToList();
-        var testPositifs = test.Count(s => s.Label);
-
-        if (train.Count == 0 || test.Count == 0 || testPositifs < _options.MinTestPositives)
-        {
-            var reason = $"Absence : jeu de test insuffisant ({test.Count} lignes, {testPositifs} positifs).";
-            _logger.LogInformation("{Reason}", reason);
-            await PersistRejectionAsync(bddSage, MlModelType.Absence, reason, rows.Count, positifs, from, to, ct);
-            return new AbsenceOutcome(null, null, reason);
-        }
-
-        var baselineAuc = Auc(test.Select(s => (double)s.TauxAbsence30j).ToList(), test.Select(s => s.Label).ToList());
-        var result = _trainer.TrainAbsence(train, test, _options.AbsenceAlgorithm, ct);
-
-        var auc = result.Metrics.Auc ?? 0d;
-        var accepted = result.Accepted
-                       && result.Model is { Length: > 0 }
-                       && auc >= _options.AbsenceMinAuc
-                       && auc >= baselineAuc + _options.AbsenceAucImprovement;
-
-        var metrics = result.Metrics with { BaselineAuc = baselineAuc };
-        var reasonText = accepted
-            ? null
-            : $"AUC {auc:F3} < max({_options.AbsenceMinAuc:F2}, baseline {baselineAuc:F3} + {_options.AbsenceAucImprovement:F2}).";
-
-        var model = await PersistAsync(
-            bddSage, MlModelType.Absence, result, metrics, from, to,
-            rows.Count, positifs, accepted, reasonText, ct);
-
-        _logger.LogInformation(
-            "Absence {Sage} : AUC={Auc:F3}, baseline={Baseline:F3}, accepté={Accepted}.",
-            bddSage, auc, baselineAuc, accepted);
-
-        return new AbsenceOutcome(
-            model,
-            metrics,
-            accepted
-                ? $"Absence : modèle {model.Version} actif (AUC {auc:F3} vs baseline {baselineAuc:F3})."
-                : reasonText ?? "Absence : baseline conservée.");
+        return new MlTrainingOutcome(etat, hs.Message, hs.HsProbabilite, hs.HsMontant, hs.HsMetrics);
     }
 
     // ------------------------------------------------------------------ heures supplémentaires
@@ -324,7 +247,6 @@ public sealed class MlTrainingService
         return somme / (positifs.Count * negatifs.Count);
     }
 
-    private sealed record AbsenceOutcome(T_ML_MODELE? Absence, MlMetrics? AbsenceMetrics, string Message);
     private sealed record HsOutcome(
         T_ML_MODELE? HsProbabilite, T_ML_MODELE? HsMontant, MlMetrics? HsMetrics, string Message);
 }

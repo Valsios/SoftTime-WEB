@@ -26,21 +26,6 @@ public sealed record MlStatusDto(
     DateTime? DerniereGeneration,
     IReadOnlyList<MlModelDto> Modeles);
 
-public sealed record MlAbsenceDayDto(
-    DateTime Date,
-    double Probabilite,
-    byte Niveau,
-    bool PlanningConnu);
-
-public sealed record MlAbsenceForecastDto(
-    string Matricule,
-    string? Nom,
-    string? Prenom,
-    string? Departement,
-    double Risque,
-    byte Niveau,
-    IReadOnlyList<MlAbsenceDayDto> Jours);
-
 public sealed record MlHsForecastDto(
     string Matricule,
     string? Nom,
@@ -75,10 +60,8 @@ public sealed record MlMetricsDto(
 public sealed record MlTrainingOutcomeDto(
     string Etat,
     string Message,
-    string? AbsenceVersion,
     string? HsProbabiliteVersion,
     string? HsMontantVersion,
-    MlMetricsDto? AbsenceMetriques,
     MlMetricsDto? HsMetriques);
 
 public sealed record MlPipelineResultDto(
@@ -86,5 +69,4 @@ public sealed record MlPipelineResultDto(
     string Message,
     int DailyRows,
     int WeeklyRows,
-    int AbsencePredictions,
     int HsPredictions);

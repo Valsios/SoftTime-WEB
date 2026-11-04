@@ -25,24 +25,6 @@ export interface MlStatus {
   modeles: MlModelInfo[];
 }
 
-export interface MlAbsenceDay {
-  date: string;
-  probabilite: number;
-  niveau: number;
-  planningConnu: boolean;
-}
-
-export interface MlAbsenceForecast {
-  matricule: string;
-  nom: string | null;
-  prenom: string | null;
-  departement: string | null;
-  /** Risque d'au moins une absence sur l'horizon (0..1). */
-  risque: number;
-  niveau: number;
-  jours: MlAbsenceDay[];
-}
-
 export interface MlHsForecast {
   matricule: string;
   nom: string | null;
@@ -69,6 +51,5 @@ export interface MlPipelineResult {
   message: string;
   dailyRows: number;
   weeklyRows: number;
-  absencePredictions: number;
   hsPredictions: number;
 }

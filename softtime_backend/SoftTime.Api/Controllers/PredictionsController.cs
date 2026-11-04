@@ -9,7 +9,7 @@ using SoftTime.Domain;
 namespace SoftTime.Api.Controllers;
 
 /// <summary>
-/// Moteur prédictif : état, prévisions d'absence et d'heures supplémentaires, déclenchement
+/// Moteur prédictif : état, prévisions d'heures supplémentaires, déclenchement
 /// des traitements. La lecture est ouverte à tout utilisateur authentifié disposant de
 /// <c>REPORTS:PREDICTIONS</c> ; les traitements sont réservés au droit Paramètres (ou admin).
 /// </summary>
@@ -51,23 +51,6 @@ public class PredictionsController : ControllerBase
     {
         await EnsureCanReadAsync(ct);
         return Ok(_jobs.State);
-    }
-
-    [HttpGet("absence")]
-    public async Task<IActionResult> Absence(
-        [FromQuery] DateTime? from,
-        [FromQuery] DateTime? to,
-        [FromQuery] string? departement,
-        [FromQuery] int? categorie,
-        CancellationToken ct)
-    {
-        await EnsureCanReadAsync(ct);
-
-        var debut = (from ?? DateTime.Today).Date;
-        var fin = (to ?? debut.AddDays(14)).Date;
-        if (fin < debut)
-            fin = debut;
-        return Ok(await _predictions.GetAbsenceForecastsAsync(debut, fin, departement, categorie, ct));
     }
 
     [HttpGet("overtime")]
