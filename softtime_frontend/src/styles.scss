@@ -131,12 +131,13 @@
   --spinner-head: #ffffff;
   --text-on-accent: #ffffff;
   --overlay: rgba(11, 19, 50, 0.55);
-  --chart-1: #2e427b;
-  --chart-2: #aa9e39;
-  --chart-3: #047857;
-  --chart-4: #bc9c22;
+  /* Ordre des séries (§10.3) : navy-600, navy-300, gold-400, sauge, ardoise, or chaud */
+  --chart-1: #455d9c;
+  --chart-2: #a9bdee;
+  --chart-3: #aa9e39;
+  --chart-4: #aeb091;
   --chart-5: #575d8f;
-  --chart-6: #b45309;
+  --chart-6: #bc9c22;
   --chart-7: #aeb091;
   --chart-8: #be123c;
   --chart-9: #455d9c;
@@ -168,7 +169,7 @@
   --sidebar-text: rgba(255, 255, 255, 0.80);
   --sidebar-text-muted: rgba(255, 255, 255, 0.45);
   --sidebar-width: 256px;
-  --sidebar-mini-width: 64px;
+  --sidebar-mini-width: 72px;
 
   /* Espacements multiples de 4px (§6.1) */
   --space-xs: 4px;
@@ -200,6 +201,7 @@
   --t-normal: 200ms;
   --t-slow: 280ms;
   --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-standard: var(--ease);
 
   /* Z-index hiérarchisé (§6.7) */
   --z-sticky: 30;
@@ -209,8 +211,8 @@
   --z-notification: 70;
 
   /* Typographie (§5.1) */
-  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-heading: 'Outfit', 'Inter', system-ui, sans-serif;
+  --font-sans: 'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-heading: 'Outfit Variable', 'Outfit', 'Inter Variable', system-ui, sans-serif;
 }
 
 /* ---- Mode sombre sobre harmonisé ---- */
@@ -403,12 +405,10 @@ button {
   line-height: 1.2;
 }
 
-.soft-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-}
 
+/* Focus clavier : 3 px navy-700, décalé de 2 px (§13.5) */
 .soft-btn:focus-visible {
-  outline: 2px solid var(--focus-ring);
+  outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -1079,7 +1079,6 @@ button {
   position: fixed;
   inset: 0;
   background: var(--overlay);
-  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1095,13 +1094,13 @@ button {
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-xl);
   width: 100%;
-  max-width: 560px;
+  max-width: 512px;
   animation: soft-slide-up var(--t-normal) var(--ease);
 }
 
-.soft-modal__panel--sm { max-width: 400px; }
-.soft-modal__panel--lg { max-width: 720px; }
-.soft-modal__panel--xl { max-width: 960px; }
+.soft-modal__panel--sm { max-width: 384px; }
+.soft-modal__panel--lg { max-width: 672px; }
+.soft-modal__panel--xl { max-width: 896px; }
 
 .soft-modal__header {
   display: flex;
@@ -1229,6 +1228,25 @@ button {
   font-weight: 600;
   color: var(--navy-950);
   letter-spacing: -0.02em;
+}
+
+.soft-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold-600);
+}
+.soft-eyebrow::before {
+  content: '';
+  width: 16px;
+  height: 2px;
+  background: var(--gold-400);
+  flex: none;
 }
 
 .soft-page-header p {
@@ -1443,5 +1461,24 @@ button {
   h3.sub-title {
     break-after: avoid;
     page-break-after: avoid;
+  }
+}
+
+/* Focus clavier visible partout (§13.5) ; or clair sur fond sombre */
+:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.on-dark :focus-visible {
+  outline-color: var(--gold-300);
+}
+
+/* « Réduire les animations » coupe toutes les transitions (§13.6) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
   }
 }
