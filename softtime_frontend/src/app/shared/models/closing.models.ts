@@ -97,4 +97,6 @@ export interface ClosingQuery {
   includeInformation?: boolean;
   page?: number;
   pageSize?: number;
+  /** Changement de page seulement : le serveur peut réutiliser, 60 s au plus, l'analyse déjà calculée. */
+  reuseCache?: boolean;
 }

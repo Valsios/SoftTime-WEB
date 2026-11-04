@@ -281,6 +281,8 @@ describe('page Contrôle avant paie : niveau Information', () => {
     el.querySelector<HTMLElement>('button[aria-label="Page suivante"]')!.click();
     fixture.detectChanges();
     expect(requetes[1].page).toBe(2);
+    expect(requetes[0].reuseCache).toBe(false); // nouvelle analyse : jamais de réutilisation
+    expect(requetes[1].reuseCache).toBe(true); // changement de page : l'analyse déjà calculée peut servir
 
     const select = el.querySelector<HTMLSelectElement>('.soft-pagination-size select')!;
     select.value = '25';
@@ -288,6 +290,17 @@ describe('page Contrôle avant paie : niveau Information', () => {
     fixture.detectChanges();
     expect(requetes[2].pageSize).toBe(25);
     expect(requetes[2].page).toBe(1);
+    expect(requetes[2].reuseCache).toBe(true);
+    expect(requetes).toHaveLength(3); // une seule requête par action, aucun appel en double
+  });
+
+  it('onglet et interrupteur de comparaison : nouvelle analyse, sans réutilisation du cache', () => {
+    const { el, requetes } = creer([avecInformations(), avecInformations(), avecInformations()]);
+
+    el.querySelectorAll<HTMLElement>('[role="tab"]')[1].click();
+    el.querySelector<HTMLInputElement>('label.closing-switch input')!.click();
+
+    expect(requetes.map((r) => r.reuseCache)).toEqual([false, false, false]);
   });
 
   it('tableau partagé : badge de gravité et noms masqués (matricule seul) conservés', () => {

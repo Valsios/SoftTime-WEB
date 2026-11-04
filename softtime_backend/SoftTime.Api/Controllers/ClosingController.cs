@@ -50,6 +50,7 @@ public class ClosingController : ControllerBase
     /// Analyse de clôture d'une période (mois civil précédent sans dates) : statut, score, formule,
     /// comptages, départements, page d'anomalies (50 par défaut, 200 au plus) et comparaison si demandée.
     /// La liste omet les anomalies « Information » sauf <c>includeInformation=true</c> ; les comptages les incluent toujours.
+    /// <c>reuseCache=true</c> (changement de page seulement) réutilise, jusqu'à 60 s, l'analyse déjà calculée pour la même période.
     /// </summary>
     [HttpGet("analysis")]
     public async Task<IActionResult> Analysis(
@@ -60,6 +61,7 @@ public class ClosingController : ControllerBase
         [FromQuery] bool? includeInformation,
         [FromQuery] int? page,
         [FromQuery] int? pageSize,
+        [FromQuery] bool? reuseCache,
         CancellationToken ct)
     {
         await FineReadAccess.EnsureAsync(_user, _rights, Rights.Reports, Permission, ct);
@@ -68,7 +70,7 @@ public class ClosingController : ControllerBase
 
         var request = new ClosingAnalysisRequest(
             Jour(from), Jour(to), departement, page, pageSize, Options: null, IncludeComparison: includeComparison == true,
-            IncludeInformation: includeInformation == true);
+            IncludeInformation: includeInformation == true, ReuseCached: reuseCache == true);
         var analyse = await _closing.AnalyserAsync(request, ct);
         var rapport = await _presentation.PresenterAsync(analyse, ct);
 

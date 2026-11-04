@@ -9,6 +9,8 @@ namespace SoftTime.Application.DTOs;
 /// <see cref="IncludeComparison"/> (faux par défaut) charge et calcule aussi la période précédente
 /// de même longueur ; sinon <c>Comparaison</c> vaut <c>null</c>. <see cref="IncludeInformation"/>
 /// (faux par défaut) ajoute à la LISTE les anomalies « Information » ; les comptages les incluent toujours.
+/// <see cref="ReuseCached"/> (faux par défaut) autorise la réutilisation, pendant un court instant, de l'analyse
+/// déjà calculée pour la même période : réservé aux changements de page, jamais à une nouvelle analyse.
 /// </summary>
 public sealed record ClosingAnalysisRequest(
     DateTime From,
@@ -18,7 +20,8 @@ public sealed record ClosingAnalysisRequest(
     int? PageSize = null,
     ClosingRulesOptions? Options = null,
     bool IncludeComparison = false,
-    bool IncludeInformation = false);
+    bool IncludeInformation = false,
+    bool ReuseCached = false);
 
 /// <summary>Comptage d'une gravité ou d'un type d'anomalie.</summary>
 public sealed record ClosingCountDto(string Cle, int Nombre);

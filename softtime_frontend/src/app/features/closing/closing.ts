@@ -370,7 +370,7 @@ export class ClosingPage implements OnInit, OnDestroy {
     if (e.pageSize !== this.pageSize()) {
       this.pageSize.set(e.pageSize || DEFAULT_PAGE_SIZE);
       this.page.set(1);
-      this.load();
+      this.load(true);
       return;
     }
     this.goTo(e.page);
@@ -379,11 +379,12 @@ export class ClosingPage implements OnInit, OnDestroy {
   goTo(page: number): void {
     if (page < 1 || page === this.page()) return;
     this.page.set(page);
-    this.load();
+    this.load(true);
   }
 
   /** L'intercepteur affiche déjà l'erreur en notification : la page ne montre qu'un état, sans second message. */
-  private load(): void {
+  /** `reuseCache` : seulement pour un changement de page ou de taille ; toute nouvelle analyse recalcule. */
+  private load(reuseCache = false): void {
     this.request?.unsubscribe();
     this.loading.set(true);
     this.error.set(null);
@@ -397,6 +398,7 @@ export class ClosingPage implements OnInit, OnDestroy {
         includeInformation: this.includeInformation(),
         page: this.page(),
         pageSize: this.pageSize(),
+        reuseCache,
       })
       .subscribe({
         next: (r) => {

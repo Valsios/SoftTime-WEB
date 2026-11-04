@@ -30,6 +30,14 @@ public class ClosingServiceTests
         public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
     }
 
+    private sealed class HorlogeMobile : TimeProvider
+    {
+        private DateTimeOffset _maintenant = new(Today.AddHours(10), TimeSpan.Zero);
+        public void Avancer(TimeSpan d) => _maintenant += d;
+        public override DateTimeOffset GetUtcNow() => _maintenant;
+        public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
+    }
+
     /// <summary>Doublure qui délègue à <see cref="InMemoryUnitOfWork"/> et compte toute écriture.</summary>
     private sealed class UowEspion : IUnitOfWork
     {
@@ -81,13 +89,13 @@ public class ClosingServiceTests
         public FakeExternalSourceService Source { get; } = new();
         public ClosingService Service { get; }
 
-        public Contexte()
+        public Contexte(TimeProvider? horloge = null)
         {
             Uow.Inner.Get<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 1, NOM_BD = "SAGE_TEST" });
             Uow.Inner.Get<T_CLOCK>().Items.Add(new T_CLOCK { IDPOINT = 1, MULTIPOINT = false });
             var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(),
                 SoftTime.Tests.Http.TestRights.Service(Uow), NullLogger<TenantConnectionService>.Instance);
-            Service = new ClosingService(Uow, tenant, new SageLeaveCalendar(tenant, Source), new HorlogeFixe());
+            Service = new ClosingService(Uow, tenant, new SageLeaveCalendar(tenant, Source), horloge ?? new HorlogeFixe());
         }
 
         public void Carte(int id, string matricule, string? departement)
@@ -538,5 +546,86 @@ public class ClosingServiceTests
         await ctx.Service.AnalyserAsync(Semaine(departement: "INFO", page: 2, taille: 1));
 
         Assert.Equal(0, ctx.Uow.Ecritures);
+    }
+
+    // ----------------------------------------------------------------------------- cache de l'analyse
+
+    private static string Json(object o) => JsonSerializer.Serialize(o);
+
+    private static ClosingAnalysisRequest Page(int page, int taille, bool reuse, bool information = false, string? departement = null, bool comparaison = false)
+        => new(Lundi, Vendredi, departement, page, taille, IncludeInformation: information, IncludeComparison: comparaison, ReuseCached: reuse);
+
+    [Fact]
+    public async Task Cache_ResultIdenticalWithAndWithoutCache_ForEveryPageAndFilter()
+    {
+        var avec = new Contexte();
+        avec.JeuFixe();
+        avec.SemainePrecedente(manquantsPour002: true);
+        var sans = new Contexte(); // même données, cache jamais réutilisé
+        sans.JeuFixe();
+        sans.SemainePrecedente(manquantsPour002: true);
+
+        // Première demande : remplit le cache ; les suivantes (changements de page) le réutilisent.
+        await avec.Service.AnalyserAsync(Page(1, 1, reuse: false, comparaison: true));
+        foreach (var info in new[] { false, true })
+            foreach (var comparaison in new[] { true })
+                for (var page = 1; page <= 5; page++)
+                    foreach (var taille in new[] { 1, 2, 50 })
+                    {
+                        var attendu = await sans.Service.AnalyserAsync(Page(page, taille, reuse: false, info, comparaison: comparaison));
+                        var obtenu = await avec.Service.AnalyserAsync(Page(page, taille, reuse: true, info, comparaison: comparaison));
+                        Assert.Equal(Json(attendu), Json(obtenu));
+                    }
+    }
+
+    [Fact]
+    public async Task Cache_WithoutReuseRequest_AlwaysRecomputesFromData()
+    {
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+        var avant = await ctx.Service.AnalyserAsync(Page(1, 50, reuse: false));
+
+        ctx.Punch("002", Lundi, H8, H17); // la donnée change : le manquant du lundi disparaît
+        var recalcule = await ctx.Service.AnalyserAsync(Page(1, 50, reuse: false));
+        var reutilise = await ctx.Service.AnalyserAsync(Page(1, 50, reuse: true));
+
+        Assert.Equal(4, avant.NombreAnomalies);
+        Assert.Equal(3, recalcule.NombreAnomalies);   // nouvelle analyse : toujours à jour
+        Assert.Equal(3, reutilise.NombreAnomalies);   // l'analyse précédente a remplacé l'entrée du cache
+    }
+
+    [Fact]
+    public async Task Cache_ReuseServesStoredAnalysis_ThenExpires()
+    {
+        var horloge = new HorlogeMobile();
+        var ctx = new Contexte(horloge);
+        ctx.JeuFixe();
+        await ctx.Service.AnalyserAsync(Page(1, 50, reuse: false));
+        ctx.Punch("002", Lundi, H8, H17);
+
+        Assert.Equal(4, (await ctx.Service.AnalyserAsync(Page(2, 1, reuse: true))).NombreAnomalies); // dans les 60 s : analyse conservée
+        horloge.Avancer(TimeSpan.FromSeconds(61));
+        Assert.Equal(3, (await ctx.Service.AnalyserAsync(Page(2, 1, reuse: true))).NombreAnomalies); // expirée : recalculée
+    }
+
+    [Fact]
+    public async Task Cache_KeyIncludesDepartmentComparisonAndRules()
+    {
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+        ctx.SemainePrecedente(manquantsPour002: true);
+        await ctx.Service.AnalyserAsync(Page(1, 50, reuse: false));
+
+        var info = await ctx.Service.AnalyserAsync(Page(1, 50, reuse: true, departement: "INFO"));
+        var rh = await ctx.Service.AnalyserAsync(Page(1, 50, reuse: true, departement: "RH"));
+        var avecComparaison = await ctx.Service.AnalyserAsync(Page(1, 50, reuse: true, comparaison: true));
+        var autresPoids = await ctx.Service.AnalyserAsync(
+            new ClosingAnalysisRequest(Lundi, Vendredi, Options: new ClosingRulesOptions { PoidsCritique = 10 }, ReuseCached: true));
+
+        Assert.Equal("INFO", info.Departement);
+        Assert.Equal(3, info.NombreAnomalies);
+        Assert.Equal(1, rh.NombreAnomalies);
+        Assert.NotNull(avecComparaison.Comparaison);
+        Assert.NotEqual((await ctx.Service.AnalyserAsync(Page(1, 50, reuse: true))).Score, autresPoids.Score);
     }
 }

@@ -66,8 +66,20 @@ public class ClosingService
         request = AvecPeriodeParDefaut(request, Today());
         request = request with { Options = request.Options ?? _reglages.ReglesParDefaut() };
         Valider(request, _reglages.MaxPeriodDays);
-        var donnees = await ChargerAsync(request, ct);
-        return Calculer(donnees, request);
+
+        if (_reglages.CacheSeconds <= 0)
+            return Calculer(await ChargerAsync(request, ct), request);
+
+        // Droit d'accès à la base vérifié AVANT toute lecture du cache (le contrôleur a déjà vérifié le droit de lecture).
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var cle = ClosingAnalysisCache.Cle(_tenant.SageDb, _tenant.PointeuseDb, request);
+        var maintenant = _horloge.GetUtcNow();
+        if (request.ReuseCached && _reglages.Cache.TryGet(cle, maintenant, out var preparee))
+            return Assembler(preparee, request);
+
+        preparee = Preparer(await ChargerAsync(request, ct), request);
+        _reglages.Cache.Set(cle, preparee, maintenant, TimeSpan.FromSeconds(_reglages.CacheSeconds));
+        return Assembler(preparee, request);
     }
 
     /// <summary>
@@ -205,6 +217,14 @@ public class ClosingService
 
     /// <summary>Calcul pur à partir des données chargées : aucune lecture ni écriture.</summary>
     internal static ClosingAnalysisDto Calculer(ClosingData donnees, ClosingAnalysisRequest request)
+        => Assembler(Preparer(donnees, request), request);
+
+    /// <summary>
+    /// Toute l'analyse sauf la page de la liste : c'est la partie coûteuse, identique d'une page à l'autre.
+    /// Elle est calculée une fois puis, sur demande (<see cref="ClosingAnalysisRequest.ReuseCached"/>), réutilisée
+    /// pendant une courte durée pour les changements de page.
+    /// </summary>
+    internal static AnalysePreparee Preparer(ClosingData donnees, ClosingAnalysisRequest request)
     {
         var options = request.Options ?? ClosingRulesOptions.Default;
         var from = request.From.Date;
@@ -224,30 +244,6 @@ public class ClosingService
 
         var score = PayrollClosingRules.Score(actuel.Anomalies, actuel.JoursControles.Count, options);
         var parType = CompterTypes(actuel.Anomalies);
-
-        var page = Math.Max(1, request.Page ?? 1);
-        var taille = Math.Clamp(request.PageSize ?? DefaultPageSize, 1, MaxPageSize);
-        // Les comptages incluent toujours les « Information » ; la liste les omet sauf demande.
-        var affichees = request.IncludeInformation
-            ? actuel.Anomalies
-            : actuel.Anomalies.Where(a => a.Severity != ClosingSeverity.Information).ToList();
-        var total = affichees.Count;
-        var items = affichees
-            .Skip(PaginationRules.Decalage(page, taille))
-            .Take(taille)
-            .Select(a => new ClosingAnomalyDto(
-                a.Type.ToString(),
-                a.Severity.ToString(),
-                options.Poids(a.Severity),
-                a.Matricule,
-                departementParCle.GetValueOrDefault(a.Matricule),
-                a.Date,
-                a.Detail,
-                a.Heures,
-                a.PointageExiste))
-            .ToList();
-        var anomaliesPage = new PagedResult<ClosingAnomalyDto>(
-            items, total, PaginationRules.PageEffective(total, page), taille, PaginationRules.NombreDePages(total, taille));
 
         ClosingComparisonDto? comparaison = null;
         if (precedent is not null && precedent.JoursControles.Count > 0)
@@ -286,6 +282,39 @@ public class ClosingService
                     ComptagesType(anomalies));
             })
             .ToList();
+
+        return new AnalysePreparee(
+            options, from, to, departementParCle, actuel, score, comparaison, parDepartement);
+    }
+
+    /// <summary>Découpe la page demandée dans l'analyse préparée et assemble le résultat (rapide).</summary>
+    internal static ClosingAnalysisDto Assembler(AnalysePreparee prep, ClosingAnalysisRequest request)
+    {
+        var (options, from, to, departementParCle, actuel, score, comparaison, parDepartement) =
+            (prep.Options, prep.From, prep.To, prep.DepartementParCle, prep.Actuel, prep.Score, prep.Comparaison, prep.ParDepartement);
+        var page = Math.Max(1, request.Page ?? 1);
+        var taille = Math.Clamp(request.PageSize ?? DefaultPageSize, 1, MaxPageSize);
+        // Les comptages incluent toujours les « Information » ; la liste les omet sauf demande.
+        var affichees = request.IncludeInformation
+            ? actuel.Anomalies
+            : actuel.Anomalies.Where(a => a.Severity != ClosingSeverity.Information).ToList();
+        var total = affichees.Count;
+        var items = affichees
+            .Skip(PaginationRules.Decalage(page, taille))
+            .Take(taille)
+            .Select(a => new ClosingAnomalyDto(
+                a.Type.ToString(),
+                a.Severity.ToString(),
+                options.Poids(a.Severity),
+                a.Matricule,
+                departementParCle.GetValueOrDefault(a.Matricule),
+                a.Date,
+                a.Detail,
+                a.Heures,
+                a.PointageExiste))
+            .ToList();
+        var anomaliesPage = new PagedResult<ClosingAnomalyDto>(
+            items, total, PaginationRules.PageEffective(total, page), taille, PaginationRules.NombreDePages(total, taille));
 
         return new ClosingAnalysisDto(
             from,
@@ -404,6 +433,17 @@ public class ClosingService
         HashSet<(string Cle, DateTime Jour)> JoursControles,
         int SalariesSansPlanningExclus);
 }
+
+/// <summary>Analyse complète d'une période, sans la page de la liste (réutilisable d'une page à l'autre).</summary>
+internal sealed record AnalysePreparee(
+    ClosingRulesOptions Options,
+    DateTime From,
+    DateTime To,
+    IReadOnlyDictionary<string, string?> DepartementParCle,
+    ClosingService.ResultatPeriode Actuel,
+    int? Score,
+    ClosingComparisonDto? Comparaison,
+    IReadOnlyList<ClosingDepartmentDto> ParDepartement);
 
 /// <summary>Données chargées pour une analyse de clôture (période demandée et période précédente).</summary>
 internal sealed record ClosingData(

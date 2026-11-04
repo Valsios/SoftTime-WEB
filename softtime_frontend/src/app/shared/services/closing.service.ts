@@ -53,5 +53,6 @@ function toParams(query: ClosingQuery): Record<string, unknown> {
     includeInformation: query.includeInformation ? true : undefined,
     page: query.page,
     pageSize: query.pageSize,
+    reuseCache: query.reuseCache ? true : undefined,
   };
 }
