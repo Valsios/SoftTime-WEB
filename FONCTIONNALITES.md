@@ -64,7 +64,9 @@ L’accès est filtré par **rôle** (6 droits) et par **société SAGE** active
 - **Multi-pointage** : journée simple = pointages du jour ; poste de nuit = pointages rattachés au jour d’entrée jusqu’à la sortie planifiée, les pointages de sortie étant consommés pour ne pas être retraités le lendemain ; appariement avec seuil de 15 minutes, dernier pointage forcé en sortie ; nombre pair → corrections, impair → une anomalie par jour.
 - **Fériés** : lus dans `T_FERIE` (synchronisé depuis SAGE `EtatJour = 1`). Un férié travaillé produit une correction avec `FERIER`, `FERIER_AM` et `FERIER_PM`.
 - **Jours non travaillés** (samedi/dimanche, `OffP`, férié) : sans pointage → rien ; avec pointage → correction (travail exceptionnel).
-- **Protections** : les corrections `ORIGINE = MANUEL` et les semaines validées ne sont jamais écrasées ; seules les corrections `ORIGINE = AUTO` sont purgées puis régénérées.
+- **Protections** : les corrections `ORIGINE = MANUEL` et les semaines validées ne sont jamais écrasées ; seules les corrections `ORIGINE = AUTO` **du périmètre traité** (département, plage de matricules, pointeuse) et hors semaine validée sont purgées puis régénérées.
+- **Semaine validée figée** : saisie, modification, suppression et import d'heures corrigées, validation d'anomalies et modification de pointage sont refusés (l'import ignore la ligne) tant que la validation n'est pas annulée.
+- **Arbitrage d'une absence** : une anomalie marquée absente matin **et** après-midi se valide sans heures (des heures saisies en plus sont refusées) ; elle devient une absence comptée dans `T_HS_VALIDER.ABSENCE` / `T_HSExoImp.ABSENCE`.
 - **Import** : dédoublonnage systématique (pointeuse et Excel, dans les deux modes), puis pré-traitement enchaîné depuis l’écran Pointages. Les pointages bruts restent dans `T_POINTAGE`.
 
 **Calcul des heures supplémentaires — validation semaine** (portage de `Frm_Validations.calculHSSemaine`, synthèse `SYNTHESE_CALCUL_HS.md` §4) :
@@ -80,12 +82,15 @@ L’accès est filtré par **rôle** (6 droits) et par **société SAGE** active
   majoration, la `T_MAJORATION.Cotation` la plus forte l'emporte.
 - **Crédits** : un férié non travaillé crédite la journée (`HEURESEMAINE / 5`) ; un congé SAGE crédite la journée
   (ou la demi-journée) ; le 8 mars crédite la journée des salariées (`T_SAL.Civilite` renseignée et ≠ 0).
-- **Absence** : jour planifié non chômé sans aucune heure corrigée, hors congé et hors férié → `(HD − HA) − pause`.
+- **Absence** : jour planifié non chômé sans aucune heure de présence, hors congé et hors férié → `(HD − HA) − pause`.
+  Une ligne qui ne fait que déclarer une absence (`ABSENCE_AM` / `ABSENCE_PM` sans heure) n'est pas une présence.
 - **Validation** : seules les lignes cochées passent `VALIDATION_HS = true` et verrouillent `VALIDER_HS` ; une
-  semaine validée reste affichée (elle n'est plus recalculée) et peut être annulée, voire purgée.
+  semaine validée reste affichée (elle n'est plus recalculée) et peut être annulée, voire purgée — sauf si elle
+  est déjà incluse dans un calcul EXO/IMPO : purger d'abord les heures supplémentaires de cette période.
 - **Ventilation** : `T_HSSemaine` est reconstruit à chaque calcul à partir des semaines **validées** —
   8 h à 130 %, au-delà à 150 %.
-- **Exonération** : `T_HSExoImp` agrège les semaines validées de la période (max. un mois), plafond de 20 h
+- **Exonération** : `T_HSExoImp` agrège les semaines validées de la période (max. un mois) — une semaine appartient
+  à la seule période qui contient son **dimanche** (une semaine à cheval sur deux mois n'est payée qu'une fois) —, plafond de 20 h
   exonérées consommé d'abord sur le 130 %, et reporte `NUIT`, `DIM`, `FERIE`, `RETARD` et `ABSENCE`.
 - **Écarts assumés vs desktop** : pas d'écriture dans `T_HS_NONVALIDER` (`T_HS_VALIDER` est la source unique) ;
   l'exonération n'agrège que les semaines validées (`VALIDATION_HS`) ; nuit / dimanche / férié ne se cumulent
@@ -173,6 +178,54 @@ s'affiche « Semaine 27 (30/06 - 06/07/2025) » (année ISO, donc correcte au pa
 
 ---
 
+## 5 ter. Moteur prédictif d'absentéisme et d'heures supplémentaires (ML.NET)
+
+Le moteur ne lit **jamais** les tables fonctionnelles pour s'entraîner : il s'appuie sur une base
+analytique dédiée au schéma `ml` (ou une base séparée via `ConnectionStrings:SoftTimeMl`), alimentée
+par un ETL qui rejoue les règles existantes (`AbsenceReportRules`, `OvertimeCalculator`).
+
+- **`ml.SalarieJour`** : grain salarié × jour ; features calculées *as-of J-1* (calendrier, salarié,
+  historique 7/30/90 jours, collectif). Elle sert à construire les features hebdomadaires HS et à
+  écarter les jours sans pointage collectif (trous d'import) de l'entraînement.
+- **`ml.SalarieSemaine`** : grain salarié × semaine ISO ; label HS = valeur validée de
+  `T_HS_VALIDER` si elle existe, sinon résultat de `OvertimeCalculator`.
+- **`ml.Modele`** : registre versionné (binaire ML.NET, hash du contrat de features, métriques,
+  statut). Un seul modèle actif par société et par type.
+- **`ml.Prediction`** : prédictions précalculées (HS par semaine) et relues par l'API.
+
+Deux modèles par société : **P(HS > 0)** (classification) et **montant HS**
+(régression). Entraînement `FastTree` (ML.NET, sans dépendance native) sur les 18 derniers mois,
+découpage **chronologique** (dernières semaines en test) et **porte qualité** : un modèle n'est
+activé que s'il bat la baseline statistique ; sinon l'ancien modèle reste actif et l'écran affiche
+« Baseline ».
+
+- **Rafraîchissement** : service d'arrière-plan (quotidien) + jobs admin. Fenêtre glissante de
+  12 semaines pour absorber les corrections tardives ; backfill complet par trimestres au premier
+  déploiement. Les lignes anciennes restent figées (snapshot).
+- **Page `/predictions`** (États, permission `REPORTS:PREDICTIONS`) : état du moteur, **horizon de 4
+  semaines** (total prévu et salariés au-delà de 20 h par semaine, « planning non saisi » quand rien n'est prévisible ; un clic
+  choisit la semaine analysée), HS prévues de la
+  semaine choisie (total et fourchette, salariés au-delà du plafond exonéré de 20 h —
+  `OvertimeRules.ExemptCeilingHours`, au-delà les HS deviennent imposables —, département le plus
+  chargé, précision —
+  constatée dès qu'une semaine est comparable, sinon mesurée à l'entraînement
+  — en heures), vue **par département** (barre, part du total ; un clic filtre la liste) puis détail
+  par salarié avec fourchette et probabilité d'HS, **prévu / réel** des 8 dernières semaines
+  terminées (écart moyen par salarié, part du réel dans la fourchette, biais du total ; la dernière
+  prévision émise pour la semaine est comparée aux HS de `ml.SalarieSemaine`), historique des
+  modèles. Les prévisions passées sont conservées sur `HistoryMonths` : la purge des anciens
+  modèles ne retire que leur binaire tant que des prévisions y renvoient. La prévision d'absence
+  a été retirée (peu exploitable) ; les modèles d'absence déjà entraînés restent en base, ignorés.
+- **API** : `GET /api/predictions/status|job|overtime|overtime/horizon|overtime/accuracy`, `POST /api/predictions/refresh|train|backfill`.
+- **Migrations** : EF Core versionnées (`SoftTime.Infrastructure/Migrations/Ml`,
+  `AddMlPredictionSchema`) et script idempotent `migrations/AddMlPredictionSchema.sql`
+  (voir `migrations/README.md`).
+- **Limites assumées** : historique insuffisant ⇒ baseline ; ancienneté approximée par
+  `T_CARDPAIE.DATE` ; prédictions individuelles réservées à l'aide à la planification (pas de
+  sanction automatique).
+
+---
+
 ## 6. Divers
 
 - **Cantine** : jours avec pointage 11h–14h30 ; recherche sur `T_CANTINE`, **Calculer** pour régénérer.
@@ -228,4 +281,6 @@ s'affiche « Semaine 27 (30/06 - 06/07/2025) » (année ISO, donc correcte au pa
 
 - Frontend : Angular  
 - Backend : ASP.NET Core 8  
-- Données : SQL Server (SoftTime + SAGE + pointeuse)
+- Données : SQL Server (SoftTime + SAGE + pointeuse)  
+- Moteur prédictif : ML.NET 5 (`Microsoft.ML`, `Microsoft.ML.FastTree`)
+

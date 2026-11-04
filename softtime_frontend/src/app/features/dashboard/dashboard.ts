@@ -5,6 +5,9 @@ import { Droit } from '../../core/rights';
 import { SoftCard } from '../../shared/components/soft-card';
 import { SoftBadge } from '../../shared/components/soft-badge';
 import { NAV_SECTIONS } from '../../layout/nav';
+import { DestroyRef, signal } from '@angular/core';
+import { ClosingService } from '../../shared/services/closing.service';
+import { dashboardCardView, defaultPeriod } from '../closing/closing.logic';
 
 const DROIT_LABELS: Record<number, string> = {
   [Droit.Databases]: 'Bases de données',
@@ -48,6 +51,23 @@ const DROIT_LABELS: Record<number, string> = {
         </div>
       </soft-card>
     </div>
+
+    @if (closingCard(); as c) {
+      <h2 class="dash-section-title">Contrôle avant paie</h2>
+      <div class="dash-links">
+        <soft-card>
+          <div class="dash-closing">
+            <span class="dash-closing__label">Mois précédent</span>
+            <soft-badge [variant]="c.status.tone">{{ c.status.label }}</soft-badge>
+            <strong>{{ c.score }}</strong>
+            @if (c.critiques) {
+              <small>{{ c.critiques }}</small>
+            }
+            <a routerLink="/closing" class="dash-closing__link">Voir le détail</a>
+          </div>
+        </soft-card>
+      </div>
+    }
 
     <h2 class="dash-section-title">Analyse</h2>
     <div class="dash-links">
@@ -122,11 +142,32 @@ const DROIT_LABELS: Record<number, string> = {
         color: var(--navy-950);
       }
       .dash-link small { color: var(--text-muted); font-size: 12px; }
+      .dash-closing { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+      .dash-closing__label { color: var(--text-muted); font-size: 13px; }
+      .dash-closing strong { font-size: 18px; color: var(--navy-950); }
+      .dash-closing small { color: var(--text-secondary); font-size: 12px; }
+      .dash-closing__link { color: var(--accent); font-weight: 600; font-size: 13px; }
+      .dash-closing__link:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
     `,
   ],
 })
 export class Dashboard {
   readonly session = inject(SessionStore);
+  private readonly closing = inject(ClosingService);
+  private readonly closingDestroy = inject(DestroyRef);
+
+  /** Carte « Contrôle avant paie » : absente sans le droit, pendant le chargement et en cas d'échec (silencieux). */
+  readonly closingCard = signal<ReturnType<typeof dashboardCardView> | null>(null);
+
+  constructor() {
+    // Même règle que le menu (REPORTS:CLOSING + porte 6) et une base active : sinon, aucun appel.
+    if (!this.session.hasPermission('REPORTS:CLOSING', Droit.Reports) || !this.session.activeSageDb()) return;
+    const sub = this.closing.analysisSilently({ ...defaultPeriod(), pageSize: 1 }).subscribe({
+      next: (r) => this.closingCard.set(dashboardCardView(r)),
+      error: () => this.closingCard.set(null),
+    });
+    this.closingDestroy.onDestroy(() => sub.unsubscribe());
+  }
 
   readonly quickLinks = computed(() => {
     const links: { label: string; path: string }[] = [];

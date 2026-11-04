@@ -1,27 +1,39 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { isAdministrator } from '../../core/access.logic';
+import { Droit } from '../../core/rights';
+import { SessionStore } from '../../core/session.store';
 import { ToastService } from '../../core/toast.service';
 import { AuditConfig, AuditTypeOption, PageChangeEvent } from '../../shared/models';
 import { AuditService } from '../../shared/services/reports.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, SoftSelect, SoftTabs, SoftToggle } from '../../shared/components';
 import { asRow, fmtDate, today } from '../../shared/utils/date';
+import { JournalTab } from '../audit/journal-tab';
 
 @Component({
   selector: 'app-audit',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, SoftSelect, SoftToggle, SoftTabs],
+  imports: [FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, SoftSelect, SoftToggle, SoftTabs, JournalTab],
   template: `
     <page-header title="Audit" subtitle="Configuration et journal">
-      <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
+      @if (activeTab() !== 'journal') {
+        <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
+      }
       @if (activeTab() === 'config') {
-        <soft-button (click)="openCreate()">Ajouter config</soft-button>
+        <soft-button [disabled]="!isAdmin()" (click)="openCreate()">Ajouter config</soft-button>
       }
     </page-header>
 
-    <soft-tabs [tabs]="tabs" [(activeTab)]="activeTab" />
+    <soft-tabs [tabs]="tabs()" [(activeTab)]="activeTab" />
 
-    @if (activeTab() === 'config') {
+    @if (activeTab() === 'config' && !isAdmin()) {
+      <p class="admin-only" role="note">Réservé aux administrateurs. La configuration est consultable mais ne peut pas être modifiée avec votre compte.</p>
+    }
+
+    @if (activeTab() === 'journal' && canViewJournal()) {
+      <journal-tab />
+    } @else if (activeTab() === 'config') {
       <soft-card padding="md">
         <data-table
           [columns]="configColumns"
@@ -36,7 +48,11 @@ import { asRow, fmtDate, today } from '../../shared/utils/date';
           (pageChange)="onConfigPageChange($event)"
         >
           <ng-template #actions let-row>
-            <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
+            @if (isAdmin()) {
+              <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
+            } @else {
+              <span class="muted">Réservé aux administrateurs.</span>
+            }
           </ng-template>
         </data-table>
       </soft-card>
@@ -85,7 +101,8 @@ import { asRow, fmtDate, today } from '../../shared/utils/date';
     `
       .form-grid { display: grid; gap: 14px; }
       .toggle-row { display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
-      .error-msg { color: #dc2626; font-size: 0.85rem; margin-top: -6px; }
+      .error-msg { color: var(--danger); font-size: 0.85rem; margin-top: -6px; }
+      .admin-only { margin: 0 0 16px; padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--warning-border); background: var(--warning-bg); color: var(--warning); font-weight: 600; }
     `,
   ],
 })
@@ -93,6 +110,7 @@ export class AuditPage implements OnInit {
   private readonly svc = inject(AuditService);
   private readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
+  private readonly session = inject(SessionStore);
 
   readonly loadingConfig = signal(true);
   readonly loadingEvents = signal(false);
@@ -116,11 +134,19 @@ export class AuditPage implements OnInit {
   readonly loadTypeError = signal<string | null>(null);
 
   form: Partial<AuditConfig> = {};
-  readonly activeTab = signal('config');
-  readonly tabs = [
+  /** Modifier la configuration des déclencheurs : administrateur seulement (POST et PUT api/audit/config). */
+  readonly isAdmin = computed(() => isAdministrator(this.session.accessContext()));
+  /** Journal central : administrateur, ou porte Traçabilité ET permission TRACE:AUDIT (comme le serveur). */
+  readonly canViewJournal = computed(() => {
+    this.session.session();
+    return this.session.hasPermission('TRACE:AUDIT', Droit.Traceability);
+  });
+  readonly activeTab = signal(this.canViewJournal() ? 'journal' : 'config');
+  readonly tabs = computed(() => [
+    ...(this.canViewJournal() ? [{ id: 'journal', label: 'Journal' }] : []),
     { id: 'config', label: 'Configuration' },
     { id: 'events', label: 'Événements' },
-  ];
+  ]);
 
   readonly configColumns: Column[] = [
     { key: 'table', label: 'Table' },
@@ -223,6 +249,7 @@ export class AuditPage implements OnInit {
   }
 
   openCreate(): void {
+    if (!this.isAdmin()) return;
     this.editId.set(null);
     this.form = { enabled: true, type: '' };
     this.typeOptions.set(this.rawTypeOptions());
@@ -230,6 +257,7 @@ export class AuditPage implements OnInit {
   }
 
   openEdit(row: Record<string, unknown>): void {
+    if (!this.isAdmin()) return;
     this.editId.set(row['id'] as number);
     const cfg = { ...(row as unknown as AuditConfig) };
     this.form = cfg;
@@ -249,11 +277,11 @@ export class AuditPage implements OnInit {
   }
 
   isSaveDisabled(): boolean {
-    return this.saving() || !this.form.type || this.form.type.trim() === '';
+    return !this.isAdmin() || this.saving() || !this.form.type || this.form.type.trim() === '';
   }
 
   save(): void {
-    if (this.isSaveDisabled()) return;
+    if (!this.isAdmin() || this.isSaveDisabled()) return;
     this.saving.set(true);
     const id = this.editId();
     const dto = {

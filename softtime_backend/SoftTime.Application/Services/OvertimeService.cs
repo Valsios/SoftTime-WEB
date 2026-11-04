@@ -23,8 +23,21 @@ public class OvertimeService
     private readonly PayrollWriterResolver _payrollWriters;
     private readonly HistoryArchiveService _history;
     private readonly SageLeaveCalendar _leaves;
+    private readonly ICurrentUser? _user;
 
     public OvertimeService(IUnitOfWork uow, TenantConnectionService tenant, IExternalSourceService externalSource, PayrollWriterResolver payrollWriters, HistoryArchiveService history, SageLeaveCalendar leaves)
+        : this(uow, tenant, externalSource, payrollWriters, history, leaves, null)
+    {
+    }
+
+    public OvertimeService(
+        IUnitOfWork uow,
+        TenantConnectionService tenant,
+        IExternalSourceService externalSource,
+        PayrollWriterResolver payrollWriters,
+        HistoryArchiveService history,
+        SageLeaveCalendar leaves,
+        ICurrentUser? user)
     {
         _uow = uow;
         _tenant = tenant;
@@ -32,6 +45,7 @@ public class OvertimeService
         _payrollWriters = payrollWriters;
         _history = history;
         _leaves = leaves;
+        _user = user;
     }
 
     public async Task<IReadOnlyList<WeeklyHsDto>> PreviewWeekAsync(PeriodRequest request, CancellationToken ct = default)
@@ -86,6 +100,8 @@ public class OvertimeService
         // sont exclues du calcul et donc absentes de `rows`).
         if (validate)
             await ComputeWeekAsync(request, persistNonValidated: true, ct);
+        else
+            await RefuserSiSemaineCalculeeAsync(sageDb, from, selected, ct);
 
         var lignes = (await hsRepo.ListAsync(x => x.BDD_SAGE == sageDb && x.DATE_DEB == from, ct))
             .Where(x => !string.IsNullOrEmpty(x.MATRICULES) && selected.Contains(MatriculeIdentity.Cle(x.MATRICULES)))
@@ -235,15 +251,17 @@ public class OvertimeService
 
         var numSalByMat = await ChargerNumSalAsync(ct);
 
-        // Semaines validées qui chevauchent la période : une période démarrant un mercredi inclut
-        // donc sa première semaine (le desktop passait par T_SemainePeriode).
-        var debutSemaineMin = from.AddDays(-6);
+        // Une semaine validée appartient à UNE seule période : celle qui contient son dimanche
+        // (le desktop passait par T_SemainePeriode). Une période démarrant un mercredi inclut donc
+        // sa première semaine, mais la semaine qui déborde sur la période suivante n'est payée
+        // qu'avec celle-ci : sinon elle serait comptée dans deux T_HSExoImp consécutifs.
+        var (debutSemaineMin, debutSemaineMax) = BornesSemainesDeLaPeriode(from, to);
         var validees = (await _uow.Repository<T_HS_VALIDER>().ListAsync(
                 h => h.BDD_SAGE == sageDb
                      && h.VALIDATION_HS == true
                      && h.DATE_DEB != null
                      && h.DATE_DEB >= debutSemaineMin
-                     && h.DATE_DEB <= to, ct))
+                     && h.DATE_DEB <= debutSemaineMax, ct))
             .Where(h => !string.IsNullOrEmpty(h.MATRICULES) && targetCles.Contains(MatriculeIdentity.Cle(h.MATRICULES)))
             .GroupBy(h => MatriculeIdentity.Cle(h.MATRICULES), StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.OrderBy(x => x.DATE_DEB).ToList(), StringComparer.Ordinal);
@@ -379,12 +397,6 @@ public class OvertimeService
         var from = request.From.Date;
         var to = request.To.Date;
 
-        var hs = (await _uow.Repository<T_HSExoImp>().ListAsync(
-            h => h.BDD_SAGE == sageDb && h.PeriodeDebut == from && h.PeriodeFin == to, ct)).Count;
-        if (hs > 0)
-            throw new InvalidOperationException(
-                "Des calculs EXO/IMPO existent sur la période : purgez d'abord les heures supplémentaires.");
-
         var repo = _uow.Repository<T_HS_VALIDER>();
         var lignes = (await repo.ListAsync(
                 v => v.BDD_SAGE == sageDb && v.DATE_DEB == from && v.DATE_FIN == to, ct))
@@ -392,6 +404,12 @@ public class OvertimeService
             .ToList();
         if (lignes.Count == 0)
             return new PurgeValidationResultDto(0, 0, "Aucune validation à purger sur la période.");
+
+        await RefuserSiSemaineCalculeeAsync(
+            sageDb,
+            from,
+            lignes.Select(v => MatriculeIdentity.Cle(v.MATRICULES)).Where(cle => cle.Length > 0).ToHashSet(StringComparer.Ordinal),
+            ct);
 
         var corrRepo = _uow.Repository<T_HEURECORRIGER>();
         var corrections = await corrRepo.ListAsync(h => h.BDD_SAGE == sageDb
@@ -453,7 +471,8 @@ public class OvertimeService
             .Select(h => new HsExoDto(h.OID, h.Matricule, h.NumSal, h.EXO130, h.EXO150, h.I130, h.I150,
                 h.FERIE, h.NUIT, h.DIM, h.RETARD, h.ABSENCE))
             .ToList();
-        return await _payrollWriters.Resolve(sageRow).WriteAsync(sageRow, dtos, ct);
+        var auditContext = new PayrollSyncContext(request.From.Date, request.To.Date, _user?.Login, Guid.NewGuid());
+        return await _payrollWriters.Resolve(sageRow).WriteAsync(sageRow, dtos, auditContext, ct);
     }
 
     /// <summary>
@@ -647,8 +666,7 @@ public class OvertimeService
         if (debuts.Count == 0 || fins.Count == 0)
             return new List<T_HS_VALIDER>();
 
-        var borneBasse = debuts.Min().AddDays(-6);
-        var borneHaute = fins.Max();
+        var (borneBasse, borneHaute) = BornesSemainesDeLaPeriode(debuts.Min(), fins.Max());
         var sageDb = _tenant.SageDb;
 
         var semaines = await _uow.Repository<T_HS_VALIDER>().ListAsync(v =>
@@ -684,8 +702,7 @@ public class OvertimeService
             var candidates = groupe.Key.Debut.HasValue && groupe.Key.Fin.HasValue
                 ? semainesValidees
                     .Where(v => v.DATE_DEB.HasValue
-                                && v.DATE_DEB.Value.Date >= groupe.Key.Debut.Value.AddDays(-6)
-                                && v.DATE_DEB.Value.Date <= groupe.Key.Fin.Value)
+                                && SemaineRattachee(v.DATE_DEB.Value, groupe.Key.Debut, groupe.Key.Fin))
                     .ToList()
                 : new List<T_HS_VALIDER>();
 
@@ -758,8 +775,7 @@ public class OvertimeService
 
         var planning = (await _uow.Repository<T_PLANNING_SAL>().ListAsync(
                 p => p.BDD_SAGE == sageDb && p.DateP >= from && p.DateP <= to, ct))
-            .Where(p => string.IsNullOrWhiteSpace(p.BDD_POINTEUSE)
-                        || string.Equals(p.BDD_POINTEUSE.Trim(), pointeuseDb.Trim(), StringComparison.OrdinalIgnoreCase))
+            .Where(p => OvertimeDayRules.EstDeLaPointeuse(p, pointeuseDb))
             .GroupBy(p => p.IDSAL)
             .ToDictionary(g => g.Key, g => g.ToList());
 
@@ -788,7 +804,7 @@ public class OvertimeService
             Heures = heures,
             Planning = planning,
             Existantes = existantes,
-            Civilites = SemaineContientHuitMars(from, to)
+            Civilites = OvertimeDayRules.ContientHuitMars(from, to)
                 ? await ChargerCivilitesAsync(ct)
                 : new Dictionary<string, byte?>(StringComparer.Ordinal)
         };
@@ -818,7 +834,7 @@ public class OvertimeService
             CotationNuit: Cotation(ctx.Majorations, "NUIT"),
             CotationDimanche: Cotation(ctx.Majorations, "DIMANCHE"),
             CotationFerie: Cotation(ctx.Majorations, "FERIE"),
-            EstFemme: civilite is > 0);
+            EstFemme: OvertimeDayRules.EstFemme(civilite));
     }
 
     private static decimal Cotation(IReadOnlyList<T_MAJORATION> majorations, string type)
@@ -837,86 +853,22 @@ public class OvertimeService
         var conges = ctx.Conges.GetValueOrDefault(cle) ?? new List<LeaveDay>();
         var jours = new List<OvertimeDayInput>();
 
+        // Construction partagée avec la base analytique du moteur prédictif.
         for (var jour = from.Date; jour <= to.Date; jour = jour.AddDays(1))
         {
-            var lignes = heures
-                .Where(h => h.DATE_POINTAGE_IN.HasValue && h.DATE_POINTAGE_IN.Value.Date == jour)
-                .OrderBy(h => h.HENTREE ?? TimeSpan.Zero)
-                .ToList();
-            var paires = lignes
-                .Where(h => h.HENTREE.HasValue && h.HSORTIE.HasValue)
-                .Select(h => new PunchPair(
-                    h.DATE_POINTAGE_IN!.Value.Date,
-                    h.HENTREE!.Value,
-                    (h.DATE_POINTAGE_OUT ?? h.DATE_POINTAGE_IN)!.Value.Date,
-                    h.HSORTIE!.Value))
-                .ToList();
-
-            var plan = planning
-                .Where(p => p.DateP.HasValue && p.DateP.Value.Date == jour)
-                .OrderBy(p => p.ID)
-                .FirstOrDefault();
-            var off = plan?.OffP == true;
-            // Les heures de planning « vides » du desktop portent une date sentinelle : elles valent NULL.
-            var sentinelle = new DateTime(2000, 1, 1);
-            var haPlanifiee = plan?.HA is DateTime haBrute && haBrute.Date > sentinelle ? haBrute.TimeOfDay : (TimeSpan?)null;
-            var hdPlanifiee = plan?.HD is DateTime hdBrute && hdBrute.Date > sentinelle ? hdBrute.TimeOfDay : (TimeSpan?)null;
-            TimeSpan? ha = off ? null : haPlanifiee;
-            TimeSpan? hd = off ? null : hdPlanifiee;
-
-            // Planning manquant : le desktop le reconstruit avec les heures réelles (entrée et sortie
-            // non corrigées), ce qui neutralise le seuil journalier du mode 2 pointages.
-            if (!off && paires.Count > 0)
-            {
-                ha ??= paires[0].EntreeHeure;
-                hd ??= paires[^1].SortieHeure;
-            }
-
-            jours.Add(new OvertimeDayInput(
+            jours.Add(OvertimeDayRules.Construire(
                 jour,
-                paires,
-                ha,
-                hd,
-                off ? null : plan?.Pause,
-                off,
+                heures.Where(h => h.DATE_POINTAGE_IN.HasValue && h.DATE_POINTAGE_IN.Value.Date == jour),
+                OvertimeDayRules.PlanDuJour(planning.Where(p => p.DateP.HasValue && p.DateP.Value.Date == jour)),
                 ctx.Feries.Any(f => f.DATE.HasValue && f.DATE.Value.Date == jour),
-                lignes.Count > 0,
-                LeaveRules.Valeur(conges, jour),
-                lignes.FirstOrDefault(h => h.RETARD.HasValue)?.RETARD));
+                LeaveRules.Valeur(conges, jour)));
         }
         return jours;
     }
 
     /// <summary>La civilité n'est chargée que si la période contient un 8 mars (évite un appel SAGE systématique).</summary>
-    private static bool SemaineContientHuitMars(DateTime from, DateTime to)
-    {
-        for (var jour = from.Date; jour <= to.Date; jour = jour.AddDays(1))
-        {
-            if (jour.Day == 8 && jour.Month == 3)
-                return true;
-        }
-        return false;
-    }
-
-    private async Task<Dictionary<string, byte?>> ChargerCivilitesAsync(CancellationToken ct)
-    {
-        var civilites = new Dictionary<string, byte?>(StringComparer.Ordinal);
-        try
-        {
-            var sageRow = await _tenant.GetSageRowAsync(ct);
-            foreach (var employe in await _externalSource.GetEmployeesAsync(sageRow, ct))
-            {
-                var cle = MatriculeIdentity.Cle(employe.Matricule);
-                if (cle.Length > 0)
-                    civilites[cle] = employe.Civilite;
-            }
-        }
-        catch
-        {
-            // SAGE indisponible : sans civilité, la règle du 8 mars n'est pas appliquée.
-        }
-        return civilites;
-    }
+    private Task<Dictionary<string, byte?>> ChargerCivilitesAsync(CancellationToken ct)
+        => SageCivilites.ChargerAsync(_tenant, _externalSource, ct);
 
     private async Task<Dictionary<string, int>> ChargerNumSalAsync(CancellationToken ct)
     {
@@ -939,6 +891,50 @@ public class OvertimeService
     }
 
     private static decimal Arrondir(decimal valeur) => Math.Round(valeur, 2);
+
+    /// <summary>
+    /// Bornes des lundis (<c>DATE_DEB</c>) des semaines rattachées à une période EXO/IMPO : une semaine
+    /// appartient à la période qui contient son dimanche, ce qui l'affecte à une seule période.
+    /// </summary>
+    private static (DateTime DebutMin, DateTime DebutMax) BornesSemainesDeLaPeriode(DateTime from, DateTime to)
+        => (from.Date.AddDays(-6), to.Date.AddDays(-6));
+
+    /// <summary>
+    /// Refuse de rouvrir (annuler ou purger) une semaine déjà ventilée dans un calcul EXO/IMPO : ce
+    /// calcul a pu être poussé en paie, il faut d'abord purger les heures supplémentaires de la
+    /// période qui contient la semaine (même rattachement que <see cref="CalculateExoImpoAsync"/>).
+    /// </summary>
+    private async Task RefuserSiSemaineCalculeeAsync(
+        string sageDb, DateTime lundi, IReadOnlySet<string> cles, CancellationToken ct)
+    {
+        if (cles.Count == 0)
+            return;
+        var dimanche = lundi.Date.AddDays(6);
+        var calcules = (await _uow.Repository<T_HSExoImp>().ListAsync(
+                h => h.BDD_SAGE == sageDb && h.PeriodeDebut <= dimanche && h.PeriodeFin >= dimanche, ct))
+            .Where(h => h.Matricule != null && cles.Contains(MatriculeIdentity.Cle(h.Matricule)))
+            .OrderBy(h => h.Matricule, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (calcules.Count == 0)
+            return;
+
+        var periode = calcules[0];
+        var matricules = string.Join(", ", calcules.Select(h => h.Matricule).Distinct().Take(5))
+                         + (calcules.Count > 5 ? "…" : string.Empty);
+        throw new InvalidOperationException(
+            $"La semaine du {lundi:dd/MM/yyyy} est incluse dans le calcul EXO/IMPO du "
+            + $"{periode.PeriodeDebut:dd/MM/yyyy} au {periode.PeriodeFin:dd/MM/yyyy} ({matricules}) : "
+            + "purgez d'abord les heures supplémentaires de cette période.");
+    }
+
+    /// <summary>La semaine qui commence ce lundi est-elle rattachée à cette période EXO/IMPO ?</summary>
+    private static bool SemaineRattachee(DateTime lundi, DateTime? periodeDebut, DateTime? periodeFin)
+    {
+        if (!periodeDebut.HasValue || !periodeFin.HasValue)
+            return false;
+        var dimanche = lundi.Date.AddDays(6);
+        return dimanche >= periodeDebut.Value.Date && dimanche <= periodeFin.Value.Date;
+    }
 
     private static void EnsureMondayToSunday(PeriodRequest request)
     {

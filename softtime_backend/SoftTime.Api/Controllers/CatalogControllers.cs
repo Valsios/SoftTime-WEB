@@ -17,12 +17,14 @@ public class SageDatabasesController : ControllerBase
     private readonly CatalogService _svc;
     private readonly AuthService _auth;
     private readonly ICurrentUser _user;
+    private readonly DatabaseConfigurationAuthorizer _configAuth;
 
-    public SageDatabasesController(CatalogService svc, AuthService auth, ICurrentUser user)
+    public SageDatabasesController(CatalogService svc, AuthService auth, ICurrentUser user, DatabaseConfigurationAuthorizer configAuth)
     {
         _svc = svc;
         _auth = auth;
         _user = user;
+        _configAuth = configAuth;
     }
 
     [HttpGet]
@@ -55,64 +57,30 @@ public class SageDatabasesController : ControllerBase
     }
 
     [HttpPost]
+    [RequireDroit(Droit.Databases)]
     public async Task<IActionResult> Create([FromBody] SageDbDto dto, CancellationToken ct)
-    {
-        if (_user.UserId is decimal uid)
-        {
-            var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
-            if (p.IsCustomized)
-            {
-                var canCreate = p.GrantedPermissions.Any(x => x.StartsWith("SAGE:") && x.EndsWith(":CREATE"))
-                                || p.GrantedPermissions.Contains("SAGE:CREATE");
-                if (!canCreate)
-                    return StatusCode(StatusCodes.Status403Forbidden, "Vous n'avez pas la permission d'ajouter une base SAGE.");
-            }
-        }
-        return Ok(await _svc.SaveSageAsync(dto with { Id = 0 }, ct));
-    }
+        => Ok(await _svc.SaveSageAsync(dto with { Id = 0 }, ct));
 
     [HttpPut("{id:int}")]
+    [RequireDroit(Droit.Databases)]
     public async Task<IActionResult> Update(int id, [FromBody] SageDbDto dto, CancellationToken ct)
-    {
-        if (_user.UserId is decimal uid)
-        {
-            var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
-            if (p.IsCustomized)
-            {
-                var existing = await _svc.GetSageByIdAsync(id, ct);
-                var dbName = existing?.NomBd ?? dto.NomBd;
-                var canUpdate = p.GrantedPermissions.Contains($"SAGE:{dbName}:UPDATE");
-                if (!canUpdate)
-                    return StatusCode(StatusCodes.Status403Forbidden, $"Vous n'avez pas la permission de modifier la base '{dbName}'.");
-            }
-        }
-        return Ok(await _svc.SaveSageAsync(dto with { Id = id }, ct));
-    }
+        => Ok(await _svc.SaveSageAsync(dto with { Id = id }, ct));
 
     [HttpDelete("{id:int}")]
+    [RequireDroit(Droit.Databases)]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
-        if (_user.UserId is decimal uid)
-        {
-            var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
-            if (p.IsCustomized)
-            {
-                var existing = await _svc.GetSageByIdAsync(id, ct);
-                var dbName = existing?.NomBd;
-                if (!string.IsNullOrEmpty(dbName))
-                {
-                    var canDelete = p.GrantedPermissions.Contains($"SAGE:{dbName}:DELETE");
-                    if (!canDelete)
-                        return StatusCode(StatusCodes.Status403Forbidden, $"Vous n'avez pas la permission de supprimer la base '{dbName}'.");
-                }
-            }
-        }
         await _svc.DeleteSageAsync(id, ct);
         return NoContent();
     }
+
     [HttpPost("test-connection")]
+    [RequireDroit(Droit.Databases)]
     public async Task<IActionResult> TestConnection([FromBody] TestSageConnectionDto dto, CancellationToken ct)
-        => Ok(await _svc.TestSageConnectionAsync(dto, ct));
+    {
+        await _configAuth.EnsureCanConfigureAnyAsync(DatabaseKind.Sage, ct);
+        return Ok(await _svc.TestSageConnectionAsync(dto, ct));
+    }
 
     [HttpPost("activate")]
     public async Task<IActionResult> Activate(CancellationToken ct)
@@ -172,12 +140,14 @@ public class PointeuseDatabasesController : ControllerBase
     private readonly CatalogService _svc;
     private readonly AuthService _auth;
     private readonly ICurrentUser _user;
+    private readonly DatabaseConfigurationAuthorizer _configAuth;
 
-    public PointeuseDatabasesController(CatalogService svc, AuthService auth, ICurrentUser user)
+    public PointeuseDatabasesController(CatalogService svc, AuthService auth, ICurrentUser user, DatabaseConfigurationAuthorizer configAuth)
     {
         _svc = svc;
         _auth = auth;
         _user = user;
+        _configAuth = configAuth;
     }
 
     [HttpGet]
@@ -210,64 +180,30 @@ public class PointeuseDatabasesController : ControllerBase
     }
 
     [HttpPost]
+    [RequireDroit(Droit.Databases)]
     public async Task<IActionResult> Create([FromBody] PointeuseDbDto dto, CancellationToken ct)
-    {
-        if (_user.UserId is decimal uid)
-        {
-            var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
-            if (p.IsCustomized)
-            {
-                var canCreate = p.GrantedPermissions.Any(x => x.StartsWith("POINTEUSE:") && x.EndsWith(":CREATE"))
-                                || p.GrantedPermissions.Contains("POINTEUSE:CREATE");
-                if (!canCreate)
-                    return StatusCode(StatusCodes.Status403Forbidden, "Vous n'avez pas la permission d'ajouter une base pointeuse.");
-            }
-        }
-        return Ok(await _svc.SavePointeuseAsync(dto with { Id = 0 }, ct));
-    }
+        => Ok(await _svc.SavePointeuseAsync(dto with { Id = 0 }, ct));
 
     [HttpPut("{id:int}")]
+    [RequireDroit(Droit.Databases)]
     public async Task<IActionResult> Update(int id, [FromBody] PointeuseDbDto dto, CancellationToken ct)
-    {
-        if (_user.UserId is decimal uid)
-        {
-            var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
-            if (p.IsCustomized)
-            {
-                var existing = await _svc.GetPointeuseByIdAsync(id, ct);
-                var dbName = existing?.NomBd ?? dto.NomBd;
-                var canUpdate = p.GrantedPermissions.Contains($"POINTEUSE:{dbName}:UPDATE");
-                if (!canUpdate)
-                    return StatusCode(StatusCodes.Status403Forbidden, $"Vous n'avez pas la permission de modifier la base pointeuse '{dbName}'.");
-            }
-        }
-        return Ok(await _svc.SavePointeuseAsync(dto with { Id = id }, ct));
-    }
+        => Ok(await _svc.SavePointeuseAsync(dto with { Id = id }, ct));
 
     [HttpDelete("{id:int}")]
+    [RequireDroit(Droit.Databases)]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
-        if (_user.UserId is decimal uid)
-        {
-            var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
-            if (p.IsCustomized)
-            {
-                var existing = await _svc.GetPointeuseByIdAsync(id, ct);
-                var dbName = existing?.NomBd;
-                if (!string.IsNullOrEmpty(dbName))
-                {
-                    var canDelete = p.GrantedPermissions.Contains($"POINTEUSE:{dbName}:DELETE");
-                    if (!canDelete)
-                        return StatusCode(StatusCodes.Status403Forbidden, $"Vous n'avez pas la permission de supprimer la base pointeuse '{dbName}'.");
-                }
-            }
-        }
         await _svc.DeletePointeuseAsync(id, ct);
         return NoContent();
     }
+
     [HttpPost("test-connection")]
+    [RequireDroit(Droit.Databases)]
     public async Task<IActionResult> TestConnection([FromBody] TestPointeuseConnectionDto dto, CancellationToken ct)
-        => Ok(await _svc.TestPointeuseConnectionAsync(dto, ct));
+    {
+        await _configAuth.EnsureCanConfigureAnyAsync(DatabaseKind.Pointeuse, ct);
+        return Ok(await _svc.TestPointeuseConnectionAsync(dto, ct));
+    }
 }
 
 [ApiController]

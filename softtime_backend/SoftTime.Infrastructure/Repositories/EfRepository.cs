@@ -38,6 +38,12 @@ public class EfRepository<T> : IRepository<T> where T : class
         CancellationToken cancellationToken = default)
         => _set.Where(predicate).OrderByDescending(orderByDescending).Take(take).ToListAsync(cancellationToken);
 
+    public Task<int> CountAsync<TResult>(IQueryable<TResult> query, CancellationToken cancellationToken = default)
+        => EntityFrameworkQueryableExtensions.CountAsync(query ?? throw new ArgumentNullException(nameof(query)), cancellationToken);
+
+    public Task<List<TResult>> ToListAsync<TResult>(IQueryable<TResult> query, CancellationToken cancellationToken = default)
+        => EntityFrameworkQueryableExtensions.ToListAsync(query ?? throw new ArgumentNullException(nameof(query)), cancellationToken);
+
     public async Task<PagedResult<TResult>> ToPagedAsync<TResult>(
         IQueryable<TResult> query,
         int? page,

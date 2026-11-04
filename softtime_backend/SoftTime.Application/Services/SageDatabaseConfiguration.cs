@@ -4,7 +4,7 @@ namespace SoftTime.Application.Services;
 
 public static class SageDatabaseConfiguration
 {
-    public static Task EnsureStorageAsync(IUnitOfWork uow, CancellationToken ct) => uow.ExecuteSqlAsync("""
+    public static Task EnsureStorageAsync(IUnitOfWork uow, CancellationToken ct) => SchemaPresenceGuard.ExecuteAsync(uow, "T_BDD_SAGE", """
         IF OBJECT_ID(N'dbo.T_BDD_SAGE', N'U') IS NOT NULL
         BEGIN
             IF COL_LENGTH(N'dbo.T_BDD_SAGE', N'MAP_TABLE_CODE_CONSTANTE') IS NULL

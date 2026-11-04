@@ -65,7 +65,7 @@ public class ReportServiceTests
                 TYPES_TOL = false
             });
 
-            var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser());
+            var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
             Source.Employees.Add(new ExternalEmployee("001", 1, "Dupont", "Jean", null, false));
             Service = new ReportService(
                 Uow,

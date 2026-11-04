@@ -57,12 +57,12 @@ public class ImportResultMessageTests
                 HD = new TimeSpan(17, 0, 0), Intitule = "Journée"
             });
 
-            var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser());
+            var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
             var external = new FakeExternalSourceService();
             Timekeeping = new TimekeepingService(Uow, tenant, external, new HistoryArchiveService(Uow, tenant));
             Planning = new PlanningService(Uow, tenant, new FakePlanningStatisticsReader());
             var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
-            Catalog = new CatalogService(Uow, mapper, tenant, external, null!);
+            Catalog = new CatalogService(Uow, mapper, tenant, external, null!, null!, SoftTime.Tests.Http.TestRights.Service(Uow));
         }
     }
 

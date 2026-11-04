@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, ElementRef, inject, OnInit, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, computed, ElementRef, inject, OnInit, signal, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -7,6 +7,8 @@ import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
 import { Droit } from '../../core/rights';
+import { RoleChangePreview, previewFromConflict } from '../../core/error.logic';
+import { confirmFlag, confirmationMessage, needsConfirmation } from './role-change.logic';
 import { PasswordPolicy, Role, User, PageChangeEvent } from '../../shared/models';
 import { CardPaieService } from '../../shared/services/catalog.service';
 import { PasswordPolicyService } from '../../shared/services/password-policy.service';
@@ -112,8 +114,8 @@ const MESSAGES_REQUIS: FieldErrors = {
           <soft-select
             label="Rôle"
             [required]="true"
-            [(ngModel)]="form.roleId"
-            (ngModelChange)="onFieldChange()"
+            [ngModel]="form.roleId"
+            (ngModelChange)="onRoleChange($event)"
             name="roleId"
             placeholder="Sélectionner un rôle"
             [options]="roleOptions()"
@@ -156,6 +158,7 @@ export class UsersPage implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly session = inject(SessionStore);
+  private readonly cdr = inject(ChangeDetectorRef);
 
   private readonly modalHost = viewChild('userModal', { read: ElementRef });
 
@@ -177,6 +180,9 @@ export class UsersPage implements OnInit {
   readonly policy = signal<PasswordPolicy | null>(null);
   readonly tableSearch = signal('');
   form: Partial<User> = {};
+  /** Rôle du compte à l'ouverture de la modification, et confirmation d'effacement des ajustements si le rôle change. */
+  private originalRoleId: number | null = null;
+  private roleChangeConfirmed = false;
 
   readonly submitted = signal(false);
   readonly serverErrors = signal<Partial<FieldErrors>>({});
@@ -271,6 +277,42 @@ export class UsersPage implements OnInit {
     this.loadPage();
   }
 
+  /**
+   * Changement de rôle d'un compte existant : le serveur dit quels ajustements personnels seraient effacés ;
+   * s'il y en a, on demande confirmation, sinon on restaure l'ancien rôle sans rien envoyer.
+   */
+  onRoleChange(newRoleId: number | string | null): void {
+    const id = this.editId();
+    this.form.roleId = Number(newRoleId);
+    this.onFieldChange();
+    if (!id || this.originalRoleId === null || this.form.roleId === this.originalRoleId) {
+      this.roleChangeConfirmed = false;
+      return;
+    }
+    this.roleChangeConfirmed = false;
+    this.svc.rolePreview(id, this.form.roleId).subscribe({
+      next: (preview) => {
+        if (!needsConfirmation(preview)) return;
+        void this.askRoleChange(preview);
+      },
+      error: () => this.restoreRole(),
+    });
+  }
+
+  private async askRoleChange(preview: RoleChangePreview): Promise<boolean> {
+    const ok = await this.confirm.ask(confirmationMessage(preview), 'Changement de rôle', 'Continuer');
+    this.roleChangeConfirmed = ok;
+    if (!ok) this.restoreRole();
+    return ok;
+  }
+
+  private restoreRole(): void {
+    if (this.originalRoleId !== null) this.form.roleId = this.originalRoleId;
+    this.roleChangeConfirmed = false;
+    this.onFieldChange();
+    this.cdr.markForCheck();
+  }
+
   onTableSearch(term: string): void {
     this.tableSearch.set(term);
     this.page.set(1);
@@ -280,6 +322,8 @@ export class UsersPage implements OnInit {
   openCreate(): void {
     this.editId.set(null);
     this.form = {};
+    this.originalRoleId = null;
+    this.roleChangeConfirmed = false;
     this.resetValidation();
     this.modal.set(true);
   }
@@ -287,6 +331,8 @@ export class UsersPage implements OnInit {
   openEdit(row: Record<string, unknown>): void {
     this.editId.set(row['id'] as number);
     this.form = { ...(row as unknown as User), password: null };
+    this.originalRoleId = Number(this.form.roleId);
+    this.roleChangeConfirmed = false;
     this.resetValidation();
     this.modal.set(true);
   }
@@ -294,6 +340,8 @@ export class UsersPage implements OnInit {
   close(): void {
     this.modal.set(false);
     this.form = {};
+    this.originalRoleId = null;
+    this.roleChangeConfirmed = false;
     this.saving.set(false);
     this.resetValidation();
   }
@@ -323,7 +371,8 @@ export class UsersPage implements OnInit {
       password: this.form.password ?? null,
     };
     this.saving.set(true);
-    const req = id ? this.svc.update(id, { ...dto, id }) : this.svc.create({ ...dto, id: 0 });
+    const confirmClearAdjustments = confirmFlag(this.roleChangeConfirmed, this.originalRoleId, dto.roleId);
+    const req = id ? this.svc.update(id, { ...dto, id, confirmClearAdjustments }) : this.svc.create({ ...dto, id: 0 });
     req.subscribe({
       next: () => {
         this.saving.set(false);
@@ -333,6 +382,12 @@ export class UsersPage implements OnInit {
       },
       error: (err: HttpErrorResponse) => {
         this.saving.set(false);
+        // Un 409 malgré l'aperçu (droits modifiés entre-temps) est une demande de confirmation, pas une erreur.
+        const preview = previewFromConflict(err);
+        if (preview) {
+          void this.askRoleChange(preview).then((ok) => { if (ok) this.save(); });
+          return;
+        }
         this.applyServerError(err);
         this.focusFirstInvalid();
       },

@@ -6,6 +6,7 @@ import { AuthService } from '../shared/services/auth.service';
 import { PointeuseDatabasesService } from '../shared/services/catalog.service';
 import { SageDatabasesService } from '../shared/services/users.service';
 import { NAV_SECTIONS, NavSection } from './nav';
+import { visibleSections as filterSections } from '../core/access.logic';
 import { Icon } from '../shared/components/icon';
 import { PointeuseDb } from '../shared/models';
 import { ToastService } from '../core/toast.service';
@@ -23,7 +24,7 @@ import { ConfirmService } from '../core/confirm.service';
 
       <aside
         id="main-navigation"
-        class="sidebar softtime-sidebar"
+        class="sidebar softtime-sidebar on-dark"
         [class.sidebar--mobile-open]="mobileMenuOpen()"
         [attr.aria-hidden]="isMobileViewport() && !mobileMenuOpen() ? 'true' : null"
         [attr.inert]="isMobileViewport() && !mobileMenuOpen() ? '' : null"
@@ -33,7 +34,7 @@ import { ConfirmService } from '../core/confirm.service';
           @if (!collapsed()) {
             <div class="sidebar__brand-text">
               <strong>Soft Time</strong>
-              <small>Gestion des temps</small>
+              <small>Console de gestion · Gestion des temps</small>
             </div>
           }
         </div>
@@ -158,9 +159,12 @@ import { ConfirmService } from '../core/confirm.service';
           </button>
         </header>
 
-        <main class="content soft-fade-in">
+        <main class="content soft-fade-in" id="contenu">
           <router-outlet></router-outlet>
         </main>
+        <footer class="app-footer">
+          © Softwell · Soft Time · {{ session.activeSageDb() || 'Aucune base' }}
+        </footer>
       </div>
     </div>
   `,
@@ -253,7 +257,7 @@ import { ConfirmService } from '../core/confirm.service';
         outline-offset: 2px;
       }
       .sidebar__section-title {
-        font-size: 11px;
+        font-size: 12px;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.08em;
@@ -281,7 +285,7 @@ import { ConfirmService } from '../core/confirm.service';
         color: var(--sidebar-text-hover);
       }
       .sidebar__item:focus-visible {
-        outline: 2px solid var(--sidebar-focus-ring);
+        outline: 3px solid var(--gold-300);
         outline-offset: 2px;
       }
       .sidebar__item.is-active {
@@ -302,14 +306,16 @@ import { ConfirmService } from '../core/confirm.service';
         background: var(--app-bg);
       }
       .topbar {
-        min-height: 68px;
+        position: sticky;
+        top: 0;
+        height: 64px;
+        min-height: 64px;
         display: flex;
         align-items: center;
         gap: 14px;
         padding: 0 24px;
         background: var(--app-surface);
         border-bottom: 1px solid var(--app-border);
-        box-shadow: var(--shadow-xs);
         z-index: var(--z-sticky);
       }
       :root[data-theme='dark'] .topbar {
@@ -416,6 +422,17 @@ import { ConfirmService } from '../core/confirm.service';
         overflow-y: auto;
         padding: 24px 32px;
       }
+      .app-footer {
+        flex: none;
+        display: flex;
+        align-items: center;
+        height: 32px;
+        padding: 0 32px;
+        background: var(--app-surface);
+        border-top: 1px solid var(--app-border);
+        color: var(--text-secondary);
+        font-size: 12px;
+      }
       @media (max-width: 1023px) {
         .shell {
           grid-template-columns: 1fr;
@@ -442,6 +459,7 @@ import { ConfirmService } from '../core/confirm.service';
         .topbar {
           position: sticky;
           top: 0;
+          height: 56px;
           min-height: 56px;
           padding: 0 16px;
         }
@@ -488,6 +506,9 @@ import { ConfirmService } from '../core/confirm.service';
         .content {
           padding: 12px;
         }
+        .app-footer {
+          padding: 0 12px;
+        }
       }
     `,
   ],
@@ -515,12 +536,8 @@ export class Shell implements OnInit {
     ),
   );
 
-  readonly visibleSections = computed<NavSection[]>(() =>
-    NAV_SECTIONS.map((section) => ({
-      ...section,
-      items: section.items.filter((item) => this.session.hasPermission(item.permission, item.droit)),
-    })).filter((section) => section.items.length > 0),
-  );
+  /** Menu : permission fine ET porte serveur ; une section sans élément visible est masquée (access.logic.ts). */
+  readonly visibleSections = computed<NavSection[]>(() => filterSections(NAV_SECTIONS, this.session.accessContext()));
 
   readonly initials = computed(() => {
     const name = this.session.displayName().trim();

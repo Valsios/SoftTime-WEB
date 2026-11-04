@@ -17,7 +17,21 @@ public record UserDto(decimal Id, decimal RoleId, string Nom, string Login, stri
     /// <summary>Adresse d'envoi des identifiants (facultative).</summary>
     public string? Email { get; init; }
 
+    /// <summary>
+    /// Changement de rôle : à vrai, confirme l'effacement des ajustements personnels du compte (défaut false).
+    /// Sans cette confirmation, un changement de rôle d'un compte qui a des ajustements est refusé (409) et rien n'est écrit.
+    /// </summary>
+    public bool ConfirmClearAdjustments { get; init; } = false;
+
     public UserDto() : this(default, default, default!, default!, default, default) { }
+}
+
+/// <summary>Aperçu d'un changement de rôle : ajustements personnels qui seraient effacés (« +CODE » ajouté, « -CODE » retiré).</summary>
+public record RoleChangePreviewDto(IReadOnlyList<string> AdjustmentsToClear, int Count, string AccountLogin);
+
+public record RoleChangePreviewRequest(decimal NewRoleId)
+{
+    public RoleChangePreviewRequest() : this(default(decimal)) { }
 }
 
 /// <summary>Création du premier compte administrateur (installation vierge).</summary>
@@ -58,15 +72,17 @@ public record DbAccessDto(int Id, decimal UserId, int SageDbId)
     public DbAccessDto() : this(default, default, default) { }
 }
 
+// Password : entrée seulement. Jamais renvoyé par l'API (PasswordDefined indique qu'un mot de passe est stocké).
 public record SageDbDto(
     int Id,
     string? Serveur,
     string? Login,
-    string? Password,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Password,
     bool? SqlAuth,
     string? NomBd,
     string TypeBase = "STANDARD",
-    IReadOnlyList<SourceEntityMappingDto>? Mappings = null)
+    IReadOnlyList<SourceEntityMappingDto>? Mappings = null,
+    bool PasswordDefined = false)
 {
     public SageDbDto() : this(default, default, default, default, default, default) { }
 }
@@ -74,19 +90,20 @@ public record PointeuseDbDto(
     int Id,
     string? Serveur,
     string? Login,
-    string? Password,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Password,
     bool? SqlAuth,
     string? NomBd,
     string? TypePointage,
     bool? Active,
     string TypeBase = "STANDARD",
-    IReadOnlyList<SourceEntityMappingDto>? Mappings = null)
+    IReadOnlyList<SourceEntityMappingDto>? Mappings = null,
+    bool PasswordDefined = false)
 {
     public PointeuseDbDto() : this(default, default, default, default, default, default, default, default) { }
 }
 
-public record TestSageConnectionDto(string? Serveur, bool? SqlAuth, string? Login, string? Password, string? NomBd, string TypeBase, IReadOnlyList<SourceEntityMappingDto>? Mappings = null);
-public record TestPointeuseConnectionDto(string? Serveur, bool? SqlAuth, string? Login, string? Password, string? NomBd, string TypeBase, IReadOnlyList<SourceEntityMappingDto>? Mappings = null);
+public record TestSageConnectionDto(string? Serveur, bool? SqlAuth, string? Login, string? Password, string? NomBd, string TypeBase, IReadOnlyList<SourceEntityMappingDto>? Mappings = null, int? Id = null);
+public record TestPointeuseConnectionDto(string? Serveur, bool? SqlAuth, string? Login, string? Password, string? NomBd, string TypeBase, IReadOnlyList<SourceEntityMappingDto>? Mappings = null, int? Id = null);
 public record ConnectionTestResultDto(bool Success, string Message, IReadOnlyList<string>? MissingTables = null);
 
 public record FieldRoleDto(string Code, string? Label, string SystemType, string EntityKind, bool IsRequired, string? AutoMappingPatterns, int SortOrder);
@@ -163,9 +180,10 @@ public record MajorationDto(int Id, string? Mojoration, decimal? Cotation)
 }
 
 public record DepartementServiceDto(string Matricule, string? Departement, string? Service);
-public record DiscoverDatabasesDto(string Serveur, bool SqlAuth, string? Login, string? Password);
-public record DiscoverTablesDto(string Serveur, string Base, bool SqlAuth, string? Login, string? Password);
-public record DiscoverColumnsDto(string Serveur, string Base, string Table, bool SqlAuth, string? Login, string? Password);
+// ConnectionId/ConnectionKind : base existante ("SAGE" ou "POINTEUSE") dont le mot de passe stocké est utilisé si Password est vide.
+public record DiscoverDatabasesDto(string Serveur, bool SqlAuth, string? Login, string? Password, int? ConnectionId = null, string? ConnectionKind = null);
+public record DiscoverTablesDto(string Serveur, string Base, bool SqlAuth, string? Login, string? Password, int? ConnectionId = null, string? ConnectionKind = null);
+public record DiscoverColumnsDto(string Serveur, string Base, string Table, bool SqlAuth, string? Login, string? Password, int? ConnectionId = null, string? ConnectionKind = null);
 
 public record CodeConstanteDto(int Id, string Categorie, string? Intitule, string CodeConstante, string? TableCible = null)
 {
@@ -566,3 +584,32 @@ public record SaveUserDetailedPermissionsRequest(
 {
     public SaveUserDetailedPermissionsRequest() : this(0, Array.Empty<string>()) { }
 }
+
+public record RoleDetailedPermissionsDto(
+    decimal RoleId,
+    IReadOnlyList<string> GrantedPermissions,
+    bool IsConfigured
+)
+{
+    public RoleDetailedPermissionsDto() : this(0, Array.Empty<string>(), false) { }
+}
+
+public record SaveRoleDetailedPermissionsRequest(
+    IReadOnlyList<string> GrantedPermissions
+)
+{
+    public SaveRoleDetailedPermissionsRequest() : this(Array.Empty<string>()) { }
+}
+
+public record AuditDroitDto(
+    int Id,
+    DateTime DateAction,
+    decimal IdOperateur,
+    string LoginOperateur,
+    string TypeCible,
+    decimal IdCible,
+    string? NomCible,
+    string Action,
+    string? PermsAvant,
+    string? PermsApres
+);

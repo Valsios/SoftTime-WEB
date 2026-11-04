@@ -24,7 +24,7 @@ public class PlanningServiceTests
                 SAGE_BDD = "SAGE_TEST",
                 POINTEUSE_BDD = "PTE_TEST"
             });
-            var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser());
+            var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
             Service = new PlanningService(Uow, tenant, new FakePlanningStatisticsReader());
         }
 

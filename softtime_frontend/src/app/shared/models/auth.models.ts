@@ -4,7 +4,9 @@ export interface SageDb {
   id: number;
   serveur?: string | null;
   login?: string | null;
+  /** Saisie seulement : le serveur ne renvoie jamais le mot de passe. */
   password?: string | null;
+  passwordDefined?: boolean | null;
   sqlAuth?: boolean | null;
   nomBd?: string | null;
   typeBase?: string; // 'STANDARD' | 'AUTRE'
@@ -38,6 +40,15 @@ export interface User {
   password?: string | null;
   /** Adresse d'envoi des identifiants (facultative). */
   email?: string | null;
+  /** Changement de rôle : confirme l'effacement des ajustements personnels du compte (sinon le serveur répond 409). */
+  confirmClearAdjustments?: boolean;
+}
+
+/** Droits détaillés d'un rôle (`GET /api/privileges/role/{roleId}`). */
+export interface RoleDetailedPermissions {
+  roleId: number;
+  grantedPermissions: string[];
+  isConfigured: boolean;
 }
 
 /** Création du premier compte administrateur (installation vierge). */

@@ -2,7 +2,8 @@ import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { catchError, throwError } from 'rxjs';
-import { apiErrorMessage } from '../api-error';
+import { BaseAccessService } from '../base-access.service';
+import { errorMessage, isBaseAccessDenied, isMissingBaseError, previewFromConflict } from '../error.logic';
 import { SessionStore } from '../session.store';
 import { ToastService } from '../toast.service';
 
@@ -11,6 +12,7 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const session = inject(SessionStore);
   const router = inject(Router);
   const toast = inject(ToastService);
+  const baseAccess = inject(BaseAccessService);
 
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
@@ -21,19 +23,25 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
       const isLogin = req.url.includes('/api/auth/login');
       if (err.status === 401) {
         if (isLogin) {
-          const msg = apiErrorMessage(err);
+          const msg = errorMessage(err);
           toast.error(msg.includes('Erreur interne') ? 'Identifiants invalides.' : msg);
         } else {
           session.clear();
           router.navigate(['/login']);
-          toast.error(apiErrorMessage(err) || 'Session expirée. Veuillez vous reconnecter.');
+          toast.error(errorMessage(err) || 'Session expirée. Veuillez vous reconnecter.');
         }
+      } else if (isMissingBaseError(err)) {
+        // Aucune base active : l'état vide « Aucune base n'est disponible… » remplace l'erreur brute.
+        if (!router.url.startsWith('/no-database')) router.navigate(['/no-database']);
+      } else if (previewFromConflict(err)) {
+        // Confirmation demandée par la page (changement de rôle) : pas une erreur à afficher.
       } else if (err.status === 403) {
-        toast.error(apiErrorMessage(err) || "Accès refusé : droits insuffisants ou base non autorisée.");
+        toast.error(errorMessage(err));
+        if (isBaseAccessDenied(err)) void baseAccess.proposeReload();
       } else if (err.status === 0) {
         toast.error('Serveur API injoignable.');
       } else {
-        toast.error(apiErrorMessage(err));
+        toast.error(errorMessage(err));
       }
       return throwError(() => err);
     }),

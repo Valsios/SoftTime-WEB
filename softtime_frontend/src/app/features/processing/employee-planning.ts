@@ -24,6 +24,8 @@ import {
 } from '../../shared/components';
 import { asRow, fmtDate, monthStart, today } from '../../shared/utils/date';
 import { toastImportResult } from '../../shared/utils/import-result';
+import { input } from '@angular/core';
+import { readDeepLink } from '../../shared/utils/deep-link';
 
 @Component({
   selector: 'app-employee-planning',
@@ -62,7 +64,7 @@ import { toastImportResult } from '../../shared/utils/import-result';
       <soft-button variant="ghost" (click)="templatesOpen.set(true)">Modèles d'import</soft-button>
     </page-header>
 
-    <period-filter [showMatricule]="false" (search)="onSearch($event)"></period-filter>
+    <period-filter [showMatricule]="false" [initial]="link()" (search)="onSearch($event)"></period-filter>
 
     <soft-tabs [tabs]="tabs" [(activeTab)]="activeTab" />
 
@@ -150,6 +152,11 @@ import { toastImportResult } from '../../shared/utils/import-result';
   ],
 })
 export class EmployeePlanningPage implements OnInit {
+  // Lien profond facultatif (?du=&au=&matricule=), lié par withComponentInputBinding ; validé avant tout usage.
+  readonly du = input<unknown>();
+  readonly au = input<unknown>();
+  readonly matricule = input<unknown>();
+  readonly link = computed(() => readDeepLink({ du: this.du(), au: this.au(), matricule: this.matricule() }));
   private readonly svc = inject(EmployeePlanningService);
   private readonly shiftsSvc = inject(ShiftsService);
   private readonly excel = inject(ExcelExportService);
@@ -227,6 +234,11 @@ export class EmployeePlanningPage implements OnInit {
   }
 
   onSearch(filter: PeriodRequest): void {
+    // Lien profond : le matricule (non affiché ici) alimente la recherche du tableau « Salariés ».
+    if (this.link() && filter.matriculeFrom) {
+      this.activeTab.set('employees');
+      this.employeeSearch.set(filter.matriculeFrom.trim());
+    }
     this.lastFilter = filter;
     this.employeePage.set(1);
     this.planningPage.set(1);

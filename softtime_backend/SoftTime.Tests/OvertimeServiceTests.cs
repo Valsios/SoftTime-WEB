@@ -63,7 +63,7 @@ public class OvertimeServiceTests
                 new T_MAJORATION { Mojoration = "FERIE", Cotation = 3m },
             });
 
-            var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser());
+            var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
             Service = new OvertimeService(
                 Uow,
                 tenant,
@@ -309,6 +309,63 @@ public class OvertimeServiceTests
         var ligne = Assert.Single(exo);
         Assert.Equal(8m, ligne.Exo130);
         Assert.Equal(2m, ligne.Exo150);
+    }
+
+    [Fact]
+    public async Task ExoImpo_SemaineAChevalSurDeuxMois_NEstPayeeQuUneFois()
+    {
+        var contexte = new Contexte();
+        // Semaine du lundi 31/08 au dimanche 06/09 : elle appartient à septembre (son dimanche).
+        contexte.SemaineValidee(Lundi, 10);
+
+        var aout = await contexte.Service.CalculateExoImpoAsync(
+            new PeriodRequest(null, null, new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)));
+        var septembre = await contexte.Service.CalculateExoImpoAsync(
+            new PeriodRequest(null, null, new DateTime(2026, 9, 1), new DateTime(2026, 9, 30)));
+
+        Assert.Empty(aout);
+        var ligne = Assert.Single(septembre);
+        Assert.Equal(8m, ligne.Exo130);
+        Assert.Equal(2m, ligne.Exo150);
+    }
+
+    [Fact]
+    public async Task ExoImpo_AbsenceArbitreeSansHeures_EstComptee()
+    {
+        var contexte = new Contexte();
+        contexte.Planning(Lundi, TimeSpan.FromMinutes(30));
+        // Anomalie d'absence validée : la journée porte une ligne d'absence, sans heure.
+        contexte.Corrections.Add(new T_HEURECORRIGER
+        {
+            BDD_SAGE = "SAGE_TEST",
+            MATRICULE_SAGE = "001",
+            DATE_POINTAGE_IN = Lundi,
+            DATE_POINTAGE_OUT = Lundi,
+            ABSENCE_AM = true,
+            ABSENCE_PM = true,
+            ORIGINE = "MANUEL"
+        });
+
+        var exo = await contexte.Service.CalculateExoImpoAsync(new PeriodRequest(null, null, Lundi, Dimanche));
+
+        Assert.Equal(8.5m, Assert.Single(exo).Absence);
+    }
+
+    [Fact]
+    public async Task Validation_SemaineDejaCalculeeEnExoImpo_NePeutEtreNiAnnuleeNiPurgee()
+    {
+        var contexte = new Contexte();
+        contexte.SemaineValidee(Lundi, 10);
+        await contexte.Service.CalculateExoImpoAsync(
+            new PeriodRequest(null, null, new DateTime(2026, 9, 1), new DateTime(2026, 9, 30)));
+
+        var annulation = new WeeklyValidationRequest(null, null, Lundi, Dimanche, new[] { "001" });
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => contexte.Service.ValidateWeekAsync(annulation, false));
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => contexte.Service.PurgeValidationAsync(new PeriodRequest(null, null, Lundi, Dimanche)));
+
+        Assert.True(Assert.Single(contexte.Semaines).VALIDATION_HS);
     }
 
     // ------------------------------------------------------------------ détail

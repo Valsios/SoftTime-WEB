@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { authGuard, droitGuard } from './core/guards';
+import { authGuard, databaseGuard, droitGuard, privilegesLeaveGuard } from './core/guards';
 import { Droit } from './core/rights';
 
 export const routes: Routes = [
@@ -19,11 +19,17 @@ export const routes: Routes = [
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
       {
+        path: 'no-database',
+        loadComponent: () => import('./features/no-database/no-database').then((m) => m.NoDatabasePage),
+      },
+      {
         path: 'dashboard',
+        canActivate: [databaseGuard],
         loadComponent: () => import('./features/dashboard/dashboard').then((m) => m.Dashboard),
       },
       {
         path: 'analytics',
+        canActivate: [databaseGuard],
         loadComponent: () => import('./features/dashboard/analytics').then((m) => m.AnalyticsPage),
       },
 
@@ -59,6 +65,7 @@ export const routes: Routes = [
       {
         path: 'privileges',
         canActivate: [droitGuard],
+        canDeactivate: [privilegesLeaveGuard],
         data: { droit: Droit.Parameters, permission: 'PARAMS:PRIVILEGES' },
         loadComponent: () => import('./features/params/privileges').then((m) => m.PrivilegesPage),
       },
@@ -76,26 +83,26 @@ export const routes: Routes = [
       },
       {
         path: 'correspondence',
-        canActivate: [droitGuard],
+        canActivate: [droitGuard, databaseGuard],
         data: { droit: Droit.Parameters, permission: 'PARAMS:CORRESPONDENCE' },
         loadComponent: () =>
           import('./features/params/correspondence').then((m) => m.CorrespondencePage),
       },
       {
         path: 'cardpaie',
-        canActivate: [droitGuard],
+        canActivate: [droitGuard, databaseGuard],
         data: { droit: Droit.Parameters, permission: 'PARAMS:CARDPAIE' },
         loadComponent: () => import('./features/params/cardpaie').then((m) => m.CardPaiePage),
       },
       {
         path: 'categories',
-        canActivate: [droitGuard],
+        canActivate: [droitGuard, databaseGuard],
         data: { droit: Droit.Parameters, permission: 'PARAMS:CATEGORIES' },
         loadComponent: () => import('./features/params/categories').then((m) => m.CategoriesPage),
       },
       {
         path: 'affectations',
-        canActivate: [droitGuard],
+        canActivate: [droitGuard, databaseGuard],
         data: { droit: Droit.Parameters, permission: 'PARAMS:AFFECTATIONS' },
         loadComponent: () =>
           import('./features/params/affectations').then((m) => m.AffectationsPage),
@@ -108,7 +115,7 @@ export const routes: Routes = [
       },
       {
         path: 'holidays',
-        canActivate: [droitGuard],
+        canActivate: [droitGuard, databaseGuard],
         data: { droit: Droit.Parameters, permission: 'PARAMS:HOLIDAYS' },
         loadComponent: () => import('./features/params/holidays').then((m) => m.HolidaysPage),
       },
@@ -120,14 +127,14 @@ export const routes: Routes = [
       },
       {
         path: 'code-constantes',
-        canActivate: [droitGuard],
+        canActivate: [droitGuard, databaseGuard],
         data: { droit: Droit.Parameters, permission: 'PARAMS:CODE_CONSTANTES' },
         loadComponent: () =>
           import('./features/params/code-constantes').then((m) => m.CodeConstantesPage),
       },
       {
         path: 'absence-codes',
-        canActivate: [droitGuard],
+        canActivate: [droitGuard, databaseGuard],
         data: { droit: Droit.Parameters, permission: 'PARAMS:ABSENCE_CODES' },
         loadComponent: () =>
           import('./features/params/absence-codes').then((m) => m.AbsenceCodesPage),
@@ -135,46 +142,46 @@ export const routes: Routes = [
       // Processing (droit 3)
       {
         path: 'shifts',
-        canActivate: [droitGuard],
+        canActivate: [droitGuard, databaseGuard],
         data: { droit: Droit.Processing, permission: 'PROC:SHIFTS' },
         loadComponent: () => import('./features/processing/shifts').then((m) => m.ShiftsPage),
       },
       {
         path: 'employee-planning',
-        canActivate: [droitGuard],
+        canActivate: [droitGuard, databaseGuard],
         data: { droit: Droit.Processing, permission: 'PROC:EMPLOYEE_PLANNING' },
         loadComponent: () =>
           import('./features/processing/employee-planning').then((m) => m.EmployeePlanningPage),
       },
       {
         path: 'punches',
-        canActivate: [droitGuard],
+        canActivate: [droitGuard, databaseGuard],
         data: { droit: Droit.Processing, permission: 'PROC:PUNCHES' },
         loadComponent: () => import('./features/processing/punches').then((m) => m.PunchesPage),
       },
       {
         path: 'anomalies',
-        canActivate: [droitGuard],
+        canActivate: [droitGuard, databaseGuard],
         data: { droit: Droit.Processing, permission: 'PROC:ANOMALIES' },
         loadComponent: () => import('./features/processing/anomalies').then((m) => m.AnomaliesPage),
       },
       {
         path: 'corrected-hours',
-        canActivate: [droitGuard],
+        canActivate: [droitGuard, databaseGuard],
         data: { droit: Droit.Processing, permission: 'PROC:CORRECTED_HOURS' },
         loadComponent: () =>
           import('./features/processing/corrected-hours').then((m) => m.CorrectedHoursPage),
       },
       {
         path: 'weekly-validation',
-        canActivate: [droitGuard],
+        canActivate: [droitGuard, databaseGuard],
         data: { droit: Droit.Processing, permission: 'PROC:WEEKLY_VALIDATION' },
         loadComponent: () =>
           import('./features/processing/weekly-validation').then((m) => m.WeeklyValidationPage),
       },
       {
         path: 'overtime',
-        canActivate: [droitGuard],
+        canActivate: [droitGuard, databaseGuard],
         data: { droit: Droit.Processing, permission: 'PROC:OVERTIME' },
         loadComponent: () => import('./features/processing/overtime').then((m) => m.OvertimePage),
       },
@@ -182,21 +189,34 @@ export const routes: Routes = [
       // Reports (droit 6)
       {
         path: 'reports',
-        canActivate: [droitGuard],
+        canActivate: [droitGuard, databaseGuard],
         data: { droit: Droit.Reports, permission: 'REPORTS:REPORTS' },
         loadComponent: () => import('./features/reports/reports').then((m) => m.ReportsPage),
+      },
+      {
+        path: 'predictions',
+        canActivate: [droitGuard, databaseGuard],
+        data: { droit: Droit.Reports, permission: 'REPORTS:PREDICTIONS' },
+        loadComponent: () =>
+          import('./features/predictions/predictions').then((m) => m.PredictionsPage),
+      },
+      {
+        path: 'closing',
+        canActivate: [droitGuard, databaseGuard],
+        data: { droit: Droit.Reports, permission: 'REPORTS:CLOSING' },
+        loadComponent: () => import('./features/closing/closing').then((m) => m.ClosingPage),
       },
 
       // Extra (droit 4)
       {
         path: 'canteen',
-        canActivate: [droitGuard],
+        canActivate: [droitGuard, databaseGuard],
         data: { droit: Droit.Other, permission: 'OTHER:CANTEEN' },
         loadComponent: () => import('./features/reports/canteen').then((m) => m.CanteenPage),
       },
       {
         path: 'travel-expenses',
-        canActivate: [droitGuard],
+        canActivate: [droitGuard, databaseGuard],
         data: { droit: Droit.Other, permission: 'OTHER:TRAVEL_EXPENSES' },
         loadComponent: () => import('./features/reports/travel').then((m) => m.TravelPage),
       },
@@ -204,7 +224,7 @@ export const routes: Routes = [
       // Traceability (droit 5)
       {
         path: 'history',
-        canActivate: [droitGuard],
+        canActivate: [droitGuard, databaseGuard],
         data: { droit: Droit.Traceability },
         loadComponent: () => import('./features/reports/history').then((m) => m.HistoryPage),
       },

@@ -114,6 +114,26 @@ public interface IRepository<T> where T : class
         return ToPagedAsync(ordered, page, pageSize, cancellationToken);
     }
 
+    /// <summary>
+    /// Compte les lignes d'une requête construite sur <see cref="Query"/> (COUNT SQL sur EF Core).
+    /// Implémentation par défaut en mémoire pour les fakes / tests unitaires.
+    /// </summary>
+    Task<int> CountAsync<TResult>(IQueryable<TResult> query, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return Task.FromResult(query.Count());
+    }
+
+    /// <summary>
+    /// Matérialise une requête construite sur <see cref="Query"/> (déjà filtrée, triée et bornée par l'appelant).
+    /// Implémentation par défaut en mémoire pour les fakes / tests unitaires.
+    /// </summary>
+    Task<List<TResult>> ToListAsync<TResult>(IQueryable<TResult> query, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return Task.FromResult(query.ToList());
+    }
+
     Task AddAsync(T entity, CancellationToken cancellationToken = default);
     Task AddRangeAsync(IEnumerable<T> entities, CancellationToken cancellationToken = default);
     void Update(T entity);

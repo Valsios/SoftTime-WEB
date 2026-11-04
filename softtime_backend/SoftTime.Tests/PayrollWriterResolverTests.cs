@@ -23,7 +23,7 @@ public class PayrollWriterResolverTests
         public bool CanHandle(T_BDD_SAGE database) => string.Equals(database.TYPE_BASE, Type, StringComparison.OrdinalIgnoreCase);
         public Task<PayrollWriteResultDto> ValidateAsync(T_BDD_SAGE database, IReadOnlyList<HsExoDto> rows, CancellationToken ct = default)
             => Task.FromResult(new PayrollWriteResultDto("", Type, 0, 0, ""));
-        public Task<PayrollWriteResultDto> WriteAsync(T_BDD_SAGE database, IReadOnlyList<HsExoDto> rows, CancellationToken ct = default)
+        public Task<PayrollWriteResultDto> WriteAsync(T_BDD_SAGE database, IReadOnlyList<HsExoDto> rows, PayrollSyncContext auditContext, CancellationToken ct = default)
             => Task.FromResult(new PayrollWriteResultDto("", Type, 0, 0, ""));
     }
 }

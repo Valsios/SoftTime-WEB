@@ -5,7 +5,32 @@ namespace SoftTime.Infrastructure.Persistence;
 
 public class SoftTimeDbContext : DbContext
 {
+    private readonly AuditJournalSaveChangesInterceptor? _auditJournal;
+
     public SoftTimeDbContext(DbContextOptions<SoftTimeDbContext> options) : base(options) { }
+
+    public SoftTimeDbContext(
+        DbContextOptions<SoftTimeDbContext> options,
+        AuditJournalSaveChangesInterceptor auditJournal) : base(options)
+        => _auditJournal = auditJournal;
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+        => _auditJournal?.SaveChanges(this, acceptAllChangesOnSuccess)
+           ?? base.SaveChanges(acceptAllChangesOnSuccess);
+
+    public override Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default)
+        => _auditJournal?.SaveChangesAsync(this, acceptAllChangesOnSuccess, cancellationToken)
+           ?? base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+
+    internal int SaveChangesWithoutAudit(bool acceptAllChangesOnSuccess)
+        => base.SaveChanges(acceptAllChangesOnSuccess);
+
+    internal Task<int> SaveChangesWithoutAuditAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken)
+        => base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
 
     public DbSet<T_ROLE> T_ROLE => Set<T_ROLE>();
     public DbSet<T_RESPONSABLE> T_RESPONSABLE => Set<T_RESPONSABLE>();
@@ -21,6 +46,7 @@ public class SoftTimeDbContext : DbContext
     public DbSet<T_HEURECORRIGER> T_HEURECORRIGER => Set<T_HEURECORRIGER>();
     public DbSet<T_HEUREANOMALIE> T_HEUREANOMALIE => Set<T_HEUREANOMALIE>();
     public DbSet<suivi_SUIVI> suivi_SUIVI => Set<suivi_SUIVI>();
+    public DbSet<suivi_JOURNAL> suivi_JOURNAL => Set<suivi_JOURNAL>();
     public DbSet<suivi_T> suivi_T => Set<suivi_T>();
     public DbSet<suivi_TBLCLN> suivi_TBLCLN => Set<suivi_TBLCLN>();
     public DbSet<T_FRAIS> T_FRAIS => Set<T_FRAIS>();
@@ -50,6 +76,8 @@ public class SoftTimeDbContext : DbContext
     public DbSet<T_SOURCE_ENTITY_MAPPING> T_SOURCE_ENTITY_MAPPING => Set<T_SOURCE_ENTITY_MAPPING>();
     public DbSet<T_SOURCE_FIELD_MAPPING> T_SOURCE_FIELD_MAPPING => Set<T_SOURCE_FIELD_MAPPING>();
     public DbSet<T_USER_PERMISSION> T_USER_PERMISSION => Set<T_USER_PERMISSION>();
+    public DbSet<T_ROLE_PERMISSION> T_ROLE_PERMISSION => Set<T_ROLE_PERMISSION>();
+    public DbSet<T_AUDIT_DROIT> T_AUDIT_DROIT => Set<T_AUDIT_DROIT>();
     public DbSet<T_HISTORIQUE_POINTAGE> T_HISTORIQUE_POINTAGE => Set<T_HISTORIQUE_POINTAGE>();
     public DbSet<T_HISTORIQUE_ANOMALIE> T_HISTORIQUE_ANOMALIE => Set<T_HISTORIQUE_ANOMALIE>();
     public DbSet<T_HISTORIQUE_HS> T_HISTORIQUE_HS => Set<T_HISTORIQUE_HS>();
@@ -129,6 +157,27 @@ public class SoftTimeDbContext : DbContext
             e.HasIndex(x => new { x.IDRESPONSABLE, x.PERMISSION_CODE }).IsUnique();
         });
 
+        modelBuilder.Entity<T_ROLE_PERMISSION>(e =>
+        {
+            e.ToTable("T_ROLE_PERMISSION");
+            e.HasKey(x => x.ID);
+            e.Property(x => x.IDROLE).HasPrecision(18, 0);
+            e.Property(x => x.PERMISSION_CODE).HasMaxLength(128);
+            e.HasIndex(x => new { x.IDROLE, x.PERMISSION_CODE }).IsUnique();
+        });
+
+        modelBuilder.Entity<T_AUDIT_DROIT>(e =>
+        {
+            e.ToTable("T_AUDIT_DROIT");
+            e.HasKey(x => x.ID);
+            e.Property(x => x.ID_OPERATEUR).HasPrecision(18, 0);
+            e.Property(x => x.ID_CIBLE).HasPrecision(18, 0);
+            e.Property(x => x.LOGIN_OPERATEUR).HasMaxLength(100);
+            e.Property(x => x.TYPE_CIBLE).HasMaxLength(20);
+            e.Property(x => x.NOM_CIBLE).HasMaxLength(100);
+            e.Property(x => x.ACTION).HasMaxLength(50);
+        });
+
         // Longueurs des colonnes de filtre, alignées sur migrations/add_pagination_performance_indexes.sql.
         // La source de vérité reste le SQL : ces annotations documentent le modèle et dimensionnent
         // les paramètres EF, sans modifier une base existante.
@@ -202,6 +251,22 @@ public class SoftTimeDbContext : DbContext
         {
             e.Property(x => x._TABLES).HasMaxLength(128);
             e.Property(x => x._ACTIONS).HasMaxLength(128);
+        });
+        modelBuilder.Entity<suivi_JOURNAL>(e =>
+        {
+            e.Property(x => x.DATE_UTC).HasColumnType("datetime2");
+            e.Property(x => x.TABLES).HasMaxLength(128);
+            e.Property(x => x.CLES).HasMaxLength(450);
+            e.Property(x => x.COLONNES).HasMaxLength(128);
+            e.Property(x => x.ACTIONS).HasMaxLength(32);
+            e.Property(x => x.USERS).HasMaxLength(256);
+            e.Property(x => x.BASE_SAGE).HasMaxLength(128);
+            e.Property(x => x.BASE_POINTEUSE).HasMaxLength(128);
+            e.Property(x => x.SOURCE).HasMaxLength(64);
+            e.HasIndex(x => new { x.DATE_UTC, x.Id }).HasDatabaseName("IX_suivi_JOURNAL_Date").IsDescending(true, true);
+            e.HasIndex(x => new { x.BASE_SAGE, x.DATE_UTC, x.Id }).HasDatabaseName("IX_suivi_JOURNAL_Base_Date").IsDescending(false, true, true);
+            e.HasIndex(x => new { x.TABLES, x.ACTIONS, x.DATE_UTC, x.Id }).HasDatabaseName("IX_suivi_JOURNAL_Table_Action_Date").IsDescending(false, false, true, true);
+            e.HasIndex(x => new { x.CORRELATIONS, x.Id }).HasDatabaseName("IX_suivi_JOURNAL_Correlation");
         });
     }
 }

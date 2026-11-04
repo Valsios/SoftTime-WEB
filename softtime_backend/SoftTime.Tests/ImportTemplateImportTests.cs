@@ -66,13 +66,13 @@ public class ImportTemplateImportTests
                 new T_PLANNING { NoSHIFT = 2, HA = VingtDeux, PAUSE = Pause, HD = Six, Intitule = "Nuit" }
             });
 
-            var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser());
+            var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
             var external = new FakeExternalSourceService();
             Timekeeping = new TimekeepingService(Uow, tenant, external, new HistoryArchiveService(Uow, tenant));
             Planning = new PlanningService(Uow, tenant, new FakePlanningStatisticsReader());
             // La découverte de bases n'est pas utilisée par les imports testés ici.
             var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
-            Catalog = new CatalogService(Uow, mapper, tenant, external, null!);
+            Catalog = new CatalogService(Uow, mapper, tenant, external, null!, null!, SoftTime.Tests.Http.TestRights.Service(Uow));
         }
 
         public List<T_POINTAGE> Pointages => Uow.Get<T_POINTAGE>().Items;

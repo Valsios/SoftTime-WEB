@@ -1,7 +1,8 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '../../core/api';
-import { DbAccess, DepartementService, DepartementServiceOptions, Droit, PagedResult, Privilege, Role, SageDb, User } from '../models';
+import { RoleChangePreview } from '../../core/error.logic';
+import { DbAccess, DepartementService, DepartementServiceOptions, Droit, PagedResult, Privilege, Role, RoleDetailedPermissions, SageDb, User } from '../models';
 
 @Injectable({ providedIn: 'root' })
 export class UsersService extends ApiService {
@@ -21,6 +22,10 @@ export class UsersService extends ApiService {
   }
   update(id: number, dto: User): Observable<User> {
     return this.http.put<User>(this.url(`/api/users/${id}`), dto);
+  }
+  /** Aperçu d'un changement de rôle : ajustements personnels qui seraient effacés (lecture seule). */
+  rolePreview(id: number, newRoleId: number): Observable<RoleChangePreview> {
+    return this.http.post<RoleChangePreview>(this.url(`/api/users/${id}/role-change-preview`), { newRoleId });
   }
   remove(id: number): Observable<void> {
     return this.http.delete<void>(this.url(`/api/users/${id}`));
@@ -71,6 +76,15 @@ export class PrivilegesService extends ApiService {
       userId,
       grantedPermissions: permissions,
     });
+  }
+  getRolePermissions(roleId: number): Observable<RoleDetailedPermissions> {
+    return this.http.get<RoleDetailedPermissions>(this.url(`/api/privileges/role/${roleId}`));
+  }
+  saveRolePermissions(roleId: number, grantedPermissions: string[]): Observable<void> {
+    return this.http.put<void>(this.url(`/api/privileges/role/${roleId}`), { grantedPermissions });
+  }
+  resetUserPermissions(userId: number): Observable<void> {
+    return this.http.post<void>(this.url(`/api/privileges/user/${userId}/reset`), {});
   }
 }
 

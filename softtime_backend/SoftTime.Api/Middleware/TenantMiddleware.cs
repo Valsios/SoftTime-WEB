@@ -61,6 +61,11 @@ public class ExceptionHandlingMiddleware
         {
             await _next(context);
         }
+        catch (ForbiddenOperationException ex)
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await context.Response.WriteAsJsonAsync(new { error = ex.Message });
+        }
         catch (UnauthorizedAccessException ex)
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;

@@ -9,7 +9,8 @@ namespace SoftTime.Application.Services;
 /// </summary>
 public static class HistoryArchiveConfiguration
 {
-    public static Task EnsureStorageAsync(IUnitOfWork uow, CancellationToken ct = default) => uow.ExecuteSqlAsync("""
+    // Table cible : T_POINTAGE, dont les suppressions alimentent les archives.
+    public static Task EnsureStorageAsync(IUnitOfWork uow, CancellationToken ct = default) => SchemaPresenceGuard.ExecuteAsync(uow, "T_POINTAGE", """
         IF OBJECT_ID(N'dbo.T_HISTORIQUE_POINTAGE', N'U') IS NULL
         BEGIN
             CREATE TABLE dbo.T_HISTORIQUE_POINTAGE (
