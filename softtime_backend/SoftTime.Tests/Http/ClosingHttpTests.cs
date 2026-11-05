@@ -207,6 +207,45 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
         Assert.Equal(before, _f.Snapshot());
     }
 
+    // ---------- Checklist d'avancement ----------
+
+    [Theory]
+    [InlineData("admin", HttpStatusCode.OK)]
+    [InlineData("closereader", HttpStatusCode.OK)]
+    [InlineData("closenobase", HttpStatusCode.Forbidden)]
+    [InlineData("closenopte", HttpStatusCode.Forbidden)]
+    [InlineData("gate6only", HttpStatusCode.Forbidden)]
+    [InlineData("joel", HttpStatusCode.Forbidden)]
+    [InlineData("anonyme", HttpStatusCode.Unauthorized)]
+    public async Task Checklist_has_the_same_access_rules_as_the_analysis(string profil, HttpStatusCode attendu)
+    {
+        var before = _f.Snapshot();
+        var (code, texte) = await Envoyer(_http, Requete(profil, HttpMethod.Get, $"{Url.Replace("analysis", "checklist")}?{Semaine}"));
+
+        Assert.Equal(attendu, code);
+        if (attendu == HttpStatusCode.Forbidden && profil is not ("closenobase" or "closenopte"))
+            Assert.Contains(Denied, texte);
+        Assert.Equal(before, _f.Snapshot());                     // lecture seule
+    }
+
+    [Fact]
+    public async Task Checklist_returns_one_line_per_step_with_counts_only_and_leaves_the_analysis_unchanged()
+    {
+        var (_, analyseAvant) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}"));
+        var (code, texte) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url.Replace("analysis", "checklist")}?{Semaine}"));
+        var (_, analyseApres) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}"));
+
+        Assert.Equal(HttpStatusCode.OK, code);
+        using var json = JsonDocument.Parse(texte);
+        var codes = json.RootElement.GetProperty("lignes").EnumerateArray().Select(l => l.GetProperty("code").GetString()).ToArray();
+        Assert.Equal(new[] { "Pointages", "Anomalies", "Semaines", "ExoImpo", "SynchroPaie" }, codes);   // pas de calcul EXO/IMPO : pas de ligne « heures imposables »
+        Assert.All(json.RootElement.GetProperty("lignes").EnumerateArray(),
+            l => Assert.Contains(l.GetProperty("etat").GetString(), new[] { "Fait", "AFaire", "Information", "NonDeterminable" }));
+        Assert.DoesNotContain("777", texte);                     // aucun matricule ni nom
+        Assert.DoesNotContain("Testnom", texte);
+        Assert.Equal(analyseAvant, analyseApres);                // la réponse de l'analyse est inchangée, octet pour octet
+    }
+
     [Fact]
     public async Task ShowNames_false_returns_the_matricule_only_without_error()
     {

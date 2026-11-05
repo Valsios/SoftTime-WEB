@@ -25,7 +25,7 @@ namespace SoftTime.Application.Services;
 ///   <item>seuls des matricules (clé canonique) sont manipulés : aucun nom ni prénom.</item>
 /// </list>
 /// </summary>
-public class ClosingService
+public partial class ClosingService
 {
     /// <summary>Longueur maximale par défaut de la période analysée, bornes comprises (réglage Closing:MaxPeriodDays).</summary>
     public const int MaxPeriodDays = ClosingOptions.PlafondPeriodDays;

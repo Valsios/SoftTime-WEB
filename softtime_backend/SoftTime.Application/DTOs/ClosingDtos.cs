@@ -29,6 +29,26 @@ public sealed record ClosingAnalysisRequest(
     IReadOnlyList<ClosingSeverity>? Gravites = null,
     bool TriParGravite = false);
 
+/// <summary>
+/// Demande de checklist d'avancement : même période (mois civil précédent sans dates) et même département que l'analyse.
+/// <see cref="ReuseCached"/> (faux par défaut) autorise la dernière checklist conservée pendant le délai du cache.
+/// </summary>
+public sealed record ClosingChecklistRequest(DateTime From, DateTime To, string? Departement = null, bool ReuseCached = false);
+
+/// <summary>
+/// Une étape de la préparation de paie. <c>Etat</c> : Fait, AFaire, Information ou NonDeterminable (jamais deviné).
+/// <c>Nombre</c> : volume utile à l'étape (à faire, à valider, concernés), <c>null</c> si sans objet.
+/// Aucun matricule ni nom : des comptages seulement.
+/// </summary>
+public sealed record ClosingChecklistLineDto(string Code, string Libelle, string Etat, string Detail, int? Nombre = null);
+
+/// <summary>Checklist d'avancement de la paie d'une période : séparée de l'analyse, n'entre ni dans le score ni dans le statut.</summary>
+public sealed record ClosingChecklistDto(
+    DateTime From,
+    DateTime To,
+    string? Departement,
+    IReadOnlyList<ClosingChecklistLineDto> Lignes);
+
 /// <summary>Comptage d'une gravité ou d'un type d'anomalie.</summary>
 public sealed record ClosingCountDto(string Cle, int Nombre);
 

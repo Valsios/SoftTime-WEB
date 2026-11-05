@@ -91,6 +91,30 @@ public class ClosingController : ControllerBase
         return Ok(rapport);
     }
 
+    /// <summary>
+    /// Checklist d'avancement de la paie (pointages importés, anomalies, semaines validées, calcul EXO/IMPO, heures
+    /// imposables, synchronisation paie) pour la même période et le même département que l'analyse. Séparée de l'analyse :
+    /// n'entre ni dans le score ni dans le statut. Mêmes contrôles d'accès que l'analyse ; cache de 60 s par utilisateur.
+    /// </summary>
+    [HttpGet("checklist")]
+    public async Task<IActionResult> Checklist(
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        [FromQuery] string? departement,
+        [FromQuery] bool? reuseCache,
+        CancellationToken ct)
+    {
+        await FineReadAccess.EnsureAsync(_user, _rights, Rights.Reports, Permission, ct);
+        if (!_reglages.Enabled)
+            return NotFound(new { error = Desactivee });
+
+        var perimetre = "u" + (_user.UserId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?");
+        var checklist = await _closing.ChecklistAsync(
+            new ClosingChecklistRequest(Jour(from), Jour(to), departement, reuseCache == true), perimetre, ct);
+        _logger.LogInformation("Checklist de clôture {From:yyyy-MM-dd} → {To:yyyy-MM-dd} : {Lignes} ligne(s).", checklist.From, checklist.To, checklist.Lignes.Count);
+        return Ok(checklist);
+    }
+
     /// <summary>Niveaux séparés par des virgules (insensible à la casse) ; absent ou vide : aucun filtre ; valeur inconnue : refus.</summary>
     private static bool TryLireGravites(string? valeur, out IReadOnlyList<ClosingSeverity>? niveaux)
     {
