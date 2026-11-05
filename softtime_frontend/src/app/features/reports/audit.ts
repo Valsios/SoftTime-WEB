@@ -1,37 +1,75 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { isAdministrator } from '../../core/access.logic';
+import { Droit } from '../../core/rights';
+import { SessionStore } from '../../core/session.store';
 import { ToastService } from '../../core/toast.service';
-import { AuditConfig } from '../../shared/models';
+import { AuditConfig, AuditTypeOption, PageChangeEvent } from '../../shared/models';
 import { AuditService } from '../../shared/services/reports.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
-import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, SoftTabs, SoftToggle } from '../../shared/components';
+import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, SoftSelect, SoftTabs, SoftToggle } from '../../shared/components';
 import { asRow, fmtDate, today } from '../../shared/utils/date';
+import { JournalTab } from '../audit/journal-tab';
 
 @Component({
   selector: 'app-audit',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, SoftToggle, SoftTabs],
+  imports: [FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, SoftSelect, SoftToggle, SoftTabs, JournalTab],
   template: `
     <page-header title="Audit" subtitle="Configuration et journal">
-      <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
+      @if (activeTab() !== 'journal') {
+        <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
+      }
       @if (activeTab() === 'config') {
-        <soft-button (click)="openCreate()">Ajouter config</soft-button>
+        <soft-button [disabled]="!isAdmin()" (click)="openCreate()">Ajouter config</soft-button>
       }
     </page-header>
 
-    <soft-tabs [tabs]="tabs" [(activeTab)]="activeTab" />
+    <soft-tabs [tabs]="tabs()" [(activeTab)]="activeTab" />
 
-    @if (activeTab() === 'config') {
+    @if (activeTab() === 'config' && !isAdmin()) {
+      <p class="admin-only" role="note">Réservé aux administrateurs. La configuration est consultable mais ne peut pas être modifiée avec votre compte.</p>
+    }
+
+    @if (activeTab() === 'journal' && canViewJournal()) {
+      <journal-tab />
+    } @else if (activeTab() === 'config') {
       <soft-card padding="md">
-        <data-table [columns]="configColumns" [rows]="configRows()" [loading]="loadingConfig()">
+        <data-table
+          [columns]="configColumns"
+          [rows]="configRows()"
+          [loading]="loadingConfig()"
+          [serverSide]="true"
+          [total]="configTotal()"
+          [serverPageSize]="configPageSize"
+          [serverPage]="configPage()"
+          [(searchTerm)]="configSearch"
+          (searchSubmit)="onConfigSearch($event)"
+          (pageChange)="onConfigPageChange($event)"
+        >
           <ng-template #actions let-row>
-            <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
+            @if (isAdmin()) {
+              <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
+            } @else {
+              <span class="muted">Réservé aux administrateurs.</span>
+            }
           </ng-template>
         </data-table>
       </soft-card>
     } @else {
       <soft-card padding="md">
-        <data-table [columns]="eventColumns" [rows]="eventRows()" [loading]="loadingEvents()"></data-table>
+        <data-table
+          [columns]="eventColumns"
+          [rows]="eventRows()"
+          [loading]="loadingEvents()"
+          [serverSide]="true"
+          [total]="eventTotal()"
+          [serverPageSize]="eventPageSize"
+          [serverPage]="eventPage()"
+          [(searchTerm)]="eventSearch"
+          (searchSubmit)="onEventsSearch($event)"
+          (pageChange)="onEventsPageChange($event)"
+        ></data-table>
       </soft-card>
     }
 
@@ -39,13 +77,23 @@ import { asRow, fmtDate, today } from '../../shared/utils/date';
       <div class="form-grid">
         <soft-input label="Table" [(ngModel)]="form.table" name="table"></soft-input>
         <soft-input label="Colonne" [(ngModel)]="form.column" name="column"></soft-input>
-        <soft-input label="Type" [(ngModel)]="form.type" name="type"></soft-input>
+        <soft-select
+          label="Type"
+          [required]="true"
+          placeholder="Sélectionner un type..."
+          [(ngModel)]="form.type"
+          name="type"
+          [options]="typeOptions()"
+        ></soft-select>
+        @if (loadTypeError()) {
+          <p class="error-msg">{{ loadTypeError() }}</p>
+        }
         <soft-input label="Base" [(ngModel)]="form.base" name="base"></soft-input>
         <label class="toggle-row"><span>Activé</span><soft-toggle [(ngModel)]="form.enabled" name="enabled"></soft-toggle></label>
       </div>
       <div footer>
         <soft-button variant="ghost" (click)="modal.set(false)">Annuler</soft-button>
-        <soft-button [loading]="saving()" (click)="save()">Enregistrer</soft-button>
+        <soft-button [loading]="saving()" [disabled]="isSaveDisabled()" (click)="save()">Enregistrer</soft-button>
       </div>
     </soft-modal>
   `,
@@ -53,6 +101,8 @@ import { asRow, fmtDate, today } from '../../shared/utils/date';
     `
       .form-grid { display: grid; gap: 14px; }
       .toggle-row { display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
+      .error-msg { color: var(--danger); font-size: 0.85rem; margin-top: -6px; }
+      .admin-only { margin: 0 0 16px; padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--warning-border); background: var(--warning-bg); color: var(--warning); font-weight: 600; }
     `,
   ],
 })
@@ -60,20 +110,43 @@ export class AuditPage implements OnInit {
   private readonly svc = inject(AuditService);
   private readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
+  private readonly session = inject(SessionStore);
 
   readonly loadingConfig = signal(true);
   readonly loadingEvents = signal(false);
   readonly saving = signal(false);
   readonly modal = signal(false);
   readonly editId = signal<number | null>(null);
+  configPageSize = 50;
+  eventPageSize = 50;
   readonly configRows = signal<Record<string, unknown>[]>([]);
   readonly eventRows = signal<Record<string, unknown>[]>([]);
+  readonly configPage = signal(1);
+  readonly configTotal = signal(0);
+  readonly eventPage = signal(1);
+  readonly eventTotal = signal(0);
+  readonly configSearch = signal('');
+  readonly eventSearch = signal('');
+  private configSeq = 0;
+  private eventSeq = 0;
+  readonly rawTypeOptions = signal<AuditTypeOption[]>([]);
+  readonly typeOptions = signal<AuditTypeOption[]>([]);
+  readonly loadTypeError = signal<string | null>(null);
+
   form: Partial<AuditConfig> = {};
-  readonly activeTab = signal('config');
-  readonly tabs = [
+  /** Modifier la configuration des déclencheurs : administrateur seulement (POST et PUT api/audit/config). */
+  readonly isAdmin = computed(() => isAdministrator(this.session.accessContext()));
+  /** Journal central : administrateur, ou porte Traçabilité ET permission TRACE:AUDIT (comme le serveur). */
+  readonly canViewJournal = computed(() => {
+    this.session.session();
+    return this.session.hasPermission('TRACE:AUDIT', Droit.Traceability);
+  });
+  readonly activeTab = signal(this.canViewJournal() ? 'journal' : 'config');
+  readonly tabs = computed(() => [
+    ...(this.canViewJournal() ? [{ id: 'journal', label: 'Journal' }] : []),
     { id: 'config', label: 'Configuration' },
     { id: 'events', label: 'Événements' },
-  ];
+  ]);
 
   readonly configColumns: Column[] = [
     { key: 'table', label: 'Table' },
@@ -93,32 +166,128 @@ export class AuditPage implements OnInit {
   ];
 
   ngOnInit(): void {
-    this.svc.config().subscribe({
-      next: (items) => { this.configRows.set(items.map(asRow)); this.loadingConfig.set(false); },
-      error: () => this.loadingConfig.set(false),
-    });
+    this.loadConfig();
+    this.loadTypes();
     this.loadEvents();
   }
 
+  loadConfig(): void {
+    const seq = ++this.configSeq;
+    this.loadingConfig.set(true);
+    this.svc.configPaged(this.configPage(), this.configPageSize, this.configSearch()).subscribe({
+      next: (r) => {
+        if (seq !== this.configSeq) return;
+        this.configRows.set(r.items.map(asRow));
+        this.configTotal.set(r.total);
+        this.configPage.set(r.page);
+        this.loadingConfig.set(false);
+      },
+      error: () => { if (seq === this.configSeq) this.loadingConfig.set(false); },
+    });
+  }
+
+  onConfigPageChange(event: PageChangeEvent): void {
+    this.configPage.set(event.page);
+    this.configPageSize = event.pageSize;
+    this.loadConfig();
+  }
+
+  onConfigSearch(term: string): void {
+    this.configSearch.set(term);
+    this.configPage.set(1);
+    this.loadConfig();
+  }
+
+  onEventsPageChange(event: PageChangeEvent): void {
+    this.eventPage.set(event.page);
+    this.eventPageSize = event.pageSize;
+    this.loadEvents();
+  }
+
+  onEventsSearch(term: string): void {
+    this.eventSearch.set(term);
+    this.eventPage.set(1);
+    this.loadEvents();
+  }
+
+  loadTypes(): void {
+    this.svc.types().subscribe({
+      next: (items) => {
+        this.rawTypeOptions.set(items);
+        this.typeOptions.set(items);
+        this.loadTypeError.set(null);
+      },
+      error: () => {
+        this.loadTypeError.set('Impossible de charger la liste des types.');
+      },
+    });
+  }
+
   loadEvents(): void {
+    const seq = ++this.eventSeq;
     this.loadingEvents.set(true);
     const to = today();
     const fromDate = new Date();
     fromDate.setDate(fromDate.getDate() - 30);
     const from = fromDate.toISOString().slice(0, 10);
-    this.svc.events({ from, to }).subscribe({
-      next: (items) => { this.eventRows.set(items.map(asRow)); this.loadingEvents.set(false); },
-      error: () => this.loadingEvents.set(false),
+    this.svc.eventsPaged({
+      from,
+      to,
+      search: this.eventSearch(),
+      page: this.eventPage(),
+      pageSize: this.eventPageSize,
+    }).subscribe({
+      next: (r) => {
+        if (seq !== this.eventSeq) return;
+        this.eventRows.set(r.items.map(asRow));
+        this.eventTotal.set(r.total);
+        this.eventPage.set(r.page);
+        this.loadingEvents.set(false);
+      },
+      error: () => { if (seq === this.eventSeq) this.loadingEvents.set(false); },
     });
   }
 
-  openCreate(): void { this.editId.set(null); this.form = { enabled: true }; this.modal.set(true); }
-  openEdit(row: Record<string, unknown>): void { this.editId.set(row['id'] as number); this.form = { ...(row as unknown as AuditConfig) }; this.modal.set(true); }
+  openCreate(): void {
+    if (!this.isAdmin()) return;
+    this.editId.set(null);
+    this.form = { enabled: true, type: '' };
+    this.typeOptions.set(this.rawTypeOptions());
+    this.modal.set(true);
+  }
+
+  openEdit(row: Record<string, unknown>): void {
+    if (!this.isAdmin()) return;
+    this.editId.set(row['id'] as number);
+    const cfg = { ...(row as unknown as AuditConfig) };
+    this.form = cfg;
+    const currentType = (cfg.type ?? '').trim();
+    const exists = this.rawTypeOptions().some(
+      (o) => o.value.toLowerCase() === currentType.toLowerCase()
+    );
+    if (currentType && !exists) {
+      this.typeOptions.set([
+        { value: currentType, label: `${currentType} (ancienne valeur)` },
+        ...this.rawTypeOptions(),
+      ]);
+    } else {
+      this.typeOptions.set(this.rawTypeOptions());
+    }
+    this.modal.set(true);
+  }
+
+  isSaveDisabled(): boolean {
+    return !this.isAdmin() || this.saving() || !this.form.type || this.form.type.trim() === '';
+  }
 
   save(): void {
+    if (!this.isAdmin() || this.isSaveDisabled()) return;
     this.saving.set(true);
     const id = this.editId();
-    const dto = this.form as AuditConfig;
+    const dto = {
+      ...this.form,
+      type: this.form.type?.trim(),
+    } as AuditConfig;
     const req = id
       ? this.svc.updateConfig(id, { ...dto, id })
       : this.svc.createConfig({ ...dto, id: 0 });
@@ -127,11 +296,7 @@ export class AuditPage implements OnInit {
         this.saving.set(false);
         this.modal.set(false);
         this.toast.success('Enregistré.');
-        this.loadingConfig.set(true);
-        this.svc.config().subscribe({
-          next: (items) => { this.configRows.set(items.map(asRow)); this.loadingConfig.set(false); },
-          error: () => this.loadingConfig.set(false),
-        });
+        this.loadConfig();
       },
       error: () => this.saving.set(false),
     });
@@ -139,9 +304,17 @@ export class AuditPage implements OnInit {
 
   exportExcel(): void {
     if (this.activeTab() === 'config') {
-      this.excel.download('audit-config', this.configColumns, this.configRows());
+      this.svc.config().subscribe({
+        next: (items) => this.excel.download('audit-config', this.configColumns, items.map(asRow), 'Données', this.configSearch()),
+      });
     } else {
-      this.excel.download('audit-evenements', this.eventColumns, this.eventRows());
+      const to = today();
+      const fromDate = new Date();
+      fromDate.setDate(fromDate.getDate() - 30);
+      const from = fromDate.toISOString().slice(0, 10);
+      this.svc.events({ from, to }).subscribe({
+        next: (items) => this.excel.download('audit-evenements', this.eventColumns, items.map(asRow), 'Données', this.eventSearch()),
+      });
     }
   }
 }

@@ -12,7 +12,9 @@ import { SoftSelect } from './soft-select';
 import { SoftButton } from './soft-button';
 import { PeriodRequest } from '../models';
 import { monthStart, today, currentMonday, currentSunday } from '../utils/date';
-import { CardPaieService } from '../services/catalog.service';
+import { SimpleChanges } from '@angular/core';
+import { DeepLinkFilter, matchMatricule } from '../utils/deep-link';
+import { CardPaieService, DepartementServiceService } from '../services/catalog.service';
 
 @Component({
   selector: 'period-filter',
@@ -44,13 +46,13 @@ import { CardPaieService } from '../services/catalog.service';
           [options]="matriculeOptions()"
         ></soft-select>
       }
-      @if (showBranche()) {
+      @if (showDepartement()) {
         <soft-select
-          label="Branche"
-          placeholder="Toutes"
-          [(ngModel)]="branche"
-          name="branche"
-          [options]="brancheOptions()"
+          label="Département"
+          placeholder="Tous"
+          [(ngModel)]="departement"
+          name="departement"
+          [options]="departementOptions()"
         ></soft-select>
       }
       <soft-button (click)="emit()">{{ searchLabel() }}</soft-button>
@@ -59,21 +61,24 @@ import { CardPaieService } from '../services/catalog.service';
 })
 export class PeriodFilter implements OnInit {
   private readonly cards = inject(CardPaieService);
+  private readonly deptSvc = inject(DepartementServiceService);
 
   readonly showMatricule = input(true);
-  readonly showBranche = input(false);
+  readonly showDepartement = input(false);
   readonly autoSearch = input(false);
   readonly mondaySundayWeek = input(false);
   readonly searchLabel = input('Rechercher');
+  /** Filtre issu d'un lien profond (déjà validé par readDeepLink) ; null : comportement habituel. */
+  readonly initial = input<DeepLinkFilter | null>(null);
 
   from = monthStart();
   to = today();
   matriculeFrom: string | null = null;
   matriculeTo: string | null = null;
-  branche: string | null = null;
+  departement: string | null = null;
 
   readonly matriculeOptions = signal<{ value: string; label: string }[]>([]);
-  readonly brancheOptions = signal<{ value: string; label: string }[]>([]);
+  readonly departementOptions = signal<{ value: string; label: string }[]>([]);
   readonly search = output<PeriodRequest>();
 
   ngOnInit(): void {
@@ -81,6 +86,7 @@ export class PeriodFilter implements OnInit {
       this.from = currentMonday();
       this.to = currentSunday();
     }
+    this.applyInitial();
     if (this.autoSearch()) this.emit();
     this.cards.list().subscribe({
       next: (list) => {
@@ -94,15 +100,70 @@ export class PeriodFilter implements OnInit {
             return { value: m, label: name ? `${m} — ${name}` : m };
           }),
         );
-        const branches = [
-          ...new Set(list.map((c) => c.branche).filter((b): b is string => !!b?.trim())),
-        ].sort();
-        this.brancheOptions.set(branches.map((b) => ({ value: b, label: b })));
+        this.resolveInitialMatricule(mats.map((value) => ({ value })));
+        const rawDepts = list.map((c) => c.departement).filter((d): d is string => !!d?.trim());
+        const depts = [...new Set(rawDepts)].sort((a, b) => a.localeCompare(b, 'fr'));
+        this.departementOptions.set(depts.map((d) => ({ value: d, label: d })));
+        if (depts.length === 0 && mats.length > 0) {
+          this.deptSvc.lookupBatch(mats).subscribe({
+            next: (results) => {
+              const fromLookup = [
+                ...new Set(results.map((r) => r.departement).filter((d): d is string => !!d?.trim())),
+              ].sort((a, b) => a.localeCompare(b, 'fr'));
+              if (fromLookup.length > 0) {
+                this.departementOptions.set(fromLookup.map((d) => ({ value: d, label: d })));
+              }
+            },
+          });
+        }
       },
       error: () => {
         this.matriculeOptions.set([]);
+        this.departementOptions.set([]);
+        this.resolveInitialMatricule([]);
       },
     });
+  }
+
+  private pendingInitialMatricule: string | null = null;
+  private optionsLoaded = false;
+
+  /** Un nouveau lien profond vers la même page (composant réutilisé) : refait le pré-remplissage. */
+  ngOnChanges(changes: SimpleChanges): void {
+    const change = changes['initial'];
+    if (change && !change.firstChange) this.applyInitial();
+  }
+
+  /** Remplit la période puis lance une seule recherche ; avec matricule, elle attend le chargement des options. */
+  private applyInitial(): void {
+    const init = this.initial();
+    if (!init) return;
+    this.from = init.from;
+    this.to = init.to;
+    this.pendingInitialMatricule = init.matricule;
+    if (!init.matricule) {
+      this.matriculeFrom = null;
+      this.matriculeTo = null;
+      this.emit();
+    } else if (this.optionsLoaded) {
+      this.resolveInitialMatricule(this.matriculeOptions());
+    }
+  }
+
+  private resolveInitialMatricule(options: readonly { value: string }[]): void {
+    this.optionsLoaded = true;
+    const cle = this.pendingInitialMatricule;
+    if (cle === null) return;
+    this.pendingInitialMatricule = null;
+    const found = matchMatricule(cle, options);
+    this.matriculeFrom = found;
+    this.matriculeTo = found;
+    this.emit();
+    // Sans liste visible, le matricule n'a servi qu'à cette émission : il ne doit pas coller aux recherches suivantes.
+    if (!this.showMatricule()) {
+      this.matriculeFrom = null;
+      this.matriculeTo = null;
+    }
   }
 
   emit(): void {
@@ -111,7 +172,7 @@ export class PeriodFilter implements OnInit {
       to: this.to,
       matriculeFrom: this.matriculeFrom || null,
       matriculeTo: this.matriculeTo || null,
-      branche: this.branche || null,
+      departement: this.departement || null,
     });
   }
 }

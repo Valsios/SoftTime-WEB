@@ -20,4 +20,7 @@ public class T_RESPONSABLE
 
     public string? MATRICULE { get; set; }
 
+    /// <summary>Adresse d'envoi des identifiants (colonne ajoutée par <c>UserAccountConfiguration</c>).</summary>
+    public string? EMAIL { get; set; }
+
 }

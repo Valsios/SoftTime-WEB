@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using SoftTime.Application.Abstractions;
+using SoftTime.Application.Security;
 using SoftTime.Application.Services;
 
 namespace SoftTime.Api.Middleware;
@@ -60,6 +61,11 @@ public class ExceptionHandlingMiddleware
         {
             await _next(context);
         }
+        catch (ForbiddenOperationException ex)
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await context.Response.WriteAsJsonAsync(new { error = ex.Message });
+        }
         catch (UnauthorizedAccessException ex)
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -69,6 +75,11 @@ public class ExceptionHandlingMiddleware
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             await context.Response.WriteAsJsonAsync(new { error = ex.Message });
+        }
+        catch (FieldValidationException ex)
+        {
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await context.Response.WriteAsJsonAsync(new { error = ex.Message, field = ex.Field });
         }
         catch (InvalidOperationException ex)
         {

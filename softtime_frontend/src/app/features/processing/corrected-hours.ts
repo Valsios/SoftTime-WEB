@@ -1,35 +1,53 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
-import { CorrectedHour, PeriodRequest } from '../../shared/models';
+import { SessionStore } from '../../core/session.store';
+import { Droit } from '../../core/rights';
+import { CorrectedHour, PeriodRequest, PageChangeEvent } from '../../shared/models';
 import { CorrectedHoursService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
-import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, PeriodFilter } from '../../shared/components';
+import { Column, DataTable, ImportTemplatesModal, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, PeriodFilter } from '../../shared/components';
 import { asRow, fmtDate } from '../../shared/utils/date';
+import { input } from '@angular/core';
+import { readDeepLink } from '../../shared/utils/deep-link';
+import { toastImportResult } from '../../shared/utils/import-result';
 
 @Component({
   selector: 'app-corrected-hours',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, PeriodFilter],
+  imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, PeriodFilter, ImportTemplatesModal],
   template: `
     <page-header title="Heures corrigées" subtitle="Corrections manuelles">
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
-      <soft-button (click)="openCreate()">Ajouter</soft-button>
+      <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter</soft-button>
       <label class="file-btn">
         <input #corrFile type="file" accept=".xlsx,.xls" hidden (change)="onFile($event)" />
         <soft-button variant="secondary" (click)="corrFile.click()">Import Excel</soft-button>
       </label>
+      <soft-button variant="ghost" (click)="templatesOpen.set(true)">Modèles d'import</soft-button>
     </page-header>
 
-    <period-filter (search)="onSearch($event)"></period-filter>
+    <period-filter [initial]="link()" (search)="onSearch($event)"></period-filter>
 
     <soft-card>
-      <data-table [columns]="columns" [rows]="rows()" [loading]="loading()">
+      <data-table
+        [columns]="columns"
+        [rows]="rows()"
+        [loading]="loading()"
+        [serverSide]="true"
+        [total]="total()"
+        [serverPageSize]="pageSize"
+        [serverPage]="page()"
+        [(searchTerm)]="tableSearch"
+        (searchSubmit)="onTableSearch($event)"
+        (pageChange)="onPageChange($event)"
+      >
         <ng-template #actions let-row>
           <div class="soft-actions">
-            <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
-            <soft-button size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
+            <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
+            <soft-button *ngIf="canDelete()" size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
           </div>
         </ng-template>
       </data-table>
@@ -48,22 +66,44 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         <soft-button [loading]="saving()" (click)="save()">Enregistrer</soft-button>
       </div>
     </soft-modal>
+    <app-import-templates-modal
+      [open]="templatesOpen()"
+      [keys]="importKeys"
+      (closed)="templatesOpen.set(false)"
+    />
   `,
   styles: [`.form-grid { display: grid; gap: 14px; } .file-btn { cursor: pointer; }`],
 })
 export class CorrectedHoursPage {
+  // Lien profond facultatif (?du=&au=&matricule=), lié par withComponentInputBinding ; validé avant tout usage.
+  readonly du = input<unknown>();
+  readonly au = input<unknown>();
+  readonly matricule = input<unknown>();
+  readonly link = computed(() => readDeepLink({ du: this.du(), au: this.au(), matricule: this.matricule() }));
   private readonly svc = inject(CorrectedHoursService);
   private readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
+  private readonly session = inject(SessionStore);
+
+  readonly canCreate = computed(() => this.session.hasPermission('PROC:CORRECTED_HOURS:CREATE', Droit.Processing));
+  readonly canUpdate = computed(() => this.session.hasPermission('PROC:CORRECTED_HOURS:UPDATE', Droit.Processing));
+  readonly canDelete = computed(() => this.session.hasPermission('PROC:CORRECTED_HOURS:DELETE', Droit.Processing));
 
   readonly loading = signal(false);
   readonly saving = signal(false);
   readonly modal = signal(false);
+  readonly templatesOpen = signal(false);
+  readonly importKeys = ['corrections'];
   readonly editId = signal<number | null>(null);
+  pageSize = 50;
   readonly rows = signal<Record<string, unknown>[]>([]);
+  readonly page = signal(1);
+  readonly total = signal(0);
+  readonly tableSearch = signal('');
   form: Partial<CorrectedHour> = {};
   private lastFilter: PeriodRequest | null = null;
+  private requestSeq = 0;
 
   readonly columns: Column[] = [
     { key: 'matricule', label: 'Matricule' },
@@ -77,11 +117,45 @@ export class CorrectedHoursPage {
 
   onSearch(filter: PeriodRequest): void {
     this.lastFilter = filter;
+    this.page.set(1);
+    this.loadPage();
+  }
+
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
+    this.loadPage();
+  }
+
+  onTableSearch(term: string): void {
+    this.tableSearch.set(term);
+    this.page.set(1);
+    this.loadPage();
+  }
+
+  private loadPage(): void {
+    if (!this.lastFilter) return;
+    const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.list(filter).subscribe({
-      next: (items) => { this.rows.set(items.map(asRow)); this.loading.set(false); },
-      error: () => this.loading.set(false),
+    this.svc.listPaged({
+      ...this.lastFilter,
+      search: this.tableSearch(),
+      page: this.page(),
+      pageSize: this.pageSize,
+    }).subscribe({
+      next: (r) => {
+        if (seq !== this.requestSeq) return;
+        this.rows.set(r.items.map(asRow));
+        this.total.set(r.total);
+        this.page.set(r.page);
+        this.loading.set(false);
+      },
+      error: () => { if (seq === this.requestSeq) this.loading.set(false); },
     });
+  }
+
+  private reload(): void {
+    if (this.lastFilter) this.loadPage();
   }
 
   openCreate(): void { this.editId.set(null); this.form = {}; this.modal.set(true); }
@@ -105,7 +179,7 @@ export class CorrectedHoursPage {
         this.saving.set(false);
         this.modal.set(false);
         this.toast.success('Enregistré.');
-        if (this.lastFilter) this.onSearch(this.lastFilter);
+        this.reload();
       },
       error: () => this.saving.set(false),
     });
@@ -116,7 +190,7 @@ export class CorrectedHoursPage {
     this.svc.remove(row['id'] as number).subscribe({
       next: () => {
         this.toast.success('Supprimé.');
-        if (this.lastFilter) this.onSearch(this.lastFilter);
+        this.reload();
       },
     });
   }
@@ -127,14 +201,29 @@ export class CorrectedHoursPage {
     if (!file) return;
     this.svc.importExcel(file).subscribe({
       next: (r) => {
-        this.toast.success(r.message || `${r.imported} importé(s).`);
-        if (this.lastFilter) this.onSearch(this.lastFilter);
+        toastImportResult(
+          this.toast,
+          r,
+          `${r.imported} correction(s) importée(s), ${r.skipped} ligne(s) ignorée(s).`,
+        );
+        this.reload();
       },
     });
     input.value = '';
   }
 
   exportExcel(): void {
-    this.excel.download('heures-corrigees', this.columns, this.rows());
+    if (!this.lastFilter) {
+      this.excel.download('heures-corrigees', this.columns, this.rows(), 'Données', this.tableSearch());
+      return;
+    }
+    this.loading.set(true);
+    this.svc.list(this.lastFilter).subscribe({
+      next: (items) => {
+        this.loading.set(false);
+        this.excel.download('heures-corrigees', this.columns, items.map(asRow), 'Données', this.tableSearch());
+      },
+      error: () => this.loading.set(false),
+    });
   }
 }

@@ -1,9 +1,13 @@
-import { Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { inject, Injectable } from '@angular/core';
+import { Observable, tap } from 'rxjs';
 import { ApiService } from '../../core/api';
+import { SessionStore } from '../../core/session.store';
 import {
   AbsenceCode,
   Affectation,
+  AffectationOptions,
+  AffectationQuery,
+  AffectationRow,
   CardPaie,
   Category,
   ClockParam,
@@ -12,15 +16,32 @@ import {
   Holiday,
   ImportResult,
   Majoration,
+  PagedResult,
   PointeuseDb,
   SageConstantOption,
   Tolerance,
+  DepartementService,
+  ConnectionTestResult,
+  FieldRole,
+  PayrollWriteConfiguration,
 } from '../models';
 
 @Injectable({ providedIn: 'root' })
 export class PointeuseDatabasesService extends ApiService {
+  private readonly session = inject(SessionStore);
+
   list(): Observable<PointeuseDb[]> {
     return this.http.get<PointeuseDb[]>(this.url('/api/pointeuse-databases'));
+  }
+  listPaged(page: number, pageSize: number, search?: string | null): Observable<PagedResult<PointeuseDb>> {
+    return this.http.get<PagedResult<PointeuseDb>>(this.url('/api/pointeuse-databases/paged'), {
+      params: this.params({ page, pageSize, search }),
+    });
+  }
+  refresh(): Observable<PointeuseDb[]> {
+    return this.list().pipe(
+      tap((list) => this.session.setPointeuseDatabases(list)),
+    );
   }
   create(dto: PointeuseDb): Observable<PointeuseDb> {
     return this.http.post<PointeuseDb>(this.url('/api/pointeuse-databases'), dto);
@@ -30,6 +51,40 @@ export class PointeuseDatabasesService extends ApiService {
   }
   remove(id: number): Observable<void> {
     return this.http.delete<void>(this.url(`/api/pointeuse-databases/${id}`));
+  }
+  testConnection(dto: Partial<PointeuseDb>): Observable<ConnectionTestResult> {
+    return this.http.post<ConnectionTestResult>(this.url('/api/pointeuse-databases/test-connection'), dto);
+  }
+}
+
+@Injectable({ providedIn: 'root' })
+export class SageDatabasesService extends ApiService {
+  activate(): Observable<{ holidaysImported: boolean; cardsAdded: number; cardsDeactivated: number; message: string }> {
+    return this.http.post<{ holidaysImported: boolean; cardsAdded: number; cardsDeactivated: number; message: string }>(
+      this.url('/api/sage-databases/activate'), {});
+  }
+}
+@Injectable({ providedIn: 'root' })
+export class FieldRolesService extends ApiService {
+  list(systemType?: 'SAGE' | 'POINTEUSE'): Observable<FieldRole[]> {
+    return this.http.get<FieldRole[]>(this.url('/api/field-roles'), {
+      params: this.params({ systemType }),
+    });
+  }
+}
+@Injectable({ providedIn: 'root' })
+export class DiscoveryService extends ApiService {
+  servers(): Observable<string[]> {
+    return this.http.get<string[]>(this.url('/api/discovery/servers'));
+  }
+  databases(dto: { serveur: string; sqlAuth: boolean; login: string | null; password: string | null; connectionId?: number; connectionKind?: 'SAGE' | 'POINTEUSE' }): Observable<string[]> {
+    return this.http.post<string[]>(this.url('/api/discovery/databases'), dto);
+  }
+  tables(dto: { serveur: string; base: string; sqlAuth: boolean; login: string | null; password: string | null; connectionId?: number; connectionKind?: 'SAGE' | 'POINTEUSE' }): Observable<string[]> {
+    return this.http.post<string[]>(this.url('/api/discovery/tables'), dto);
+  }
+  columns(dto: { serveur: string; base: string; table: string; sqlAuth: boolean; login: string | null; password: string | null; connectionId?: number; connectionKind?: 'SAGE' | 'POINTEUSE' }): Observable<string[]> {
+    return this.http.post<string[]>(this.url('/api/discovery/columns'), dto);
   }
 }
 
@@ -58,6 +113,11 @@ export class CardPaieService extends ApiService {
   list(): Observable<CardPaie[]> {
     return this.http.get<CardPaie[]>(this.url('/api/cardpaie'));
   }
+  listPaged(page: number, pageSize: number, search?: string | null): Observable<PagedResult<CardPaie>> {
+    return this.http.get<PagedResult<CardPaie>>(this.url('/api/cardpaie/paged'), {
+      params: this.params({ page, pageSize, search }),
+    });
+  }
   create(dto: CardPaie): Observable<CardPaie> {
     return this.http.post<CardPaie>(this.url('/api/cardpaie'), dto);
   }
@@ -67,8 +127,8 @@ export class CardPaieService extends ApiService {
   remove(id: number): Observable<void> {
     return this.http.delete<void>(this.url(`/api/cardpaie/${id}`));
   }
-  autoMap(): Observable<{ added: number }> {
-    return this.http.post<{ added: number }>(this.url('/api/cardpaie/auto-map'), {});
+    autoMap(): Observable<{ added: number; deactivated: number; message: string }> {
+    return this.http.post<{ added: number; deactivated: number; message: string }>(this.url('/api/cardpaie/auto-map'), {});
   }
   importCsv(file: File): Observable<ImportResult> {
     const form = new FormData();
@@ -81,6 +141,11 @@ export class CardPaieService extends ApiService {
 export class CategoriesService extends ApiService {
   list(): Observable<Category[]> {
     return this.http.get<Category[]>(this.url('/api/categories'));
+  }
+  listPaged(page: number, pageSize: number, search?: string | null): Observable<PagedResult<Category>> {
+    return this.http.get<PagedResult<Category>>(this.url('/api/categories/paged'), {
+      params: this.params({ page, pageSize, search }),
+    });
   }
   create(dto: Category): Observable<Category> {
     return this.http.post<Category>(this.url('/api/categories'), dto);
@@ -99,6 +164,19 @@ export class AffectationsService extends ApiService {
     return this.http.get<Affectation[]>(this.url('/api/affectations'), {
       params: this.params({ categoryId }),
     });
+  }
+  listPaged(query: AffectationQuery & { page: number; pageSize: number }): Observable<PagedResult<AffectationRow>> {
+    return this.http.get<PagedResult<AffectationRow>>(this.url('/api/affectations/paged'), {
+      params: this.params({ ...query }),
+    });
+  }
+  listAll(query?: AffectationQuery): Observable<AffectationRow[]> {
+    return this.http.get<AffectationRow[]>(this.url('/api/affectations/all'), {
+      params: this.params({ ...(query ?? {}) }),
+    });
+  }
+  options(): Observable<AffectationOptions> {
+    return this.http.get<AffectationOptions>(this.url('/api/affectations/options'));
   }
   create(dto: Affectation): Observable<Affectation> {
     return this.http.post<Affectation>(this.url('/api/affectations'), dto);
@@ -123,11 +201,19 @@ export class TolerancesService extends ApiService {
       params: this.params({ categoryId }),
     });
   }
+  listPaged(page: number, pageSize: number, categoryId?: number, search?: string | null): Observable<PagedResult<Tolerance>> {
+    return this.http.get<PagedResult<Tolerance>>(this.url('/api/tolerances/paged'), {
+      params: this.params({ page, pageSize, categoryId, search }),
+    });
+  }
   create(dto: Tolerance): Observable<Tolerance> {
     return this.http.post<Tolerance>(this.url('/api/tolerances'), dto);
   }
   update(id: number, dto: Tolerance): Observable<Tolerance> {
     return this.http.put<Tolerance>(this.url(`/api/tolerances/${id}`), dto);
+  }
+  remove(id: number): Observable<void> {
+    return this.http.delete<void>(this.url(`/api/tolerances/${id}`));
   }
 }
 
@@ -135,6 +221,11 @@ export class TolerancesService extends ApiService {
 export class HolidaysService extends ApiService {
   list(): Observable<Holiday[]> {
     return this.http.get<Holiday[]>(this.url('/api/holidays'));
+  }
+  listPaged(page: number, pageSize: number, search?: string | null): Observable<PagedResult<Holiday>> {
+    return this.http.get<PagedResult<Holiday>>(this.url('/api/holidays/paged'), {
+      params: this.params({ page, pageSize, search }),
+    });
   }
   create(dto: Holiday): Observable<Holiday> {
     return this.http.post<Holiday>(this.url('/api/holidays'), dto);
@@ -155,6 +246,11 @@ export class MajorationsService extends ApiService {
   list(): Observable<Majoration[]> {
     return this.http.get<Majoration[]>(this.url('/api/majorations'));
   }
+  listPaged(page: number, pageSize: number, search?: string | null): Observable<PagedResult<Majoration>> {
+    return this.http.get<PagedResult<Majoration>>(this.url('/api/majorations/paged'), {
+      params: this.params({ page, pageSize, search }),
+    });
+  }
   update(id: number, dto: Majoration): Observable<Majoration> {
     return this.http.put<Majoration>(this.url(`/api/majorations/${id}`), dto);
   }
@@ -164,6 +260,11 @@ export class MajorationsService extends ApiService {
 export class AbsenceCodesService extends ApiService {
   list(): Observable<AbsenceCode[]> {
     return this.http.get<AbsenceCode[]>(this.url('/api/absence-codes'));
+  }
+  listPaged(page: number, pageSize: number, search?: string | null): Observable<PagedResult<AbsenceCode>> {
+    return this.http.get<PagedResult<AbsenceCode>>(this.url('/api/absence-codes/paged'), {
+      params: this.params({ page, pageSize, search }),
+    });
   }
   create(dto: AbsenceCode): Observable<AbsenceCode> {
     return this.http.post<AbsenceCode>(this.url('/api/absence-codes'), dto);
@@ -177,14 +278,56 @@ export class AbsenceCodesService extends ApiService {
 }
 
 @Injectable({ providedIn: 'root' })
+export class DepartementServiceService extends ApiService {
+  /** Recherche le departement/service Sage pour une liste de matricules. */
+  lookupBatch(matricules: string[]): Observable<DepartementService[]> {
+    return this.http.post<DepartementService[]>(this.url('/api/departement-service/lookup-batch'), matricules);
+  }
+}
+
+@Injectable({ providedIn: 'root' })
 export class CodeConstantesService extends ApiService {
   list(): Observable<CodeConstante[]> {
     return this.http.get<CodeConstante[]>(this.url('/api/code-constantes'));
+  }
+  listPaged(page: number, pageSize: number, search?: string | null): Observable<PagedResult<CodeConstante>> {
+    return this.http.get<PagedResult<CodeConstante>>(this.url('/api/code-constantes/paged'), {
+      params: this.params({ page, pageSize, search }),
+    });
   }
   update(id: number, dto: CodeConstante): Observable<CodeConstante> {
     return this.http.put<CodeConstante>(this.url(`/api/code-constantes/${id}`), dto);
   }
   sageOptions(): Observable<SageConstantOption[]> {
     return this.http.get<SageConstantOption[]>(this.url('/api/code-constantes/sage-options'));
+  }
+  /** Tables candidates pour un code constante de base AUTRE (table du mapping CONSTANT). */
+  otherTables(): Observable<string[]> {
+    return this.http.get<string[]>(this.url('/api/code-constantes/autre-tables'));
+  }
+  /** Valeurs distinctes de la colonne de code constante mappee pour une base AUTRE. */
+  otherValues(table: string): Observable<string[]> {
+    return this.http.get<string[]>(this.url('/api/code-constantes/autre-values'), {
+      params: this.params({ table }),
+    });
+  }
+}
+
+@Injectable({ providedIn: 'root' })
+export class PayrollWriteConfigurationService extends ApiService {
+  list(): Observable<PayrollWriteConfiguration[]> {
+    return this.http.get<PayrollWriteConfiguration[]>(this.url('/api/payroll-write-config'));
+  }
+  create(dto: PayrollWriteConfiguration): Observable<PayrollWriteConfiguration> {
+    return this.http.post<PayrollWriteConfiguration>(this.url('/api/payroll-write-config'), dto);
+  }
+  update(id: number, dto: PayrollWriteConfiguration): Observable<PayrollWriteConfiguration> {
+    return this.http.put<PayrollWriteConfiguration>(this.url(`/api/payroll-write-config/${id}`), dto);
+  }
+  remove(id: number): Observable<void> {
+    return this.http.delete<void>(this.url(`/api/payroll-write-config/${id}`));
+  }
+  test(): Observable<ConnectionTestResult> {
+    return this.http.post<ConnectionTestResult>(this.url('/api/payroll-write-config/test'), {});
   }
 }

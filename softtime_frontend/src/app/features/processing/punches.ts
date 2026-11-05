@@ -1,42 +1,101 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
-import { PeriodRequest } from '../../shared/models';
+import { PunchUpdate, PeriodRequest, PageChangeEvent } from '../../shared/models';
 import { PunchesService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
-import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, PeriodFilter } from '../../shared/components';
+import { Column, DataTable, ImportTemplatesModal, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, PeriodFilter } from '../../shared/components';
 import { asRow, fmtDate } from '../../shared/utils/date';
+import { computed, input } from '@angular/core';
+import { readDeepLink } from '../../shared/utils/deep-link';
+import { toastImportResult } from '../../shared/utils/import-result';
 
 @Component({
   selector: 'app-punches',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, PageHeader, SoftButton, SoftCard, DataTable, PeriodFilter],
+  imports: [FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftInput, SoftModal, PeriodFilter, ImportTemplatesModal],
   template: `
-    <page-header title="Pointages" subtitle="Liste et import des pointages">
+    <page-header title="Pointages" subtitle="Liste, import et traitement des pointages">
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
       <soft-button variant="secondary" (click)="importClock()">Import pointeuse</soft-button>
+      <soft-button [loading]="processing()" (click)="preprocess()">Traiter les pointages</soft-button>
+      <soft-button variant="danger" [loading]="busy()" (click)="purge()">Purger la période</soft-button>
       <label class="file-btn">
         <input #punchFile type="file" accept=".xlsx,.xls" hidden (change)="onFile($event)" />
         <soft-button variant="accent" (click)="punchFile.click()">Import Excel</soft-button>
       </label>
+      <soft-button variant="ghost" (click)="templatesOpen.set(true)">Modèles d'import</soft-button>
     </page-header>
 
-    <period-filter (search)="onSearch($event)"></period-filter>
+    <period-filter [initial]="link()" (search)="onSearch($event)"></period-filter>
 
     <soft-card>
-      <data-table [columns]="columns" [rows]="rows()" [loading]="loading()"></data-table>
+      <data-table
+        [columns]="columns"
+        [rows]="rows()"
+        [loading]="loading()"
+        [serverSide]="true"
+        [total]="total()"
+        [serverPageSize]="pageSize"
+        [serverPage]="page()"
+        [(searchTerm)]="tableSearch"
+        (searchSubmit)="onTableSearch($event)"
+        (pageChange)="onPageChange($event)"
+      >
+        <ng-template #actions let-row>
+          <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
+        </ng-template>
+      </data-table>
     </soft-card>
+
+    <soft-modal [open]="modal()" title="Corriger le pointage" (closed)="modal.set(false)">
+      <div class="form-grid">
+        <soft-input label="Matricule" [(ngModel)]="currentMatricule" name="matricule" [disabled]="true"></soft-input>
+        <soft-input label="Date" type="date" [(ngModel)]="form.date" name="date"></soft-input>
+        <soft-input label="Heure" type="time" [(ngModel)]="form.heure" name="heure"></soft-input>
+        <soft-input label="Type" [(ngModel)]="form.type" name="type"></soft-input>
+      </div>
+      <div footer>
+        <soft-button variant="ghost" (click)="modal.set(false)">Annuler</soft-button>
+        <soft-button [loading]="busy()" (click)="saveEdit()">Enregistrer</soft-button>
+      </div>
+    </soft-modal>
+    <app-import-templates-modal
+      [open]="templatesOpen()"
+      [keys]="importKeys"
+      (closed)="templatesOpen.set(false)"
+    />
   `,
-  styles: [`.file-btn { cursor: pointer; }`],
+  styles: [`.file-btn { cursor: pointer; } .form-grid { display: grid; gap: 14px; }`],
 })
 export class PunchesPage {
+  // Lien profond facultatif (?du=&au=&matricule=), lié par withComponentInputBinding ; validé avant tout usage.
+  readonly du = input<unknown>();
+  readonly au = input<unknown>();
+  readonly matricule = input<unknown>();
+  readonly link = computed(() => readDeepLink({ du: this.du(), au: this.au(), matricule: this.matricule() }));
   private readonly svc = inject(PunchesService);
   private readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
+  private readonly confirm = inject(ConfirmService);
 
   readonly loading = signal(false);
+  readonly processing = signal(false);
+  readonly busy = signal(false);
+  readonly modal = signal(false);
+  readonly templatesOpen = signal(false);
+  readonly importKeys = ['punches'];
+  pageSize = 50;
   readonly rows = signal<Record<string, unknown>[]>([]);
+  readonly page = signal(1);
+  readonly total = signal(0);
+  readonly tableSearch = signal('');
   private lastFilter: PeriodRequest | null = null;
+  private requestSeq = 0;
+  private editId: number | null = null;
+  currentMatricule = '';
+  form: PunchUpdate = {};
 
   readonly columns: Column[] = [
     { key: 'matricule', label: 'Matricule' },
@@ -48,11 +107,42 @@ export class PunchesPage {
 
   onSearch(filter: PeriodRequest): void {
     this.lastFilter = filter;
+    this.page.set(1);
+    this.loadPage();
+  }
+
+  /** Charge la page courante (liste paginée : une période peut compter des dizaines de milliers de lignes). */
+  private loadPage(): void {
+    if (!this.lastFilter) return;
+    const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.list(filter).subscribe({
-      next: (items) => { this.rows.set(items.map(asRow)); this.loading.set(false); },
-      error: () => this.loading.set(false),
+    this.svc.listPaged({
+      ...this.lastFilter,
+      search: this.tableSearch(),
+      page: this.page(),
+      pageSize: this.pageSize,
+    }).subscribe({
+      next: (r) => {
+        if (seq !== this.requestSeq) return;
+        this.rows.set(r.items.map(asRow));
+        this.total.set(r.total);
+        this.page.set(r.page);
+        this.loading.set(false);
+      },
+      error: () => { if (seq === this.requestSeq) this.loading.set(false); },
     });
+  }
+
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
+    this.loadPage();
+  }
+
+  onTableSearch(term: string): void {
+    this.tableSearch.set(term);
+    this.page.set(1);
+    this.loadPage();
   }
 
   importClock(): void {
@@ -63,7 +153,29 @@ export class PunchesPage {
       matriculeFrom: this.lastFilter.matriculeFrom,
       matriculeTo: this.lastFilter.matriculeTo,
     }).subscribe({
-      next: (r) => { this.toast.success(r.message || `${r.imported} importé(s).`); this.onSearch(this.lastFilter!); },
+      next: (r) => {
+        toastImportResult(this.toast, r, `${r.imported} pointage(s) importé(s), ${r.skipped} ignoré(s).`);
+        // Le desktop enchaîne import et pré-traitement : on reproduit ce parcours.
+        this.runPreprocess();
+      },
+    });
+  }
+
+  /** Pré-traitement : transforme les pointages en heures corrigées + anomalies à arbitrer. */
+  preprocess(): void {
+    this.runPreprocess();
+  }
+
+  private runPreprocess(): void {
+    if (!this.lastFilter) { this.toast.warning('Lancez d\'abord une recherche.'); return; }
+    this.processing.set(true);
+    this.svc.preprocess(this.lastFilter).subscribe({
+      next: (r) => {
+        this.processing.set(false);
+        this.toast.success(r.message || `${r.correctionsCreees} correction(s) créée(s).`);
+        this.onSearch(this.lastFilter!);
+      },
+      error: () => { this.processing.set(false); this.refresh(); },
     });
   }
 
@@ -72,11 +184,89 @@ export class PunchesPage {
     const file = input.files?.[0];
     if (!file) return;
     this.svc.importExcel(file).subscribe({
-      next: (r) => { this.toast.success(r.message || `${r.imported} importé(s).`); if (this.lastFilter) this.onSearch(this.lastFilter); },
+      next: (r) => {
+        toastImportResult(
+          this.toast,
+          r,
+          `${r.imported} pointage(s) importé(s), ${r.skipped} ligne(s) ignorée(s).`,
+        );
+        if (this.lastFilter) this.runPreprocess();
+        else this.refresh();
+      },
     });
     input.value = '';
   }
+  /**
+   * Export de la grille complète : la pagination ne porte que sur l'affichage, l'export recharge
+   * donc toute la période pour ne pas tronquer le fichier.
+   */
   exportExcel(): void {
-    this.excel.download('pointages', this.columns, this.rows());
+    if (!this.lastFilter) {
+      this.excel.download('pointages', this.columns, this.rows(), 'Données', this.tableSearch());
+      return;
+    }
+    this.loading.set(true);
+    this.svc.list(this.lastFilter).subscribe({
+      next: (items) => {
+        this.loading.set(false);
+        this.excel.download('pointages', this.columns, items.map(asRow), 'Données', this.tableSearch());
+      },
+      error: () => this.loading.set(false),
+    });
+  }
+
+  openEdit(row: Record<string, unknown>): void {
+    this.editId = row['id'] as number;
+    this.currentMatricule = (row['matricule'] as string) ?? '';
+    this.form = {
+      date: this.toDateInput(row['date']),
+      heure: this.toTimeInput(row['heure']),
+      type: (row['type'] as string) ?? '',
+    };
+    this.modal.set(true);
+  }
+
+  saveEdit(): void {
+    if (this.editId == null) return;
+    this.busy.set(true);
+    // Les valeurs vides ne sont pas transmises : le champ correspondant reste inchangé.
+    const payload: PunchUpdate = {
+      date: this.form.date || undefined,
+      heure: this.form.heure || undefined,
+      type: this.form.type ?? '',
+    };
+    this.svc.update(this.editId, payload).subscribe({
+      next: () => {
+        this.busy.set(false);
+        this.modal.set(false);
+        this.toast.success('Pointage corrigé. Relancez le traitement pour propager la correction.');
+        this.refresh();
+      },
+      error: () => this.busy.set(false),
+    });
+  }
+
+  /** Purge la période : pointages + corrections automatiques + anomalies (archivés). */
+  async purge(): Promise<void> {
+    if (!this.lastFilter) { this.toast.warning('Lancez d\'abord une recherche.'); return; }
+    if (!(await this.confirm.ask(
+      'Purger les pointages de la période ? Les corrections automatiques et les anomalies seront aussi retirées. L\'opération est archivée et consultable dans Historique.'))) return;
+    this.busy.set(true);
+    this.svc.purge(this.lastFilter).subscribe({
+      next: (r) => { this.busy.set(false); this.toast.success(r.message); this.refresh(); },
+      error: () => this.busy.set(false),
+    });
+  }
+
+  private refresh(): void {
+    if (this.lastFilter) this.loadPage();
+  }
+
+  private toDateInput(value: unknown): string | null {
+    return typeof value === 'string' && value.length >= 10 ? value.slice(0, 10) : null;
+  }
+
+  private toTimeInput(value: unknown): string | null {
+    return typeof value === 'string' && value.length >= 5 ? value.slice(0, 5) : null;
   }
 }

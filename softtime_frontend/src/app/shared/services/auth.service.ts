@@ -2,12 +2,14 @@ import { Injectable } from '@angular/core';
 import { Observable, tap } from 'rxjs';
 import { ApiService } from '../../core/api';
 import { SessionStore } from '../../core/session.store';
-import { LoginRequest, LoginResponse } from '../models';
+import { AdminSetupRequest, AdminSetupResult, LoginRequest, LoginResponse } from '../models';
+import { PrivilegesDraftService } from './privileges-draft.service';
 import { inject } from '@angular/core';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService extends ApiService {
   private readonly session = inject(SessionStore);
+  private readonly draft = inject(PrivilegesDraftService);
 
   login(body: LoginRequest): Observable<LoginResponse> {
     return this.http
@@ -19,7 +21,31 @@ export class AuthService extends ApiService {
     return this.http.get<LoginResponse>(this.url('/api/auth/me'));
   }
 
+  refreshMe(): Observable<LoginResponse> {
+    return this.me().pipe(
+      tap((res) => {
+        if (res.authorizedDatabases) {
+          this.session.setAuthorizedDatabases(res.authorizedDatabases);
+        }
+        if (res.permissions !== undefined) {
+          this.session.setPermissions(res.permissions, res.permissionsCustomized);
+        }
+      }),
+    );
+  }
+
+  /** Installation vierge (aucun compte) : le client affiche l'écran de création de l'administrateur. */
+  isFirstRun(): Observable<boolean> {
+    return this.http.get<boolean>(this.url('/api/auth/is-first-run'));
+  }
+
+  /** Crée le premier compte administrateur (refusé dès qu'un compte existe). */
+  createAdmin(body: AdminSetupRequest): Observable<AdminSetupResult> {
+    return this.http.post<AdminSetupResult>(this.url('/api/auth/create-admin'), body);
+  }
+
   logout(): void {
+    this.draft.clearAll();
     this.session.clear();
   }
 }

@@ -1,81 +1,64 @@
 import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
-import { SageDb } from '../../shared/models';
+import { SessionStore } from '../../core/session.store';
+import { Droit } from '../../core/rights';
+import { SageDb, PageChangeEvent } from '../../shared/models';
 import { SageDatabasesService } from '../../shared/services/users.service';
+import { AuthService } from '../../shared/services/auth.service';
 import {
   Column,
   DataTable,
   PageHeader,
   SoftButton,
   SoftCard,
-  SoftInput,
-  SoftModal,
-  SoftToggle,
+  SourceMappingStepper,
 } from '../../shared/components';
 import { asRow } from '../../shared/utils/date';
 
 @Component({
   selector: 'app-sage-databases',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    FormsModule,
-    PageHeader,
-    SoftButton,
-    SoftCard,
-    DataTable,
-    SoftModal,
-    SoftInput,
-    SoftToggle,
-  ],
+  imports: [PageHeader, SoftButton, SoftCard, DataTable, SourceMappingStepper],
   template: `
-    <page-header title="Bases SAGE" subtitle="Connexions aux bases SAGE ">
-      <soft-button (click)="openCreate()">Ajouter</soft-button>
+    <page-header title="Bases SAGE" subtitle="Connexions aux bases SAGE (ou toute autre base)">
+      @if (canCreate()) {
+        <soft-button (click)="openCreate()">Ajouter</soft-button>
+      }
     </page-header>
-
     <soft-card>
-      <data-table [columns]="columns" [rows]="rows()" [loading]="loading()">
+      <data-table [columns]="columns" [rows]="rows()" [loading]="loading()"
+        [serverSide]="true" [total]="total()" [serverPage]="page()" [serverPageSize]="pageSize"
+        [(searchTerm)]="tableSearch" (searchSubmit)="onTableSearch($event)"
+        (pageChange)="onPageChange($event)">
         <ng-template #actions let-row>
           <div class="soft-actions">
-            <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
-            <soft-button size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
+            @if (canUpdate(row)) {
+              <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
+            }
+            @if (canDelete(row)) {
+              <soft-button size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
+            }
           </div>
         </ng-template>
       </data-table>
     </soft-card>
 
-    <soft-modal [open]="modal()" [title]="editId() ? 'Modifier' : 'Nouvelle base SAGE'" (closed)="closeModal()">
-      <form class="form-grid">
-        <soft-input label="Serveur" [(ngModel)]="form.serveur" name="serveur"></soft-input>
-        <soft-input label="Nom base" [(ngModel)]="form.nomBd" name="nomBd"></soft-input>
-        <soft-input label="Login SQL" [(ngModel)]="form.login" name="login"></soft-input>
-        <soft-input label="Mot de passe" type="password" [(ngModel)]="form.password" name="password"></soft-input>
-        <label class="toggle-row">
-          <span>Authentification SQL</span>
-          <soft-toggle [(ngModel)]="form.sqlAuth" name="sqlAuth"></soft-toggle>
-        </label>
-      </form>
-      <div footer>
-        <soft-button variant="ghost" (click)="closeModal()">Annuler</soft-button>
-        <soft-button [loading]="saving()" (click)="save()">Enregistrer</soft-button>
-      </div>
-    </soft-modal>
+    <soft-source-mapping-stepper
+      [open]="modal()"
+      systemType="SAGE"
+      [title]="editId() ? 'Modifier une base SAGE' : 'Nouvelle base SAGE'"
+      [initial]="form()"
+      [saving]="saving()"
+      (closed)="closeModal()"
+      (saved)="onSaved($event)"
+    />
   `,
-  styles: [
-    `
-      .form-grid { display: grid; gap: 14px; }
-      .toggle-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        font-weight: 600;
-      }
-    `,
-  ],
 })
 export class SageDatabasesPage implements OnInit {
   private readonly svc = inject(SageDatabasesService);
+  private readonly auth = inject(AuthService);
+  private readonly session = inject(SessionStore);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
 
@@ -84,45 +67,93 @@ export class SageDatabasesPage implements OnInit {
   readonly modal = signal(false);
   readonly editId = signal<number | null>(null);
   readonly rows = signal<Record<string, unknown>[]>([]);
-
-  form: Partial<SageDb> = {};
-
+  readonly page = signal(1);
+  pageSize = 50;
+  readonly total = signal(0);
+  readonly tableSearch = signal('');
+  private requestSeq = 0;
+  readonly form = signal<Partial<SageDb>>({});
   readonly columns: Column[] = [
-    { key: 'id', label: 'ID' },
     { key: 'serveur', label: 'Serveur' },
     { key: 'nomBd', label: 'Base' },
-    { key: 'login', label: 'Login' },
-    {
-      key: 'sqlAuth',
-      label: 'SQL Auth',
-      format: (v) => (v ? 'Oui' : 'Non'),
-    },
+    { key: 'typeBase', label: 'Type' },
+    { key: 'sqlAuth', label: 'SQL Auth', format: (v) => (v ? 'Oui' : 'Non') },
   ];
 
   ngOnInit(): void {
-    this.load();
+    this.loadPage();
   }
 
-  load(): void {
+  canCreate(): boolean {
+    const perms = this.session.permissions();
+    if (!perms || perms.length === 0) {
+      return this.session.hasRight(Droit.Databases);
+    }
+    return perms.some((p) => p.startsWith('SAGE:') && p.endsWith(':CREATE')) || perms.includes('SAGE:CREATE');
+  }
+
+  canUpdate(row: Record<string, unknown>): boolean {
+    const perms = this.session.permissions();
+    if (!perms || perms.length === 0) {
+      return this.session.hasRight(Droit.Databases);
+    }
+    const nom = (row['nomBd'] as string) || '';
+    return perms.includes(`SAGE:${nom}:UPDATE`);
+  }
+
+  canDelete(row: Record<string, unknown>): boolean {
+    const perms = this.session.permissions();
+    if (!perms || perms.length === 0) {
+      return this.session.hasRight(Droit.Databases);
+    }
+    const nom = (row['nomBd'] as string) || '';
+    return perms.includes(`SAGE:${nom}:DELETE`);
+  }
+
+  loadPage(): void {
+    const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.list().subscribe({
-      next: (items) => {
-        this.rows.set(items.map(asRow));
+    this.svc.listPaged(this.page(), this.pageSize, this.tableSearch()).subscribe({
+      next: (r) => {
+        if (seq !== this.requestSeq) return;
+        this.rows.set(r.items.map(asRow));
+        this.total.set(r.total);
+        this.page.set(r.page);
         this.loading.set(false);
       },
-      error: () => this.loading.set(false),
+      error: () => { if (seq === this.requestSeq) this.loading.set(false); },
     });
   }
 
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
+    this.loadPage();
+  }
+
+  onTableSearch(term: string): void {
+    this.tableSearch.set(term);
+    this.page.set(1);
+    this.loadPage();
+  }
+
   openCreate(): void {
+    if (!this.canCreate()) {
+      this.toast.error("Vous n'avez pas la permission d'ajouter une base SAGE.");
+      return;
+    }
     this.editId.set(null);
-    this.form = { sqlAuth: true };
+    this.form.set({ sqlAuth: true, typeBase: 'STANDARD' });
     this.modal.set(true);
   }
 
   openEdit(row: Record<string, unknown>): void {
+    if (!this.canUpdate(row)) {
+      this.toast.error("Vous n'avez pas la permission de modifier cette base SAGE.");
+      return;
+    }
     this.editId.set(row['id'] as number);
-    this.form = { ...(row as unknown as SageDb) };
+    this.form.set({ ...(row as unknown as SageDb) });
     this.modal.set(true);
   }
 
@@ -130,28 +161,49 @@ export class SageDatabasesPage implements OnInit {
     this.modal.set(false);
   }
 
-  save(): void {
-    this.saving.set(true);
+  onSaved(dto: Record<string, unknown>): void {
     const id = this.editId();
-    const dto = this.form as SageDb;
-    const req = id ? this.svc.update(id, { ...dto, id }) : this.svc.create({ ...dto, id: 0 });
+    if (id && !this.canUpdate(dto)) {
+      this.toast.error("Vous n'avez pas la permission de modifier cette base SAGE.");
+      return;
+    }
+    if (!id && !this.canCreate()) {
+      this.toast.error("Vous n'avez pas la permission d'ajouter une base SAGE.");
+      return;
+    }
+    const payload = dto as unknown as SageDb;
+    this.saving.set(true);
+    const req = id ? this.svc.update(id, payload) : this.svc.create({ ...payload, id: 0 });
     req.subscribe({
       next: () => {
         this.saving.set(false);
         this.modal.set(false);
-        this.toast.success('Enregistré.');
-        this.load();
+        this.toast.success(
+          id
+            ? 'Enregistré.'
+            : "Base enregistrée. Pour qu'elle apparaisse dans le menu en haut, accordez l'accès dans « Accès bases ».",
+        );
+        this.auth.refreshMe().subscribe();
+        this.loadPage();
       },
-      error: () => this.saving.set(false),
+      error: (e) => {
+        this.saving.set(false);
+        this.toast.error(e?.error?.title || e?.error || 'Enregistrement impossible.');
+      },
     });
   }
 
   async remove(row: Record<string, unknown>): Promise<void> {
+    if (!this.canDelete(row)) {
+      this.toast.error("Vous n'avez pas la permission de supprimer cette base SAGE.");
+      return;
+    }
     if (!(await this.confirm.ask('Supprimer cette base SAGE ?'))) return;
     this.svc.remove(row['id'] as number).subscribe({
       next: () => {
         this.toast.success('Supprimé.');
-        this.load();
+        this.auth.refreshMe().subscribe();
+        this.loadPage();
       },
     });
   }

@@ -4,3 +4,7 @@ obj/
 publish/
 # JetBrains Rider / IntelliJ
 .idea/
+
+appsettings.json
+appsettings.Development.json
+appsettings.Production.json

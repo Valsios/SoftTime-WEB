@@ -21,5 +21,5 @@ public class CurrentUser : ICurrentUser
     public decimal? RoleId { get; init; }
     public string? Matricule { get; init; }
     public IReadOnlyCollection<int> Rights { get; init; } = Array.Empty<int>();
-    public bool HasRight(int droit) => Rights.Contains(droit);
+    public bool HasRight(int droit) => RoleId == 1 || Rights.Contains(droit);
 }

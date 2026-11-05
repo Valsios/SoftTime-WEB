@@ -1,7 +1,11 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
-import { Tolerance } from '../../shared/models';
+import { SessionStore } from '../../core/session.store';
+import { Droit } from '../../core/rights';
+import { Tolerance, PageChangeEvent } from '../../shared/models';
 import { CategoriesService, TolerancesService } from '../../shared/services/catalog.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, SoftSelect, SoftToggle } from '../../shared/components';
 import { asRow } from '../../shared/utils/date';
@@ -9,20 +13,24 @@ import { asRow } from '../../shared/utils/date';
 @Component({
   selector: 'app-tolerances',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, SoftSelect, SoftToggle],
+  imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, SoftSelect, SoftToggle],
   template: `
     <page-header title="Tolérances" subtitle="Tolérances entrée/sortie par catégorie">
-      <soft-button (click)="openCreate()">Ajouter</soft-button>
+      <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter</soft-button>
     </page-header>
 
     <div class="soft-toolbar">
-      <soft-select label="Catégorie" [(ngModel)]="filterCategoryId" name="filterCat" placeholder="Toutes" [options]="categoryOptions()" (ngModelChange)="load()"></soft-select>
+      <soft-select label="Catégorie" [(ngModel)]="filterCategoryId" name="filterCat" placeholder="Toutes" [options]="categoryOptions()" (ngModelChange)="onFilterChange()"></soft-select>
     </div>
 
     <soft-card>
-      <data-table [columns]="columns" [rows]="rows()" [loading]="loading()">
+      <data-table [columns]="columns" [rows]="rows()" [loading]="loading()"
+        [serverSide]="true" [total]="total()" [serverPage]="page()" [serverPageSize]="pageSize"
+        [(searchTerm)]="tableSearch" (searchSubmit)="onTableSearch($event)"
+        (pageChange)="onPageChange($event)">
         <ng-template #actions let-row>
-          <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
+          <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
+          <soft-button size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
         </ng-template>
       </data-table>
     </soft-card>
@@ -46,46 +54,124 @@ export class TolerancesPage implements OnInit {
   private readonly svc = inject(TolerancesService);
   private readonly catSvc = inject(CategoriesService);
   private readonly toast = inject(ToastService);
+  private readonly session = inject(SessionStore);
+
+  readonly canCreate = computed(() => this.session.hasPermission('PARAMS:TOLERANCES:CREATE', Droit.Parameters));
+  readonly canUpdate = computed(() => this.session.hasPermission('PARAMS:TOLERANCES:UPDATE', Droit.Parameters));
+  private readonly confirm = inject(ConfirmService);
 
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly modal = signal(false);
   readonly editId = signal<number | null>(null);
   readonly rows = signal<Record<string, unknown>[]>([]);
+  readonly page = signal(1);
+  pageSize = 50;
+  readonly total = signal(0);
+  readonly tableSearch = signal('');
+  private requestSeq = 0;
   readonly categoryOptions = signal<{ value: number; label: string }[]>([]);
+  private readonly categoryLabels = new Map<number, string>();
   filterCategoryId: number | null = null;
   form: Partial<Tolerance> = {};
 
   readonly columns: Column[] = [
-    { key: 'categoryId', label: 'Catégorie' },
+    { key: 'categoryName', label: 'Catégorie' },
     { key: 'tolerance', label: 'Tolérance' },
     { key: 'sortie', label: 'Sortie' },
     { key: 'typesTol', label: 'Type sortie', format: (v) => (v ? 'Oui' : 'Non') },
   ];
 
   ngOnInit(): void {
-    this.catSvc.list().subscribe((cats) =>
-      this.categoryOptions.set(cats.map((c) => ({ value: c.id, label: c.intitule ?? `Cat. ${c.id}` }))),
-    );
-    this.load();
-  }
-
-  load(): void {
-    this.loading.set(true);
-    this.svc.list(this.filterCategoryId ?? undefined).subscribe({
-      next: (items) => { this.rows.set(items.map(asRow)); this.loading.set(false); },
-      error: () => this.loading.set(false),
+    this.catSvc.list().subscribe({
+      next: (categories) => {
+        const entries = categories.map((category) => ({
+          id: category.id,
+          label: category.intitule ?? `Catégorie #${category.id}`,
+        }));
+        this.categoryOptions.set(entries.map((entry) => ({ value: entry.id, label: entry.label })));
+        for (const entry of entries) this.categoryLabels.set(entry.id, entry.label);
+        this.loadPage();
+      },
+      error: () => this.loadPage(),
     });
   }
 
+  loadPage(): void {
+    const seq = ++this.requestSeq;
+    this.loading.set(true);
+    this.svc.listPaged(this.page(), this.pageSize, this.filterCategoryId ?? undefined, this.tableSearch()).subscribe({
+      next: (r) => {
+        if (seq !== this.requestSeq) return;
+        this.rows.set(
+          r.items.map((tolerance) =>
+            asRow({
+              ...tolerance,
+              categoryName: this.categoryLabels.get(tolerance.categoryId) ?? '—',
+            }),
+          ),
+        );
+        this.total.set(r.total);
+        this.page.set(r.page);
+        this.loading.set(false);
+      },
+      error: () => { if (seq === this.requestSeq) this.loading.set(false); },
+    });
+  }
+
+  onFilterChange(): void {
+    this.page.set(1);
+    this.loadPage();
+  }
+
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
+    this.loadPage();
+  }
+
+  onTableSearch(term: string): void {
+    this.tableSearch.set(term);
+    this.page.set(1);
+    this.loadPage();
+  }
+
   openCreate(): void { this.editId.set(null); this.form = { categoryId: this.categoryOptions()[0]?.value ?? 0, tolerance: 0, typesTol: false }; this.modal.set(true); }
-  openEdit(row: Record<string, unknown>): void { this.editId.set(row['id'] as number); this.form = { ...(row as unknown as Tolerance) }; this.modal.set(true); }
+  openEdit(row: Record<string, unknown>): void {
+    this.ensureCategoryOption(row['categoryId'] as number);
+    this.editId.set(row['id'] as number);
+    this.form = {
+      id: row['id'] as number,
+      categoryId: row['categoryId'] as number,
+      tolerance: row['tolerance'] as number,
+      typesTol: row['typesTol'] as boolean,
+      sortie: (row['sortie'] as number | null) ?? null,
+    };
+    this.modal.set(true);
+  }
 
   save(): void {
+    if (!this.form.categoryId) {
+      this.toast.error('Sélectionnez une catégorie.');
+      return;
+    }
     this.saving.set(true);
     const id = this.editId();
     const dto = this.form as Tolerance;
     const req = id ? this.svc.update(id, { ...dto, id }) : this.svc.create({ ...dto, id: 0 });
-    req.subscribe({ next: () => { this.saving.set(false); this.modal.set(false); this.toast.success('Enregistré.'); this.load(); }, error: () => this.saving.set(false) });
+    req.subscribe({ next: () => { this.saving.set(false); this.modal.set(false); this.toast.success('Enregistré.'); this.loadPage(); }, error: () => this.saving.set(false) });
+  }
+
+  async remove(row: Record<string, unknown>): Promise<void> {
+    if (!(await this.confirm.ask('Supprimer cette tolérance ?'))) return;
+    this.svc.remove(row['id'] as number).subscribe({
+      next: () => { this.toast.success('Supprimé.'); this.loadPage(); },
+    });
+  }
+
+  /** Conserve la catégorie courante même si elle n'est plus dans la liste chargée. */
+  private ensureCategoryOption(id: number | null | undefined): void {
+    if (!id || this.categoryOptions().some((option) => Number(option.value) === id)) return;
+    this.categoryOptions.update((options) => [{ value: id, label: 'Catégorie introuvable' }, ...options]);
   }
 }

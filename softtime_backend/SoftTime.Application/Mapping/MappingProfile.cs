@@ -14,22 +14,34 @@ public class MappingProfile : Profile
             .ForMember(d => d.Id, o => o.MapFrom(s => s.ID))
             .ForMember(d => d.SqlAuth, o => o.MapFrom(s => s.TYPE_AUTH))
             .ForMember(d => d.NomBd, o => o.MapFrom(s => s.NOM_BD))
-            .ForMember(d => d.Password, o => o.MapFrom(s => s.TMDP))
-            .ForMember(d => d.Login, o => o.MapFrom(s => s.TLOGIN));
+            .ForMember(d => d.Password, o => o.Ignore())
+            .ForMember(d => d.PasswordDefined, o => o.MapFrom(s => !string.IsNullOrEmpty(s.TMDP)))
+            .ForMember(d => d.Login, o => o.MapFrom(s => s.TLOGIN))
+            .ForMember(d => d.TypeBase, o => o.MapFrom(s => s.TYPE_BASE))
+            .ForMember(d => d.Mappings, o => o.Ignore());
         CreateMap<SageDbDto, T_BDD_SAGE>()
             .ForMember(d => d.TYPE_AUTH, o => o.MapFrom(s => s.SqlAuth))
             .ForMember(d => d.NOM_BD, o => o.MapFrom(s => s.NomBd))
             .ForMember(d => d.TMDP, o => o.MapFrom(s => s.Password))
             .ForMember(d => d.TLOGIN, o => o.MapFrom(s => s.Login))
-            .ForMember(d => d.SERVEUR, o => o.MapFrom(s => s.Serveur));
+            .ForMember(d => d.SERVEUR, o => o.MapFrom(s => s.Serveur))
+            .ForMember(d => d.TYPE_BASE, o => o.MapFrom(s => s.TypeBase));
         CreateMap<T_BDD_POINTEUSE, PointeuseDbDto>()
             .ForMember(d => d.Id, o => o.MapFrom(s => s.ID))
             .ForMember(d => d.SqlAuth, o => o.MapFrom(s => s.TYPE_AUTH))
             .ForMember(d => d.NomBd, o => o.MapFrom(s => s.NOM_BD))
-            .ForMember(d => d.Password, o => o.MapFrom(s => s.TMDP))
+            .ForMember(d => d.Password, o => o.Ignore())
+            .ForMember(d => d.PasswordDefined, o => o.MapFrom(s => !string.IsNullOrEmpty(s.TMDP)))
             .ForMember(d => d.Login, o => o.MapFrom(s => s.TLOGIN))
             .ForMember(d => d.TypePointage, o => o.MapFrom(s => s.TYPE_POINTAGE))
-            .ForMember(d => d.Active, o => o.MapFrom(s => s.ACTIVE));
+            .ForMember(d => d.Active, o => o.MapFrom(s => s.ACTIVE))
+            .ForMember(d => d.TypeBase, o => o.MapFrom(s => s.TYPE_BASE))
+            .ForMember(d => d.Mappings, o => o.Ignore());
+        CreateMap<T_FIELD_ROLE, FieldRoleDto>();
+        CreateMap<T_SOURCE_FIELD_MAPPING, SourceFieldMappingDto>();
+        CreateMap<T_SOURCE_ENTITY_MAPPING, SourceEntityMappingDto>();
+        CreateMap<SourceFieldMappingDto, T_SOURCE_FIELD_MAPPING>();
+        CreateMap<SourceEntityMappingDto, T_SOURCE_ENTITY_MAPPING>();
         CreateMap<PointeuseDbDto, T_BDD_POINTEUSE>()
             .ForMember(d => d.TYPE_AUTH, o => o.MapFrom(s => s.SqlAuth))
             .ForMember(d => d.NOM_BD, o => o.MapFrom(s => s.NomBd))
@@ -37,7 +49,8 @@ public class MappingProfile : Profile
             .ForMember(d => d.TLOGIN, o => o.MapFrom(s => s.Login))
             .ForMember(d => d.TYPE_POINTAGE, o => o.MapFrom(s => s.TypePointage))
             .ForMember(d => d.ACTIVE, o => o.MapFrom(s => s.Active))
-            .ForMember(d => d.SERVEUR, o => o.MapFrom(s => s.Serveur));
+            .ForMember(d => d.SERVEUR, o => o.MapFrom(s => s.Serveur))
+            .ForMember(d => d.TYPE_BASE, o => o.MapFrom(s => s.TypeBase));
         CreateMap<T_CARDPAIE, CardPaieDto>()
             .ForMember(d => d.SageMatricule, o => o.MapFrom(s => s.SAGE_MATRICULE))
             .ForMember(d => d.SageNom, o => o.MapFrom(s => s.SAGE_NOM))
@@ -47,10 +60,12 @@ public class MappingProfile : Profile
             .ForMember(d => d.SageServeur, o => o.MapFrom(s => s.SAGE_SERVEUR))
             .ForMember(d => d.PointeuseServeur, o => o.MapFrom(s => s.POINTEUSE_SERVEUR))
             .ForMember(d => d.SageBdd, o => o.MapFrom(s => s.SAGE_BDD))
-            .ForMember(d => d.PointeuseBdd, o => o.MapFrom(s => s.POINTEUSE_BDD));
+            .ForMember(d => d.PointeuseBdd, o => o.MapFrom(s => s.POINTEUSE_BDD))
+            .ForMember(d => d.Origine, o => o.MapFrom(s => s.ORIGINE))
+            .ForMember(d => d.Actif, o => o.MapFrom(s => s.ACTIF))
+            .ForMember(d => d.Departement, o => o.MapFrom(s => s.DEPARTEMENT));
         CreateMap<CardPaieDto, T_CARDPAIE>()
             .ForMember(d => d.SAGE_MATRICULE, o => o.MapFrom(s => s.SageMatricule))
-            .ForMember(d => d.BRANCHE, o => o.MapFrom(s => s.Branche))
             .ForMember(d => d.SAGE_NOM, o => o.MapFrom(s => s.SageNom))
             .ForMember(d => d.SAGE_PRENOM, o => o.MapFrom(s => s.SagePrenom))
             .ForMember(d => d.POINTEUSE_NUMERO, o => o.MapFrom(s => s.PointeuseNumero))
@@ -58,7 +73,8 @@ public class MappingProfile : Profile
             .ForMember(d => d.SAGE_SERVEUR, o => o.MapFrom(s => s.SageServeur))
             .ForMember(d => d.POINTEUSE_SERVEUR, o => o.MapFrom(s => s.PointeuseServeur))
             .ForMember(d => d.SAGE_BDD, o => o.MapFrom(s => s.SageBdd))
-            .ForMember(d => d.POINTEUSE_BDD, o => o.MapFrom(s => s.PointeuseBdd));
+            .ForMember(d => d.POINTEUSE_BDD, o => o.MapFrom(s => s.PointeuseBdd))
+            .ForMember(d => d.DEPARTEMENT, o => o.MapFrom(s => s.Departement));
         CreateMap<T_CATEGORIE, CategoryDto>()
             .ForMember(d => d.Id, o => o.MapFrom(s => s.IDCATEGORIE))
             .ForMember(d => d.SupervisorCardId, o => o.MapFrom(s => s.ID_CARDPAIE))
@@ -68,7 +84,9 @@ public class MappingProfile : Profile
             .ForMember(d => d.Id, o => o.MapFrom(s => s.ID))
             .ForMember(d => d.Categorie, o => o.MapFrom(s => s.CATEGORIE))
             .ForMember(d => d.Intitule, o => o.MapFrom(s => s.INTITULE))
-            .ForMember(d => d.CodeConstante, o => o.MapFrom(s => s.CODE_CONSTANTE));
+            .ForMember(d => d.CodeConstante, o => o.MapFrom(s => s.CODE_CONSTANTE))
+            // La table cible n'est plus stockee : elle provient du mapping « Code constante ».
+            .ForMember(d => d.TableCible, o => o.Ignore());
         CreateMap<T_FERIE, HolidayDto>();
         CreateMap<T_PLANNING, ShiftDto>()
             .ForMember(d => d.Id, o => o.MapFrom(s => s.IDPLANNING))

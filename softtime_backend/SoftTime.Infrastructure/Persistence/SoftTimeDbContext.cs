@@ -5,7 +5,32 @@ namespace SoftTime.Infrastructure.Persistence;
 
 public class SoftTimeDbContext : DbContext
 {
+    private readonly AuditJournalSaveChangesInterceptor? _auditJournal;
+
     public SoftTimeDbContext(DbContextOptions<SoftTimeDbContext> options) : base(options) { }
+
+    public SoftTimeDbContext(
+        DbContextOptions<SoftTimeDbContext> options,
+        AuditJournalSaveChangesInterceptor auditJournal) : base(options)
+        => _auditJournal = auditJournal;
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+        => _auditJournal?.SaveChanges(this, acceptAllChangesOnSuccess)
+           ?? base.SaveChanges(acceptAllChangesOnSuccess);
+
+    public override Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default)
+        => _auditJournal?.SaveChangesAsync(this, acceptAllChangesOnSuccess, cancellationToken)
+           ?? base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+
+    internal int SaveChangesWithoutAudit(bool acceptAllChangesOnSuccess)
+        => base.SaveChanges(acceptAllChangesOnSuccess);
+
+    internal Task<int> SaveChangesWithoutAuditAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken)
+        => base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
 
     public DbSet<T_ROLE> T_ROLE => Set<T_ROLE>();
     public DbSet<T_RESPONSABLE> T_RESPONSABLE => Set<T_RESPONSABLE>();
@@ -21,6 +46,7 @@ public class SoftTimeDbContext : DbContext
     public DbSet<T_HEURECORRIGER> T_HEURECORRIGER => Set<T_HEURECORRIGER>();
     public DbSet<T_HEUREANOMALIE> T_HEUREANOMALIE => Set<T_HEUREANOMALIE>();
     public DbSet<suivi_SUIVI> suivi_SUIVI => Set<suivi_SUIVI>();
+    public DbSet<suivi_JOURNAL> suivi_JOURNAL => Set<suivi_JOURNAL>();
     public DbSet<suivi_T> suivi_T => Set<suivi_T>();
     public DbSet<suivi_TBLCLN> suivi_TBLCLN => Set<suivi_TBLCLN>();
     public DbSet<T_FRAIS> T_FRAIS => Set<T_FRAIS>();
@@ -35,7 +61,6 @@ public class SoftTimeDbContext : DbContext
     public DbSet<T_MAJORATION> T_MAJORATION => Set<T_MAJORATION>();
     public DbSet<T_TOLERANCE> T_TOLERANCE => Set<T_TOLERANCE>();
     public DbSet<T_HS_VALIDER> T_HS_VALIDER => Set<T_HS_VALIDER>();
-    public DbSet<T_CARDPAIE_SAUVE> T_CARDPAIE_SAUVE => Set<T_CARDPAIE_SAUVE>();
     public DbSet<T_CATEGORIE> T_CATEGORIE => Set<T_CATEGORIE>();
     public DbSet<T_CAT_SAL> T_CAT_SAL => Set<T_CAT_SAL>();
     public DbSet<T_POINTAGE> T_POINTAGE => Set<T_POINTAGE>();
@@ -46,6 +71,16 @@ public class SoftTimeDbContext : DbContext
     public DbSet<T_CARDPAIE> T_CARDPAIE => Set<T_CARDPAIE>();
     public DbSet<T_HSSAL> T_HSSAL => Set<T_HSSAL>();
     public DbSet<T_CODE_CONSTANTE> T_CODE_CONSTANTE => Set<T_CODE_CONSTANTE>();
+    public DbSet<T_PAIE_ECRITURE> T_PAIE_ECRITURE => Set<T_PAIE_ECRITURE>();
+    public DbSet<T_FIELD_ROLE> T_FIELD_ROLE => Set<T_FIELD_ROLE>();
+    public DbSet<T_SOURCE_ENTITY_MAPPING> T_SOURCE_ENTITY_MAPPING => Set<T_SOURCE_ENTITY_MAPPING>();
+    public DbSet<T_SOURCE_FIELD_MAPPING> T_SOURCE_FIELD_MAPPING => Set<T_SOURCE_FIELD_MAPPING>();
+    public DbSet<T_USER_PERMISSION> T_USER_PERMISSION => Set<T_USER_PERMISSION>();
+    public DbSet<T_ROLE_PERMISSION> T_ROLE_PERMISSION => Set<T_ROLE_PERMISSION>();
+    public DbSet<T_AUDIT_DROIT> T_AUDIT_DROIT => Set<T_AUDIT_DROIT>();
+    public DbSet<T_HISTORIQUE_POINTAGE> T_HISTORIQUE_POINTAGE => Set<T_HISTORIQUE_POINTAGE>();
+    public DbSet<T_HISTORIQUE_ANOMALIE> T_HISTORIQUE_ANOMALIE => Set<T_HISTORIQUE_ANOMALIE>();
+    public DbSet<T_HISTORIQUE_HS> T_HISTORIQUE_HS => Set<T_HISTORIQUE_HS>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -59,6 +94,12 @@ public class SoftTimeDbContext : DbContext
             e.Property(x => x.Cotation).HasPrecision(18, 2);
         });
 
+        modelBuilder.Entity<T_PAIE_ECRITURE>(e =>
+        {
+            e.ToTable("T_PAIE_ECRITURE");
+            e.HasIndex(x => new { x.BDD_SAGE, x.CATEGORIE }).IsUnique();
+        });
+
         modelBuilder.Entity<T_RESPONSABLE>(e =>
         {
             e.ToTable("T_RESPONSABLE");
@@ -68,6 +109,164 @@ public class SoftTimeDbContext : DbContext
             e.Property(x => x.LOGIN).IsRequired(false);
             e.Property(x => x.PASSWORD).IsRequired(false);
             e.Property(x => x.NOMRESPONSABLE).IsRequired(false);
+        });
+
+        modelBuilder.Entity<T_FIELD_ROLE>(e =>
+        {
+            e.ToTable("T_FIELD_ROLE");
+            e.HasKey(x => x.Code);
+            e.Property(x => x.Code).HasMaxLength(64);
+            e.Property(x => x.Label).HasMaxLength(128);
+            e.Property(x => x.SystemType).HasMaxLength(16);
+            e.Property(x => x.EntityKind).HasMaxLength(32);
+            e.Property(x => x.AutoMappingPatterns).HasMaxLength(256);
+        });
+
+        modelBuilder.Entity<T_SOURCE_ENTITY_MAPPING>(e =>
+        {
+            e.ToTable("T_SOURCE_ENTITY_MAPPING");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.SystemType).HasMaxLength(16);
+            e.Property(x => x.EntityKind).HasMaxLength(32);
+            e.Property(x => x.SourceTable).HasMaxLength(128);
+            e.HasMany(x => x.Fields)
+                .WithOne()
+                .HasForeignKey(x => x.EntityMappingId)
+                .OnDelete(DeleteBehavior.Cascade);
+            // Index filtres : la FK non applicable est NULL pour chaque ligne, or SQL Server
+            // traite les NULL comme egaux dans un index unique (voir EnsureMappingSchemaAsync).
+            e.HasIndex(x => new { x.SageDbId, x.EntityKind }).IsUnique().HasFilter("[SageDbId] IS NOT NULL");
+            e.HasIndex(x => new { x.PointeuseDbId, x.EntityKind }).IsUnique().HasFilter("[PointeuseDbId] IS NOT NULL");
+        });
+
+        modelBuilder.Entity<T_SOURCE_FIELD_MAPPING>(e =>
+        {
+            e.ToTable("T_SOURCE_FIELD_MAPPING");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.FieldRoleCode).HasMaxLength(64);
+            e.Property(x => x.SourceColumn).HasMaxLength(128);
+            e.HasIndex(x => new { x.EntityMappingId, x.FieldRoleCode }).IsUnique();
+        });
+
+        modelBuilder.Entity<T_USER_PERMISSION>(e =>
+        {
+            e.ToTable("T_USER_PERMISSION");
+            e.HasKey(x => x.ID);
+            e.Property(x => x.IDRESPONSABLE).HasPrecision(18, 0);
+            e.Property(x => x.PERMISSION_CODE).HasMaxLength(128);
+            e.HasIndex(x => new { x.IDRESPONSABLE, x.PERMISSION_CODE }).IsUnique();
+        });
+
+        modelBuilder.Entity<T_ROLE_PERMISSION>(e =>
+        {
+            e.ToTable("T_ROLE_PERMISSION");
+            e.HasKey(x => x.ID);
+            e.Property(x => x.IDROLE).HasPrecision(18, 0);
+            e.Property(x => x.PERMISSION_CODE).HasMaxLength(128);
+            e.HasIndex(x => new { x.IDROLE, x.PERMISSION_CODE }).IsUnique();
+        });
+
+        modelBuilder.Entity<T_AUDIT_DROIT>(e =>
+        {
+            e.ToTable("T_AUDIT_DROIT");
+            e.HasKey(x => x.ID);
+            e.Property(x => x.ID_OPERATEUR).HasPrecision(18, 0);
+            e.Property(x => x.ID_CIBLE).HasPrecision(18, 0);
+            e.Property(x => x.LOGIN_OPERATEUR).HasMaxLength(100);
+            e.Property(x => x.TYPE_CIBLE).HasMaxLength(20);
+            e.Property(x => x.NOM_CIBLE).HasMaxLength(100);
+            e.Property(x => x.ACTION).HasMaxLength(50);
+        });
+
+        // Longueurs des colonnes de filtre, alignées sur migrations/add_pagination_performance_indexes.sql.
+        // La source de vérité reste le SQL : ces annotations documentent le modèle et dimensionnent
+        // les paramètres EF, sans modifier une base existante.
+        modelBuilder.Entity<T_POINTAGE>(e =>
+        {
+            e.Property(x => x.NOM_BDD_SAGE).HasMaxLength(128);
+            e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
+        });
+        modelBuilder.Entity<T_HEURECORRIGER>(e =>
+        {
+            e.Property(x => x.BDD_SAGE).HasMaxLength(128);
+            e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
+        });
+        modelBuilder.Entity<T_HEUREANOMALIE>(e =>
+        {
+            e.Property(x => x.BDD_SAGE).HasMaxLength(128);
+            e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
+        });
+        modelBuilder.Entity<T_CANTINE>(e =>
+        {
+            e.Property(x => x.NOM_BDD_SAGE).HasMaxLength(128);
+            e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
+        });
+        modelBuilder.Entity<T_FRAIS>(e =>
+        {
+            e.Property(x => x.NOM_BDD_SAGE).HasMaxLength(128);
+            e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
+        });
+        modelBuilder.Entity<T_PLANNING_SAL>(e => e.Property(x => x.BDD_SAGE).HasMaxLength(128));
+        modelBuilder.Entity<T_CARDPAIE>(e =>
+        {
+            e.Property(x => x.SAGE_BDD).HasMaxLength(128);
+            e.Property(x => x.SAGE_MATRICULE).HasMaxLength(64);
+        });
+        modelBuilder.Entity<T_HS_VALIDER>(e =>
+        {
+            e.Property(x => x.BDD_SAGE).HasMaxLength(128);
+            e.Property(x => x.MATRICULES).HasMaxLength(64);
+        });
+        modelBuilder.Entity<T_HSExoImp>(e =>
+        {
+            e.Property(x => x.BDD_SAGE).HasMaxLength(128);
+            e.Property(x => x.Matricule).HasMaxLength(64);
+        });
+        modelBuilder.Entity<T_HSSemaine>(e =>
+        {
+            e.Property(x => x.BDD_SAGE).HasMaxLength(128);
+            e.Property(x => x.Matricule).HasMaxLength(64);
+        });
+        modelBuilder.Entity<T_HEUREDIMANCHE>(e =>
+        {
+            e.Property(x => x.BDD_SAGE).HasMaxLength(128);
+            e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
+        });
+        modelBuilder.Entity<T_HISTORIQUE_POINTAGE>(e =>
+        {
+            e.Property(x => x.NOM_BDD_SAGE).HasMaxLength(128);
+            e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
+        });
+        modelBuilder.Entity<T_HISTORIQUE_ANOMALIE>(e =>
+        {
+            e.Property(x => x.BDD_SAGE).HasMaxLength(128);
+            e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
+        });
+        modelBuilder.Entity<T_HISTORIQUE_HS>(e =>
+        {
+            e.Property(x => x.BDD_SAGE).HasMaxLength(128);
+            e.Property(x => x.MATRICULE).HasMaxLength(64);
+        });
+        modelBuilder.Entity<suivi_SUIVI>(e =>
+        {
+            e.Property(x => x._TABLES).HasMaxLength(128);
+            e.Property(x => x._ACTIONS).HasMaxLength(128);
+        });
+        modelBuilder.Entity<suivi_JOURNAL>(e =>
+        {
+            e.Property(x => x.DATE_UTC).HasColumnType("datetime2");
+            e.Property(x => x.TABLES).HasMaxLength(128);
+            e.Property(x => x.CLES).HasMaxLength(450);
+            e.Property(x => x.COLONNES).HasMaxLength(128);
+            e.Property(x => x.ACTIONS).HasMaxLength(32);
+            e.Property(x => x.USERS).HasMaxLength(256);
+            e.Property(x => x.BASE_SAGE).HasMaxLength(128);
+            e.Property(x => x.BASE_POINTEUSE).HasMaxLength(128);
+            e.Property(x => x.SOURCE).HasMaxLength(64);
+            e.HasIndex(x => new { x.DATE_UTC, x.Id }).HasDatabaseName("IX_suivi_JOURNAL_Date").IsDescending(true, true);
+            e.HasIndex(x => new { x.BASE_SAGE, x.DATE_UTC, x.Id }).HasDatabaseName("IX_suivi_JOURNAL_Base_Date").IsDescending(false, true, true);
+            e.HasIndex(x => new { x.TABLES, x.ACTIONS, x.DATE_UTC, x.Id }).HasDatabaseName("IX_suivi_JOURNAL_Table_Action_Date").IsDescending(false, false, true, true);
+            e.HasIndex(x => new { x.CORRELATIONS, x.Id }).HasDatabaseName("IX_suivi_JOURNAL_Correlation");
         });
     }
 }

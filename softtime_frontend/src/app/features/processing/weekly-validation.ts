@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
-import { PeriodRequest } from '../../shared/models';
+import { PeriodRequest, PageChangeEvent } from '../../shared/models';
 import { WeeklyValidationService } from '../../shared/services/processing.service';
+import { ClockParamsService } from '../../shared/services/catalog.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { Column, DataTable, PageHeader, SoftButton, SoftCard, PeriodFilter } from '../../shared/components';
 import { asRow, fmtDate } from '../../shared/utils/date';
@@ -16,33 +17,67 @@ import { asRow, fmtDate } from '../../shared/utils/date';
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
       <soft-button variant="secondary" [loading]="busy()" (click)="validate(false)">Annuler validation</soft-button>
       <soft-button [loading]="busy()" (click)="validate(true)">Valider semaine</soft-button>
+      <soft-button variant="danger" [loading]="busy()" (click)="purge()">Purger la validation</soft-button>
     </page-header>
 
-    <period-filter searchLabel="Calculer" (search)="preview($event)"></period-filter>
+    <period-filter [mondaySundayWeek]="true" searchLabel="Calculer" (search)="preview($event)"></period-filter>
 
     <soft-card>
+      <p class="hint">
+        @if (modeLabel()) { <strong>{{ modeLabel() }}</strong> — }
+        {{ selectedKeys().length }} salarié(s) sélectionné(s) — la sélection est conservée entre les pages ;
+        « tout sélectionner » porte sur la page affichée.
+      </p>
       <data-table
         [columns]="columns"
         [rows]="rows()"
         [loading]="loading()"
         [selectable]="true"
         trackKey="matricule"
+        [serverSide]="true"
+        [total]="total()"
+        [serverPageSize]="pageSize"
+        [serverPage]="page()"
+        [(searchTerm)]="tableSearch"
+        (searchSubmit)="onTableSearch($event)"
+        (pageChange)="onPageChange($event)"
         [(selectedKeys)]="selectedKeys"
       ></data-table>
     </soft-card>
   `,
+  styles: [`.hint { margin: 0 0 12px; color: var(--text-muted); font-size: 13px; }`],
 })
 export class WeeklyValidationPage {
   private readonly svc = inject(WeeklyValidationService);
   private readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
+  private readonly clock = inject(ClockParamsService);
 
   readonly loading = signal(false);
   readonly busy = signal(false);
+  readonly modeLabel = signal('');
+  pageSize = 50;
   readonly rows = signal<Record<string, unknown>[]>([]);
+  readonly page = signal(1);
+  readonly total = signal(0);
+  readonly tableSearch = signal('');
   readonly selectedKeys = signal<string[]>([]);
   private lastFilter: PeriodRequest | null = null;
+  private requestSeq = 0;
+
+  constructor() {
+    // Affiche le mode de calcul actif (T_CLOCK.MULTIPOINT) : il change la règle des HS.
+    this.clock.get().subscribe({
+      next: (c) =>
+        this.modeLabel.set(
+          c.multiPoint
+            ? 'Multi-pointage : HS au-delà de HEURESEMAINE'
+            : '2 pointages : somme des dépassements journaliers',
+        ),
+      error: () => this.modeLabel.set(''),
+    });
+  }
 
   readonly columns: Column[] = [
     { key: 'matricule', label: 'Matricule' },
@@ -50,6 +85,9 @@ export class WeeklyValidationPage {
     { key: 'dateFin', label: 'Fin', format: fmtDate },
     { key: 'ht', label: 'HT' },
     { key: 'hs', label: 'HS' },
+    { key: 'nuit', label: 'Maj. Nuit' },
+    { key: 'dimanche', label: 'Maj. Dimanche' },
+    { key: 'feries', label: 'Maj. Férié' },
     { key: 'retard', label: 'Retard' },
     { key: 'absence', label: 'Absence' },
     { key: 'validated', label: 'Validé', format: (v) => (v ? 'Oui' : 'Non') },
@@ -57,14 +95,42 @@ export class WeeklyValidationPage {
 
   preview(filter: PeriodRequest): void {
     this.lastFilter = filter;
+    this.selectedKeys.set([]);
+    this.page.set(1);
+    this.loadPage();
+  }
+
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
+    this.loadPage();
+  }
+
+  onTableSearch(term: string): void {
+    this.tableSearch.set(term);
+    this.selectedKeys.set([]);
+    this.page.set(1);
+    this.loadPage();
+  }
+
+  private loadPage(): void {
+    if (!this.lastFilter) return;
+    const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.preview(filter).subscribe({
-      next: (items) => {
-        this.rows.set(items.filter((i) => !i.validated).map(asRow));
-        this.selectedKeys.set([]);
+    this.svc.previewPaged({
+      ...this.lastFilter,
+      search: this.tableSearch(),
+      page: this.page(),
+      pageSize: this.pageSize,
+    }).subscribe({
+      next: (r) => {
+        if (seq !== this.requestSeq) return;
+        this.rows.set(r.items.map(asRow));
+        this.total.set(r.total);
+        this.page.set(r.page);
         this.loading.set(false);
       },
-      error: () => this.loading.set(false),
+      error: () => { if (seq === this.requestSeq) this.loading.set(false); },
     });
   }
 
@@ -89,13 +155,45 @@ export class WeeklyValidationPage {
       next: () => {
         this.busy.set(false);
         this.toast.success(ok ? 'Lignes sélectionnées validées.' : 'Validation annulée pour la sélection.');
-        this.preview(this.lastFilter!);
+        this.selectedKeys.set([]);
+        this.loadPage();
       },
       error: () => this.busy.set(false),
     });
   }
 
   exportExcel(): void {
-    this.excel.download('validation-semaine', this.columns, this.rows());
+    if (!this.lastFilter) {
+      this.excel.download('validation-semaine', this.columns, this.rows(), 'Données', this.tableSearch());
+      return;
+    }
+    this.loading.set(true);
+    this.svc.preview(this.lastFilter).subscribe({
+      next: (items) => {
+        this.loading.set(false);
+        // L'export reprend exactement la grille, y compris les semaines déjà validées.
+        this.excel.download('validation-semaine', this.columns, items.map(asRow), 'Données', this.tableSearch());
+      },
+      error: () => this.loading.set(false),
+    });
+  }
+
+  /** Purge la validation de la semaine : supprime T_HS_VALIDER et déverrouille les heures corrigées. */
+  async purge(): Promise<void> {
+    if (!this.lastFilter) {
+      this.toast.warning("Lancez d'abord un aperçu.");
+      return;
+    }
+    if (!(await this.confirm.ask(
+      'Purger la validation de cette semaine ? Les heures corrigées seront déverrouillées et la semaine redeviendra calculable.'))) return;
+    this.busy.set(true);
+    this.svc.purge(this.lastFilter).subscribe({
+      next: (r) => {
+        this.busy.set(false);
+        this.toast.success(r.message);
+        this.loadPage();
+      },
+      error: () => this.busy.set(false),
+    });
   }
 }

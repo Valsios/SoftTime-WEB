@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Services;
 using SoftTime.Infrastructure.Excel;
@@ -14,25 +15,120 @@ namespace SoftTime.Api.Controllers;
 public class SageDatabasesController : ControllerBase
 {
     private readonly CatalogService _svc;
-    public SageDatabasesController(CatalogService svc) => _svc = svc;
+    private readonly AuthService _auth;
+    private readonly ICurrentUser _user;
+    private readonly DatabaseConfigurationAuthorizer _configAuth;
+
+    public SageDatabasesController(CatalogService svc, AuthService auth, ICurrentUser user, DatabaseConfigurationAuthorizer configAuth)
+    {
+        _svc = svc;
+        _auth = auth;
+        _user = user;
+        _configAuth = configAuth;
+    }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListSageAsync(ct));
+    public async Task<IActionResult> GetAll(CancellationToken ct)
+    {
+        var list = await _svc.ListSageAsync(ct);
+        if (_user.UserId is decimal uid)
+        {
+            var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
+            if (p.IsCustomized)
+            {
+                list = list.Where(s => !string.IsNullOrEmpty(s.NomBd) && p.GrantedPermissions.Contains($"SAGE:{s.NomBd}:READ")).ToList();
+            }
+        }
+        return Ok(list);
+    }
+
+    [HttpGet("paged")]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
+    {
+        IReadOnlyCollection<string>? allowed = null;
+        if (_user.UserId is decimal uid)
+        {
+            var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
+            if (p.IsCustomized)
+                allowed = DatabasePermissionNames.Read(p.GrantedPermissions, "SAGE");
+        }
+        return Ok(await _svc.ListSagePagedAsync(allowed, page, pageSize, search, ct));
+    }
 
     [HttpPost]
+    [RequireDroit(Droit.Databases)]
     public async Task<IActionResult> Create([FromBody] SageDbDto dto, CancellationToken ct)
         => Ok(await _svc.SaveSageAsync(dto with { Id = 0 }, ct));
 
     [HttpPut("{id:int}")]
+    [RequireDroit(Droit.Databases)]
     public async Task<IActionResult> Update(int id, [FromBody] SageDbDto dto, CancellationToken ct)
         => Ok(await _svc.SaveSageAsync(dto with { Id = id }, ct));
 
     [HttpDelete("{id:int}")]
+    [RequireDroit(Droit.Databases)]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
         await _svc.DeleteSageAsync(id, ct);
         return NoContent();
     }
+
+    [HttpPost("test-connection")]
+    [RequireDroit(Droit.Databases)]
+    public async Task<IActionResult> TestConnection([FromBody] TestSageConnectionDto dto, CancellationToken ct)
+    {
+        await _configAuth.EnsureCanConfigureAnyAsync(DatabaseKind.Sage, ct);
+        return Ok(await _svc.TestSageConnectionAsync(dto, ct));
+    }
+
+    [HttpPost("activate")]
+    public async Task<IActionResult> Activate(CancellationToken ct)
+        => Ok(await _svc.ActivateSagePairAsync(ct));
+
+    [HttpGet("lookup/{matricule}")]
+    public async Task<IActionResult> Lookup(string matricule, CancellationToken ct)
+        => Ok(await _svc.GetDepartementServiceAsync(matricule, ct));
+
+    [HttpPost("lookup-batch")]
+    public async Task<IActionResult> LookupBatch([FromBody] string[] matricules, CancellationToken ct)
+        => Ok(await _svc.GetDepartementServiceBatchAsync(matricules ?? Array.Empty<string>(), ct));
+
+    [HttpGet("departement-service-options")]
+    public async Task<IActionResult> DepartementServiceOptions(CancellationToken ct)
+        => Ok(await _svc.GetDepartementServiceOptionsAsync(ct));
+}
+
+[ApiController]
+[Authorize]
+[RequireDroit(Droit.Parameters)]
+[Route("api/payroll-write-config")]
+[Tags("PayrollWriteConfiguration")]
+public class PayrollWriteConfigurationController : ControllerBase
+{
+    private readonly CatalogService _svc;
+    public PayrollWriteConfigurationController(CatalogService svc) => _svc = svc;
+
+    [HttpGet]
+    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListPayrollWriteConfigurationsAsync(ct));
+
+    [HttpPost]
+    public async Task<IActionResult> Create([FromBody] PayrollWriteConfigurationDto dto, CancellationToken ct)
+        => Ok(await _svc.SavePayrollWriteConfigurationAsync(dto with { Id = 0 }, ct));
+
+    [HttpPut("{id:int}")]
+    public async Task<IActionResult> Update(int id, [FromBody] PayrollWriteConfigurationDto dto, CancellationToken ct)
+        => Ok(await _svc.SavePayrollWriteConfigurationAsync(dto with { Id = id }, ct));
+
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> Delete(int id, CancellationToken ct)
+    {
+        await _svc.DeletePayrollWriteConfigurationAsync(id, ct);
+        return NoContent();
+    }
+
+    [HttpPost("test")]
+    public async Task<IActionResult> Test(CancellationToken ct) => Ok(await _svc.TestPayrollWriteConfigurationAsync(ct));
 }
 
 [ApiController]
@@ -42,24 +138,71 @@ public class SageDatabasesController : ControllerBase
 public class PointeuseDatabasesController : ControllerBase
 {
     private readonly CatalogService _svc;
-    public PointeuseDatabasesController(CatalogService svc) => _svc = svc;
+    private readonly AuthService _auth;
+    private readonly ICurrentUser _user;
+    private readonly DatabaseConfigurationAuthorizer _configAuth;
+
+    public PointeuseDatabasesController(CatalogService svc, AuthService auth, ICurrentUser user, DatabaseConfigurationAuthorizer configAuth)
+    {
+        _svc = svc;
+        _auth = auth;
+        _user = user;
+        _configAuth = configAuth;
+    }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListPointeuseAsync(ct));
+    public async Task<IActionResult> GetAll(CancellationToken ct)
+    {
+        var list = await _svc.ListPointeuseAsync(ct);
+        if (_user.UserId is decimal uid)
+        {
+            var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
+            if (p.IsCustomized)
+            {
+                list = list.Where(s => !string.IsNullOrEmpty(s.NomBd) && p.GrantedPermissions.Contains($"POINTEUSE:{s.NomBd}:READ")).ToList();
+            }
+        }
+        return Ok(list);
+    }
+
+    [HttpGet("paged")]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
+    {
+        IReadOnlyCollection<string>? allowed = null;
+        if (_user.UserId is decimal uid)
+        {
+            var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
+            if (p.IsCustomized)
+                allowed = DatabasePermissionNames.Read(p.GrantedPermissions, "POINTEUSE");
+        }
+        return Ok(await _svc.ListPointeusePagedAsync(allowed, page, pageSize, search, ct));
+    }
 
     [HttpPost]
+    [RequireDroit(Droit.Databases)]
     public async Task<IActionResult> Create([FromBody] PointeuseDbDto dto, CancellationToken ct)
         => Ok(await _svc.SavePointeuseAsync(dto with { Id = 0 }, ct));
 
     [HttpPut("{id:int}")]
+    [RequireDroit(Droit.Databases)]
     public async Task<IActionResult> Update(int id, [FromBody] PointeuseDbDto dto, CancellationToken ct)
         => Ok(await _svc.SavePointeuseAsync(dto with { Id = id }, ct));
 
     [HttpDelete("{id:int}")]
+    [RequireDroit(Droit.Databases)]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
         await _svc.DeletePointeuseAsync(id, ct);
         return NoContent();
+    }
+
+    [HttpPost("test-connection")]
+    [RequireDroit(Droit.Databases)]
+    public async Task<IActionResult> TestConnection([FromBody] TestPointeuseConnectionDto dto, CancellationToken ct)
+    {
+        await _configAuth.EnsureCanConfigureAnyAsync(DatabaseKind.Pointeuse, ct);
+        return Ok(await _svc.TestPointeuseConnectionAsync(dto, ct));
     }
 }
 
@@ -101,6 +244,25 @@ public class CorrespondenceModeController : ControllerBase
 
 [ApiController]
 [Authorize]
+[RequireDroit(Droit.Parameters)]
+[Route("api/departement-service")]
+[Tags("DepartementService")]
+public class DepartementServiceController : ControllerBase
+{
+    private readonly CatalogService _svc;
+    public DepartementServiceController(CatalogService svc) => _svc = svc;
+
+    [HttpGet("lookup/{matricule}")]
+    public async Task<IActionResult> Lookup(string matricule, CancellationToken ct)
+        => Ok(await _svc.GetDepartementServiceAsync(matricule, ct));
+
+    [HttpPost("lookup-batch")]
+    public async Task<IActionResult> LookupBatch([FromBody] string[] matricules, CancellationToken ct)
+        => Ok(await _svc.GetDepartementServiceBatchAsync(matricules ?? Array.Empty<string>(), ct));
+}
+
+[ApiController]
+[Authorize]
 [Route("api/cardpaie")]
 [Tags("CardPaie")]
 public class CardPaieController : ControllerBase
@@ -110,6 +272,11 @@ public class CardPaieController : ControllerBase
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListCardsAsync(ct));
+
+    [HttpGet("paged")]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
+        => Ok(await _svc.ListCardsPagedAsync(page, pageSize, search, ct));
 
     [HttpPost]
     [RequireDroit(Droit.Parameters)]
@@ -129,10 +296,25 @@ public class CardPaieController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Supprime la correspondance SAGE ↔ badge identifiée par le couple de matricules
+    /// (portage de <c>SupprimerParCorrespondance</c> du desktop).
+    /// </summary>
+    [HttpDelete("by-correspondence")]
+    [RequireDroit(Droit.Parameters)]
+    public async Task<IActionResult> DeleteByCorrespondence(
+        [FromQuery] string matriculeSage,
+        [FromQuery] string? matriculePointeuse,
+        CancellationToken ct)
+    {
+        await _svc.DeleteCardByCorrespondenceAsync(matriculeSage, matriculePointeuse, ct);
+        return NoContent();
+    }
+
     [HttpPost("auto-map")]
     [RequireDroit(Droit.Parameters)]
     public async Task<IActionResult> AutoMap(CancellationToken ct)
-        => Ok(new { added = await _svc.AutoMapCardsAsync(ct) });
+        => Ok(await _svc.AutoMapCardsAsync(ct));
 
     [HttpPost("import-csv")]
     [RequireDroit(Droit.Parameters)]
@@ -141,7 +323,7 @@ public class CardPaieController : ControllerBase
     {
         using var reader = new StreamReader(file.OpenReadStream());
         var text = await reader.ReadToEndAsync(ct);
-        var lines = text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+        var lines = text.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
             .Select(l =>
             {
                 var sep = l.Contains(';') ? ';' : ',';
@@ -164,6 +346,11 @@ public class CategoriesController : ControllerBase
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListCategoriesAsync(ct));
+
+    [HttpGet("paged")]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
+        => Ok(await _svc.ListCategoriesPagedAsync(page, pageSize, search, ct));
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CategoryDto dto, CancellationToken ct)
@@ -194,6 +381,29 @@ public class AffectationsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] int? categoryId, CancellationToken ct)
         => Ok(await _svc.ListAffectationsAsync(categoryId, ct));
+
+    [HttpGet("paged")]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] int? categoryId,
+        [FromQuery] string? departement,
+        [FromQuery] string? service,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
+        [FromQuery] string? search,
+        CancellationToken ct)
+        => Ok(await _svc.ListAffectationsPagedAsync(categoryId, departement, service, page, pageSize, search, ct));
+
+    [HttpGet("options")]
+    public async Task<IActionResult> GetOptions(CancellationToken ct)
+        => Ok(await _svc.GetAffectationOptionsAsync(ct));
+
+    [HttpGet("all")]
+    public async Task<IActionResult> GetAllRows(
+        [FromQuery] int? categoryId,
+        [FromQuery] string? departement,
+        [FromQuery] string? service,
+        CancellationToken ct)
+        => Ok(await _svc.ListAllAffectationsAsync(categoryId, departement, service, ct));
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] AffectationDto dto, CancellationToken ct)
@@ -233,6 +443,12 @@ public class TolerancesController : ControllerBase
     public async Task<IActionResult> GetAll([FromQuery] int? categoryId, CancellationToken ct)
         => Ok(await _svc.ListTolerancesAsync(categoryId, ct));
 
+    [HttpGet("paged")]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] int? categoryId, [FromQuery] int? page, [FromQuery] int? pageSize,
+        [FromQuery] string? search, CancellationToken ct)
+        => Ok(await _svc.ListTolerancesPagedAsync(categoryId, page, pageSize, search, ct));
+
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] ToleranceDto dto, CancellationToken ct)
         => Ok(await _svc.SaveToleranceAsync(dto with { Id = 0 }, ct));
@@ -240,6 +456,13 @@ public class TolerancesController : ControllerBase
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] ToleranceDto dto, CancellationToken ct)
         => Ok(await _svc.SaveToleranceAsync(dto with { Id = id }, ct));
+
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> Delete(int id, CancellationToken ct)
+    {
+        await _svc.DeleteToleranceAsync(id, ct);
+        return NoContent();
+    }
 }
 
 [ApiController]
@@ -254,6 +477,11 @@ public class HolidaysController : ControllerBase
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListHolidaysAsync(ct));
+
+    [HttpGet("paged")]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
+        => Ok(await _svc.ListHolidaysPagedAsync(page, pageSize, search, ct));
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] HolidayDto dto, CancellationToken ct)
@@ -291,6 +519,11 @@ public class MajorationsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListMajorationsAsync(ct));
 
+    [HttpGet("paged")]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
+        => Ok(await _svc.ListMajorationsPagedAsync(page, pageSize, search, ct));
+
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] MajorationDto dto, CancellationToken ct)
         => Ok(await _svc.SaveMajorationAsync(dto with { Id = id }, ct));
@@ -308,6 +541,11 @@ public class AbsenceCodesController : ControllerBase
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListAbsenceCodesAsync(ct));
+
+    [HttpGet("paged")]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
+        => Ok(await _svc.ListAbsenceCodesPagedAsync(page, pageSize, search, ct));
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] AbsenceCodeDto dto, CancellationToken ct)
@@ -338,10 +576,42 @@ public class CodeConstantesController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListCodeConstantesAsync(ct));
 
+    [HttpGet("paged")]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
+        => Ok(await _svc.ListCodeConstantesPagedAsync(page, pageSize, search, ct));
+
     [HttpGet("sage-options")]
     public async Task<IActionResult> SageOptions(CancellationToken ct) => Ok(await _svc.ListSageConstantOptionsAsync(ct));
+
+    [HttpGet("autre-tables")]
+    public async Task<IActionResult> OtherTables(CancellationToken ct) => Ok(await _svc.ListOtherCodeConstantTablesAsync(ct));
+
+    [HttpGet("autre-values")]
+    public async Task<IActionResult> OtherValues([FromQuery] string table, CancellationToken ct)
+        => Ok(await _svc.ListOtherCodeConstantValuesAsync(table, ct));
 
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] CodeConstanteDto dto, CancellationToken ct)
         => Ok(await _svc.SaveCodeConstanteAsync(dto with { Id = id }, ct));
+}
+
+/// <summary>
+/// Extrait les noms de bases autorisées à partir des permissions détaillées
+/// (<c>SAGE:{nom}:READ</c> / <c>POINTEUSE:{nom}:READ</c>).
+/// </summary>
+internal static class DatabasePermissionNames
+{
+    public static IReadOnlyCollection<string> Read(IEnumerable<string> permissions, string system)
+    {
+        var prefix = system + ":";
+        return permissions
+            .Where(p => p.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                        && p.EndsWith(":READ", StringComparison.OrdinalIgnoreCase))
+            .Select(p => p.Split(':'))
+            .Where(parts => parts.Length == 3)
+            .Select(parts => parts[1])
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
 }

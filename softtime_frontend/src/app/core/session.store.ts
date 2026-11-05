@@ -1,5 +1,7 @@
 import { Injectable, computed, effect, signal } from '@angular/core';
-import { LoginResponse, SageDb } from '../shared/models';
+import { LoginResponse, PointeuseDb, SageDb } from '../shared/models';
+import { stripDatabasePasswords } from '../shared/utils/connection-password';
+import { AccessContext, canAccess, decodeTokenGates, gateAllows, hasUsableDatabase } from './access.logic';
 
 const TOKEN_KEY = 'st_token';
 const SESSION_KEY = 'st_session';
@@ -15,6 +17,8 @@ interface StoredSession {
   matricule?: string | null;
   rights: number[];
   authorizedDatabases: SageDb[];
+  permissions?: string[];
+  permissionsCustomized?: boolean;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -23,6 +27,7 @@ export class SessionStore {
   private readonly _session = signal<StoredSession | null>(this.readSession());
   readonly activeSageDb = signal<string | null>(localStorage.getItem(SAGE_KEY));
   readonly activePointeuseDb = signal<string | null>(localStorage.getItem(POINTEUSE_KEY));
+  readonly pointeuseDatabases = signal<PointeuseDb[]>([]);
   readonly theme = signal<'light' | 'dark'>(
     (localStorage.getItem(THEME_KEY) as 'light' | 'dark') || 'light',
   );
@@ -31,6 +36,7 @@ export class SessionStore {
   readonly session = this._session.asReadonly();
   readonly isAuthenticated = computed(() => !!this._token());
   readonly rights = computed(() => this._session()?.rights ?? []);
+  readonly permissions = computed(() => this._session()?.permissions ?? []);
   readonly databases = computed(() => this._session()?.authorizedDatabases ?? []);
   readonly displayName = computed(() => this._session()?.nom ?? this._session()?.login ?? '');
 
@@ -42,8 +48,29 @@ export class SessionStore {
     });
   }
 
+  /** Portes du compte telles que le serveur les applique : claim « rights » du jeton, sinon portes de la connexion. */
+  readonly gates = computed(() => decodeTokenGates(this._token()) ?? this.rights());
+  /** Au moins une base SAGE utilisable (liste fournie par le serveur selon la même règle que le contrôle d'usage). */
+  readonly hasUsableDatabase = computed(() => hasUsableDatabase(this.databases()));
+
+  accessContext(): AccessContext {
+    const session = this._session();
+    return {
+      roleId: session?.roleId,
+      permissions: this.permissions(),
+      customized: session?.permissionsCustomized ?? false,
+      gates: decodeTokenGates(this._token()),
+      fallbackRights: this.rights(),
+    };
+  }
+
   hasRight(droit: number): boolean {
-    return this.rights().includes(droit);
+    return gateAllows(this.accessContext(), droit);
+  }
+
+  /** Permission fine ET porte serveur (voir access.logic.ts). */
+  hasPermission(permissionCode?: string, fallbackDroit?: number): boolean {
+    return canAccess(this.accessContext(), permissionCode, fallbackDroit);
   }
 
   setSession(res: LoginResponse): void {
@@ -54,7 +81,9 @@ export class SessionStore {
       roleId: res.roleId,
       matricule: res.matricule,
       rights: res.rights ?? [],
-      authorizedDatabases: res.authorizedDatabases ?? [],
+      authorizedDatabases: stripDatabasePasswords(res.authorizedDatabases),
+      permissions: res.permissions ?? [],
+      permissionsCustomized: res.permissionsCustomized ?? false,
     };
     this._token.set(res.token);
     this._session.set(session);
@@ -82,6 +111,48 @@ export class SessionStore {
     else localStorage.removeItem(POINTEUSE_KEY);
   }
 
+  setAuthorizedDatabases(databases: SageDb[]): void {
+    const cur = this._session();
+    if (!cur) return;
+    const updated: StoredSession = {
+      ...cur,
+      authorizedDatabases: stripDatabasePasswords(databases),
+    };
+    this._session.set(updated);
+    localStorage.setItem(SESSION_KEY, JSON.stringify(updated));
+
+    const allowed = (databases ?? [])
+      .map((d) => d.nomBd)
+      .filter((n): n is string => !!n);
+    const current = this.activeSageDb();
+    if (!current || !allowed.includes(current)) {
+      this.setActiveSageDb(allowed[0] ?? null);
+    }
+  }
+
+  setPointeuseDatabases(list: PointeuseDb[]): void {
+    const dbs = list ?? [];
+    this.pointeuseDatabases.set(dbs);
+    const names = dbs.map((d) => d.nomBd).filter((n): n is string => !!n);
+    const current = this.activePointeuseDb();
+    if (!current || !names.includes(current)) {
+      const preferred = dbs.find((d) => d.active)?.nomBd ?? names[0] ?? null;
+      this.setActivePointeuseDb(preferred);
+    }
+  }
+
+  setPermissions(permissions: string[], permissionsCustomized?: boolean): void {
+    const cur = this._session();
+    if (!cur) return;
+    const updated: StoredSession = {
+      ...cur,
+      permissions: permissions ?? [],
+      permissionsCustomized: permissionsCustomized ?? cur.permissionsCustomized ?? false,
+    };
+    this._session.set(updated);
+    localStorage.setItem(SESSION_KEY, JSON.stringify(updated));
+  }
+
   toggleTheme(): void {
     this.theme.update((t) => (t === 'light' ? 'dark' : 'light'));
   }
@@ -101,7 +172,13 @@ export class SessionStore {
     const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return null;
     try {
-      return JSON.parse(raw) as StoredSession;
+      const stored = JSON.parse(raw) as StoredSession;
+      // Une session enregistrée avant la correction peut encore contenir des mots de passe de bases : on les purge.
+      if (stored.authorizedDatabases?.some((d) => d.password !== undefined)) {
+        stored.authorizedDatabases = stripDatabasePasswords(stored.authorizedDatabases);
+        localStorage.setItem(SESSION_KEY, JSON.stringify(stored));
+      }
+      return stored;
     } catch {
       return null;
     }

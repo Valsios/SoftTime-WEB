@@ -1,6 +1,9 @@
+using System.Linq.Expressions;
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
+using SoftTime.Domain.Services;
 
 namespace SoftTime.Application.Services;
 
@@ -8,18 +11,43 @@ public class PlanningService
 {
     private readonly IUnitOfWork _uow;
     private readonly TenantConnectionService _tenant;
+    private readonly IPlanningStatisticsReader _planningStats;
 
-    public PlanningService(IUnitOfWork uow, TenantConnectionService tenant)
+    public PlanningService(IUnitOfWork uow, TenantConnectionService tenant, IPlanningStatisticsReader planningStats)
     {
         _uow = uow;
         _tenant = tenant;
+        _planningStats = planningStats;
     }
 
     public async Task<IReadOnlyList<ShiftDto>> ListShiftsAsync(CancellationToken ct = default)
     {
         var list = await _uow.Repository<T_PLANNING>().ListAsync(_ => true, ct);
-        return list.Select(s => new ShiftDto(s.IDPLANNING, s.NoSHIFT, s.HA, s.PAUSE, s.HD, s.Intitule)).ToList();
+        return list.Select(ToShiftDto).ToList();
     }
+
+    /// <summary>
+    /// Liste paginée du catalogue des shifts. Le catalogue reste petit, mais l'endpoint suit le
+    /// même contrat que les autres listes (page bornée, total serveur) pour éviter un découpage
+    /// côté client.
+    /// </summary>
+    public async Task<PagedResult<ShiftDto>> ListShiftsPagedAsync(
+        int? page, int? pageSize, string? search = null, CancellationToken ct = default)
+        => await PagedLists.PageAsync(
+            _uow.Repository<T_PLANNING>(),
+            _ => true,
+            q => q.OrderBy(s => s.NoSHIFT)
+                  .ThenBy(s => s.Intitule)
+                  .ThenBy(s => s.IDPLANNING),
+            page,
+            pageSize,
+            ToShiftDto,
+            search,
+            new Expression<Func<T_PLANNING, string?>>[] { s => s.Intitule },
+            ct);
+
+    private static ShiftDto ToShiftDto(T_PLANNING s) => new(
+        s.IDPLANNING, s.NoSHIFT, s.HA, s.PAUSE, s.HD, s.Intitule);
 
     public async Task<ShiftDto> SaveShiftAsync(ShiftDto dto, CancellationToken ct = default)
     {
@@ -95,26 +123,162 @@ public class PlanningService
             .ToList();
     }
 
+    /// <summary>
+    /// Liste paginée des lignes de planning. Le filtre date/carte est traduit en SQL ; les cartes
+    /// (petite table) sont chargées une fois pour exposer matricule/nom/prénom.
+    /// </summary>
+    public async Task<PagedResult<EmployeePlanningDto>> ListEmployeePlanningPagedAsync(
+        DateTime from, DateTime to, int? cardId, int? page, int? pageSize,
+        string? search = null, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var sageDb = _tenant.SageDb;
+        var start = from.Date;
+        var end = to.Date.AddDays(1);
+        var cards = (await _uow.Repository<T_CARDPAIE>().ListAsync(EmployeeCardPredicate(sageDb), ct))
+            .ToDictionary(c => c.ID);
+        var hasSearch = SearchText.Terms(search).Count > 0;
+        var cardIds = hasSearch
+            ? cards.Values
+                .Where(c => SearchText.Matches(search, c.SAGE_MATRICULE, c.SAGE_NOM, c.SAGE_PRENOM))
+                .Select(c => c.ID)
+                .ToArray()
+            : Array.Empty<int>();
+        if (hasSearch && cardIds.Length == 0)
+            return PagedLists.Page(Array.Empty<EmployeePlanningDto>(), page, pageSize);
+
+        return await PagedLists.PageAsync(
+            _uow.Repository<T_PLANNING_SAL>(),
+            p => p.DateP >= start
+                 && p.DateP < end
+                 && (p.BDD_SAGE == null || p.BDD_SAGE.Trim() == "" || p.BDD_SAGE.Trim() == sageDb)
+                 && (!cardId.HasValue || p.IDSAL == cardId.Value)
+                 && (!hasSearch || cardIds.Contains(p.IDSAL)),
+            q => q.OrderBy(p => p.IDSAL).ThenBy(p => p.DateP).ThenBy(p => p.ID),
+            page,
+            pageSize,
+            p =>
+            {
+                cards.TryGetValue(p.IDSAL, out var card);
+                return new EmployeePlanningDto(
+                    p.ID, p.IDSAL, p.NoSHIFT, p.DateP, p.HA, p.Pause, p.HD, p.OffP,
+                    card?.SAGE_MATRICULE, card?.SAGE_NOM, card?.SAGE_PRENOM);
+            },
+            ct);
+    }
+
+    /// <summary>Complet (export) : salariés + nombre de jours planifiés sur la période.</summary>
+    public async Task<IReadOnlyList<PlanningEmployeeStatDto>> ListEmployeeStatsAsync(
+        DateTime from, DateTime to, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var sageDb = _tenant.SageDb;
+        var counts = (await _planningStats.CountPlannedDaysAsync(sageDb, from, to, ct))
+            .ToDictionary(x => x.CardPaieId, x => x.PlannedDays);
+        var cards = await _uow.Repository<T_CARDPAIE>().ListAsync(EmployeeCardPredicate(sageDb), ct);
+        return cards
+            .Where(c => MatchesSage(c.SAGE_BDD))
+            .OrderBy(c => c.SAGE_MATRICULE)
+            .ThenBy(c => c.SAGE_NOM)
+            .Select(c => new PlanningEmployeeStatDto(
+                c.ID, c.SAGE_MATRICULE, c.SAGE_NOM, c.SAGE_PRENOM, counts.GetValueOrDefault(c.ID)))
+            .ToList();
+    }
+
+    /// <summary>Grille paginée des salariés avec leur nombre de jours planifiés.</summary>
+    public async Task<PagedResult<PlanningEmployeeStatDto>> ListEmployeeStatsPagedAsync(
+        DateTime from, DateTime to, int? page, int? pageSize,
+        string? search = null, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var sageDb = _tenant.SageDb;
+        var counts = (await _planningStats.CountPlannedDaysAsync(sageDb, from, to, ct))
+            .ToDictionary(x => x.CardPaieId, x => x.PlannedDays);
+
+        return await PagedLists.PageAsync(
+            _uow.Repository<T_CARDPAIE>(),
+            EmployeeCardPredicate(sageDb),
+            q => q.OrderBy(c => c.SAGE_MATRICULE).ThenBy(c => c.SAGE_NOM).ThenBy(c => c.ID),
+            page,
+            pageSize,
+            c => new PlanningEmployeeStatDto(
+                c.ID, c.SAGE_MATRICULE, c.SAGE_NOM, c.SAGE_PRENOM, counts.GetValueOrDefault(c.ID)),
+            search,
+            new Expression<Func<T_CARDPAIE, string?>>[]
+            {
+                c => c.SAGE_MATRICULE,
+                c => c.SAGE_NOM,
+                c => c.SAGE_PRENOM,
+            },
+            ct);
+    }
+
+    /// <summary>Filtre tenant des cartes : <c>SAGE_BDD</c> null/vide est accepté (lignes héritées).</summary>
+    private static Expression<Func<T_CARDPAIE, bool>> EmployeeCardPredicate(string sageDb)
+        => c => c.SAGE_BDD == null || c.SAGE_BDD.Trim() == "" || c.SAGE_BDD.Trim() == sageDb;
+
     public async Task SaveEmployeePlanningAsync(IReadOnlyCollection<EmployeePlanningDto> rows, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var repo = _uow.Repository<T_PLANNING_SAL>();
         var shifts = await _uow.Repository<T_PLANNING>().ListAsync(_ => true, ct);
+        var cards = (await _uow.Repository<T_CARDPAIE>().ListAsync(_ => true, ct))
+            .Where(c => MatchesSage(c.SAGE_BDD) && MatchesPointeuse(c.POINTEUSE_BDD))
+            .GroupBy(c => c.ID)
+            .ToDictionary(g => g.Key, g => g.First());
+
         foreach (var dto in rows)
         {
-            var date = (dto.DateP ?? DateTime.Today).Date;
-            var shift = dto.NoShift is int n ? shifts.FirstOrDefault(s => s.NoSHIFT == n) : null;
-            var ha = dto.Ha ?? Combine(date, shift?.HA);
-            var hd = dto.Hd ?? Combine(date, shift?.HD);
-            var pause = dto.Pause ?? shift?.PAUSE;
+            if (!dto.DateP.HasValue)
+                throw new InvalidOperationException("La date du planning est requise.");
+            if (!cards.ContainsKey(dto.CardPaieId))
+                throw new InvalidOperationException($"Salarié introuvable pour la carte {dto.CardPaieId}.");
+
+            var date = dto.DateP.Value.Date;
+            var shift = dto.NoShift is int noShift
+                ? shifts.FirstOrDefault(s => s.NoSHIFT == noShift)
+                : null;
+            if (dto.NoShift is int shiftDemande && shift is null)
+                throw new InvalidOperationException($"Shift {shiftDemande} introuvable.");
+
             T_PLANNING_SAL? entity = null;
             if (dto.Id != 0)
-                entity = await repo.GetByIdAsync(dto.Id, ct);
-            entity ??= (await repo.ListAsync(
-                p => p.IDSAL == dto.CardPaieId
-                     && p.DateP != null
-                     && p.DateP.Value.Date == date
-                     && p.BDD_SAGE == _tenant.SageDb, ct)).FirstOrDefault();
+            {
+                entity = await repo.GetByIdAsync(dto.Id, ct)
+                    ?? throw new InvalidOperationException($"Planning {dto.Id} introuvable.");
+                if (!MatchesSage(entity.BDD_SAGE) || !MatchesPointeuse(entity.BDD_POINTEUSE))
+                    throw new InvalidOperationException("Planning hors du périmètre de la base active.");
+            }
+
+            if (entity is null)
+            {
+                var existantes = await repo.ListAsync(
+                    p => p.IDSAL == dto.CardPaieId
+                         && p.DateP != null
+                         && p.DateP.Value.Date == date, ct);
+                entity = existantes
+                    .Where(p => MatchesSage(p.BDD_SAGE) && MatchesPointeuse(p.BDD_POINTEUSE))
+                    .OrderBy(p => p.ID)
+                    .FirstOrDefault();
+            }
+
+            var off = dto.Off == true;
+            DateTime? ha = null;
+            DateTime? hd = null;
+            var pause = TimeSpan.Zero;
+
+            if (!off)
+            {
+                // Une ligne héritée peut ne pas avoir de NoSHIFT : on conserve alors ses heures
+                // existantes si l'écran n'en fournit pas.
+                var debut = dto.Ha?.TimeOfDay ?? shift?.HA ?? entity?.HA?.TimeOfDay;
+                var fin = dto.Hd?.TimeOfDay ?? shift?.HD ?? entity?.HD?.TimeOfDay;
+                if (!PlanningGenerationRules.TryIntervalle(date, debut, fin, out ha, out hd))
+                    throw new InvalidOperationException(
+                        $"Heures d'entrée/sortie manquantes ou invalides pour le planning du {date:dd/MM/yyyy}.");
+                pause = dto.Pause ?? shift?.PAUSE ?? entity?.Pause ?? TimeSpan.Zero;
+            }
+
             if (entity == null)
             {
                 await repo.AddAsync(new T_PLANNING_SAL
@@ -125,7 +289,7 @@ public class PlanningService
                     HA = ha,
                     Pause = pause,
                     HD = hd,
-                    OffP = dto.Off,
+                    OffP = off,
                     BDD_SAGE = _tenant.SageDb,
                     BDD_POINTEUSE = _tenant.PointeuseDb
                 }, ct);
@@ -138,7 +302,9 @@ public class PlanningService
                 entity.HA = ha;
                 entity.Pause = pause;
                 entity.HD = hd;
-                entity.OffP = dto.Off;
+                entity.OffP = off;
+                entity.BDD_SAGE = _tenant.SageDb;
+                entity.BDD_POINTEUSE = _tenant.PointeuseDb;
                 repo.Update(entity);
             }
         }
@@ -160,9 +326,15 @@ public class PlanningService
             return new ImportResultDto(0, 0, "Fichier vide.");
         var mode = ExcelCells.Fold(headers[0]);
         var shifts = await _uow.Repository<T_PLANNING>().ListAsync(_ => true, ct);
-        var cards = await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == _tenant.SageDb, ct);
-        var categories = await _uow.Repository<T_CATEGORIE>().ListAsync(c => c.BDD_SAGE == _tenant.SageDb, ct);
-        var affect = await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == _tenant.SageDb, ct);
+        var cards = (await _uow.Repository<T_CARDPAIE>().ListAsync(_ => true, ct))
+            .Where(c => MatchesSage(c.SAGE_BDD) && MatchesPointeuse(c.POINTEUSE_BDD))
+            .ToList();
+        var categories = (await _uow.Repository<T_CATEGORIE>().ListAsync(c => c.BDD_SAGE == _tenant.SageDb, ct))
+            .Where(c => MatchesPointeuse(c.BDD_POINTEUSE))
+            .ToList();
+        var affect = (await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == _tenant.SageDb, ct))
+            .Where(a => MatchesPointeuse(a.BDD_POINTEUSE))
+            .ToList();
         var repo = _uow.Repository<T_PLANNING_SAL>();
         var imported = 0;
         var skipped = 0;
@@ -180,27 +352,54 @@ public class PlanningService
             }
             else
             {
-                var card = cards.FirstOrDefault(c => c.SAGE_MATRICULE == key);
+                var card = cards.FirstOrDefault(c => MemeIdentifiant(c.SAGE_MATRICULE, key));
                 if (card == null) { skipped++; continue; }
                 targets = new[] { card };
             }
+
             foreach (var header in dateHeaders)
             {
                 if (!ExcelCells.TryDate(header, out var date))
                     continue;
-                if (!int.TryParse(row.GetValueOrDefault(header), out var noShift))
+
+                var cellule = row.GetValueOrDefault(header)?.Trim();
+                if (string.IsNullOrWhiteSpace(cellule))
                     continue;
-                var shift = shifts.FirstOrDefault(s => s.NoSHIFT == noShift);
-                if (shift == null) { skipped++; continue; }
+
+                var off = string.Equals(cellule, "OFF", StringComparison.OrdinalIgnoreCase);
+                int? noShift = null;
+                DateTime? ha = null;
+                DateTime? hd = null;
+                var pause = TimeSpan.Zero;
+
+                if (!off)
+                {
+                    if (!int.TryParse(cellule, out var numeroShift))
+                    {
+                        skipped++;
+                        continue;
+                    }
+                    var shift = shifts.FirstOrDefault(s => s.NoSHIFT == numeroShift);
+                    if (shift == null || !PlanningGenerationRules.TryIntervalle(date, shift.HA, shift.HD, out ha, out hd))
+                    {
+                        skipped++;
+                        continue;
+                    }
+                    noShift = numeroShift;
+                    pause = shift.PAUSE ?? TimeSpan.Zero;
+                }
+
                 foreach (var card in targets)
                 {
-                    var existing = (await repo.ListAsync(
+                    var existantes = await repo.ListAsync(
                         p => p.IDSAL == card.ID
                              && p.DateP != null
-                             && p.DateP.Value.Date == date.Date
-                             && p.BDD_SAGE == _tenant.SageDb, ct)).FirstOrDefault();
-                    var ha = Combine(date, shift.HA);
-                    var hd = Combine(date, shift.HD);
+                             && p.DateP.Value.Date == date.Date, ct);
+                    var existing = existantes
+                        .Where(p => MatchesSage(p.BDD_SAGE) && MatchesPointeuse(p.BDD_POINTEUSE))
+                        .OrderBy(p => p.ID)
+                        .FirstOrDefault();
+
                     if (existing == null)
                     {
                         await repo.AddAsync(new T_PLANNING_SAL
@@ -210,8 +409,8 @@ public class PlanningService
                             DateP = date.Date,
                             HA = ha,
                             HD = hd,
-                            Pause = shift.PAUSE,
-                            OffP = false,
+                            Pause = pause,
+                            OffP = off,
                             BDD_SAGE = _tenant.SageDb,
                             BDD_POINTEUSE = _tenant.PointeuseDb
                         }, ct);
@@ -221,8 +420,10 @@ public class PlanningService
                         existing.NoSHIFT = noShift;
                         existing.HA = ha;
                         existing.HD = hd;
-                        existing.Pause = shift.PAUSE;
-                        existing.OffP = false;
+                        existing.Pause = pause;
+                        existing.OffP = off;
+                        existing.BDD_SAGE = _tenant.SageDb;
+                        existing.BDD_POINTEUSE = _tenant.PointeuseDb;
                         repo.Update(existing);
                     }
                     imported++;
@@ -230,7 +431,175 @@ public class PlanningService
             }
         }
         await _uow.SaveChangesAsync(ct);
-        return new ImportResultDto(imported, skipped, "Planning importé.");
+        return new ImportResultDto(imported, skipped,
+            $"{imported} ligne(s) de planning importée(s), {skipped} élément(s) ignoré(s).");
+    }
+
+    /// <summary>
+    /// Génère le planning d'une semaine depuis un CSV « catégorie ; lundi ; (début ; fin) × 7 ».
+    /// Chaque ligne alimente tous les salariés affectés à la catégorie, avec la pause de la catégorie.
+    /// Portage de <c>GenererPlanningParCategorieAsync</c> du desktop.
+    /// Écart assumé : un jour « OFF » est enregistré <c>OffP = true</c> avec des heures nulles, au lieu
+    /// de la date sentinelle 1800-01-01 du desktop (le calcul de semaine ignore déjà ces jours).
+    /// </summary>
+    public Task<ImportResultDto> GenerateFromCategoryCsvAsync(IReadOnlyList<string[]> lines, CancellationToken ct = default)
+        => GenerateFromCsvAsync(lines, parCategorie: true, ct);
+
+    /// <summary>
+    /// Génère le planning d'une semaine depuis un CSV « matricule ; lundi ; (début ; pause ; fin) × 7 »,
+    /// avec une pause saisie par jour. Portage de <c>GenererPlanningsAsync</c> du desktop.
+    /// </summary>
+    public Task<ImportResultDto> GenerateFromMatriculeCsvAsync(IReadOnlyList<string[]> lines, CancellationToken ct = default)
+        => GenerateFromCsvAsync(lines, parCategorie: false, ct);
+
+    private async Task<ImportResultDto> GenerateFromCsvAsync(
+        IReadOnlyList<string[]> lines, bool parCategorie, CancellationToken ct)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        if (lines.Count <= 1)
+            return new ImportResultDto(0, 0, "Fichier vide (en-tête seule).");
+
+        var sageDb = _tenant.SageDb;
+        var pointeuseDb = _tenant.PointeuseDb;
+        var cards = (await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == sageDb, ct))
+            .Where(c => MatchesPointeuse(c.POINTEUSE_BDD))
+            .ToList();
+        var categories = (await _uow.Repository<T_CATEGORIE>().ListAsync(c => c.BDD_SAGE == sageDb, ct))
+            .Where(c => MatchesPointeuse(c.BDD_POINTEUSE))
+            .ToList();
+        var affectations = (await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == sageDb, ct))
+            .Where(a => MatchesPointeuse(a.BDD_POINTEUSE))
+            .ToList();
+        var repo = _uow.Repository<T_PLANNING_SAL>();
+        var existantes = (await repo.ListAsync(p => p.BDD_SAGE == sageDb, ct))
+            .Where(p => MatchesPointeuse(p.BDD_POINTEUSE))
+            .ToList();
+
+        var pas = parCategorie ? 2 : 3;   // (début, fin) ou (début, pause, fin)
+        var ecrites = 0;
+        var joursIgnores = 0;
+        var lignesIgnores = 0;
+
+        // La première ligne est un en-tête.
+        foreach (var cells in lines.Skip(1))
+        {
+            if (cells.Length < 1 + pas)
+            {
+                lignesIgnores++;
+                continue;
+            }
+            var cle = cells[0].Trim();
+            if (!PlanningGenerationRules.TryLundi(PlanningGenerationRules.Cellule(cells, 1), out var lundi))
+            {
+                lignesIgnores++;
+                continue;
+            }
+
+            List<T_CARDPAIE> cibles;
+            TimeSpan? pauseCategorie = null;
+            if (parCategorie)
+            {
+                var categorie = categories.FirstOrDefault(c =>
+                    string.Equals(c.INTITULE?.Trim(), cle, StringComparison.OrdinalIgnoreCase));
+                if (categorie is null)
+                {
+                    lignesIgnores++;
+                    continue;
+                }
+                pauseCategorie = categorie.PAUSE;
+                var ids = affectations.Where(a => a.ID_CATEG == categorie.IDCATEGORIE).Select(a => a.MATRICULE_SAGE).ToHashSet();
+                cibles = cards.Where(c => ids.Contains(c.ID)).ToList();
+            }
+            else
+            {
+                var carte = cards.FirstOrDefault(c => MemeIdentifiant(c.SAGE_MATRICULE, cle));
+                cibles = carte is null ? new List<T_CARDPAIE>() : new List<T_CARDPAIE> { carte };
+            }
+            if (cibles.Count == 0)
+            {
+                lignesIgnores++;
+                continue;
+            }
+
+            for (var jourSemaine = 0; jourSemaine < PlanningGenerationRules.JoursParSemaine; jourSemaine++)
+            {
+                var debutIndex = PlanningGenerationRules.IndiceDebut(jourSemaine, avecPauseParJour: !parCategorie);
+                var debutTxt = PlanningGenerationRules.Cellule(cells, debutIndex);
+                var finTxt = PlanningGenerationRules.Cellule(cells, debutIndex + pas - 1);
+                var jour = lundi.AddDays(jourSemaine);
+                var off = PlanningGenerationRules.EstOff(debutTxt);
+
+                DateTime? ha = null;
+                DateTime? hd = null;
+                var pause = pauseCategorie;
+                if (!off)
+                {
+                    if (!PlanningGenerationRules.TryIntervalle(jour, debutTxt, finTxt, out ha, out hd))
+                    {
+                        joursIgnores++;
+                        continue;
+                    }
+                    if (!parCategorie && PlanningGenerationRules.TryHeure(PlanningGenerationRules.Cellule(cells, debutIndex + 1), out var pauseJour))
+                        pause = pauseJour;
+                }
+
+                foreach (var carte in cibles)
+                {
+                    var entity = existantes
+                        .Where(p => p.IDSAL == carte.ID && p.DateP?.Date == jour)
+                        .OrderBy(p => p.ID)
+                        .FirstOrDefault();
+                    if (entity is null)
+                    {
+                        entity = new T_PLANNING_SAL
+                        {
+                            IDSAL = carte.ID,
+                            NoSHIFT = null,
+                            DateP = jour,
+                            HA = ha,
+                            HD = hd,
+                            Pause = off ? TimeSpan.Zero : (pause ?? TimeSpan.Zero),
+                            OffP = off,
+                            BDD_SAGE = sageDb,
+                            BDD_POINTEUSE = pointeuseDb
+                        };
+                        await repo.AddAsync(entity, ct);
+                        existantes.Add(entity);
+                    }
+                    else
+                    {
+                        entity.NoSHIFT = null;
+                        entity.DateP = jour;
+                        entity.HA = ha;
+                        entity.HD = hd;
+                        entity.Pause = off ? TimeSpan.Zero : (pause ?? TimeSpan.Zero);
+                        entity.OffP = off;
+                        entity.BDD_SAGE = sageDb;
+                        entity.BDD_POINTEUSE = pointeuseDb;
+                        repo.Update(entity);
+                    }
+                    ecrites++;
+                }
+            }
+        }
+
+        await _uow.SaveChangesAsync(ct);
+        var message = $"{ecrites} jour(s) de planning généré(s)"
+            + (joursIgnores > 0 ? $", {joursIgnores} jour(s) ignoré(s) (heures illisibles)" : string.Empty)
+            + (lignesIgnores > 0 ? $", {lignesIgnores} ligne(s) ignorée(s)" : string.Empty) + ".";
+        return new ImportResultDto(ecrites, joursIgnores + lignesIgnores, message);
+    }
+
+    /// <summary>Comparaison de matricule insensible au remplissage par des zéros (« 00369 » == « 369 »).</summary>
+    private static bool MemeIdentifiant(string? a, string? b)
+    {
+        a = a?.Trim();
+        b = b?.Trim();
+        if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b))
+            return false;
+        if (long.TryParse(a, out var na) && long.TryParse(b, out var nb))
+            return na == nb;
+        return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
     }
 
     public async Task<ImportResultDto> ImportShiftsExcelAsync(IReadOnlyList<Dictionary<string, string>> rows, CancellationToken ct = default)
@@ -270,7 +639,8 @@ public class PlanningService
             imported++;
         }
         await _uow.SaveChangesAsync(ct);
-        return new ImportResultDto(imported, skipped, "Shifts importés.");
+        return new ImportResultDto(imported, skipped,
+            $"{imported} shift(s) importé(s), {skipped} ligne(s) ignorée(s).");
     }
 
     private bool MatchesSage(string? stored)
@@ -281,6 +651,11 @@ public class PlanningService
         return string.Equals(stored.Trim(), sage.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
-    private static DateTime? Combine(DateTime date, TimeSpan? time)
-        => time.HasValue ? date.Date + time.Value : date.Date;
+    private bool MatchesPointeuse(string? stored)
+    {
+        var pointeuse = _tenant.PointeuseDb;
+        if (string.IsNullOrWhiteSpace(stored))
+            return true;
+        return string.Equals(stored.Trim(), pointeuse.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
 }

@@ -1,17 +1,21 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
-import { Shift } from '../../shared/models';
+import { SessionStore } from '../../core/session.store';
+import { Droit } from '../../core/rights';
+import { Shift, PageChangeEvent } from '../../shared/models';
 import { ShiftsService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
-import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal } from '../../shared/components';
+import { Column, DataTable, ImportTemplatesModal, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal } from '../../shared/components';
 import { asRow } from '../../shared/utils/date';
+import { toastImportResult } from '../../shared/utils/import-result';
 
 @Component({
   selector: 'app-shifts',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput],
+  imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, ImportTemplatesModal],
   template: `
     <page-header title="Shifts" subtitle="Catalogue des shifts">
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
@@ -19,14 +23,26 @@ import { asRow } from '../../shared/utils/date';
         <input #shiftFile type="file" accept=".xlsx,.xls" hidden (change)="onFile($event)" />
         <soft-button variant="secondary" (click)="shiftFile.click()">Import Excel</soft-button>
       </label>
-      <soft-button (click)="openCreate()">Ajouter</soft-button>
+      <soft-button variant="ghost" (click)="templatesOpen.set(true)">Modèles d'import</soft-button>
+      <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter</soft-button>
     </page-header>
     <soft-card>
-      <data-table [columns]="columns" [rows]="rows()" [loading]="loading()">
+      <data-table
+        [columns]="columns"
+        [rows]="rows()"
+        [loading]="loading()"
+        [serverSide]="true"
+        [total]="total()"
+        [serverPageSize]="pageSize"
+        [serverPage]="page()"
+        [(searchTerm)]="tableSearch"
+        (searchSubmit)="onTableSearch($event)"
+        (pageChange)="onPageChange($event)"
+      >
         <ng-template #actions let-row>
           <div class="soft-actions" style="justify-content: end">
-            <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
-            <soft-button size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
+            <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
+            <soft-button *ngIf="canDelete()" size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
           </div>
         </ng-template>
       </data-table>
@@ -44,6 +60,11 @@ import { asRow } from '../../shared/utils/date';
         <soft-button [loading]="saving()" (click)="save()">Enregistrer</soft-button>
       </div>
     </soft-modal>
+    <app-import-templates-modal
+      [open]="templatesOpen()"
+      [keys]="importKeys"
+      (closed)="templatesOpen.set(false)"
+    />
   `,
   styles: [`.form-grid { display: grid; gap: 14px; } .file-btn { cursor: pointer; }`],
 })
@@ -52,12 +73,24 @@ export class ShiftsPage implements OnInit {
   private readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
+  private readonly session = inject(SessionStore);
+
+  readonly canCreate = computed(() => this.session.hasPermission('PROC:SHIFTS:CREATE', Droit.Processing));
+  readonly canUpdate = computed(() => this.session.hasPermission('PROC:SHIFTS:UPDATE', Droit.Processing));
+  readonly canDelete = computed(() => this.session.hasPermission('PROC:SHIFTS:DELETE', Droit.Processing));
 
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly modal = signal(false);
+  readonly templatesOpen = signal(false);
+  readonly importKeys = ['shifts'];
   readonly editId = signal<number | null>(null);
+  pageSize = 50;
   readonly rows = signal<Record<string, unknown>[]>([]);
+  readonly page = signal(1);
+  readonly total = signal(0);
+  readonly tableSearch = signal('');
+  private requestSeq = 0;
   form: Partial<Shift> = {};
   readonly columns: Column[] = [
     { key: 'noShift', label: 'N°' },
@@ -67,11 +100,37 @@ export class ShiftsPage implements OnInit {
     { key: 'hd', label: 'Départ' },
   ];
 
-  ngOnInit(): void { this.load(); }
-  load(): void {
+  ngOnInit(): void { this.loadPage(); }
+
+  private loadPage(): void {
+    const seq = ++this.requestSeq;
     this.loading.set(true);
-    this.svc.list().subscribe({ next: (items) => { this.rows.set(items.map(asRow)); this.loading.set(false); }, error: () => this.loading.set(false) });
+    this.svc.listPaged(this.page(), this.pageSize, this.tableSearch()).subscribe({
+      next: (r) => {
+        if (seq !== this.requestSeq) return;
+        this.rows.set(r.items.map(asRow));
+        this.total.set(r.total);
+        this.page.set(r.page);
+        this.loading.set(false);
+      },
+      error: () => { if (seq === this.requestSeq) this.loading.set(false); },
+    });
   }
+
+  onPageChange(event: PageChangeEvent): void {
+    this.page.set(event.page);
+    this.pageSize = event.pageSize;
+    this.loadPage();
+  }
+
+  onTableSearch(term: string): void {
+    this.tableSearch.set(term);
+    this.page.set(1);
+    this.loadPage();
+  }
+
+  private reload(): void { this.loadPage(); }
+
   openCreate(): void { this.editId.set(null); this.form = {}; this.modal.set(true); }
   openEdit(row: Record<string, unknown>): void { this.editId.set(row['id'] as number); this.form = { ...(row as unknown as Shift) }; this.modal.set(true); }
   save(): void {
@@ -79,21 +138,30 @@ export class ShiftsPage implements OnInit {
     const id = this.editId();
     const dto = this.form as Shift;
     const req = id ? this.svc.update(id, { ...dto, id }) : this.svc.create({ ...dto, id: 0 });
-    req.subscribe({ next: () => { this.saving.set(false); this.modal.set(false); this.toast.success('Enregistré.'); this.load(); }, error: () => this.saving.set(false) });
+    req.subscribe({ next: () => { this.saving.set(false); this.modal.set(false); this.toast.success('Enregistré.'); this.reload(); }, error: () => this.saving.set(false) });
   }
   async remove(row: Record<string, unknown>): Promise<void> {
     if (!(await this.confirm.ask('Supprimer ce shift ?'))) return;
-    this.svc.remove(row['id'] as number).subscribe({ next: () => { this.toast.success('Supprimé.'); this.load(); } });
+    this.svc.remove(row['id'] as number).subscribe({ next: () => { this.toast.success('Supprimé.'); this.reload(); } });
   }
   exportExcel(): void {
-    this.excel.download('shifts', this.columns, this.rows());
+    this.svc.list().subscribe({
+      next: (items) => this.excel.download('shifts', this.columns, items.map(asRow), 'Données', this.tableSearch()),
+    });
   }
   onFile(event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
     this.svc.importExcel(file).subscribe({
-      next: (r) => { this.toast.success(r.message || `${r.imported} importé(s).`); this.load(); },
+      next: (r) => {
+        toastImportResult(
+          this.toast,
+          r,
+          `${r.imported} shift(s) importé(s), ${r.skipped} ligne(s) ignorée(s).`,
+        );
+        this.reload();
+      },
     });
     input.value = '';
   }

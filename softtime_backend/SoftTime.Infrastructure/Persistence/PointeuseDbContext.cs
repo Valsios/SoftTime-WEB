@@ -32,7 +32,7 @@ public sealed class PointeuseContextFactory : IPointeuseContextFactory
     public IDisposablePointeuseContext Create(string connectionString)
     {
         var options = new DbContextOptionsBuilder<PointeuseDbContext>()
-            .UseSqlServer(connectionString)
+            .UseSqlServer(connectionString, o => o.CommandTimeout(120))
             .Options;
         return new DisposablePointeuseContext(new PointeuseDbContext(options));
     }

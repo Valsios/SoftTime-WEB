@@ -1,13 +1,17 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ToastService } from '../../core/toast.service';
 import { ConfirmService } from '../../core/confirm.service';
-import { EmployeePlanning, PeriodRequest, PlanningEmployee } from '../../shared/models';
+import { SessionStore } from '../../core/session.store';
+import { Droit } from '../../core/rights';
+import { EmployeePlanning, PeriodRequest, PlanningEmployee, PageChangeEvent } from '../../shared/models';
 import { EmployeePlanningService, ShiftsService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import {
   Column,
   DataTable,
+  ImportTemplatesModal,
   PageHeader,
   PeriodFilter,
   SoftButton,
@@ -19,11 +23,15 @@ import {
   SoftToggle,
 } from '../../shared/components';
 import { asRow, fmtDate, monthStart, today } from '../../shared/utils/date';
+import { toastImportResult } from '../../shared/utils/import-result';
+import { input } from '@angular/core';
+import { readDeepLink } from '../../shared/utils/deep-link';
 
 @Component({
   selector: 'app-employee-planning',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    CommonModule,
     FormsModule,
     PageHeader,
     SoftButton,
@@ -35,36 +43,68 @@ import { asRow, fmtDate, monthStart, today } from '../../shared/utils/date';
     SoftSelect,
     SoftToggle,
     SoftTabs,
+    ImportTemplatesModal,
   ],
   template: `
     <page-header title="Planning salariés" subtitle="Tous les salariés, même sans planning">
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
-      <soft-button (click)="openCreate()">Ajouter un planning</soft-button>
+      <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter un planning</soft-button>
       <label class="file-btn">
         <input #planningFile type="file" accept=".xlsx,.xls" hidden (change)="onFile($event)" />
         <soft-button variant="secondary" (click)="planningFile.click()">Import Excel</soft-button>
       </label>
+      <label class="file-btn">
+        <input #categoryFile type="file" accept=".csv" hidden (change)="onGenerateFromCategoryFile($event)" />
+        <soft-button variant="secondary" (click)="categoryFile.click()">Générer par catégorie (CSV)</soft-button>
+      </label>
+      <label class="file-btn">
+        <input #generateFile type="file" accept=".csv" hidden (change)="onGenerateFile($event)" />
+        <soft-button variant="secondary" (click)="generateFile.click()">Générer par matricule (CSV)</soft-button>
+      </label>
+      <soft-button variant="ghost" (click)="templatesOpen.set(true)">Modèles d'import</soft-button>
     </page-header>
 
-    <period-filter [showMatricule]="false" (search)="onSearch($event)"></period-filter>
+    <period-filter [showMatricule]="false" [initial]="link()" (search)="onSearch($event)"></period-filter>
 
     <soft-tabs [tabs]="tabs" [(activeTab)]="activeTab" />
 
     @if (activeTab() === 'employees') {
       <soft-card padding="md">
-        <data-table [columns]="employeeColumns" [rows]="employeeRows()" [loading]="loadingPeople()">
+        <data-table
+          [columns]="employeeColumns"
+          [rows]="employeeRows()"
+          [loading]="loadingPeople()"
+          [serverSide]="true"
+          [total]="employeeTotal()"
+          [serverPageSize]="employeePageSize"
+          [serverPage]="employeePage()"
+          [(searchTerm)]="employeeSearch"
+          (searchSubmit)="onEmployeeSearch($event)"
+          (pageChange)="onEmployeePageChange($event)"
+        >
           <ng-template #actions let-row>
-            <soft-button size="sm" (click)="openCreate(row)">Planifier</soft-button>
+            <soft-button *ngIf="canCreate()" size="sm" (click)="openCreate(row)">Planifier</soft-button>
           </ng-template>
         </data-table>
       </soft-card>
     } @else {
       <soft-card padding="md">
-        <data-table [columns]="planningColumns" [rows]="planningRows()" [loading]="loading()">
+        <data-table
+          [columns]="planningColumns"
+          [rows]="planningRows()"
+          [loading]="loading()"
+          [serverSide]="true"
+          [total]="planningTotal()"
+          [serverPageSize]="planningPageSize"
+          [serverPage]="planningPage()"
+          [(searchTerm)]="planningSearch"
+          (searchSubmit)="onPlanningSearch($event)"
+          (pageChange)="onPlanningPageChange($event)"
+        >
           <ng-template #actions let-row>
             <div class="soft-actions" style="justify-content: end">
-              <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
-              <soft-button size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
+              <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
+              <soft-button *ngIf="canDelete()" size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
             </div>
           </ng-template>
         </data-table>
@@ -97,6 +137,11 @@ import { asRow, fmtDate, monthStart, today } from '../../shared/utils/date';
         <soft-button [loading]="saving()" (click)="save()">Enregistrer</soft-button>
       </div>
     </soft-modal>
+    <app-import-templates-modal
+      [open]="templatesOpen()"
+      [keys]="importKeys"
+      (closed)="templatesOpen.set(false)"
+    />
   `,
   styles: [
     `
@@ -107,22 +152,49 @@ import { asRow, fmtDate, monthStart, today } from '../../shared/utils/date';
   ],
 })
 export class EmployeePlanningPage implements OnInit {
+  // Lien profond facultatif (?du=&au=&matricule=), lié par withComponentInputBinding ; validé avant tout usage.
+  readonly du = input<unknown>();
+  readonly au = input<unknown>();
+  readonly matricule = input<unknown>();
+  readonly link = computed(() => readDeepLink({ du: this.du(), au: this.au(), matricule: this.matricule() }));
   private readonly svc = inject(EmployeePlanningService);
   private readonly shiftsSvc = inject(ShiftsService);
   private readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
+  private readonly session = inject(SessionStore);
+
+  readonly canCreate = computed(() => this.session.hasPermission('PROC:EMPLOYEE_PLANNING:CREATE', Droit.Processing));
+  readonly canUpdate = computed(() => this.session.hasPermission('PROC:EMPLOYEE_PLANNING:UPDATE', Droit.Processing));
+  readonly canDelete = computed(() => this.session.hasPermission('PROC:EMPLOYEE_PLANNING:DELETE', Droit.Processing));
 
   readonly loading = signal(false);
   readonly loadingPeople = signal(true);
   readonly saving = signal(false);
   readonly modal = signal(false);
+  readonly templatesOpen = signal(false);
+  readonly importKeys = [
+    'planning-matricule',
+    'planning-categorie',
+    'planning-generate-category',
+    'planning-generate-matricule',
+  ];
+  employeePageSize = 50;
+  planningPageSize = 50;
   readonly employeeRows = signal<Record<string, unknown>[]>([]);
   readonly planningRows = signal<Record<string, unknown>[]>([]);
+  readonly employeePage = signal(1);
+  readonly employeeTotal = signal(0);
+  readonly planningPage = signal(1);
+  readonly planningTotal = signal(0);
+  readonly employeeSearch = signal('');
+  readonly planningSearch = signal('');
   readonly employeeOptions = signal<{ value: number; label: string }[]>([]);
   readonly shiftOptions = signal<{ value: number; label: string }[]>([]);
   private employees: PlanningEmployee[] = [];
   private lastFilter: PeriodRequest = { from: monthStart(), to: today() };
+  private employeeSeq = 0;
+  private planningSeq = 0;
   form: Partial<EmployeePlanning> = {};
   readonly activeTab = signal('employees');
   readonly tabs = [
@@ -157,16 +229,48 @@ export class EmployeePlanningPage implements OnInit {
         ),
     });
     this.loadEmployees();
+    this.loadEmployeeRows();
     this.loadPlanning();
   }
 
   onSearch(filter: PeriodRequest): void {
+    // Lien profond : le matricule (non affiché ici) alimente la recherche du tableau « Salariés ».
+    if (this.link() && filter.matriculeFrom) {
+      this.activeTab.set('employees');
+      this.employeeSearch.set(filter.matriculeFrom.trim());
+    }
     this.lastFilter = filter;
+    this.employeePage.set(1);
+    this.planningPage.set(1);
+    this.loadEmployeeRows();
+    this.loadPlanning();
+  }
+
+  onEmployeePageChange(event: PageChangeEvent): void {
+    this.employeePage.set(event.page);
+    this.employeePageSize = event.pageSize;
+    this.loadEmployeeRows();
+  }
+
+  onPlanningPageChange(event: PageChangeEvent): void {
+    this.planningPage.set(event.page);
+    this.planningPageSize = event.pageSize;
+    this.loadPlanning();
+  }
+
+  onEmployeeSearch(term: string): void {
+    this.employeeSearch.set(term);
+    this.employeePage.set(1);
+    this.loadEmployeeRows();
+  }
+
+  onPlanningSearch(term: string): void {
+    this.planningSearch.set(term);
+    this.planningPage.set(1);
     this.loadPlanning();
   }
 
   loadEmployees(): void {
-    this.loadingPeople.set(true);
     this.svc.employees().subscribe({
       next: (items) => {
         this.employees = items;
@@ -176,40 +280,51 @@ export class EmployeePlanningPage implements OnInit {
             label: `${e.matricule ?? e.cardPaieId} — ${[e.nom, e.prenom].filter(Boolean).join(' ')}`.trim(),
           })),
         );
-        this.refreshEmployeeRows();
+      },
+    });
+  }
+
+  /** Grille des salariés : le nombre de jours planifiés est calculé côté serveur. */
+  private loadEmployeeRows(): void {
+    const seq = ++this.employeeSeq;
+    this.loadingPeople.set(true);
+    this.svc.employeesPaged(
+      this.lastFilter.from,
+      this.lastFilter.to,
+      this.employeePage(),
+      this.employeePageSize,
+      this.employeeSearch(),
+    ).subscribe({
+      next: (r) => {
+        if (seq !== this.employeeSeq) return;
+        this.employeeRows.set(r.items.map(asRow));
+        this.employeeTotal.set(r.total);
+        this.employeePage.set(r.page);
         this.loadingPeople.set(false);
       },
-      error: () => this.loadingPeople.set(false),
+      error: () => { if (seq === this.employeeSeq) this.loadingPeople.set(false); },
     });
   }
 
   loadPlanning(): void {
+    const seq = ++this.planningSeq;
     this.loading.set(true);
-    this.svc.list(this.lastFilter.from, this.lastFilter.to).subscribe({
-      next: (items) => {
-        this.planningRows.set(items.map(asRow));
-        this.refreshEmployeeRows();
+    this.svc.listPaged({
+      from: this.lastFilter.from,
+      to: this.lastFilter.to,
+      search: this.planningSearch(),
+      page: this.planningPage(),
+      pageSize: this.planningPageSize,
+    }).subscribe({
+      next: (r) => {
+        if (seq !== this.planningSeq) return;
+        this.planningRows.set(r.items.map(asRow));
+        this.planningTotal.set(r.total);
+        this.planningPage.set(r.page);
         this.loading.set(false);
       },
-      error: () => this.loading.set(false),
+      error: () => { if (seq === this.planningSeq) this.loading.set(false); },
     });
-  }
-
-  private refreshEmployeeRows(): void {
-    const counts = new Map<number, number>();
-    for (const row of this.planningRows()) {
-      const id = Number(row['cardPaieId']);
-      counts.set(id, (counts.get(id) ?? 0) + 1);
-    }
-    this.employeeRows.set(
-      this.employees.map((e) => ({
-        cardPaieId: e.cardPaieId,
-        matricule: e.matricule,
-        nom: e.nom,
-        prenom: e.prenom,
-        plannedDays: counts.get(e.cardPaieId) ?? 0,
-      })),
-    );
   }
 
   openCreate(row?: Record<string, unknown>): void {
@@ -250,6 +365,7 @@ export class EmployeePlanningPage implements OnInit {
         this.modal.set(false);
         this.toast.success('Planning enregistré.');
         this.loadPlanning();
+        this.loadEmployeeRows();
       },
       error: () => this.saving.set(false),
     });
@@ -261,15 +377,20 @@ export class EmployeePlanningPage implements OnInit {
       next: () => {
         this.toast.success('Supprimé.');
         this.loadPlanning();
+        this.loadEmployeeRows();
       },
     });
   }
 
   exportExcel(): void {
     if (this.activeTab() === 'employees') {
-      this.excel.download('salaries-planning', this.employeeColumns, this.employeeRows());
+      this.svc.employeesStats(this.lastFilter.from, this.lastFilter.to).subscribe({
+        next: (items) => this.excel.download('salaries-planning', this.employeeColumns, items.map(asRow), 'Données', this.employeeSearch()),
+      });
     } else {
-      this.excel.download('lignes-planning', this.planningColumns, this.planningRows());
+      this.svc.list(this.lastFilter.from, this.lastFilter.to).subscribe({
+        next: (items) => this.excel.download('lignes-planning', this.planningColumns, items.map(asRow), 'Données', this.planningSearch()),
+      });
     }
   }
 
@@ -279,9 +400,46 @@ export class EmployeePlanningPage implements OnInit {
     if (!file) return;
     this.svc.importExcel(file).subscribe({
       next: (r) => {
-        this.toast.success(r.message || `${r.imported} ligne(s) importée(s).`);
+        toastImportResult(
+          this.toast,
+          r,
+          `${r.imported} ligne(s) de planning importée(s), ${r.skipped} élément(s) ignoré(s).`,
+        );
         this.activeTab.set('planning');
         this.loadPlanning();
+        this.loadEmployeeRows();
+      },
+    });
+    input.value = '';
+  }
+
+  /** Génération du planning d'une semaine pour toute une catégorie (CSV). */
+  onGenerateFromCategoryFile(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    this.svc.generateFromCategory(file).subscribe({
+      next: (r) => {
+        toastImportResult(this.toast, r, `${r.imported} jour(s) généré(s), ${r.skipped} ignoré(s).`);
+        this.activeTab.set('planning');
+        this.loadPlanning();
+        this.loadEmployeeRows();
+      },
+    });
+    input.value = '';
+  }
+
+  /** Génération du planning d'une semaine par matricule (CSV, pause par jour). */
+  onGenerateFile(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    this.svc.generate(file).subscribe({
+      next: (r) => {
+        toastImportResult(this.toast, r, `${r.imported} jour(s) généré(s), ${r.skipped} ignoré(s).`);
+        this.activeTab.set('planning');
+        this.loadPlanning();
+        this.loadEmployeeRows();
       },
     });
     input.value = '';

@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { ToastService } from '../../core/toast.service';
 import { SageDb, User } from '../../shared/models';
 import { DbAccessService, SageDatabasesService, UsersService } from '../../shared/services/users.service';
+import { AuthService } from '../../shared/services/auth.service';
 import { PageHeader, SoftButton, SoftCard, SoftSelect } from '../../shared/components';
 
 @Component({
@@ -44,6 +45,7 @@ export class DbAccessPage implements OnInit {
   private readonly usersSvc = inject(UsersService);
   private readonly sageSvc = inject(SageDatabasesService);
   private readonly accessSvc = inject(DbAccessService);
+  private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
 
   readonly databases = signal<SageDb[]>([]);
@@ -85,7 +87,11 @@ export class DbAccessPage implements OnInit {
     if (!this.selectedUserId) return;
     this.saving.set(true);
     this.accessSvc.replace(this.selectedUserId, [...this.selected()]).subscribe({
-      next: () => { this.saving.set(false); this.toast.success('Accès enregistrés.'); },
+      next: () => {
+        this.saving.set(false);
+        this.toast.success('Accès enregistrés.');
+        this.auth.refreshMe().subscribe();
+      },
       error: () => this.saving.set(false),
     });
   }

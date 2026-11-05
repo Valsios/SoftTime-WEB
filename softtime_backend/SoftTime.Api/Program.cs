@@ -5,15 +5,23 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using SoftTime.Api.HostedServices;
 using SoftTime.Api.Middleware;
 using SoftTime.Api.Security;
 using SoftTime.Application;
 using SoftTime.Application.Abstractions;
+using SoftTime.Application.Serialization;
+using SoftTime.Application.Services;
 using SoftTime.Infrastructure;
+using SoftTime.Infrastructure.SchemaMigrations;
+using SoftTime.Domain.Repositories;
+using Microsoft.AspNetCore.Identity;
+using SoftTime.Domain.Entities.SoftTime;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(o => SoftTimeJsonOptions.Configure(o.JsonSerializerOptions));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -35,6 +43,14 @@ builder.Services.AddSwaggerGen(c =>
     {
         {
             new OpenApiSecurityScheme { Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" } },
+            Array.Empty<string>()
+        },
+        {
+            new OpenApiSecurityScheme { Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "SageDb" } },
+            Array.Empty<string>()
+        },
+        {
+            new OpenApiSecurityScheme { Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "PointeuseDb" } },
             Array.Empty<string>()
         }
     });
@@ -58,11 +74,17 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.Configure<MlOptions>(builder.Configuration.GetSection("Ml"));
+builder.Services.AddHostedService<MlMaintenanceHostedService>();
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
 builder.Services.AddScoped<ICompanyContext, CompanyContext>();
+builder.Services.AddScoped<SystemExecution>();
 builder.Services.AddScoped<ICurrentUser>(sp =>
 {
     var http = sp.GetRequiredService<IHttpContextAccessor>().HttpContext;
+    // Scope d'arrière-plan (jobs ML) : identité système administratrice, jamais pour une requête HTTP.
+    if (http is null && sp.GetRequiredService<SystemExecution>().Active)
+        return new CurrentUser { Login = SystemExecution.Login, RoleId = SoftTime.Domain.Services.AdminRules.AdminRoleId };
     var principal = http?.User;
     if (principal?.Identity?.IsAuthenticated != true)
         return new CurrentUser();
@@ -108,16 +130,51 @@ builder.Services.AddAuthorization();
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
 var app = builder.Build();
+using (var scope = app.Services.CreateScope())
+{
+    // Scripts SQL versionnés (migrations/versions) : uniquement si Database:AutoMigrate = true (faux par défaut),
+    // AVANT les Ensure* ci-dessous. Un échec arrête le démarrage avec un message explicite.
+    await scope.ServiceProvider.GetRequiredService<SchemaMigrator>().RunIfEnabledAsync(CancellationToken.None);
+
+    await SageDatabaseConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
+    await PunchProcessingConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
+    await HistoryArchiveConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
+    // Le journal central est créé par la migration 003 ; sans elle, le démarrage s'arrête avec un message clair.
+    if (scope.ServiceProvider.GetRequiredService<AuditJournalOptions>().Enabled)
+        await SchemaPresenceGuard.EnsureAuditJournalAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
+    await UserAccountConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
+    await RolePermissionConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
+
+    // Base analytique du moteur prédictif : applique les migrations EF versionnées (schéma ml).
+    // Un échec n'empêche pas l'API de démarrer : la fonctionnalité reste simplement indisponible.
+    try
+    {
+        await MlStorageConfiguration.EnsureSchemaAsync(app.Services, CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Impossible d'appliquer les migrations du moteur prédictif (schéma ml).");
+    }
+
+    // Migration globale contrôlée des mots de passe en clair :
+    // Par défaut, la migration est assurée de manière fluide et isolée à la connexion de chaque utilisateur (AuthService.LoginAsync),
+    // éliminant tout risque de verrou concurrent (multi-instances / conteneurs) ou de dépassement de délai au démarrage.
+    // L'exécution batch au démarrage reste activable explicitement via la configuration "Security:MigrateLegacyPasswordsOnStartup" :
+    if (app.Configuration.GetValue<bool>("Security:MigrateLegacyPasswordsOnStartup", false))
+    {
+        await UserAccountConfiguration.MigrateLegacyPasswordsAsync(
+            scope.ServiceProvider.GetRequiredService<IUnitOfWork>(),
+            scope.ServiceProvider.GetRequiredService<IPasswordHasher<T_RESPONSABLE>>(),
+            CancellationToken.None);
+    }
+}
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseSwagger();
 app.UseSwaggerUI();
 app.UseCors();
-app.UseDefaultFiles();
-app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<TenantMiddleware>();
 app.MapControllers();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
-app.MapFallbackToFile("index.html");
 app.Run();

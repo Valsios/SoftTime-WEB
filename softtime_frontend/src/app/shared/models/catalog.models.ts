@@ -1,4 +1,5 @@
 import { SageDb } from './auth.models';
+import type { SourceEntityMapping } from './mapping.models';
 
 export type { SageDb };
 
@@ -6,11 +7,15 @@ export interface PointeuseDb {
   id: number;
   serveur?: string | null;
   login?: string | null;
+  /** Saisie seulement : le serveur ne renvoie jamais le mot de passe. */
   password?: string | null;
+  passwordDefined?: boolean | null;
   sqlAuth?: boolean | null;
   nomBd?: string | null;
   typePointage?: string | null;
   active?: boolean | null;
+  typeBase?: string; // 'STANDARD' | 'AUTRE'
+  mappings?: SourceEntityMapping[] | null;
 }
 
 export interface ClockParam {
@@ -25,7 +30,6 @@ export interface CorrespondenceMode {
 export interface CardPaie {
   id: number;
   sageMatricule?: string | null;
-  branche?: string | null;
   sageNom?: string | null;
   sagePrenom?: string | null;
   pointeuseNumero?: string | null;
@@ -35,6 +39,7 @@ export interface CardPaie {
   sageBdd?: string | null;
   pointeuseBdd?: string | null;
   date?: string | null;
+  departement?: string | null;
 }
 
 export interface Category {
@@ -49,6 +54,27 @@ export interface Affectation {
   id: number;
   cardPaieId: number;
   categoryId: number;
+}
+
+/** Ligne enrichie renvoyée par l'endpoint paginé des affectations. */
+export interface AffectationRow extends Affectation {
+  matricule?: string | null;
+  nom?: string | null;
+  prenom?: string | null;
+  departement?: string | null;
+  service?: string | null;
+}
+
+export interface AffectationQuery {
+  categoryId?: number | null;
+  departement?: string | null;
+  service?: string | null;
+  search?: string | null;
+}
+
+export interface AffectationOptions {
+  departements: string[];
+  services: string[];
 }
 
 export interface Tolerance {
@@ -82,9 +108,43 @@ export interface CodeConstante {
   categorie: string;
   intitule?: string | null;
   codeConstante: string;
+  tableCible?: string | null;
 }
 
 export interface SageConstantOption {
   code: string;
   intitule?: string | null;
+}
+
+export interface DepartementService {
+  matricule: string;
+  departement?: string | null;
+  service?: string | null;
+}
+
+export interface DepartementServiceOptions {
+  departements: string[];
+  services: string[];
+}
+
+export interface ConnectionTestResult {
+  success: boolean;
+  message: string;
+  missingTables?: string[] | null;
+}
+
+export interface PayrollWriteConfiguration {
+  id: number;
+  tableCible?: string | null;
+  colMatricule?: string | null;
+  categorie: string;
+  colValeur?: string | null;
+}
+
+export interface PayrollWriteResult {
+  database: string;
+  typeBase: string;
+  employeesUpdated: number;
+  categoriesUpdated: number;
+  message: string;
 }

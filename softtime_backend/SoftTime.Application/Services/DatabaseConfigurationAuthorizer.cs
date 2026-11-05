@@ -1,0 +1,89 @@
+using SoftTime.Application.Abstractions;
+using SoftTime.Domain;
+
+namespace SoftTime.Application.Services;
+
+public enum DatabaseKind { Sage, Pointeuse }
+
+public enum DatabaseConfigAction { Create, Update, Delete }
+
+/// <summary>
+/// Autorise la configuration (ajout, modification, suppression, test, découverte) des bases SAGE et pointeuse.
+/// Hors administrateur, exige la porte Bases ET la permission fine, que le compte soit personnalisé ou non.
+/// </summary>
+public class DatabaseConfigurationAuthorizer
+{
+    private readonly ICurrentUser _user;
+    private readonly AuthService _auth;
+
+    public DatabaseConfigurationAuthorizer(ICurrentUser user, AuthService auth)
+    {
+        _user = user;
+        _auth = auth;
+    }
+
+    public async Task EnsureCanConfigureAsync(DatabaseKind kind, DatabaseConfigAction action, string? dbName, CancellationToken ct = default)
+    {
+        if (AdminAccess.IsAdmin(_user)) return;
+        var perms = await LoadPermissionsAsync(ct);
+        var prefix = Prefix(kind);
+
+        if (action == DatabaseConfigAction.Create)
+        {
+            if (!HasCreate(perms, prefix))
+                throw new ForbiddenOperationException($"Vous n'avez pas la permission d'ajouter une base {Label(kind)}.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(dbName))
+            throw new ForbiddenOperationException($"Base {Label(kind)} introuvable : opération refusée.");
+        var code = $"{prefix}:{dbName}:{(action == DatabaseConfigAction.Update ? "UPDATE" : "DELETE")}";
+        if (!perms.Contains(code))
+        {
+            var verbe = action == DatabaseConfigAction.Update ? "modifier" : "supprimer";
+            throw new ForbiddenOperationException($"Vous n'avez pas la permission de {verbe} la base {Label(kind)} '{dbName}'.");
+        }
+    }
+
+    /// <summary>Test de connexion et découverte : il faut pouvoir ajouter ou modifier au moins une base.</summary>
+    public async Task EnsureCanConfigureAnyAsync(DatabaseKind? kind, CancellationToken ct = default)
+    {
+        if (AdminAccess.IsAdmin(_user)) return;
+        var perms = await LoadPermissionsAsync(ct);
+        var kinds = kind.HasValue ? new[] { kind.Value } : new[] { DatabaseKind.Sage, DatabaseKind.Pointeuse };
+        var allowed = kinds.Any(k =>
+        {
+            var prefix = Prefix(k);
+            return HasCreate(perms, prefix)
+                   || perms.Any(p => p.StartsWith(prefix + ":", StringComparison.OrdinalIgnoreCase)
+                                     && p.EndsWith(":UPDATE", StringComparison.OrdinalIgnoreCase));
+        });
+        if (!allowed)
+            throw new ForbiddenOperationException("Vous n'avez pas la permission de configurer les bases.");
+    }
+
+    private async Task<HashSet<string>> LoadPermissionsAsync(CancellationToken ct)
+    {
+        if (_user.UserId is not decimal uid)
+            throw new ForbiddenOperationException("Utilisateur non identifié.");
+        if (!_user.HasRight(Rights.Databases))
+            throw new ForbiddenOperationException("La configuration des bases exige le droit « Bases ».");
+        try
+        {
+            var detailed = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
+            return new HashSet<string>(detailed.GrantedPermissions, StringComparer.OrdinalIgnoreCase);
+        }
+        catch (KeyNotFoundException)
+        {
+            throw new ForbiddenOperationException("Utilisateur introuvable.");
+        }
+    }
+
+    private static bool HasCreate(HashSet<string> perms, string prefix)
+        => perms.Contains($"{prefix}:CREATE")
+           || perms.Any(p => p.StartsWith(prefix + ":", StringComparison.OrdinalIgnoreCase)
+                             && p.EndsWith(":CREATE", StringComparison.OrdinalIgnoreCase));
+
+    private static string Prefix(DatabaseKind kind) => kind == DatabaseKind.Sage ? "SAGE" : "POINTEUSE";
+    private static string Label(DatabaseKind kind) => kind == DatabaseKind.Sage ? "SAGE" : "pointeuse";
+}
