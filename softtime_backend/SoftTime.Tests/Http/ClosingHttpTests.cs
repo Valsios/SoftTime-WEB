@@ -161,6 +161,53 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Analysis_without_gravity_parameters_is_identical_to_empty_ones()
+    {
+        var (c1, sans) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}"));
+        var (c2, vides) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}&gravites=&tri="));
+
+        Assert.Equal(HttpStatusCode.OK, c1);
+        Assert.Equal(HttpStatusCode.OK, c2);
+        Assert.Equal(sans, vides);
+    }
+
+    [Fact]
+    public async Task Gravity_filter_changes_the_list_only_never_the_status_score_or_counts()
+    {
+        var (_, complet) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}"));
+        var (code, mineures) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}&gravites=Mineure,Information&tri=gravite"));
+        var (codeCritique, critiques) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}&gravites=critique&tri=gravite"));
+
+        Assert.Equal(HttpStatusCode.OK, code);
+        Assert.Equal(HttpStatusCode.OK, codeCritique);
+        using var a = JsonDocument.Parse(complet);
+        using var b = JsonDocument.Parse(mineures);
+        using var c = JsonDocument.Parse(critiques);
+        foreach (var champ in new[] { "statut", "score", "nombreAnomalies", "joursEmployeControles" })
+        {
+            Assert.Equal(a.RootElement.GetProperty(champ).ToString(), b.RootElement.GetProperty(champ).ToString());
+            Assert.Equal(a.RootElement.GetProperty(champ).ToString(), c.RootElement.GetProperty(champ).ToString());
+        }
+        Assert.Equal(a.RootElement.GetProperty("parGravite").ToString(), b.RootElement.GetProperty("parGravite").ToString());
+        Assert.Equal(0, b.RootElement.GetProperty("anomalies").GetProperty("total").GetInt32());   // l'anomalie du jeu est Critique
+        Assert.Equal(1, c.RootElement.GetProperty("anomalies").GetProperty("total").GetInt32());
+    }
+
+    [Theory]
+    [InlineData("gravites=Grave")]
+    [InlineData("gravites=Critique,Urgent")]
+    [InlineData("tri=date")]
+    public async Task Invalid_gravity_or_sort_value_is_refused_with_a_clear_message(string requete)
+    {
+        var before = _f.Snapshot();
+        var (code, texte) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}&{requete}"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, code);
+        Assert.Contains("gravite", texte, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(before, _f.Snapshot());
+    }
+
+    [Fact]
     public async Task ShowNames_false_returns_the_matricule_only_without_error()
     {
         using var factory = AvecReglages(("Closing:ShowNames", "false"));

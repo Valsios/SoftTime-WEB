@@ -295,9 +295,15 @@ public class ClosingService
         var page = Math.Max(1, request.Page ?? 1);
         var taille = Math.Clamp(request.PageSize ?? DefaultPageSize, 1, MaxPageSize);
         // Les comptages incluent toujours les « Information » ; la liste les omet sauf demande.
-        var affichees = request.IncludeInformation
-            ? actuel.Anomalies
-            : actuel.Anomalies.Where(a => a.Severity != ClosingSeverity.Information).ToList();
+        // Un filtre de gravité explicite remplace cette règle ; le tri par gravité est stable (l'ordre de départ,
+        // déterministe, départage les égalités). Dans tous les cas, seule la liste change : comptages, score et statut non.
+        IReadOnlyList<ClosingAnomaly> affichees = request.Gravites is { Count: > 0 } filtre
+            ? actuel.Anomalies.Where(a => filtre.Contains(a.Severity)).ToList()
+            : request.IncludeInformation
+                ? actuel.Anomalies
+                : actuel.Anomalies.Where(a => a.Severity != ClosingSeverity.Information).ToList();
+        if (request.TriParGravite)
+            affichees = affichees.OrderByDescending(a => (int)a.Severity).ToList();
         var total = affichees.Count;
         var items = affichees
             .Skip(PaginationRules.Decalage(page, taille))

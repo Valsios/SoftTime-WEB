@@ -628,4 +628,170 @@ public class ClosingServiceTests
         Assert.NotNull(avecComparaison.Comparaison);
         Assert.NotEqual((await ctx.Service.AnalyserAsync(Page(1, 50, reuse: true))).Score, autresPoids.Score);
     }
+
+    // ----------------------------------------------------------------------------- filtre et tri par gravité
+
+    /// <summary>
+    /// Gravités réglées pour que l'ordre par date diffère de l'ordre par gravité :
+    /// lundi manquant (Mineure), mardi incomplet (Critique), mercredi doublon exact (Information), jeudi quasi-doublon (Critique).
+    /// </summary>
+    private static ClosingRulesOptions GravitesMelangees() => new()
+    {
+        Gravites = new Dictionary<ClosingAnomalyType, ClosingSeverity>
+        {
+            [ClosingAnomalyType.PointageManquant] = ClosingSeverity.Mineure,
+            [ClosingAnomalyType.DoublonExact] = ClosingSeverity.Information,
+            [ClosingAnomalyType.QuasiDoublon] = ClosingSeverity.Critique,
+        }
+    };
+
+    private static ClosingAnalysisRequest AvecGravite(
+        IReadOnlyList<ClosingSeverity>? niveaux = null, bool tri = false, bool information = false, int? page = null, int? taille = null, bool reuse = false)
+        => new(Lundi, Vendredi, null, page, taille, GravitesMelangees(), IncludeInformation: information, ReuseCached: reuse, Gravites: niveaux, TriParGravite: tri);
+
+    private static string[] Types(ClosingAnalysisDto a) => a.Anomalies.Items.Select(x => x.Type).ToArray();
+
+    /// <summary>Tout sauf la liste : ce qui ne doit jamais dépendre du filtre ni du tri.</summary>
+    private static string SansListe(ClosingAnalysisDto a) =>
+        Json(new { a.Score, a.Statut, a.NombreAnomalies, a.JoursEmployeControles, a.ParGravite, a.ParType, a.ParDepartement, a.Comparaison, a.From, a.To });
+
+    [Fact]
+    public async Task Gravite_WithoutParameter_IsStrictlyIdenticalToTheDefaultOutput()
+    {
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+        ctx.SemainePrecedente(manquantsPour002: true);
+
+        var absent = await ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(Lundi, Vendredi, null, 1, 50, IncludeComparison: true));
+        var explicite = await ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(Lundi, Vendredi, null, 1, 50, IncludeComparison: true,
+            Gravites: null, TriParGravite: false));
+        var videExplicite = await ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(Lundi, Vendredi, null, 1, 50, IncludeComparison: true,
+            Gravites: Array.Empty<ClosingSeverity>(), TriParGravite: false));
+
+        Assert.Equal(Json(absent), Json(explicite));
+        Assert.Equal(Json(absent), Json(videExplicite));
+        // Ordre historique : date, matricule, type (le lundi manquant, puis incomplet, doublon exact, quasi-doublon).
+        Assert.Equal(new[] { "PointageManquant", "PointageIncomplet", "DoublonExact", "QuasiDoublon" }, Types(absent));
+        Assert.Equal(76, absent.Score);
+        Assert.Equal(4, absent.NombreAnomalies);
+        Assert.Equal(4, absent.Anomalies.Total);
+    }
+
+    [Fact]
+    public async Task Gravite_Filter_KeepsScoreStatusAndCountsOnTheFullAnalysis()
+    {
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+        ctx.SemainePrecedente(manquantsPour002: true);
+
+        var complet = await ctx.Service.AnalyserAsync(AvecGravite(information: true));
+        foreach (var niveaux in new[] { new[] { ClosingSeverity.Critique }, new[] { ClosingSeverity.Mineure, ClosingSeverity.Information }, new[] { ClosingSeverity.Importante } })
+        {
+            var filtre = await ctx.Service.AnalyserAsync(AvecGravite(niveaux));
+            Assert.Equal(SansListe(complet), SansListe(filtre));   // score, statut, comptages, départements : inchangés
+            Assert.All(filtre.Anomalies.Items, a => Assert.Contains(Enum.Parse<ClosingSeverity>(a.Gravite), niveaux));
+        }
+    }
+
+    [Fact]
+    public async Task Gravite_Filter_RestrictsTheListAndTheTotalButNotTheCounts()
+    {
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+
+        var critiques = await ctx.Service.AnalyserAsync(AvecGravite(new[] { ClosingSeverity.Critique }));
+        Assert.Equal(new[] { "PointageIncomplet", "QuasiDoublon" }, Types(critiques));
+        Assert.Equal(2, critiques.Anomalies.Total);
+        Assert.Equal(4, critiques.NombreAnomalies);
+
+        var deux = await ctx.Service.AnalyserAsync(AvecGravite(new[] { ClosingSeverity.Critique, ClosingSeverity.Mineure }));
+        Assert.Equal(new[] { "PointageManquant", "PointageIncomplet", "QuasiDoublon" }, Types(deux));   // ordre habituel conservé
+
+        var aucune = await ctx.Service.AnalyserAsync(AvecGravite(new[] { ClosingSeverity.Importante }));
+        Assert.Empty(aucune.Anomalies.Items);
+        Assert.Equal(0, aucune.Anomalies.Total);
+        Assert.Equal(4, aucune.NombreAnomalies);
+    }
+
+    [Fact]
+    public async Task Gravite_ExplicitFilter_OverridesIncludeInformation()
+    {
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+
+        var parDefaut = await ctx.Service.AnalyserAsync(AvecGravite());                           // Information masquée
+        var avecInfo = await ctx.Service.AnalyserAsync(AvecGravite(information: true));
+        var infoSeule = await ctx.Service.AnalyserAsync(AvecGravite(new[] { ClosingSeverity.Information }));       // demandée par le filtre
+        var critiquesEtInfo = await ctx.Service.AnalyserAsync(AvecGravite(new[] { ClosingSeverity.Critique }, information: true));
+
+        Assert.DoesNotContain("DoublonExact", Types(parDefaut));
+        Assert.Contains("DoublonExact", Types(avecInfo));
+        Assert.Equal(new[] { "DoublonExact" }, Types(infoSeule));
+        Assert.DoesNotContain("DoublonExact", Types(critiquesEtInfo));   // le filtre explicite l'emporte
+    }
+
+    [Fact]
+    public async Task Gravite_Sort_PutsTheMostSevereFirstThenKeepsTheUsualOrderStable()
+    {
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+
+        var trie = await ctx.Service.AnalyserAsync(AvecGravite(tri: true, information: true));
+        var graviteDe = trie.Anomalies.Items.Select(a => Enum.Parse<ClosingSeverity>(a.Gravite)).ToArray();
+
+        Assert.Equal(new[] { ClosingSeverity.Critique, ClosingSeverity.Critique, ClosingSeverity.Mineure, ClosingSeverity.Information }, graviteDe);
+        // Égalités départagées par l'ordre habituel (date, matricule, type) : incomplet (mardi) avant quasi-doublon (jeudi).
+        Assert.Equal(new[] { "PointageIncomplet", "QuasiDoublon", "PointageManquant", "DoublonExact" }, Types(trie));
+        // Déterministe : mêmes demandes, mêmes résultats.
+        Assert.Equal(Json(trie), Json(await ctx.Service.AnalyserAsync(AvecGravite(tri: true, information: true))));
+        // Le tri ne change ni le total ni les comptages ni le score.
+        var sansTri = await ctx.Service.AnalyserAsync(AvecGravite(information: true));
+        Assert.Equal(sansTri.Anomalies.Total, trie.Anomalies.Total);
+        Assert.Equal(SansListe(sansTri), SansListe(trie));
+        Assert.Equal(Types(sansTri).OrderBy(t => t), Types(trie).OrderBy(t => t));   // mêmes lignes, autre ordre
+    }
+
+    [Fact]
+    public async Task Gravite_SortedPages_ConcatenateToTheFullSortedListWithoutGapsOrDuplicates()
+    {
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+        var complet = await ctx.Service.AnalyserAsync(AvecGravite(tri: true, information: true, page: 1, taille: 50));
+
+        var assemble = new List<ClosingAnomalyDto>();
+        for (var page = 1; page <= 4; page++)
+            assemble.AddRange((await ctx.Service.AnalyserAsync(AvecGravite(tri: true, information: true, page: page, taille: 1))).Anomalies.Items);
+
+        Assert.Equal(Json(complet.Anomalies.Items), Json(assemble));
+    }
+
+    [Fact]
+    public async Task Gravite_FilterAndSort_ServedFromCacheEqualFreshComputation_ForEveryPage()
+    {
+        var avec = new Contexte();
+        avec.JeuFixe();
+        var sans = new Contexte();
+        sans.JeuFixe();
+        await avec.Service.AnalyserAsync(AvecGravite(page: 1, taille: 1));   // remplit le cache
+
+        foreach (var niveaux in new IReadOnlyList<ClosingSeverity>?[] { null, new[] { ClosingSeverity.Critique }, new[] { ClosingSeverity.Mineure, ClosingSeverity.Critique } })
+            foreach (var tri in new[] { false, true })
+                for (var page = 1; page <= 4; page++)
+                {
+                    var attendu = await sans.Service.AnalyserAsync(AvecGravite(niveaux, tri, true, page, 1, reuse: false));
+                    var obtenu = await avec.Service.AnalyserAsync(AvecGravite(niveaux, tri, true, page, 1, reuse: true));
+                    Assert.Equal(Json(attendu), Json(obtenu));
+                }
+    }
+
+    [Fact]
+    public async Task Gravite_FilterAndSort_NeverWrite()
+    {
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+
+        await ctx.Service.AnalyserAsync(AvecGravite(new[] { ClosingSeverity.Critique }, tri: true, information: true));
+
+        Assert.Equal(0, ctx.Uow.Ecritures);
+    }
 }

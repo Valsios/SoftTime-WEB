@@ -11,6 +11,10 @@ namespace SoftTime.Application.DTOs;
 /// (faux par défaut) ajoute à la LISTE les anomalies « Information » ; les comptages les incluent toujours.
 /// <see cref="ReuseCached"/> (faux par défaut) autorise la réutilisation, pendant un court instant, de l'analyse
 /// déjà calculée pour la même période : réservé aux changements de page, jamais à une nouvelle analyse.
+/// <see cref="Gravites"/> (absent par défaut) restreint la LISTE aux niveaux donnés ; un filtre explicite
+/// l'emporte sur <see cref="IncludeInformation"/>. <see cref="TriParGravite"/> (faux par défaut) range la liste du plus
+/// grave au moins grave, puis dans l'ordre habituel (date, matricule, type, détail), de façon stable. Ni l'un ni l'autre
+/// ne touche aux comptages, au score ni au statut, toujours calculés sur l'analyse complète.
 /// </summary>
 public sealed record ClosingAnalysisRequest(
     DateTime From,
@@ -21,7 +25,9 @@ public sealed record ClosingAnalysisRequest(
     ClosingRulesOptions? Options = null,
     bool IncludeComparison = false,
     bool IncludeInformation = false,
-    bool ReuseCached = false);
+    bool ReuseCached = false,
+    IReadOnlyList<ClosingSeverity>? Gravites = null,
+    bool TriParGravite = false);
 
 /// <summary>Comptage d'une gravité ou d'un type d'anomalie.</summary>
 public sealed record ClosingCountDto(string Cle, int Nombre);
