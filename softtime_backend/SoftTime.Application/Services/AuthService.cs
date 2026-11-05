@@ -243,16 +243,18 @@ public class AuthService
             authorizedSages.Select(_mapper.Map<SageDbDto>).ToList(), detailed.GrantedPermissions, detailed.IsCustomized, refreshToken);
     }
 
+    /// <summary>
+    /// Une seule requête, sans casse ni espaces en bordure (voir <see cref="LoginKey"/>). Si une ancienne base
+    /// contient encore des doublons (index unique de la migration 005 non posé), le compte dont le login est
+    /// exactement celui saisi l'emporte ; sinon la connexion est refusée plutôt que d'ouvrir un compte au hasard.
+    /// </summary>
     private async Task<T_RESPONSABLE?> FindByLoginAsync(string login, CancellationToken cancellationToken)
     {
-        var users = await _uow.Repository<T_RESPONSABLE>().ListAsync(u => u.LOGIN == login, cancellationToken);
-        if (users.Count == 0)
-        {
-            users = (await _uow.Repository<T_RESPONSABLE>().ListAsync(_ => true, cancellationToken))
-                .Where(u => string.Equals((u.LOGIN ?? string.Empty).Trim(), login, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-        }
-        return users.FirstOrDefault();
+        var users = await _uow.Repository<T_RESPONSABLE>().ListAsync(LoginKey.Matches(LoginKey.Normalize(login)), cancellationToken);
+        if (users.Count <= 1)
+            return users.FirstOrDefault();
+        var exact = users.Where(u => string.Equals((u.LOGIN ?? string.Empty).Trim(), login, StringComparison.Ordinal)).ToList();
+        return exact.Count == 1 ? exact[0] : null;
     }
 
     private (bool Verified, bool NeedsUpgrade) VerifyPassword(T_RESPONSABLE user, string password)
@@ -400,7 +402,13 @@ public class AuthService
     /// reste vrai après la suppression du dernier compte (seul moyen de sortir d'un verrouillage total).
     /// </summary>
     public async Task<bool> IsFirstRunAsync(CancellationToken cancellationToken = default)
-        => (await _uow.Repository<T_RESPONSABLE>().ListAsync(_ => true, cancellationToken)).Count == 0;
+    {
+        var repo = _uow.Repository<T_RESPONSABLE>();
+        return await repo.CountAsync(repo.Query().Take(1), cancellationToken) == 0;
+    }
+
+    /// <summary>Verrou applicatif de la création initiale : deux appels simultanés passent l'un après l'autre.</summary>
+    internal const string CreateAdminLockResource = "SoftTime.CreateAdmin";
 
     /// <summary>
     /// Crée le premier compte administrateur. Refusé dès qu'un compte existe, et le rôle
@@ -421,23 +429,34 @@ public class AuthService
         if (string.IsNullOrWhiteSpace(motDePasse))
             throw new InvalidOperationException("Le mot de passe est requis.");
         PasswordPolicy.EnsureValid(motDePasse);
+        var passwordHash = _passwordHasher.HashPassword(null!, motDePasse);
 
-        // Le premier compte reçoit toujours le rôle d'identifiant 1 : seul ce rôle est administrateur.
-        var role = await _uow.Repository<T_ROLE>().GetByIdAsync(AdminRules.AdminRoleId, cancellationToken)
-            ?? throw new InvalidOperationException(
-                "Le rôle Administrateur (identifiant 1) est introuvable : exécutez le script de création de la base.");
-
-        var entity = new T_RESPONSABLE
+        // La vérification ci-dessus ne suffit pas : deux requêtes simultanées sur une base vide la passeraient
+        // toutes les deux. Sous le verrou, la seconde attend la fin de la première, puis voit le compte créé.
+        var entity = await _uow.RunExclusiveAsync(CreateAdminLockResource, async ct =>
         {
-            IDROLE = role.IDROLE,
-            NOMRESPONSABLE = dto.Nom.Trim(),
-            LOGIN = login,
-            PASSWORD = _passwordHasher.HashPassword(null!, motDePasse),
-            EMAIL = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim()
-        };
-        await _uow.Repository<T_RESPONSABLE>().AddAsync(entity, cancellationToken);
-        await EnsureRoleHasAllRightsAsync(role.IDROLE, cancellationToken);
-        await _uow.SaveChangesAsync(cancellationToken);
+            if (!await IsFirstRunAsync(ct))
+                throw new InvalidOperationException(
+                    "Des comptes existent déjà : la création initiale n'est plus possible. Utilisez l'écran Utilisateurs.");
+
+            // Le premier compte reçoit toujours le rôle d'identifiant 1 : seul ce rôle est administrateur.
+            var role = await _uow.Repository<T_ROLE>().GetByIdAsync(AdminRules.AdminRoleId, ct)
+                ?? throw new InvalidOperationException(
+                    "Le rôle Administrateur (identifiant 1) est introuvable : exécutez le script de création de la base.");
+
+            var created = new T_RESPONSABLE
+            {
+                IDROLE = role.IDROLE,
+                NOMRESPONSABLE = dto.Nom.Trim(),
+                LOGIN = login,
+                PASSWORD = passwordHash,
+                EMAIL = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim()
+            };
+            await _uow.Repository<T_RESPONSABLE>().AddAsync(created, ct);
+            await EnsureRoleHasAllRightsAsync(role.IDROLE, ct);
+            await _uow.SaveChangesAsync(ct);
+            return created;
+        }, cancellationToken);
 
         var envoye = await _email.SendUserCredentialsAsync(entity.EMAIL, entity.LOGIN, motDePasse, entity.NOMRESPONSABLE, null, cancellationToken);
         var message = envoye
@@ -748,9 +767,9 @@ public class AuthService
         decimal id,
         CancellationToken cancellationToken)
     {
-        var autres = await repo.ListAsync(u => u.IDRESPONSABLE != id, cancellationToken);
-        if (autres.Any(u => string.Equals((u.LOGIN ?? string.Empty).Trim(), login, StringComparison.OrdinalIgnoreCase)))
-            throw new FieldValidationException("login", "Ce login est déjà utilisé. Choisissez-en un autre.");
+        var autres = await repo.ListAsync(LoginKey.MatchesOther(LoginKey.Normalize(login), id), cancellationToken);
+        if (autres.Count > 0)
+            throw new FieldValidationException("login", LoginKey.TakenMessage);
     }
 
     /// <summary>Réservé aux tests (internal, sans garde) : le code de production doit transmettre l'identité de l'appelant.</summary>

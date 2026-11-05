@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using SoftTime.Application.Security;
 using SoftTime.Infrastructure.SchemaMigrations;
 
 namespace SoftTime.Tests;
@@ -35,7 +36,7 @@ public class SchemaMigrationsIntegrityTests
     public void Script003_IsEmbeddedAfter002_AndIsReplayableAndNonDestructive()
     {
         var scripts = new EmbeddedMigrationScriptSource().Load();
-        Assert.Equal(new[] { 1, 2, 3, 4 }, scripts.Select(s => s.Version).ToArray());
+        Assert.Equal(new[] { 1, 2, 3, 4, 5 }, scripts.Select(s => s.Version).ToArray());
         var journal = Assert.Single(scripts, s => s.Version == 3);
 
         Assert.Equal("003_journal_central.sql", journal.Name);
@@ -74,6 +75,27 @@ public class SchemaMigrationsIntegrityTests
         // Seule l'empreinte du jeton est stockée.
         Assert.Contains("TOKEN_HASH        char(64)", security.Content);
         Assert.DoesNotContain("Password", security.Content, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ---------- Script 005 ----------
+
+    [Fact]
+    public void Script005_LoginUniqueness_OnlyByAdditions_AndSkipsIndexWhenDuplicatesExist()
+    {
+        var scripts = new EmbeddedMigrationScriptSource().Load();
+        var unicity = Assert.Single(scripts, s => s.Version == 5);
+
+        Assert.Equal("005_unicite_login.sql", unicity.Name);
+        foreach (var forbidden in new[] { "DROP ", "DELETE", "TRUNCATE", "ALTER COLUMN", "USE [", "CREATE DATABASE", "UPDATE ", "INSERT ", "STRING_AGG" })
+            Assert.DoesNotContain(forbidden, unicity.Content, StringComparison.OrdinalIgnoreCase);
+        // Rejouable : colonne et index testés avant création.
+        Assert.Contains("COL_LENGTH(N'dbo.T_RESPONSABLE', N'LOGIN_CLE') IS NULL", unicity.Content);
+        Assert.Contains($"name = N'{LoginKey.UniqueIndexName}'", unicity.Content);
+        // Même expression que LoginKey : sans espaces en bordure, en majuscules.
+        Assert.Contains("UPPER(LTRIM(RTRIM(LOGIN)))", unicity.Content);
+        // Des doublons existants n'arrêtent pas le démarrage : l'index est seulement ignoré, avec un message.
+        Assert.Contains("IF @doublons IS NULL", unicity.Content);
+        Assert.Contains("index unique NON créé", unicity.Content);
     }
 
     // ---------- Journal de démarrage ----------
