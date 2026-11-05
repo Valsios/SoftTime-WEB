@@ -350,6 +350,61 @@ describe('page Contrôle avant paie : filtre et résultat conservés pendant la 
     expect(el.querySelector('.closing-overview')).toBeNull();
   });
 
+  it('nombre de requêtes : zéro à l’ouverture, une seule au clic sur « Analyser » (analyse complète, sans cache)', () => {
+    const { requetes } = configurer([rapport()]);
+    const { fixture, el } = monter();
+    expect(requetes).toHaveLength(0);
+
+    cliquerAnalyser(fixture, el);
+
+    expect(requetes).toHaveLength(1);
+    expect(requetes[0].reuseCache).toBe(false);
+    expect(requetes[0].page).toBe(1);
+  });
+
+  it('changement de page : une requête de page (cache autorisé), jamais « Analyse en cours… » ni zone des résultats occupée', () => {
+    const flux: Subject<ClosingReport>[] = [];
+    const requetes: ClosingQuery[] = [];
+    const premiere = rapport({ anomalies: { items: [anomalie({})], total: 120, page: 1, pageSize: 50, totalPages: 3 } }, [anomalie({})]);
+    let appel = 0;
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([]),
+        { provide: SessionStore, useValue: fausseSession() },
+        { provide: CardPaieService, useValue: { list: () => of([]) } },
+        { provide: DepartementServiceService, useValue: { lookupBatch: () => of([]) } },
+        {
+          provide: ClosingService,
+          useValue: {
+            analysis: (q: ClosingQuery) => {
+              requetes.push(q);
+              if (appel++ === 0) return of(premiere);
+              const f = new Subject<ClosingReport>();
+              flux.push(f);
+              return f.asObservable();
+            },
+          },
+        },
+      ],
+    });
+    const { fixture, el } = monter();
+    cliquerAnalyser(fixture, el);
+    expect(requetes).toHaveLength(1);
+
+    el.querySelector<HTMLElement>('button[aria-label="Page suivante"]')!.click();
+    fixture.detectChanges();
+
+    expect(requetes).toHaveLength(2); // une requête de plus, pas davantage
+    expect(requetes[1].page).toBe(2);
+    expect(requetes[1].reuseCache).toBe(true); // l’analyse déjà calculée peut servir : pas de nouveau calcul complet
+    expect(el.querySelector('.closing-busy')).toBeNull(); // pas d’« Analyse en cours… » pour une page
+    expect(el.querySelector('.closing-results')?.getAttribute('aria-busy')).toBe('false');
+    expect(el.querySelector('.closing-overview')).not.toBeNull(); // la page ne se recharge pas
+    expect(Array.from(el.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Analyser')!.disabled).toBe(false);
+    flux[0].complete();
+  });
+
   it('bandeau du résultat : date et heure, période et département', () => {
     const { el } = creer([rapport()]);
     const bandeau = el.querySelector('.closing-status-line')?.textContent ?? '';
