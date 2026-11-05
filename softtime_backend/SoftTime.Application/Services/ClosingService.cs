@@ -74,11 +74,15 @@ public partial class ClosingService
         await _tenant.EnsureAuthorizedAsync(ct);
         var cle = ClosingAnalysisCache.Cle(_tenant.SageDb, _tenant.PointeuseDb, request);
         var maintenant = _horloge.GetUtcNow();
-        if (request.ReuseCached && _reglages.Cache.TryGet(cle, maintenant, out var preparee))
+        // Délai glissant (renouvelé à chaque lecture avec réutilisation) sous un plafond absolu depuis le calcul d'origine.
+        var glissant = TimeSpan.FromSeconds(_reglages.CacheSeconds);
+        var plafond = TimeSpan.FromSeconds(Math.Max(_reglages.CacheMaxSeconds, _reglages.CacheSeconds));
+        if (request.ReuseCached && _reglages.Cache.TryGet(cle, maintenant, glissant, out var preparee))
             return Assembler(preparee, request);
 
+        // Sans réutilisation (ou entrée expirée) : calcul à neuf, qui remplace l'entrée avec un plafond neuf.
         preparee = Preparer(await ChargerAsync(request, ct), request);
-        _reglages.Cache.Set(cle, preparee, maintenant, TimeSpan.FromSeconds(_reglages.CacheSeconds));
+        _reglages.Cache.Set(cle, preparee, maintenant, glissant, plafond);
         return Assembler(preparee, request);
     }
 

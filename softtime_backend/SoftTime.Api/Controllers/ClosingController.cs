@@ -81,7 +81,8 @@ public class ClosingController : ControllerBase
         var request = new ClosingAnalysisRequest(
             Jour(from), Jour(to), departement, page, pageSize, Options: null, IncludeComparison: includeComparison == true,
             IncludeInformation: includeInformation == true, ReuseCached: reuseCache == true,
-            Gravites: niveaux, TriParGravite: !string.IsNullOrWhiteSpace(tri));
+            Gravites: niveaux, TriParGravite: !string.IsNullOrWhiteSpace(tri),
+            Perimetre: PerimetreUtilisateur());
         var analyse = await _closing.AnalyserAsync(request, ct);
         var rapport = await _presentation.PresenterAsync(analyse, ct);
 
@@ -108,12 +109,15 @@ public class ClosingController : ControllerBase
         if (!_reglages.Enabled)
             return NotFound(new { error = Desactivee });
 
-        var perimetre = "u" + (_user.UserId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?");
+        var perimetre = PerimetreUtilisateur();
         var checklist = await _closing.ChecklistAsync(
             new ClosingChecklistRequest(Jour(from), Jour(to), departement, reuseCache == true), perimetre, ct);
         _logger.LogInformation("Checklist de clôture {From:yyyy-MM-dd} → {To:yyyy-MM-dd} : {Lignes} ligne(s).", checklist.From, checklist.To, checklist.Lignes.Count);
         return Ok(checklist);
     }
+
+    /// <summary>Périmètre de l'appelant pour la clé des caches : deux utilisateurs ne partagent jamais une entrée.</summary>
+    private string PerimetreUtilisateur() => "u" + (_user.UserId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?");
 
     /// <summary>Niveaux séparés par des virgules (insensible à la casse) ; absent ou vide : aucun filtre ; valeur inconnue : refus.</summary>
     private static bool TryLireGravites(string? valeur, out IReadOnlyList<ClosingSeverity>? niveaux)

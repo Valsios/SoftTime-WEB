@@ -15,6 +15,7 @@ namespace SoftTime.Application.DTOs;
 /// l'emporte sur <see cref="IncludeInformation"/>. <see cref="TriParGravite"/> (faux par défaut) range la liste du plus
 /// grave au moins grave, puis dans l'ordre habituel (date, matricule, type, détail), de façon stable. Ni l'un ni l'autre
 /// ne touche aux comptages, au score ni au statut, toujours calculés sur l'analyse complète.
+/// <see cref="Perimetre"/> (absent par défaut) identifie l'utilisateur : il entre dans la clé du cache, jamais dans le résultat.
 /// </summary>
 public sealed record ClosingAnalysisRequest(
     DateTime From,
@@ -27,7 +28,8 @@ public sealed record ClosingAnalysisRequest(
     bool IncludeInformation = false,
     bool ReuseCached = false,
     IReadOnlyList<ClosingSeverity>? Gravites = null,
-    bool TriParGravite = false);
+    bool TriParGravite = false,
+    string? Perimetre = null);
 
 /// <summary>
 /// Demande de checklist d'avancement : même période (mois civil précédent sans dates) et même département que l'analyse.

@@ -219,4 +219,36 @@ public class ClosingSettingsTests
 
         Assert.Equal("Critique", Assert.Single(resultat.Anomalies.Items).Gravite);
     }
+
+    // ---------- Cache de l'analyse : plafond absolu ----------
+
+    [Fact]
+    public void CacheMaxSeconds_DefaultsTo600_AndTheSlidingDelayStaysAt60()
+    {
+        var o = Lus();
+
+        Assert.Equal(600, o.CacheMaxSeconds);
+        Assert.Equal(60, o.CacheSeconds);
+        Assert.Empty(o.Erreurs());
+    }
+
+    [Fact]
+    public void CacheMaxSeconds_IsReadFromTheClosingSection()
+    {
+        Assert.Equal(300, Lus(("Closing:CacheMaxSeconds", "300")).CacheMaxSeconds);
+        Assert.Equal(0, Lus(("Closing:CacheMaxSeconds", "0")).CacheMaxSeconds);   // 0 : l'analyse expire après le délai glissant seul
+        Assert.Empty(Lus(("Closing:CacheMaxSeconds", "3600")).Erreurs());
+    }
+
+    [Theory]
+    [InlineData("-1")]
+    [InlineData("3601")]
+    [InlineData("dix")]
+    public void CacheMaxSeconds_InvalidValueIsRefusedWithoutEchoingIt(string valeur)
+    {
+        var erreurs = Lus(("Closing:CacheMaxSeconds", valeur)).Erreurs();
+
+        Assert.Contains(erreurs, e => e.Contains("CacheMaxSeconds"));
+        Assert.DoesNotContain(erreurs, e => e.Contains(valeur));
+    }
 }

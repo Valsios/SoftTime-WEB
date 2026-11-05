@@ -794,4 +794,114 @@ public class ClosingServiceTests
 
         Assert.Equal(0, ctx.Uow.Ecritures);
     }
+
+    // ----------------------------------------------------------------------------- cache glissant sous plafond absolu
+
+    private static readonly TimeSpan Pas = TimeSpan.FromSeconds(50);   // plus court que le délai glissant (60 s)
+
+    private static async Task<int> Anomalies(Contexte ctx, bool reuse, string? perimetre = null)
+        => (await ctx.Service.AnalyserAsync(Page(1, 50, reuse) with { Perimetre = perimetre })).NombreAnomalies;
+
+    [Fact]
+    public async Task CacheSliding_StaysValidWhileReadingContinuously_ThenExpiresAtTheAbsoluteCeiling()
+    {
+        var horloge = new HorlogeMobile();
+        var ctx = new Contexte(horloge);
+        ctx.JeuFixe();
+        Assert.Equal(4, await Anomalies(ctx, reuse: false));         // calcul d'origine : t = 0
+        ctx.Punch("002", Lundi, H8, H17);                            // la donnée change : un recalcul donnerait 3
+
+        for (var i = 1; i <= 11; i++)                                // lectures toutes les 50 s jusqu'à t = 550 s (délai glissant 60 s)
+        {
+            horloge.Avancer(Pas);
+            Assert.Equal(4, await Anomalies(ctx, reuse: true));
+        }
+        horloge.Avancer(TimeSpan.FromSeconds(49));                   // t = 599 s : sous le plafond de 600 s
+        Assert.Equal(4, await Anomalies(ctx, reuse: true));
+        horloge.Avancer(TimeSpan.FromSeconds(2));                    // t = 601 s : plafond dépassé malgré la lecture continue
+        Assert.Equal(3, await Anomalies(ctx, reuse: true));
+    }
+
+    [Fact]
+    public async Task CacheSliding_WithoutReading_StillExpiresAfterTheSlidingDelay()
+    {
+        var horloge = new HorlogeMobile();
+        var ctx = new Contexte(horloge);
+        ctx.JeuFixe();
+        await Anomalies(ctx, reuse: false);
+        ctx.Punch("002", Lundi, H8, H17);
+
+        horloge.Avancer(Pas);
+        Assert.Equal(4, await Anomalies(ctx, reuse: true));          // lue à 50 s : renouvelée jusqu'à 110 s
+        horloge.Avancer(TimeSpan.FromSeconds(61));                   // 111 s sans lecture entre-temps
+        Assert.Equal(3, await Anomalies(ctx, reuse: true));
+    }
+
+    [Fact]
+    public async Task CacheSliding_AnalysisWithoutReuse_AlwaysRecomputesAndRestartsTheCeiling()
+    {
+        var horloge = new HorlogeMobile();
+        var ctx = new Contexte(horloge);
+        ctx.JeuFixe();
+        await Anomalies(ctx, reuse: false);                          // t = 0
+        ctx.Punch("002", Lundi, H8, H17);
+        for (var i = 0; i < 11; i++)
+        {
+            horloge.Avancer(Pas);
+            await Anomalies(ctx, reuse: true);                       // lectures continues jusqu'à t = 550 s
+        }
+        horloge.Avancer(TimeSpan.FromSeconds(40));                   // t = 590 s : ancien plafond (600 s) presque atteint
+
+        Assert.Equal(3, await Anomalies(ctx, reuse: false));         // « Analyser » : recalcule toujours à neuf, plafond neuf (jusqu'à 1190 s)
+        ctx.Punch("001", Lundi.AddDays(1), H17);                     // nouvelle donnée : un recalcul donnerait 2
+
+        horloge.Avancer(TimeSpan.FromSeconds(50));                   // t = 640 s : l'ancien plafond est dépassé depuis longtemps
+        Assert.Equal(3, await Anomalies(ctx, reuse: true));          // l'entrée neuve est toujours servie
+        for (var i = 0; i < 9; i++)
+        {
+            horloge.Avancer(Pas);
+            await Anomalies(ctx, reuse: true);                       // jusqu'à t = 1090 s
+        }
+        horloge.Avancer(Pas);                                        // t = 1140 s
+        Assert.Equal(3, await Anomalies(ctx, reuse: true));
+        horloge.Avancer(TimeSpan.FromSeconds(49));                   // t = 1189 s : sous le plafond neuf (590 + 600 = 1190 s)
+        Assert.Equal(3, await Anomalies(ctx, reuse: true));
+        horloge.Avancer(TimeSpan.FromSeconds(2));                    // t = 1191 s : plafond neuf dépassé malgré la lecture continue
+        Assert.Equal(2, await Anomalies(ctx, reuse: true));
+    }
+
+    [Fact]
+    public async Task CacheSliding_TwoUsersNeverShareAnEntry()
+    {
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+        Assert.Equal(4, await Anomalies(ctx, reuse: false, perimetre: "u1"));
+        ctx.Punch("002", Lundi, H8, H17);
+
+        Assert.Equal(4, await Anomalies(ctx, reuse: true, perimetre: "u1"));   // l'entrée de u1
+        Assert.Equal(3, await Anomalies(ctx, reuse: true, perimetre: "u2"));   // u2 ne lit jamais l'entrée de u1 : calcul à neuf
+        Assert.Equal(3, await Anomalies(ctx, reuse: true, perimetre: "u2"));   // puis sa propre entrée
+        Assert.Equal(4, await Anomalies(ctx, reuse: true, perimetre: "u1"));   // celle de u1 reste inchangée
+        Assert.Equal(3, await Anomalies(ctx, reuse: true));                    // sans périmètre : encore une autre clé
+    }
+
+    [Fact]
+    public async Task CacheSliding_ResultIsIdenticalWithAndWithoutTheCache_AfterRenewals()
+    {
+        var horloge = new HorlogeMobile();
+        var avec = new Contexte(horloge);
+        avec.JeuFixe();
+        avec.SemainePrecedente(manquantsPour002: true);
+        var sans = new Contexte();
+        sans.JeuFixe();
+        sans.SemainePrecedente(manquantsPour002: true);
+        await avec.Service.AnalyserAsync(Page(1, 1, reuse: false, comparaison: true));
+        foreach (var page in new[] { 1, 2, 3, 4 })
+        {
+            horloge.Avancer(Pas);                                    // une lecture toutes les 50 s : l'entrée est renouvelée à chaque page
+            var attendu = await sans.Service.AnalyserAsync(Page(page, 1, reuse: false, information: true, comparaison: true));
+            var obtenu = await avec.Service.AnalyserAsync(Page(page, 1, reuse: true, information: true, comparaison: true));
+            Assert.Equal(Json(attendu), Json(obtenu));
+        }
+    }
 }
