@@ -21,6 +21,7 @@ import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { ClosingSessionState } from './closing.state';
 import {
   ANALYSING_TEXT,
+  analysisAgeText,
   CHECKLIST_ERROR,
   CHECKLIST_LOADING,
   CHECKLIST_NOTE,
@@ -109,7 +110,7 @@ import {
       } @else if (stale()) {
         <span class="closing-stale">{{ staleText }}</span>
       } @else if (banner(); as texte) {
-        <span class="closing-muted">{{ texte }}</span>
+        <span class="closing-muted">{{ texte }} <span class="closing-age">{{ ageText() }}</span></span>
       }
     </div>
 
@@ -420,6 +421,10 @@ export class ClosingPage implements OnInit, OnDestroy {
   readonly checklistFailed = signal(false);
   private checklistRequest?: Subscription;
 
+  /** Heure courante, rafraîchie localement toutes les 30 s pour l'âge de l'analyse : aucune requête. */
+  private readonly maintenant = signal(new Date());
+  private horloge?: ReturnType<typeof setInterval>;
+
   readonly report = signal<ClosingReport | null>(null);
   /** Analyse complète en cours (bouton Analyser, onglet) : indicateur près du filtre, résultat atténué. */
   readonly analysing = signal(false);
@@ -452,6 +457,11 @@ export class ClosingPage implements OnInit, OnDestroy {
 
   /** La saisie diffère du résultat affiché : rien n'est relancé, l'utilisateur doit cliquer sur Analyser. */
   readonly stale = computed(() => this.applied() !== null && !sameFilter(this.draft(), this.applied()));
+  /** Âge de l'analyse affichée, à partir de l'heure conservée en session (donc cohérent avec le filtre figé). */
+  readonly ageText = computed(() => {
+    const at = this.analysedAt();
+    return at ? analysisAgeText(at, this.maintenant()) : '';
+  });
   readonly banner = computed(() => {
     const at = this.analysedAt();
     const filter = this.applied();
@@ -492,6 +502,8 @@ export class ClosingPage implements OnInit, OnDestroy {
   });
 
   ngOnInit(): void {
+    this.maintenant.set(new Date());
+    this.horloge = setInterval(() => this.maintenant.set(new Date()), 30_000);
     // Retour sur la page : on réaffiche l'état conservé (filtre saisi, dernier résultat), sans rien relancer.
     this.state.syncContext();
     const draft = this.state.draft() ?? { ...defaultPeriod(), departement: null, includeComparison: false };
@@ -517,6 +529,7 @@ export class ClosingPage implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.horloge !== undefined) clearInterval(this.horloge);
     // Le filtre saisi est conservé ; une requête en cours n'est pas annulée : son résultat sera gardé en mémoire.
     this.state.draft.set(this.readFilter());
     this.exportRequest?.unsubscribe();

@@ -1114,3 +1114,55 @@ describe('page Contrôle avant paie : avancement de la paie', () => {
     expect(checklists).toHaveLength(1);
   });
 });
+
+describe('page Contrôle avant paie : âge de l’analyse', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  const statut = (el: HTMLElement) => el.querySelector('.closing-status-line')?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+
+  it('texte seul, qui avance avec le temps sans aucune requête', () => {
+    vi.useFakeTimers();
+    const { fixture, el, requetes } = creer([rapport()]);
+    expect(statut(el)).toContain('Analyse faite il y a moins d’une minute.');
+    const avant = requetes.length;
+
+    vi.advanceTimersByTime(3 * 60_000 + 5_000);
+    fixture.detectChanges();
+    expect(statut(el)).toContain('Analyse faite il y a 3 min.');
+
+    vi.advanceTimersByTime(58 * 60_000);
+    fixture.detectChanges();
+    expect(statut(el)).toContain('Analyse faite il y a 1 h 1 min.');
+    expect(requetes).toHaveLength(avant);                        // l’âge ne déclenche aucune requête
+    expect(el.querySelector('.closing-age')?.querySelector('a, button')).toBeNull();
+  });
+
+  it('cohérent avec le résultat conservé : au retour sur l’écran, l’âge part de l’heure d’origine', () => {
+    vi.useFakeTimers();
+    const { fixture, requetes } = creer([rapport()]);
+    fixture.destroy();
+    vi.advanceTimersByTime(5 * 60_000);
+
+    const retour = monter();
+
+    expect(statut(retour.el)).toContain('Analyse faite il y a 5 min.');
+    expect(requetes).toHaveLength(1);                            // retour sur l’écran : aucune requête
+  });
+
+  it('absent tant qu’il n’y a pas de résultat, remplacé par le message « filtre modifié »', () => {
+    configurer([rapport()]);
+    const { fixture, el } = monter();
+    expect(statut(el)).not.toContain('Analyse faite');
+
+    cliquerAnalyser(fixture, el);
+    expect(statut(el)).toContain('Analyse faite');
+    const interrupteur = el.querySelector<HTMLInputElement>('label.closing-switch input')!;
+    interrupteur.click();
+    fixture.detectChanges();
+    expect(statut(el)).toContain('Filtre modifié, réanalyser');
+    expect(statut(el)).not.toContain('Analyse faite');
+  });
+});

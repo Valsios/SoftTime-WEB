@@ -375,6 +375,19 @@ export function formatStamp(date: Date): string {
   return `${p(date.getDate())}/${p(date.getMonth() + 1)} à ${p(date.getHours())}:${p(date.getMinutes())}`;
 }
 
+/**
+ * Âge de l'analyse en texte seul : « Analyse faite il y a 3 min ». Calculé depuis l'heure conservée en session,
+ * sans aucune requête ; de 1 h à 59 min 59 s, les minutes ; au-delà, les heures puis les minutes restantes.
+ */
+export function analysisAgeText(analysedAt: Date, now: Date): string {
+  const minutes = Math.max(0, Math.floor((now.getTime() - analysedAt.getTime()) / 60000));
+  if (minutes < 1) return 'Analyse faite il y a moins d’une minute.';
+  if (minutes < 60) return `Analyse faite il y a ${minutes} min.`;
+  const heures = Math.floor(minutes / 60);
+  const reste = minutes % 60;
+  return `Analyse faite il y a ${heures} h${reste ? ` ${reste} min` : ''}.`;
+}
+
 /** Bandeau du dernier résultat : quand, pour quelle période et quel département. */
 export function resultBannerText(analysedAt: Date, filter: ClosingFilter): string {
   const departement = filter.departement ? filter.departement : 'tous';

@@ -9,6 +9,7 @@ import {
   exportRows,
   checklistLink,
   checklistStateView,
+  analysisAgeText,
   resultBannerText,
   severityFilterText,
   toggleSeverity,
@@ -417,5 +418,19 @@ describe('checklist d’avancement : états et liens', () => {
     expect(checklistLink({ code: 'Semaines' }, periode)).toMatchObject({ path: '/weekly-validation', queryParams: null });
     expect(checklistLink({ code: 'ExoImpo' }, periode)).toMatchObject({ path: '/overtime', queryParams: null });
     expect(checklistLink({ code: 'Inconnue' }, periode)).toBeNull();
+  });
+});
+
+describe('âge de l’analyse', () => {
+  const t0 = new Date(2026, 0, 5, 9, 0, 0);
+  const apres = (minutes: number, secondes = 0) => new Date(t0.getTime() + minutes * 60_000 + secondes * 1000);
+
+  it('minutes, puis heures et minutes ; jamais de valeur négative', () => {
+    expect(analysisAgeText(t0, apres(0, 59))).toBe('Analyse faite il y a moins d’une minute.');
+    expect(analysisAgeText(t0, apres(1))).toBe('Analyse faite il y a 1 min.');
+    expect(analysisAgeText(t0, apres(59, 59))).toBe('Analyse faite il y a 59 min.');
+    expect(analysisAgeText(t0, apres(60))).toBe('Analyse faite il y a 1 h.');
+    expect(analysisAgeText(t0, apres(125))).toBe('Analyse faite il y a 2 h 5 min.');
+    expect(analysisAgeText(t0, apres(-5))).toBe('Analyse faite il y a moins d’une minute.');
   });
 });
