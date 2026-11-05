@@ -72,16 +72,14 @@ import {
 
     <p class="closing-banner" role="note">{{ purposeNote }}</p>
 
-    <!-- Le filtre partagé n'émet rien tant qu'on ne clique pas sur Analyser : ces écoutes sur son conteneur
-         servent uniquement à savoir si la saisie diffère du résultat affiché. -->
-    <div class="closing-filter" (input)="refreshDraft()" (change)="refreshDraft()" (click)="refreshDraft()">
-      <period-filter
-        [showMatricule]="false"
-        [showDepartement]="true"
-        searchLabel="Analyser"
-        (search)="onSearch($event)"
-      ></period-filter>
-    </div>
+    <period-filter
+      [showMatricule]="false"
+      [showDepartement]="true"
+      searchLabel="Analyser"
+      [busy]="analysing()"
+      (changed)="refreshDraft()"
+      (search)="onSearch($event)"
+    ></period-filter>
 
     <div class="closing-status-line" role="status" aria-live="polite">
       @if (analysing()) {
@@ -415,10 +413,9 @@ export class ClosingPage implements OnInit, OnDestroy {
     this.state.draft.set(this.readFilter());
   }
 
-  /** Relit le formulaire partagé (ses champs sont publics) pour savoir si la saisie diffère du résultat affiché. */
+  /** Le filtre a été modifié par l'utilisateur : relit ses champs pour savoir si la saisie diffère du résultat affiché. */
   refreshDraft(): void {
-    // Le sélecteur de département met son modèle à jour pendant le clic : on lit après lui.
-    setTimeout(() => this.draft.set(this.readFilter()));
+    this.draft.set(this.readFilter());
   }
 
   private readFilter(): ClosingFilter {

@@ -341,8 +341,6 @@ describe('page Contrôle avant paie : niveau Information', () => {
 describe('page Contrôle avant paie : filtre et résultat conservés pendant la session', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  const attendre = () => new Promise<void>((r) => setTimeout(r));
-
   it('à l’ouverture : aucune analyse automatique, invitation à cliquer sur « Analyser »', () => {
     const { requetes } = configurer([rapport()]);
     const { el } = monter();
@@ -381,14 +379,12 @@ describe('page Contrôle avant paie : filtre et résultat conservés pendant la 
 
     debut.value = '2025-10-01';
     debut.dispatchEvent(new Event('input', { bubbles: true }));
-    await attendre();
     fixture.detectChanges();
     expect(el.querySelector('.closing-stale')?.textContent).toContain('Filtre modifié, réanalyser');
     expect(requetes).toHaveLength(1);
 
     debut.value = ancien;
     debut.dispatchEvent(new Event('input', { bubbles: true }));
-    await attendre();
     fixture.detectChanges();
     expect(el.querySelector('.closing-stale')).toBeNull();
   });
@@ -398,11 +394,10 @@ describe('page Contrôle avant paie : filtre et résultat conservés pendant la 
     const debut = el.querySelector<HTMLInputElement>('input[name="from"]')!;
     debut.value = '2025-10-01';
     debut.dispatchEvent(new Event('input', { bubbles: true }));
-    await attendre();
     fixture.destroy();
 
     const retour = monter();
-    await attendre();
+    await retour.fixture.whenStable(); // le modèle des champs est écrit après le premier rendu
     retour.fixture.detectChanges();
 
     expect(retour.el.querySelector<HTMLInputElement>('input[name="from"]')?.value).toBe('2025-10-01');
@@ -494,13 +489,13 @@ describe('page Contrôle avant paie : filtre et résultat conservés pendant la 
       expect(flux).toHaveLength(1);
     });
 
-    it('un autre filtre pendant l’analyse : la requête précédente est annulée, la nouvelle part', () => {
+    it('bouton désactivé pendant l’analyse ; un autre filtre soumis quand même annule la requête précédente', () => {
       const { fixture, el, flux, desabonnements } = enAttente();
       cliquerAnalyser(fixture, el);
-      const debut = el.querySelector<HTMLInputElement>('input[name="from"]')!;
-      debut.value = '2025-10-01';
-      debut.dispatchEvent(new Event('input', { bubbles: true }));
-      cliquerAnalyser(fixture, el);
+      const bouton = Array.from(el.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Analyser')!;
+      expect(bouton.disabled).toBe(true);
+
+      fixture.componentInstance.onSearch({ from: '2025-10-01', to: '2025-10-31', matriculeFrom: null, matriculeTo: null, departement: null });
 
       expect(flux).toHaveLength(2);
       expect(desabonnements()).toBe(1);
