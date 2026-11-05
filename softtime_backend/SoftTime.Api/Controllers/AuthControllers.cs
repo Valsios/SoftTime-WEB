@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.RateLimiting;
 using SoftTime.Api.Authorization;
 using SoftTime.Api.Security;
@@ -17,39 +19,52 @@ public class AuthController : ControllerBase
 {
     private readonly AuthService _auth;
     private readonly ICurrentUser _user;
-    public AuthController(AuthService auth, ICurrentUser user)
+    private readonly AccountSecurityOptions _security;
+    public AuthController(AuthService auth, ICurrentUser user, IOptions<AccountSecurityOptions> security)
     {
         _auth = auth;
         _user = user;
+        _security = security.Value;
     }
 
     /// <summary>
-    /// POST — Authentification (LOGIN/PASSWORD T_RESPONSABLE). Retourne le jeton d'accès (courte durée) et le jeton
-    /// de rafraîchissement. Compte verrouillé après plusieurs échecs (403), requêtes limitées par adresse IP (429).
+    /// POST — Authentification (LOGIN/PASSWORD T_RESPONSABLE). Retourne le jeton d'accès (courte durée) ; le jeton
+    /// de rafraîchissement est posé dans un cookie HttpOnly (voir RefreshTokenCookie), jamais dans le corps.
+    /// Compte verrouillé après plusieurs échecs (403), requêtes limitées par adresse IP (429).
     /// </summary>
     [AllowAnonymous]
     [EnableRateLimiting(AuthRateLimit.Policy)]
     [HttpPost("login")]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<LoginResponse>> Login([FromBody] LoginRequest request, CancellationToken ct)
-        => Ok(await _auth.LoginAsync(request, ct));
+        => Ok(RefreshTokenCookie.Issue(HttpContext, await _auth.LoginAsync(request, ct), _security));
 
-    /// <summary>POST — Échange le jeton de rafraîchissement contre une nouvelle paire (rotation). 401 si invalide.</summary>
+    /// <summary>
+    /// POST — Échange le jeton de rafraîchissement (cookie, sinon corps) contre une nouvelle paire (rotation). 401 si invalide.
+    /// </summary>
     [AllowAnonymous]
     [EnableRateLimiting(AuthRateLimit.Policy)]
     [HttpPost("refresh")]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
-    public async Task<ActionResult<LoginResponse>> Refresh([FromBody] RefreshTokenRequest request, CancellationToken ct)
-        => Ok(await _auth.RefreshAsync(request.RefreshToken, ct));
+    public async Task<ActionResult<LoginResponse>> Refresh(
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RefreshTokenRequest? request, CancellationToken ct)
+    {
+        // Un refus (401) n'efface pas le cookie : quand deux onglets rafraîchissent en même temps, le refus du second
+        // effacerait le nouveau cookie que le premier vient de recevoir (le navigateur partage un seul cookie).
+        var response = await _auth.RefreshAsync(RefreshTokenCookie.Read(HttpContext, request?.RefreshToken), ct);
+        return Ok(RefreshTokenCookie.Issue(HttpContext, response, _security));
+    }
 
     /// <summary>POST — Déconnexion : révoque le jeton de rafraîchissement (anonyme : le jeton d'accès peut avoir expiré).</summary>
     [AllowAnonymous]
     [EnableRateLimiting(AuthRateLimit.Policy)]
     [HttpPost("logout")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<IActionResult> Logout([FromBody] RefreshTokenRequest request, CancellationToken ct)
+    public async Task<IActionResult> Logout(
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RefreshTokenRequest? request, CancellationToken ct)
     {
-        await _auth.LogoutAsync(request.RefreshToken, ct);
+        await _auth.LogoutAsync(RefreshTokenCookie.Read(HttpContext, request?.RefreshToken), ct);
+        RefreshTokenCookie.Delete(HttpContext);
         return NoContent();
     }
 

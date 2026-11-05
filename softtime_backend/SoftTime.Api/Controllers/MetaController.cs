@@ -4,7 +4,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace SoftTime.Api.Controllers;
 
 [ApiController]
-[AllowAnonymous]
+// Authentification exigée : la liste des routes et des numéros de droits est une carte de l'API pour un attaquant.
+[Authorize]
 [Route("api/meta")]
 [Tags("Meta")]
 public class MetaController : ControllerBase

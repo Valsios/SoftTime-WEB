@@ -4,6 +4,8 @@ using System.Security.Cryptography;
 using System.Text;
 using AutoMapper;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
@@ -104,6 +106,7 @@ public class AuthService
     private readonly EffectiveRightsService _effectiveRights;
     private readonly RefreshTokenService _refreshTokens;
     private readonly AccountSecurityOptions _security;
+    private readonly ILogger<AuthService> _logger;
 
     public const string InvalidCredentialsMessage = "Identifiants invalides.";
     public const string LockedAccountMessage =
@@ -161,8 +164,10 @@ public class AuthService
         EffectiveRightsService effectiveRights,
         IPasswordHasher<T_RESPONSABLE>? passwordHasher = null,
         RefreshTokenService? refreshTokens = null,
-        IOptions<AccountSecurityOptions>? securityOptions = null)
+        IOptions<AccountSecurityOptions>? securityOptions = null,
+        ILogger<AuthService>? logger = null)
     {
+        _logger = logger ?? NullLogger<AuthService>.Instance;
         _uow = uow;
         _tokens = tokens;
         _mapper = mapper;
@@ -186,13 +191,17 @@ public class AuthService
         if (user is null)
         {
             _passwordHasher.VerifyHashedPassword(new T_RESPONSABLE(), DummyHash(), password);
+            _logger.LogWarning("Connexion refusée : login inconnu ou ambigu « {Login} ».", LogSafe(login));
             throw new UnauthorizedAccessException(InvalidCredentialsMessage);
         }
+        if (IsLocked(user))
+            _logger.LogWarning("Connexion refusée : compte {UserId} verrouillé jusqu'à {LockedUntil:o}.", user.IDRESPONSABLE, user.VERROUILLE_JUSQUA);
         EnsureNotLocked(user);
 
         var (passwordVerified, needsUpgrade) = VerifyPassword(user, password);
         if (!passwordVerified)
         {
+            _logger.LogWarning("Connexion refusée : mot de passe incorrect pour le compte {UserId}.", user.IDRESPONSABLE);
             await RegisterFailedLoginAsync(user, cancellationToken);
             throw new UnauthorizedAccessException(InvalidCredentialsMessage);
         }
@@ -298,9 +307,21 @@ public class AuthService
         {
             user.TENTATIVES_ECHOUEES = 0;
             user.VERROUILLE_JUSQUA = DateTime.UtcNow.AddMinutes(_security.LockoutMinutes);
+            _logger.LogWarning("Compte {UserId} verrouillé {Minutes} min après {Attempts} échecs de connexion.",
+                user.IDRESPONSABLE, _security.LockoutMinutes, _security.MaxFailedLoginAttempts);
         }
         _uow.Repository<T_RESPONSABLE>().Update(user);
         await _uow.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Login saisi, tel qu'il peut être journalisé : sans caractère de contrôle (pas de fausse ligne injectée dans le
+    /// journal) et tronqué (un mot de passe tapé par erreur dans le champ login n'y apparaît pas en entier).
+    /// </summary>
+    internal static string LogSafe(string value)
+    {
+        var clean = new string(value.Where(c => !char.IsControl(c)).ToArray());
+        return clean.Length <= 32 ? clean : clean[..32] + "…";
     }
 
     private string DummyHash()

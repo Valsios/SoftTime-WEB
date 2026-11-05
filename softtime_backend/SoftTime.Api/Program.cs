@@ -23,7 +23,7 @@ using SoftTime.Domain.Entities.SoftTime;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers()
+builder.Services.AddControllers(o => o.Filters.Add<SoftTime.Api.Validation.FluentValidationFilter>())
     .AddJsonOptions(o => SoftTimeJsonOptions.Configure(o.JsonSerializerOptions));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>

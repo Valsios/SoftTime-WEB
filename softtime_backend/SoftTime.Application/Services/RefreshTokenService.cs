@@ -1,4 +1,6 @@
 using System.Security.Cryptography;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using SoftTime.Application.Security;
 using SoftTime.Domain.Entities.SoftTime;
@@ -22,9 +24,11 @@ public class RefreshTokenService
 
     private readonly IUnitOfWork _uow;
     private readonly AccountSecurityOptions _options;
+    private readonly ILogger<RefreshTokenService> _logger;
 
-    public RefreshTokenService(IUnitOfWork uow, IOptions<AccountSecurityOptions>? options = null)
+    public RefreshTokenService(IUnitOfWork uow, IOptions<AccountSecurityOptions>? options = null, ILogger<RefreshTokenService>? logger = null)
     {
+        _logger = logger ?? NullLogger<RefreshTokenService>.Instance;
         _uow = uow;
         _options = options?.Value ?? new AccountSecurityOptions();
     }
@@ -61,6 +65,9 @@ public class RefreshTokenService
             var justRotated = current.REMPLACE_PAR is not null && DateTime.UtcNow - revokedAt < ConcurrentRotationGrace;
             if (justRotated)
                 throw new UnauthorizedAccessException(InvalidTokenMessage);
+            _logger.LogWarning(
+                "Réutilisation d'un jeton de rafraîchissement déjà remplacé (compte {UserId}, famille {Family}) : vol probable, toutes les sessions du compte sont fermées.",
+                current.IDRESPONSABLE, current.FAMILLE);
             await RevokeAllAsync(current.IDRESPONSABLE, cancellationToken);
             await _uow.SaveChangesAsync(cancellationToken);
             throw new UnauthorizedAccessException(InvalidTokenMessage);

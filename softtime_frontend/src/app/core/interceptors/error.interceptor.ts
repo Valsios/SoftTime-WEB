@@ -61,7 +61,7 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
 
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
-      if (!shouldRefreshSession(req.url, err.status, session.refreshToken())) {
+      if (!shouldRefreshSession(req.url, err.status, session.isAuthenticated())) {
         return handle(err);
       }
       return refresher.refresh().pipe(

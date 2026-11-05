@@ -11,7 +11,10 @@ export function isAnonymousAuthRequest(url: string): boolean {
   return ANONYMOUS_AUTH_PATHS.some((path) => url.includes(path));
 }
 
-/** Vrai si un 401 sur cette requête doit être tenté de nouveau après un rafraîchissement de session. */
-export function shouldRefreshSession(url: string, status: number, refreshToken: string | null | undefined): boolean {
-  return status === 401 && !!refreshToken && !isAnonymousAuthRequest(url);
+/**
+ * Vrai si un 401 sur cette requête doit être tenté de nouveau après un rafraîchissement de session.
+ * Le jeton de rafraîchissement est dans un cookie HttpOnly, invisible ici : on se fie à la présence d'une session ouverte.
+ */
+export function shouldRefreshSession(url: string, status: number, hasSession: boolean): boolean {
+  return status === 401 && hasSession && !isAnonymousAuthRequest(url);
 }
