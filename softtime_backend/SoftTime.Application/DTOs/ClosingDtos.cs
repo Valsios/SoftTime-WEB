@@ -11,6 +11,11 @@ namespace SoftTime.Application.DTOs;
 /// (faux par défaut) ajoute à la LISTE les anomalies « Information » ; les comptages les incluent toujours.
 /// <see cref="ReuseCached"/> (faux par défaut) autorise la réutilisation, pendant un court instant, de l'analyse
 /// déjà calculée pour la même période : réservé aux changements de page, jamais à une nouvelle analyse.
+/// <see cref="Gravites"/> (absent par défaut) restreint la LISTE aux niveaux donnés ; un filtre explicite
+/// l'emporte sur <see cref="IncludeInformation"/>. <see cref="TriParGravite"/> (faux par défaut) range la liste du plus
+/// grave au moins grave, puis dans l'ordre habituel (date, matricule, type, détail), de façon stable. Ni l'un ni l'autre
+/// ne touche aux comptages, au score ni au statut, toujours calculés sur l'analyse complète.
+/// <see cref="Perimetre"/> (absent par défaut) identifie l'utilisateur : il entre dans la clé du cache, jamais dans le résultat.
 /// </summary>
 public sealed record ClosingAnalysisRequest(
     DateTime From,
@@ -21,7 +26,30 @@ public sealed record ClosingAnalysisRequest(
     ClosingRulesOptions? Options = null,
     bool IncludeComparison = false,
     bool IncludeInformation = false,
-    bool ReuseCached = false);
+    bool ReuseCached = false,
+    IReadOnlyList<ClosingSeverity>? Gravites = null,
+    bool TriParGravite = false,
+    string? Perimetre = null);
+
+/// <summary>
+/// Demande de checklist d'avancement : même période (mois civil précédent sans dates) et même département que l'analyse.
+/// <see cref="ReuseCached"/> (faux par défaut) autorise la dernière checklist conservée pendant le délai du cache.
+/// </summary>
+public sealed record ClosingChecklistRequest(DateTime From, DateTime To, string? Departement = null, bool ReuseCached = false);
+
+/// <summary>
+/// Une étape de la préparation de paie. <c>Etat</c> : Fait, AFaire, Information ou NonDeterminable (jamais deviné).
+/// <c>Nombre</c> : volume utile à l'étape (à faire, à valider, concernés), <c>null</c> si sans objet.
+/// Aucun matricule ni nom : des comptages seulement.
+/// </summary>
+public sealed record ClosingChecklistLineDto(string Code, string Libelle, string Etat, string Detail, int? Nombre = null);
+
+/// <summary>Checklist d'avancement de la paie d'une période : séparée de l'analyse, n'entre ni dans le score ni dans le statut.</summary>
+public sealed record ClosingChecklistDto(
+    DateTime From,
+    DateTime To,
+    string? Departement,
+    IReadOnlyList<ClosingChecklistLineDto> Lignes);
 
 /// <summary>Comptage d'une gravité ou d'un type d'anomalie.</summary>
 public sealed record ClosingCountDto(string Cle, int Nombre);

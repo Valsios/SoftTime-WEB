@@ -226,6 +226,70 @@ activé que s'il bat la baseline statistique ; sinon l'ancien modèle reste acti
 
 ---
 
+## 5 quater. Contrôle avant paie (`/closing`)
+
+Page **en lecture seule** d'aide à la préparation de la paie : elle liste les anomalies de la période,
+donne un score et un statut, et renvoie vers les écrans de correction existants. Accès : porte 6
+(États) **et** permission `REPORTS:CLOSING` (l'administrateur y a toujours accès). Elle peut être coupée
+par le réglage `Closing:Enabled`. Période par défaut : le mois civil complet précédent ; les jours en
+cours et futurs ne sont jamais contrôlés (la période est plafonnée à la veille).
+
+- **Types d'anomalies et gravité par défaut** (`PayrollClosingRules`, réglables par la section `Closing`) :
+
+  | Type | Gravité | Ce que le contrôle signale |
+  |---|---|---|
+  | Pointage incomplet | Critique | Pointages qui ne s'apparient pas (mêmes règles que le traitement des pointages). |
+  | Pointage manquant | Critique | Jour planifié avec heures, sans aucun pointage ni correction. |
+  | Planning sans pointage | Importante | Une demi-journée non couverte (congé ou absence arbitrée d'un seul côté). |
+  | Pointage sans planning | Importante | Jour pointé sans aucune ligne de planning. |
+  | Doublon exact | Mineure en mono-pointage, Information en multi-pointage | Même matricule, même date, même heure. |
+  | Quasi-doublon | Mineure en mono-pointage, Information en multi-pointage | Deux pointages séparés de moins de la tolérance (30 s par défaut). |
+  | Férié non appliqué | Information | Jour férié dont la correction ne porte pas le drapeau férié (lien de correction seulement si un pointage existe ce jour-là). |
+
+  Les quatre niveaux sont Information (poids 0), Mineure (1), Importante (3) et Critique (5). Une
+  anomalie « Information » figure dans les comptages mais n'entre ni dans le score ni dans le statut.
+- **Score** : `100 − 100 × (somme des poids) ÷ (poids maximum × jours-employé contrôlés)`, borné entre 0
+  et 100 ; aucun score sans jour contrôlé.
+- **Statut** : *Prêt* (aucune anomalie critique), *Bloquant* (critiques ÷ jours-employé contrôlés ≥ **5 %**),
+  sinon *À corriger*. **Le seuil de 5 % est provisoire**, à confirmer par le manager (`Closing:CriticalRatioBlocking`).
+  « Bloquant » est un statut d'affichage : aucun autre écran n'est empêché.
+- **Filtre et tri par gravité** : les quatre cartes de comptage servent de bascules de filtre de la liste,
+  et un menu trie la liste du plus grave au moins grave (puis date, matricule, type). Seule la liste change :
+  les comptages, le score et le statut restent ceux de l'analyse complète. Changer le filtre ou le tri relit
+  la page 1 dans l'analyse en cache du serveur, sans nouvelle analyse (`gravites=…`, `tri=gravite`).
+- **Export Excel** : le bouton « Exporter » produit un classeur (feuille « Synthèse » avec période, département,
+  statut, score, comptages, filtre et tri appliqués ; feuille « Anomalies » avec toute la liste affichée, toutes
+  les pages). Il suit l'onglet, le filtre de gravité et le tri affichés, et refuse d'exporter si les données ont
+  changé depuis l'analyse.
+- **Filtre figé en session** : le filtre saisi, le dernier résultat (avec la date et l'heure de l'analyse), l'onglet,
+  le filtre de gravité et le tri sont conservés en mémoire tant que la session dure. Aucune analyse ne se lance à
+  l'ouverture de la page ni au retour : il faut cliquer sur « Analyser ». Un filtre modifié affiche « Filtre
+  modifié, réanalyser ». L'état est vidé à la déconnexion et au changement de compte ou de base active.
+- **Avancement de la paie** (`GET api/closing/checklist`, séparé de l'analyse, même droit) : chargé avec
+  l'analyse, une ligne par étape avec son état (*Fait*, *À faire*, *Information*, *Non déterminable*) et un
+  lien vers l'écran concerné. Ces lignes n'entrent jamais dans le score ni dans le statut.
+
+  | Étape | Source | Règle |
+  |---|---|---|
+  | Pointages importés | `T_POINTAGE` | Fait s'il existe des pointages sur la période pour le périmètre. |
+  | Anomalies à arbitrer | `T_HEUREANOMALIE`, `T_HEURECORRIGER` | À faire s'il reste des anomalies, ou si des pointages existent sans aucune heure corrigée (traitement non lancé). |
+  | Semaines validées | `T_HS_VALIDER`, `T_PLANNING_SAL` | Une semaine appartient à la période qui contient son dimanche ; fait si chaque semaine-salarié planifiée est validée. |
+  | Calcul EXO/IMPO | `T_HSExoImp` | Fait pour la période exacte ; non déterminable si un calcul existe sur une autre période qui la recoupe. |
+  | Heures imposables | `T_HSExoImp` | Information : salariés au-delà du plafond de 20 h exonérées (`OvertimeRules.ExemptCeilingHours`), seulement si le calcul existe. |
+  | Synchronisation paie | journal d'audit (`SYNC_PAIE`) | Statut de la dernière synchronisation de la période ; non déterminable sans trace (le journal peut être désactivé). |
+
+  Le cache de la checklist dure 60 s, par utilisateur, base, période et département.
+- **Badge** : dans la barre du haut, près du bouton de thème, le nombre d'anomalies critiques du dernier résultat,
+  pour les comptes ayant `REPORTS:CLOSING`, et seulement si une analyse existe en session. Il ne fait aucune requête
+  et ne se rafraîchit pas seul ; il disparaît avec l'état de session.
+- **Cache de l'analyse** : le serveur garde l'analyse en mémoire par utilisateur, base, période et département. Le délai de 120 s est **glissant** (chaque lecture du filtre, du tri, de l'onglet ou d'une page le renouvelle) sous un **plafond absolu de 600 s** depuis le calcul (`Closing:CacheMaxSeconds`, 0 à 3600) ; le délai glissant se règle par `Closing:CacheSeconds` (120 s par défaut, 0 à 3600, jamais au-delà du plafond ; 0 : aucun cache) ; « Analyser » recalcule toujours à neuf et repart d'un plafond neuf.
+- **Âge de l'analyse** : près du résultat, « Analyse faite il y a X min », calculé sur l'heure conservée en session, sans requête.
+- **Ce que l'écran ne fait pas** : aucune écriture, aucune correction saisie dans la page (seulement des liens vers
+  les écrans existants), aucune règle métier de paie propre (mêmes anomalies, mêmes calculs d'heures supplémentaires,
+  mêmes validations que les autres écrans), aucun blocage d'un autre écran, aucun envoi de message.
+
+---
+
 ## 6. Divers
 
 - **Cantine** : jours avec pointage 11h–14h30 ; recherche sur `T_CANTINE`, **Calculer** pour régénérer.
