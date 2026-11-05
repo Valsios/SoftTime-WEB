@@ -1,6 +1,6 @@
 import { effect, inject, Injectable, signal, untracked } from '@angular/core';
 import { SessionStore } from '../../core/session.store';
-import { ClosingReport } from '../../shared/models';
+import { ClosingChecklist, ClosingReport } from '../../shared/models';
 import { ClosingFilter, ClosingSort } from './closing.logic';
 
 /** Dernier résultat d'analyse conservé en mémoire : filtre appliqué, rapport et heure du calcul. */
@@ -27,6 +27,8 @@ export class ClosingSessionState {
   readonly draft = signal<ClosingFilter | null>(null);
   readonly result = signal<ClosingResult | null>(null);
   readonly tab = signal<'afix' | 'all'>('afix');
+  /** Dernière checklist d'avancement chargée avec l'analyse (null : aucune, ou en échec). */
+  readonly checklist = signal<ClosingChecklist | null>(null);
   /** Niveaux de gravité retenus dans la liste (vide : aucun filtre) et tri choisi. */
   readonly gravites = signal<string[]>([]);
   readonly tri = signal<ClosingSort>('date');
@@ -64,7 +66,15 @@ export class ClosingSessionState {
     return true;
   }
 
+  /** Conserve la checklist, sauf si le contexte a changé depuis son lancement. */
+  storeChecklist(checklist: ClosingChecklist | null, startedIn: string | null): boolean {
+    if (this.syncContext() !== startedIn) return false;
+    this.checklist.set(checklist);
+    return true;
+  }
+
   reset(): void {
+    this.checklist.set(null);
     this.draft.set(null);
     this.result.set(null);
     this.tab.set('afix');

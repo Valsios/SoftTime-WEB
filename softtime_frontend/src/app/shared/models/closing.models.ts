@@ -87,6 +87,23 @@ export interface ClosingReport {
   salariesSansPlanningExclus?: number;
 }
 
+/** Une étape de la préparation de paie : Fait, AFaire, Information ou NonDeterminable (jamais deviné). */
+export interface ClosingChecklistLine {
+  code: string;
+  libelle: string;
+  etat: 'Fait' | 'AFaire' | 'Information' | 'NonDeterminable' | string;
+  detail: string;
+  nombre?: number | null;
+}
+
+/** Réponse de GET api/closing/checklist : séparée de l'analyse, sans effet sur le score ni le statut. */
+export interface ClosingChecklist {
+  from: string;
+  to: string;
+  departement: string | null;
+  lignes: ClosingChecklistLine[];
+}
+
 export interface ClosingQuery {
   /** Jour de début, AAAA-MM-JJ (envoyé en UTC avec Z). */
   from?: string | null;

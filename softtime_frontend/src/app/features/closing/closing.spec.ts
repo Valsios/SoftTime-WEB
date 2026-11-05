@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 import { Observable, of, Subject } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SessionStore } from '../../core/session.store';
-import { ClosingAnomalyView, ClosingQuery, ClosingReport } from '../../shared/models';
+import { ClosingAnomalyView, ClosingChecklist, ClosingQuery, ClosingReport } from '../../shared/models';
 import { CardPaieService, DepartementServiceService } from '../../shared/services/catalog.service';
 import { ClosingService } from '../../shared/services/closing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
@@ -12,6 +12,10 @@ import { ClosingPage } from './closing';
 
 /** Export Excel simulé : aucun téléchargement réel, seulement les appels reçus. */
 const excelFactice = { downloadWorkbook: vi.fn() };
+
+/** Checklist simulée par défaut dans les mocks du service (les tests de la carte la remplacent). */
+const checklistFactice = (): Observable<ClosingChecklist> =>
+  of({ from: '2025-11-01T00:00:00', to: '2025-11-30T00:00:00', departement: null, lignes: [] });
 
 const anomalie = (over: Partial<ClosingAnomalyView>): ClosingAnomalyView => ({
   type: 'PointageManquant',
@@ -80,7 +84,7 @@ function configurer(rapports: ClosingReport[]) {
       {
         provide: ClosingService,
         useValue: {
-          analysis: (q: ClosingQuery) => {
+          checklist: checklistFactice, analysis: (q: ClosingQuery) => {
             requetes.push(q);
             return of(rapports[Math.min(appel++, rapports.length - 1)]);
           },
@@ -382,7 +386,7 @@ describe('page Contrôle avant paie : filtre et résultat conservés pendant la 
         {
           provide: ClosingService,
           useValue: {
-            analysis: (q: ClosingQuery) => {
+            checklist: checklistFactice, analysis: (q: ClosingQuery) => {
               requetes.push(q);
               if (appel++ === 0) return of(premiere);
               const f = new Subject<ClosingReport>();
@@ -503,7 +507,7 @@ describe('page Contrôle avant paie : filtre et résultat conservés pendant la 
           { provide: CardPaieService, useValue: { list: () => of([]) } },
           { provide: DepartementServiceService, useValue: { lookupBatch: () => of([]) } },
           { provide: ExcelExportService, useValue: excelFactice },
-          { provide: ClosingService, useValue: { analysis } },
+          { provide: ClosingService, useValue: { checklist: checklistFactice, analysis } },
         ],
       });
       return monter();
@@ -611,7 +615,7 @@ describe('page Contrôle avant paie : export Excel de la liste', () => {
         {
           provide: ClosingService,
           useValue: {
-            analysis: (q: ClosingQuery) => {
+            checklist: checklistFactice, analysis: (q: ClosingQuery) => {
               requetes.push(q);
               return reponse(q);
             },
@@ -767,7 +771,7 @@ describe('page Contrôle avant paie : filtre et tri par gravité', () => {
         {
           provide: ClosingService,
           useValue: {
-            analysis: (q: ClosingQuery) => {
+            checklist: checklistFactice, analysis: (q: ClosingQuery) => {
               requetes.push(q);
               return of(serveur(q));
             },
@@ -876,7 +880,7 @@ describe('page Contrôle avant paie : filtre et tri par gravité', () => {
         {
           provide: ClosingService,
           useValue: {
-            analysis: (q: ClosingQuery) =>
+            checklist: checklistFactice, analysis: (q: ClosingQuery) =>
               of(q.gravites?.length ? rapport({ nombreAnomalies: 4, anomalies: { items: [], total: 0, page: 1, pageSize: 50, totalPages: 1 } }) : serveur(q)),
           },
         },
@@ -933,5 +937,155 @@ describe('page Contrôle avant paie : filtre et tri par gravité', () => {
     expect(requetes[avant].gravites ?? []).toEqual([]);
     const liste = excelFactice.downloadWorkbook.mock.calls[0][1].find((f: { sheetName: string }) => f.sheetName === 'Anomalies');
     expect(liste.rows).toHaveLength(30);   // 40 lignes dont 10 « Information » masquées
+  });
+});
+
+describe('page Contrôle avant paie : avancement de la paie', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    excelFactice.downloadWorkbook.mockClear();
+  });
+
+  const LIGNES: ClosingChecklist['lignes'] = [
+    { code: 'Pointages', libelle: 'Pointages importés', etat: 'Fait', detail: '12 pointage(s) pour 3 salarié(s).', nombre: 12 },
+    { code: 'Anomalies', libelle: 'Anomalies à arbitrer', etat: 'AFaire', detail: '2 anomalie(s) restent à arbitrer.', nombre: 2 },
+    { code: 'Semaines', libelle: 'Semaines validées', etat: 'Information', detail: 'Aucune semaine planifiée à valider.', nombre: 0 },
+    { code: 'ExoImpo', libelle: 'Calcul EXO/IMPO', etat: 'AFaire', detail: 'Aucune ligne EXO/IMPO pour cette période.', nombre: 0 },
+    { code: 'SynchroPaie', libelle: 'Synchronisation paie', etat: 'NonDeterminable', detail: 'Aucune trace de synchronisation.', nombre: 0 },
+  ];
+  const liste = (): ClosingChecklist => ({ from: '2025-11-01T00:00:00', to: '2025-11-30T00:00:00', departement: null, lignes: LIGNES });
+
+  function monterAvec(checklist: () => Observable<ClosingChecklist>, permissions = true) {
+    TestBed.resetTestingModule();
+    const analyses: ClosingQuery[] = [];
+    const checklists: { from?: string | null; to?: string | null; departement?: string | null }[] = [];
+    const session = { ...fausseSession(), hasPermission: vi.fn(() => permissions) };
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([]),
+        { provide: SessionStore, useValue: session },
+        { provide: CardPaieService, useValue: { list: () => of([]) } },
+        { provide: DepartementServiceService, useValue: { lookupBatch: () => of([]) } },
+        { provide: ExcelExportService, useValue: excelFactice },
+        {
+          provide: ClosingService,
+          useValue: {
+            analysis: (q: ClosingQuery) => {
+              analyses.push(q);
+              return of(rapport());
+            },
+            checklist: (q: { from?: string | null; to?: string | null; departement?: string | null }) => {
+              checklists.push(q);
+              return checklist();
+            },
+          },
+        },
+      ],
+    });
+    const { fixture, el } = monter();
+    return { fixture, el, analyses, checklists, session };
+  }
+
+  it('aucune requête à l’ouverture : ni analyse ni checklist', () => {
+    const { analyses, checklists, el } = monterAvec(() => of(liste()));
+
+    expect(analyses).toHaveLength(0);
+    expect(checklists).toHaveLength(0);
+    expect(el.querySelector('.closing-checklist')).toBeNull();
+  });
+
+  it('au clic sur « Analyser » : une checklist, avec la même période et le même département que l’analyse', () => {
+    const { fixture, el, analyses, checklists } = monterAvec(() => of(liste()));
+
+    cliquerAnalyser(fixture, el);
+
+    expect(analyses).toHaveLength(1);
+    expect(checklists).toHaveLength(1);
+    expect(checklists[0]).toMatchObject({ from: analyses[0].from, to: analyses[0].to, departement: analyses[0].departement ?? null });
+  });
+
+  it('une ligne par étape : état en texte, détail et lien vers l’écran existant', () => {
+    const { fixture, el } = monterAvec(() => of(liste()));
+    cliquerAnalyser(fixture, el);
+
+    const lignes = Array.from(el.querySelectorAll('.closing-checklist li'));
+    expect(lignes).toHaveLength(5);
+    expect(lignes.map((l) => l.querySelector('.soft-badge')?.textContent?.trim())).toEqual(['Fait', 'À faire', 'Information', 'À faire', 'Non déterminable']);
+    expect(lignes[1].textContent).toContain('2 anomalie(s) restent à arbitrer.');
+    const liens = lignes.map((l) => l.querySelector('a')?.getAttribute('href'));
+    expect(liens[0]).toContain('/punches');
+    expect(liens[0]).toContain('du=2025-11-01');
+    expect(liens[0]).toContain('au=2025-11-30');
+    expect(liens[1]).toContain('/anomalies');
+    expect(liens[2]).toBe('/weekly-validation');               // écran qui ne lit pas la période : aucun paramètre
+    expect(liens[3]).toBe('/overtime');
+    expect(el.querySelector('.closing-checklist')?.getAttribute('aria-label')).toBe('Avancement de la paie');
+  });
+
+  it('lien absent quand l’utilisateur n’a pas accès à l’écran (même règle que le menu)', () => {
+    const { fixture, el } = monterAvec(() => of(liste()), false);
+    cliquerAnalyser(fixture, el);
+
+    expect(el.querySelectorAll('.closing-checklist li')).toHaveLength(5);
+    expect(el.querySelector('.closing-checklist a')).toBeNull();
+  });
+
+  it('en parallèle et sans bloquer : la liste s’affiche même si la checklist tarde', () => {
+    const attente = new Subject<ClosingChecklist>();
+    const { fixture, el } = monterAvec(() => attente);
+
+    cliquerAnalyser(fixture, el);
+
+    expect(el.querySelector('.closing-overview')).not.toBeNull();   // l’analyse est affichée
+    expect(el.textContent).toContain('Avancement de la paie en cours de chargement');
+    attente.next(liste());
+    attente.complete();
+    fixture.detectChanges();
+    expect(el.textContent).not.toContain('en cours de chargement');
+    expect(el.querySelector('.closing-checklist')).not.toBeNull();
+  });
+
+  it('erreur de la checklist : simple note, l’analyse (score, statut, liste) reste intacte', () => {
+    const { fixture, el } = monterAvec(() => new Observable<ClosingChecklist>((o) => o.error({ status: 500 })));
+
+    cliquerAnalyser(fixture, el);
+
+    expect(el.textContent).toContain('L’avancement de la paie n’a pas pu être chargé');
+    expect(el.querySelector('.closing-alert--error')).toBeNull();
+    expect(el.querySelector('.closing-score__value')?.textContent?.trim()).toBe('97 / 100');
+    expect(el.querySelector('.closing-overview')).not.toBeNull();
+  });
+
+  it('conservée en session : au retour sur l’écran, même carte, aucune requête', () => {
+    const { fixture, el, analyses, checklists } = monterAvec(() => of(liste()));
+    cliquerAnalyser(fixture, el);
+    fixture.destroy();
+
+    const retour = monter();
+
+    expect(analyses).toHaveLength(1);
+    expect(checklists).toHaveLength(1);
+    expect(retour.el.querySelectorAll('.closing-checklist li')).toHaveLength(5);
+  });
+
+  it('vidée au changement de base active', () => {
+    const { fixture, el, session } = monterAvec(() => of(liste()));
+    cliquerAnalyser(fixture, el);
+    fixture.destroy();
+
+    session.activeSageDb.set('SAGE_B');
+    const retour = monter();
+
+    expect(retour.el.querySelector('.closing-checklist')).toBeNull();
+  });
+
+  it('changement de page, filtre de gravité et tri : jamais de nouvelle checklist', () => {
+    const { fixture, el, checklists } = monterAvec(() => of(liste()));
+    cliquerAnalyser(fixture, el);
+
+    el.querySelector<HTMLButtonElement>('button.closing-count--toggle')!.click();
+    fixture.detectChanges();
+
+    expect(checklists).toHaveLength(1);
   });
 });

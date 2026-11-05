@@ -2,7 +2,7 @@
  * Clôture de paie assistée : logique pure de l'écran (sans Angular), testée par closing.logic.spec.ts.
  * L'écran n'invente rien : il met en forme la réponse de GET api/closing/analysis.
  */
-import { ClosingAnomalyView, ClosingComparison, ClosingCount, ClosingReport, ClosingStatus } from '../../shared/models';
+import { ClosingAnomalyView, ClosingChecklistLine, ClosingComparison, ClosingCount, ClosingReport, ClosingStatus } from '../../shared/models';
 import type { ExcelSheet } from '../../shared/services/excel-export.service';
 
 export const DEFAULT_PAGE_SIZE = 50;
@@ -287,6 +287,48 @@ export interface ClosingFilter {
 export const ANALYSING_TEXT = 'Analyse en cours…';
 export const NOT_ANALYSED_TEXT = 'Choisissez la période puis cliquez sur « Analyser » : aucune analyse ne se lance toute seule.';
 export const FILTER_CHANGED_TEXT = 'Filtre modifié, réanalyser : le résultat affiché correspond encore à l’ancien filtre.';
+
+/** Libellé et teinte de l'état d'une étape de la checklist. */
+export function checklistStateView(etat: string): { label: string; tone: BadgeTone } {
+  switch (etat) {
+    case 'Fait':
+      return { label: 'Fait', tone: 'success' };
+    case 'AFaire':
+      return { label: 'À faire', tone: 'warning' };
+    case 'Information':
+      return { label: 'Information', tone: 'info' };
+    default:
+      return { label: 'Non déterminable', tone: 'muted' };
+  }
+}
+
+export const CHECKLIST_TITLE = 'Avancement de la paie';
+export const CHECKLIST_LOADING = 'Avancement de la paie en cours de chargement…';
+export const CHECKLIST_ERROR = 'L’avancement de la paie n’a pas pu être chargé. L’analyse reste valable.';
+export const CHECKLIST_NOTE = 'Repères de préparation, sans effet sur le score ni sur le statut.';
+
+export interface ChecklistLink extends CorrectionTarget {
+  queryParams: Record<string, string> | null;
+}
+
+/** Écran existant de chaque étape ; la période n'est transmise qu'aux écrans qui la lisent (du, au). */
+const CHECKLIST_TARGETS: Record<string, CorrectionTarget> = {
+  Pointages: { path: '/punches', label: 'Pointages', permission: 'PROC:PUNCHES', droit: DROIT_PROCESSING },
+  Anomalies: { path: '/anomalies', label: 'Anomalies', permission: 'PROC:ANOMALIES', droit: DROIT_PROCESSING },
+  Semaines: { path: '/weekly-validation', label: 'Validation semaine', permission: 'PROC:WEEKLY_VALIDATION', droit: DROIT_PROCESSING },
+  ExoImpo: { path: '/overtime', label: 'Heures supp.', permission: 'PROC:OVERTIME', droit: DROIT_PROCESSING },
+  HeuresImposables: { path: '/overtime', label: 'Heures supp.', permission: 'PROC:OVERTIME', droit: DROIT_PROCESSING },
+  SynchroPaie: { path: '/overtime', label: 'Heures supp.', permission: 'PROC:OVERTIME', droit: DROIT_PROCESSING },
+};
+
+export function checklistLink(line: Pick<ClosingChecklistLine, 'code'>, filter: { from: string; to: string }): ChecklistLink | null {
+  const target = CHECKLIST_TARGETS[line.code];
+  if (!target) return null;
+  return {
+    ...target,
+    queryParams: PAGES_WITH_QUERY_PARAMS.has(target.path) ? { du: filter.from, au: filter.to } : null,
+  };
+}
 
 /** Tri de la liste : ordre habituel (date, matricule, type) ou gravité décroissante. */
 export type ClosingSort = 'date' | 'gravite';

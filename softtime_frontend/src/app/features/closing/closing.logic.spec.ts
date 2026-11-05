@@ -7,6 +7,8 @@ import {
   EXPORT_HEADERS,
   exportFileName,
   exportRows,
+  checklistLink,
+  checklistStateView,
   resultBannerText,
   severityFilterText,
   toggleSeverity,
@@ -396,5 +398,24 @@ describe('filtre de gravité : bascules', () => {
   it('severityFilterText : vide sans filtre, sinon les libellés des niveaux', () => {
     expect(severityFilterText([])).toBe('');
     expect(severityFilterText(['Critique', 'Importante'])).toBe('Filtre de gravité : Critique, Importante');
+  });
+});
+
+describe('checklist d’avancement : états et liens', () => {
+  it('états en clair, jamais seulement une couleur', () => {
+    expect(checklistStateView('Fait')).toEqual({ label: 'Fait', tone: 'success' });
+    expect(checklistStateView('AFaire')).toEqual({ label: 'À faire', tone: 'warning' });
+    expect(checklistStateView('Information')).toEqual({ label: 'Information', tone: 'info' });
+    expect(checklistStateView('NonDeterminable')).toEqual({ label: 'Non déterminable', tone: 'muted' });
+    expect(checklistStateView('autre').label).toBe('Non déterminable');
+  });
+
+  it('lien : écran existant ; période transmise seulement aux écrans qui la lisent', () => {
+    const periode = { from: '2025-11-01', to: '2025-11-30' };
+    expect(checklistLink({ code: 'Pointages' }, periode)).toMatchObject({ path: '/punches', queryParams: { du: '2025-11-01', au: '2025-11-30' } });
+    expect(checklistLink({ code: 'Anomalies' }, periode)).toMatchObject({ path: '/anomalies', queryParams: { du: '2025-11-01', au: '2025-11-30' } });
+    expect(checklistLink({ code: 'Semaines' }, periode)).toMatchObject({ path: '/weekly-validation', queryParams: null });
+    expect(checklistLink({ code: 'ExoImpo' }, periode)).toMatchObject({ path: '/overtime', queryParams: null });
+    expect(checklistLink({ code: 'Inconnue' }, periode)).toBeNull();
   });
 });

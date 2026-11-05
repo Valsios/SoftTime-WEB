@@ -15,12 +15,18 @@ import { EMPTY, expand, Subscription, toArray } from 'rxjs';
 import { errorMessage } from '../../core/error.logic';
 import { SessionStore } from '../../core/session.store';
 import { Column, DataTable, DataTableCell, PageHeader, PeriodFilter, SoftBadge, SoftButton, SoftCard, SoftTabs, SoftToggle, TabItem } from '../../shared/components';
-import { ClosingAnomalyView, ClosingReport, PageChangeEvent, PeriodRequest } from '../../shared/models';
+import { ClosingAnomalyView, ClosingChecklist, ClosingChecklistLine, ClosingReport, PageChangeEvent, PeriodRequest } from '../../shared/models';
 import { ClosingService } from '../../shared/services/closing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { ClosingSessionState } from './closing.state';
 import {
   ANALYSING_TEXT,
+  CHECKLIST_ERROR,
+  CHECKLIST_LOADING,
+  CHECKLIST_NOTE,
+  CHECKLIST_TITLE,
+  checklistLink,
+  checklistStateView,
   ClosingFilter,
   correctionLink,
   CorrectionLink,
@@ -107,6 +113,37 @@ import {
       }
     </div>
 
+    @if (checklistLoading()) {
+      <p class="closing-muted" role="status">{{ checklistLoadingText }}</p>
+    }
+    @if (checklistFailed()) {
+      <p class="closing-muted" role="status">{{ checklistErrorText }}</p>
+    }
+    @if (checklist(); as c) {
+      <soft-card variant="bordered" padding="sm">
+        <div class="closing-section-head">
+          <h2>{{ checklistTitle }}</h2>
+          <span>{{ checklistNote }}</span>
+        </div>
+        <ul class="closing-checklist" [attr.aria-label]="checklistTitle">
+          @for (l of c.lignes; track l.code) {
+            <li>
+              <soft-badge [variant]="stateView(l.etat).tone">{{ stateView(l.etat).label }}</soft-badge>
+              <span class="closing-checklist__text">
+                <strong>{{ l.libelle }}</strong>
+                <span class="closing-muted">{{ l.detail }}</span>
+              </span>
+              @if (stepLink(l, c); as k) {
+                @if (canOpen(k)) {
+                  <a class="soft-btn soft-btn--ghost soft-btn--sm" [routerLink]="k.path" [queryParams]="k.queryParams"
+                     [attr.aria-label]="'Ouvrir ' + k.label + ' : ' + l.libelle">{{ k.label }}</a>
+                }
+              }
+            </li>
+          }
+        </ul>
+      </soft-card>
+    }
     @if (disabled()) {
       <soft-card variant="bordered"><div class="soft-empty" role="status">{{ disabledMessage }}</div></soft-card>
     }
@@ -322,6 +359,9 @@ import {
       }
       .closing-count--toggle[aria-pressed='true'] { outline: 2px solid var(--accent); outline-offset: 4px; }
       .closing-count--toggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 4px; }
+      .closing-checklist { list-style: none; margin: 0; padding: 0 8px 8px; display: grid; gap: 8px; }
+      .closing-checklist li { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 13.5px; }
+      .closing-checklist__text { display: inline-flex; flex-direction: column; gap: 2px; flex: 1 1 220px; min-width: 0; }
       .closing-filter-line { margin: 0 8px 8px; font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
       .closing-sort { display: inline-flex; align-items: center; gap: 8px; margin: 0 8px 8px; font-size: 13px; color: var(--text-secondary); }
       .closing-count strong { font-size: 22px; font-family: var(--font-heading); color: var(--app-text-strong); }
@@ -369,6 +409,16 @@ export class ClosingPage implements OnInit, OnDestroy {
   readonly staleText = FILTER_CHANGED_TEXT;
   readonly notAnalysedText = NOT_ANALYSED_TEXT;
   readonly noAnomalyForFilter = NO_ANOMALY_FOR_FILTER;
+  readonly checklistTitle = CHECKLIST_TITLE;
+  readonly checklistNote = CHECKLIST_NOTE;
+  readonly checklistLoadingText = CHECKLIST_LOADING;
+  readonly checklistErrorText = CHECKLIST_ERROR;
+
+  /** Avancement de la paie : chargé avec l'analyse, en parallèle ; son échec n'empêche ni ne modifie l'analyse. */
+  readonly checklist = signal<ClosingChecklist | null>(null);
+  readonly checklistLoading = signal(false);
+  readonly checklistFailed = signal(false);
+  private checklistRequest?: Subscription;
 
   readonly report = signal<ClosingReport | null>(null);
   /** Analyse complète en cours (bouton Analyser, onglet) : indicateur près du filtre, résultat atténué. */
@@ -453,6 +503,7 @@ export class ClosingPage implements OnInit, OnDestroy {
     this.includeComparison.set(draft.includeComparison);
     this.draft.set(draft);
     const kept = this.state.result();
+    this.checklist.set(this.state.checklist());
     if (kept) {
       this.report.set(kept.report);
       this.applied.set(kept.filter);
@@ -544,6 +595,43 @@ export class ClosingPage implements OnInit, OnDestroy {
     if (this.analysing() && sameFilter(next, this.inflight)) return;
     this.page.set(1);
     this.load(next, false);
+    this.loadChecklist(next);
+  }
+
+  /**
+   * Avancement de la paie pour le filtre analysé : lancé avec l'analyse, sans la bloquer. Une nouvelle recherche annule la
+   * précédente ; une erreur n'affiche qu'une note (jamais d'effet sur la liste, le score ni le statut).
+   */
+  private loadChecklist(filter: ClosingFilter): void {
+    this.checklistRequest?.unsubscribe();
+    this.checklist.set(null);
+    this.checklistFailed.set(false);
+    this.checklistLoading.set(true);
+    const context = this.state.currentContext();
+    this.state.storeChecklist(null, context);
+    this.checklistRequest = this.closing
+      .checklist({ from: filter.from, to: filter.to, departement: filter.departement })
+      .subscribe({
+        next: (c) => {
+          this.checklist.set(c);
+          this.state.storeChecklist(c, context);
+          this.checklistLoading.set(false);
+        },
+        error: () => {
+          this.checklistFailed.set(true);
+          this.checklistLoading.set(false);
+        },
+      });
+  }
+
+  /** Libellé et teinte de l'état d'une étape. */
+  stateView(etat: string) {
+    return checklistStateView(etat);
+  }
+
+  /** Écran existant de l'étape, avec la période quand l'écran la lit. */
+  stepLink(line: ClosingChecklistLine, c: ClosingChecklist) {
+    return checklistLink(line, { from: c.from.slice(0, 10), to: c.to.slice(0, 10) });
   }
 
   /** L'option est mémorisée avec le filtre : rien n'est relancé avant le clic sur Analyser. */
@@ -718,7 +806,7 @@ export class ClosingPage implements OnInit, OnDestroy {
   }
 
   /** Lien actif seulement si la page cible est accessible (même règle que le menu). */
-  canOpen(l: CorrectionLink): boolean {
+  canOpen(l: { permission: string; droit: number }): boolean {
     return this.session.hasPermission(l.permission, l.droit);
   }
 }
