@@ -99,4 +99,8 @@ export interface ClosingQuery {
   pageSize?: number;
   /** Changement de page seulement : le serveur peut réutiliser, 60 s au plus, l'analyse déjà calculée. */
   reuseCache?: boolean;
+  /** Restreint la LISTE à ces niveaux (Information, Mineure, Importante, Critique) ; comptages, score et statut ne changent pas. */
+  gravites?: readonly string[];
+  /** « gravite » : liste du plus grave au moins grave, puis ordre habituel. */
+  tri?: 'gravite';
 }

@@ -33,6 +33,10 @@ import {
   EXPORT_STALE_MESSAGE,
   exportFileName,
   exportSheets,
+  ClosingSort,
+  NO_ANOMALY_FOR_FILTER,
+  severityFilterText,
+  toggleSeverity,
   FILTER_CHANGED_TEXT,
   formatDay,
   INFORMATION_RULE,
@@ -145,11 +149,17 @@ import {
         <div class="closing-kpis">
           @for (s of severities; track s) {
             <soft-card variant="bordered">
-              <div class="closing-count">
+              <button
+                type="button"
+                class="closing-count closing-count--toggle"
+                [attr.aria-pressed]="isSelected(s)"
+                [attr.aria-label]="'Filtrer la liste : ' + severityText(s) + ', ' + count(r, s)"
+                (click)="toggleGravite(s)"
+              >
                 <span class="closing-kpi__label"><soft-badge [variant]="tone(s)">{{ severityText(s) }}</soft-badge></span>
                 <strong>{{ count(r, s) }}</strong>
                 <span class="closing-count__text">{{ sentence(s, count(r, s)) }}</span>
-              </div>
+              </button>
             </soft-card>
           }
         </div>
@@ -201,9 +211,25 @@ import {
           <div class="closing-section-head">
             <h2>Anomalies à corriger</h2>
           </div>
-          <soft-tabs [tabs]="tabs()" [activeTab]="tab()" (activeTabChange)="onTab($event)"></soft-tabs>
+          @if (gravites().length === 0) {
+            <soft-tabs [tabs]="tabs()" [activeTab]="tab()" (activeTabChange)="onTab($event)"></soft-tabs>
+          } @else {
+            <p class="closing-filter-line" role="status">
+              {{ filterText() }} · {{ r.anomalies.total }} ligne(s)
+              <button type="button" class="soft-btn soft-btn--ghost soft-btn--sm" (click)="clearGravites()">Tout afficher</button>
+            </p>
+          }
+          <label class="closing-sort">
+            <span>Trier par</span>
+            <select class="soft-input" name="tri" (change)="onTri($event)">
+              <option value="date" [selected]="tri() === 'date'">Date, matricule, type</option>
+              <option value="gravite" [selected]="tri() === 'gravite'">Gravité (la plus grave d’abord)</option>
+            </select>
+          </label>
           @if (r.anomalies.total === 0 && r.nombreAnomalies === 0) {
             <div class="closing-state closing-state--success" role="status">{{ noAnomaly }}</div>
+          } @else if (r.anomalies.total === 0 && gravites().length > 0) {
+            <div class="closing-state closing-state--success" role="status">{{ noAnomalyForFilter }}</div>
           } @else if (r.anomalies.total === 0) {
             <div class="closing-state closing-state--success" role="status">{{ hiddenInformationText() }}</div>
           } @else {
@@ -290,6 +316,14 @@ import {
       .closing-explain p { margin: 8px 0 0; font-size: 13px; color: var(--app-text); }
       .closing-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
       .closing-count { display: flex; flex-direction: column; gap: 6px; }
+      .closing-count--toggle {
+        width: 100%; padding: 0; text-align: left; font: inherit; color: inherit;
+        background: none; border: 0; border-radius: var(--radius-md); cursor: pointer;
+      }
+      .closing-count--toggle[aria-pressed='true'] { outline: 2px solid var(--accent); outline-offset: 4px; }
+      .closing-count--toggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 4px; }
+      .closing-filter-line { margin: 0 8px 8px; font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+      .closing-sort { display: inline-flex; align-items: center; gap: 8px; margin: 0 8px 8px; font-size: 13px; color: var(--text-secondary); }
       .closing-count strong { font-size: 22px; font-family: var(--font-heading); color: var(--app-text-strong); }
       .closing-count__text { color: var(--text-secondary); font-size: 12.5px; }
       .closing-section-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 8px 8px 12px; }
@@ -334,6 +368,7 @@ export class ClosingPage implements OnInit, OnDestroy {
   readonly analysingText = ANALYSING_TEXT;
   readonly staleText = FILTER_CHANGED_TEXT;
   readonly notAnalysedText = NOT_ANALYSED_TEXT;
+  readonly noAnomalyForFilter = NO_ANOMALY_FOR_FILTER;
 
   readonly report = signal<ClosingReport | null>(null);
   /** Analyse complète en cours (bouton Analyser, onglet) : indicateur près du filtre, résultat atténué. */
@@ -349,6 +384,10 @@ export class ClosingPage implements OnInit, OnDestroy {
   /** Onglet de la liste : « afix » (par défaut) ou « all » (avec les informations, includeInformation = true). */
   readonly tab = signal<'afix' | 'all'>('afix');
   readonly includeInformation = computed(() => this.tab() === 'all');
+  /** Niveaux retenus dans la liste (vide : aucun filtre) et tri : ne touchent ni l'analyse, ni le score, ni le statut. */
+  readonly gravites = signal<string[]>([]);
+  readonly tri = signal<ClosingSort>('date');
+  readonly filterText = computed(() => severityFilterText(this.gravites()));
   readonly page = signal(1);
   readonly pageSize = signal<number>(DEFAULT_PAGE_SIZE);
 
@@ -419,6 +458,8 @@ export class ClosingPage implements OnInit, OnDestroy {
       this.applied.set(kept.filter);
       this.analysedAt.set(kept.analysedAt);
       this.tab.set(this.state.tab());
+      this.gravites.set(this.state.gravites());
+      this.tri.set(this.state.tri());
       this.page.set(kept.report.anomalies.page);
       this.pageSize.set(this.state.pageSize() ?? DEFAULT_PAGE_SIZE);
     }
@@ -431,10 +472,11 @@ export class ClosingPage implements OnInit, OnDestroy {
   }
 
   /**
-   * Export Excel de TOUTE la liste du résultat affiché (filtre figé en session, toutes gravités),
-   * par le classeur multi-feuilles existant (synthèse + anomalies). Les pages sont relues avec
-   * `reuseCache` : tant que l'analyse est dans le cache du serveur (60 s), rien n'est recalculé.
-   * Si le nombre de lignes diffère de l'analyse affichée, l'export est refusé (données modifiées).
+   * Export Excel de TOUTE la liste affichée (toutes les pages), avec le même filtre de période et de
+   * département, le même onglet, le même filtre de gravité et le même tri que l'écran, par le classeur
+   * multi-feuilles existant (synthèse + anomalies). Les pages sont relues avec `reuseCache` : tant que
+   * l'analyse est dans le cache du serveur (60 s), rien n'est recalculé. Si le nombre de lignes diffère du
+   * total (filtré) de la liste affichée, l'export est refusé (données modifiées depuis l'analyse).
    */
   exportExcel(): void {
     const filter = this.applied();
@@ -443,16 +485,20 @@ export class ClosingPage implements OnInit, OnDestroy {
     if (!filter || !report || !at || this.analysing() || this.exporting()) return;
     this.exporting.set(true);
     this.error.set(null);
+    const vue = { gravites: this.gravites(), tri: this.tri(), includeInformation: this.includeInformation() };
+    const attendu = report.anomalies.total;
     const fetchPage = (page: number) =>
       this.closing.analysis({
         from: filter.from,
         to: filter.to,
         departement: filter.departement,
         includeComparison: filter.includeComparison,
-        includeInformation: true,
+        includeInformation: vue.includeInformation,
         page,
         pageSize: EXPORT_PAGE_SIZE,
         reuseCache: true,
+        gravites: vue.gravites,
+        tri: vue.tri === 'gravite' ? 'gravite' : undefined,
       });
     this.exportRequest = fetchPage(1)
       .pipe(
@@ -463,11 +509,11 @@ export class ClosingPage implements OnInit, OnDestroy {
         next: (pages) => {
           const items = pages.flatMap((r) => r.anomalies.items);
           this.exporting.set(false);
-          if (items.length !== report.nombreAnomalies) {
+          if (items.length !== attendu) {
             this.error.set(EXPORT_STALE_MESSAGE);
             return;
           }
-          this.excel.downloadWorkbook(exportFileName(filter), exportSheets(report, items, filter, at));
+          this.excel.downloadWorkbook(exportFileName(filter), exportSheets(report, items, filter, at, vue));
         },
         error: () => this.exporting.set(false),
       });
@@ -517,6 +563,43 @@ export class ClosingPage implements OnInit, OnDestroy {
     this.load(applied, false);
   }
 
+  /**
+   * Carte de gravité = bascule de filtre de la liste. Le serveur relit la page 1 dans l'analyse en cache
+   * (`reuseCache`) : aucune nouvelle analyse complète, le score et les comptages restent ceux de l'analyse.
+   */
+  toggleGravite(severity: string): void {
+    this.gravites.set(toggleSeverity(this.gravites(), severity));
+    this.state.gravites.set(this.gravites());
+    this.reloadList();
+  }
+
+  clearGravites(): void {
+    if (!this.gravites().length) return;
+    this.gravites.set([]);
+    this.state.gravites.set([]);
+    this.reloadList();
+  }
+
+  isSelected(severity: string): boolean {
+    return this.gravites().includes(severity);
+  }
+
+  onTri(event: Event): void {
+    const next: ClosingSort = (event.target as HTMLSelectElement).value === 'gravite' ? 'gravite' : 'date';
+    if (next === this.tri()) return;
+    this.tri.set(next);
+    this.state.tri.set(next);
+    this.reloadList();
+  }
+
+  /** Liste seulement : page 1 du filtre déjà analysé, avec le cache du serveur. */
+  private reloadList(): void {
+    const applied = this.applied();
+    if (!applied) return;
+    this.page.set(1);
+    this.load(applied, true);
+  }
+
   /** Navigation du tableau partagé : un changement de taille revient à la page 1. */
   onPageChange(e: PageChangeEvent): void {
     const applied = this.applied();
@@ -562,6 +645,8 @@ export class ClosingPage implements OnInit, OnDestroy {
         page: this.page(),
         pageSize: this.pageSize(),
         reuseCache: pageOnly,
+        gravites: this.gravites(),
+        tri: this.tri() === 'gravite' ? 'gravite' : undefined,
       })
       .subscribe({
         next: (r) => {

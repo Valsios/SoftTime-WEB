@@ -656,7 +656,7 @@ describe('page Contrôle avant paie : export Excel de la liste', () => {
 
     const export_ = requetes.slice(avant);
     expect(export_.map((r) => r.page)).toEqual([1, 2, 3]);
-    expect(export_.every((r) => r.reuseCache === true && r.pageSize === 200 && r.includeInformation === true)).toBe(true);
+    expect(export_.every((r) => r.reuseCache === true && r.pageSize === 200 && r.includeInformation === false)).toBe(true);   // suit l’onglet affiché
     expect(export_.every((r) => r.from === requetes[0].from && r.to === requetes[0].to)).toBe(true);
 
     expect(excelFactice.downloadWorkbook).toHaveBeenCalledTimes(1);
@@ -716,5 +716,222 @@ describe('page Contrôle avant paie : export Excel de la liste', () => {
     expect(valeur('Statut')).toBe('À corriger');
     expect(valeur('Score')).toBe(97);
     expect(valeur('Lignes de la feuille « Anomalies »')).toBe(TOTAL);
+  });
+});
+
+describe('page Contrôle avant paie : filtre et tri par gravité', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    excelFactice.downloadWorkbook.mockClear();
+  });
+
+  const CYCLE = ['Critique', 'Importante', 'Mineure', 'Information'] as const;
+  const RANG: Record<string, number> = { Critique: 3, Importante: 2, Mineure: 1, Information: 0 };
+  /** 40 lignes fictives « ligne 1 » à « ligne 40 », dont la gravité tourne dans l'ordre Critique, Importante, Mineure, Information. */
+  const TOUTES = Array.from({ length: 40 }, (_, i) =>
+    anomalie({ detail: `ligne ${i + 1}`, matricule: `M${i + 1}`, gravite: CYCLE[i % 4], poids: 1 }),
+  );
+
+  /** Serveur simulé : mêmes règles que le vrai (filtre explicite > onglet, tri stable) ; comptages toujours complets. */
+  function serveur(q: ClosingQuery): ClosingReport {
+    let liste = q.gravites?.length
+      ? TOUTES.filter((a) => q.gravites!.includes(a.gravite))
+      : q.includeInformation
+        ? [...TOUTES]
+        : TOUTES.filter((a) => a.gravite !== 'Information');
+    if (q.tri === 'gravite') liste = [...liste].sort((a, b) => RANG[b.gravite] - RANG[a.gravite]);
+    const taille = q.pageSize ?? 50;
+    const page = q.page ?? 1;
+    const items = liste.slice((page - 1) * taille, page * taille);
+    return rapport(
+      {
+        nombreAnomalies: TOUTES.length,
+        parGravite: CYCLE.map((cle) => ({ cle, nombre: 10 })),
+        anomalies: { items, total: liste.length, page, pageSize: taille, totalPages: Math.max(1, Math.ceil(liste.length / taille)) },
+      },
+      items,
+    );
+  }
+
+  function monterServeur() {
+    const requetes: ClosingQuery[] = [];
+    const session = fausseSession();
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([]),
+        { provide: SessionStore, useValue: session },
+        { provide: CardPaieService, useValue: { list: () => of([]) } },
+        { provide: DepartementServiceService, useValue: { lookupBatch: () => of([]) } },
+        { provide: ExcelExportService, useValue: excelFactice },
+        {
+          provide: ClosingService,
+          useValue: {
+            analysis: (q: ClosingQuery) => {
+              requetes.push(q);
+              return of(serveur(q));
+            },
+          },
+        },
+      ],
+    });
+    const { fixture, el } = monter();
+    cliquerAnalyser(fixture, el);
+    return { fixture, el, requetes };
+  }
+
+  const carte = (el: HTMLElement, niveau: string) =>
+    Array.from(el.querySelectorAll<HTMLButtonElement>('button.closing-count--toggle')).find((b) => b.textContent?.includes(niveau))!;
+  const lignes = (el: HTMLElement) => Array.from(el.querySelectorAll('tbody tr')).map((tr) => tr.querySelectorAll('td')[6]?.textContent?.trim());
+
+  it('sans filtre ni tri : la requête est identique à l’ancienne (aucun niveau, aucun tri)', () => {
+    const { requetes } = monterServeur();
+
+    expect(requetes).toHaveLength(1);
+    expect(requetes[0].gravites ?? []).toEqual([]);
+    expect(requetes[0].tri).toBeUndefined();
+    expect(requetes[0].reuseCache).toBe(false);
+  });
+
+  it('une carte de gravité = une bascule : une seule requête de liste (page 1, cache), sans nouvelle analyse complète', () => {
+    const { fixture, el, requetes } = monterServeur();
+
+    carte(el, 'Critique').click();
+    fixture.detectChanges();
+
+    expect(requetes).toHaveLength(2);
+    expect(requetes[1]).toMatchObject({ gravites: ['Critique'], page: 1, reuseCache: true });
+    expect(carte(el, 'Critique').getAttribute('aria-pressed')).toBe('true');
+    expect(carte(el, 'Mineure').getAttribute('aria-pressed')).toBe('false');
+    // Les quatre comptages ne bougent pas : ils restent ceux de l’analyse complète.
+    expect(Array.from(el.querySelectorAll('.closing-count strong')).map((n) => n.textContent)).toEqual(['10', '10', '10', '10']);
+    expect(lignes(el).every((d) => d !== undefined)).toBe(true);
+    expect(el.querySelector('.closing-busy')).toBeNull();
+  });
+
+  it('plusieurs niveaux (toujours du plus grave au moins grave), retrait d’un niveau et « Tout afficher »', () => {
+    const { fixture, el, requetes } = monterServeur();
+
+    carte(el, 'Mineure').click();
+    carte(el, 'Critique').click();
+    fixture.detectChanges();
+    expect(requetes[requetes.length - 1].gravites).toEqual(['Critique', 'Mineure']);
+    expect(el.querySelector('.closing-filter-line')?.textContent).toContain('Filtre de gravité : Critique, Mineure');
+    expect(el.querySelector('[role="tab"]')).toBeNull();   // le filtre explicite remplace les onglets
+
+    carte(el, 'Mineure').click();
+    fixture.detectChanges();
+    expect(requetes[requetes.length - 1].gravites).toEqual(['Critique']);
+
+    el.querySelector<HTMLElement>('.closing-filter-line button')!.click();
+    fixture.detectChanges();
+    const dernier = requetes[requetes.length - 1];
+    expect(dernier.gravites ?? []).toEqual([]);
+    expect(dernier.reuseCache).toBe(true);
+    expect(el.querySelector('[role="tab"]')).not.toBeNull();
+    expect(requetes.every((r, i) => i === 0 || r.reuseCache === true)).toBe(true);   // jamais d’analyse complète relancée
+  });
+
+  it('tri par gravité : une requête de liste, du plus grave au moins grave, ordre habituel conservé à gravité égale', () => {
+    const { fixture, el, requetes } = monterServeur();
+    const select = el.querySelector<HTMLSelectElement>('select[name="tri"]')!;
+
+    select.value = 'gravite';
+    select.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+
+    expect(requetes).toHaveLength(2);
+    expect(requetes[1]).toMatchObject({ tri: 'gravite', page: 1, reuseCache: true });
+    const premieres = lignes(el).slice(0, 3);
+    expect(premieres).toEqual(['ligne 1', 'ligne 5', 'ligne 9']);   // les « Critique », dans l’ordre d’origine
+  });
+
+  it('filtre et tri conservés en session : au retour sur l’écran, même liste, même état, aucune requête', () => {
+    const { fixture, el, requetes } = monterServeur();
+    carte(el, 'Importante').click();
+    const select = el.querySelector<HTMLSelectElement>('select[name="tri"]')!;
+    select.value = 'gravite';
+    select.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    const avant = requetes.length;
+    fixture.destroy();
+
+    const retour = monter();
+
+    expect(requetes).toHaveLength(avant);
+    expect(carte(retour.el, 'Importante').getAttribute('aria-pressed')).toBe('true');
+    expect(retour.el.querySelector<HTMLSelectElement>('select[name="tri"]')!.selectedOptions[0].value).toBe('gravite');
+    expect(retour.el.querySelector('.closing-filter-line')?.textContent).toContain('Importante');
+  });
+
+  it('filtre sans aucune ligne : message dédié, comptages inchangés', () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([]),
+        { provide: SessionStore, useValue: fausseSession() },
+        { provide: CardPaieService, useValue: { list: () => of([]) } },
+        { provide: DepartementServiceService, useValue: { lookupBatch: () => of([]) } },
+        { provide: ExcelExportService, useValue: excelFactice },
+        {
+          provide: ClosingService,
+          useValue: {
+            analysis: (q: ClosingQuery) =>
+              of(q.gravites?.length ? rapport({ nombreAnomalies: 4, anomalies: { items: [], total: 0, page: 1, pageSize: 50, totalPages: 1 } }) : serveur(q)),
+          },
+        },
+      ],
+    });
+    const { fixture, el } = monter();
+    cliquerAnalyser(fixture, el);
+
+    carte(el, 'Mineure').click();
+    fixture.detectChanges();
+
+    expect(el.querySelector('.closing-state')?.textContent).toContain('Aucune anomalie pour ce filtre de gravité');
+    expect(el.querySelector('.closing-state')?.textContent).not.toContain('prêtes pour la clôture');
+  });
+
+  it('export : suit l’onglet, le filtre de gravité et le tri affichés ; la synthèse les indique', () => {
+    const { fixture, el, requetes } = monterServeur();
+    carte(el, 'Critique').click();
+    carte(el, 'Information').click();
+    const select = el.querySelector<HTMLSelectElement>('select[name="tri"]')!;
+    select.value = 'gravite';
+    select.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    const avant = requetes.length;
+
+    Array.from(el.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Exporter')!.click();
+    fixture.detectChanges();
+
+    const export_ = requetes.slice(avant);
+    expect(export_).toHaveLength(1);   // 20 lignes filtrées tiennent sur une page de 200
+    expect(export_[0]).toMatchObject({ gravites: ['Critique', 'Information'], tri: 'gravite', page: 1, pageSize: 200, reuseCache: true });
+    expect(excelFactice.downloadWorkbook).toHaveBeenCalledTimes(1);
+    const [, feuilles] = excelFactice.downloadWorkbook.mock.calls[0];
+    const liste = feuilles.find((f: { sheetName: string }) => f.sheetName === 'Anomalies');
+    expect(liste.rows).toHaveLength(20);   // même nombre que le total filtré affiché
+    expect(liste.rows.slice(0, 3).map((l: unknown[]) => l[6])).toEqual(['ligne 1', 'ligne 5', 'ligne 9']);
+    expect(liste.rows.slice(0, 10).every((l: unknown[]) => l[0] === 'Critique')).toBe(true);   // Critique d’abord
+    expect(liste.rows.slice(10).every((l: unknown[]) => l[0] === 'Information')).toBe(true);
+    const synthese = feuilles.find((f: { sheetName: string }) => f.sheetName === 'Synthèse');
+    const valeur = (cle: string) => synthese.rows.find((l: unknown[]) => l[0] === cle)?.[1];
+    expect(valeur('Filtre de gravité')).toBe('Critique, Information');
+    expect(valeur('Tri de la liste')).toBe('Gravité décroissante, puis date');
+    expect(valeur('Anomalies (toutes gravités)')).toBe(40);   // les comptages de la synthèse restent complets
+  });
+
+  it('export sans filtre ni tri : même liste que l’onglet affiché (hors « Information » par défaut)', () => {
+    const { fixture, el, requetes } = monterServeur();
+    const avant = requetes.length;
+
+    Array.from(el.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Exporter')!.click();
+    fixture.detectChanges();
+
+    expect(requetes[avant]).toMatchObject({ includeInformation: false, reuseCache: true });
+    expect(requetes[avant].gravites ?? []).toEqual([]);
+    const liste = excelFactice.downloadWorkbook.mock.calls[0][1].find((f: { sheetName: string }) => f.sheetName === 'Anomalies');
+    expect(liste.rows).toHaveLength(30);   // 40 lignes dont 10 « Information » masquées
   });
 });

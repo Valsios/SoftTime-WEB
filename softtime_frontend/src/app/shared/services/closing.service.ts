@@ -54,5 +54,7 @@ function toParams(query: ClosingQuery): Record<string, unknown> {
     page: query.page,
     pageSize: query.pageSize,
     reuseCache: query.reuseCache ? true : undefined,
+    gravites: query.gravites?.length ? query.gravites.join(',') : undefined,
+    tri: query.tri === 'gravite' ? 'gravite' : undefined,
   };
 }

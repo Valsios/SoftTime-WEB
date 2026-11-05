@@ -1,7 +1,7 @@
 import { effect, inject, Injectable, signal, untracked } from '@angular/core';
 import { SessionStore } from '../../core/session.store';
 import { ClosingReport } from '../../shared/models';
-import { ClosingFilter } from './closing.logic';
+import { ClosingFilter, ClosingSort } from './closing.logic';
 
 /** Dernier résultat d'analyse conservé en mémoire : filtre appliqué, rapport et heure du calcul. */
 export interface ClosingResult {
@@ -27,6 +27,9 @@ export class ClosingSessionState {
   readonly draft = signal<ClosingFilter | null>(null);
   readonly result = signal<ClosingResult | null>(null);
   readonly tab = signal<'afix' | 'all'>('afix');
+  /** Niveaux de gravité retenus dans la liste (vide : aucun filtre) et tri choisi. */
+  readonly gravites = signal<string[]>([]);
+  readonly tri = signal<ClosingSort>('date');
   readonly page = signal(1);
   readonly pageSize = signal<number | null>(null);
 
@@ -65,6 +68,8 @@ export class ClosingSessionState {
     this.draft.set(null);
     this.result.set(null);
     this.tab.set('afix');
+    this.gravites.set([]);
+    this.tri.set('date');
     this.page.set(1);
     this.pageSize.set(null);
   }

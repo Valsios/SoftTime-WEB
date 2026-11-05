@@ -8,6 +8,8 @@ import {
   exportFileName,
   exportRows,
   resultBannerText,
+  severityFilterText,
+  toggleSeverity,
   sameFilter,
   dashboardCardView,
   defaultPeriod,
@@ -380,5 +382,19 @@ describe('export de la liste', () => {
   it('nom de fichier : période incluse', () => {
     expect(exportFileName({ from: '2025-11-01', to: '2025-11-30', departement: null, includeComparison: false }))
       .toBe('controle-avant-paie_2025-11-01_2025-11-30');
+  });
+});
+
+describe('filtre de gravité : bascules', () => {
+  it('toggleSeverity : ajoute et retire, toujours du plus grave au moins grave', () => {
+    expect(toggleSeverity([], 'Mineure')).toEqual(['Mineure']);
+    expect(toggleSeverity(['Mineure'], 'Critique')).toEqual(['Critique', 'Mineure']);
+    expect(toggleSeverity(['Critique', 'Mineure'], 'Critique')).toEqual(['Mineure']);
+    expect(toggleSeverity(['Mineure'], 'Mineure')).toEqual([]);
+  });
+
+  it('severityFilterText : vide sans filtre, sinon les libellés des niveaux', () => {
+    expect(severityFilterText([])).toBe('');
+    expect(severityFilterText(['Critique', 'Importante'])).toBe('Filtre de gravité : Critique, Importante');
   });
 });

@@ -288,6 +288,29 @@ export const ANALYSING_TEXT = 'Analyse en cours…';
 export const NOT_ANALYSED_TEXT = 'Choisissez la période puis cliquez sur « Analyser » : aucune analyse ne se lance toute seule.';
 export const FILTER_CHANGED_TEXT = 'Filtre modifié, réanalyser : le résultat affiché correspond encore à l’ancien filtre.';
 
+/** Tri de la liste : ordre habituel (date, matricule, type) ou gravité décroissante. */
+export type ClosingSort = 'date' | 'gravite';
+
+/** Ce que montre la liste : niveaux retenus (vide : aucun filtre), tri et présence des « Information » (onglet). */
+export interface ClosingListView {
+  gravites: readonly string[];
+  tri: ClosingSort;
+  includeInformation: boolean;
+}
+
+/** Ajoute ou retire un niveau ; le résultat suit toujours l'ordre d'affichage des cartes (du plus grave au moins grave). */
+export function toggleSeverity(current: readonly string[], severity: string): string[] {
+  const next = current.includes(severity) ? current.filter((s) => s !== severity) : [...current, severity];
+  return SEVERITIES.filter((s) => next.includes(s));
+}
+
+/** « Filtre de gravité : Critique, Importante » ; vide sans filtre. */
+export function severityFilterText(gravites: readonly string[]): string {
+  return gravites.length ? `Filtre de gravité : ${gravites.map(severityLabel).join(', ')}` : '';
+}
+
+export const NO_ANOMALY_FOR_FILTER = 'Aucune anomalie pour ce filtre de gravité.';
+
 /** Deux filtres équivalents (département vide = tous). */
 export function sameFilter(a: ClosingFilter | null | undefined, b: ClosingFilter | null | undefined): boolean {
   if (!a || !b) return false;
@@ -366,6 +389,7 @@ export function exportSummary(
   filter: ClosingFilter,
   analysedAt: Date,
   exportedRows: number,
+  view: ClosingListView = { gravites: [], tri: 'date', includeInformation: false },
 ): ExcelSheet {
   const rows: (string | number | boolean | null)[][] = [
     ['Période', `du ${formatDay(filter.from)} au ${formatDay(filter.to)}`],
@@ -376,6 +400,8 @@ export function exportSummary(
     ['Score', report.score === null ? 'Aucun jour contrôlé' : report.score],
     ['Jours-employé contrôlés', report.joursEmployeControles],
     ['Anomalies (toutes gravités)', report.nombreAnomalies],
+    ['Filtre de gravité', view.gravites.length ? view.gravites.map(severityLabel).join(', ') : view.includeInformation ? 'Aucun (toutes gravités)' : 'Aucun (hors « Information »)'],
+    ['Tri de la liste', view.tri === 'gravite' ? 'Gravité décroissante, puis date' : 'Date, matricule, type'],
     ['Lignes de la feuille « Anomalies »', exportedRows],
   ];
   for (const s of SEVERITIES) rows.push([`Gravité : ${severityLabel(s)}`, countOf(report.parGravite, s)]);
@@ -388,9 +414,10 @@ export function exportSheets(
   items: readonly ClosingAnomalyView[],
   filter: ClosingFilter,
   analysedAt: Date,
+  view: ClosingListView = { gravites: [], tri: 'date', includeInformation: false },
 ): ExcelSheet[] {
   return [
-    exportSummary(report, filter, analysedAt, items.length),
+    exportSummary(report, filter, analysedAt, items.length, view),
     { sheetName: 'Anomalies', headers: EXPORT_HEADERS, rows: exportRows(items) },
   ];
 }
