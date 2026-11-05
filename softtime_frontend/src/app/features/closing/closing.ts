@@ -539,7 +539,7 @@ export class ClosingPage implements OnInit, OnDestroy {
    * Export Excel de TOUTE la liste affichée (toutes les pages), avec le même filtre de période et de
    * département, le même onglet, le même filtre de gravité et le même tri que l'écran, par le classeur
    * multi-feuilles existant (synthèse + anomalies). Les pages sont relues avec `reuseCache` : tant que
-   * l'analyse est dans le cache du serveur (60 s), rien n'est recalculé. Si le nombre de lignes diffère du
+   * l'analyse est dans le cache du serveur (délai glissant), rien n'est recalculé. Si le nombre de lignes diffère du
    * total (filtré) de la liste affichée, l'export est refusé (données modifiées depuis l'analyse).
    */
   exportExcel(): void {
@@ -725,7 +725,7 @@ export class ClosingPage implements OnInit, OnDestroy {
 
   /**
    * Lance la requête pour un filtre donné. `pageOnly` : changement de page ou de taille seulement, le
-   * serveur peut alors réutiliser l'analyse déjà calculée (60 s) et seul le tableau montre un chargement ;
+   * serveur peut alors réutiliser l'analyse déjà calculée (cache glissant) et seul le tableau montre un chargement ;
    * toute nouvelle analyse recalcule et montre l'indicateur « Analyse en cours… ».
    * L'intercepteur affiche déjà l'erreur en notification : la page ne montre qu'un état, sans second message,
    * et garde le dernier bon résultat.

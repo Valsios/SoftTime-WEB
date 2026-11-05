@@ -256,7 +256,7 @@ cours et futurs ne sont jamais contrôlés (la période est plafonnée à la vei
 - **Filtre et tri par gravité** : les quatre cartes de comptage servent de bascules de filtre de la liste,
   et un menu trie la liste du plus grave au moins grave (puis date, matricule, type). Seule la liste change :
   les comptages, le score et le statut restent ceux de l'analyse complète. Changer le filtre ou le tri relit
-  la page 1 dans l'analyse en cache du serveur (60 s), sans nouvelle analyse (`gravites=…`, `tri=gravite`).
+  la page 1 dans l'analyse en cache du serveur, sans nouvelle analyse (`gravites=…`, `tri=gravite`).
 - **Export Excel** : le bouton « Exporter » produit un classeur (feuille « Synthèse » avec période, département,
   statut, score, comptages, filtre et tri appliqués ; feuille « Anomalies » avec toute la liste affichée, toutes
   les pages). Il suit l'onglet, le filtre de gravité et le tri affichés, et refuse d'exporter si les données ont
@@ -282,7 +282,7 @@ cours et futurs ne sont jamais contrôlés (la période est plafonnée à la vei
 - **Badge** : dans la barre du haut, près du bouton de thème, le nombre d'anomalies critiques du dernier résultat,
   pour les comptes ayant `REPORTS:CLOSING`, et seulement si une analyse existe en session. Il ne fait aucune requête
   et ne se rafraîchit pas seul ; il disparaît avec l'état de session.
-- **Cache de l'analyse** : le serveur garde l'analyse en mémoire par utilisateur, base, période et département. Le délai de 60 s est **glissant** (chaque lecture du filtre, du tri, de l'onglet ou d'une page le renouvelle) sous un **plafond absolu de 600 s** depuis le calcul (`Closing:CacheMaxSeconds`, 0 à 3600) ; « Analyser » recalcule toujours à neuf et repart d'un plafond neuf.
+- **Cache de l'analyse** : le serveur garde l'analyse en mémoire par utilisateur, base, période et département. Le délai de 120 s est **glissant** (chaque lecture du filtre, du tri, de l'onglet ou d'une page le renouvelle) sous un **plafond absolu de 600 s** depuis le calcul (`Closing:CacheMaxSeconds`, 0 à 3600) ; le délai glissant se règle par `Closing:CacheSeconds` (120 s par défaut, 0 à 3600, jamais au-delà du plafond ; 0 : aucun cache) ; « Analyser » recalcule toujours à neuf et repart d'un plafond neuf.
 - **Âge de l'analyse** : près du résultat, « Analyse faite il y a X min », calculé sur l'heure conservée en session, sans requête.
 - **Ce que l'écran ne fait pas** : aucune écriture, aucune correction saisie dans la page (seulement des liens vers
   les écrans existants), aucune règle métier de paie propre (mêmes anomalies, mêmes calculs d'heures supplémentaires,

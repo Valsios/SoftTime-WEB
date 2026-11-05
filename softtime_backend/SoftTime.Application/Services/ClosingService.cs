@@ -76,7 +76,8 @@ public partial class ClosingService
         var maintenant = _horloge.GetUtcNow();
         // Délai glissant (renouvelé à chaque lecture avec réutilisation) sous un plafond absolu depuis le calcul d'origine.
         var glissant = TimeSpan.FromSeconds(_reglages.CacheSeconds);
-        var plafond = TimeSpan.FromSeconds(Math.Max(_reglages.CacheMaxSeconds, _reglages.CacheSeconds));
+        // Plafond absolu ; à 0, l'analyse expire après le seul délai glissant. Le délai glissant ne le dépasse jamais.
+        var plafond = TimeSpan.FromSeconds(_reglages.CacheMaxSeconds > 0 ? _reglages.CacheMaxSeconds : _reglages.CacheSeconds);
         if (request.ReuseCached && _reglages.Cache.TryGet(cle, maintenant, glissant, out var preparee))
             return Assembler(preparee, request);
 

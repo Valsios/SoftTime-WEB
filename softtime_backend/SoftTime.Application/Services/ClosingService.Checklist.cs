@@ -19,6 +19,9 @@ public partial class ClosingService
     public const string EtatInformation = "Information";
     public const string EtatNonDeterminable = "NonDeterminable";
 
+    /// <summary>Durée de réutilisation de la checklist (60 s, ou moins si le délai glissant est plus court ; 0 : aucun cache).</summary>
+    private const int DureeCacheChecklistSecondes = 60;
+
     /// <summary>Un cache par instance de réglages (donc par processus en production, isolé dans chaque test).</summary>
     private static readonly ConditionalWeakTable<ClosingOptions, ChecklistCache> CachesChecklist = new();
 
@@ -54,7 +57,7 @@ public partial class ClosingService
     /// Checklist de la période (mois civil précédent sans dates), pour le département demandé.
     /// <paramref name="perimetre"/> identifie le périmètre de droits de l'appelant et entre dans la clé du cache :
     /// deux utilisateurs ne partagent jamais une entrée. <see cref="ClosingChecklistRequest.ReuseCached"/> (faux par
-    /// défaut) autorise la réutilisation de la dernière checklist pendant le délai du cache (60 s par défaut).
+    /// défaut) autorise la réutilisation de la dernière checklist pendant 60 s au plus.
     /// </summary>
     public async Task<ClosingChecklistDto> ChecklistAsync(ClosingChecklistRequest request, string perimetre, CancellationToken ct = default)
     {
@@ -74,7 +77,7 @@ public partial class ClosingService
 
         var resultat = await ConstruireChecklistAsync(from, to, request.Departement, ct);
         if (_reglages.CacheSeconds > 0)
-            cache.Set(cle, resultat, maintenant, TimeSpan.FromSeconds(_reglages.CacheSeconds));
+            cache.Set(cle, resultat, maintenant, TimeSpan.FromSeconds(Math.Min(DureeCacheChecklistSecondes, _reglages.CacheSeconds)));
         return resultat;
     }
 

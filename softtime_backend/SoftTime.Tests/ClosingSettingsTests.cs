@@ -223,12 +223,12 @@ public class ClosingSettingsTests
     // ---------- Cache de l'analyse : plafond absolu ----------
 
     [Fact]
-    public void CacheMaxSeconds_DefaultsTo600_AndTheSlidingDelayStaysAt60()
+    public void CacheMaxSeconds_DefaultsTo600_AndTheSlidingDelayDefaultsTo120()
     {
         var o = Lus();
 
         Assert.Equal(600, o.CacheMaxSeconds);
-        Assert.Equal(60, o.CacheSeconds);
+        Assert.Equal(120, o.CacheSeconds);
         Assert.Empty(o.Erreurs());
     }
 
@@ -250,5 +250,47 @@ public class ClosingSettingsTests
 
         Assert.Contains(erreurs, e => e.Contains("CacheMaxSeconds"));
         Assert.DoesNotContain(erreurs, e => e.Contains(valeur));
+    }
+
+    // ---------- Délai glissant : Closing:CacheSeconds ----------
+
+    [Fact]
+    public void CacheSeconds_AbsentKeepsTheDefaultOf120()
+    {
+        Assert.Equal(120, Lus().CacheSeconds);
+        Assert.Equal(120, Lus(("Closing:CacheMaxSeconds", "300")).CacheSeconds);
+        Assert.Equal(120, ClosingOptions.DefautCacheSeconds);
+    }
+
+    [Fact]
+    public void CacheSeconds_IsReadFromTheClosingSection()
+    {
+        Assert.Equal(90, Lus(("Closing:CacheSeconds", "90")).CacheSeconds);
+        Assert.Equal(0, Lus(("Closing:CacheSeconds", "0")).CacheSeconds);              // 0 : aucun cache
+        Assert.Empty(Lus(("Closing:CacheSeconds", "600"), ("Closing:CacheMaxSeconds", "600")).Erreurs());
+        Assert.Empty(Lus(("Closing:CacheSeconds", "120"), ("Closing:CacheMaxSeconds", "0")).Erreurs());   // plafond à 0 : délai glissant seul
+    }
+
+    [Theory]
+    [InlineData("-1")]
+    [InlineData("3601")]
+    [InlineData("deux")]
+    public void CacheSeconds_InvalidValueIsRefusedWithoutEchoingIt_AndKeepsTheDefault(string valeur)
+    {
+        var o = Lus(("Closing:CacheSeconds", valeur));
+        var erreurs = o.Erreurs();
+
+        Assert.Contains(erreurs, e => e.Contains("CacheSeconds"));
+        Assert.DoesNotContain(erreurs, e => e.Contains(valeur));
+        if (valeur == "deux")
+            Assert.Equal(120, o.CacheSeconds);                                            // illisible : la valeur par défaut est conservée
+    }
+
+    [Fact]
+    public void CacheSeconds_CannotExceedTheCeiling()
+    {
+        var erreurs = Lus(("Closing:CacheSeconds", "400"), ("Closing:CacheMaxSeconds", "300")).Erreurs();
+
+        Assert.Contains(erreurs, e => e.Contains("CacheSeconds") && e.Contains("CacheMaxSeconds"));
     }
 }

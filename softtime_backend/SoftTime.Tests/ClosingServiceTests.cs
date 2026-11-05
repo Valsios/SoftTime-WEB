@@ -89,13 +89,13 @@ public class ClosingServiceTests
         public FakeExternalSourceService Source { get; } = new();
         public ClosingService Service { get; }
 
-        public Contexte(TimeProvider? horloge = null)
+        public Contexte(TimeProvider? horloge = null, ClosingOptions? reglages = null)
         {
             Uow.Inner.Get<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 1, NOM_BD = "SAGE_TEST" });
             Uow.Inner.Get<T_CLOCK>().Items.Add(new T_CLOCK { IDPOINT = 1, MULTIPOINT = false });
             var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(),
                 SoftTime.Tests.Http.TestRights.Service(Uow), NullLogger<TenantConnectionService>.Instance);
-            Service = new ClosingService(Uow, tenant, new SageLeaveCalendar(tenant, Source), horloge ?? new HorlogeFixe());
+            Service = new ClosingService(Uow, tenant, new SageLeaveCalendar(tenant, Source), horloge ?? new HorlogeFixe(), reglages);
         }
 
         public void Carte(int id, string matricule, string? departement)
@@ -603,8 +603,8 @@ public class ClosingServiceTests
         await ctx.Service.AnalyserAsync(Page(1, 50, reuse: false));
         ctx.Punch("002", Lundi, H8, H17);
 
-        Assert.Equal(4, (await ctx.Service.AnalyserAsync(Page(2, 1, reuse: true))).NombreAnomalies); // dans les 60 s : analyse conservée
-        horloge.Avancer(TimeSpan.FromSeconds(61));
+        Assert.Equal(4, (await ctx.Service.AnalyserAsync(Page(2, 1, reuse: true))).NombreAnomalies); // dans les 120 s : analyse conservée
+        horloge.Avancer(TimeSpan.FromSeconds(121));
         Assert.Equal(3, (await ctx.Service.AnalyserAsync(Page(2, 1, reuse: true))).NombreAnomalies); // expirée : recalculée
     }
 
@@ -797,7 +797,7 @@ public class ClosingServiceTests
 
     // ----------------------------------------------------------------------------- cache glissant sous plafond absolu
 
-    private static readonly TimeSpan Pas = TimeSpan.FromSeconds(50);   // plus court que le délai glissant (60 s)
+    private static readonly TimeSpan Pas = TimeSpan.FromSeconds(50);   // plus court que le délai glissant (120 s)
 
     private static async Task<int> Anomalies(Contexte ctx, bool reuse, string? perimetre = null)
         => (await ctx.Service.AnalyserAsync(Page(1, 50, reuse) with { Perimetre = perimetre })).NombreAnomalies;
@@ -811,7 +811,7 @@ public class ClosingServiceTests
         Assert.Equal(4, await Anomalies(ctx, reuse: false));         // calcul d'origine : t = 0
         ctx.Punch("002", Lundi, H8, H17);                            // la donnée change : un recalcul donnerait 3
 
-        for (var i = 1; i <= 11; i++)                                // lectures toutes les 50 s jusqu'à t = 550 s (délai glissant 60 s)
+        for (var i = 1; i <= 11; i++)                                // lectures toutes les 50 s jusqu'à t = 550 s (délai glissant 120 s)
         {
             horloge.Avancer(Pas);
             Assert.Equal(4, await Anomalies(ctx, reuse: true));
@@ -833,7 +833,7 @@ public class ClosingServiceTests
 
         horloge.Avancer(Pas);
         Assert.Equal(4, await Anomalies(ctx, reuse: true));          // lue à 50 s : renouvelée jusqu'à 110 s
-        horloge.Avancer(TimeSpan.FromSeconds(61));                   // 111 s sans lecture entre-temps
+        horloge.Avancer(TimeSpan.FromSeconds(121));                  // 171 s : plus de 120 s sans lecture depuis celle de 50 s
         Assert.Equal(3, await Anomalies(ctx, reuse: true));
     }
 
@@ -903,5 +903,63 @@ public class ClosingServiceTests
             var obtenu = await avec.Service.AnalyserAsync(Page(page, 1, reuse: true, information: true, comparaison: true));
             Assert.Equal(Json(attendu), Json(obtenu));
         }
+    }
+
+    // ----------------------------------------------------------------------------- délai glissant de 120 s
+
+    [Fact]
+    public async Task CacheSliding120_IsolatedClickAt90Seconds_IsServedByTheCache()
+    {
+        var horloge = new HorlogeMobile();
+        var ctx = new Contexte(horloge);
+        ctx.JeuFixe();
+        Assert.Equal(4, await Anomalies(ctx, reuse: false));         // analyse : t = 0
+        ctx.Punch("002", Lundi, H8, H17);                            // un recalcul donnerait 3
+
+        horloge.Avancer(TimeSpan.FromSeconds(90));                   // clic isolé, sans lecture entre-temps
+        Assert.Equal(4, await Anomalies(ctx, reuse: true));          // servi par le cache
+    }
+
+    [Fact]
+    public async Task CacheSliding120_ClickAt130SecondsWithoutAnyRead_Recomputes()
+    {
+        var horloge = new HorlogeMobile();
+        var ctx = new Contexte(horloge);
+        ctx.JeuFixe();
+        await Anomalies(ctx, reuse: false);
+        ctx.Punch("002", Lundi, H8, H17);
+
+        horloge.Avancer(TimeSpan.FromSeconds(130));                  // plus de 120 s sans lecture
+        Assert.Equal(3, await Anomalies(ctx, reuse: true));
+    }
+
+    [Fact]
+    public async Task CacheSliding120_ConfiguredDelayIsUsed()
+    {
+        var horloge = new HorlogeMobile();
+        var ctx = new Contexte(horloge, new ClosingOptions { CacheSeconds = 30 });
+        ctx.JeuFixe();
+        await Anomalies(ctx, reuse: false);
+        ctx.Punch("002", Lundi, H8, H17);
+
+        horloge.Avancer(TimeSpan.FromSeconds(25));
+        Assert.Equal(4, await Anomalies(ctx, reuse: true));          // dans les 30 s configurées
+        horloge.Avancer(TimeSpan.FromSeconds(31));
+        Assert.Equal(3, await Anomalies(ctx, reuse: true));          // 31 s sans lecture : expirée
+    }
+
+    [Fact]
+    public async Task CacheSliding120_SlidingDelayNeverExceedsTheCeiling()
+    {
+        var horloge = new HorlogeMobile();
+        var ctx = new Contexte(horloge, new ClosingOptions { CacheSeconds = 120, CacheMaxSeconds = 100 });
+        ctx.JeuFixe();
+        await Anomalies(ctx, reuse: false);
+        ctx.Punch("002", Lundi, H8, H17);
+
+        horloge.Avancer(TimeSpan.FromSeconds(99));
+        Assert.Equal(4, await Anomalies(ctx, reuse: true));
+        horloge.Avancer(TimeSpan.FromSeconds(2));                    // t = 101 s : le plafond (100 s) l'emporte sur les 120 s glissantes
+        Assert.Equal(3, await Anomalies(ctx, reuse: true));
     }
 }
