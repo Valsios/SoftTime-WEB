@@ -1,6 +1,7 @@
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { Observable, of, Subject } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SessionStore } from '../../core/session.store';
 import { ClosingAnomalyView, ClosingQuery, ClosingReport } from '../../shared/models';
@@ -49,14 +50,26 @@ const rapport = (over: Partial<ClosingReport> = {}, items: ClosingAnomalyView[] 
   ...over,
 });
 
-function creer(rapports: ClosingReport[]) {
+/** Session simulée : les signaux que lit l'état conservé (jeton, compte, bases actives). */
+function fausseSession() {
+  return {
+    hasPermission: vi.fn(() => true),
+    token: signal<string | null>('jeton'),
+    session: signal<{ userId: number } | null>({ userId: 1 }),
+    activeSageDb: signal<string | null>('SAGE_A'),
+    activePointeuseDb: signal<string | null>('PTE_A'),
+  };
+}
+
+function configurer(rapports: ClosingReport[]) {
   TestBed.resetTestingModule();
   const requetes: ClosingQuery[] = [];
+  const session = fausseSession();
   let appel = 0;
   TestBed.configureTestingModule({
     providers: [
       provideRouter([]),
-      { provide: SessionStore, useValue: { hasPermission: vi.fn(() => true) } },
+      { provide: SessionStore, useValue: session },
       { provide: CardPaieService, useValue: { list: () => of([]) } },
       { provide: DepartementServiceService, useValue: { lookupBatch: () => of([]) } },
       {
@@ -70,10 +83,26 @@ function creer(rapports: ClosingReport[]) {
       },
     ],
   });
+  return { requetes, session };
+}
+
+function monter() {
   const fixture = TestBed.createComponent(ClosingPage);
   fixture.detectChanges();
-  const el = fixture.nativeElement as HTMLElement;
-  return { fixture, el, requetes };
+  return { fixture, el: fixture.nativeElement as HTMLElement };
+}
+
+function cliquerAnalyser(fixture: { detectChanges(): void }, el: HTMLElement) {
+  Array.from(el.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Analyser')!.click();
+  fixture.detectChanges();
+}
+
+/** Monte la page puis clique une fois sur « Analyser » : plus aucune analyse ne se lance à l'ouverture. */
+function creer(rapports: ClosingReport[]) {
+  const { requetes, session } = configurer(rapports);
+  const { fixture, el } = monter();
+  cliquerAnalyser(fixture, el);
+  return { fixture, el, requetes, session };
 }
 
 describe('page Contrôle avant paie : niveau Information', () => {
@@ -98,10 +127,8 @@ describe('page Contrôle avant paie : niveau Information', () => {
     expect(el.querySelectorAll('input[type="checkbox"]')).toHaveLength(1); // seul l’interrupteur de comparaison
   });
 
-  it('interrupteur de comparaison : nommé, état en texte, désactivé par défaut', async () => {
-    const { fixture, el, requetes } = creer([rapport()]);
-    await fixture.whenStable();
-    fixture.detectChanges();
+  it('interrupteur de comparaison : nommé, état en texte, désactivé par défaut', () => {
+    const { el, requetes } = creer([rapport()]);
     const interrupteur = el.querySelector<HTMLInputElement>('label.closing-switch input[type="checkbox"]');
 
     expect(interrupteur).not.toBeNull();
@@ -111,24 +138,22 @@ describe('page Contrôle avant paie : niveau Information', () => {
     expect(requetes[0].includeComparison).toBe(false);
   });
 
-  it('interrupteur de comparaison : au clavier ou à la souris, relance l’analyse et affiche « Activée »', async () => {
+  it('interrupteur de comparaison : au clavier ou à la souris, change l’état affiché sans relancer ; l’analyse suivante l’envoie', () => {
     const { fixture, el, requetes } = creer([rapport(), rapport()]);
-    await fixture.whenStable();
-    fixture.detectChanges();
     const interrupteur = el.querySelector<HTMLInputElement>('label.closing-switch input[type="checkbox"]')!;
 
     interrupteur.focus(); // un contrôle natif : Espace l’active comme un clic
     interrupteur.click();
     fixture.detectChanges();
 
+    expect(requetes).toHaveLength(1);
+    expect(el.querySelector('.closing-switch__state')?.textContent?.trim()).toBe('Activée');
+    expect(el.querySelector('.closing-stale')?.textContent).toContain('Filtre modifié, réanalyser');
+
+    cliquerAnalyser(fixture, el);
     expect(requetes).toHaveLength(2);
     expect(requetes[1].includeComparison).toBe(true);
-    expect(el.querySelector('.closing-switch__state')?.textContent?.trim()).toBe('Activée');
-
-    interrupteur.click();
-    fixture.detectChanges();
-    expect(requetes[2].includeComparison).toBe(false);
-    expect(el.querySelector('.closing-switch__state')?.textContent?.trim()).toBe('Désactivée');
+    expect(el.querySelector('.closing-stale')).toBeNull();
   });
 
   const avecInformations = (over: Partial<ClosingReport> = {}) =>
@@ -153,12 +178,10 @@ describe('page Contrôle avant paie : niveau Information', () => {
     expect(onglets[1].getAttribute('aria-selected')).toBe('false');
   });
 
-  it('onglet « Avec informations » : includeInformation = true, retour à la page 1, filtres et comparaison conservés', async () => {
-    const { fixture, el, requetes } = creer([avecInformations(), avecInformations(), avecInformations()]);
-    await fixture.whenStable();
-    fixture.detectChanges();
+  it('onglet « Avec informations » : includeInformation = true, retour à la page 1, filtres et comparaison conservés', () => {
+    const { fixture, el, requetes } = creer([avecInformations(), avecInformations(), avecInformations(), avecInformations()]);
     el.querySelector<HTMLInputElement>('label.closing-switch input')!.click();
-    fixture.detectChanges();
+    cliquerAnalyser(fixture, el);
     fixture.componentInstance.goTo(3);
     fixture.detectChanges();
 
@@ -172,6 +195,7 @@ describe('page Contrôle avant paie : niveau Information', () => {
     expect(dernier.from).toBe(requetes[0].from);
     expect(dernier.to).toBe(requetes[0].to);
     expect(requetes[0].includeInformation).toBe(false);
+    expect(requetes[1].from).toBe(requetes[0].from);
 
     el.querySelectorAll<HTMLElement>('[role="tab"]')[0].click();
     fixture.detectChanges();
@@ -294,11 +318,11 @@ describe('page Contrôle avant paie : niveau Information', () => {
     expect(requetes).toHaveLength(3); // une seule requête par action, aucun appel en double
   });
 
-  it('onglet et interrupteur de comparaison : nouvelle analyse, sans réutilisation du cache', () => {
-    const { el, requetes } = creer([avecInformations(), avecInformations(), avecInformations()]);
+  it('onglet et nouvelle analyse : jamais de réutilisation du cache', () => {
+    const { fixture, el, requetes } = creer([avecInformations(), avecInformations(), avecInformations()]);
 
     el.querySelectorAll<HTMLElement>('[role="tab"]')[1].click();
-    el.querySelector<HTMLInputElement>('label.closing-switch input')!.click();
+    cliquerAnalyser(fixture, el);
 
     expect(requetes.map((r) => r.reuseCache)).toEqual([false, false, false]);
   });
@@ -311,5 +335,190 @@ describe('page Contrôle avant paie : niveau Information', () => {
     expect(ligne.textContent).toContain('Pointage manquant');
     expect(ligne.querySelectorAll('td')[3].textContent?.trim()).toBe('777');
     expect(el.textContent).toContain('Les noms ne sont pas affichés sur ce serveur');
+  });
+});
+
+describe('page Contrôle avant paie : filtre et résultat conservés pendant la session', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const attendre = () => new Promise<void>((r) => setTimeout(r));
+
+  it('à l’ouverture : aucune analyse automatique, invitation à cliquer sur « Analyser »', () => {
+    const { requetes } = configurer([rapport()]);
+    const { el } = monter();
+
+    expect(requetes).toHaveLength(0);
+    expect(el.textContent).toContain('aucune analyse ne se lance toute seule');
+    expect(el.querySelector('.closing-overview')).toBeNull();
+  });
+
+  it('bandeau du résultat : date et heure, période et département', () => {
+    const { el } = creer([rapport()]);
+    const bandeau = el.querySelector('.closing-status-line')?.textContent ?? '';
+
+    expect(bandeau).toMatch(/Résultat du \d{2}\/\d{2} à \d{2}:\d{2}, période du \d{2}\/\d{2}\/\d{4} au \d{2}\/\d{2}\/\d{4}, département tous\./);
+  });
+
+  it('quitter puis revenir : même résultat, même bandeau, aucune requête de plus', () => {
+    const { fixture, el, requetes } = creer([rapport({}, [anomalie({})])]);
+    const bandeau = el.querySelector('.closing-status-line')?.textContent;
+    const score = el.querySelector('.closing-score__value')?.textContent;
+    fixture.destroy();
+
+    const retour = monter();
+
+    expect(requetes).toHaveLength(1);
+    expect(retour.el.querySelector('.closing-score__value')?.textContent).toBe(score);
+    expect(retour.el.querySelector('.closing-status-line')?.textContent).toBe(bandeau);
+    expect(retour.el.querySelectorAll('tbody tr')).toHaveLength(1);
+  });
+
+  it('filtre modifié : « filtre modifié, réanalyser », aucune requête ; revenir à l’ancien filtre efface le message', async () => {
+    const { fixture, el, requetes } = creer([rapport()]);
+    await fixture.whenStable(); // le modèle des champs est écrit après le premier rendu
+    const debut = el.querySelector<HTMLInputElement>('input[name="from"]')!;
+    const ancien = debut.value;
+
+    debut.value = '2025-10-01';
+    debut.dispatchEvent(new Event('input', { bubbles: true }));
+    await attendre();
+    fixture.detectChanges();
+    expect(el.querySelector('.closing-stale')?.textContent).toContain('Filtre modifié, réanalyser');
+    expect(requetes).toHaveLength(1);
+
+    debut.value = ancien;
+    debut.dispatchEvent(new Event('input', { bubbles: true }));
+    await attendre();
+    fixture.detectChanges();
+    expect(el.querySelector('.closing-stale')).toBeNull();
+  });
+
+  it('un filtre saisi mais non analysé est conservé au retour sur la page', async () => {
+    const { fixture, el, requetes } = creer([rapport()]);
+    const debut = el.querySelector<HTMLInputElement>('input[name="from"]')!;
+    debut.value = '2025-10-01';
+    debut.dispatchEvent(new Event('input', { bubbles: true }));
+    await attendre();
+    fixture.destroy();
+
+    const retour = monter();
+    await attendre();
+    retour.fixture.detectChanges();
+
+    expect(retour.el.querySelector<HTMLInputElement>('input[name="from"]')?.value).toBe('2025-10-01');
+    expect(requetes).toHaveLength(1);
+  });
+
+  it('déconnexion : le résultat conservé est vidé', () => {
+    const { fixture, session } = creer([rapport()]);
+    fixture.destroy();
+
+    session.token.set(null);
+    TestBed.tick(); // les effets s'exécutent à chaque cycle de l'application
+    session.token.set('autre');
+    const retour = monter();
+
+    expect(retour.el.querySelector('.closing-overview')).toBeNull();
+    expect(retour.el.textContent).toContain('aucune analyse ne se lance toute seule');
+  });
+
+  it('changement de base active (SAGE ou pointage) ou de compte : le résultat conservé est vidé', () => {
+    const changements: ((s: ReturnType<typeof fausseSession>) => void)[] = [
+      (s) => s.activeSageDb.set('SAGE_B'),
+      (s) => s.activePointeuseDb.set('PTE_B'),
+      (s) => s.session.set({ userId: 2 }),
+    ];
+    for (const changer of changements) {
+      const { fixture, session } = creer([rapport()]);
+      fixture.destroy();
+      changer(session);
+
+      const retour = monter();
+      expect(retour.el.querySelector('.closing-overview')).toBeNull();
+    }
+  });
+
+  describe('analyse en cours', () => {
+    function configurerAvec(analysis: () => Observable<ClosingReport>) {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [
+          provideRouter([]),
+          { provide: SessionStore, useValue: fausseSession() },
+          { provide: CardPaieService, useValue: { list: () => of([]) } },
+          { provide: DepartementServiceService, useValue: { lookupBatch: () => of([]) } },
+          { provide: ClosingService, useValue: { analysis } },
+        ],
+      });
+      return monter();
+    }
+
+    function enAttente() {
+      const flux: Subject<ClosingReport>[] = [];
+      let desabonnements = 0;
+      const { fixture, el } = configurerAvec(
+        () =>
+          new Observable<ClosingReport>((abonne) => {
+            const f = new Subject<ClosingReport>();
+            flux.push(f);
+            const sub = f.subscribe(abonne);
+            return () => {
+              desabonnements++;
+              sub.unsubscribe();
+            };
+          }),
+      );
+      return { fixture, el, flux, desabonnements: () => desabonnements };
+    }
+
+    it('« Analyse en cours… » annoncé, zone des résultats marquée occupée, puis retirée à la fin', () => {
+      const { fixture, el, flux } = enAttente();
+      cliquerAnalyser(fixture, el);
+
+      expect(el.querySelector('.closing-busy')?.textContent).toContain('Analyse en cours…');
+      expect(el.querySelector('.closing-status-line')?.getAttribute('aria-live')).toBe('polite');
+
+      flux[0].next(rapport());
+      flux[0].complete();
+      fixture.detectChanges();
+      expect(el.querySelector('.closing-busy')).toBeNull();
+      expect(el.querySelector('.closing-results')?.getAttribute('aria-busy')).toBe('false');
+    });
+
+    it('clics répétés sur le même filtre : une seule requête', () => {
+      const { fixture, el, flux } = enAttente();
+      cliquerAnalyser(fixture, el);
+      cliquerAnalyser(fixture, el);
+      cliquerAnalyser(fixture, el);
+
+      expect(flux).toHaveLength(1);
+    });
+
+    it('un autre filtre pendant l’analyse : la requête précédente est annulée, la nouvelle part', () => {
+      const { fixture, el, flux, desabonnements } = enAttente();
+      cliquerAnalyser(fixture, el);
+      const debut = el.querySelector<HTMLInputElement>('input[name="from"]')!;
+      debut.value = '2025-10-01';
+      debut.dispatchEvent(new Event('input', { bubbles: true }));
+      cliquerAnalyser(fixture, el);
+
+      expect(flux).toHaveLength(2);
+      expect(desabonnements()).toBe(1);
+    });
+
+    it('échec : message clair, dernier bon résultat gardé, indicateur retiré', () => {
+      let appel = 0;
+      const { fixture, el } = configurerAvec(() =>
+        appel++ === 0
+          ? of(rapport())
+          : new Observable<ClosingReport>((o) => o.error({ status: 500, error: { error: 'Indisponible' } })),
+      );
+      cliquerAnalyser(fixture, el);
+      cliquerAnalyser(fixture, el);
+
+      expect(el.querySelector('.closing-alert--error')).not.toBeNull();
+      expect(el.querySelector('.closing-busy')).toBeNull();
+      expect(el.querySelector('.closing-overview')).not.toBeNull();
+    });
   });
 });

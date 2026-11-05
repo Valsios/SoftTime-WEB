@@ -4,6 +4,8 @@ import { readDeepLink } from '../../shared/utils/deep-link';
 import {
   correctionLink,
   CORRECTION_TARGETS,
+  resultBannerText,
+  sameFilter,
   dashboardCardView,
   defaultPeriod,
   excludedEmployeesText,
@@ -328,5 +330,23 @@ describe('fonction désactivée et carte du tableau de bord', () => {
       score: NO_CONTROLLED_DAY,
       critiques: '',
     });
+  });
+});
+
+describe('filtre conservé : comparaison et bandeau', () => {
+  const base = { from: '2025-11-01', to: '2025-11-30', departement: null, includeComparison: false };
+
+  it('sameFilter : département vide = tous, tout autre écart = filtre modifié', () => {
+    expect(sameFilter(base, { ...base, departement: '' as unknown as null })).toBe(true);
+    expect(sameFilter(base, { ...base, departement: 'D1' })).toBe(false);
+    expect(sameFilter(base, { ...base, from: '2025-11-02' })).toBe(false);
+    expect(sameFilter(base, { ...base, includeComparison: true })).toBe(false);
+    expect(sameFilter(base, null)).toBe(false);
+  });
+
+  it('resultBannerText : JJ/MM à HH:mm, période et département', () => {
+    const quand = new Date(2026, 0, 5, 9, 7);
+    expect(resultBannerText(quand, base)).toBe('Résultat du 05/01 à 09:07, période du 01/11/2025 au 30/11/2025, département tous.');
+    expect(resultBannerText(quand, { ...base, departement: 'Atelier' })).toContain('département Atelier.');
   });
 });

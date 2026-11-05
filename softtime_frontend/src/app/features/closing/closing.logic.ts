@@ -275,6 +275,39 @@ export function formatDay(value: string | null | undefined): string {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : value;
 }
 
+/** Filtre d'une analyse : période, département et option de comparaison (l'onglet et la page n'en font pas partie). */
+export interface ClosingFilter {
+  from: string;
+  to: string;
+  departement: string | null;
+  includeComparison: boolean;
+}
+
+export const ANALYSING_TEXT = 'Analyse en cours…';
+export const NOT_ANALYSED_TEXT = 'Choisissez la période puis cliquez sur « Analyser » : aucune analyse ne se lance toute seule.';
+export const FILTER_CHANGED_TEXT = 'Filtre modifié, réanalyser : le résultat affiché correspond encore à l’ancien filtre.';
+
+/** Deux filtres équivalents (département vide = tous). */
+export function sameFilter(a: ClosingFilter | null | undefined, b: ClosingFilter | null | undefined): boolean {
+  if (!a || !b) return false;
+  return a.from === b.from
+    && a.to === b.to
+    && (a.departement || null) === (b.departement || null)
+    && a.includeComparison === b.includeComparison;
+}
+
+/** « JJ/MM à HH:mm » (heure locale). */
+export function formatStamp(date: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(date.getDate())}/${p(date.getMonth() + 1)} à ${p(date.getHours())}:${p(date.getMinutes())}`;
+}
+
+/** Bandeau du dernier résultat : quand, pour quelle période et quel département. */
+export function resultBannerText(analysedAt: Date, filter: ClosingFilter): string {
+  const departement = filter.departement ? filter.departement : 'tous';
+  return `Résultat du ${formatStamp(analysedAt)}, période du ${formatDay(filter.from)} au ${formatDay(filter.to)}, département ${departement}.`;
+}
+
 /** Nom affiché : « Nom Prénom », ou le matricule seul quand les noms ne sont pas renvoyés. */
 export function personLabel(a: { matricule: string; nom: string | null; prenom: string | null }): string {
   const nom = [a.nom, a.prenom].filter((x) => !!x && x.trim()).join(' ');
