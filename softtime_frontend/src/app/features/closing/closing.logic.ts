@@ -302,6 +302,13 @@ export function checklistStateView(etat: string): { label: string; tone: BadgeTo
   }
 }
 
+/** Badge de la barre du haut : nombre d'anomalies critiques du dernier résultat, avec un libellé lisible. */
+export function closingBadgeView(report: Pick<ClosingReport, 'parGravite'>): { count: number; label: string } {
+  const count = countOf(report.parGravite, 'Critique');
+  const texte = count === 0 ? 'aucune anomalie critique' : count === 1 ? '1 anomalie critique' : `${count} anomalies critiques`;
+  return { count, label: `Contrôle avant paie : ${texte}` };
+}
+
 export const CHECKLIST_TITLE = 'Avancement de la paie';
 export const CHECKLIST_LOADING = 'Avancement de la paie en cours de chargement…';
 export const CHECKLIST_ERROR = 'L’avancement de la paie n’a pas pu être chargé. L’analyse reste valable.';
