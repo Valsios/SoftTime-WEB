@@ -640,15 +640,17 @@ export class ClosingPage implements OnInit, OnDestroy {
     this.draft.set(this.readFilter());
   }
 
-  /** Changer d'onglet relance l'analyse du filtre déjà analysé, à la page 1 (le filtre saisi n'est pas pris en compte). */
+  /**
+   * Changer d'onglet ne change que la LISTE (présence des « Information ») : page 1 du filtre déjà analysé, relue dans
+   * l'analyse en cache du serveur (`reuseCache`), sans nouveau calcul complet ni checklist. Le filtre saisi n'est pas pris en compte.
+   */
   onTab(id: string): void {
     const next = id === 'all' ? 'all' : 'afix';
     const applied = this.applied();
     if (next === this.tab() || !applied) return;
     this.tab.set(next);
     this.state.tab.set(next);
-    this.page.set(1);
-    this.load(applied, false);
+    this.reloadList();
   }
 
   /**

@@ -327,13 +327,14 @@ describe('page Contrôle avant paie : niveau Information', () => {
     expect(requetes).toHaveLength(3); // une seule requête par action, aucun appel en double
   });
 
-  it('onglet et nouvelle analyse : jamais de réutilisation du cache', () => {
+  it('onglet : une requête de liste avec le cache du serveur ; seule une nouvelle analyse recalcule', () => {
     const { fixture, el, requetes } = creer([avecInformations(), avecInformations(), avecInformations()]);
 
     el.querySelectorAll<HTMLElement>('[role="tab"]')[1].click();
     cliquerAnalyser(fixture, el);
 
-    expect(requetes.map((r) => r.reuseCache)).toEqual([false, false, false]);
+    expect(requetes.map((r) => r.reuseCache)).toEqual([false, true, false]);
+    expect(requetes[1]).toMatchObject({ includeInformation: true, page: 1 });
   });
 
   it('tableau partagé : badge de gravité et noms masqués (matricule seul) conservés', () => {
@@ -848,6 +849,30 @@ describe('page Contrôle avant paie : filtre et tri par gravité', () => {
     expect(requetes[1]).toMatchObject({ tri: 'gravite', page: 1, reuseCache: true });
     const premieres = lignes(el).slice(0, 3);
     expect(premieres).toEqual(['ligne 1', 'ligne 5', 'ligne 9']);   // les « Critique », dans l’ordre d’origine
+  });
+
+  it('gravité, tri et onglet sans changement de période : aucune nouvelle analyse complète, ni checklist', () => {
+    const { fixture, el, requetes } = monterServeur();
+    const periode = (r: ClosingQuery) => [r.from, r.to, r.departement ?? null, r.includeComparison];
+
+    carte(el, 'Critique').click();                                              // filtre de gravité
+    fixture.detectChanges();
+    el.querySelector<HTMLElement>('.closing-filter-line button')!.click();      // retour à « tout afficher »
+    fixture.detectChanges();
+    const select = el.querySelector<HTMLSelectElement>('select[name="tri"]')!;
+    select.value = 'gravite';
+    select.dispatchEvent(new Event('change'));                                  // tri
+    fixture.detectChanges();
+    el.querySelectorAll<HTMLElement>('[role="tab"]')[1].click();                // onglet « Avec informations »
+    fixture.detectChanges();
+    el.querySelectorAll<HTMLElement>('[role="tab"]')[0].click();                // retour à « À corriger »
+    fixture.detectChanges();
+
+    const apres = requetes.slice(1);                                            // la première est l'analyse du clic sur « Analyser »
+    expect(apres).toHaveLength(5);                                              // une requête de liste par action
+    expect(apres.every((r) => r.reuseCache === true)).toBe(true);               // jamais de nouveau calcul complet côté serveur
+    expect(apres.every((r) => r.page === 1)).toBe(true);
+    expect(apres.map(periode)).toEqual(apres.map(() => periode(requetes[0])));  // même période, même département
   });
 
   it('filtre et tri conservés en session : au retour sur l’écran, même liste, même état, aucune requête', () => {
