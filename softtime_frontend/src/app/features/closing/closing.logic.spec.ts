@@ -4,6 +4,9 @@ import { readDeepLink } from '../../shared/utils/deep-link';
 import {
   correctionLink,
   CORRECTION_TARGETS,
+  EXPORT_HEADERS,
+  exportFileName,
+  exportRows,
   resultBannerText,
   sameFilter,
   dashboardCardView,
@@ -348,5 +351,34 @@ describe('filtre conservé : comparaison et bandeau', () => {
     const quand = new Date(2026, 0, 5, 9, 7);
     expect(resultBannerText(quand, base)).toBe('Résultat du 05/01 à 09:07, période du 01/11/2025 au 30/11/2025, département tous.');
     expect(resultBannerText(quand, { ...base, departement: 'Atelier' })).toContain('département Atelier.');
+  });
+});
+
+describe('export de la liste', () => {
+  const ligne = (n: number) => ({
+    type: 'PointageManquant', gravite: 'Critique', poids: 5, matricule: `M${n}`, nom: null, prenom: null,
+    departement: null, date: '2025-11-03T00:00:00', detail: `ligne ${n}`, heures: null, pointageExiste: null,
+  });
+
+  it('même nombre de lignes et même ordre que la liste, une cellule par en-tête, sans colonne de lien', () => {
+    const items = [ligne(2), ligne(1), ligne(3)];
+    const rows = exportRows(items);
+    expect(rows).toHaveLength(3);
+    expect(rows.map((r) => r[6])).toEqual(['ligne 2', 'ligne 1', 'ligne 3']);
+    expect(rows.every((r) => r.length === EXPORT_HEADERS.length)).toBe(true);
+    expect(EXPORT_HEADERS).not.toContain('Correction');
+  });
+
+  it('libellés lisibles : gravité, type, jour JJ/MM/AAAA, département vide', () => {
+    const [r] = exportRows([ligne(1)]);
+    expect(r[0]).toBe('Critique');
+    expect(r[1]).toBe('Pointage manquant');
+    expect(r[5]).toBe('03/11/2025');
+    expect(r[4]).toBe('');
+  });
+
+  it('nom de fichier : période incluse', () => {
+    expect(exportFileName({ from: '2025-11-01', to: '2025-11-30', departement: null, includeComparison: false }))
+      .toBe('controle-avant-paie_2025-11-01_2025-11-30');
   });
 });

@@ -2,7 +2,8 @@
  * Clôture de paie assistée : logique pure de l'écran (sans Angular), testée par closing.logic.spec.ts.
  * L'écran n'invente rien : il met en forme la réponse de GET api/closing/analysis.
  */
-import { ClosingComparison, ClosingCount, ClosingReport, ClosingStatus } from '../../shared/models';
+import { ClosingAnomalyView, ClosingComparison, ClosingCount, ClosingReport, ClosingStatus } from '../../shared/models';
+import type { ExcelSheet } from '../../shared/services/excel-export.service';
 
 export const DEFAULT_PAGE_SIZE = 50;
 export const NO_CONTROLLED_DAY = 'Aucun jour contrôlé sur cette période';
@@ -333,4 +334,63 @@ export function dashboardCardView(report: Pick<ClosingReport, 'statut' | 'score'
     score: scoreText(report.score),
     critiques: report.joursEmployeControles > 0 ? severitySentence('Critique', countOf(report.parGravite, 'Critique')) : '',
   };
+}
+
+/** Taille de page utilisée pour rassembler toute la liste à exporter (maximum accepté par le serveur). */
+export const EXPORT_PAGE_SIZE = 200;
+export const EXPORT_STALE_MESSAGE = 'Les données ont changé depuis l’analyse : réanalysez avant d’exporter.';
+
+/** Colonnes de la feuille « Anomalies » : celles de la liste affichée, sans la colonne de lien « Correction ». */
+export const EXPORT_HEADERS = ['Gravité', 'Type', 'Matricule', 'Salarié', 'Département', 'Date', 'Détail'];
+
+export function exportFileName(filter: ClosingFilter): string {
+  return `controle-avant-paie_${filter.from}_${filter.to}`;
+}
+
+/** Lignes de la feuille « Anomalies », dans l'ordre de la liste (aucun tri ni filtre ajouté). */
+export function exportRows(items: readonly ClosingAnomalyView[]): (string | number | boolean | null)[][] {
+  return items.map((a) => [
+    severityLabel(a.gravite),
+    typeLabel(a.type),
+    a.matricule,
+    personLabel(a),
+    a.departement ?? '',
+    formatDay(a.date),
+    a.detail,
+  ]);
+}
+
+/** Feuille de synthèse : filtre analysé, statut, score, comptages et nombre de lignes exportées. */
+export function exportSummary(
+  report: ClosingReport,
+  filter: ClosingFilter,
+  analysedAt: Date,
+  exportedRows: number,
+): ExcelSheet {
+  const rows: (string | number | boolean | null)[][] = [
+    ['Période', `du ${formatDay(filter.from)} au ${formatDay(filter.to)}`],
+    ['Département', filter.departement ? filter.departement : 'Tous'],
+    ['Comparaison avec la période précédente', filter.includeComparison ? 'Oui' : 'Non'],
+    ['Analyse du', formatStamp(analysedAt)],
+    ['Statut', report.statutLibelle ?? statusView(report.statut).label],
+    ['Score', report.score === null ? 'Aucun jour contrôlé' : report.score],
+    ['Jours-employé contrôlés', report.joursEmployeControles],
+    ['Anomalies (toutes gravités)', report.nombreAnomalies],
+    ['Lignes de la feuille « Anomalies »', exportedRows],
+  ];
+  for (const s of SEVERITIES) rows.push([`Gravité : ${severityLabel(s)}`, countOf(report.parGravite, s)]);
+  for (const t of report.parType) rows.push([`Type : ${typeLabel(t.cle)}`, t.nombre]);
+  return { sheetName: 'Synthèse', headers: ['Information', 'Valeur'], rows };
+}
+
+export function exportSheets(
+  report: ClosingReport,
+  items: readonly ClosingAnomalyView[],
+  filter: ClosingFilter,
+  analysedAt: Date,
+): ExcelSheet[] {
+  return [
+    exportSummary(report, filter, analysedAt, items.length),
+    { sheetName: 'Anomalies', headers: EXPORT_HEADERS, rows: exportRows(items) },
+  ];
 }

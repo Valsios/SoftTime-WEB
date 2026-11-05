@@ -11,12 +11,13 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { Subscription } from 'rxjs';
+import { EMPTY, expand, Subscription, toArray } from 'rxjs';
 import { errorMessage } from '../../core/error.logic';
 import { SessionStore } from '../../core/session.store';
-import { Column, DataTable, DataTableCell, PageHeader, PeriodFilter, SoftBadge, SoftCard, SoftTabs, SoftToggle, TabItem } from '../../shared/components';
+import { Column, DataTable, DataTableCell, PageHeader, PeriodFilter, SoftBadge, SoftButton, SoftCard, SoftTabs, SoftToggle, TabItem } from '../../shared/components';
 import { ClosingAnomalyView, ClosingReport, PageChangeEvent, PeriodRequest } from '../../shared/models';
 import { ClosingService } from '../../shared/services/closing.service';
+import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { ClosingSessionState } from './closing.state';
 import {
   ANALYSING_TEXT,
@@ -28,6 +29,10 @@ import {
   defaultPeriod,
   DISABLED_MESSAGE,
   excludedEmployeesText,
+  EXPORT_PAGE_SIZE,
+  EXPORT_STALE_MESSAGE,
+  exportFileName,
+  exportSheets,
   FILTER_CHANGED_TEXT,
   formatDay,
   INFORMATION_RULE,
@@ -60,9 +65,16 @@ import {
 @Component({
   selector: 'app-closing',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, PageHeader, PeriodFilter, SoftCard, SoftBadge, SoftTabs, SoftToggle, RouterLink, DataTable, DataTableCell],
+  imports: [FormsModule, PageHeader, PeriodFilter, SoftButton, SoftCard, SoftBadge, SoftTabs, SoftToggle, RouterLink, DataTable, DataTableCell],
   template: `
     <page-header title="Contrôle avant paie" subtitle="Contrôle des données de la période avant la clôture">
+      <soft-button
+        variant="secondary"
+        [loading]="exporting()"
+        [disabled]="!report() || analysing()"
+        [attr.aria-busy]="exporting() || null"
+        (click)="exportExcel()"
+      >Exporter</soft-button>
       <label class="closing-switch">
         <span>Comparer avec la période précédente</span>
         <soft-toggle [ngModel]="includeComparison()" (ngModelChange)="onComparison($event)" name="comparaison"></soft-toggle>
@@ -296,6 +308,7 @@ export class ClosingPage implements OnInit, OnDestroy {
   private readonly closing = inject(ClosingService);
   private readonly session = inject(SessionStore);
   private readonly state = inject(ClosingSessionState);
+  private readonly excel = inject(ExcelExportService);
 
   /** Filtre partagé, positionné sur le mois précédent avant son premier rendu. */
   @ViewChild(PeriodFilter, { static: true }) private filter?: PeriodFilter;
@@ -327,6 +340,9 @@ export class ClosingPage implements OnInit, OnDestroy {
   readonly analysing = signal(false);
   /** Changement de page ou de taille seulement : seul le tableau affiche un chargement. */
   readonly paging = signal(false);
+  /** Rassemblement de la liste complète pour l'export en cours : clics répétés ignorés. */
+  readonly exporting = signal(false);
+  private exportRequest?: Subscription;
   readonly error = signal<string | null>(null);
   readonly disabled = signal(false);
   readonly includeComparison = signal(false);
@@ -411,6 +427,50 @@ export class ClosingPage implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     // Le filtre saisi est conservé ; une requête en cours n'est pas annulée : son résultat sera gardé en mémoire.
     this.state.draft.set(this.readFilter());
+    this.exportRequest?.unsubscribe();
+  }
+
+  /**
+   * Export Excel de TOUTE la liste du résultat affiché (filtre figé en session, toutes gravités),
+   * par le classeur multi-feuilles existant (synthèse + anomalies). Les pages sont relues avec
+   * `reuseCache` : tant que l'analyse est dans le cache du serveur (60 s), rien n'est recalculé.
+   * Si le nombre de lignes diffère de l'analyse affichée, l'export est refusé (données modifiées).
+   */
+  exportExcel(): void {
+    const filter = this.applied();
+    const report = this.report();
+    const at = this.analysedAt();
+    if (!filter || !report || !at || this.analysing() || this.exporting()) return;
+    this.exporting.set(true);
+    this.error.set(null);
+    const fetchPage = (page: number) =>
+      this.closing.analysis({
+        from: filter.from,
+        to: filter.to,
+        departement: filter.departement,
+        includeComparison: filter.includeComparison,
+        includeInformation: true,
+        page,
+        pageSize: EXPORT_PAGE_SIZE,
+        reuseCache: true,
+      });
+    this.exportRequest = fetchPage(1)
+      .pipe(
+        expand((r) => (r.anomalies.page < r.anomalies.totalPages ? fetchPage(r.anomalies.page + 1) : EMPTY)),
+        toArray(),
+      )
+      .subscribe({
+        next: (pages) => {
+          const items = pages.flatMap((r) => r.anomalies.items);
+          this.exporting.set(false);
+          if (items.length !== report.nombreAnomalies) {
+            this.error.set(EXPORT_STALE_MESSAGE);
+            return;
+          }
+          this.excel.downloadWorkbook(exportFileName(filter), exportSheets(report, items, filter, at));
+        },
+        error: () => this.exporting.set(false),
+      });
   }
 
   /** Le filtre a été modifié par l'utilisateur : relit ses champs pour savoir si la saisie diffère du résultat affiché. */

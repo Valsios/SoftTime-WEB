@@ -7,7 +7,11 @@ import { SessionStore } from '../../core/session.store';
 import { ClosingAnomalyView, ClosingQuery, ClosingReport } from '../../shared/models';
 import { CardPaieService, DepartementServiceService } from '../../shared/services/catalog.service';
 import { ClosingService } from '../../shared/services/closing.service';
+import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { ClosingPage } from './closing';
+
+/** Export Excel simulé : aucun téléchargement réel, seulement les appels reçus. */
+const excelFactice = { downloadWorkbook: vi.fn() };
 
 const anomalie = (over: Partial<ClosingAnomalyView>): ClosingAnomalyView => ({
   type: 'PointageManquant',
@@ -72,6 +76,7 @@ function configurer(rapports: ClosingReport[]) {
       { provide: SessionStore, useValue: session },
       { provide: CardPaieService, useValue: { list: () => of([]) } },
       { provide: DepartementServiceService, useValue: { lookupBatch: () => of([]) } },
+      { provide: ExcelExportService, useValue: excelFactice },
       {
         provide: ClosingService,
         useValue: {
@@ -497,6 +502,7 @@ describe('page Contrôle avant paie : filtre et résultat conservés pendant la 
           { provide: SessionStore, useValue: fausseSession() },
           { provide: CardPaieService, useValue: { list: () => of([]) } },
           { provide: DepartementServiceService, useValue: { lookupBatch: () => of([]) } },
+          { provide: ExcelExportService, useValue: excelFactice },
           { provide: ClosingService, useValue: { analysis } },
         ],
       });
@@ -570,5 +576,145 @@ describe('page Contrôle avant paie : filtre et résultat conservés pendant la 
       expect(el.querySelector('.closing-busy')).toBeNull();
       expect(el.querySelector('.closing-overview')).not.toBeNull();
     });
+  });
+});
+
+describe('page Contrôle avant paie : export Excel de la liste', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    excelFactice.downloadWorkbook.mockClear();
+  });
+
+  const TOTAL = 450;
+  /** Page k d'une liste fictive de 450 lignes (détails « ligne 1 » à « ligne 450 »), 200 par page au plus. */
+  const page = (k: number, taille: number): ClosingReport => {
+    const debut = (k - 1) * taille;
+    const items = Array.from({ length: Math.max(0, Math.min(taille, TOTAL - debut)) }, (_, i) =>
+      anomalie({ detail: `ligne ${debut + i + 1}`, matricule: `M${debut + i + 1}` }),
+    );
+    return rapport(
+      { nombreAnomalies: TOTAL, anomalies: { items, total: TOTAL, page: k, pageSize: taille, totalPages: Math.ceil(TOTAL / taille) } },
+      items,
+    );
+  };
+
+  function monterAvec(reponse: (q: ClosingQuery) => Observable<ClosingReport>) {
+    TestBed.resetTestingModule();
+    const requetes: ClosingQuery[] = [];
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([]),
+        { provide: SessionStore, useValue: fausseSession() },
+        { provide: CardPaieService, useValue: { list: () => of([]) } },
+        { provide: DepartementServiceService, useValue: { lookupBatch: () => of([]) } },
+        { provide: ExcelExportService, useValue: excelFactice },
+        {
+          provide: ClosingService,
+          useValue: {
+            analysis: (q: ClosingQuery) => {
+              requetes.push(q);
+              return reponse(q);
+            },
+          },
+        },
+      ],
+    });
+    const { fixture, el } = monter();
+    return { fixture, el, requetes };
+  }
+
+  const boutonExport = (el: HTMLElement) =>
+    Array.from(el.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Exporter') as HTMLButtonElement;
+
+  it('« Exporter » est désactivé tant qu’il n’y a pas de résultat, actif ensuite', () => {
+    const { fixture, el } = monterAvec((q) => of(page(q.page ?? 1, q.pageSize ?? 50)));
+    expect(boutonExport(el).disabled).toBe(true);
+
+    cliquerAnalyser(fixture, el);
+    expect(boutonExport(el).disabled).toBe(false);
+  });
+
+  it('« Exporter » est désactivé pendant l’analyse', () => {
+    const flux = new Subject<ClosingReport>();
+    const { fixture, el } = monterAvec(() => flux);
+    cliquerAnalyser(fixture, el);
+
+    expect(boutonExport(el).disabled).toBe(true);
+    flux.next(page(1, 50));
+    flux.complete();
+    fixture.detectChanges();
+    expect(boutonExport(el).disabled).toBe(false);
+  });
+
+  it('exporte TOUTE la liste (450 lignes, 3 pages de 200 au plus), même nombre et même ordre, sans relancer d’analyse', () => {
+    const { fixture, el, requetes } = monterAvec((q) => of(page(q.page ?? 1, q.pageSize ?? 50)));
+    cliquerAnalyser(fixture, el);
+    const avant = requetes.length;
+
+    boutonExport(el).click();
+    fixture.detectChanges();
+
+    const export_ = requetes.slice(avant);
+    expect(export_.map((r) => r.page)).toEqual([1, 2, 3]);
+    expect(export_.every((r) => r.reuseCache === true && r.pageSize === 200 && r.includeInformation === true)).toBe(true);
+    expect(export_.every((r) => r.from === requetes[0].from && r.to === requetes[0].to)).toBe(true);
+
+    expect(excelFactice.downloadWorkbook).toHaveBeenCalledTimes(1);
+    const [nom, feuilles] = excelFactice.downloadWorkbook.mock.calls[0];
+    expect(nom).toMatch(/^controle-avant-paie_\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2}$/);
+    const liste = feuilles.find((f: { sheetName: string }) => f.sheetName === 'Anomalies');
+    expect(liste.rows).toHaveLength(TOTAL);
+    expect(liste.rows.map((l: unknown[]) => l[6])).toEqual(Array.from({ length: TOTAL }, (_, i) => `ligne ${i + 1}`));
+    expect(feuilles.map((f: { sheetName: string }) => f.sheetName)).toEqual(['Synthèse', 'Anomalies']);
+  });
+
+  it('clics répétés pendant la préparation : un seul export', () => {
+    const flux: Subject<ClosingReport>[] = [];
+    let appel = 0;
+    const { fixture, el } = monterAvec((q) => {
+      if (appel++ === 0) return of(page(1, q.pageSize ?? 50));
+      const f = new Subject<ClosingReport>();
+      flux.push(f);
+      return f;
+    });
+    cliquerAnalyser(fixture, el);
+
+    boutonExport(el).click();
+    fixture.detectChanges();
+    boutonExport(el).click();
+    boutonExport(el).click();
+
+    expect(flux).toHaveLength(1); // une seule lecture de liste en cours
+    expect(boutonExport(el).disabled).toBe(true); // indicateur : bouton occupé
+  });
+
+  it('données modifiées depuis l’analyse : message clair, aucun fichier', () => {
+    let appel = 0;
+    const { fixture, el } = monterAvec((q) => {
+      const p = page(q.page ?? 1, q.pageSize ?? 50);
+      // Après l’analyse, la liste relue est plus courte que le résultat affiché.
+      return of(appel++ === 0 ? p : { ...p, anomalies: { ...p.anomalies, items: [], totalPages: 1 } });
+    });
+    cliquerAnalyser(fixture, el);
+
+    boutonExport(el).click();
+    fixture.detectChanges();
+
+    expect(excelFactice.downloadWorkbook).not.toHaveBeenCalled();
+    expect(el.querySelector('.closing-alert--error')?.textContent).toContain('réanalysez avant d’exporter');
+  });
+
+  it('synthèse : période, département, statut, score et nombre de lignes exportées', () => {
+    const { fixture, el } = monterAvec((q) => of(page(q.page ?? 1, q.pageSize ?? 50)));
+    cliquerAnalyser(fixture, el);
+    boutonExport(el).click();
+
+    const synthese = excelFactice.downloadWorkbook.mock.calls[0][1][0];
+    const valeur = (cle: string) => synthese.rows.find((l: unknown[]) => l[0] === cle)?.[1];
+    expect(valeur('Période')).toMatch(/^du \d{2}\/\d{2}\/\d{4} au \d{2}\/\d{2}\/\d{4}$/);
+    expect(valeur('Département')).toBe('Tous');
+    expect(valeur('Statut')).toBe('À corriger');
+    expect(valeur('Score')).toBe(97);
+    expect(valeur('Lignes de la feuille « Anomalies »')).toBe(TOTAL);
   });
 });
