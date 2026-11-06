@@ -42,23 +42,14 @@ public sealed class PunchService : IPunchService
     public async Task<PagedResult<PunchDto>> ListPunchesPagedAsync(PeriodRequest filter, int? page, int? pageSize, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        return await PagedLists.PageAsync(
-            _uow.Repository<Pointage>(),
-            PunchPredicate(filter, _tenant.SageDb),
-            q => q.OrderBy(p => p.DatePointage)
+        return await PagedLists.From(_uow.Repository<Pointage>(), PunchPredicate(filter, _tenant.SageDb), q => q.OrderBy(p => p.DatePointage)
                   .ThenBy(p => p.HeurePointage)
                   .ThenBy(p => p.MatriculeSage)
-                  .ThenBy(p => p.IdPointage),
-            page,
-            pageSize,
-            ToPunchDto,
-            filter.Search,
-            new Expression<Func<Pointage, string?>>[]
+                  .ThenBy(p => p.IdPointage)).WithSearch(filter.Search, new Expression<Func<Pointage, string?>>[]
             {
                 p => p.MatriculeSage,
                 p => p.TypePointage,
-            },
-            ct);
+            }).PageAsync(new PageRequest(page, pageSize), ToPunchDto, ct);
     }
 
     private static PunchDto ToPunchDto(Pointage p) => new(

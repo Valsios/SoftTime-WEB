@@ -43,22 +43,13 @@ public sealed class AnomalyService : IAnomalyService
     public async Task<PagedResult<AnomalyDto>> ListAnomaliesPagedAsync(PeriodRequest filter, int? page, int? pageSize, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        return await PagedLists.PageAsync(
-            _uow.Repository<HeureAnomalie>(),
-            AnomalyPredicate(filter, _tenant.SageDb),
-            q => q.OrderBy(a => a.DatePointageIn)
+        return await PagedLists.From(_uow.Repository<HeureAnomalie>(), AnomalyPredicate(filter, _tenant.SageDb), q => q.OrderBy(a => a.DatePointageIn)
                   .ThenBy(a => a.MatriculeSage)
-                  .ThenBy(a => a.Id),
-            page,
-            pageSize,
-            MapAnomaly,
-            filter.Search,
-            new Expression<Func<HeureAnomalie, string?>>[]
+                  .ThenBy(a => a.Id)).WithSearch(filter.Search, new Expression<Func<HeureAnomalie, string?>>[]
             {
                 a => a.MatriculeSage,
                 a => a.IntituleAbsence,
-            },
-            ct);
+            }).PageAsync(new PageRequest(page, pageSize), MapAnomaly, ct);
     }
 
     private static Expression<Func<HeureAnomalie, bool>> AnomalyPredicate(PeriodRequest filter, string sageDb)

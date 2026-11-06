@@ -1,3 +1,4 @@
+using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
 
@@ -70,10 +71,9 @@ public class RepositoryPaginationTests
             repo.Items.Add(new TestEntity(i, "CatA", $"Item {i:D2}", i * 10));
 
         var result = await repo.ToPagedAsync(
-            predicate: null,
-            orderBy: q => q.OrderBy(x => x.Id),
-            page: 1,
-            pageSize: 10);
+            null,
+            q => q.OrderBy(x => x.Id),
+            new PageRequest(1, 10));
 
         Assert.Equal(25, result.Total);
         Assert.Equal(1, result.Page);
@@ -92,10 +92,9 @@ public class RepositoryPaginationTests
             repo.Items.Add(new TestEntity(i, "CatA", $"Item {i:D2}", i * 10));
 
         var result = await repo.ToPagedAsync(
-            predicate: null,
-            orderBy: q => q.OrderBy(x => x.Id),
-            page: 3,
-            pageSize: 10);
+            null,
+            q => q.OrderBy(x => x.Id),
+            new PageRequest(3, 10));
 
         Assert.Equal(25, result.Total);
         Assert.Equal(3, result.Page);
@@ -114,10 +113,9 @@ public class RepositoryPaginationTests
             repo.Items.Add(new TestEntity(i, "CatA", $"Item {i:D2}", i * 10));
 
         var result = await repo.ToPagedAsync(
-            predicate: null,
-            orderBy: q => q.OrderBy(x => x.Id),
-            page: 10,
-            pageSize: 10);
+            null,
+            q => q.OrderBy(x => x.Id),
+            new PageRequest(10, 10));
 
         Assert.Equal(25, result.Total);
         Assert.Equal(10, result.Page);
@@ -134,10 +132,9 @@ public class RepositoryPaginationTests
             repo.Items.Add(new TestEntity(i, "CatA", $"Item {i:D3}", i));
 
         var result = await repo.ToPagedAsync(
-            predicate: null,
-            orderBy: q => q.OrderBy(x => x.Id),
-            page: 1,
-            pageSize: 500);
+            null,
+            q => q.OrderBy(x => x.Id),
+            new PageRequest(1, 500));
 
         Assert.Equal(100, result.PageSize);
         Assert.Equal(100, result.Items.Count);
@@ -153,10 +150,9 @@ public class RepositoryPaginationTests
             repo.Items.Add(new TestEntity(i, "CatA", $"Item {i:D2}", i));
 
         var result = await repo.ToPagedAsync(
-            predicate: null,
-            orderBy: q => q.OrderBy(x => x.Id),
-            page: 1,
-            pageSize: -1);
+            null,
+            q => q.OrderBy(x => x.Id),
+            new PageRequest(1, -1));
 
         Assert.Equal(PaginationRules.TailleDefaut, result.PageSize);
         Assert.Equal(50, result.Items.Count);
@@ -169,10 +165,9 @@ public class RepositoryPaginationTests
         var repo = new InMemoryTestRepository();
 
         var result = await repo.ToPagedAsync(
-            predicate: null,
-            orderBy: q => q.OrderBy(x => x.Id),
-            page: 1,
-            pageSize: 10);
+            null,
+            q => q.OrderBy(x => x.Id),
+            new PageRequest(1, 10));
 
         Assert.Equal(0, result.Total);
         Assert.Equal(1, result.TotalPages);
@@ -190,10 +185,9 @@ public class RepositoryPaginationTests
         repo.Items.Add(new TestEntity(1, "SameCat", "Z", 5));
 
         var result = await repo.ToPagedAsync(
-            predicate: null,
-            orderBy: q => q.OrderBy(x => x.Category).ThenBy(x => x.Id),
-            page: 1,
-            pageSize: 10);
+            null,
+            q => q.OrderBy(x => x.Category).ThenBy(x => x.Id),
+            new PageRequest(1, 10));
 
         Assert.Equal(new[] { 1, 2, 5, 8 }, result.Items.Select(x => x.Id).ToArray());
     }
@@ -206,10 +200,9 @@ public class RepositoryPaginationTests
             repo.Items.Add(new TestEntity(i, i % 2 == 0 ? "Pair" : "Impair", $"Item {i}", i));
 
         var result = await repo.ToPagedAsync(
-            predicate: x => x.Category == "Pair",
-            orderBy: q => q.OrderBy(x => x.Id),
-            page: 2,
-            pageSize: 5);
+            x => x.Category == "Pair",
+            q => q.OrderBy(x => x.Id),
+            new PageRequest(2, 5));
 
         // 15 pairs au total, page 2 de taille 5 -> éléments 6 à 10 (Ids: 12, 14, 16, 18, 20)
         Assert.Equal(15, result.Total);
@@ -227,11 +220,10 @@ public class RepositoryPaginationTests
             repo.Items.Add(new TestEntity(i, "Cat", $"Nom {i}", i * 100));
 
         var result = await repo.ToPagedAsync(
-            predicate: x => x.Id > 5,
-            orderBy: q => q.OrderBy(x => x.Id),
-            selector: x => new TestDto(x.Id, $"{x.Name} ({x.Value})"),
-            page: 1,
-            pageSize: 5);
+            x => x.Id > 5,
+            q => q.OrderBy(x => x.Id),
+            x => new TestDto(x.Id, $"{x.Name} ({x.Value})"),
+            new PageRequest(1, 5));
 
         Assert.Equal(10, result.Total);
         Assert.Equal(5, result.Items.Count);
@@ -247,10 +239,9 @@ public class RepositoryPaginationTests
             repo.Items.Add(new TestEntity(i, "CatA", $"Item {i:D2}", i * 10));
 
         var result = await repo.ToPagedAsync(
-            predicate: null,
-            orderBy: q => q.OrderBy(x => x.Id),
-            page: int.MaxValue,
-            pageSize: 10);
+            null,
+            q => q.OrderBy(x => x.Id),
+            new PageRequest(int.MaxValue, 10));
 
         Assert.Equal(25, result.Total);
         Assert.Equal(int.MaxValue, result.Page);
@@ -266,6 +257,6 @@ public class RepositoryPaginationTests
         repo.Items.Add(new TestEntity(1, "Cat", "A", 10));
 
         await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            repo.ToPagedAsync(predicate: null, orderBy: null!, page: 1, pageSize: 10));
+            repo.ToPagedAsync(null, null!, new PageRequest(1, 10)));
     }
 }

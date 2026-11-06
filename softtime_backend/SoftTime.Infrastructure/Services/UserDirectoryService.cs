@@ -69,13 +69,6 @@ public sealed class UserDirectoryService : IUserDirectoryService
                 : SearchExpression.OrElse(searchPredicate, rolePredicate);
         }
 
-        return await PagedLists.PageAsync(
-            _uow.Repository<Responsable>(),
-            predicate,
-            q => q.OrderBy(u => u.NomResponsable).ThenBy(u => u.Login).ThenBy(u => u.IdResponsable),
-            page,
-            pageSize,
-            u => new UserDto(u.IdResponsable, u.IdRole, u.NomResponsable ?? string.Empty, u.Login ?? string.Empty, u.Matricule, null) { Email = u.Email },
-            cancellationToken);
+        return await PagedLists.From(_uow.Repository<Responsable>(), predicate, q => q.OrderBy(u => u.NomResponsable).ThenBy(u => u.Login).ThenBy(u => u.IdResponsable)).PageAsync(new PageRequest(page, pageSize), u => new UserDto(u.IdResponsable, u.IdRole, u.NomResponsable ?? string.Empty, u.Login ?? string.Empty, u.Matricule, null) { Email = u.Email }, cancellationToken);
     }
 }

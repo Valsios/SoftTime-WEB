@@ -96,24 +96,17 @@ public sealed class EmployeePlanningService : IEmployeePlanningService
         if (hasSearch && cardIds.Length == 0)
             return PagedLists.Page(Array.Empty<EmployeePlanningDto>(), page, pageSize);
 
-        return await PagedLists.PageAsync(
-            _uow.Repository<PlanningSalarie>(),
-            p => p.DateP >= start
+        return await PagedLists.From(_uow.Repository<PlanningSalarie>(), p => p.DateP >= start
                  && p.DateP < end
                  && (p.BddSage == null || p.BddSage.Trim() == "" || p.BddSage.Trim() == sageDb)
                  && (!cardId.HasValue || p.IdSal == cardId.Value)
-                 && (!hasSearch || cardIds.Contains(p.IdSal)),
-            q => q.OrderBy(p => p.IdSal).ThenBy(p => p.DateP).ThenBy(p => p.Id),
-            page,
-            pageSize,
-            p =>
+                 && (!hasSearch || cardIds.Contains(p.IdSal)), q => q.OrderBy(p => p.IdSal).ThenBy(p => p.DateP).ThenBy(p => p.Id)).PageAsync(new PageRequest(page, pageSize), p =>
             {
                 cards.TryGetValue(p.IdSal, out var card);
                 return new EmployeePlanningDto(
                     p.Id, p.IdSal, p.NoShift, p.DateP, p.Ha, p.Pause, p.Hd, p.OffP,
                     card?.SageMatricule, card?.SageNom, card?.SagePrenom);
-            },
-            ct);
+            }, ct);
     }
 
     /// <summary>Complet (export) : salariés + nombre de jours planifiés sur la période.</summary>
@@ -144,22 +137,13 @@ public sealed class EmployeePlanningService : IEmployeePlanningService
         var counts = (await _planningStats.CountPlannedDaysAsync(sageDb, from, to, ct))
             .ToDictionary(x => x.CardPaieId, x => x.PlannedDays);
 
-        return await PagedLists.PageAsync(
-            _uow.Repository<CardPaie>(),
-            EmployeeCardPredicate(sageDb),
-            q => q.OrderBy(c => c.SageMatricule).ThenBy(c => c.SageNom).ThenBy(c => c.Id),
-            page,
-            pageSize,
-            c => new PlanningEmployeeStatDto(
-                c.Id, c.SageMatricule, c.SageNom, c.SagePrenom, counts.GetValueOrDefault(c.Id)),
-            search,
-            new Expression<Func<CardPaie, string?>>[]
+        return await PagedLists.From(_uow.Repository<CardPaie>(), EmployeeCardPredicate(sageDb), q => q.OrderBy(c => c.SageMatricule).ThenBy(c => c.SageNom).ThenBy(c => c.Id)).WithSearch(search, new Expression<Func<CardPaie, string?>>[]
             {
                 c => c.SageMatricule,
                 c => c.SageNom,
                 c => c.SagePrenom,
-            },
-            ct);
+            }).PageAsync(new PageRequest(page, pageSize), c => new PlanningEmployeeStatDto(
+                c.Id, c.SageMatricule, c.SageNom, c.SagePrenom, counts.GetValueOrDefault(c.Id)), ct);
     }
 
     /// <summary>Filtre tenant des cartes : <c>SAGE_BDD</c> null/vide est accepté (lignes héritées).</summary>

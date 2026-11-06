@@ -46,12 +46,11 @@ public class EfRepository<T> : IRepository<T> where T : class
 
     public async Task<PagedResult<TResult>> ToPagedAsync<TResult>(
         IQueryable<TResult> query,
-        int? page,
-        int? pageSize,
+        PageRequest pagination,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
-        var fenetre = PageWindow.Pour(await query.CountAsync(cancellationToken), page, pageSize);
+        var fenetre = PageWindow.Pour(await query.CountAsync(cancellationToken), pagination.Page, pagination.PageSize);
         IReadOnlyList<TResult> items = fenetre.EstVide
             ? Array.Empty<TResult>()
             : await query.Skip(fenetre.Decalage).Take(fenetre.Taille).ToListAsync(cancellationToken);
@@ -62,8 +61,7 @@ public class EfRepository<T> : IRepository<T> where T : class
         Expression<Func<T, bool>>? predicate,
         Func<IQueryable<T>, IOrderedQueryable<T>> orderBy,
         Expression<Func<T, TDto>> selector,
-        int? page,
-        int? pageSize,
+        PageRequest pagination,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(orderBy);
@@ -75,14 +73,13 @@ public class EfRepository<T> : IRepository<T> where T : class
 
         var ordered = orderBy(query);
         var projected = ordered.Select(selector);
-        return await ToPagedAsync(projected, page, pageSize, cancellationToken);
+        return await ToPagedAsync(projected, pagination, cancellationToken);
     }
 
     public async Task<PagedResult<T>> ToPagedAsync(
         Expression<Func<T, bool>>? predicate,
         Func<IQueryable<T>, IOrderedQueryable<T>> orderBy,
-        int? page,
-        int? pageSize,
+        PageRequest pagination,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(orderBy);
@@ -92,7 +89,7 @@ public class EfRepository<T> : IRepository<T> where T : class
             query = query.Where(predicate);
 
         var ordered = orderBy(query);
-        return await ToPagedAsync(ordered, page, pageSize, cancellationToken);
+        return await ToPagedAsync(ordered, pagination, cancellationToken);
     }
 
     public async Task AddAsync(T entity, CancellationToken cancellationToken = default)

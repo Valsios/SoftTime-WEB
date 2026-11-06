@@ -34,14 +34,7 @@ public sealed class HoursReportService : IHoursReportService
         ReportFilter filter, int? page, int? pageSize, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        return await PagedLists.PageAsync(
-            _uow.Repository<HsExoImp>(),
-            HsRecapPredicate(filter, _tenant.SageDb),
-            q => q.OrderBy(h => h.Matricule).ThenBy(h => h.Oid),
-            page,
-            pageSize,
-            h => (object)ToHsExoDto(h),
-            ct);
+        return await PagedLists.From(_uow.Repository<HsExoImp>(), HsRecapPredicate(filter, _tenant.SageDb), q => q.OrderBy(h => h.Matricule).ThenBy(h => h.Oid)).PageAsync(new PageRequest(page, pageSize), h => (object)ToHsExoDto(h), ct);
     }
 
     public async Task<IReadOnlyList<object>> HeuresParSemaineAsync(ReportFilter filter, CancellationToken ct = default)
@@ -58,14 +51,7 @@ public sealed class HoursReportService : IHoursReportService
     {
         ReportPeriods.EnsureMondayToSunday(filter);
         await _tenant.EnsureAuthorizedAsync(ct);
-        return await PagedLists.PageAsync(
-            _uow.Repository<HsValidee>(),
-            HeuresSemainePredicate(filter, _tenant.SageDb),
-            q => q.OrderBy(h => h.Matricules).ThenBy(h => h.Id),
-            page,
-            pageSize,
-            ToHeuresSemaineRow,
-            ct);
+        return await PagedLists.From(_uow.Repository<HsValidee>(), HeuresSemainePredicate(filter, _tenant.SageDb), q => q.OrderBy(h => h.Matricules).ThenBy(h => h.Id)).PageAsync(new PageRequest(page, pageSize), ToHeuresSemaineRow, ct);
     }
 
     public async Task<IReadOnlyList<object>> HeuresDimancheAsync(ReportFilter filter, CancellationToken ct = default)
@@ -80,14 +66,7 @@ public sealed class HoursReportService : IHoursReportService
         ReportFilter filter, int? page, int? pageSize, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        return await PagedLists.PageAsync(
-            _uow.Repository<HeureDimanche>(),
-            HeuresDimanchePredicate(filter, _tenant.SageDb),
-            q => q.OrderBy(h => h.DateDim).ThenBy(h => h.MatriculeSage).ThenBy(h => h.Id),
-            page,
-            pageSize,
-            ToHeuresDimancheRow,
-            ct);
+        return await PagedLists.From(_uow.Repository<HeureDimanche>(), HeuresDimanchePredicate(filter, _tenant.SageDb), q => q.OrderBy(h => h.DateDim).ThenBy(h => h.MatriculeSage).ThenBy(h => h.Id)).PageAsync(new PageRequest(page, pageSize), ToHeuresDimancheRow, ct);
     }
 
     private static Expression<Func<HsExoImp, bool>> HsRecapPredicate(ReportFilter filter, string sageDb)

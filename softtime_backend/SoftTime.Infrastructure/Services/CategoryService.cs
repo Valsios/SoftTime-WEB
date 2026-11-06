@@ -50,9 +50,7 @@ public sealed class CategoryService : ICategoryService
             predicate = SearchExpression.AndAlso(predicate, searchPredicate);
         }
 
-        return await PagedLists.PageAsync(
-            _uow.Repository<Categorie>(), predicate, q => q.OrderBy(c => c.IdCategorie),
-            page, pageSize, c => _mapper.Map<CategoryDto>(c), ct);
+        return await PagedLists.From(_uow.Repository<Categorie>(), predicate, q => q.OrderBy(c => c.IdCategorie)).PageAsync(new PageRequest(page, pageSize), c => _mapper.Map<CategoryDto>(c), ct);
     }
 
     /// <summary>Cartes de la base active (ou sans base) dont le matricule, le nom ou le prénom correspond.</summary>

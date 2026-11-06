@@ -93,15 +93,8 @@ public sealed class HistoryQueryService : IHistoryQueryService
             filter.Search, h => h.MatriculeSage, h => h.TypePointage);
         if (searchPredicate is not null)
             predicate = SearchExpression.AndAlso(predicate, searchPredicate);
-        return await PagedLists.PageAsync(
-            _uow.Repository<HistoriquePointage>(),
-            predicate,
-            q => q.OrderByDescending(h => h.DateSuppression).ThenByDescending(h => h.Id),
-            page,
-            pageSize,
-            h => new HistoryPointageDto(h.Id, h.MatriculeSage, h.DatePointage, h.HeurePointage,
-                h.TypePointage, h.DateSuppression),
-            ct);
+        return await PagedLists.From(_uow.Repository<HistoriquePointage>(), predicate, q => q.OrderByDescending(h => h.DateSuppression).ThenByDescending(h => h.Id)).PageAsync(new PageRequest(page, pageSize), h => new HistoryPointageDto(h.Id, h.MatriculeSage, h.DatePointage, h.HeurePointage,
+                h.TypePointage, h.DateSuppression), ct);
     }
 
     /// <summary>Archive des anomalies paginée (filtre SQL date + matricule).</summary>
@@ -126,15 +119,8 @@ public sealed class HistoryQueryService : IHistoryQueryService
             filter.Search, h => h.MatriculeSage, h => h.IntituleAbsence);
         if (searchPredicate is not null)
             predicate = SearchExpression.AndAlso(predicate, searchPredicate);
-        return await PagedLists.PageAsync(
-            _uow.Repository<HistoriqueAnomalie>(),
-            predicate,
-            q => q.OrderByDescending(h => h.DateSuppression).ThenByDescending(h => h.Id),
-            page,
-            pageSize,
-            h => new HistoryAnomalieDto(h.Id, h.MatriculeSage, h.DatePointageIn, h.DatePointageOut,
-                h.HEntree, h.HSortie, h.AbsAm, h.AbsPm, h.IntituleAbsence, h.DateSuppression),
-            ct);
+        return await PagedLists.From(_uow.Repository<HistoriqueAnomalie>(), predicate, q => q.OrderByDescending(h => h.DateSuppression).ThenByDescending(h => h.Id)).PageAsync(new PageRequest(page, pageSize), h => new HistoryAnomalieDto(h.Id, h.MatriculeSage, h.DatePointageIn, h.DatePointageOut,
+                h.HEntree, h.HSortie, h.AbsAm, h.AbsPm, h.IntituleAbsence, h.DateSuppression), ct);
     }
 
     /// <summary>Archive des calculs HS paginée (filtre SQL date + matricule).</summary>
@@ -159,14 +145,7 @@ public sealed class HistoryQueryService : IHistoryQueryService
             filter.Search, h => h.Matricule);
         if (searchPredicate is not null)
             predicate = SearchExpression.AndAlso(predicate, searchPredicate);
-        return await PagedLists.PageAsync(
-            _uow.Repository<HistoriqueHs>(),
-            predicate,
-            q => q.OrderByDescending(h => h.DateSuppression).ThenByDescending(h => h.Id),
-            page,
-            pageSize,
-            h => new HistoryHsDto(h.Id, h.Matricule, h.PeriodeDebut, h.PeriodeFin,
-                h.Exo130, h.Exo150, h.I130, h.I150, h.DateSuppression),
-            ct);
+        return await PagedLists.From(_uow.Repository<HistoriqueHs>(), predicate, q => q.OrderByDescending(h => h.DateSuppression).ThenByDescending(h => h.Id)).PageAsync(new PageRequest(page, pageSize), h => new HistoryHsDto(h.Id, h.Matricule, h.PeriodeDebut, h.PeriodeFin,
+                h.Exo130, h.Exo150, h.I130, h.I150, h.DateSuppression), ct);
     }
 }

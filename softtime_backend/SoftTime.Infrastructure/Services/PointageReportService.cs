@@ -35,16 +35,9 @@ public sealed class PointageReportService : IPointageReportService
         ReportFilter filter, int? page, int? pageSize, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        return await PagedLists.PageAsync(
-            _uow.Repository<HeureCorrigee>(),
-            PointagePredicate(filter, _tenant.SageDb),
-            q => q.OrderBy(h => h.DatePointageIn)
+        return await PagedLists.From(_uow.Repository<HeureCorrigee>(), PointagePredicate(filter, _tenant.SageDb), q => q.OrderBy(h => h.DatePointageIn)
                   .ThenBy(h => h.MatriculeSage)
-                  .ThenBy(h => h.Id),
-            page,
-            pageSize,
-            h => (object)ToCorrectedHourDto(h),
-            ct);
+                  .ThenBy(h => h.Id)).PageAsync(new PageRequest(page, pageSize), h => (object)ToCorrectedHourDto(h), ct);
     }
 
     private static Expression<Func<HeureCorrigee, bool>> PointagePredicate(ReportFilter filter, string sageDb)

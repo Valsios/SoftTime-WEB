@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 
 using SoftTime.Application.Services;
+using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
 
@@ -83,13 +84,7 @@ public class PagedListsTests
         var repository = new FakeRepository<Item>(
             Enumerable.Range(1, 120).Select(i => new Item(i)).ToList());
 
-        var result = await PagedLists.PageAsync(
-            repository,
-            _ => true,
-            q => q.OrderBy(x => x.Value),
-            page: 2,
-            pageSize: 50,
-            map: x => x.Value * 10);
+        var result = await PagedLists.From(repository, _ => true, q => q.OrderBy(x => x.Value)).PageAsync(new PageRequest(2, 50), x => x.Value * 10);
 
         Assert.Equal(120, result.Total);
         Assert.Equal(2, result.Page);
@@ -105,13 +100,7 @@ public class PagedListsTests
     {
         var repository = new FakeRepository<Item>(Array.Empty<Item>());
 
-        var result = await PagedLists.PageAsync(
-            repository,
-            _ => false,
-            q => q.OrderBy(x => x.Value),
-            page: 3,
-            pageSize: 50,
-            map: x => x.Value);
+        var result = await PagedLists.From(repository, _ => false, q => q.OrderBy(x => x.Value)).PageAsync(new PageRequest(3, 50), x => x.Value);
 
         Assert.Empty(result.Items);
         Assert.Equal(0, result.Total);
@@ -125,13 +114,7 @@ public class PagedListsTests
         var repository = new FakeRepository<Item>(
             Enumerable.Range(1, 25).Select(i => new Item(i)).ToList());
 
-        var result = await PagedLists.PageAsync(
-            repository,
-            x => x.Value % 2 == 0,
-            q => q.OrderBy(x => x.Value),
-            page: 99,
-            pageSize: 10,
-            map: x => x.Value);
+        var result = await PagedLists.From(repository, x => x.Value % 2 == 0, q => q.OrderBy(x => x.Value)).PageAsync(new PageRequest(99, 10), x => x.Value);
 
         Assert.Equal(12, result.Total);
         Assert.Equal(2, result.Page);
@@ -157,13 +140,7 @@ public class PagedListsTests
         var repository = new FakeRepository<Item>(
             Enumerable.Range(1, 25).Select(i => new Item(i)).ToList());
 
-        var result = await PagedLists.PageAsync(
-            repository,
-            _ => true,
-            q => q.OrderBy(x => x.Value),
-            page: int.MaxValue,
-            pageSize: 10,
-            map: x => x.Value);
+        var result = await PagedLists.From(repository, _ => true, q => q.OrderBy(x => x.Value)).PageAsync(new PageRequest(int.MaxValue, 10), x => x.Value);
 
         Assert.Equal(25, result.Total);
         Assert.Equal(3, result.Page);

@@ -35,16 +35,7 @@ public sealed class RoleService : IRoleService
         int? page, int? pageSize, string? search = null, CancellationToken cancellationToken = default)
     {
         await _parametersAccessGuard.EnsureCanReadAsync(ReadPermissions.Roles, cancellationToken);
-        return await PagedLists.PageAsync(
-            _uow.Repository<Role>(),
-            _ => true,
-            q => q.OrderBy(r => r.IdRole),
-            page,
-            pageSize,
-            r => new RoleDto(r.IdRole, r.NomRole),
-            search,
-            new System.Linq.Expressions.Expression<Func<Role, string?>>[] { r => r.NomRole },
-            cancellationToken);
+        return await PagedLists.From(_uow.Repository<Role>(), _ => true, q => q.OrderBy(r => r.IdRole)).WithSearch(search, new System.Linq.Expressions.Expression<Func<Role, string?>>[] { r => r.NomRole }).PageAsync(new PageRequest(page, pageSize), r => new RoleDto(r.IdRole, r.NomRole), cancellationToken);
     }
 
     public async Task<RoleDto> SaveRoleAsync(RoleDto dto, CancellationToken cancellationToken = default)

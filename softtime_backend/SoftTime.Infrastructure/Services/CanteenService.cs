@@ -61,22 +61,13 @@ public sealed class CanteenService : ICanteenService
         var to = request.To.Date;
         var matriculeFrom = request.MatriculeFrom;
         var matriculeTo = request.MatriculeTo;
-        return await PagedLists.PageAsync(
-            _uow.Repository<Cantine>(),
-            c => c.NomBddSage == sageDb
+        return await PagedLists.From(_uow.Repository<Cantine>(), c => c.NomBddSage == sageDb
                  && c.DateDeb >= from
                  && c.DateFin <= to
                  && (string.IsNullOrEmpty(matriculeFrom)
                      || (c.MatriculeSage != null && string.Compare(c.MatriculeSage, matriculeFrom) >= 0))
                  && (string.IsNullOrEmpty(matriculeTo)
-                     || (c.MatriculeSage != null && string.Compare(c.MatriculeSage, matriculeTo) <= 0)),
-            q => q.OrderBy(c => c.MatriculeSage).ThenBy(c => c.DateDeb).ThenBy(c => c.IdCantine),
-            page,
-            pageSize,
-            c => new CanteenDto(c.IdCantine, c.MatriculeSage, c.DateDeb, c.DateFin, c.TotalCantine),
-            request.Search,
-            new System.Linq.Expressions.Expression<Func<Cantine, string?>>[] { c => c.MatriculeSage },
-            ct);
+                     || (c.MatriculeSage != null && string.Compare(c.MatriculeSage, matriculeTo) <= 0)), q => q.OrderBy(c => c.MatriculeSage).ThenBy(c => c.DateDeb).ThenBy(c => c.IdCantine)).WithSearch(request.Search, new System.Linq.Expressions.Expression<Func<Cantine, string?>>[] { c => c.MatriculeSage }).PageAsync(new PageRequest(page, pageSize), c => new CanteenDto(c.IdCantine, c.MatriculeSage, c.DateDeb, c.DateFin, c.TotalCantine), ct);
     }
 
     public async Task<IReadOnlyList<CanteenDto>> ComputeCanteenAsync(PeriodRequest request, CancellationToken ct = default)

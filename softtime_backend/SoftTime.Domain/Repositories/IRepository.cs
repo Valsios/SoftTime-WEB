@@ -31,13 +31,12 @@ public interface IRepository<T> where T : class
     /// </summary>
     Task<PagedResult<TResult>> ToPagedAsync<TResult>(
         IQueryable<TResult> query,
-        int? page,
-        int? pageSize,
+        PageRequest pagination,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
         var list = query.ToList();
-        var fenetre = PageWindow.Pour(list.Count, page, pageSize);
+        var fenetre = PageWindow.Pour(list.Count, pagination.Page, pagination.PageSize);
         IReadOnlyList<TResult> items = fenetre.EstVide
             ? Array.Empty<TResult>()
             : list.Skip(fenetre.Decalage).Take(fenetre.Taille).ToList();
@@ -51,8 +50,7 @@ public interface IRepository<T> where T : class
         Expression<Func<T, bool>>? predicate,
         Func<IQueryable<T>, IOrderedQueryable<T>> orderBy,
         Expression<Func<T, TDto>> selector,
-        int? page,
-        int? pageSize,
+        PageRequest pagination,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(orderBy);
@@ -64,7 +62,7 @@ public interface IRepository<T> where T : class
 
         var ordered = orderBy(query);
         var projected = ordered.Select(selector);
-        return ToPagedAsync(projected, page, pageSize, cancellationToken);
+        return ToPagedAsync(projected, pagination, cancellationToken);
     }
 
     /// <summary>
@@ -73,8 +71,7 @@ public interface IRepository<T> where T : class
     Task<PagedResult<T>> ToPagedAsync(
         Expression<Func<T, bool>>? predicate,
         Func<IQueryable<T>, IOrderedQueryable<T>> orderBy,
-        int? page,
-        int? pageSize,
+        PageRequest pagination,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(orderBy);
@@ -84,7 +81,7 @@ public interface IRepository<T> where T : class
             query = query.Where(predicate);
 
         var ordered = orderBy(query);
-        return ToPagedAsync(ordered, page, pageSize, cancellationToken);
+        return ToPagedAsync(ordered, pagination, cancellationToken);
     }
 
     /// <summary>

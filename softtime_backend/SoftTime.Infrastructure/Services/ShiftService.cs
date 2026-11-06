@@ -31,18 +31,9 @@ public sealed class ShiftService : IShiftService
     /// </summary>
     public async Task<PagedResult<ShiftDto>> ListShiftsPagedAsync(
         int? page, int? pageSize, string? search = null, CancellationToken ct = default)
-        => await PagedLists.PageAsync(
-            _uow.Repository<Planning>(),
-            _ => true,
-            q => q.OrderBy(s => s.NoShift)
+        => await PagedLists.From(_uow.Repository<Planning>(), _ => true, q => q.OrderBy(s => s.NoShift)
                   .ThenBy(s => s.Intitule)
-                  .ThenBy(s => s.IdPlanning),
-            page,
-            pageSize,
-            ToShiftDto,
-            search,
-            new Expression<Func<Planning, string?>>[] { s => s.Intitule },
-            ct);
+                  .ThenBy(s => s.IdPlanning)).WithSearch(search, new Expression<Func<Planning, string?>>[] { s => s.Intitule }).PageAsync(new PageRequest(page, pageSize), ToShiftDto, ct);
 
     private static ShiftDto ToShiftDto(Planning s) => new(
         s.IdPlanning, s.NoShift, s.Ha, s.Pause, s.Hd, s.Intitule);

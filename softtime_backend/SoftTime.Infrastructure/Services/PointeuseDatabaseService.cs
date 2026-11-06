@@ -166,21 +166,14 @@ public sealed class PointeuseDatabaseService : IPointeuseDatabaseService
         System.Linq.Expressions.Expression<Func<BddPointeuse, bool>> predicate = allowedNames is null
             ? p => true
             : p => p.NomBd != null && allowedNames.Contains(p.NomBd);
-        var searchPredicate = SearchExpression.For<BddPointeuse>(
-            search, p => p.Serveur, p => p.NomBd, p => p.TypeBase);
-        if (searchPredicate is not null)
-            predicate = SearchExpression.AndAlso(predicate, searchPredicate);
-        var result = await _uow.Repository<BddPointeuse>().ToPagedAsync(
-            predicate, q => q.OrderBy(p => p.Id), page, pageSize, ct);
-        if (result.Total > 0 && result.Items.Count == 0 && result.Page > result.TotalPages)
-            result = await _uow.Repository<BddPointeuse>().ToPagedAsync(
-                predicate, q => q.OrderBy(p => p.Id), result.TotalPages, result.PageSize, ct);
+        var result = await PagedLists.From(_uow.Repository<BddPointeuse>(), predicate, q => q.OrderBy(p => p.Id))
+            .WithSearch(search, new System.Linq.Expressions.Expression<Func<BddPointeuse, string?>>[] { p => p.Serveur, p => p.NomBd, p => p.TypeBase })
+            .PageAsync(new PageRequest(page, pageSize), p => p, ct);
         var mappings = await _sourceMappingStore.LoadMappingLookupAsync(false, result.Items.Select(p => p.Id).ToList(), ct);
         var items = result.Items.Select(p => _mapper.Map<PointeuseDbDto>(p) with
         {
             Mappings = mappings.TryGetValue(p.Id, out var m) ? m : Array.Empty<SourceEntityMappingDto>()
         }).ToList();
-        var pageEffective = PaginationRules.PageEffective(result.Total, result.Page);
-        return new PagedResult<PointeuseDbDto>(items, result.Total, pageEffective, result.PageSize, result.TotalPages);
+        return new PagedResult<PointeuseDbDto>(items, result.Total, result.Page, result.PageSize, result.TotalPages);
     }
 }

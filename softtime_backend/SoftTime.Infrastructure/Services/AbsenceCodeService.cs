@@ -25,16 +25,7 @@ public sealed class AbsenceCodeService : IAbsenceCodeService
     public async Task<PagedResult<AbsenceCodeDto>> ListAbsenceCodesPagedAsync(
         int? page, int? pageSize, string? search = null, CancellationToken ct = default)
     {
-        return await PagedLists.PageAsync(
-            _uow.Repository<CodeAbsence>(),
-            _ => true,
-            q => q.OrderBy(a => a.IdAbsence),
-            page,
-            pageSize,
-            a => new AbsenceCodeDto(a.IdAbsence, a.IntituleAbsence, a.NotPay),
-            search,
-            new System.Linq.Expressions.Expression<Func<CodeAbsence, string?>>[] { a => a.IntituleAbsence },
-            ct);
+        return await PagedLists.From(_uow.Repository<CodeAbsence>(), _ => true, q => q.OrderBy(a => a.IdAbsence)).WithSearch(search, new System.Linq.Expressions.Expression<Func<CodeAbsence, string?>>[] { a => a.IntituleAbsence }).PageAsync(new PageRequest(page, pageSize), a => new AbsenceCodeDto(a.IdAbsence, a.IntituleAbsence, a.NotPay), ct);
     }
 
     public async Task<IReadOnlyList<AbsenceCodeDto>> ListAbsenceCodesAsync(CancellationToken ct = default)

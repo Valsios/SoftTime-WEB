@@ -38,15 +38,7 @@ public sealed class CardPaieService : ICardPaieService
             || c.SageBdd.Trim() == ""
             || c.SageBdd.Trim().ToLower() == sage;
 
-        return await PagedLists.PageAsync(
-            _uow.Repository<CardPaie>(),
-            predicate,
-            q => q.OrderBy(c => c.Id),
-            page,
-            pageSize,
-            c => _mapper.Map<CardPaieDto>(c),
-            search,
-            new System.Linq.Expressions.Expression<Func<CardPaie, string?>>[]
+        return await PagedLists.From(_uow.Repository<CardPaie>(), predicate, q => q.OrderBy(c => c.Id)).WithSearch(search, new System.Linq.Expressions.Expression<Func<CardPaie, string?>>[]
             {
                 c => c.SageMatricule,
                 c => c.SageNom,
@@ -54,8 +46,7 @@ public sealed class CardPaieService : ICardPaieService
                 c => c.PointeuseNumero,
                 c => c.PointeuseNom,
                 c => c.Departement,
-            },
-            ct);
+            }).PageAsync(new PageRequest(page, pageSize), c => _mapper.Map<CardPaieDto>(c), ct);
     }
 
     public async Task<IReadOnlyList<CardPaieDto>> ListCardsAsync(CancellationToken ct = default)

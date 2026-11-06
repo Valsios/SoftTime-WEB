@@ -69,16 +69,7 @@ public sealed class OvertimeExoImpoService : IOvertimeExoImpoService
                 .ToList();
         }
 
-        return await PagedLists.PageAsync(
-            _uow.Repository<HsExoImp>(),
-            Filtre(request, targetMatricules),
-            q => q.OrderBy(h => h.Matricule).ThenBy(h => h.Oid),
-            page,
-            pageSize,
-            ToDto,
-            request.Search,
-            new Expression<Func<HsExoImp, string?>>[] { h => h.Matricule },
-            ct);
+        return await PagedLists.From(_uow.Repository<HsExoImp>(), Filtre(request, targetMatricules), q => q.OrderBy(h => h.Matricule).ThenBy(h => h.Oid)).WithSearch(request.Search, new Expression<Func<HsExoImp, string?>>[] { h => h.Matricule }).PageAsync(new PageRequest(page, pageSize), ToDto, ct);
     }
 
     /// <summary>

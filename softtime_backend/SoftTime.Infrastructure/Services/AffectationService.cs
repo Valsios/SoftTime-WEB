@@ -67,10 +67,7 @@ public sealed class AffectationService : IAffectationService
             a => a.BddSage == sage && (!categoryId.HasValue || a.IdCateg == categoryId);
         Func<IQueryable<CategorieSalarie>, IOrderedQueryable<CategorieSalarie>> order =
             q => q.OrderBy(a => a.MatriculeSage).ThenBy(a => a.Id);
-        var result = await _uow.Repository<CategorieSalarie>().ToPagedAsync(predicate, order, page, pageSize, ct);
-        if (result.Total > 0 && result.Items.Count == 0 && result.Page > result.TotalPages)
-            result = await _uow.Repository<CategorieSalarie>().ToPagedAsync(
-                predicate, order, result.TotalPages, result.PageSize, ct);
+        var result = await PagedLists.From(_uow.Repository<CategorieSalarie>(), predicate, order).PageAsync(new PageRequest(page, pageSize), a => a, ct);
 
         var cards = await LoadCardsAsync(result.Items.Select(a => a.MatriculeSage).ToList(), ct);
         var matricules = cards.Values
@@ -80,8 +77,7 @@ public sealed class AffectationService : IAffectationService
             .ToList();
         var deptByMat = await LoadDepartementServicesAsync(matricules, ct);
         var items = result.Items.Select(a => ToAffectationRow(a, cards, deptByMat)).ToList();
-        var pageEffective = PaginationRules.PageEffective(result.Total, result.Page);
-        return new PagedResult<AffectationRowDto>(items, result.Total, pageEffective, result.PageSize, result.TotalPages);
+        return new PagedResult<AffectationRowDto>(items, result.Total, result.Page, result.PageSize, result.TotalPages);
     }
 
     /// <summary>Jeu complet enrichi, pour l'export Excel (jamais la page affichée).</summary>

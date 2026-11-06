@@ -60,22 +60,13 @@ public sealed class TravelExpenseService : ITravelExpenseService
         var to = request.To.Date;
         var matriculeFrom = request.MatriculeFrom;
         var matriculeTo = request.MatriculeTo;
-        return await PagedLists.PageAsync(
-            _uow.Repository<Frais>(),
-            c => c.NomBddSage == sageDb
+        return await PagedLists.From(_uow.Repository<Frais>(), c => c.NomBddSage == sageDb
                  && c.DateDeb >= from
                  && c.DateFin <= to
                  && (string.IsNullOrEmpty(matriculeFrom)
                      || (c.MatriculeSage != null && string.Compare(c.MatriculeSage, matriculeFrom) >= 0))
                  && (string.IsNullOrEmpty(matriculeTo)
-                     || (c.MatriculeSage != null && string.Compare(c.MatriculeSage, matriculeTo) <= 0)),
-            q => q.OrderBy(c => c.MatriculeSage).ThenBy(c => c.DateDeb).ThenBy(c => c.IdPointage),
-            page,
-            pageSize,
-            c => new TravelDto(c.IdPointage, c.MatriculeSage, c.DateDeb, c.DateFin, c.TotalPoint),
-            request.Search,
-            new System.Linq.Expressions.Expression<Func<Frais, string?>>[] { c => c.MatriculeSage },
-            ct);
+                     || (c.MatriculeSage != null && string.Compare(c.MatriculeSage, matriculeTo) <= 0)), q => q.OrderBy(c => c.MatriculeSage).ThenBy(c => c.DateDeb).ThenBy(c => c.IdPointage)).WithSearch(request.Search, new System.Linq.Expressions.Expression<Func<Frais, string?>>[] { c => c.MatriculeSage }).PageAsync(new PageRequest(page, pageSize), c => new TravelDto(c.IdPointage, c.MatriculeSage, c.DateDeb, c.DateFin, c.TotalPoint), ct);
     }
 
     public async Task<IReadOnlyList<TravelDto>> ComputeTravelAsync(PeriodRequest request, CancellationToken ct = default)

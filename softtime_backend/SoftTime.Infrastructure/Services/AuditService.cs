@@ -86,14 +86,7 @@ public class AuditService : IAuditService
         System.Linq.Expressions.Expression<Func<SuiviConfiguration, bool>> predicate = _ => true;
         if (searchPredicate is not null)
             predicate = SearchExpression.AndAlso(predicate, searchPredicate);
-        return await PagedLists.PageAsync(
-            _uow.Repository<SuiviConfiguration>(),
-            predicate,
-            q => q.OrderBy(c => c.Id),
-            page,
-            pageSize,
-            c => new AuditConfigDto(c.Id, c.Tables, c.Colonnes, c.Types, c.Etats, c.Bases),
-            ct);
+        return await PagedLists.From(_uow.Repository<SuiviConfiguration>(), predicate, q => q.OrderBy(c => c.Id)).PageAsync(new PageRequest(page, pageSize), c => new AuditConfigDto(c.Id, c.Tables, c.Colonnes, c.Types, c.Etats, c.Bases), ct);
     }
 
     /// <summary>
@@ -124,14 +117,7 @@ public class AuditService : IAuditService
                  && (actionFiltre == null || e.Actions == actionFiltre);
         if (searchPredicate is not null)
             predicate = SearchExpression.AndAlso(predicate, searchPredicate);
-        return await PagedLists.PageAsync(
-            _uow.Repository<SuiviModification>(),
-            predicate,
-            q => q.OrderByDescending(e => e.Datetimes).ThenByDescending(e => e.Id),
-            page,
-            pageSize,
-            e => new AuditEventDto(e.Id, e.Tables, e.Colonnes, e.Users, e.Actions, e.Datetimes, e.Nouveaux, e.Anciens, e.Bases),
-            ct);
+        return await PagedLists.From(_uow.Repository<SuiviModification>(), predicate, q => q.OrderByDescending(e => e.Datetimes).ThenByDescending(e => e.Id)).PageAsync(new PageRequest(page, pageSize), e => new AuditEventDto(e.Id, e.Tables, e.Colonnes, e.Users, e.Actions, e.Datetimes, e.Nouveaux, e.Anciens, e.Bases), ct);
     }
 
     public async Task<IReadOnlyList<object>> ListDiscoveredSchemaAsync(CancellationToken ct = default)

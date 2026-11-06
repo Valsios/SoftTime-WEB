@@ -39,22 +39,13 @@ public sealed class CorrectedHoursService : ICorrectedHoursService
     public async Task<PagedResult<CorrectedHourDto>> ListCorrectionsPagedAsync(PeriodRequest filter, int? page, int? pageSize, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        return await PagedLists.PageAsync(
-            _uow.Repository<HeureCorrigee>(),
-            CorrectionPredicate(filter, _tenant.SageDb),
-            q => q.OrderBy(a => a.DatePointageIn)
+        return await PagedLists.From(_uow.Repository<HeureCorrigee>(), CorrectionPredicate(filter, _tenant.SageDb), q => q.OrderBy(a => a.DatePointageIn)
                   .ThenBy(a => a.MatriculeSage)
-                  .ThenBy(a => a.Id),
-            page,
-            pageSize,
-            MapCorrection,
-            filter.Search,
-            new Expression<Func<HeureCorrigee, string?>>[]
+                  .ThenBy(a => a.Id)).WithSearch(filter.Search, new Expression<Func<HeureCorrigee, string?>>[]
             {
                 a => a.MatriculeSage,
                 a => a.IntituleAbsence,
-            },
-            ct);
+            }).PageAsync(new PageRequest(page, pageSize), MapCorrection, ct);
     }
 
     private static Expression<Func<HeureCorrigee, bool>> CorrectionPredicate(PeriodRequest filter, string sageDb)

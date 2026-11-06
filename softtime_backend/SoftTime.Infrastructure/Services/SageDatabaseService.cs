@@ -209,22 +209,15 @@ public sealed class SageDatabaseService : ISageDatabaseService
         System.Linq.Expressions.Expression<Func<BddSage, bool>> predicate = allowedNames is null
             ? s => true
             : s => s.NomBd != null && allowedNames.Contains(s.NomBd);
-        var searchPredicate = SearchExpression.For<BddSage>(
-            search, s => s.Serveur, s => s.NomBd, s => s.TypeBase);
-        if (searchPredicate is not null)
-            predicate = SearchExpression.AndAlso(predicate, searchPredicate);
-        var result = await _uow.Repository<BddSage>().ToPagedAsync(
-            predicate, q => q.OrderBy(s => s.Id), page, pageSize, ct);
-        if (result.Total > 0 && result.Items.Count == 0 && result.Page > result.TotalPages)
-            result = await _uow.Repository<BddSage>().ToPagedAsync(
-                predicate, q => q.OrderBy(s => s.Id), result.TotalPages, result.PageSize, ct);
+        var result = await PagedLists.From(_uow.Repository<BddSage>(), predicate, q => q.OrderBy(s => s.Id))
+            .WithSearch(search, new System.Linq.Expressions.Expression<Func<BddSage, string?>>[] { s => s.Serveur, s => s.NomBd, s => s.TypeBase })
+            .PageAsync(new PageRequest(page, pageSize), s => s, ct);
         var mappings = await _sourceMappingStore.LoadMappingLookupAsync(true, result.Items.Select(s => s.Id).ToList(), ct);
         var items = result.Items.Select(s => _mapper.Map<SageDbDto>(s) with
         {
             Mappings = mappings.TryGetValue(s.Id, out var m) ? m : Array.Empty<SourceEntityMappingDto>()
         }).ToList();
-        var pageEffective = PaginationRules.PageEffective(result.Total, result.Page);
-        return new PagedResult<SageDbDto>(items, result.Total, pageEffective, result.PageSize, result.TotalPages);
+        return new PagedResult<SageDbDto>(items, result.Total, result.Page, result.PageSize, result.TotalPages);
     }
 
     

@@ -12,12 +12,11 @@ public static class RepositoryPaginationExtensions
     public static Task<PagedResult<TResult>> ToPagedAsync<T, TResult>(
         this IRepository<T> repo,
         IQueryable<TResult> query,
-        int? page,
-        int? pageSize,
+        PageRequest pagination,
         CancellationToken cancellationToken = default) where T : class
     {
         ArgumentNullException.ThrowIfNull(repo);
-        return repo.ToPagedAsync(query, page, pageSize, cancellationToken);
+        return repo.ToPagedAsync(query, pagination, cancellationToken);
     }
 
     public static Task<PagedResult<TDto>> ToPagedAsync<T, TDto>(
@@ -25,23 +24,21 @@ public static class RepositoryPaginationExtensions
         Expression<Func<T, bool>>? predicate,
         Func<IQueryable<T>, IOrderedQueryable<T>> orderBy,
         Expression<Func<T, TDto>> selector,
-        int? page,
-        int? pageSize,
+        PageRequest pagination,
         CancellationToken cancellationToken = default) where T : class
     {
         ArgumentNullException.ThrowIfNull(repo);
-        return repo.ToPagedAsync(predicate, orderBy, selector, page, pageSize, cancellationToken);
+        return repo.ToPagedAsync(predicate, orderBy, selector, pagination, cancellationToken);
     }
 
     public static Task<PagedResult<T>> ToPagedAsync<T>(
         this IRepository<T> repo,
         Expression<Func<T, bool>>? predicate,
         Func<IQueryable<T>, IOrderedQueryable<T>> orderBy,
-        int? page,
-        int? pageSize,
+        PageRequest pagination,
         CancellationToken cancellationToken = default) where T : class
     {
         ArgumentNullException.ThrowIfNull(repo);
-        return repo.ToPagedAsync(predicate, orderBy, page, pageSize, cancellationToken);
+        return repo.ToPagedAsync(predicate, orderBy, pagination, cancellationToken);
     }
 }
