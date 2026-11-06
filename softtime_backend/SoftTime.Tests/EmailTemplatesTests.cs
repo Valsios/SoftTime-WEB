@@ -1,3 +1,4 @@
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.Services;
 
 namespace SoftTime.Tests;
@@ -60,7 +61,7 @@ public class EmailTemplatesTests
     [Fact]
     public void MiseAJour_MentionsOnlyWhatChanged()
     {
-        var corps = EmailTemplates.MiseAJour("Rakoto", "Ines", "nouveau.login", null, loginModifie: true, motDePasseModifie: false);
+        var corps = EmailTemplates.MiseAJour(new AccountMailRecipient(null, "nouveau.login", "Rakoto", "Ines"), null, true, false);
         Assert.Contains("nouveau.login", corps);
         Assert.DoesNotContain("Nouveau mot de passe", corps);
     }
@@ -68,7 +69,7 @@ public class EmailTemplatesTests
     [Fact]
     public void MiseAJour_ShowsTheNewPasswordOnlyWhenItChanged()
     {
-        var corps = EmailTemplates.MiseAJour("Rakoto", "Ines", "login", "NouveauMotDePasse!1", loginModifie: false, motDePasseModifie: true);
+        var corps = EmailTemplates.MiseAJour(new AccountMailRecipient(null, "login", "Rakoto", "Ines"), "NouveauMotDePasse!1", false, true);
         Assert.Contains("NouveauMotDePasse!1", corps);
         Assert.DoesNotContain("Nouvel identifiant", corps);
     }

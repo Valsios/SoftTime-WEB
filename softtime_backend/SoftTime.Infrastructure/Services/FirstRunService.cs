@@ -69,7 +69,7 @@ public sealed class FirstRunService : IFirstRunService
         // toutes les deux. Sous le verrou, la seconde attend la fin de la première, puis voit le compte créé.
         var entity = await _uow.RunExclusiveAsync(CreateAdminLockResource, ct => AddAdminAsync(admin, ct), cancellationToken);
 
-        var envoye = await _email.SendUserCredentialsAsync(entity.Email, entity.Login, motDePasse, entity.NomResponsable, null, cancellationToken);
+        var envoye = await _email.SendUserCredentialsAsync(new AccountMailRecipient(entity.Email, entity.Login, entity.NomResponsable, null), motDePasse, cancellationToken);
         var message = envoye
             ? "Compte administrateur créé et identifiants envoyés par e-mail."
             : _email.EstConfigure

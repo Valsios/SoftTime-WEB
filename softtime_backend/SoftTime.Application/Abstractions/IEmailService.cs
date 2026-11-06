@@ -13,8 +13,8 @@ public interface IEmailService
     Task<bool> EnvoyerAsync(EmailMessage message, CancellationToken cancellationToken = default);
 
     /// <summary>Identifiants d'un compte nouvellement créé.</summary>
-    Task<bool> SendUserCredentialsAsync(string? email, string? pseudo, string? password, string? nom, string? prenom, CancellationToken cancellationToken = default);
+    Task<bool> SendUserCredentialsAsync(AccountMailRecipient destinataire, string? password, CancellationToken cancellationToken = default);
 
     /// <summary>Changement d'identifiant ou de mot de passe (ne mentionne que ce qui a changé).</summary>
-    Task<bool> SendUserUpdateAsync(string? email, string? pseudo, string? newPassword, string? nom, string? prenom, bool pseudoChanged, bool passwordChanged, CancellationToken cancellationToken = default);
+    Task<bool> SendUserUpdateAsync(AccountMailRecipient destinataire, string? newPassword, bool pseudoChanged, bool passwordChanged, CancellationToken cancellationToken = default);
 }

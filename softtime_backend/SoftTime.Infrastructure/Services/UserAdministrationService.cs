@@ -169,9 +169,9 @@ public sealed class UserAdministrationService : IUserAdministrationService
 
         // Notification best-effort : le service journalise et n'échoue jamais la requête.
         if (dto.Id == 0)
-            await _email.SendUserCredentialsAsync(entity.Email, entity.Login, dto.Password, entity.NomResponsable, null, cancellationToken);
+            await _email.SendUserCredentialsAsync(new AccountMailRecipient(entity.Email, entity.Login, entity.NomResponsable, null), dto.Password, cancellationToken);
         else if (loginModifie || motDePasseModifie)
-            await _email.SendUserUpdateAsync(entity.Email, entity.Login, motDePasseModifie ? dto.Password : null, entity.NomResponsable, null, loginModifie, motDePasseModifie, cancellationToken);
+            await _email.SendUserUpdateAsync(new AccountMailRecipient(entity.Email, entity.Login, entity.NomResponsable, null), motDePasseModifie ? dto.Password : null, loginModifie, motDePasseModifie, cancellationToken);
 
         return new UserDto(entity.IdResponsable, entity.IdRole, entity.NomResponsable, entity.Login ?? string.Empty, entity.Matricule, null) { Email = entity.Email };
     }

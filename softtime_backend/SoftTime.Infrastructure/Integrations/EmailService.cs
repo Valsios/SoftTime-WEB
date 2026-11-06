@@ -86,17 +86,17 @@ public class EmailService : IEmailService
     }
 
     /// <inheritdoc />
-    public Task<bool> SendUserCredentialsAsync(string? email, string? pseudo, string? password, string? nom, string? prenom, CancellationToken cancellationToken = default)
+    public Task<bool> SendUserCredentialsAsync(AccountMailRecipient destinataire, string? password, CancellationToken cancellationToken = default)
         => EnvoyerAsync(
-            new EmailMessage(email ?? string.Empty, EmailTemplates.SujetIdentifiants,
-                EmailTemplates.Identifiants(nom, prenom, pseudo, password)),
+            new EmailMessage(destinataire.Email ?? string.Empty, EmailTemplates.SujetIdentifiants,
+                EmailTemplates.Identifiants(destinataire.Nom, destinataire.Prenom, destinataire.Login, password)),
             cancellationToken);
 
     /// <inheritdoc />
-    public Task<bool> SendUserUpdateAsync(string? email, string? pseudo, string? newPassword, string? nom, string? prenom, bool pseudoChanged, bool passwordChanged, CancellationToken cancellationToken = default)
+    public Task<bool> SendUserUpdateAsync(AccountMailRecipient destinataire, string? newPassword, bool pseudoChanged, bool passwordChanged, CancellationToken cancellationToken = default)
         => EnvoyerAsync(
-            new EmailMessage(email ?? string.Empty, EmailTemplates.SujetMiseAJour,
-                EmailTemplates.MiseAJour(nom, prenom, pseudo, newPassword, pseudoChanged, passwordChanged)),
+            new EmailMessage(destinataire.Email ?? string.Empty, EmailTemplates.SujetMiseAJour,
+                EmailTemplates.MiseAJour(destinataire, newPassword, pseudoChanged, passwordChanged)),
             cancellationToken);
 
     /// <summary>Relu à chaque envoi : une modification de la configuration est prise en compte sans redémarrage.</summary>
