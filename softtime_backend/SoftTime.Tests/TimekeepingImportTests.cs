@@ -29,7 +29,7 @@ public class TimekeepingImportTests
             });
             Uow.Get<ParametrePointeuse>().Items.Add(new ParametrePointeuse { MultiPoint = true });
             var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
-            Service = new TimekeepingServices(Uow, tenant, External, new HistoryArchiveService(Uow, tenant));
+            Service = new TimekeepingServices(Uow, tenant, External, new HistoryArchiveService(Uow));
         }
 
         public List<Pointage> Pointages => Uow.Get<Pointage>().Items;

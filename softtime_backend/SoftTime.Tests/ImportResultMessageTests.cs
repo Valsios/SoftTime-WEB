@@ -60,7 +60,7 @@ public class ImportResultMessageTests
 
             var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
             var external = new FakeExternalSourceService();
-            Timekeeping = new TimekeepingServices(Uow, tenant, external, new HistoryArchiveService(Uow, tenant));
+            Timekeeping = new TimekeepingServices(Uow, tenant, external, new HistoryArchiveService(Uow));
             Planning = new PlanningServices(Uow, tenant, new FakePlanningStatisticsReader());
             var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
             Catalog = new CatalogServices(Uow, mapper, tenant, external, null!, null!, SoftTime.Tests.Http.TestRights.Service(Uow));

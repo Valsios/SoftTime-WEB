@@ -87,7 +87,7 @@ public class MlDatasetParityTests
         public OvertimeServices Overtime() => new(
             Uow, Tenant, Source,
             new PayrollWriterResolver(Array.Empty<IPayrollWriter>()),
-            new HistoryArchiveService(Uow, Tenant),
+            new HistoryArchiveService(Uow),
             new SageLeaveCalendar(Tenant, Source));
     }
 

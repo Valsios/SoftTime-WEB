@@ -71,7 +71,7 @@ public class ImportTemplateImportTests
 
             var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
             var external = new FakeExternalSourceService();
-            Timekeeping = new TimekeepingServices(Uow, tenant, external, new HistoryArchiveService(Uow, tenant));
+            Timekeeping = new TimekeepingServices(Uow, tenant, external, new HistoryArchiveService(Uow));
             Planning = new PlanningServices(Uow, tenant, new FakePlanningStatisticsReader());
             // La découverte de bases n'est pas utilisée par les imports testés ici.
             var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();

@@ -86,6 +86,8 @@ public static class DependencyInjection
         services.AddScoped<IValidatedWeekGuard, ValidatedWeekGuard>();
         services.AddScoped<IPunchProcessingService, PunchProcessingService>();
         services.AddScoped<IHistoryArchiveService, HistoryArchiveService>();
+        services.AddScoped<IHistoryQueryService, HistoryQueryService>();
+        services.AddScoped<IHistoryPurgeService, HistoryPurgeService>();
         services.AddScoped<IWeeklyValidationService, WeeklyValidationService>();
         services.AddScoped<IOvertimeExoImpoService, OvertimeExoImpoService>();
         services.AddScoped<IOvertimeDetailService, OvertimeDetailService>();
@@ -108,6 +110,7 @@ public static class DependencyInjection
         services.AddScoped<IMlDatasetService, MlDatasetService>();
         services.AddScoped<IMlTrainingService, MlTrainingService>();
         services.AddScoped<IMlPredictionService, MlPredictionService>();
+        services.AddScoped<IMlForecastQueryService, MlForecastQueryService>();
         services.AddScoped<IMlPipelineService, MlPipelineService>();
         services.AddSingleton<ClosingAnalysisCache>();
         services.AddScoped<IClosingService, ClosingService>();

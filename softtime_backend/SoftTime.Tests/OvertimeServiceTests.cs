@@ -69,7 +69,7 @@ public class OvertimeServiceTests
                 tenant,
                 Source,
                 new PayrollWriterResolver(Array.Empty<IPayrollWriter>()),
-                new HistoryArchiveService(Uow, tenant),
+                new HistoryArchiveService(Uow),
                 new SageLeaveCalendar(tenant, Source));
         }
 

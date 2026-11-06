@@ -19,61 +19,66 @@ namespace SoftTime.Api.Controllers;
 [Tags("History")]
 public class HistoryController : ControllerBase
 {
-    private readonly IHistoryArchiveService _svc;
+    private readonly IHistoryQueryService _query;
+    private readonly IHistoryPurgeService _purge;
 
-    public HistoryController(IHistoryArchiveService svc) => _svc = svc;
+    public HistoryController(IHistoryQueryService query, IHistoryPurgeService purge)
+    {
+        _query = query;
+        _purge = purge;
+    }
 
     [HttpGet("pointages")]
     public async Task<IActionResult> Pointages([FromQuery] PeriodRequest filter, CancellationToken ct)
-        => Ok(await _svc.ListPointagesAsync(filter, ct));
+        => Ok(await _query.ListPointagesAsync(filter, ct));
 
     [HttpDelete("pointages/{id}")]
     public async Task<IActionResult> DeletePointage(decimal id, CancellationToken ct)
-        => await _svc.DeletePointagesAsync(id, ct) == 0 ? NotFound() : NoContent();
+        => await _purge.DeletePointagesAsync(id, ct) == 0 ? NotFound() : NoContent();
 
     [HttpDelete("pointages")]
     public async Task<IActionResult> PurgePointages(CancellationToken ct)
-        => Ok(await _svc.DeleteAllPointagesAsync(ct));
+        => Ok(await _purge.DeleteAllPointagesAsync(ct));
 
     [HttpGet("anomalies")]
     public async Task<IActionResult> Anomalies([FromQuery] PeriodRequest filter, CancellationToken ct)
-        => Ok(await _svc.ListAnomaliesAsync(filter, ct));
+        => Ok(await _query.ListAnomaliesAsync(filter, ct));
 
     [HttpDelete("anomalies/{id}")]
     public async Task<IActionResult> DeleteAnomalie(decimal id, CancellationToken ct)
-        => await _svc.DeleteAnomaliesAsync(id, ct) == 0 ? NotFound() : NoContent();
+        => await _purge.DeleteAnomaliesAsync(id, ct) == 0 ? NotFound() : NoContent();
 
     [HttpDelete("anomalies")]
     public async Task<IActionResult> PurgeAnomalies(CancellationToken ct)
-        => Ok(await _svc.DeleteAllAnomaliesAsync(ct));
+        => Ok(await _purge.DeleteAllAnomaliesAsync(ct));
 
     [HttpGet("hs")]
     public async Task<IActionResult> Hs([FromQuery] PeriodRequest filter, CancellationToken ct)
-        => Ok(await _svc.ListHsAsync(filter, ct));
+        => Ok(await _query.ListHsAsync(filter, ct));
 
     [HttpDelete("hs/{id}")]
     public async Task<IActionResult> DeleteHs(decimal id, CancellationToken ct)
-        => await _svc.DeleteHsAsync(id, ct) == 0 ? NotFound() : NoContent();
+        => await _purge.DeleteHsAsync(id, ct) == 0 ? NotFound() : NoContent();
 
     [HttpDelete("hs")]
     public async Task<IActionResult> PurgeHs(CancellationToken ct)
-        => Ok(await _svc.DeleteAllHsAsync(ct));
+        => Ok(await _purge.DeleteAllHsAsync(ct));
 
     /// <summary>Archive des pointages paginée (page bornée, total serveur).</summary>
     [HttpGet("pointages/paged")]
     public async Task<IActionResult> PointagesPaged(
         [FromQuery] PeriodRequest filter, [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
-        => Ok(await _svc.ListPointagesPagedAsync(filter, page, pageSize, ct));
+        => Ok(await _query.ListPointagesPagedAsync(filter, page, pageSize, ct));
 
     /// <summary>Archive des anomalies paginée.</summary>
     [HttpGet("anomalies/paged")]
     public async Task<IActionResult> AnomaliesPaged(
         [FromQuery] PeriodRequest filter, [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
-        => Ok(await _svc.ListAnomaliesPagedAsync(filter, page, pageSize, ct));
+        => Ok(await _query.ListAnomaliesPagedAsync(filter, page, pageSize, ct));
 
     /// <summary>Archive des calculs HS paginée.</summary>
     [HttpGet("hs/paged")]
     public async Task<IActionResult> HsPaged(
         [FromQuery] PeriodRequest filter, [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
-        => Ok(await _svc.ListHsPagedAsync(filter, page, pageSize, ct));
+        => Ok(await _query.ListHsPagedAsync(filter, page, pageSize, ct));
 }

@@ -75,22 +75,14 @@ public class MlPredictionServiceTests
 
     // ------------------------------------------------------------------ fixtures
 
-    private static MlPredictionService Service(IMlStore store)
+    private static MlForecastQueryService Service(IMlStore store)
     {
         var uow = new InMemoryUnitOfWork();
         uow.Get<BddSage>().Items.Add(new BddSage { Id = 1, NomBd = Sage });
         var tenant = new TenantConnectionService(
             uow, new FakeCompanyContext(), new FakeCurrentUser(),
             SoftTime.Tests.Http.TestRights.Service(uow), NullLogger<TenantConnectionService>.Instance);
-        var source = new FakeExternalSourceService();
-        var options = new MlOptions();
-        var dataset = MlDatasetTestFactory.Create(
-            uow, tenant, new SageLeaveCalendar(tenant, source), source, store,
-            Options.Create(options), NullLogger<MlDatasetService>.Instance);
-
-        return new MlPredictionService(
-            dataset, store, new FakeMlPredictor(), uow, tenant, Options.Create(options),
-            NullLogger<MlPredictionService>.Instance);
+        return new MlForecastQueryService(store, new FakeMlPredictor(), uow, tenant, Options.Create(new MlOptions()));
     }
 
     private static void Montant(FakeMlStore store, string matricule, DateTime semaine, decimal valeur, decimal basse, decimal haute)
