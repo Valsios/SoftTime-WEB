@@ -1,3 +1,4 @@
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.Services;
 
 namespace SoftTime.Tests;
@@ -7,7 +8,7 @@ public class ExternalConnectionFactorySecurityTests
     [Fact]
     public void Build_WithStandardSqlAuth_ReturnsValidConnectionString()
     {
-        var cs = ExternalConnectionFactory.Build("localhost", "SoftTimeDb", true, "sa", "P@ssword123");
+        var cs = ExternalConnectionFactory.Build(new SqlServerCredentials("localhost", true, "sa", "P@ssword123"), "SoftTimeDb");
 
         Assert.Contains("Data Source=localhost", cs);
         Assert.Contains("Initial Catalog=SoftTimeDb", cs);
@@ -20,7 +21,7 @@ public class ExternalConnectionFactorySecurityTests
     [Fact]
     public void Build_WithIntegratedAuth_DoesNotIncludeCredentials()
     {
-        var cs = ExternalConnectionFactory.Build("localhost", "SoftTimeDb", false, "sa", "secret");
+        var cs = ExternalConnectionFactory.Build(new SqlServerCredentials("localhost", false, "sa", "secret"), "SoftTimeDb");
 
         Assert.Contains("Data Source=localhost", cs);
         Assert.Contains("Initial Catalog=SoftTimeDb", cs);
@@ -35,7 +36,7 @@ public class ExternalConnectionFactorySecurityTests
     [InlineData("srv\"--", "pwd\"'")]
     public void Build_WithInjectionPayloads_ProperlyQuotesAndEscapesValues(string server, string password)
     {
-        var cs = ExternalConnectionFactory.Build(server, "DbTest", true, "admin", password);
+        var cs = ExternalConnectionFactory.Build(new SqlServerCredentials(server, true, "admin", password), "DbTest");
 
         // DbConnectionStringBuilder must safely encapsulate semicolons and special characters
         Assert.NotNull(cs);

@@ -132,7 +132,7 @@ public sealed class SageDatabaseService : ISageDatabaseService
         var password = await _sourceMappingStore.ResolveStoredPasswordAsync("SAGE", dto.Id, dto.Serveur, dto.SqlAuth, dto.Login, dto.Password, ct);
         if (string.IsNullOrWhiteSpace(dto.Serveur) || string.IsNullOrWhiteSpace(dto.NomBd))
             return new ConnectionTestResultDto(false, "Serveur et nom de base requis.");
-        var cible = new ExternalConnectionTarget(dto.Serveur, dto.NomBd, dto.SqlAuth ?? true, dto.Login, password, dto.TypeBase, dto.Mappings);
+        var cible = new ExternalConnectionTarget(new SqlServerCredentials(dto.Serveur, dto.SqlAuth ?? true, dto.Login, password), dto.NomBd, dto.TypeBase, dto.Mappings);
         var standard = new StandardStructure(SageStandardTables, "Connexion réussie, structure Sage standard reconnue.", "Connexion réussie mais certaines tables Sage attendues sont introuvables.");
         return await new ExternalConnectionTester(_discovery, _sourceMappingValidator).TestAsync(cible, standard, ct);
     }
@@ -180,8 +180,11 @@ public sealed class SageDatabaseService : ISageDatabaseService
             SourceIdentifiers.ValidateSourceIdentifier(entity.SourceTable);
             SourceIdentifiers.ValidateSourceIdentifier(column);
             return await _discovery.ListDistinctValuesAsync(
-                database.Serveur!, database.NomBd!, entity.SourceTable!, column!,
-                database.TypeAuth == true, database.TLogin, database.TMdp, ct);
+                SqlServerCredentials.Of(database),
+                database.NomBd!,
+                entity.SourceTable!,
+                column!,
+                ct);
         }
 
         return new DepartementServiceOptionsDto(

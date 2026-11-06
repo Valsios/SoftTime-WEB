@@ -15,7 +15,8 @@ public class StandardEmployeeReader : IEmployeeReader
     public async Task<IReadOnlyList<NormalizedEmployee>> ListActiveEmployeesAsync(BddSage sageRow, CancellationToken ct)
     {
         using var sage = _sageFactory.Create(ExternalConnectionFactory.Build(
-            sageRow.Serveur, sageRow.NomBd, sageRow.TypeAuth == true, sageRow.TLogin, sageRow.TMdp));
+            SqlServerCredentials.Of(sageRow),
+            sageRow.NomBd));
         return sage.Employees
             .Where(e => e.SalarieDesactive != 1)
             .ToList()

@@ -195,10 +195,10 @@ public class DatabasePasswordTests
         public string? LastPassword { get; private set; }
         private IReadOnlyList<string> Record(string? password) { LastPassword = password; return new[] { "T_SAL", "T_HST_AFFECTATION", "T_DEPARTEMENT", "T_GHRCAL_SOCIETE", "T_CST", "USERINFO", "CHECKINOUT" }; }
         public Task<IReadOnlyList<string>> ListServersAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
-        public Task<IReadOnlyList<string>> ListDatabasesAsync(string serveur, bool sqlAuth, string? login, string? password, CancellationToken ct = default) => Task.FromResult(Record(password));
-        public Task<IReadOnlyList<string>> ListTablesAsync(string serveur, string baseDb, bool sqlAuth, string? login, string? password, CancellationToken ct = default) => Task.FromResult(Record(password));
-        public Task<IReadOnlyList<string>> ListColumnsAsync(string serveur, string baseDb, string table, bool sqlAuth, string? login, string? password, CancellationToken ct = default) => Task.FromResult(Record(password));
-        public Task<IReadOnlyList<string>> ListDistinctValuesAsync(string serveur, string baseDb, string table, string column, bool sqlAuth, string? login, string? password, CancellationToken ct = default) => Task.FromResult(Record(password));
+        public Task<IReadOnlyList<string>> ListDatabasesAsync(SqlServerCredentials credentials, CancellationToken ct = default) => Task.FromResult(Record(credentials.Password));
+        public Task<IReadOnlyList<string>> ListTablesAsync(SqlServerCredentials credentials, string baseDb, CancellationToken ct = default) => Task.FromResult(Record(credentials.Password));
+        public Task<IReadOnlyList<string>> ListColumnsAsync(SqlServerCredentials credentials, string baseDb, string table, CancellationToken ct = default) => Task.FromResult(Record(credentials.Password));
+        public Task<IReadOnlyList<string>> ListDistinctValuesAsync(SqlServerCredentials credentials, string baseDb, string table, string column, CancellationToken ct = default) => Task.FromResult(Record(credentials.Password));
     }
 
     private sealed class FakeUser : ICurrentUser

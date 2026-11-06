@@ -35,7 +35,7 @@ public class OtherPointeuseReader : IPointeuseReader
 
         var sql = $"SELECT {selId} AS Id, {selBadge} AS Badge, {selSsn} AS Ssn, {selNom} AS Nom FROM [{pteRow.MapUserTable}]";
 
-        var connStr = ExternalConnectionFactory.Build(pteRow.Serveur, pteRow.NomBd, pteRow.TypeAuth == true, pteRow.TLogin, pteRow.TMdp);
+        var connStr = ExternalConnectionFactory.Build(SqlServerCredentials.Of(pteRow), pteRow.NomBd);
         await using var con = new SqlConnection(connStr);
         await con.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, con);
@@ -72,7 +72,7 @@ public class OtherPointeuseReader : IPointeuseReader
         var sql = $"SELECT {selUserId} AS UserId, {selDateHeure} AS DateHeure, {selType} AS Type " +
                   $"FROM [{pteRow.MapPunchTable}] WHERE {selDateHeure} >= @from AND {selDateHeure} <= @to";
 
-        var connStr = ExternalConnectionFactory.Build(pteRow.Serveur, pteRow.NomBd, pteRow.TypeAuth == true, pteRow.TLogin, pteRow.TMdp);
+        var connStr = ExternalConnectionFactory.Build(SqlServerCredentials.Of(pteRow), pteRow.NomBd);
         await using var con = new SqlConnection(connStr);
         await con.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, con);

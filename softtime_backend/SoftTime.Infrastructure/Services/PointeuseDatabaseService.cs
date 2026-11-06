@@ -135,7 +135,7 @@ public sealed class PointeuseDatabaseService : IPointeuseDatabaseService
         var password = await _sourceMappingStore.ResolveStoredPasswordAsync("POINTEUSE", dto.Id, dto.Serveur, dto.SqlAuth, dto.Login, dto.Password, ct);
         if (string.IsNullOrWhiteSpace(dto.Serveur) || string.IsNullOrWhiteSpace(dto.NomBd))
             return new ConnectionTestResultDto(false, "Serveur et nom de base requis.");
-        var cible = new ExternalConnectionTarget(dto.Serveur, dto.NomBd, dto.SqlAuth ?? true, dto.Login, password, dto.TypeBase, dto.Mappings);
+        var cible = new ExternalConnectionTarget(new SqlServerCredentials(dto.Serveur, dto.SqlAuth ?? true, dto.Login, password), dto.NomBd, dto.TypeBase, dto.Mappings);
         var standard = new StandardStructure(PointeuseStandardTables, "Connexion réussie, structure pointeuse standard reconnue.", "Connexion réussie mais les tables USERINFO/CHECKINOUT sont introuvables.");
         return await new ExternalConnectionTester(_discovery, _sourceMappingValidator).TestAsync(cible, standard, ct);
     }

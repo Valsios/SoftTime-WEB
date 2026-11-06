@@ -30,10 +30,10 @@ public sealed class ExternalSourceService : IExternalSourceService
         => string.Equals(typeBase?.Trim(), "AUTRE", StringComparison.OrdinalIgnoreCase);
 
     private static string BuildSage(BddSage row)
-        => ExternalConnectionFactory.Build(row.Serveur, row.NomBd, row.TypeAuth == true, row.TLogin, row.TMdp);
+        => ExternalConnectionFactory.Build(SqlServerCredentials.Of(row), row.NomBd);
 
     private static string BuildPointeuse(BddPointeuse row)
-        => ExternalConnectionFactory.Build(row.Serveur, row.NomBd, row.TypeAuth == true, row.TLogin, row.TMdp);
+        => ExternalConnectionFactory.Build(SqlServerCredentials.Of(row), row.NomBd);
 
     private static bool? ParseBool(string? value)
     {

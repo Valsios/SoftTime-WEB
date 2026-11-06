@@ -60,8 +60,11 @@ public sealed class CodeConstanteService : ICodeConstanteService
         var (mappedTable, column) = await GetOtherCodeConstantMappingAsync(ct);
         SourceIdentifiers.ValidateSourceIdentifier(mappedTable);
         SourceIdentifiers.ValidateSourceIdentifier(column);
-        return await _discovery.ListDistinctValuesAsync(database.Serveur!, database.NomBd!, mappedTable, column,
-            database.TypeAuth == true, database.TLogin, database.TMdp, ct);
+        return await _discovery.ListDistinctValuesAsync(SqlServerCredentials.Of(database),
+                                                        database.NomBd!,
+                                                        mappedTable,
+                                                        column,
+                                                        ct);
     }
 
     // Resout la table/colonne du code constante depuis le mapping de l'entite CONSTANT.

@@ -31,7 +31,7 @@ public class OtherEmployeeReader : IEmployeeReader
         var sql = $"SELECT {selMatricule} AS Matricule, {selNom} AS Nom, {selPrenom} AS Prenom, {selBadge} AS Badge " +
                   $"FROM [{sageRow.MapTable}]";
 
-        var connStr = ExternalConnectionFactory.Build(sageRow.Serveur, sageRow.NomBd, sageRow.TypeAuth == true, sageRow.TLogin, sageRow.TMdp);
+        var connStr = ExternalConnectionFactory.Build(SqlServerCredentials.Of(sageRow), sageRow.NomBd);
         await using var con = new SqlConnection(connStr);
         await con.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, con);

@@ -100,10 +100,10 @@ public sealed class PayrollWriteConfigurationService : IPayrollWriteConfiguratio
             var (schema, table) = PayrollWritingConfiguration.SplitTable(first.TableCible);
             if (!string.Equals(schema, "dbo", StringComparison.OrdinalIgnoreCase))
                 return new ConnectionTestResultDto(false, "La découverte des tables ne prend actuellement en charge que le schéma dbo.");
-            var tables = await _discovery.ListTablesAsync(database.Serveur!, database.NomBd!, database.TypeAuth == true, database.TLogin, database.TMdp, ct);
+            var tables = await _discovery.ListTablesAsync(SqlServerCredentials.Of(database), database.NomBd!, ct);
             if (!tables.Contains(table, StringComparer.OrdinalIgnoreCase))
                 return new ConnectionTestResultDto(false, $"La table {first.TableCible} n'existe pas.");
-            var columns = await _discovery.ListColumnsAsync(database.Serveur!, database.NomBd!, table, database.TypeAuth == true, database.TLogin, database.TMdp, ct);
+            var columns = await _discovery.ListColumnsAsync(SqlServerCredentials.Of(database), database.NomBd!, table, ct);
             var required = configs.Select(c => c.ColValeur).Append(first.ColMatricule).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             var missingColumn = required.FirstOrDefault(column => !columns.Contains(column, StringComparer.OrdinalIgnoreCase));
             return missingColumn == null

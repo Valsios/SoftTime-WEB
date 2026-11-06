@@ -23,7 +23,7 @@ internal sealed class ExternalConnectionTester
         IReadOnlyList<string> tables;
         try
         {
-            tables = await _discovery.ListTablesAsync(cible.Serveur, cible.NomBd, cible.SqlAuth, cible.Login, cible.Password, ct);
+            tables = await _discovery.ListTablesAsync(cible.Credentials, cible.NomBd, ct);
         }
         catch (ExternalConnectionException ex)
         {
@@ -53,7 +53,10 @@ internal sealed class ExternalConnectionTester
             if (missingCustom.Count == 0)
             {
                 var missingCols = await _validator.ValidateMappingColumnsAsync(
-                    cible.Serveur, cible.NomBd, cible.SqlAuth, cible.Login, cible.Password, cible.Mappings, ct);
+                    cible.Credentials,
+                    cible.NomBd,
+                    cible.Mappings,
+                    ct);
                 if (missingCols.Count > 0)
                     return new ConnectionTestResultDto(false, "Connexion réussie mais certaines colonnes mappées sont introuvables.", missingCols);
             }

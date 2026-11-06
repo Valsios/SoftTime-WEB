@@ -129,12 +129,12 @@ public class TenantConnectionService : ITenantConnectionService
     public async Task<string> GetSageConnectionAsync(CancellationToken cancellationToken = default)
     {
         var row = await GetSageRowAsync(cancellationToken);
-        return ExternalConnectionFactory.Build(row.Serveur, row.NomBd, row.TypeAuth == true, row.TLogin, row.TMdp);
+        return ExternalConnectionFactory.Build(SqlServerCredentials.Of(row), row.NomBd);
     }
 
     public async Task<string> GetPointeuseConnectionAsync(CancellationToken cancellationToken = default)
     {
         var row = await GetPointeuseRowAsync(cancellationToken);
-        return ExternalConnectionFactory.Build(row.Serveur, row.NomBd, row.TypeAuth == true, row.TLogin, row.TMdp);
+        return ExternalConnectionFactory.Build(SqlServerCredentials.Of(row), row.NomBd);
     }
 }

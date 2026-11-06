@@ -43,12 +43,12 @@ public sealed class SourceMappingValidator : ISourceMappingValidator
         }
     }
 
-    public async Task<IReadOnlyList<string>> ValidateMappingColumnsAsync(string serveur, string nomBd, bool sqlAuth, string? login, string? password, IReadOnlyList<SourceEntityMappingDto> mappings, CancellationToken ct)
+    public async Task<IReadOnlyList<string>> ValidateMappingColumnsAsync(SqlServerCredentials credentials, string nomBd, IReadOnlyList<SourceEntityMappingDto> mappings, CancellationToken ct)
     {
         var missing = new List<string>();
         foreach (var m in mappings.Where(x => !string.IsNullOrWhiteSpace(x.SourceTable)))
         {
-            var cols = await _discovery.ListColumnsAsync(serveur, nomBd, m.SourceTable!, sqlAuth, login, password, ct);
+            var cols = await _discovery.ListColumnsAsync(credentials, nomBd, m.SourceTable!, ct);
             foreach (var col in (m.Fields ?? Array.Empty<SourceFieldMappingDto>())
                         .Where(f => !string.IsNullOrWhiteSpace(f.SourceColumn))
                         .Select(f => f.SourceColumn!))

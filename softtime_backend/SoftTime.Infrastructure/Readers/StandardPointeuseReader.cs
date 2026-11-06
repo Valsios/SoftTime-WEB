@@ -15,7 +15,8 @@ public class StandardPointeuseReader : IPointeuseReader
     public async Task<IReadOnlyList<NormalizedPointeuseUser>> ListUsersAsync(BddPointeuse pteRow, CancellationToken ct)
     {
         using var pte = _pointeuseFactory.Create(ExternalConnectionFactory.Build(
-            pteRow.Serveur, pteRow.NomBd, pteRow.TypeAuth == true, pteRow.TLogin, pteRow.TMdp));
+            SqlServerCredentials.Of(pteRow),
+            pteRow.NomBd));
         return pte.Users.ToList()
             .Select(u => new NormalizedPointeuseUser(
                 Id: u.UserId.ToString(),
@@ -29,7 +30,8 @@ public class StandardPointeuseReader : IPointeuseReader
         BddPointeuse pteRow, DateTime from, DateTime to, CancellationToken ct)
     {
         using var pte = _pointeuseFactory.Create(ExternalConnectionFactory.Build(
-            pteRow.Serveur, pteRow.NomBd, pteRow.TypeAuth == true, pteRow.TLogin, pteRow.TMdp));
+            SqlServerCredentials.Of(pteRow),
+            pteRow.NomBd));
         return pte.CheckInOut
             .Where(c => c.CheckTime >= from && c.CheckTime <= to)
             .ToList()
