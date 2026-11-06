@@ -84,7 +84,7 @@ public class MlPredictionServiceTests
             SoftTime.Tests.Http.TestRights.Service(uow), NullLogger<TenantConnectionService>.Instance);
         var source = new FakeExternalSourceService();
         var options = new MlOptions();
-        var dataset = new MlDatasetService(
+        var dataset = MlDatasetTestFactory.Create(
             uow, tenant, new SageLeaveCalendar(tenant, source), source, store,
             Options.Create(options), NullLogger<MlDatasetService>.Instance);
 

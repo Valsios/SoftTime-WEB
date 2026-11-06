@@ -1,17 +1,8 @@
 ﻿using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.Ml;
-using SoftTime.Domain.Services;
 
 namespace SoftTime.Application.Abstractions;
 
-/// <summary>
-/// Construction de la base analytique « model-ready » à partir des tables fonctionnelles.
-///
-/// Le principe est le même que les états : les labels sont produits par les règles existantes
-/// (<see cref="AbsenceReportRules"/>, <see cref="OvertimeCalculator"/>), jamais par une
-/// réimplémentation. Les features sont calculées avec les données connues avant la date cible
-/// (as-of J-1) ; le planning du jour et les fériés sont autorisés car connus à l'avance.
-/// </summary>
 public interface IMlDatasetService
 {
     /// <summary>
@@ -20,7 +11,7 @@ public interface IMlDatasetService
     /// </summary>
     Task<MlDatasetBuildResult> BuildAsync(DateTime from, DateTime to, bool persist, CancellationToken ct = default);
 
-    /// <summary>Lignes d'inférence (planning futur) réutilisées par <see cref="IMlPredictionService"/>.</summary>
+    /// <summary>Lignes d'inférence (planning futur) réutilisées par <see cref="MlPredictionService"/>.</summary>
     Task<IReadOnlyList<MlSalarieJour>> BuildInferenceDailyAsync(DateTime from, DateTime to, CancellationToken ct = default);
 
     /// <summary>Lignes d'inférence hebdomadaires (semaines futures).</summary>

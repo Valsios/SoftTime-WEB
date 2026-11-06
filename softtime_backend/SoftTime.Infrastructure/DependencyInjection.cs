@@ -97,6 +97,7 @@ public static class DependencyInjection
         services.AddScoped<IExtraService, ExtraService>();
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IJournalService, JournalService>();
+        services.AddScoped<IMlDatasetContextLoader, MlDatasetContextLoader>();
         services.AddScoped<IMlDatasetService, MlDatasetService>();
         services.AddScoped<IMlTrainingService, MlTrainingService>();
         services.AddScoped<IMlPredictionService, MlPredictionService>();

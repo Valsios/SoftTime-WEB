@@ -80,7 +80,7 @@ public class MlDatasetParityTests
                 Plannings.Add(Plan(id: 100 + jour.Day, jour, DixSept, "PTE_TEST"));
         }
 
-        public MlDatasetService Dataset() => new(
+        public MlDatasetService Dataset() => MlDatasetTestFactory.Create(
             Uow, Tenant, new SageLeaveCalendar(Tenant, Source), Source, Store,
             Options.Create(new MlOptions { WarmupDays = 0 }), NullLogger<MlDatasetService>.Instance);
 
