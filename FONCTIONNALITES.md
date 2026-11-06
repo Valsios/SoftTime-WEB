@@ -340,6 +340,13 @@ export ni lien vers un autre écran. Fonction **non validée** : tout est additi
   mesuré environ 1,3 Mo pour la démo (3 008 cartes).
 - **Lectures filtrées dans la requête.** Plannings, anomalies et catégories du salarié sont filtrés dans la requête SQL (et recontrôlés par la
   clé canonique) au lieu d'être lus pour tout le tenant puis filtrés.
+- **Erreurs affichées durablement (écran).** Une erreur de `api/me/space/*` s'affiche dans un encadré au-dessus des cartes, en texte seul (jamais le
+  JSON brut), avec le message du serveur et une consigne : « Contactez la RH. » (403 de compte), « Reconnectez-vous. » (message demandant de se
+  reconnecter), « Choisissez un autre mois. » (400), « Réessayez dans un instant. » (erreur serveur ou réseau). Les erreurs de compte, de période ou de
+  session remplacent les quatre cartes ; avec l'option coupée (404 « Mon espace n'est pas activé »), l'encadré indique « Mon espace n'est pas encore activé :
+  contactez la RH. ». Le menu et la redirection après connexion ne changent pas (ils dépendent de `SELF:READ`, pas de l'option serveur).
+- **Semaine à cheval.** Une semaine qui chevauche deux mois apparaît dans chacun (le filtre retient les semaines dont le lundi est dans la période élargie au lundi
+  précédent) : une note sous la carte « Mes heures par semaine » le rappelle, les totaux de deux mois ne doivent donc pas être additionnés.
 
 ---
 
