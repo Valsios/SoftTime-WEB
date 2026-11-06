@@ -170,31 +170,39 @@ public sealed class CodeConstanteService : ICodeConstanteService
             Code(OvertimeCodeKeys.Nuit, "HS07"));
     }
 
+    /// <summary>Table globale des codes constantes ; supprime l'ancienne colonne BDD_SAGE (doublons dédoublonnés).</summary>
+    private const string StorageSql = """
+        IF OBJECT_ID(N'dbo.T_CODE_CONSTANTE', N'U') IS NULL
+        BEGIN
+            CREATE TABLE dbo.T_CODE_CONSTANTE (
+                ID int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                CATEGORIE nvarchar(32) NOT NULL,
+                INTITULE nvarchar(64) NULL,
+                CODE_CONSTANTE nvarchar(20) NOT NULL
+            );
+        END
+        ELSE IF COL_LENGTH(N'dbo.T_CODE_CONSTANTE', N'BDD_SAGE') IS NOT NULL
+        BEGIN
+            DELETE FROM dbo.T_CODE_CONSTANTE
+            WHERE ID NOT IN (SELECT MIN(ID) FROM dbo.T_CODE_CONSTANTE GROUP BY CATEGORIE);
+            IF EXISTS (SELECT * FROM sys.indexes WHERE name = 'UX_T_CODE_CONSTANTE_GLOBAL' AND object_id = OBJECT_ID('dbo.T_CODE_CONSTANTE'))
+                DROP INDEX UX_T_CODE_CONSTANTE_GLOBAL ON dbo.T_CODE_CONSTANTE;
+            IF EXISTS (SELECT * FROM sys.indexes WHERE name = 'UX_T_CODE_CONSTANTE_BASE' AND object_id = OBJECT_ID('dbo.T_CODE_CONSTANTE'))
+                DROP INDEX UX_T_CODE_CONSTANTE_BASE ON dbo.T_CODE_CONSTANTE;
+            ALTER TABLE dbo.T_CODE_CONSTANTE DROP COLUMN BDD_SAGE;
+        END
+        """;
+
     public async Task EnsureCodeConstantesAsync(CancellationToken ct)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        await _uow.ExecuteSqlAsync("""
-            IF OBJECT_ID(N'dbo.T_CODE_CONSTANTE', N'U') IS NULL
-            BEGIN
-                CREATE TABLE dbo.T_CODE_CONSTANTE (
-                    ID int IDENTITY(1,1) NOT NULL PRIMARY KEY,
-                    CATEGORIE nvarchar(32) NOT NULL,
-                    INTITULE nvarchar(64) NULL,
-                    CODE_CONSTANTE nvarchar(20) NOT NULL
-                );
-            END
-            ELSE IF COL_LENGTH(N'dbo.T_CODE_CONSTANTE', N'BDD_SAGE') IS NOT NULL
-            BEGIN
-                DELETE FROM dbo.T_CODE_CONSTANTE
-                WHERE ID NOT IN (SELECT MIN(ID) FROM dbo.T_CODE_CONSTANTE GROUP BY CATEGORIE);
-                IF EXISTS (SELECT * FROM sys.indexes WHERE name = 'UX_T_CODE_CONSTANTE_GLOBAL' AND object_id = OBJECT_ID('dbo.T_CODE_CONSTANTE'))
-                    DROP INDEX UX_T_CODE_CONSTANTE_GLOBAL ON dbo.T_CODE_CONSTANTE;
-                IF EXISTS (SELECT * FROM sys.indexes WHERE name = 'UX_T_CODE_CONSTANTE_BASE' AND object_id = OBJECT_ID('dbo.T_CODE_CONSTANTE'))
-                    DROP INDEX UX_T_CODE_CONSTANTE_BASE ON dbo.T_CODE_CONSTANTE;
-                ALTER TABLE dbo.T_CODE_CONSTANTE DROP COLUMN BDD_SAGE;
-            END
-            """, ct);
+        await _uow.ExecuteSqlAsync(StorageSql, ct);
+        await SeedDefaultsAsync(ct);
+    }
 
+    /// <summary>Ajoute les catégories de code par défaut manquantes.</summary>
+    private async Task SeedDefaultsAsync(CancellationToken ct)
+    {
         var repo = _uow.Repository<CodeConstanteCategorie>();
         var existing = await repo.ListAsync(_ => true, ct);
         var added = false;

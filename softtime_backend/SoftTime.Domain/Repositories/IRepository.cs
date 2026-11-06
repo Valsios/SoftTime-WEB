@@ -1,7 +1,6 @@
 using System.Linq.Expressions;
 
 using SoftTime.Domain.Models;
-using SoftTime.Domain.Services;
 
 namespace SoftTime.Domain.Repositories;
 
@@ -37,43 +36,12 @@ public interface IRepository<T> where T : class
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
-
         var list = query.ToList();
-        var total = list.Count;
-        var (pageNorm, taille) = PaginationRules.Normaliser(page, pageSize);
-
-        if (total == 0)
-        {
-            return Task.FromResult(new PagedResult<TResult>(
-                Array.Empty<TResult>(),
-                0,
-                pageNorm,
-                taille,
-                1));
-        }
-
-        var totalPages = PaginationRules.NombreDePages(total, taille);
-        if (pageNorm > totalPages)
-        {
-            return Task.FromResult(new PagedResult<TResult>(
-                Array.Empty<TResult>(),
-                total,
-                pageNorm,
-                taille,
-                totalPages));
-        }
-
-        var items = list
-            .Skip(PaginationRules.Decalage(pageNorm, taille))
-            .Take(taille)
-            .ToList();
-
-        return Task.FromResult(new PagedResult<TResult>(
-            items,
-            total,
-            pageNorm,
-            taille,
-            totalPages));
+        var fenetre = PageWindow.Pour(list.Count, page, pageSize);
+        IReadOnlyList<TResult> items = fenetre.EstVide
+            ? Array.Empty<TResult>()
+            : list.Skip(fenetre.Decalage).Take(fenetre.Taille).ToList();
+        return Task.FromResult(fenetre.Resultat(items));
     }
 
     /// <summary>

@@ -40,17 +40,8 @@ public class EmailService : IEmailService
     public async Task<bool> EnvoyerAsync(EmailMessage message, CancellationToken cancellationToken = default)
     {
         var reglages = Reglages();
-        if (!reglages.EstConfigure)
-        {
-            _logger.LogWarning(
-                "E-mail non envoyé : la section de configuration « Email » est incomplète (Host et FromAddress requis).");
+        if (!PeutEnvoyer(reglages, message))
             return false;
-        }
-        if (string.IsNullOrWhiteSpace(message.To))
-        {
-            _logger.LogWarning("E-mail non envoyé : aucun destinataire sur le compte.");
-            return false;
-        }
 
         using var mail = new MailMessage
         {
@@ -60,11 +51,7 @@ public class EmailService : IEmailService
             IsBodyHtml = true
         };
         mail.To.Add(message.To.Trim());
-
-        using var client = new SmtpClient(reglages.Host, reglages.PortEffectif)
-        {
-            EnableSsl = reglages.EnableSsl
-        };
+        using var client = new SmtpClient(reglages.Host, reglages.PortEffectif) { EnableSsl = reglages.EnableSsl };
         if (!string.IsNullOrWhiteSpace(reglages.User))
             client.Credentials = new NetworkCredential(reglages.User, reglages.Password);
 
@@ -79,6 +66,23 @@ public class EmailService : IEmailService
             _logger.LogError(ex, "Échec de l'envoi de l'e-mail à {Destinataire}.", message.To);
             return false;
         }
+    }
+
+    /// <summary>Configuration SMTP complète et destinataire renseigné ; sinon l'envoi est abandonné (journalisé).</summary>
+    private bool PeutEnvoyer(EmailSettings reglages, EmailMessage message)
+    {
+        if (!reglages.EstConfigure)
+        {
+            _logger.LogWarning(
+                "E-mail non envoyé : la section de configuration « Email » est incomplète (Host et FromAddress requis).");
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(message.To))
+        {
+            _logger.LogWarning("E-mail non envoyé : aucun destinataire sur le compte.");
+            return false;
+        }
+        return true;
     }
 
     /// <inheritdoc />

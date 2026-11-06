@@ -132,39 +132,9 @@ public sealed class SageDatabaseService : ISageDatabaseService
         var password = await _sourceMappingStore.ResolveStoredPasswordAsync("SAGE", dto.Id, dto.Serveur, dto.SqlAuth, dto.Login, dto.Password, ct);
         if (string.IsNullOrWhiteSpace(dto.Serveur) || string.IsNullOrWhiteSpace(dto.NomBd))
             return new ConnectionTestResultDto(false, "Serveur et nom de base requis.");
-        IReadOnlyList<string> tables;
-        try
-        {
-            tables = await _discovery.ListTablesAsync(dto.Serveur, dto.NomBd, dto.SqlAuth ?? true, dto.Login, password, ct);
-        }
-        catch (ExternalConnectionException ex)
-        {
-            // Message lisible, sans texte SQL (voir ExternalDiscoveryService.Describe) ; toute autre erreur va au middleware (500 journalisé).
-            return new ConnectionTestResultDto(false, $"Connexion impossible : {ex.Message}");
-        }
-        if (dto.TypeBase == "AUTRE")
-        {
-            var missingCustom = new List<string>();
-            if (dto.Mappings is { Count: > 0 })
-            {
-                foreach (var t in dto.Mappings.Where(x => !string.IsNullOrWhiteSpace(x.SourceTable)).Select(x => x.SourceTable!))
-                    if (!tables.Contains(t, StringComparer.OrdinalIgnoreCase) && !missingCustom.Contains(t, StringComparer.OrdinalIgnoreCase))
-                        missingCustom.Add(t);
-                if (missingCustom.Count == 0)
-                {
-                    var missingCols = await _sourceMappingValidator.ValidateMappingColumnsAsync(dto.Serveur!, dto.NomBd!, dto.SqlAuth ?? true, dto.Login, password, dto.Mappings, ct);
-                    if (missingCols.Count > 0)
-                        return new ConnectionTestResultDto(false, "Connexion réussie mais certaines colonnes mappées sont introuvables.", missingCols);
-                }
-            }
-            return missingCustom.Count == 0
-                ? new ConnectionTestResultDto(true, "Connexion réussie.")
-                : new ConnectionTestResultDto(false, "Connexion réussie mais certaines tables choisies sont introuvables.", missingCustom);
-        }
-        var missing = SageStandardTables.Where(t => !tables.Contains(t, StringComparer.OrdinalIgnoreCase)).ToList();
-        return missing.Count == 0
-            ? new ConnectionTestResultDto(true, "Connexion réussie, structure Sage standard reconnue.")
-            : new ConnectionTestResultDto(false, "Connexion réussie mais certaines tables Sage attendues sont introuvables.", missing);
+        var cible = new ExternalConnectionTarget(dto.Serveur, dto.NomBd, dto.SqlAuth ?? true, dto.Login, password, dto.TypeBase, dto.Mappings);
+        var standard = new StandardStructure(SageStandardTables, "Connexion réussie, structure Sage standard reconnue.", "Connexion réussie mais certaines tables Sage attendues sont introuvables.");
+        return await new ExternalConnectionTester(_discovery, _sourceMappingValidator).TestAsync(cible, standard, ct);
     }
 
     public async Task DeleteSageAsync(int id, CancellationToken ct = default)

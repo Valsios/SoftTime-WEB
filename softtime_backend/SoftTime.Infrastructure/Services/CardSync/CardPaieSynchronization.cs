@@ -1,8 +1,8 @@
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
-using SoftTime.Domain.Services;
 using SoftTime.Domain.Repositories;
+using SoftTime.Domain.Services;
 
 namespace SoftTime.Infrastructure.Services.CardSync;
 

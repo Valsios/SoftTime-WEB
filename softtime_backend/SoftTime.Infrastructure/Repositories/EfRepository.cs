@@ -3,7 +3,6 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 
 using SoftTime.Domain.Repositories;
-using SoftTime.Domain.Services;
 using SoftTime.Infrastructure.Persistence;
 
 namespace SoftTime.Infrastructure.Repositories;
@@ -52,42 +51,11 @@ public class EfRepository<T> : IRepository<T> where T : class
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
-
-        var total = await query.CountAsync(cancellationToken);
-        var (pageNorm, taille) = PaginationRules.Normaliser(page, pageSize);
-
-        if (total == 0)
-        {
-            return new PagedResult<TResult>(
-                Array.Empty<TResult>(),
-                0,
-                pageNorm,
-                taille,
-                1);
-        }
-
-        var totalPages = PaginationRules.NombreDePages(total, taille);
-        if (pageNorm > totalPages)
-        {
-            return new PagedResult<TResult>(
-                Array.Empty<TResult>(),
-                total,
-                pageNorm,
-                taille,
-                totalPages);
-        }
-
-        var items = await query
-            .Skip(PaginationRules.Decalage(pageNorm, taille))
-            .Take(taille)
-            .ToListAsync(cancellationToken);
-
-        return new PagedResult<TResult>(
-            items,
-            total,
-            pageNorm,
-            taille,
-            totalPages);
+        var fenetre = PageWindow.Pour(await query.CountAsync(cancellationToken), page, pageSize);
+        IReadOnlyList<TResult> items = fenetre.EstVide
+            ? Array.Empty<TResult>()
+            : await query.Skip(fenetre.Decalage).Take(fenetre.Taille).ToListAsync(cancellationToken);
+        return fenetre.Resultat(items);
     }
 
     public async Task<PagedResult<TDto>> ToPagedAsync<TDto>(

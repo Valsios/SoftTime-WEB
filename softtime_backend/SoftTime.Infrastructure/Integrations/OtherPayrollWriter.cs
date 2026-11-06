@@ -64,24 +64,27 @@ public sealed class OtherPayrollWriter : IPayrollWriter
         }
         catch
         {
-            try
-            {
-                await transaction.RollbackAsync(CancellationToken.None);
-            }
-            catch (Exception rollbackException)
-            {
-                _logger.LogError(rollbackException, "Échec du rollback de la synchronisation de paie AUTRE.");
-            }
-
-            try
-            {
-                await WriteAuditAsync(database, plan, auditContext, rows.Count, 0, updates, categoryCounts, "ECHEC", CancellationToken.None);
-            }
-            catch (Exception auditException)
-            {
-                _logger.LogError(auditException, "Impossible d'écrire la synthèse d'échec de synchronisation de paie AUTRE.");
-            }
+            await RollbackQuietlyAsync(transaction);
+            await QuietlyAsync(
+                () => WriteAuditAsync(database, plan, auditContext, rows.Count, 0, updates, categoryCounts, "ECHEC", CancellationToken.None),
+                "Impossible d'écrire la synthèse d'échec de synchronisation de paie AUTRE.");
             throw;
+        }
+    }
+
+    private Task RollbackQuietlyAsync(SqlTransaction transaction) =>
+        QuietlyAsync(() => transaction.RollbackAsync(CancellationToken.None), "Échec du rollback de la synchronisation de paie AUTRE.");
+
+    /// <summary>Exécute une action de repli après échec ; son propre échec est journalisé sans masquer l'erreur initiale.</summary>
+    private async Task QuietlyAsync(Func<Task> action, string erreur)
+    {
+        try
+        {
+            await action();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "{Erreur}", erreur);
         }
     }
 
