@@ -11,7 +11,7 @@ public class PlanningServiceTests
     private sealed class Contexte
     {
         public InMemoryUnitOfWork Uow { get; } = new();
-        public PlanningService Service { get; }
+        public PlanningServices Service { get; }
         public List<PlanningSalarie> Planning => Uow.Get<PlanningSalarie>().Items;
 
         public Contexte()
@@ -25,7 +25,7 @@ public class PlanningServiceTests
                 PointeuseBdd = "PTE_TEST"
             });
             var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
-            Service = new PlanningService(Uow, tenant, new FakePlanningStatisticsReader());
+            Service = new PlanningServices(Uow, tenant, new FakePlanningStatisticsReader());
         }
 
         public void Shift(int noShift, int haHeure, int haMinute, int hdHeure, int hdMinute, int? pauseHeure = 0)

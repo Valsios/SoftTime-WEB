@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging.Abstractions;
+﻿using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 using SoftTime.Application.Abstractions;
@@ -11,9 +11,9 @@ using SoftTime.Infrastructure.Services;
 namespace SoftTime.Tests;
 
 /// <summary>
-/// Vérifie que l'ETL reconstruit les données avec les mêmes règles que les écrans : absences
-/// (état des absences), retards (état des retards / tableau de bord) et heures supplémentaires
-/// (écran HS) doivent se retrouver à l'identique dans la base analytique.
+/// VÃ©rifie que l'ETL reconstruit les donnÃ©es avec les mÃªmes rÃ¨gles que les Ã©crans : absences
+/// (Ã©tat des absences), retards (Ã©tat des retards / tableau de bord) et heures supplÃ©mentaires
+/// (Ã©cran HS) doivent se retrouver Ã  l'identique dans la base analytique.
 /// </summary>
 public class MlDatasetParityTests
 {
@@ -56,7 +56,7 @@ public class MlDatasetParityTests
             Uow.Get<Categorie>().Items.Add(new Categorie
             {
                 IdCategorie = 10,
-                Intitule = "Sédentaire",
+                Intitule = "SÃ©dentaire",
                 HeureSemaine = 40m,
                 Pause = TimeSpan.FromMinutes(30),
                 BddSage = "SAGE_TEST"
@@ -75,7 +75,7 @@ public class MlDatasetParityTests
                 new Majoration { Mojoration = "FERIE", Cotation = 3m },
             });
 
-            // Planning : lundi → vendredi, 8 h – 17 h avec 30 min de pause.
+            // Planning : lundi â†’ vendredi, 8 h â€“ 17 h avec 30 min de pause.
             for (var jour = Lundi; jour <= Vendredi; jour = jour.AddDays(1))
                 Plannings.Add(Plan(id: 100 + jour.Day, jour, DixSept, "PTE_TEST"));
         }
@@ -84,7 +84,7 @@ public class MlDatasetParityTests
             Uow, Tenant, new SageLeaveCalendar(Tenant, Source), Source, Store,
             Options.Create(new MlOptions { WarmupDays = 0 }), NullLogger<MlDatasetService>.Instance);
 
-        public OvertimeService Overtime() => new(
+        public OvertimeServices Overtime() => new(
             Uow, Tenant, Source,
             new PayrollWriterResolver(Array.Empty<IPayrollWriter>()),
             new HistoryArchiveService(Uow, Tenant),
@@ -96,7 +96,7 @@ public class MlDatasetParityTests
     {
         var ctx = new Contexte();
 
-        // Lundi et mercredi pointés ; mardi et jeudi absents ; vendredi absence déclarée.
+        // Lundi et mercredi pointÃ©s ; mardi et jeudi absents ; vendredi absence dÃ©clarÃ©e.
         ctx.Corrections.Add(Pointage(Lundi, Huit, DixSept));
         ctx.Corrections.Add(Pointage(Lundi.AddDays(2), Huit, DixSept));
         ctx.Corrections.Add(new HeureCorrigee
@@ -118,7 +118,7 @@ public class MlDatasetParityTests
         Assert.True(ctx.Store.Daily.Single(d => d.Date == Vendredi).AbsenceDeclaree);
         Assert.False(ctx.Store.Daily.Single(d => d.Date == Vendredi).AbsenceNonJustifiee);
 
-        // Parité avec l'état des absences, sur la même population et la même règle.
+        // ParitÃ© avec l'Ã©tat des absences, sur la mÃªme population et la mÃªme rÃ¨gle.
         var absences = AbsenceReportRules.Calculer(
             ctx.Plannings,
             new[] { ctx.Carte },
@@ -152,7 +152,7 @@ public class MlDatasetParityTests
         var ctx = new Contexte();
         ctx.Uow.Get<ToleranceRetard>().Items.Add(new ToleranceRetard { Id = 1, IdCategorie = 10, Tolerance = 5, TypesTol = false });
 
-        // Aucune valeur RETARD saisie : le retard vient de la première entrée vs 8 h + 5 min.
+        // Aucune valeur RETARD saisie : le retard vient de la premiÃ¨re entrÃ©e vs 8 h + 5 min.
         ctx.Corrections.Add(Pointage(Lundi, new TimeSpan(8, 20, 0), DixSept));
         ctx.Corrections.Add(Pointage(Lundi.AddDays(1), new TimeSpan(7, 55, 0), DixSept));
         ctx.Corrections.Add(Pointage(Lundi.AddDays(2), new TimeSpan(8, 4, 0), DixSept));
@@ -187,10 +187,10 @@ public class MlDatasetParityTests
     {
         var ctx = new Contexte();
 
-        // Planning d'une autre pointeuse, d'ID plus petit : ignoré par l'écran HS.
+        // Planning d'une autre pointeuse, d'ID plus petit : ignorÃ© par l'Ã©cran HS.
         ctx.Plannings.Add(Plan(id: 1, Lundi, new TimeSpan(20, 0, 0), "AUTRE_PTE"));
 
-        // 8 h – 19 h chaque jour, et une ligne d'absence déclarée seule le samedi.
+        // 8 h â€“ 19 h chaque jour, et une ligne d'absence dÃ©clarÃ©e seule le samedi.
         for (var jour = Lundi; jour <= Vendredi; jour = jour.AddDays(1))
             ctx.Corrections.Add(Pointage(jour, Huit, new TimeSpan(19, 0, 0)));
         ctx.Corrections.Add(new HeureCorrigee
@@ -219,7 +219,7 @@ public class MlDatasetParityTests
         var ctx = new Contexte();
         var aujourdHui = DateTime.Today;
 
-        // Hier pointé, puis 7 jours planifiés à venir (donc sans pointage par construction).
+        // Hier pointÃ©, puis 7 jours planifiÃ©s Ã  venir (donc sans pointage par construction).
         ctx.Plannings.Add(Plan(id: 500, aujourdHui.AddDays(-1), DixSept, "PTE_TEST"));
         ctx.Corrections.Add(Pointage(aujourdHui.AddDays(-1), Huit, DixSept));
         for (var i = 0; i < 7; i++)
@@ -246,7 +246,7 @@ public class MlDatasetParityTests
 
         var jours = Enumerable.Range(0, 10).Select(i => (trou, true, i < 8))         // 80 % : trou
             .Concat(Enumerable.Range(0, 10).Select(i => (normal, true, i < 1)))       // 10 % : normal
-            .Concat(Enumerable.Range(0, 3).Select(i => (petit, true, true)));         // trop peu planifiés
+            .Concat(Enumerable.Range(0, 3).Select(i => (petit, true, true)));         // trop peu planifiÃ©s
 
         var resultat = MlDataQuality.JoursSansPointage(jours, options);
 

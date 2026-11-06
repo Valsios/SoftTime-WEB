@@ -23,7 +23,7 @@ public class OvertimeServiceTests
     {
         public InMemoryUnitOfWork Uow { get; } = new();
         public FakeExternalSourceService Source { get; } = new();
-        public OvertimeService Service { get; }
+        public OvertimeServices Service { get; }
 
         public List<HeureCorrigee> Corrections => Uow.Get<HeureCorrigee>().Items;
         public List<HsValidee> Semaines => Uow.Get<HsValidee>().Items;
@@ -64,7 +64,7 @@ public class OvertimeServiceTests
             });
 
             var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
-            Service = new OvertimeService(
+            Service = new OvertimeServices(
                 Uow,
                 tenant,
                 Source,

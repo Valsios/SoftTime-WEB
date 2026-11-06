@@ -14,7 +14,7 @@
 /// Pour une base de type <c>AUTRE</c>, les mêmes informations viennent des mappings dynamiques
 /// (<c>ABSENCE_EVENT</c> / <c>EMPLOYEE_EVENT</c>) via <see cref="IExternalSourceService"/>.
 ///
-/// Partagé par la validation semaine (<see cref="IOvertimeService"/>) et le tableau de bord
+/// Partagé par la validation semaine (<see cref="IWeeklyValidationService"/>) et le tableau de bord
 /// analytique (<see cref="IDashboardService"/>) afin que les deux écrans comptent les mêmes journées.
 /// </summary>
 public interface ISageLeaveCalendar

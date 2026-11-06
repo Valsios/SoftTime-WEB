@@ -14,8 +14,15 @@ namespace SoftTime.Api.Controllers;
 [Tags("Overtime")]
 public class OvertimeController : ControllerBase
 {
-    private readonly IOvertimeService _svc;
-    public OvertimeController(IOvertimeService svc) => _svc = svc;
+    private readonly IOvertimeExoImpoService _exoImpo;
+    private readonly IOvertimeDetailService _detail;
+    private readonly IOvertimePayrollSyncService _payrollSync;
+    public OvertimeController(IOvertimeExoImpoService exoImpo, IOvertimeDetailService detail, IOvertimePayrollSyncService payrollSync)
+    {
+        _exoImpo = exoImpo;
+        _detail = detail;
+        _payrollSync = payrollSync;
+    }
 
     [HttpGet]
     public async Task<IActionResult> List(
@@ -25,7 +32,7 @@ public class OvertimeController : ControllerBase
         [FromQuery] string? matriculeTo,
         [FromQuery] string? departement,
         CancellationToken ct)
-        => Ok(await _svc.ListExoAsync(new PeriodRequest(matriculeFrom, matriculeTo, from, to, departement), ct));
+        => Ok(await _exoImpo.ListExoAsync(new PeriodRequest(matriculeFrom, matriculeTo, from, to, departement), ct));
 
     /// <summary>Même liste que <c>GET /api/overtime</c>, paginée (page bornée, total serveur).</summary>
     [HttpGet("paged")]
@@ -39,7 +46,7 @@ public class OvertimeController : ControllerBase
         [FromQuery] int? pageSize,
         [FromQuery] string? search,
         CancellationToken ct)
-        => Ok(await _svc.ListExoPagedAsync(
+        => Ok(await _exoImpo.ListExoPagedAsync(
             new PeriodRequest(matriculeFrom, matriculeTo, from, to, departement, search),
             page,
             pageSize,
@@ -47,28 +54,28 @@ public class OvertimeController : ControllerBase
 
     [HttpPost("calculate")]
     public async Task<IActionResult> Calculate([FromBody] PeriodRequest request, CancellationToken ct)
-        => Ok(await _svc.CalculateExoImpoAsync(request, ct));
+        => Ok(await _exoImpo.CalculateExoImpoAsync(request, ct));
 
     [HttpPost("purge")]
     public async Task<IActionResult> Purge([FromBody] PeriodRequest request, CancellationToken ct)
     {
-        await _svc.PurgeHsAsync(request, ct);
+        await _detail.PurgeHsAsync(request, ct);
         return NoContent();
     }
 
     [HttpPost("sync-sage")]
     public async Task<IActionResult> SyncSage([FromBody] PeriodRequest request, CancellationToken ct)
     {
-        await _svc.SyncSageAsync(request, ct);
+        await _payrollSync.SyncSageAsync(request, ct);
         return NoContent();
     }
 
     [HttpPost("sync-payroll")]
     public async Task<IActionResult> SyncPayroll([FromBody] PeriodRequest request, CancellationToken ct)
-        => Ok(await _svc.SyncPayrollAsync(request, ct));
+        => Ok(await _payrollSync.SyncPayrollAsync(request, ct));
 
     /// <summary>Détail du calcul des heures supplémentaires d'un salarié (jours, semaines, EXO/IMPO).</summary>
     [HttpGet("detail/{matricule}")]
     public async Task<IActionResult> Detail(string matricule, [FromQuery] DateTime from, [FromQuery] DateTime to, CancellationToken ct)
-        => Ok(await _svc.DetailAsync(matricule, from, to, ct));
+        => Ok(await _detail.DetailAsync(matricule, from, to, ct));
 }

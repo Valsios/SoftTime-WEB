@@ -17,8 +17,8 @@ public class ImportResultMessageTests
     private sealed class Contexte
     {
         public InMemoryUnitOfWork Uow { get; } = new();
-        public TimekeepingService Timekeeping { get; }
-        public PlanningService Planning { get; }
+        public TimekeepingServices Timekeeping { get; }
+        public PlanningServices Planning { get; }
         public CatalogServices Catalog { get; }
 
         public Contexte()
@@ -60,8 +60,8 @@ public class ImportResultMessageTests
 
             var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
             var external = new FakeExternalSourceService();
-            Timekeeping = new TimekeepingService(Uow, tenant, external, new HistoryArchiveService(Uow, tenant));
-            Planning = new PlanningService(Uow, tenant, new FakePlanningStatisticsReader());
+            Timekeeping = new TimekeepingServices(Uow, tenant, external, new HistoryArchiveService(Uow, tenant));
+            Planning = new PlanningServices(Uow, tenant, new FakePlanningStatisticsReader());
             var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
             Catalog = new CatalogServices(Uow, mapper, tenant, external, null!, null!, SoftTime.Tests.Http.TestRights.Service(Uow));
         }

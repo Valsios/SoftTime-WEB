@@ -14,8 +14,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("Anomalies")]
 public class AnomaliesController : ControllerBase
 {
-    private readonly ITimekeepingService _svc;
-    public AnomaliesController(ITimekeepingService svc) => _svc = svc;
+    private readonly IAnomalyService _svc;
+    public AnomaliesController(IAnomalyService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery] PeriodRequest filter, CancellationToken ct)

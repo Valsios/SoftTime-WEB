@@ -15,8 +15,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("CorrectedHours")]
 public class CorrectedHoursController : ControllerBase
 {
-    private readonly ITimekeepingService _svc;
-    public CorrectedHoursController(ITimekeepingService svc) => _svc = svc;
+    private readonly ICorrectedHoursService _svc;
+    public CorrectedHoursController(ICorrectedHoursService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery] PeriodRequest filter, CancellationToken ct)

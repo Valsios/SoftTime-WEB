@@ -15,9 +15,9 @@ namespace SoftTime.Api.Controllers;
 [Tags("Punches")]
 public class PunchesController : ControllerBase
 {
-    private readonly ITimekeepingService _svc;
+    private readonly IPunchService _svc;
     private readonly IPunchProcessingService _processing;
-    public PunchesController(ITimekeepingService svc, IPunchProcessingService processing)
+    public PunchesController(IPunchService svc, IPunchProcessingService processing)
     {
         _svc = svc;
         _processing = processing;

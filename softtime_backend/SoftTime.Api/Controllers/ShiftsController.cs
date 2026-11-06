@@ -15,8 +15,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("Shifts")]
 public class ShiftsController : ControllerBase
 {
-    private readonly IPlanningService _svc;
-    public ShiftsController(IPlanningService svc) => _svc = svc;
+    private readonly IShiftService _svc;
+    public ShiftsController(IShiftService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListShiftsAsync(ct));

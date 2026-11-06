@@ -14,8 +14,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("WeeklyValidation")]
 public class WeeklyValidationController : ControllerBase
 {
-    private readonly IOvertimeService _svc;
-    public WeeklyValidationController(IOvertimeService svc) => _svc = svc;
+    private readonly IWeeklyValidationService _svc;
+    public WeeklyValidationController(IWeeklyValidationService svc) => _svc = svc;
 
     [HttpPost("preview")]
     public async Task<IActionResult> Preview([FromBody] PeriodRequest request, CancellationToken ct)

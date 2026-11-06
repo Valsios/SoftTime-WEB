@@ -15,12 +15,17 @@ namespace SoftTime.Api.Controllers;
 [Tags("EmployeePlanning")]
 public class EmployeePlanningController : ControllerBase
 {
-    private readonly IPlanningService _svc;
-    public EmployeePlanningController(IPlanningService svc) => _svc = svc;
+    private readonly IEmployeePlanningService _planning;
+    private readonly IPlanningImportService _imports;
+    public EmployeePlanningController(IEmployeePlanningService planning, IPlanningImportService imports)
+    {
+        _planning = planning;
+        _imports = imports;
+    }
 
     [HttpGet("employees")]
     public async Task<IActionResult> Employees(CancellationToken ct)
-        => Ok(await _svc.ListEmployeesAsync(ct));
+        => Ok(await _planning.ListEmployeesAsync(ct));
 
     [HttpGet]
     public async Task<IActionResult> Get(
@@ -28,7 +33,7 @@ public class EmployeePlanningController : ControllerBase
         [FromQuery] DateTime to,
         [FromQuery] int? cardId,
         CancellationToken ct)
-        => Ok(await _svc.ListEmployeePlanningAsync(from, to, cardId, ct));
+        => Ok(await _planning.ListEmployeePlanningAsync(from, to, cardId, ct));
 
     /// <summary>Même liste que <c>GET /api/employee-planning</c>, paginée.</summary>
     [HttpGet("paged")]
@@ -40,7 +45,7 @@ public class EmployeePlanningController : ControllerBase
         [FromQuery] int? pageSize,
         [FromQuery] string? search,
         CancellationToken ct)
-        => Ok(await _svc.ListEmployeePlanningPagedAsync(from, to, cardId, page, pageSize, search, ct));
+        => Ok(await _planning.ListEmployeePlanningPagedAsync(from, to, cardId, page, pageSize, search, ct));
 
     /// <summary>Salariés + nombre de jours planifiés (complet, pour l'export).</summary>
     [HttpGet("employees/stats")]
@@ -48,7 +53,7 @@ public class EmployeePlanningController : ControllerBase
         [FromQuery] DateTime from,
         [FromQuery] DateTime to,
         CancellationToken ct)
-        => Ok(await _svc.ListEmployeeStatsAsync(from, to, ct));
+        => Ok(await _planning.ListEmployeeStatsAsync(from, to, ct));
 
     /// <summary>Salariés + nombre de jours planifiés, paginé.</summary>
     [HttpGet("employees/paged")]
@@ -59,7 +64,7 @@ public class EmployeePlanningController : ControllerBase
         [FromQuery] int? pageSize,
         [FromQuery] string? search,
         CancellationToken ct)
-        => Ok(await _svc.ListEmployeeStatsPagedAsync(from, to, page, pageSize, search, ct));
+        => Ok(await _planning.ListEmployeeStatsPagedAsync(from, to, page, pageSize, search, ct));
 
     [HttpPost]
     public Task<IActionResult> Create([FromBody] List<EmployeePlanningDto> rows, CancellationToken ct)
@@ -75,14 +80,14 @@ public class EmployeePlanningController : ControllerBase
     /// </summary>
     private async Task<IActionResult> SavePlanningAsync(List<EmployeePlanningDto> rows, CancellationToken ct)
     {
-        await _svc.SaveEmployeePlanningAsync(rows, ct);
+        await _planning.SaveEmployeePlanningAsync(rows, ct);
         return NoContent();
     }
 
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
-        await _svc.DeleteEmployeePlanningAsync(id, ct);
+        await _planning.DeleteEmployeePlanningAsync(id, ct);
         return NoContent();
     }
 
@@ -95,7 +100,7 @@ public class EmployeePlanningController : ControllerBase
         var headers = rows.Count > 0 ? rows[0].Keys.ToList() : new List<string>();
         if (headers.Count == 0)
             return BadRequest("Fichier Excel vide ou sans en-têtes.");
-        return Ok(await _svc.ImportExcelAsync(rows, headers, ct));
+        return Ok(await _imports.ImportExcelAsync(rows, headers, ct));
     }
 
     /// <summary>
@@ -105,7 +110,7 @@ public class EmployeePlanningController : ControllerBase
     [HttpPost("generate-from-category")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> GenerateFromCategory(IFormFile file, CancellationToken ct)
-        => Ok(await _svc.GenerateFromCategoryCsvAsync(await ReadCsvAsync(file, ct), ct));
+        => Ok(await _imports.GenerateFromCategoryCsvAsync(await ReadCsvAsync(file, ct), ct));
 
     /// <summary>
     /// Génère le planning d'une semaine pour un ou plusieurs salariés.
@@ -114,7 +119,7 @@ public class EmployeePlanningController : ControllerBase
     [HttpPost("generate")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> Generate(IFormFile file, CancellationToken ct)
-        => Ok(await _svc.GenerateFromMatriculeCsvAsync(await ReadCsvAsync(file, ct), ct));
+        => Ok(await _imports.GenerateFromMatriculeCsvAsync(await ReadCsvAsync(file, ct), ct));
 
     /// <summary>Lecture d'un CSV point-virgule (ou virgule) en lignes de cellules nettoyées.</summary>
     private static async Task<IReadOnlyList<string[]>> ReadCsvAsync(IFormFile file, CancellationToken ct)
