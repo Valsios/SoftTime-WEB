@@ -4,7 +4,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace SoftTime.Api.Controllers;
 
 [ApiController]
-[AllowAnonymous]
+// Authentification exigée : la liste des routes et des numéros de droits est une carte de l'API pour un attaquant.
+[Authorize]
 [Route("api/meta")]
 [Tags("Meta")]
 public class MetaController : ControllerBase
@@ -39,7 +40,9 @@ public static class ApiCatalog
 {
     public static readonly object[] All =
     {
-        E("Auth", "POST", "/api/auth/login", "Login, retourne JWT"),
+        E("Auth", "POST", "/api/auth/login", "Login, retourne JWT + jeton de rafraîchissement"),
+        E("Auth", "POST", "/api/auth/refresh", "Rotation du jeton de rafraîchissement, nouveau JWT"),
+        E("Auth", "POST", "/api/auth/logout", "Révoque le jeton de rafraîchissement"),
         E("Auth", "GET", "/api/auth/me", "Utilisateur courant + bases SAGE"),
         E("Auth", "GET", "/api/auth/is-first-run", "Installation vierge ? (anonyme)"),
         E("Auth", "POST", "/api/auth/create-admin", "Créer le premier compte administrateur (anonyme, une seule fois)"),
