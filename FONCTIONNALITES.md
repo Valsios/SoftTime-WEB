@@ -321,6 +321,26 @@ export ni lien vers un autre écran. Fonction **non validée** : tout est additi
   base : le rôle « Salarié », ses lignes `T_ROLE_PERMISSION`, les comptes créés et leurs accès bases ; `migrations/mon_espace_retrait.sql`
   les liste, puis les supprime après relecture.
 
+**Corrections de revue (complètent et, en cas de désaccord, remplacent les points ci-dessus)** :
+
+- **Garde — le compte est relu à chaque appel.** Le matricule du jeton n'est plus la seule source : la garde relit le compte dans
+  `T_RESPONSABLE` (une requête, sans cache). Compte supprimé, matricule retiré ou différent de celui du jeton (réaffectation par la RH,
+  jeton de 12 h encore valide) : 403 explicite « reconnectez-vous ». `T_RESPONSABLE` n'a pas de colonne « actif » : un compte désactivé est un
+  compte supprimé ou sans `SELF:READ`. Seules les routes `api/me/space/*` font cette lecture ; aucune autre route n'est touchée.
+- **Matricule partagé = refus.** Si un autre compte porte la même clé de matricule (casse, espaces et zéros de tête ignorés), **aucun** des
+  porteurs ne lit Mon espace (403 « matricule porté par plusieurs comptes : contactez la RH »), sans citer l'autre compte. À la création des
+  comptes Salarié, donner un matricule unique.
+- **Aucune conservation par le navigateur.** Toutes les réponses de `api/me/space/*` (succès, 400, 403, 404 de la fonction désactivée)
+  portent `Cache-Control: no-store` et `Pragma: no-cache`. Seuls les 401 (jeton absent, rendus avant le contrôleur) et les 405 n'en portent pas :
+  ils ne contiennent aucune donnée.
+- **Congés SAGE : une seule lecture partagée.** La lecture du tenant (qui prend plusieurs secondes) n'est lancée qu'une fois à la fois par
+  base, quel que soit le nombre de salariés qui la demandent ; les autres attendent la même lecture. Elle est conservée **5 minutes** en
+  mémoire, dans le cache seulement : aucune route ne la rend, chaque salarié n'en reçoit qu'une copie de sa propre part (clé utilisateur |
+  base | matricule, jamais plus vieille que la lecture). Un échec n'est jamais conservé. Plafond mémoire : 8 bases et 512 parts de salarié ;
+  mesuré environ 1,3 Mo pour la démo (3 008 cartes).
+- **Lectures filtrées dans la requête.** Plannings, anomalies et catégories du salarié sont filtrés dans la requête SQL (et recontrôlés par la
+  clé canonique) au lieu d'être lus pour tout le tenant puis filtrés.
+
 ---
 
 ## 6. Divers
