@@ -7,6 +7,6 @@ namespace SoftTime.Application.Services;
 public sealed record MlTrainingOutcome(
     string Etat,
     string Message,
-    T_ML_MODELE? HsProbabilite,
-    T_ML_MODELE? HsMontant,
+    MlModele? HsProbabilite,
+    MlModele? HsMontant,
     MlMetrics? HsMetrics);

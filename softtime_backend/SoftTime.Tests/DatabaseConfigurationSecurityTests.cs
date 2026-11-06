@@ -26,30 +26,30 @@ public class DatabaseConfigurationSecurityTests
 
     public DatabaseConfigurationSecurityTests()
     {
-        _auth = new AuthService(_uow, new FakeTokenService(), _mapper, new FakeEmailService(), new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<T_RESPONSABLE>());
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 5, NOMROLE = "Gestionnaire" });
-        _uow.GetRepo<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 7, NOM_BD = Base, SERVEUR = "srv" });
-        _uow.GetRepo<T_BDD_POINTEUSE>().Items.Add(new T_BDD_POINTEUSE { ID = 8, NOM_BD = "PTG", SERVEUR = "srv" });
+        _auth = new AuthService(_uow, new FakeTokenService(), _mapper, new FakeEmailService(), new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<Responsable>());
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 5, NomRole = "Gestionnaire" });
+        _uow.GetRepo<BddSage>().Items.Add(new BddSage { Id = 7, NomBd = Base, Serveur = "srv" });
+        _uow.GetRepo<BddPointeuse>().Items.Add(new BddPointeuse { Id = 8, NomBd = "PTG", Serveur = "srv" });
     }
 
     private DatabaseConfigurationAuthorizer AuthorizerFor(decimal userId, decimal roleId, params int[] rights)
     {
-        if (!_uow.GetRepo<T_RESPONSABLE>().Items.Any(u => u.IDRESPONSABLE == userId))
-            _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = userId, IDROLE = roleId, LOGIN = $"u{userId}" });
+        if (!_uow.GetRepo<Responsable>().Items.Any(u => u.IdResponsable == userId))
+            _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = userId, IdRole = roleId, Login = $"u{userId}" });
         return new DatabaseConfigurationAuthorizer(new FakeCurrentUser(userId, roleId, rights), _auth);
     }
 
     private void GrantUser(decimal userId, params string[] codes)
     {
         foreach (var c in codes)
-            _uow.GetRepo<T_USER_PERMISSION>().Items.Add(new T_USER_PERMISSION { IDRESPONSABLE = userId, PERMISSION_CODE = c, IS_GRANTED = true });
+            _uow.GetRepo<UserPermission>().Items.Add(new UserPermission { IdResponsable = userId, PermissionCode = c, IsGranted = true });
     }
 
     private void GrantRole(decimal roleId, params string[] codes)
     {
         foreach (var c in codes)
-            _uow.GetRepo<T_ROLE_PERMISSION>().Items.Add(new T_ROLE_PERMISSION { IDROLE = roleId, PERMISSION_CODE = c, IS_GRANTED = true });
+            _uow.GetRepo<RolePermission>().Items.Add(new RolePermission { IdRole = roleId, PermissionCode = c, IsGranted = true });
     }
 
     private static Task<ForbiddenException> Refused(Func<Task> act) => Assert.ThrowsAsync<ForbiddenException>(act);
@@ -169,17 +169,17 @@ public class DatabaseConfigurationSecurityTests
         var svc = CatalogFor(AuthorizerFor(30, 5, Rights.Databases));
         GrantUser(30, $"SAGE:{Base}:READ");
         await Refused(() => svc.DeleteSageAsync(7));
-        Assert.Single(_uow.GetRepo<T_BDD_SAGE>().Items);
+        Assert.Single(_uow.GetRepo<BddSage>().Items);
     }
 
     [Fact]
     public async Task CatalogService_DeleteSage_EmptyName_IsRefused()
     {
-        _uow.GetRepo<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 9, NOM_BD = "", SERVEUR = "srv" });
+        _uow.GetRepo<BddSage>().Items.Add(new BddSage { Id = 9, NomBd = "", Serveur = "srv" });
         GrantUser(31, "SAGE:CREATE", "SAGE::DELETE");
         var svc = CatalogFor(AuthorizerFor(31, 5, Rights.Databases));
         await Refused(() => svc.DeleteSageAsync(9));
-        Assert.Equal(2, _uow.GetRepo<T_BDD_SAGE>().Items.Count);
+        Assert.Equal(2, _uow.GetRepo<BddSage>().Items.Count);
     }
 
     [Fact]
@@ -189,7 +189,7 @@ public class DatabaseConfigurationSecurityTests
         var dto = new SageDbDto(0, "srv", null, null, true, "NOUVELLE");
         await Refused(() => svc.SaveSageAsync(dto));
         await Refused(() => svc.SaveSageAsync(dto with { Id = 7 }));
-        Assert.Single(_uow.GetRepo<T_BDD_SAGE>().Items);
+        Assert.Single(_uow.GetRepo<BddSage>().Items);
     }
 
     [Fact]
@@ -198,7 +198,7 @@ public class DatabaseConfigurationSecurityTests
         var svc = CatalogFor(AuthorizerFor(33, 5, Rights.Reports));
         await Refused(() => svc.DeletePointeuseAsync(8));
         await Refused(() => svc.SavePointeuseAsync(new PointeuseDbDto(0, "srv", null, null, true, "NEW", null, false)));
-        Assert.Single(_uow.GetRepo<T_BDD_POINTEUSE>().Items);
+        Assert.Single(_uow.GetRepo<BddPointeuse>().Items);
     }
 
     #endregion
@@ -211,18 +211,18 @@ public class DatabaseConfigurationSecurityTests
         await Assert.ThrowsAsync<DomainException>(() => _auth.SaveRoleAsync(new RoleDto(1, "Autre")));
         await Assert.ThrowsAsync<DomainException>(() => _auth.DeleteRoleAsync(1));
         await Assert.ThrowsAsync<DomainException>(() => _auth.SetPrivilegesAsync(1, new List<decimal> { Rights.Reports }));
-        Assert.Equal("Administrateur", _uow.GetRepo<T_ROLE>().Items.First(r => r.IDROLE == 1).NOMROLE);
+        Assert.Equal("Administrateur", _uow.GetRepo<Role>().Items.First(r => r.IdRole == 1).NomRole);
     }
 
     [Fact]
     public async Task OtherRoles_RemainEditable()
     {
         await _auth.SetPrivilegesAsync(5, new List<decimal> { Rights.Reports });
-        Assert.Single(_uow.GetRepo<T_DROIT_ROLE>().Items.Where(d => d.IDROLE == 5));
+        Assert.Single(_uow.GetRepo<DroitRole>().Items.Where(d => d.IdRole == 5));
         await _auth.SaveRoleAsync(new RoleDto(5, "Gestionnaire paie"));
-        Assert.Equal("Gestionnaire paie", _uow.GetRepo<T_ROLE>().Items.First(r => r.IDROLE == 5).NOMROLE);
+        Assert.Equal("Gestionnaire paie", _uow.GetRepo<Role>().Items.First(r => r.IdRole == 5).NomRole);
         await _auth.DeleteRoleAsync(5);
-        Assert.DoesNotContain(_uow.GetRepo<T_ROLE>().Items, r => r.IDROLE == 5);
+        Assert.DoesNotContain(_uow.GetRepo<Role>().Items, r => r.IdRole == 5);
     }
 
     #endregion
@@ -256,10 +256,10 @@ public class DatabaseConfigurationSecurityTests
             var decId = Convert.ToDecimal(id);
             var match = Items.FirstOrDefault(i => i switch
             {
-                T_RESPONSABLE r => r.IDRESPONSABLE == decId,
-                T_ROLE ro => ro.IDROLE == decId,
-                T_BDD_SAGE s => s.ID == decId,
-                T_BDD_POINTEUSE p => p.ID == decId,
+                Responsable r => r.IdResponsable == decId,
+                Role ro => ro.IdRole == decId,
+                BddSage s => s.Id == decId,
+                BddPointeuse p => p.Id == decId,
                 _ => false
             });
             return Task.FromResult(match);

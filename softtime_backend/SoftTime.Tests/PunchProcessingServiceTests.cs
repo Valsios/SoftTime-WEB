@@ -14,19 +14,19 @@ public class PunchProcessingServiceTests
     {
         public InMemoryUnitOfWork Uow { get; } = new();
         public PunchProcessingService Service { get; }
-        public List<T_HEURECORRIGER> Corrections => Uow.Get<T_HEURECORRIGER>().Items;
-        public List<T_HEUREANOMALIE> Anomalies => Uow.Get<T_HEUREANOMALIE>().Items;
+        public List<HeureCorrigee> Corrections => Uow.Get<HeureCorrigee>().Items;
+        public List<HeureAnomalie> Anomalies => Uow.Get<HeureAnomalie>().Items;
 
         public Contexte(bool multi = false)
         {
-            Uow.Get<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 1, NOM_BD = "SAGE_TEST" });
-            Uow.Get<T_CLOCK>().Items.Add(new T_CLOCK { MULTIPOINT = multi });
-            Uow.Get<T_CARDPAIE>().Items.Add(new T_CARDPAIE
+            Uow.Get<BddSage>().Items.Add(new BddSage { Id = 1, NomBd = "SAGE_TEST" });
+            Uow.Get<ParametrePointeuse>().Items.Add(new ParametrePointeuse { MultiPoint = multi });
+            Uow.Get<CardPaie>().Items.Add(new CardPaie
             {
-                ID = 1,
-                SAGE_MATRICULE = "001",
-                SAGE_BDD = "SAGE_TEST",
-                POINTEUSE_BDD = "PTE_TEST"
+                Id = 1,
+                SageMatricule = "001",
+                SageBdd = "SAGE_TEST",
+                PointeuseBdd = "PTE_TEST"
             });
             var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
             Service = new PunchProcessingService(Uow, tenant);
@@ -34,40 +34,40 @@ public class PunchProcessingServiceTests
 
         public void Pointage(DateTime jour, int heure, int minute = 0)
         {
-            Uow.Get<T_POINTAGE>().Items.Add(new T_POINTAGE
+            Uow.Get<Pointage>().Items.Add(new Pointage
             {
-                NOM_BDD_SAGE = "SAGE_TEST",
-                NOM_BDD_POINTEUSE = "PTE_TEST",
-                MATRICULE_SAGE = "001",
-                DATE_POINTAGE = jour.Date,
-                HEURE_POINTAGE = new TimeSpan(heure, minute, 0),
-                DATE_IMPORTATION = DateTime.Now
+                NomBddSage = "SAGE_TEST",
+                NomBddPointeuse = "PTE_TEST",
+                MatriculeSage = "001",
+                DatePointage = jour.Date,
+                HeurePointage = new TimeSpan(heure, minute, 0),
+                DateImportation = DateTime.Now
             });
         }
 
         public void Ferie(DateTime jour)
         {
-            Uow.Get<T_FERIE>().Items.Add(new T_FERIE
+            Uow.Get<JourFerie>().Items.Add(new JourFerie
             {
-                DATE = jour.Date,
-                INTITULE = "Férié test",
-                BDD_SAGE = "SAGE_TEST"
+                Date = jour.Date,
+                Intitule = "Férié test",
+                BddSage = "SAGE_TEST"
             });
         }
 
-        public T_PLANNING_SAL Planning(DateTime jour, DateTime ha, DateTime hd, bool off = false)
+        public PlanningSalarie Planning(DateTime jour, DateTime ha, DateTime hd, bool off = false)
         {
-            var planning = new T_PLANNING_SAL
+            var planning = new PlanningSalarie
             {
-                IDSAL = 1,
+                IdSal = 1,
                 DateP = jour.Date,
-                HA = ha,
-                HD = hd,
+                Ha = ha,
+                Hd = hd,
                 OffP = off,
-                BDD_SAGE = "SAGE_TEST",
-                BDD_POINTEUSE = "PTE_TEST"
+                BddSage = "SAGE_TEST",
+                BddPointeuse = "PTE_TEST"
             };
-            Uow.Get<T_PLANNING_SAL>().Items.Add(planning);
+            Uow.Get<PlanningSalarie>().Items.Add(planning);
             return planning;
         }
 
@@ -84,8 +84,8 @@ public class PunchProcessingServiceTests
 
         Assert.Equal(0, resultat.CorrectionsCreees);
         var anomalie = Assert.Single(contexte.Anomalies);
-        Assert.True(anomalie.ABS_AM);
-        Assert.True(anomalie.ABS_PM);
+        Assert.True(anomalie.AbsAm);
+        Assert.True(anomalie.AbsPm);
         Assert.Null(anomalie.H1);
         Assert.Null(anomalie.H2);
     }
@@ -101,8 +101,8 @@ public class PunchProcessingServiceTests
         var anomalie = Assert.Single(contexte.Anomalies);
         Assert.Equal(new TimeSpan(8, 0, 0), anomalie.H1);
         Assert.Equal(new TimeSpan(8, 0, 0), anomalie.H2);
-        Assert.Null(anomalie.ABS_AM);
-        Assert.Null(anomalie.ABS_PM);
+        Assert.Null(anomalie.AbsAm);
+        Assert.Null(anomalie.AbsPm);
     }
 
     [Fact]
@@ -115,13 +115,13 @@ public class PunchProcessingServiceTests
         var resultat = await contexte.Traiter(Lundi, Lundi);
 
         var correction = Assert.Single(contexte.Corrections);
-        Assert.Equal(new TimeSpan(8, 0, 0), correction.HENTREE);
-        Assert.Equal(new TimeSpan(17, 0, 0), correction.HSORTIE);
-        Assert.Equal(Lundi.Date, correction.DATE_POINTAGE_IN);
-        Assert.Equal(Lundi.Date, correction.DATE_POINTAGE_OUT);
-        Assert.True(correction.VALIDER_CORRECTION);
-        Assert.Equal(PunchProcessingConfiguration.OrigineAuto, correction.ORIGINE);
-        Assert.Null(correction.FERIER);
+        Assert.Equal(new TimeSpan(8, 0, 0), correction.HEntree);
+        Assert.Equal(new TimeSpan(17, 0, 0), correction.HSortie);
+        Assert.Equal(Lundi.Date, correction.DatePointageIn);
+        Assert.Equal(Lundi.Date, correction.DatePointageOut);
+        Assert.True(correction.ValiderCorrection);
+        Assert.Equal(PunchProcessingConfiguration.OrigineAuto, correction.Origine);
+        Assert.Null(correction.Ferier);
         Assert.Empty(contexte.Anomalies);
         Assert.Equal(1, resultat.CorrectionsCreees);
     }
@@ -137,9 +137,9 @@ public class PunchProcessingServiceTests
         await contexte.Traiter(Lundi, Lundi);
 
         var correction = Assert.Single(contexte.Corrections);
-        Assert.True(correction.FERIER);
-        Assert.True(correction.FERIER_AM);
-        Assert.True(correction.FERIER_PM);
+        Assert.True(correction.Ferier);
+        Assert.True(correction.FerierAm);
+        Assert.True(correction.FerierPm);
     }
 
     [Fact]
@@ -164,7 +164,7 @@ public class PunchProcessingServiceTests
         var resultat = await contexte.Traiter(Samedi, Samedi);
 
         var correction = Assert.Single(contexte.Corrections);
-        Assert.Null(correction.FERIER);
+        Assert.Null(correction.Ferier);
         Assert.Equal(1, resultat.CorrectionsCreees);
     }
 
@@ -206,10 +206,10 @@ public class PunchProcessingServiceTests
 
         Assert.Equal(2, contexte.Corrections.Count);
         Assert.Equal(2, resultat.CorrectionsCreees);
-        Assert.Equal(new TimeSpan(8, 0, 0), contexte.Corrections[0].HENTREE);
-        Assert.Equal(new TimeSpan(12, 0, 0), contexte.Corrections[0].HSORTIE);
-        Assert.Equal(new TimeSpan(13, 0, 0), contexte.Corrections[1].HENTREE);
-        Assert.Equal(new TimeSpan(17, 0, 0), contexte.Corrections[1].HSORTIE);
+        Assert.Equal(new TimeSpan(8, 0, 0), contexte.Corrections[0].HEntree);
+        Assert.Equal(new TimeSpan(12, 0, 0), contexte.Corrections[0].HSortie);
+        Assert.Equal(new TimeSpan(13, 0, 0), contexte.Corrections[1].HEntree);
+        Assert.Equal(new TimeSpan(17, 0, 0), contexte.Corrections[1].HSortie);
         Assert.Empty(contexte.Anomalies);
     }
 
@@ -238,8 +238,8 @@ public class PunchProcessingServiceTests
         await contexte.Traiter(Lundi, Lundi);
 
         var anomalie = Assert.Single(contexte.Anomalies);
-        Assert.True(anomalie.ABS_AM);
-        Assert.True(anomalie.ABS_PM);
+        Assert.True(anomalie.AbsAm);
+        Assert.True(anomalie.AbsPm);
     }
 
     [Fact]
@@ -275,10 +275,10 @@ public class PunchProcessingServiceTests
         await contexte.Traiter(Lundi, mardi);
 
         var correction = Assert.Single(contexte.Corrections);
-        Assert.Equal(Lundi.Date, correction.DATE_POINTAGE_IN);
-        Assert.Equal(mardi.Date, correction.DATE_POINTAGE_OUT);
-        Assert.Equal(new TimeSpan(22, 0, 0), correction.HENTREE);
-        Assert.Equal(new TimeSpan(6, 0, 0), correction.HSORTIE);
+        Assert.Equal(Lundi.Date, correction.DatePointageIn);
+        Assert.Equal(mardi.Date, correction.DatePointageOut);
+        Assert.Equal(new TimeSpan(22, 0, 0), correction.HEntree);
+        Assert.Equal(new TimeSpan(6, 0, 0), correction.HSortie);
         Assert.Empty(contexte.Anomalies);
     }
 
@@ -286,16 +286,16 @@ public class PunchProcessingServiceTests
     public async Task CorrectionManuelle_EstProtegee()
     {
         var contexte = new Contexte();
-        contexte.Uow.Get<T_HEURECORRIGER>().Items.Add(new T_HEURECORRIGER
+        contexte.Uow.Get<HeureCorrigee>().Items.Add(new HeureCorrigee
         {
-            BDD_SAGE = "SAGE_TEST",
-            BDD_POINTEUSE = "PTE_TEST",
-            MATRICULE_SAGE = "001",
-            DATE_POINTAGE_IN = Lundi.Date,
-            DATE_POINTAGE_OUT = Lundi.Date,
-            HENTREE = new TimeSpan(8, 0, 0),
-            HSORTIE = new TimeSpan(16, 0, 0),
-            ORIGINE = PunchProcessingConfiguration.OrigineManuel
+            BddSage = "SAGE_TEST",
+            BddPointeuse = "PTE_TEST",
+            MatriculeSage = "001",
+            DatePointageIn = Lundi.Date,
+            DatePointageOut = Lundi.Date,
+            HEntree = new TimeSpan(8, 0, 0),
+            HSortie = new TimeSpan(16, 0, 0),
+            Origine = PunchProcessingConfiguration.OrigineManuel
         });
         contexte.Pointage(Lundi, 8);
         contexte.Pointage(Lundi, 17);
@@ -304,20 +304,20 @@ public class PunchProcessingServiceTests
 
         Assert.Equal(1, resultat.JoursIgnores);
         Assert.Single(contexte.Corrections);
-        Assert.Equal(PunchProcessingConfiguration.OrigineManuel, contexte.Corrections[0].ORIGINE);
-        Assert.Equal(new TimeSpan(16, 0, 0), contexte.Corrections[0].HSORTIE);
+        Assert.Equal(PunchProcessingConfiguration.OrigineManuel, contexte.Corrections[0].Origine);
+        Assert.Equal(new TimeSpan(16, 0, 0), contexte.Corrections[0].HSortie);
     }
 
     [Fact]
     public async Task SemaineValidee_EstProtegee()
     {
         var contexte = new Contexte();
-        contexte.Uow.Get<T_HS_VALIDER>().Items.Add(new T_HS_VALIDER
+        contexte.Uow.Get<HsValidee>().Items.Add(new HsValidee
         {
-            BDD_SAGE = "SAGE_TEST",
-            MATRICULES = "001",
-            DATE_DEB = Lundi.Date,
-            VALIDATION_HS = true
+            BddSage = "SAGE_TEST",
+            Matricules = "001",
+            DateDeb = Lundi.Date,
+            ValidationHs = true
         });
         contexte.Pointage(Lundi, 8);
         contexte.Pointage(Lundi, 17);
@@ -369,30 +369,30 @@ public class PunchProcessingServiceTests
         Assert.Empty(contexte.Anomalies);
     }
 
-    private static T_HEURECORRIGER CorrectionAuto(string matricule, DateTime jour) => new()
+    private static HeureCorrigee CorrectionAuto(string matricule, DateTime jour) => new()
     {
-        BDD_SAGE = "SAGE_TEST",
-        BDD_POINTEUSE = "PTE_TEST",
-        MATRICULE_SAGE = matricule,
-        DATE_POINTAGE_IN = jour.Date,
-        DATE_POINTAGE_OUT = jour.Date,
-        HENTREE = new TimeSpan(8, 0, 0),
-        HSORTIE = new TimeSpan(17, 0, 0),
-        ORIGINE = "AUTO"
+        BddSage = "SAGE_TEST",
+        BddPointeuse = "PTE_TEST",
+        MatriculeSage = matricule,
+        DatePointageIn = jour.Date,
+        DatePointageOut = jour.Date,
+        HEntree = new TimeSpan(8, 0, 0),
+        HSortie = new TimeSpan(17, 0, 0),
+        Origine = "AUTO"
     };
 
     [Fact]
     public async Task Traitement_FiltreDepartement_NePurgePasLesCorrectionsDesAutresSalaries()
     {
         var contexte = new Contexte();
-        contexte.Uow.Get<T_CARDPAIE>().Items[0].DEPARTEMENT = "ATELIER";
-        contexte.Uow.Get<T_CARDPAIE>().Items.Add(new T_CARDPAIE
+        contexte.Uow.Get<CardPaie>().Items[0].Departement = "ATELIER";
+        contexte.Uow.Get<CardPaie>().Items.Add(new CardPaie
         {
-            ID = 2,
-            SAGE_MATRICULE = "002",
-            SAGE_BDD = "SAGE_TEST",
-            POINTEUSE_BDD = "PTE_TEST",
-            DEPARTEMENT = "BUREAU"
+            Id = 2,
+            SageMatricule = "002",
+            SageBdd = "SAGE_TEST",
+            PointeuseBdd = "PTE_TEST",
+            Departement = "BUREAU"
         });
         var autre = CorrectionAuto("002", Lundi);
         contexte.Corrections.Add(autre);
@@ -408,13 +408,13 @@ public class PunchProcessingServiceTests
         var contexte = new Contexte();
         var validee = CorrectionAuto("001", Lundi);
         contexte.Corrections.Add(validee);
-        contexte.Uow.Get<T_HS_VALIDER>().Items.Add(new T_HS_VALIDER
+        contexte.Uow.Get<HsValidee>().Items.Add(new HsValidee
         {
-            BDD_SAGE = "SAGE_TEST",
-            MATRICULES = "001",
-            DATE_DEB = Lundi,
-            DATE_FIN = Lundi.AddDays(6),
-            VALIDATION_HS = true
+            BddSage = "SAGE_TEST",
+            Matricules = "001",
+            DateDeb = Lundi,
+            DateFin = Lundi.AddDays(6),
+            ValidationHs = true
         });
 
         var resultat = await contexte.Traiter(Lundi, Lundi);

@@ -35,35 +35,35 @@ public class ReportServiceTests
         public FakeExternalSourceService Source { get; } = new();
         public ReportService Service { get; }
 
-        public List<T_PLANNING_SAL> Planning => Uow.Get<T_PLANNING_SAL>().Items;
-        public List<T_HEURECORRIGER> Corrections => Uow.Get<T_HEURECORRIGER>().Items;
-        public List<T_FERIE> Feries => Uow.Get<T_FERIE>().Items;
+        public List<PlanningSalarie> Planning => Uow.Get<PlanningSalarie>().Items;
+        public List<HeureCorrigee> Corrections => Uow.Get<HeureCorrigee>().Items;
+        public List<JourFerie> Feries => Uow.Get<JourFerie>().Items;
 
         public Contexte()
         {
-            Uow.Get<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 1, NOM_BD = "SAGE_TEST" });
-            Uow.Get<T_CARDPAIE>().Items.Add(new T_CARDPAIE
+            Uow.Get<BddSage>().Items.Add(new BddSage { Id = 1, NomBd = "SAGE_TEST" });
+            Uow.Get<CardPaie>().Items.Add(new CardPaie
             {
-                ID = 1,
-                SAGE_MATRICULE = "001",
-                SAGE_NOM = "Dupont",
-                SAGE_PRENOM = "Jean",
-                DEPARTEMENT = "INFO",
-                SAGE_BDD = "SAGE_TEST",
-                POINTEUSE_BDD = "PTE_TEST"
+                Id = 1,
+                SageMatricule = "001",
+                SageNom = "Dupont",
+                SagePrenom = "Jean",
+                Departement = "INFO",
+                SageBdd = "SAGE_TEST",
+                PointeuseBdd = "PTE_TEST"
             });
-            Uow.Get<T_CAT_SAL>().Items.Add(new T_CAT_SAL
+            Uow.Get<CategorieSalarie>().Items.Add(new CategorieSalarie
             {
-                ID = 1,
-                MATRICULE_SAGE = 1,
-                ID_CATEG = 10,
-                BDD_SAGE = "SAGE_TEST"
+                Id = 1,
+                MatriculeSage = 1,
+                IdCateg = 10,
+                BddSage = "SAGE_TEST"
             });
-            Uow.Get<T_TOLERANCE>().Items.Add(new T_TOLERANCE
+            Uow.Get<ToleranceRetard>().Items.Add(new ToleranceRetard
             {
-                IDCATEGORIE = 10,
-                TOLERANCE = 10,
-                TYPES_TOL = false
+                IdCategorie = 10,
+                Tolerance = 10,
+                TypesTol = false
             });
 
             var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
@@ -78,31 +78,31 @@ public class ReportServiceTests
 
         /// <summary>Journée planifiée 08:00–17:00 avec 1 h de pause (8 h attendues), ou jour OFF.</summary>
         public void Plan(DateTime jour, bool off = false)
-            => Planning.Add(new T_PLANNING_SAL
+            => Planning.Add(new PlanningSalarie
             {
-                IDSAL = 1,
+                IdSal = 1,
                 DateP = jour.Date,
-                HA = off ? null : jour.Date.AddHours(8),
-                HD = off ? null : jour.Date.AddHours(17),
+                Ha = off ? null : jour.Date.AddHours(8),
+                Hd = off ? null : jour.Date.AddHours(17),
                 Pause = off ? TimeSpan.Zero : TimeSpan.FromHours(1),
                 OffP = off,
-                BDD_SAGE = "SAGE_TEST",
-                BDD_POINTEUSE = "PTE_TEST"
+                BddSage = "SAGE_TEST",
+                BddPointeuse = "PTE_TEST"
             });
 
         /// <summary>Heure corrigée déclarant l'absence (type « Arbitrée GTA »).</summary>
         public void AbsenceDeclaree(DateTime jour)
-            => Corrections.Add(new T_HEURECORRIGER
+            => Corrections.Add(new HeureCorrigee
             {
-                BDD_SAGE = "SAGE_TEST",
-                BDD_POINTEUSE = "PTE_TEST",
-                MATRICULE_SAGE = "001",
-                DATE_POINTAGE_IN = jour.Date,
-                DATE_POINTAGE_OUT = jour.Date,
-                HENTREE = TimeSpan.FromHours(8),
-                HSORTIE = TimeSpan.FromHours(17),
-                ABSENCE_AM = true,
-                VALIDER_CORRECTION = true
+                BddSage = "SAGE_TEST",
+                BddPointeuse = "PTE_TEST",
+                MatriculeSage = "001",
+                DatePointageIn = jour.Date,
+                DatePointageOut = jour.Date,
+                HEntree = TimeSpan.FromHours(8),
+                HSortie = TimeSpan.FromHours(17),
+                AbsenceAm = true,
+                ValiderCorrection = true
             });
 
         /// <summary>Congé SAGE d'une journée (type « Congé SAGE »).</summary>
@@ -153,7 +153,7 @@ public class ReportServiceTests
 
         ctx.Plan(jourOff, off: true);
         ctx.Plan(ferie);
-        ctx.Feries.Add(new T_FERIE { DATE = ferie.Date, INTITULE = "Férié", BDD_SAGE = "SAGE_TEST" });
+        ctx.Feries.Add(new JourFerie { Date = ferie.Date, Intitule = "Férié", BddSage = "SAGE_TEST" });
 
         var rows = await ctx.Service.AbsencesAsync(Contexte.Filtre(jourOff, ferie));
 

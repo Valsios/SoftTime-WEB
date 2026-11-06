@@ -27,7 +27,7 @@ public class TimekeepingService : ITimekeepingService
     public async Task<IReadOnlyList<PunchDto>> ListPunchesAsync(PeriodRequest filter, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var list = await _uow.Repository<T_POINTAGE>().ListReadOnlyAsync(PunchPredicate(filter, _tenant.SageDb), ct);
+        var list = await _uow.Repository<Pointage>().ListReadOnlyAsync(PunchPredicate(filter, _tenant.SageDb), ct);
         return list.Select(ToPunchDto).ToList();
     }
 
@@ -40,38 +40,38 @@ public class TimekeepingService : ITimekeepingService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         return await PagedLists.PageAsync(
-            _uow.Repository<T_POINTAGE>(),
+            _uow.Repository<Pointage>(),
             PunchPredicate(filter, _tenant.SageDb),
-            q => q.OrderBy(p => p.DATE_POINTAGE)
-                  .ThenBy(p => p.HEURE_POINTAGE)
-                  .ThenBy(p => p.MATRICULE_SAGE)
-                  .ThenBy(p => p.IDPOINTAGE),
+            q => q.OrderBy(p => p.DatePointage)
+                  .ThenBy(p => p.HeurePointage)
+                  .ThenBy(p => p.MatriculeSage)
+                  .ThenBy(p => p.IdPointage),
             page,
             pageSize,
             ToPunchDto,
             filter.Search,
-            new Expression<Func<T_POINTAGE, string?>>[]
+            new Expression<Func<Pointage, string?>>[]
             {
-                p => p.MATRICULE_SAGE,
-                p => p.TYPE_POINTAGE,
+                p => p.MatriculeSage,
+                p => p.TypePointage,
             },
             ct);
     }
 
-    private static PunchDto ToPunchDto(T_POINTAGE p) => new(
-        p.IDPOINTAGE, p.MATRICULE_SAGE, p.DATE_POINTAGE, p.HEURE_POINTAGE, p.TYPE_POINTAGE, p.DATE_IMPORTATION);
+    private static PunchDto ToPunchDto(Pointage p) => new(
+        p.IdPointage, p.MatriculeSage, p.DatePointage, p.HeurePointage, p.TypePointage, p.DateImportation);
 
-    private static Expression<Func<T_POINTAGE, bool>> PunchPredicate(PeriodRequest filter, string sageDb)
+    private static Expression<Func<Pointage, bool>> PunchPredicate(PeriodRequest filter, string sageDb)
     {
         var from = filter.From.Date;
         var toInclusive = filter.To.Date.AddDays(1);
         var matriculeFrom = filter.MatriculeFrom;
         var matriculeTo = filter.MatriculeTo;
-        return p => p.NOM_BDD_SAGE == sageDb
-            && p.DATE_POINTAGE >= from
-            && p.DATE_POINTAGE <= toInclusive
-            && (string.IsNullOrEmpty(matriculeFrom) || string.Compare(p.MATRICULE_SAGE, matriculeFrom) >= 0)
-            && (string.IsNullOrEmpty(matriculeTo) || string.Compare(p.MATRICULE_SAGE, matriculeTo) <= 0);
+        return p => p.NomBddSage == sageDb
+            && p.DatePointage >= from
+            && p.DatePointage <= toInclusive
+            && (string.IsNullOrEmpty(matriculeFrom) || string.Compare(p.MatriculeSage, matriculeFrom) >= 0)
+            && (string.IsNullOrEmpty(matriculeTo) || string.Compare(p.MatriculeSage, matriculeTo) <= 0);
     }
 
     /// <summary>
@@ -82,24 +82,24 @@ public class TimekeepingService : ITimekeepingService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageDb = _tenant.SageDb;
-        var repo = _uow.Repository<T_POINTAGE>();
-        var entity = (await repo.ListAsync(p => p.IDPOINTAGE == id && p.NOM_BDD_SAGE == sageDb, ct)).FirstOrDefault()
+        var repo = _uow.Repository<Pointage>();
+        var entity = (await repo.ListAsync(p => p.IdPointage == id && p.NomBddSage == sageDb, ct)).FirstOrDefault()
             ?? throw new NotFoundException($"Pointage introuvable (ID={id}).");
 
-        var jour = dto.Date?.Date ?? entity.DATE_POINTAGE?.Date;
-        await RefuserSiSemaineValideeAsync(sageDb, entity.MATRICULE_SAGE, jour, ct);
+        var jour = dto.Date?.Date ?? entity.DatePointage?.Date;
+        await RefuserSiSemaineValideeAsync(sageDb, entity.MatriculeSage, jour, ct);
 
         if (dto.Date.HasValue)
-            entity.DATE_POINTAGE = dto.Date.Value.Date;
+            entity.DatePointage = dto.Date.Value.Date;
         if (dto.Heure.HasValue)
-            entity.HEURE_POINTAGE = dto.Heure.Value;
+            entity.HeurePointage = dto.Heure.Value;
         if (dto.Type is not null)
-            entity.TYPE_POINTAGE = string.IsNullOrWhiteSpace(dto.Type) ? null : dto.Type.Trim();
+            entity.TypePointage = string.IsNullOrWhiteSpace(dto.Type) ? null : dto.Type.Trim();
 
         repo.Update(entity);
         await _uow.SaveChangesAsync(ct);
-        return new PunchDto(entity.IDPOINTAGE, entity.MATRICULE_SAGE, entity.DATE_POINTAGE,
-            entity.HEURE_POINTAGE, entity.TYPE_POINTAGE, entity.DATE_IMPORTATION);
+        return new PunchDto(entity.IdPointage, entity.MatriculeSage, entity.DatePointage,
+            entity.HeurePointage, entity.TypePointage, entity.DateImportation);
     }
 
     /// <summary>
@@ -123,38 +123,38 @@ public class TimekeepingService : ITimekeepingService
         var to = request.To.Date;
         var finExclusive = to.AddDays(1);
 
-        var validees = (await _uow.Repository<T_HS_VALIDER>().ListAsync(
-            v => v.BDD_SAGE == sageDb && v.VALIDATION_HS == true && v.DATE_DEB >= from && v.DATE_DEB <= to, ct)).Count;
+        var validees = (await _uow.Repository<HsValidee>().ListAsync(
+            v => v.BddSage == sageDb && v.ValidationHs == true && v.DateDeb >= from && v.DateDeb <= to, ct)).Count;
         if (validees > 0)
             throw new DomainException(
                 $"La période contient {validees} semaine(s) validée(s) : annulez la validation avant de purger.");
 
-        var hsExistants = (await _uow.Repository<T_HSExoImp>().ListAsync(
-            h => h.BDD_SAGE == sageDb && h.PeriodeDebut >= from && h.PeriodeFin <= to, ct)).Count;
+        var hsExistants = (await _uow.Repository<HsExoImp>().ListAsync(
+            h => h.BddSage == sageDb && h.PeriodeDebut >= from && h.PeriodeFin <= to, ct)).Count;
         if (hsExistants > 0)
             throw new DomainException(
                 "Des calculs EXO/IMPO existent sur la période : purgez les heures supplémentaires avant de purger les pointages.");
 
-        var pointages = (await _uow.Repository<T_POINTAGE>().ListAsync(
-                p => p.NOM_BDD_SAGE == sageDb && p.DATE_POINTAGE >= from && p.DATE_POINTAGE <= finExclusive, ct))
-            .Where(p => MatriculeRange.Contains(p.MATRICULE_SAGE, request))
+        var pointages = (await _uow.Repository<Pointage>().ListAsync(
+                p => p.NomBddSage == sageDb && p.DatePointage >= from && p.DatePointage <= finExclusive, ct))
+            .Where(p => MatriculeRange.Contains(p.MatriculeSage, request))
             .ToList();
 
-        var corrRepo = _uow.Repository<T_HEURECORRIGER>();
+        var corrRepo = _uow.Repository<HeureCorrigee>();
         var corrections = await corrRepo.ListAsync(
-            h => h.BDD_SAGE == sageDb && h.DATE_POINTAGE_IN >= from && h.DATE_POINTAGE_IN <= finExclusive, ct);
+            h => h.BddSage == sageDb && h.DatePointageIn >= from && h.DatePointageIn <= finExclusive, ct);
         var correctionsCibles = corrections
-            .Where(h => MatriculeRange.Contains(h.MATRICULE_SAGE, request)
-                        && !string.Equals(h.ORIGINE, PunchProcessingConfiguration.OrigineManuel, StringComparison.OrdinalIgnoreCase))
+            .Where(h => MatriculeRange.Contains(h.MatriculeSage, request)
+                        && !string.Equals(h.Origine, PunchProcessingConfiguration.OrigineManuel, StringComparison.OrdinalIgnoreCase))
             .ToList();
         var manuellesConservees = corrections.Count(h =>
-            MatriculeRange.Contains(h.MATRICULE_SAGE, request)
-            && string.Equals(h.ORIGINE, PunchProcessingConfiguration.OrigineManuel, StringComparison.OrdinalIgnoreCase));
+            MatriculeRange.Contains(h.MatriculeSage, request)
+            && string.Equals(h.Origine, PunchProcessingConfiguration.OrigineManuel, StringComparison.OrdinalIgnoreCase));
 
-        var anomRepo = _uow.Repository<T_HEUREANOMALIE>();
+        var anomRepo = _uow.Repository<HeureAnomalie>();
         var anomalies = (await anomRepo.ListAsync(
-                a => a.BDD_SAGE == sageDb && a.DATE_POINTAGE_IN >= from && a.DATE_POINTAGE_IN <= finExclusive, ct))
-            .Where(a => MatriculeRange.Contains(a.MATRICULE_SAGE, request))
+                a => a.BddSage == sageDb && a.DatePointageIn >= from && a.DatePointageIn <= finExclusive, ct))
+            .Where(a => MatriculeRange.Contains(a.MatriculeSage, request))
             .ToList();
 
         if (pointages.Count == 0 && correctionsCibles.Count == 0 && anomalies.Count == 0)
@@ -166,7 +166,7 @@ public class TimekeepingService : ITimekeepingService
         await _history.ArchivePunchesAsync(pointages, ct);
         await _history.ArchiveAnomaliesAsync(anomalies, ct);
         if (pointages.Count > 0)
-            _uow.Repository<T_POINTAGE>().RemoveRange(pointages);
+            _uow.Repository<Pointage>().RemoveRange(pointages);
         if (correctionsCibles.Count > 0)
             corrRepo.RemoveRange(correctionsCibles);
         if (anomalies.Count > 0)
@@ -186,9 +186,9 @@ public class TimekeepingService : ITimekeepingService
         if (matricule is null || jour is null)
             return;
         var lundi = jour.Value.Date.AddDays(-(((int)jour.Value.DayOfWeek + 6) % 7));
-        var semaines = await _uow.Repository<T_HS_VALIDER>().ListAsync(
-            v => v.BDD_SAGE == sageDb && v.DATE_DEB == lundi && v.VALIDATION_HS == true, ct);
-        if (semaines.Any(v => MemeIdentifiant(v.MATRICULES, matricule)))
+        var semaines = await _uow.Repository<HsValidee>().ListAsync(
+            v => v.BddSage == sageDb && v.DateDeb == lundi && v.ValidationHs == true, ct);
+        if (semaines.Any(v => MemeIdentifiant(v.Matricules, matricule)))
             throw new DomainException(
                 $"La semaine du {lundi:dd/MM/yyyy} est validée : annulez la validation avant de modifier les pointages.");
     }
@@ -198,16 +198,16 @@ public class TimekeepingService : ITimekeepingService
     /// opérations de masse (import, validation d'anomalies) au lieu d'une requête par ligne.
     /// </summary>
     private async Task<HashSet<(string Cle, DateTime Lundi)>> ChargerSemainesValideesAsync(string sageDb, CancellationToken ct)
-        => (await _uow.Repository<T_HS_VALIDER>().ListAsync(
-                v => v.BDD_SAGE == sageDb && v.VALIDATION_HS == true && v.DATE_DEB != null, ct))
-            .Where(v => !string.IsNullOrWhiteSpace(v.MATRICULES))
-            .Select(v => (MatriculeIdentity.Cle(v.MATRICULES), v.DATE_DEB!.Value.Date))
+        => (await _uow.Repository<HsValidee>().ListAsync(
+                v => v.BddSage == sageDb && v.ValidationHs == true && v.DateDeb != null, ct))
+            .Where(v => !string.IsNullOrWhiteSpace(v.Matricules))
+            .Select(v => (MatriculeIdentity.Cle(v.Matricules), v.DateDeb!.Value.Date))
             .ToHashSet();
 
     private static DateTime Lundi(DateTime jour) => jour.Date.AddDays(-(((int)jour.DayOfWeek + 6) % 7));
 
-    private static bool AbsenceJourneeComplete(T_HEUREANOMALIE anomalie)
-        => anomalie.ABS_AM == true && anomalie.ABS_PM == true;
+    private static bool AbsenceJourneeComplete(HeureAnomalie anomalie)
+        => anomalie.AbsAm == true && anomalie.AbsPm == true;
 
     /// <summary>Comparaison de matricule insensible au remplissage par des zéros (« 00369 » == « 369 »).</summary>
     private static bool MemeIdentifiant(string? a, string? b)
@@ -229,23 +229,23 @@ public class TimekeepingService : ITimekeepingService
         if (request.To.Date < request.From.Date)
             throw new DomainException("La date de fin doit être postérieure ou égale à la date de début.");
 
-        _ = (await _uow.Repository<T_CLOCK>().ListAsync(_ => true, ct)).FirstOrDefault()
+        _ = (await _uow.Repository<ParametrePointeuse>().ListAsync(_ => true, ct)).FirstOrDefault()
             ?? throw new DomainException("Paramètre pointeuse (T_CLOCK) manquant.");
         var pteRow = await _tenant.GetPointeuseRowAsync(ct);
-        var cards = (await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == _tenant.SageDb, ct))
-            .Where(c => MatchesPointeuse(c.POINTEUSE_BDD, _tenant.PointeuseDb))
+        var cards = (await _uow.Repository<CardPaie>().ListAsync(c => c.SageBdd == _tenant.SageDb, ct))
+            .Where(c => MatchesPointeuse(c.PointeuseBdd, _tenant.PointeuseDb))
             .ToList();
         if (!string.IsNullOrEmpty(request.MatriculeFrom))
-            cards = cards.Where(c => string.Compare(c.SAGE_MATRICULE, request.MatriculeFrom, StringComparison.Ordinal) >= 0).ToList();
+            cards = cards.Where(c => string.Compare(c.SageMatricule, request.MatriculeFrom, StringComparison.Ordinal) >= 0).ToList();
         if (!string.IsNullOrEmpty(request.MatriculeTo))
-            cards = cards.Where(c => string.Compare(c.SAGE_MATRICULE, request.MatriculeTo, StringComparison.Ordinal) <= 0).ToList();
+            cards = cards.Where(c => string.Compare(c.SageMatricule, request.MatriculeTo, StringComparison.Ordinal) <= 0).ToList();
         // Un meme badge peut etre associe a plusieurs correspondances paie : le rattachement est alors
         // ambigu, on ignore ce badge plutot que d'importer des pointages sur le mauvais salarie.
-        var badgeMap = new Dictionary<string, T_CARDPAIE>(StringComparer.OrdinalIgnoreCase);
+        var badgeMap = new Dictionary<string, CardPaie>(StringComparer.OrdinalIgnoreCase);
         var ambiguousBadges = new List<string>();
         foreach (var group in cards
-                     .Where(c => !string.IsNullOrWhiteSpace(c.POINTEUSE_NUMERO))
-                     .GroupBy(c => c.POINTEUSE_NUMERO!.Trim(), StringComparer.OrdinalIgnoreCase))
+                     .Where(c => !string.IsNullOrWhiteSpace(c.PointeuseNumero))
+                     .GroupBy(c => c.PointeuseNumero!.Trim(), StringComparer.OrdinalIgnoreCase))
         {
             if (group.Count() > 1)
             {
@@ -258,20 +258,20 @@ public class TimekeepingService : ITimekeepingService
         var from = request.From.Date;
         var to = request.To.Date.AddDays(1);
         var punches = await _externalSource.GetPunchesAsync(pteRow, from, to, ct);
-        var repo = _uow.Repository<T_POINTAGE>();
+        var repo = _uow.Repository<Pointage>();
         var existing = await repo.ListAsync(p =>
-            p.NOM_BDD_SAGE == _tenant.SageDb && p.DATE_POINTAGE >= from && p.DATE_POINTAGE < to, ct);
+            p.NomBddSage == _tenant.SageDb && p.DatePointage >= from && p.DatePointage < to, ct);
         // Dédoublonnage exact (matricule canonique + date + heure) dans les deux modes. L'ancien
         // comportement ne dédoublonnait qu'en mono : en multi, une réimportation doublait les lignes.
         var dejaImportes = existing
-            .Where(p => MatchesPointeuse(p.NOM_BDD_POINTEUSE, _tenant.PointeuseDb))
-            .Where(p => p.DATE_POINTAGE.HasValue
-                        && p.HEURE_POINTAGE.HasValue
-                        && !string.IsNullOrWhiteSpace(p.MATRICULE_SAGE))
+            .Where(p => MatchesPointeuse(p.NomBddPointeuse, _tenant.PointeuseDb))
+            .Where(p => p.DatePointage.HasValue
+                        && p.HeurePointage.HasValue
+                        && !string.IsNullOrWhiteSpace(p.MatriculeSage))
             .Select(p => (
-                Cle: MatriculeIdentity.Cle(p.MATRICULE_SAGE),
-                Jour: p.DATE_POINTAGE!.Value.Date,
-                Heure: p.HEURE_POINTAGE!.Value))
+                Cle: MatriculeIdentity.Cle(p.MatriculeSage),
+                Jour: p.DatePointage!.Value.Date,
+                Heure: p.HeurePointage!.Value))
             .ToHashSet();
         var imported = 0;
         var skipped = 0;
@@ -280,18 +280,18 @@ public class TimekeepingService : ITimekeepingService
             var user = users.FirstOrDefault(u => u.UserId == punch.UserId);
             if (user?.Badge is not string badge || !badgeMap.TryGetValue(badge.Trim(), out var card))
             { skipped++; continue; }
-            if (!dejaImportes.Add((MatriculeIdentity.Cle(card.SAGE_MATRICULE), punch.CheckTime.Date, punch.CheckTime.TimeOfDay)))
+            if (!dejaImportes.Add((MatriculeIdentity.Cle(card.SageMatricule), punch.CheckTime.Date, punch.CheckTime.TimeOfDay)))
             { skipped++; continue; }
-            await repo.AddAsync(new T_POINTAGE
+            await repo.AddAsync(new Pointage
             {
-                NOM_BDD_SAGE = _tenant.SageDb,
-                NOM_BDD_POINTEUSE = pteRow.NOM_BD,
-                MATRICULE_SAGE = card.SAGE_MATRICULE,
-                DATE_POINTAGE = punch.CheckTime.Date,
-                HEURE_POINTAGE = punch.CheckTime.TimeOfDay,
-                DATE_IMPORTATION = DateTime.Now,
-                TYPE_POINTAGE = string.IsNullOrWhiteSpace(punch.CheckType) ? pteRow.TYPE_POINTAGE : punch.CheckType,
-                IDUNIQUE_POINTAGE = punch.UserId
+                NomBddSage = _tenant.SageDb,
+                NomBddPointeuse = pteRow.NomBd,
+                MatriculeSage = card.SageMatricule,
+                DatePointage = punch.CheckTime.Date,
+                HeurePointage = punch.CheckTime.TimeOfDay,
+                DateImportation = DateTime.Now,
+                TypePointage = string.IsNullOrWhiteSpace(punch.CheckType) ? pteRow.TypePointage : punch.CheckType,
+                IdUniquePointage = punch.UserId
             }, ct);
             imported++;
         }
@@ -325,24 +325,24 @@ public class TimekeepingService : ITimekeepingService
             return new ImportResultDto(0, skipped,
                 $"Aucun pointage valide : {skipped} ligne(s) ignorée(s) (matricule, date ou heure manquants).");
 
-        var repo = _uow.Repository<T_POINTAGE>();
+        var repo = _uow.Repository<Pointage>();
         var from = parsed.Min(p => p.Jour);
         var to = parsed.Max(p => p.Jour).AddDays(1);
         var existing = await repo.ListAsync(p =>
-            p.NOM_BDD_SAGE == _tenant.SageDb
-            && p.DATE_POINTAGE >= from
-            && p.DATE_POINTAGE < to, ct);
+            p.NomBddSage == _tenant.SageDb
+            && p.DatePointage >= from
+            && p.DatePointage < to, ct);
         // Dédoublonnage contre la base et au sein du fichier (deux lignes identiques ne doivent
         // produire qu'un seul pointage).
         var dejaImportes = existing
-            .Where(p => MatchesPointeuse(p.NOM_BDD_POINTEUSE, _tenant.PointeuseDb))
-            .Where(p => p.DATE_POINTAGE.HasValue
-                        && p.HEURE_POINTAGE.HasValue
-                        && !string.IsNullOrWhiteSpace(p.MATRICULE_SAGE))
+            .Where(p => MatchesPointeuse(p.NomBddPointeuse, _tenant.PointeuseDb))
+            .Where(p => p.DatePointage.HasValue
+                        && p.HeurePointage.HasValue
+                        && !string.IsNullOrWhiteSpace(p.MatriculeSage))
             .Select(p => (
-                Cle: MatriculeIdentity.Cle(p.MATRICULE_SAGE),
-                Jour: p.DATE_POINTAGE!.Value.Date,
-                Heure: p.HEURE_POINTAGE!.Value))
+                Cle: MatriculeIdentity.Cle(p.MatriculeSage),
+                Jour: p.DatePointage!.Value.Date,
+                Heure: p.HeurePointage!.Value))
             .ToHashSet();
 
         var imported = 0;
@@ -353,15 +353,15 @@ public class TimekeepingService : ITimekeepingService
                 skipped++;
                 continue;
             }
-            await repo.AddAsync(new T_POINTAGE
+            await repo.AddAsync(new Pointage
             {
-                MATRICULE_SAGE = row.Matricule,
-                DATE_POINTAGE = row.Jour,
-                HEURE_POINTAGE = row.Heure,
-                DATE_IMPORTATION = DateTime.Now,
-                NOM_BDD_SAGE = _tenant.SageDb,
-                NOM_BDD_POINTEUSE = _tenant.PointeuseDb,
-                TYPE_POINTAGE = "IO"
+                MatriculeSage = row.Matricule,
+                DatePointage = row.Jour,
+                HeurePointage = row.Heure,
+                DateImportation = DateTime.Now,
+                NomBddSage = _tenant.SageDb,
+                NomBddPointeuse = _tenant.PointeuseDb,
+                TypePointage = "IO"
             }, ct);
             imported++;
         }
@@ -379,7 +379,7 @@ public class TimekeepingService : ITimekeepingService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         // Les anomalies sans date (importées sans date exploitable) ne doivent pas rester invisibles.
-        var list = await _uow.Repository<T_HEUREANOMALIE>().ListReadOnlyAsync(AnomalyPredicate(filter, _tenant.SageDb), ct);
+        var list = await _uow.Repository<HeureAnomalie>().ListReadOnlyAsync(AnomalyPredicate(filter, _tenant.SageDb), ct);
         return list.Select(MapAnomaly).ToList();
     }
 
@@ -388,30 +388,30 @@ public class TimekeepingService : ITimekeepingService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         return await PagedLists.PageAsync(
-            _uow.Repository<T_HEUREANOMALIE>(),
+            _uow.Repository<HeureAnomalie>(),
             AnomalyPredicate(filter, _tenant.SageDb),
-            q => q.OrderBy(a => a.DATE_POINTAGE_IN)
-                  .ThenBy(a => a.MATRICULE_SAGE)
-                  .ThenBy(a => a.ID),
+            q => q.OrderBy(a => a.DatePointageIn)
+                  .ThenBy(a => a.MatriculeSage)
+                  .ThenBy(a => a.Id),
             page,
             pageSize,
             MapAnomaly,
             filter.Search,
-            new Expression<Func<T_HEUREANOMALIE, string?>>[]
+            new Expression<Func<HeureAnomalie, string?>>[]
             {
-                a => a.MATRICULE_SAGE,
-                a => a.INTITULE_ABSENCE,
+                a => a.MatriculeSage,
+                a => a.IntituleAbsence,
             },
             ct);
     }
 
-    private static Expression<Func<T_HEUREANOMALIE, bool>> AnomalyPredicate(PeriodRequest filter, string sageDb)
+    private static Expression<Func<HeureAnomalie, bool>> AnomalyPredicate(PeriodRequest filter, string sageDb)
     {
         var from = filter.From;
         var to = filter.To;
-        return a => a.BDD_SAGE == sageDb
-            && (a.DATE_POINTAGE_IN == null
-                || (a.DATE_POINTAGE_IN >= from && a.DATE_POINTAGE_IN <= to));
+        return a => a.BddSage == sageDb
+            && (a.DatePointageIn == null
+                || (a.DatePointageIn >= from && a.DatePointageIn <= to));
     }
 
     public async Task<AnomalyDto?> GetAnomalyAsync(decimal id, CancellationToken ct = default)
@@ -432,29 +432,29 @@ public class TimekeepingService : ITimekeepingService
         var entity = await LoadAnomalyAsync(id, ct)
             ?? throw new NotFoundException($"Anomalie introuvable (ID={id}).");
 
-        var dateIn = dto.DateIn?.Date ?? entity.DATE_POINTAGE_IN?.Date;
-        var dateOut = dto.DateOut?.Date ?? entity.DATE_POINTAGE_OUT?.Date;
-        var hEntree = dto.HEntree ?? entity.HENTREE;
-        var hPs = dto.HPs ?? entity.HPS;
-        var hPe = dto.HPe ?? entity.HPE;
-        var hSortie = dto.HSortie ?? entity.HSORTIE;
+        var dateIn = dto.DateIn?.Date ?? entity.DatePointageIn?.Date;
+        var dateOut = dto.DateOut?.Date ?? entity.DatePointageOut?.Date;
+        var hEntree = dto.HEntree ?? entity.HEntree;
+        var hPs = dto.HPs ?? entity.Hps;
+        var hPe = dto.HPe ?? entity.Hpe;
+        var hSortie = dto.HSortie ?? entity.HSortie;
         ValidateAnomalyHours(dateIn, hEntree, hPs, hPe, dateOut, hSortie);
 
-        entity.DATE_POINTAGE_IN = dateIn;
-        entity.DATE_POINTAGE_OUT = dateOut;
-        entity.HENTREE = hEntree;
-        entity.HPS = hPs;
-        entity.HPE = hPe;
-        entity.HSORTIE = hSortie;
-        if (dto.AbsAm.HasValue) entity.ABS_AM = dto.AbsAm;
-        if (dto.AbsPm.HasValue) entity.ABS_PM = dto.AbsPm;
-        if (dto.Feries.HasValue) entity.FERIES = dto.Feries;
-        if (dto.FeriesAm.HasValue) entity.FERIES_AM = dto.FeriesAm;
-        if (dto.FeriesPm.HasValue) entity.FERIES_PM = dto.FeriesPm;
+        entity.DatePointageIn = dateIn;
+        entity.DatePointageOut = dateOut;
+        entity.HEntree = hEntree;
+        entity.Hps = hPs;
+        entity.Hpe = hPe;
+        entity.HSortie = hSortie;
+        if (dto.AbsAm.HasValue) entity.AbsAm = dto.AbsAm;
+        if (dto.AbsPm.HasValue) entity.AbsPm = dto.AbsPm;
+        if (dto.Feries.HasValue) entity.Feries = dto.Feries;
+        if (dto.FeriesAm.HasValue) entity.FeriesAm = dto.FeriesAm;
+        if (dto.FeriesPm.HasValue) entity.FeriesPm = dto.FeriesPm;
         if (dto.IntituleAbsence is not null)
-            entity.INTITULE_ABSENCE = string.IsNullOrWhiteSpace(dto.IntituleAbsence) ? null : dto.IntituleAbsence.Trim();
+            entity.IntituleAbsence = string.IsNullOrWhiteSpace(dto.IntituleAbsence) ? null : dto.IntituleAbsence.Trim();
 
-        _uow.Repository<T_HEUREANOMALIE>().Update(entity);
+        _uow.Repository<HeureAnomalie>().Update(entity);
         await _uow.SaveChangesAsync(ct);
         return MapAnomaly(entity);
     }
@@ -472,9 +472,9 @@ public class TimekeepingService : ITimekeepingService
             throw new DomainException("Aucune anomalie sélectionnée.");
 
         var cible = ids.ToHashSet();
-        var anomalies = (await _uow.Repository<T_HEUREANOMALIE>()
-                .ListAsync(a => a.BDD_SAGE == _tenant.SageDb, ct))
-            .Where(a => cible.Contains(a.ID))
+        var anomalies = (await _uow.Repository<HeureAnomalie>()
+                .ListAsync(a => a.BddSage == _tenant.SageDb, ct))
+            .Where(a => cible.Contains(a.Id))
             .ToList();
         if (anomalies.Count == 0)
             throw new DomainException("Aucune anomalie trouvée pour les identifiants fournis.");
@@ -482,65 +482,65 @@ public class TimekeepingService : ITimekeepingService
         // Une absence de la journée complète (matin et après-midi) se valide sans heures : c'est
         // l'arbitrage « le salarié était absent ». Des heures saisies en plus seraient payées.
         var contradictoires = anomalies
-            .Where(a => AbsenceJourneeComplete(a) && (a.HENTREE.HasValue || a.HSORTIE.HasValue))
+            .Where(a => AbsenceJourneeComplete(a) && (a.HEntree.HasValue || a.HSortie.HasValue))
             .ToList();
         if (contradictoires.Count > 0)
         {
             var detail = string.Join(", ", contradictoires.Take(5)
-                .Select(a => $"{a.MATRICULE_SAGE} du {a.DATE_POINTAGE_IN?.ToString("dd/MM/yyyy") ?? "?"}"));
+                .Select(a => $"{a.MatriculeSage} du {a.DatePointageIn?.ToString("dd/MM/yyyy") ?? "?"}"));
             throw new DomainException(
                 $"Absence de la journée complète et heures saisies pour : {detail}. Retirez les heures ou l'absence avant de valider.");
         }
 
         var incompletes = anomalies
-            .Where(a => !AbsenceJourneeComplete(a) && (a.HENTREE is null || a.HSORTIE is null))
+            .Where(a => !AbsenceJourneeComplete(a) && (a.HEntree is null || a.HSortie is null))
             .ToList();
         if (incompletes.Count > 0)
         {
             var detail = string.Join(", ", incompletes.Take(5)
-                .Select(a => $"{a.MATRICULE_SAGE} du {a.DATE_POINTAGE_IN?.ToString("dd/MM/yyyy") ?? "?"}"));
+                .Select(a => $"{a.MatriculeSage} du {a.DatePointageIn?.ToString("dd/MM/yyyy") ?? "?"}"));
             throw new DomainException(
                 $"Heure d'entrée ou de sortie manquante pour : {detail}. Renseignez-les avant de valider.");
         }
 
         var semainesValidees = await ChargerSemainesValideesAsync(_tenant.SageDb, ct);
         var verrouillees = anomalies
-            .Where(a => a.DATE_POINTAGE_IN.HasValue
-                        && semainesValidees.Contains((MatriculeIdentity.Cle(a.MATRICULE_SAGE), Lundi(a.DATE_POINTAGE_IN.Value))))
+            .Where(a => a.DatePointageIn.HasValue
+                        && semainesValidees.Contains((MatriculeIdentity.Cle(a.MatriculeSage), Lundi(a.DatePointageIn.Value))))
             .ToList();
         if (verrouillees.Count > 0)
         {
             var detail = string.Join(", ", verrouillees.Take(5)
-                .Select(a => $"{a.MATRICULE_SAGE} du {a.DATE_POINTAGE_IN:dd/MM/yyyy}"));
+                .Select(a => $"{a.MatriculeSage} du {a.DatePointageIn:dd/MM/yyyy}"));
             throw new DomainException(
                 $"Semaine validée pour : {detail}. Annulez la validation avant de modifier les heures.");
         }
 
-        var corrRepo = _uow.Repository<T_HEURECORRIGER>();
+        var corrRepo = _uow.Repository<HeureCorrigee>();
         foreach (var anomalie in anomalies)
         {
-            await corrRepo.AddAsync(new T_HEURECORRIGER
+            await corrRepo.AddAsync(new HeureCorrigee
             {
-                BDD_SAGE = anomalie.BDD_SAGE,
-                BDD_POINTEUSE = anomalie.BDD_POINTEUSE,
-                MATRICULE_SAGE = anomalie.MATRICULE_SAGE,
-                DATE_POINTAGE_IN = anomalie.DATE_POINTAGE_IN,
-                DATE_POINTAGE_OUT = anomalie.DATE_POINTAGE_OUT,
-                HENTREE = anomalie.HENTREE,
-                HPS = anomalie.HPS,
-                HPE = anomalie.HPE,
-                HSORTIE = anomalie.HSORTIE,
-                ABSENCE_AM = anomalie.ABS_AM ?? false,
-                ABSENCE_PM = anomalie.ABS_PM ?? false,
-                FERIER = anomalie.FERIES,
-                FERIER_AM = anomalie.FERIES_AM ?? false,
-                FERIER_PM = anomalie.FERIES_PM ?? false,
-                INTITULE_ABSENCE = anomalie.INTITULE_ABSENCE,
-                VALIDER_CORRECTION = true,
-                ORIGINE = PunchProcessingConfiguration.OrigineManuel
+                BddSage = anomalie.BddSage,
+                BddPointeuse = anomalie.BddPointeuse,
+                MatriculeSage = anomalie.MatriculeSage,
+                DatePointageIn = anomalie.DatePointageIn,
+                DatePointageOut = anomalie.DatePointageOut,
+                HEntree = anomalie.HEntree,
+                Hps = anomalie.Hps,
+                Hpe = anomalie.Hpe,
+                HSortie = anomalie.HSortie,
+                AbsenceAm = anomalie.AbsAm ?? false,
+                AbsencePm = anomalie.AbsPm ?? false,
+                Ferier = anomalie.Feries,
+                FerierAm = anomalie.FeriesAm ?? false,
+                FerierPm = anomalie.FeriesPm ?? false,
+                IntituleAbsence = anomalie.IntituleAbsence,
+                ValiderCorrection = true,
+                Origine = PunchProcessingConfiguration.OrigineManuel
             }, ct);
         }
-        _uow.Repository<T_HEUREANOMALIE>().RemoveRange(anomalies);
+        _uow.Repository<HeureAnomalie>().RemoveRange(anomalies);
         await _history.ArchiveAnomaliesAsync(anomalies, ct);
         await _uow.SaveChangesAsync(ct);
 
@@ -551,7 +551,7 @@ public class TimekeepingService : ITimekeepingService
     public async Task DeleteAnomalyAsync(decimal id, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var repo = _uow.Repository<T_HEUREANOMALIE>();
+        var repo = _uow.Repository<HeureAnomalie>();
         var e = await LoadAnomalyAsync(id, ct) ?? throw new NotFoundException();
         await _history.ArchiveAnomaliesAsync(new[] { e }, ct);
         repo.Remove(e);
@@ -559,11 +559,11 @@ public class TimekeepingService : ITimekeepingService
     }
 
     /// <summary>Charge une anomalie en la restreignant à la base SAGE du tenant courant.</summary>
-    private async Task<T_HEUREANOMALIE?> LoadAnomalyAsync(decimal id, CancellationToken ct)
+    private async Task<HeureAnomalie?> LoadAnomalyAsync(decimal id, CancellationToken ct)
     {
         var sageDb = _tenant.SageDb;
-        return (await _uow.Repository<T_HEUREANOMALIE>()
-            .ListAsync(a => a.ID == id && a.BDD_SAGE == sageDb, ct)).FirstOrDefault();
+        return (await _uow.Repository<HeureAnomalie>()
+            .ListAsync(a => a.Id == id && a.BddSage == sageDb, ct)).FirstOrDefault();
     }
 
     /// <summary>
@@ -592,15 +592,15 @@ public class TimekeepingService : ITimekeepingService
         }
     }
 
-    private static AnomalyDto MapAnomaly(T_HEUREANOMALIE a) => new(
-        a.ID, a.MATRICULE_SAGE, a.DATE_POINTAGE_IN, a.DATE_POINTAGE_OUT, a.H1, a.H2,
-        a.HENTREE, a.HPS, a.HPE, a.HSORTIE,
-        a.ABS_AM, a.ABS_PM, a.FERIES, a.FERIES_AM, a.FERIES_PM, a.INTITULE_ABSENCE);
+    private static AnomalyDto MapAnomaly(HeureAnomalie a) => new(
+        a.Id, a.MatriculeSage, a.DatePointageIn, a.DatePointageOut, a.H1, a.H2,
+        a.HEntree, a.Hps, a.Hpe, a.HSortie,
+        a.AbsAm, a.AbsPm, a.Feries, a.FeriesAm, a.FeriesPm, a.IntituleAbsence);
 
     public async Task<IReadOnlyList<CorrectedHourDto>> ListCorrectionsAsync(PeriodRequest filter, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var list = await _uow.Repository<T_HEURECORRIGER>().ListReadOnlyAsync(CorrectionPredicate(filter, _tenant.SageDb), ct);
+        var list = await _uow.Repository<HeureCorrigee>().ListReadOnlyAsync(CorrectionPredicate(filter, _tenant.SageDb), ct);
         return list.Select(MapCorrection).ToList();
     }
 
@@ -612,53 +612,53 @@ public class TimekeepingService : ITimekeepingService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         return await PagedLists.PageAsync(
-            _uow.Repository<T_HEURECORRIGER>(),
+            _uow.Repository<HeureCorrigee>(),
             CorrectionPredicate(filter, _tenant.SageDb),
-            q => q.OrderBy(a => a.DATE_POINTAGE_IN)
-                  .ThenBy(a => a.MATRICULE_SAGE)
-                  .ThenBy(a => a.ID),
+            q => q.OrderBy(a => a.DatePointageIn)
+                  .ThenBy(a => a.MatriculeSage)
+                  .ThenBy(a => a.Id),
             page,
             pageSize,
             MapCorrection,
             filter.Search,
-            new Expression<Func<T_HEURECORRIGER, string?>>[]
+            new Expression<Func<HeureCorrigee, string?>>[]
             {
-                a => a.MATRICULE_SAGE,
-                a => a.INTITULE_ABSENCE,
+                a => a.MatriculeSage,
+                a => a.IntituleAbsence,
             },
             ct);
     }
 
-    private static Expression<Func<T_HEURECORRIGER, bool>> CorrectionPredicate(PeriodRequest filter, string sageDb)
+    private static Expression<Func<HeureCorrigee, bool>> CorrectionPredicate(PeriodRequest filter, string sageDb)
     {
         var from = filter.From;
         var to = filter.To;
         var matriculeFrom = filter.MatriculeFrom;
         var matriculeTo = filter.MatriculeTo;
-        return a => a.BDD_SAGE == sageDb
-            && a.DATE_POINTAGE_IN >= from
-            && a.DATE_POINTAGE_IN <= to
-            && (string.IsNullOrEmpty(matriculeFrom) || string.Compare(a.MATRICULE_SAGE, matriculeFrom) >= 0)
-            && (string.IsNullOrEmpty(matriculeTo) || string.Compare(a.MATRICULE_SAGE, matriculeTo) <= 0);
+        return a => a.BddSage == sageDb
+            && a.DatePointageIn >= from
+            && a.DatePointageIn <= to
+            && (string.IsNullOrEmpty(matriculeFrom) || string.Compare(a.MatriculeSage, matriculeFrom) >= 0)
+            && (string.IsNullOrEmpty(matriculeTo) || string.Compare(a.MatriculeSage, matriculeTo) <= 0);
     }
 
     public async Task<CorrectedHourDto> SaveCorrectionAsync(CorrectedHourDto dto, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var repo = _uow.Repository<T_HEURECORRIGER>();
+        var repo = _uow.Repository<HeureCorrigee>();
         var sageDb = _tenant.SageDb;
         // La semaine cible ne doit pas être validée (ni, pour une modification, la semaine d'origine).
         await RefuserSiSemaineValideeAsync(sageDb, dto.Matricule, dto.DateIn, ct);
-        T_HEURECORRIGER entity;
+        HeureCorrigee entity;
         if (dto.Id == 0)
         {
-            entity = new T_HEURECORRIGER
+            entity = new HeureCorrigee
             {
-                BDD_SAGE = _tenant.SageDb,
-                BDD_POINTEUSE = _tenant.PointeuseDb,
-                MATRICULE_SAGE = dto.Matricule,
+                BddSage = _tenant.SageDb,
+                BddPointeuse = _tenant.PointeuseDb,
+                MatriculeSage = dto.Matricule,
                 // Une saisie manuelle est protégée du pré-traitement des pointages.
-                ORIGINE = PunchProcessingConfiguration.OrigineManuel
+                Origine = PunchProcessingConfiguration.OrigineManuel
             };
             Apply(dto, entity);
             await repo.AddAsync(entity, ct);
@@ -666,8 +666,8 @@ public class TimekeepingService : ITimekeepingService
         else
         {
             entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
-            await RefuserSiSemaineValideeAsync(sageDb, entity.MATRICULE_SAGE, entity.DATE_POINTAGE_IN, ct);
-            entity.ORIGINE = PunchProcessingConfiguration.OrigineManuel;
+            await RefuserSiSemaineValideeAsync(sageDb, entity.MatriculeSage, entity.DatePointageIn, ct);
+            entity.Origine = PunchProcessingConfiguration.OrigineManuel;
             Apply(dto, entity);
             repo.Update(entity);
         }
@@ -678,11 +678,11 @@ public class TimekeepingService : ITimekeepingService
     public async Task DeleteCorrectionAsync(decimal id, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var repo = _uow.Repository<T_HEURECORRIGER>();
+        var repo = _uow.Repository<HeureCorrigee>();
         var sageDb = _tenant.SageDb;
-        var e = (await repo.ListAsync(h => h.ID == id && h.BDD_SAGE == sageDb, ct)).FirstOrDefault()
+        var e = (await repo.ListAsync(h => h.Id == id && h.BddSage == sageDb, ct)).FirstOrDefault()
                 ?? throw new NotFoundException();
-        await RefuserSiSemaineValideeAsync(sageDb, e.MATRICULE_SAGE, e.DATE_POINTAGE_IN, ct);
+        await RefuserSiSemaineValideeAsync(sageDb, e.MatriculeSage, e.DatePointageIn, ct);
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
     }
@@ -690,7 +690,7 @@ public class TimekeepingService : ITimekeepingService
     public async Task<ImportResultDto> ImportCorrectionsExcelAsync(IReadOnlyList<Dictionary<string, string>> rows, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var repo = _uow.Repository<T_HEURECORRIGER>();
+        var repo = _uow.Repository<HeureCorrigee>();
         var semainesValidees = await ChargerSemainesValideesAsync(_tenant.SageDb, ct);
         var imported = 0;
         var sansMatricule = 0;
@@ -713,18 +713,18 @@ public class TimekeepingService : ITimekeepingService
                 verrouillees++;
                 continue;
             }
-            await repo.AddAsync(new T_HEURECORRIGER
+            await repo.AddAsync(new HeureCorrigee
             {
-                MATRICULE_SAGE = matr,
-                DATE_POINTAGE_IN = dIn == default ? null : dIn,
-                DATE_POINTAGE_OUT = dOut == default ? null : dOut,
-                HENTREE = hIn,
-                HSORTIE = hOut,
-                BDD_SAGE = _tenant.SageDb,
-                BDD_POINTEUSE = _tenant.PointeuseDb,
-                VALIDER_CORRECTION = true,
+                MatriculeSage = matr,
+                DatePointageIn = dIn == default ? null : dIn,
+                DatePointageOut = dOut == default ? null : dOut,
+                HEntree = hIn,
+                HSortie = hOut,
+                BddSage = _tenant.SageDb,
+                BddPointeuse = _tenant.PointeuseDb,
+                ValiderCorrection = true,
                 // Une correction importée est protégée du pré-traitement des pointages.
-                ORIGINE = PunchProcessingConfiguration.OrigineManuel
+                Origine = PunchProcessingConfiguration.OrigineManuel
             }, ct);
             imported++;
         }
@@ -741,31 +741,31 @@ public class TimekeepingService : ITimekeepingService
         return new ImportResultDto(imported, skipped, message + ".");
     }
 
-    private static void Apply(CorrectedHourDto dto, T_HEURECORRIGER e)
+    private static void Apply(CorrectedHourDto dto, HeureCorrigee e)
     {
-        e.MATRICULE_SAGE = dto.Matricule;
-        e.DATE_POINTAGE_IN = dto.DateIn;
-        e.DATE_POINTAGE_OUT = dto.DateOut;
-        e.HENTREE = dto.HEntree;
-        e.HPS = dto.HPs;
-        e.HPE = dto.HPe;
-        e.HSORTIE = dto.HSortie;
-        e.ABSENCE_AM = dto.AbsAm;
-        e.ABSENCE_PM = dto.AbsPm;
-        e.INTITULE_ABSENCE = dto.IntituleAbsence;
-        e.RETARD = dto.Retard;
-        e.FERIER = dto.Ferie;
-        e.FERIER_AM = dto.FerieAm;
-        e.FERIER_PM = dto.FeriePm;
-        e.VALIDER_CORRECTION = dto.ValiderCorrection;
-        e.HS = dto.Hs;
-        e.M_NUIT = dto.MNuit;
-        e.M_DIMANCHE = dto.MDimanche;
-        e.M_FERIES = dto.MFeries;
+        e.MatriculeSage = dto.Matricule;
+        e.DatePointageIn = dto.DateIn;
+        e.DatePointageOut = dto.DateOut;
+        e.HEntree = dto.HEntree;
+        e.Hps = dto.HPs;
+        e.Hpe = dto.HPe;
+        e.HSortie = dto.HSortie;
+        e.AbsenceAm = dto.AbsAm;
+        e.AbsencePm = dto.AbsPm;
+        e.IntituleAbsence = dto.IntituleAbsence;
+        e.Retard = dto.Retard;
+        e.Ferier = dto.Ferie;
+        e.FerierAm = dto.FerieAm;
+        e.FerierPm = dto.FeriePm;
+        e.ValiderCorrection = dto.ValiderCorrection;
+        e.Hs = dto.Hs;
+        e.MNuit = dto.MNuit;
+        e.MDimanche = dto.MDimanche;
+        e.MFeries = dto.MFeries;
     }
 
-    private static CorrectedHourDto MapCorrection(T_HEURECORRIGER a) => new(
-        a.ID, a.MATRICULE_SAGE, a.DATE_POINTAGE_IN, a.DATE_POINTAGE_OUT, a.HENTREE, a.HPS, a.HPE, a.HSORTIE,
-        a.ABSENCE_AM, a.ABSENCE_PM, a.INTITULE_ABSENCE, a.RETARD, a.FERIER, a.FERIER_AM, a.FERIER_PM,
-        a.VALIDER_CORRECTION, a.VALIDER_HS, a.HS, a.M_NUIT, a.M_DIMANCHE, a.M_FERIES);
+    private static CorrectedHourDto MapCorrection(HeureCorrigee a) => new(
+        a.Id, a.MatriculeSage, a.DatePointageIn, a.DatePointageOut, a.HEntree, a.Hps, a.Hpe, a.HSortie,
+        a.AbsenceAm, a.AbsencePm, a.IntituleAbsence, a.Retard, a.Ferier, a.FerierAm, a.FerierPm,
+        a.ValiderCorrection, a.ValiderHs, a.Hs, a.MNuit, a.MDimanche, a.MFeries);
 }

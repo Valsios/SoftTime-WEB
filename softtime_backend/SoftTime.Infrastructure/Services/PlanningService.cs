@@ -24,7 +24,7 @@ public class PlanningService : IPlanningService
 
     public async Task<IReadOnlyList<ShiftDto>> ListShiftsAsync(CancellationToken ct = default)
     {
-        var list = await _uow.Repository<T_PLANNING>().ListReadOnlyAsync(_ => true, ct);
+        var list = await _uow.Repository<Planning>().ListReadOnlyAsync(_ => true, ct);
         return list.Select(ToShiftDto).ToList();
     }
 
@@ -36,47 +36,47 @@ public class PlanningService : IPlanningService
     public async Task<PagedResult<ShiftDto>> ListShiftsPagedAsync(
         int? page, int? pageSize, string? search = null, CancellationToken ct = default)
         => await PagedLists.PageAsync(
-            _uow.Repository<T_PLANNING>(),
+            _uow.Repository<Planning>(),
             _ => true,
-            q => q.OrderBy(s => s.NoSHIFT)
+            q => q.OrderBy(s => s.NoShift)
                   .ThenBy(s => s.Intitule)
-                  .ThenBy(s => s.IDPLANNING),
+                  .ThenBy(s => s.IdPlanning),
             page,
             pageSize,
             ToShiftDto,
             search,
-            new Expression<Func<T_PLANNING, string?>>[] { s => s.Intitule },
+            new Expression<Func<Planning, string?>>[] { s => s.Intitule },
             ct);
 
-    private static ShiftDto ToShiftDto(T_PLANNING s) => new(
-        s.IDPLANNING, s.NoSHIFT, s.HA, s.PAUSE, s.HD, s.Intitule);
+    private static ShiftDto ToShiftDto(Planning s) => new(
+        s.IdPlanning, s.NoShift, s.Ha, s.Pause, s.Hd, s.Intitule);
 
     public async Task<ShiftDto> SaveShiftAsync(ShiftDto dto, CancellationToken ct = default)
     {
-        var repo = _uow.Repository<T_PLANNING>();
-        T_PLANNING entity;
+        var repo = _uow.Repository<Planning>();
+        Planning entity;
         if (dto.Id == 0)
         {
-            entity = new T_PLANNING { NoSHIFT = dto.NoShift, HA = dto.Ha, PAUSE = dto.Pause, HD = dto.Hd, Intitule = dto.Intitule };
+            entity = new Planning { NoShift = dto.NoShift, Ha = dto.Ha, Pause = dto.Pause, Hd = dto.Hd, Intitule = dto.Intitule };
             await repo.AddAsync(entity, ct);
         }
         else
         {
             entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
-            entity.NoSHIFT = dto.NoShift;
-            entity.HA = dto.Ha;
-            entity.PAUSE = dto.Pause;
-            entity.HD = dto.Hd;
+            entity.NoShift = dto.NoShift;
+            entity.Ha = dto.Ha;
+            entity.Pause = dto.Pause;
+            entity.Hd = dto.Hd;
             entity.Intitule = dto.Intitule;
             repo.Update(entity);
         }
         await _uow.SaveChangesAsync(ct);
-        return new ShiftDto(entity.IDPLANNING, entity.NoSHIFT, entity.HA, entity.PAUSE, entity.HD, entity.Intitule);
+        return new ShiftDto(entity.IdPlanning, entity.NoShift, entity.Ha, entity.Pause, entity.Hd, entity.Intitule);
     }
 
     public async Task DeleteShiftAsync(decimal id, CancellationToken ct = default)
     {
-        var repo = _uow.Repository<T_PLANNING>();
+        var repo = _uow.Repository<Planning>();
         var e = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException();
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
@@ -85,12 +85,12 @@ public class PlanningService : IPlanningService
     public async Task<IReadOnlyList<PlanningEmployeeDto>> ListEmployeesAsync(CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var cards = await _uow.Repository<T_CARDPAIE>().ListReadOnlyAsync(_ => true, ct);
+        var cards = await _uow.Repository<CardPaie>().ListReadOnlyAsync(_ => true, ct);
         return cards
-            .Where(c => MatchesSage(c.SAGE_BDD))
-            .OrderBy(c => c.SAGE_MATRICULE)
-            .ThenBy(c => c.SAGE_NOM)
-            .Select(c => new PlanningEmployeeDto(c.ID, c.SAGE_MATRICULE, c.SAGE_NOM, c.SAGE_PRENOM))
+            .Where(c => MatchesSage(c.SageBdd))
+            .OrderBy(c => c.SageMatricule)
+            .ThenBy(c => c.SageNom)
+            .Select(c => new PlanningEmployeeDto(c.Id, c.SageMatricule, c.SageNom, c.SagePrenom))
             .ToList();
     }
 
@@ -99,11 +99,11 @@ public class PlanningService : IPlanningService
         await _tenant.EnsureAuthorizedAsync(ct);
         var fromDate = from.Date;
         var toDate = to.Date;
-        var cards = (await _uow.Repository<T_CARDPAIE>().ListReadOnlyAsync(_ => true, ct))
-            .Where(c => MatchesSage(c.SAGE_BDD))
-            .ToDictionary(c => c.ID);
-        var list = await _uow.Repository<T_PLANNING_SAL>().ListReadOnlyAsync(
-            p => (!cardId.HasValue || p.IDSAL == cardId)
+        var cards = (await _uow.Repository<CardPaie>().ListReadOnlyAsync(_ => true, ct))
+            .Where(c => MatchesSage(c.SageBdd))
+            .ToDictionary(c => c.Id);
+        var list = await _uow.Repository<PlanningSalarie>().ListReadOnlyAsync(
+            p => (!cardId.HasValue || p.IdSal == cardId)
                  && p.DateP != null
                  && p.DateP >= fromDate.AddDays(-1)
                  && p.DateP <= toDate.AddDays(2), ct);
@@ -111,14 +111,14 @@ public class PlanningService : IPlanningService
             .Where(p => p.DateP.HasValue
                         && p.DateP.Value.Date >= fromDate
                         && p.DateP.Value.Date <= toDate
-                        && MatchesSage(p.BDD_SAGE)
-                        && (!cardId.HasValue || p.IDSAL == cardId.Value))
+                        && MatchesSage(p.BddSage)
+                        && (!cardId.HasValue || p.IdSal == cardId.Value))
             .Select(p =>
             {
-                cards.TryGetValue(p.IDSAL, out var card);
+                cards.TryGetValue(p.IdSal, out var card);
                 return new EmployeePlanningDto(
-                    p.ID, p.IDSAL, p.NoSHIFT, p.DateP, p.HA, p.Pause, p.HD, p.OffP,
-                    card?.SAGE_MATRICULE, card?.SAGE_NOM, card?.SAGE_PRENOM);
+                    p.Id, p.IdSal, p.NoShift, p.DateP, p.Ha, p.Pause, p.Hd, p.OffP,
+                    card?.SageMatricule, card?.SageNom, card?.SagePrenom);
             })
             .OrderBy(p => p.Matricule)
             .ThenBy(p => p.DateP)
@@ -137,34 +137,34 @@ public class PlanningService : IPlanningService
         var sageDb = _tenant.SageDb;
         var start = from.Date;
         var end = to.Date.AddDays(1);
-        var cards = (await _uow.Repository<T_CARDPAIE>().ListReadOnlyAsync(EmployeeCardPredicate(sageDb), ct))
-            .ToDictionary(c => c.ID);
+        var cards = (await _uow.Repository<CardPaie>().ListReadOnlyAsync(EmployeeCardPredicate(sageDb), ct))
+            .ToDictionary(c => c.Id);
         var hasSearch = SearchText.Terms(search).Count > 0;
         var cardIds = hasSearch
             ? cards.Values
-                .Where(c => SearchText.Matches(search, c.SAGE_MATRICULE, c.SAGE_NOM, c.SAGE_PRENOM))
-                .Select(c => c.ID)
+                .Where(c => SearchText.Matches(search, c.SageMatricule, c.SageNom, c.SagePrenom))
+                .Select(c => c.Id)
                 .ToArray()
             : Array.Empty<int>();
         if (hasSearch && cardIds.Length == 0)
             return PagedLists.Page(Array.Empty<EmployeePlanningDto>(), page, pageSize);
 
         return await PagedLists.PageAsync(
-            _uow.Repository<T_PLANNING_SAL>(),
+            _uow.Repository<PlanningSalarie>(),
             p => p.DateP >= start
                  && p.DateP < end
-                 && (p.BDD_SAGE == null || p.BDD_SAGE.Trim() == "" || p.BDD_SAGE.Trim() == sageDb)
-                 && (!cardId.HasValue || p.IDSAL == cardId.Value)
-                 && (!hasSearch || cardIds.Contains(p.IDSAL)),
-            q => q.OrderBy(p => p.IDSAL).ThenBy(p => p.DateP).ThenBy(p => p.ID),
+                 && (p.BddSage == null || p.BddSage.Trim() == "" || p.BddSage.Trim() == sageDb)
+                 && (!cardId.HasValue || p.IdSal == cardId.Value)
+                 && (!hasSearch || cardIds.Contains(p.IdSal)),
+            q => q.OrderBy(p => p.IdSal).ThenBy(p => p.DateP).ThenBy(p => p.Id),
             page,
             pageSize,
             p =>
             {
-                cards.TryGetValue(p.IDSAL, out var card);
+                cards.TryGetValue(p.IdSal, out var card);
                 return new EmployeePlanningDto(
-                    p.ID, p.IDSAL, p.NoSHIFT, p.DateP, p.HA, p.Pause, p.HD, p.OffP,
-                    card?.SAGE_MATRICULE, card?.SAGE_NOM, card?.SAGE_PRENOM);
+                    p.Id, p.IdSal, p.NoShift, p.DateP, p.Ha, p.Pause, p.Hd, p.OffP,
+                    card?.SageMatricule, card?.SageNom, card?.SagePrenom);
             },
             ct);
     }
@@ -177,13 +177,13 @@ public class PlanningService : IPlanningService
         var sageDb = _tenant.SageDb;
         var counts = (await _planningStats.CountPlannedDaysAsync(sageDb, from, to, ct))
             .ToDictionary(x => x.CardPaieId, x => x.PlannedDays);
-        var cards = await _uow.Repository<T_CARDPAIE>().ListReadOnlyAsync(EmployeeCardPredicate(sageDb), ct);
+        var cards = await _uow.Repository<CardPaie>().ListReadOnlyAsync(EmployeeCardPredicate(sageDb), ct);
         return cards
-            .Where(c => MatchesSage(c.SAGE_BDD))
-            .OrderBy(c => c.SAGE_MATRICULE)
-            .ThenBy(c => c.SAGE_NOM)
+            .Where(c => MatchesSage(c.SageBdd))
+            .OrderBy(c => c.SageMatricule)
+            .ThenBy(c => c.SageNom)
             .Select(c => new PlanningEmployeeStatDto(
-                c.ID, c.SAGE_MATRICULE, c.SAGE_NOM, c.SAGE_PRENOM, counts.GetValueOrDefault(c.ID)))
+                c.Id, c.SageMatricule, c.SageNom, c.SagePrenom, counts.GetValueOrDefault(c.Id)))
             .ToList();
     }
 
@@ -198,35 +198,35 @@ public class PlanningService : IPlanningService
             .ToDictionary(x => x.CardPaieId, x => x.PlannedDays);
 
         return await PagedLists.PageAsync(
-            _uow.Repository<T_CARDPAIE>(),
+            _uow.Repository<CardPaie>(),
             EmployeeCardPredicate(sageDb),
-            q => q.OrderBy(c => c.SAGE_MATRICULE).ThenBy(c => c.SAGE_NOM).ThenBy(c => c.ID),
+            q => q.OrderBy(c => c.SageMatricule).ThenBy(c => c.SageNom).ThenBy(c => c.Id),
             page,
             pageSize,
             c => new PlanningEmployeeStatDto(
-                c.ID, c.SAGE_MATRICULE, c.SAGE_NOM, c.SAGE_PRENOM, counts.GetValueOrDefault(c.ID)),
+                c.Id, c.SageMatricule, c.SageNom, c.SagePrenom, counts.GetValueOrDefault(c.Id)),
             search,
-            new Expression<Func<T_CARDPAIE, string?>>[]
+            new Expression<Func<CardPaie, string?>>[]
             {
-                c => c.SAGE_MATRICULE,
-                c => c.SAGE_NOM,
-                c => c.SAGE_PRENOM,
+                c => c.SageMatricule,
+                c => c.SageNom,
+                c => c.SagePrenom,
             },
             ct);
     }
 
     /// <summary>Filtre tenant des cartes : <c>SAGE_BDD</c> null/vide est accepté (lignes héritées).</summary>
-    private static Expression<Func<T_CARDPAIE, bool>> EmployeeCardPredicate(string sageDb)
-        => c => c.SAGE_BDD == null || c.SAGE_BDD.Trim() == "" || c.SAGE_BDD.Trim() == sageDb;
+    private static Expression<Func<CardPaie, bool>> EmployeeCardPredicate(string sageDb)
+        => c => c.SageBdd == null || c.SageBdd.Trim() == "" || c.SageBdd.Trim() == sageDb;
 
     public async Task SaveEmployeePlanningAsync(IReadOnlyCollection<EmployeePlanningDto> rows, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var repo = _uow.Repository<T_PLANNING_SAL>();
-        var shifts = await _uow.Repository<T_PLANNING>().ListAsync(_ => true, ct);
-        var cards = (await _uow.Repository<T_CARDPAIE>().ListAsync(_ => true, ct))
-            .Where(c => MatchesSage(c.SAGE_BDD) && MatchesPointeuse(c.POINTEUSE_BDD))
-            .GroupBy(c => c.ID)
+        var repo = _uow.Repository<PlanningSalarie>();
+        var shifts = await _uow.Repository<Planning>().ListAsync(_ => true, ct);
+        var cards = (await _uow.Repository<CardPaie>().ListAsync(_ => true, ct))
+            .Where(c => MatchesSage(c.SageBdd) && MatchesPointeuse(c.PointeuseBdd))
+            .GroupBy(c => c.Id)
             .ToDictionary(g => g.Key, g => g.First());
 
         foreach (var dto in rows)
@@ -238,29 +238,29 @@ public class PlanningService : IPlanningService
 
             var date = dto.DateP.Value.Date;
             var shift = dto.NoShift is int noShift
-                ? shifts.FirstOrDefault(s => s.NoSHIFT == noShift)
+                ? shifts.FirstOrDefault(s => s.NoShift == noShift)
                 : null;
             if (dto.NoShift is int shiftDemande && shift is null)
                 throw new DomainException($"Shift {shiftDemande} introuvable.");
 
-            T_PLANNING_SAL? entity = null;
+            PlanningSalarie? entity = null;
             if (dto.Id != 0)
             {
                 entity = await repo.GetByIdAsync(dto.Id, ct)
                     ?? throw new DomainException($"Planning {dto.Id} introuvable.");
-                if (!MatchesSage(entity.BDD_SAGE) || !MatchesPointeuse(entity.BDD_POINTEUSE))
+                if (!MatchesSage(entity.BddSage) || !MatchesPointeuse(entity.BddPointeuse))
                     throw new DomainException("Planning hors du périmètre de la base active.");
             }
 
             if (entity is null)
             {
                 var existantes = await repo.ListAsync(
-                    p => p.IDSAL == dto.CardPaieId
+                    p => p.IdSal == dto.CardPaieId
                          && p.DateP != null
                          && p.DateP.Value.Date == date, ct);
                 entity = existantes
-                    .Where(p => MatchesSage(p.BDD_SAGE) && MatchesPointeuse(p.BDD_POINTEUSE))
-                    .OrderBy(p => p.ID)
+                    .Where(p => MatchesSage(p.BddSage) && MatchesPointeuse(p.BddPointeuse))
+                    .OrderBy(p => p.Id)
                     .FirstOrDefault();
             }
 
@@ -273,40 +273,40 @@ public class PlanningService : IPlanningService
             {
                 // Une ligne héritée peut ne pas avoir de NoSHIFT : on conserve alors ses heures
                 // existantes si l'écran n'en fournit pas.
-                var debut = dto.Ha?.TimeOfDay ?? shift?.HA ?? entity?.HA?.TimeOfDay;
-                var fin = dto.Hd?.TimeOfDay ?? shift?.HD ?? entity?.HD?.TimeOfDay;
+                var debut = dto.Ha?.TimeOfDay ?? shift?.Ha ?? entity?.Ha?.TimeOfDay;
+                var fin = dto.Hd?.TimeOfDay ?? shift?.Hd ?? entity?.Hd?.TimeOfDay;
                 if (!PlanningGenerationRules.TryIntervalle(date, debut, fin, out ha, out hd))
                     throw new DomainException(
                         $"Heures d'entrée/sortie manquantes ou invalides pour le planning du {date:dd/MM/yyyy}.");
-                pause = dto.Pause ?? shift?.PAUSE ?? entity?.Pause ?? TimeSpan.Zero;
+                pause = dto.Pause ?? shift?.Pause ?? entity?.Pause ?? TimeSpan.Zero;
             }
 
             if (entity == null)
             {
-                await repo.AddAsync(new T_PLANNING_SAL
+                await repo.AddAsync(new PlanningSalarie
                 {
-                    IDSAL = dto.CardPaieId,
-                    NoSHIFT = dto.NoShift,
+                    IdSal = dto.CardPaieId,
+                    NoShift = dto.NoShift,
                     DateP = date,
-                    HA = ha,
+                    Ha = ha,
                     Pause = pause,
-                    HD = hd,
+                    Hd = hd,
                     OffP = off,
-                    BDD_SAGE = _tenant.SageDb,
-                    BDD_POINTEUSE = _tenant.PointeuseDb
+                    BddSage = _tenant.SageDb,
+                    BddPointeuse = _tenant.PointeuseDb
                 }, ct);
             }
             else
             {
-                entity.IDSAL = dto.CardPaieId;
-                entity.NoSHIFT = dto.NoShift;
+                entity.IdSal = dto.CardPaieId;
+                entity.NoShift = dto.NoShift;
                 entity.DateP = date;
-                entity.HA = ha;
+                entity.Ha = ha;
                 entity.Pause = pause;
-                entity.HD = hd;
+                entity.Hd = hd;
                 entity.OffP = off;
-                entity.BDD_SAGE = _tenant.SageDb;
-                entity.BDD_POINTEUSE = _tenant.PointeuseDb;
+                entity.BddSage = _tenant.SageDb;
+                entity.BddPointeuse = _tenant.PointeuseDb;
                 repo.Update(entity);
             }
         }
@@ -315,7 +315,7 @@ public class PlanningService : IPlanningService
 
     public async Task DeleteEmployeePlanningAsync(int id, CancellationToken ct = default)
     {
-        var repo = _uow.Repository<T_PLANNING_SAL>();
+        var repo = _uow.Repository<PlanningSalarie>();
         var e = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException();
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
@@ -327,34 +327,34 @@ public class PlanningService : IPlanningService
         if (headers.Count == 0)
             return new ImportResultDto(0, 0, "Fichier vide.");
         var mode = ExcelCells.Fold(headers[0]);
-        var shifts = await _uow.Repository<T_PLANNING>().ListAsync(_ => true, ct);
-        var cards = (await _uow.Repository<T_CARDPAIE>().ListAsync(_ => true, ct))
-            .Where(c => MatchesSage(c.SAGE_BDD) && MatchesPointeuse(c.POINTEUSE_BDD))
+        var shifts = await _uow.Repository<Planning>().ListAsync(_ => true, ct);
+        var cards = (await _uow.Repository<CardPaie>().ListAsync(_ => true, ct))
+            .Where(c => MatchesSage(c.SageBdd) && MatchesPointeuse(c.PointeuseBdd))
             .ToList();
-        var categories = (await _uow.Repository<T_CATEGORIE>().ListAsync(c => c.BDD_SAGE == _tenant.SageDb, ct))
-            .Where(c => MatchesPointeuse(c.BDD_POINTEUSE))
+        var categories = (await _uow.Repository<Categorie>().ListAsync(c => c.BddSage == _tenant.SageDb, ct))
+            .Where(c => MatchesPointeuse(c.BddPointeuse))
             .ToList();
-        var affect = (await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == _tenant.SageDb, ct))
-            .Where(a => MatchesPointeuse(a.BDD_POINTEUSE))
+        var affect = (await _uow.Repository<CategorieSalarie>().ListAsync(a => a.BddSage == _tenant.SageDb, ct))
+            .Where(a => MatchesPointeuse(a.BddPointeuse))
             .ToList();
-        var repo = _uow.Repository<T_PLANNING_SAL>();
+        var repo = _uow.Repository<PlanningSalarie>();
         var imported = 0;
         var skipped = 0;
         var dateHeaders = headers.Skip(1).ToList();
         foreach (var row in rows)
         {
             var key = row.GetValueOrDefault(headers[0]) ?? string.Empty;
-            IEnumerable<T_CARDPAIE> targets;
+            IEnumerable<CardPaie> targets;
             if (mode.StartsWith("CATEG", StringComparison.Ordinal))
             {
-                var cat = categories.FirstOrDefault(c => string.Equals(c.INTITULE, key, StringComparison.OrdinalIgnoreCase));
+                var cat = categories.FirstOrDefault(c => string.Equals(c.Intitule, key, StringComparison.OrdinalIgnoreCase));
                 if (cat == null) { skipped++; continue; }
-                var ids = affect.Where(a => a.ID_CATEG == cat.IDCATEGORIE).Select(a => a.MATRICULE_SAGE).ToHashSet();
-                targets = cards.Where(c => ids.Contains(c.ID));
+                var ids = affect.Where(a => a.IdCateg == cat.IdCategorie).Select(a => a.MatriculeSage).ToHashSet();
+                targets = cards.Where(c => ids.Contains(c.Id));
             }
             else
             {
-                var card = cards.FirstOrDefault(c => MemeIdentifiant(c.SAGE_MATRICULE, key));
+                var card = cards.FirstOrDefault(c => MemeIdentifiant(c.SageMatricule, key));
                 if (card == null) { skipped++; continue; }
                 targets = new[] { card };
             }
@@ -381,51 +381,51 @@ public class PlanningService : IPlanningService
                         skipped++;
                         continue;
                     }
-                    var shift = shifts.FirstOrDefault(s => s.NoSHIFT == numeroShift);
-                    if (shift == null || !PlanningGenerationRules.TryIntervalle(date, shift.HA, shift.HD, out ha, out hd))
+                    var shift = shifts.FirstOrDefault(s => s.NoShift == numeroShift);
+                    if (shift == null || !PlanningGenerationRules.TryIntervalle(date, shift.Ha, shift.Hd, out ha, out hd))
                     {
                         skipped++;
                         continue;
                     }
                     noShift = numeroShift;
-                    pause = shift.PAUSE ?? TimeSpan.Zero;
+                    pause = shift.Pause ?? TimeSpan.Zero;
                 }
 
                 foreach (var card in targets)
                 {
                     var existantes = await repo.ListAsync(
-                        p => p.IDSAL == card.ID
+                        p => p.IdSal == card.Id
                              && p.DateP != null
                              && p.DateP.Value.Date == date.Date, ct);
                     var existing = existantes
-                        .Where(p => MatchesSage(p.BDD_SAGE) && MatchesPointeuse(p.BDD_POINTEUSE))
-                        .OrderBy(p => p.ID)
+                        .Where(p => MatchesSage(p.BddSage) && MatchesPointeuse(p.BddPointeuse))
+                        .OrderBy(p => p.Id)
                         .FirstOrDefault();
 
                     if (existing == null)
                     {
-                        await repo.AddAsync(new T_PLANNING_SAL
+                        await repo.AddAsync(new PlanningSalarie
                         {
-                            IDSAL = card.ID,
-                            NoSHIFT = noShift,
+                            IdSal = card.Id,
+                            NoShift = noShift,
                             DateP = date.Date,
-                            HA = ha,
-                            HD = hd,
+                            Ha = ha,
+                            Hd = hd,
                             Pause = pause,
                             OffP = off,
-                            BDD_SAGE = _tenant.SageDb,
-                            BDD_POINTEUSE = _tenant.PointeuseDb
+                            BddSage = _tenant.SageDb,
+                            BddPointeuse = _tenant.PointeuseDb
                         }, ct);
                     }
                     else
                     {
-                        existing.NoSHIFT = noShift;
-                        existing.HA = ha;
-                        existing.HD = hd;
+                        existing.NoShift = noShift;
+                        existing.Ha = ha;
+                        existing.Hd = hd;
                         existing.Pause = pause;
                         existing.OffP = off;
-                        existing.BDD_SAGE = _tenant.SageDb;
-                        existing.BDD_POINTEUSE = _tenant.PointeuseDb;
+                        existing.BddSage = _tenant.SageDb;
+                        existing.BddPointeuse = _tenant.PointeuseDb;
                         repo.Update(existing);
                     }
                     imported++;
@@ -463,18 +463,18 @@ public class PlanningService : IPlanningService
 
         var sageDb = _tenant.SageDb;
         var pointeuseDb = _tenant.PointeuseDb;
-        var cards = (await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == sageDb, ct))
-            .Where(c => MatchesPointeuse(c.POINTEUSE_BDD))
+        var cards = (await _uow.Repository<CardPaie>().ListAsync(c => c.SageBdd == sageDb, ct))
+            .Where(c => MatchesPointeuse(c.PointeuseBdd))
             .ToList();
-        var categories = (await _uow.Repository<T_CATEGORIE>().ListAsync(c => c.BDD_SAGE == sageDb, ct))
-            .Where(c => MatchesPointeuse(c.BDD_POINTEUSE))
+        var categories = (await _uow.Repository<Categorie>().ListAsync(c => c.BddSage == sageDb, ct))
+            .Where(c => MatchesPointeuse(c.BddPointeuse))
             .ToList();
-        var affectations = (await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == sageDb, ct))
-            .Where(a => MatchesPointeuse(a.BDD_POINTEUSE))
+        var affectations = (await _uow.Repository<CategorieSalarie>().ListAsync(a => a.BddSage == sageDb, ct))
+            .Where(a => MatchesPointeuse(a.BddPointeuse))
             .ToList();
-        var repo = _uow.Repository<T_PLANNING_SAL>();
-        var existantes = (await repo.ListAsync(p => p.BDD_SAGE == sageDb, ct))
-            .Where(p => MatchesPointeuse(p.BDD_POINTEUSE))
+        var repo = _uow.Repository<PlanningSalarie>();
+        var existantes = (await repo.ListAsync(p => p.BddSage == sageDb, ct))
+            .Where(p => MatchesPointeuse(p.BddPointeuse))
             .ToList();
 
         var pas = parCategorie ? 2 : 3;   // (début, fin) ou (début, pause, fin)
@@ -497,25 +497,25 @@ public class PlanningService : IPlanningService
                 continue;
             }
 
-            List<T_CARDPAIE> cibles;
+            List<CardPaie> cibles;
             TimeSpan? pauseCategorie = null;
             if (parCategorie)
             {
                 var categorie = categories.FirstOrDefault(c =>
-                    string.Equals(c.INTITULE?.Trim(), cle, StringComparison.OrdinalIgnoreCase));
+                    string.Equals(c.Intitule?.Trim(), cle, StringComparison.OrdinalIgnoreCase));
                 if (categorie is null)
                 {
                     lignesIgnores++;
                     continue;
                 }
-                pauseCategorie = categorie.PAUSE;
-                var ids = affectations.Where(a => a.ID_CATEG == categorie.IDCATEGORIE).Select(a => a.MATRICULE_SAGE).ToHashSet();
-                cibles = cards.Where(c => ids.Contains(c.ID)).ToList();
+                pauseCategorie = categorie.Pause;
+                var ids = affectations.Where(a => a.IdCateg == categorie.IdCategorie).Select(a => a.MatriculeSage).ToHashSet();
+                cibles = cards.Where(c => ids.Contains(c.Id)).ToList();
             }
             else
             {
-                var carte = cards.FirstOrDefault(c => MemeIdentifiant(c.SAGE_MATRICULE, cle));
-                cibles = carte is null ? new List<T_CARDPAIE>() : new List<T_CARDPAIE> { carte };
+                var carte = cards.FirstOrDefault(c => MemeIdentifiant(c.SageMatricule, cle));
+                cibles = carte is null ? new List<CardPaie>() : new List<CardPaie> { carte };
             }
             if (cibles.Count == 0)
             {
@@ -548,36 +548,36 @@ public class PlanningService : IPlanningService
                 foreach (var carte in cibles)
                 {
                     var entity = existantes
-                        .Where(p => p.IDSAL == carte.ID && p.DateP?.Date == jour)
-                        .OrderBy(p => p.ID)
+                        .Where(p => p.IdSal == carte.Id && p.DateP?.Date == jour)
+                        .OrderBy(p => p.Id)
                         .FirstOrDefault();
                     if (entity is null)
                     {
-                        entity = new T_PLANNING_SAL
+                        entity = new PlanningSalarie
                         {
-                            IDSAL = carte.ID,
-                            NoSHIFT = null,
+                            IdSal = carte.Id,
+                            NoShift = null,
                             DateP = jour,
-                            HA = ha,
-                            HD = hd,
+                            Ha = ha,
+                            Hd = hd,
                             Pause = off ? TimeSpan.Zero : (pause ?? TimeSpan.Zero),
                             OffP = off,
-                            BDD_SAGE = sageDb,
-                            BDD_POINTEUSE = pointeuseDb
+                            BddSage = sageDb,
+                            BddPointeuse = pointeuseDb
                         };
                         await repo.AddAsync(entity, ct);
                         existantes.Add(entity);
                     }
                     else
                     {
-                        entity.NoSHIFT = null;
+                        entity.NoShift = null;
                         entity.DateP = jour;
-                        entity.HA = ha;
-                        entity.HD = hd;
+                        entity.Ha = ha;
+                        entity.Hd = hd;
                         entity.Pause = off ? TimeSpan.Zero : (pause ?? TimeSpan.Zero);
                         entity.OffP = off;
-                        entity.BDD_SAGE = sageDb;
-                        entity.BDD_POINTEUSE = pointeuseDb;
+                        entity.BddSage = sageDb;
+                        entity.BddPointeuse = pointeuseDb;
                         repo.Update(entity);
                     }
                     ecrites++;
@@ -606,7 +606,7 @@ public class PlanningService : IPlanningService
 
     public async Task<ImportResultDto> ImportShiftsExcelAsync(IReadOnlyList<Dictionary<string, string>> rows, CancellationToken ct = default)
     {
-        var repo = _uow.Repository<T_PLANNING>();
+        var repo = _uow.Repository<Planning>();
         var existing = await repo.ListAsync(_ => true, ct);
         var imported = 0;
         var skipped = 0;
@@ -622,18 +622,18 @@ public class PlanningService : IPlanningService
             ExcelCells.TryTime(ExcelCells.Get(row, "PAUSE", "Pause"), out var pause);
             ExcelCells.TryTime(ExcelCells.Get(row, "SORTIE", "HD", "Heure départ", "Depart"), out var hd);
             var intitule = ExcelCells.Get(row, "INTITULE", "Intitulé", "Libelle");
-            var entity = existing.FirstOrDefault(s => s.NoSHIFT == noShift);
+            var entity = existing.FirstOrDefault(s => s.NoShift == noShift);
             if (entity == null)
             {
-                entity = new T_PLANNING { NoSHIFT = noShift, HA = ha == default ? null : ha, PAUSE = pause == default ? null : pause, HD = hd == default ? null : hd, Intitule = intitule };
+                entity = new Planning { NoShift = noShift, Ha = ha == default ? null : ha, Pause = pause == default ? null : pause, Hd = hd == default ? null : hd, Intitule = intitule };
                 await repo.AddAsync(entity, ct);
                 existing.Add(entity);
             }
             else
             {
-                entity.HA = ha == default ? entity.HA : ha;
-                entity.PAUSE = pause == default ? entity.PAUSE : pause;
-                entity.HD = hd == default ? entity.HD : hd;
+                entity.Ha = ha == default ? entity.Ha : ha;
+                entity.Pause = pause == default ? entity.Pause : pause;
+                entity.Hd = hd == default ? entity.Hd : hd;
                 if (!string.IsNullOrWhiteSpace(intitule))
                     entity.Intitule = intitule;
                 repo.Update(entity);

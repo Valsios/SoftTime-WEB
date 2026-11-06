@@ -35,16 +35,16 @@ public class ClosingPresentationService : IClosingPresentationService
         if (afficherNoms && analyse.Anomalies.Items.Count > 0)
         {
             var sageDb = _tenant.SageDb;
-            var repo = _uow.Repository<T_CARDPAIE>();
+            var repo = _uow.Repository<CardPaie>();
             var cartes = await repo.ToListAsync(repo.QueryReadOnly()
-                .Where(c => c.SAGE_BDD == sageDb)
-                .Select(c => new T_CARDPAIE { ID = c.ID, SAGE_MATRICULE = c.SAGE_MATRICULE, SAGE_NOM = c.SAGE_NOM, SAGE_PRENOM = c.SAGE_PRENOM }), ct);
+                .Where(c => c.SageBdd == sageDb)
+                .Select(c => new CardPaie { Id = c.Id, SageMatricule = c.SageMatricule, SageNom = c.SageNom, SagePrenom = c.SagePrenom }), ct);
             var clesPage = analyse.Anomalies.Items.Select(a => a.Matricule).ToHashSet(StringComparer.Ordinal);
-            foreach (var carte in cartes.OrderBy(c => c.ID))
+            foreach (var carte in cartes.OrderBy(c => c.Id))
             {
-                var cle = MatriculeIdentity.Cle(carte.SAGE_MATRICULE);
+                var cle = MatriculeIdentity.Cle(carte.SageMatricule);
                 if (clesPage.Contains(cle) && !noms.ContainsKey(cle))
-                    noms[cle] = (Texte(carte.SAGE_NOM), Texte(carte.SAGE_PRENOM));
+                    noms[cle] = (Texte(carte.SageNom), Texte(carte.SagePrenom));
             }
         }
 

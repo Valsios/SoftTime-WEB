@@ -89,20 +89,20 @@ public class AuditMaskingPolicyTests
     public void Database_credentials_are_masked_but_the_changed_column_stays_visible()
     {
         using var db = CreateContext();
-        var entity = new T_BDD_SAGE { ID = 3, NOM_BD = "BASE", SERVEUR = "srv-avant", TLOGIN = "l-avant", TMDP = "m-avant" };
+        var entity = new BddSage { Id = 3, NomBd = "BASE", Serveur = "srv-avant", TLogin = "l-avant", TMdp = "m-avant" };
         db.Attach(entity);
-        entity.SERVEUR = "srv-apres";
-        entity.TLOGIN = "l-apres";
-        entity.TMDP = "m-apres";
+        entity.Serveur = "srv-apres";
+        entity.TLogin = "l-apres";
+        entity.TMdp = "m-apres";
 
         Capture(db);
 
         var entries = AuditEntries(db);
-        Assert.Equal(new[] { "SERVEUR", "TLOGIN", "TMDP" }, entries.Select(e => e.COLONNES).OrderBy(c => c).ToArray());
+        Assert.Equal(new[] { "SERVEUR", "TLOGIN", "TMDP" }, entries.Select(e => e.Colonnes).OrderBy(c => c).ToArray());
         Assert.All(entries, e =>
         {
-            Assert.Equal(AuditMaskingPolicy.Mask, e.ANCIENS);
-            Assert.Equal(AuditMaskingPolicy.Mask, e.NOUVEAUX);
+            Assert.Equal(AuditMaskingPolicy.Mask, e.Anciens);
+            Assert.Equal(AuditMaskingPolicy.Mask, e.Nouveaux);
         });
     }
 
@@ -110,23 +110,23 @@ public class AuditMaskingPolicyTests
     public void Pointeuse_password_is_masked_and_email_stays_visible()
     {
         using var db = CreateContext();
-        db.Add(new T_BDD_POINTEUSE { ID = 9, NOM_BD = "PTG", TMDP = "clair" });
-        db.Add(new T_RESPONSABLE { LOGIN = "agent", EMAIL = "agent@exemple.test", PASSWORD = "empreinte" });
+        db.Add(new BddPointeuse { Id = 9, NomBd = "PTG", TMdp = "clair" });
+        db.Add(new Responsable { Login = "agent", Email = "agent@exemple.test", Password = "empreinte" });
 
         Capture(db);
 
         var entries = AuditEntries(db);
-        Assert.Equal(AuditMaskingPolicy.Mask, Assert.Single(entries, e => e.TABLES == "T_BDD_POINTEUSE" && e.COLONNES == "TMDP").NOUVEAUX);
-        Assert.Equal(AuditMaskingPolicy.Mask, Assert.Single(entries, e => e.COLONNES == "PASSWORD").NOUVEAUX);
-        Assert.Equal("agent@exemple.test", Assert.Single(entries, e => e.COLONNES == "EMAIL").NOUVEAUX);
-        Assert.DoesNotContain(entries, e => e.ANCIENS == "clair" || e.NOUVEAUX == "clair" || e.NOUVEAUX == "empreinte");
+        Assert.Equal(AuditMaskingPolicy.Mask, Assert.Single(entries, e => e.Tables == "T_BDD_POINTEUSE" && e.Colonnes == "TMDP").Nouveaux);
+        Assert.Equal(AuditMaskingPolicy.Mask, Assert.Single(entries, e => e.Colonnes == "PASSWORD").Nouveaux);
+        Assert.Equal("agent@exemple.test", Assert.Single(entries, e => e.Colonnes == "EMAIL").Nouveaux);
+        Assert.DoesNotContain(entries, e => e.Anciens == "clair" || e.Nouveaux == "clair" || e.Nouveaux == "empreinte");
     }
 
     [Fact]
     public void Rights_audit_table_is_excluded_from_the_central_journal()
     {
         using var db = CreateContext();
-        db.Add(new T_AUDIT_DROIT { LOGIN_OPERATEUR = "admin" });
+        db.Add(new AuditDroit { LoginOperateur = "admin" });
 
         Capture(db);
 
@@ -141,8 +141,8 @@ public class AuditMaskingPolicyTests
     private static void Capture(SoftTimeDbContext db)
         => new AuditJournalSaveChangesInterceptor(new TestUser(), new TestCompany(), Options.Create(new AuditJournalOptions())).CaptureChanges(db);
 
-    private static List<suivi_JOURNAL> AuditEntries(SoftTimeDbContext db)
-        => db.ChangeTracker.Entries<suivi_JOURNAL>().Select(entry => entry.Entity).ToList();
+    private static List<JournalAudit> AuditEntries(SoftTimeDbContext db)
+        => db.ChangeTracker.Entries<JournalAudit>().Select(entry => entry.Entity).ToList();
 
     private sealed class TestUser : ICurrentUser
     {

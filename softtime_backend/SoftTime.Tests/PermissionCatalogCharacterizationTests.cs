@@ -17,7 +17,7 @@ public class PermissionCatalogCharacterizationTests
     // elles s'exécutent maintenant contre le helper partagé (mêmes valeurs attendues).
     private static HashSet<decimal> Gates(IEnumerable<string> codes) => PermissionCatalog.DeduirePortes(codes);
 
-    private static List<string> Defaults(HashSet<int> rights, IEnumerable<T_BDD_SAGE> sages, IEnumerable<T_BDD_POINTEUSE> pointeuses)
+    private static List<string> Defaults(HashSet<int> rights, IEnumerable<BddSage> sages, IEnumerable<BddPointeuse> pointeuses)
         => PermissionCatalog.BuildDefaultPermissionsList(rights, sages, pointeuses);
 
     // Anciennes entrées, toujours présentes dans AuthService (déléguées au helper) : le résultat doit rester identique.
@@ -25,7 +25,7 @@ public class PermissionCatalogCharacterizationTests
         => (HashSet<decimal>)typeof(AuthService).GetMethod("DeduirePortes", BindingFlags.NonPublic | BindingFlags.Static)!
             .Invoke(null, new object[] { codes })!;
 
-    private static List<string> LegacyDefaults(HashSet<int> rights, IEnumerable<T_BDD_SAGE> sages, IEnumerable<T_BDD_POINTEUSE> pointeuses)
+    private static List<string> LegacyDefaults(HashSet<int> rights, IEnumerable<BddSage> sages, IEnumerable<BddPointeuse> pointeuses)
         => (List<string>)typeof(AuthService).GetMethod("BuildDefaultPermissionsList", BindingFlags.NonPublic | BindingFlags.Static)!
             .Invoke(null, new object[] { rights, sages, pointeuses })!;
 
@@ -83,8 +83,8 @@ public class PermissionCatalogCharacterizationTests
 
     private static readonly string[] Other = { "OTHER:CANTEEN", "OTHER:TRAVEL_EXPENSES" };
 
-    private static T_BDD_SAGE Sage(string? name) => new() { NOM_BD = name };
-    private static T_BDD_POINTEUSE Pointeuse(string? name) => new() { NOM_BD = name };
+    private static BddSage Sage(string? name) => new() { NomBd = name };
+    private static BddPointeuse Pointeuse(string? name) => new() { NomBd = name };
 
     private static List<string> Build(int[] rights, string[]? sages = null, string[]? pointeuses = null)
         => Defaults(rights.ToHashSet(), (sages ?? Array.Empty<string>()).Select(Sage), (pointeuses ?? Array.Empty<string>()).Select(Pointeuse));

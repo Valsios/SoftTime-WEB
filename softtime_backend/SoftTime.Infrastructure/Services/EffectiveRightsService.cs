@@ -64,46 +64,46 @@ public sealed class EffectiveRightsService : IEffectiveRightsService
     /// </summary>
     public async Task<IReadOnlyList<string>> RoleDefaultPermissionsAsync(decimal roleId, CancellationToken ct = default)
     {
-        var roleEntity = await _uow.Repository<T_ROLE>().GetByIdAsync(roleId, ct);
-        var rows = (await _uow.Repository<T_ROLE_PERMISSION>().ListReadOnlyAsync(p => p.IDROLE == roleId, ct))
-            .Select(p => new PermissionRow(p.PERMISSION_CODE, p.IS_GRANTED)).ToList();
-        var gates = (await _uow.Repository<T_DROIT_ROLE>().ListReadOnlyAsync(p => p.IDROLE == roleId, ct))
-            .Select(p => (int)p.IDDROIT).ToList();
+        var roleEntity = await _uow.Repository<Role>().GetByIdAsync(roleId, ct);
+        var rows = (await _uow.Repository<RolePermission>().ListReadOnlyAsync(p => p.IdRole == roleId, ct))
+            .Select(p => new PermissionRow(p.PermissionCode, p.IsGranted)).ToList();
+        var gates = (await _uow.Repository<DroitRole>().ListReadOnlyAsync(p => p.IdRole == roleId, ct))
+            .Select(p => (int)p.IdDroit).ToList();
         var role = new RoleDefinition(roleId, roleEntity is not null || roleId == AdminRules.AdminRoleId, rows, gates);
 
-        var sages = (await _uow.Repository<T_BDD_SAGE>().ListReadOnlyAsync(_ => true, ct)).Select(s => s.NOM_BD ?? string.Empty).ToList();
-        var pointeuses = (await _uow.Repository<T_BDD_POINTEUSE>().ListReadOnlyAsync(_ => true, ct)).Select(p => p.NOM_BD ?? string.Empty).ToList();
+        var sages = (await _uow.Repository<BddSage>().ListReadOnlyAsync(_ => true, ct)).Select(s => s.NomBd ?? string.Empty).ToList();
+        var pointeuses = (await _uow.Repository<BddPointeuse>().ListReadOnlyAsync(_ => true, ct)).Select(p => p.NomBd ?? string.Empty).ToList();
         var catalog = new DatabaseCatalog(sages, pointeuses, sages);
         return EffectiveRightsCalculator.ComputeEffectiveRights(role, Array.Empty<PermissionRow>(), catalog).Permissions.ToList();
     }
 
     private async Task<(RoleDefinition Role, IReadOnlyCollection<PermissionRow> Rows, DatabaseCatalog Catalog)> LoadInputsAsync(decimal userId, CancellationToken ct)
     {
-        var user = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(userId, ct);
-        var roleEntity = user is null ? null : await _uow.Repository<T_ROLE>().GetByIdAsync(user.IDROLE, ct);
+        var user = await _uow.Repository<Responsable>().GetByIdAsync(userId, ct);
+        var roleEntity = user is null ? null : await _uow.Repository<Role>().GetByIdAsync(user.IdRole, ct);
 
         var roleRows = new List<PermissionRow>();
         var roleGates = new List<int>();
         if (roleEntity is not null)
         {
-            roleRows = (await _uow.Repository<T_ROLE_PERMISSION>().ListAsync(p => p.IDROLE == roleEntity.IDROLE, ct))
-                .Select(p => new PermissionRow(p.PERMISSION_CODE, p.IS_GRANTED)).ToList();
-            roleGates = (await _uow.Repository<T_DROIT_ROLE>().ListAsync(p => p.IDROLE == roleEntity.IDROLE, ct))
-                .Select(p => (int)p.IDDROIT).ToList();
+            roleRows = (await _uow.Repository<RolePermission>().ListAsync(p => p.IdRole == roleEntity.IdRole, ct))
+                .Select(p => new PermissionRow(p.PermissionCode, p.IsGranted)).ToList();
+            roleGates = (await _uow.Repository<DroitRole>().ListAsync(p => p.IdRole == roleEntity.IdRole, ct))
+                .Select(p => (int)p.IdDroit).ToList();
         }
-        var role = new RoleDefinition(roleEntity?.IDROLE, roleEntity is not null, roleRows, roleGates);
+        var role = new RoleDefinition(roleEntity?.IdRole, roleEntity is not null, roleRows, roleGates);
 
-        var sages = await _uow.Repository<T_BDD_SAGE>().ListAsync(_ => true, ct);
-        var pointeuses = await _uow.Repository<T_BDD_POINTEUSE>().ListAsync(_ => true, ct);
-        var accessIds = (await _uow.Repository<T_BDD_AUTORISE>().ListAsync(a => a.IDRESPONSABLE == userId, ct))
-            .Select(a => a.IDBDD).ToHashSet();
+        var sages = await _uow.Repository<BddSage>().ListAsync(_ => true, ct);
+        var pointeuses = await _uow.Repository<BddPointeuse>().ListAsync(_ => true, ct);
+        var accessIds = (await _uow.Repository<BddAutorisee>().ListAsync(a => a.IdResponsable == userId, ct))
+            .Select(a => a.IdBdd).ToHashSet();
         var catalog = new DatabaseCatalog(
-            sages.Select(s => s.NOM_BD ?? string.Empty).ToList(),
-            pointeuses.Select(p => p.NOM_BD ?? string.Empty).ToList(),
-            sages.Where(s => accessIds.Contains(s.ID)).Select(s => s.NOM_BD ?? string.Empty).ToList());
+            sages.Select(s => s.NomBd ?? string.Empty).ToList(),
+            pointeuses.Select(p => p.NomBd ?? string.Empty).ToList(),
+            sages.Where(s => accessIds.Contains(s.Id)).Select(s => s.NomBd ?? string.Empty).ToList());
 
-        var userRows = (await _uow.Repository<T_USER_PERMISSION>().ListAsync(p => p.IDRESPONSABLE == userId, ct))
-            .Select(p => new PermissionRow(p.PERMISSION_CODE, p.IS_GRANTED)).ToList();
+        var userRows = (await _uow.Repository<UserPermission>().ListAsync(p => p.IdResponsable == userId, ct))
+            .Select(p => new PermissionRow(p.PermissionCode, p.IsGranted)).ToList();
 
         return (role, LegacyToDeviations(role, userRows, catalog), catalog);
     }

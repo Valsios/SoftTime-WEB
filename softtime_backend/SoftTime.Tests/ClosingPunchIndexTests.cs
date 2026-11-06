@@ -17,26 +17,26 @@ public class ClosingPunchIndexTests
     private static readonly TimeSpan H8 = TimeSpan.FromHours(8);
     private static readonly TimeSpan H17 = TimeSpan.FromHours(17);
 
-    private static T_POINTAGE P(string m, DateTime d, TimeSpan h) => new() { MATRICULE_SAGE = m, DATE_POINTAGE = d, HEURE_POINTAGE = h };
+    private static Pointage P(string m, DateTime d, TimeSpan h) => new() { MatriculeSage = m, DatePointage = d, HeurePointage = h };
 
-    private static T_PLANNING_SAL Plan(int id, int idsal, DateTime d, TimeSpan ha, TimeSpan hd, bool off = false) =>
-        new() { ID = id, IDSAL = idsal, DateP = d, HA = d.Date.Add(ha), HD = d.Date.Add(hd), OffP = off };
+    private static PlanningSalarie Plan(int id, int idsal, DateTime d, TimeSpan ha, TimeSpan hd, bool off = false) =>
+        new() { Id = id, IdSal = idsal, DateP = d, Ha = d.Date.Add(ha), Hd = d.Date.Add(hd), OffP = off };
 
     // Jeu mêlant doublons, quasi-doublons, impairs, jours hors période, sans planning, matricules
     // de formats différents, lignes inexploitables et ordre d'entrée volontairement désordonné.
-    private static readonly T_CARDPAIE[] Cartes =
+    private static readonly CardPaie[] Cartes =
     {
-        new() { ID = 1, SAGE_MATRICULE = "00369" }, new() { ID = 2, SAGE_MATRICULE = "500" }, new() { ID = 3, SAGE_MATRICULE = "A12" }
+        new() { Id = 1, SageMatricule = "00369" }, new() { Id = 2, SageMatricule = "500" }, new() { Id = 3, SageMatricule = "A12" }
     };
 
-    private static readonly T_PLANNING_SAL[] Plannings =
+    private static readonly PlanningSalarie[] Plannings =
     {
         Plan(1, 1, Lundi, H8, H17), Plan(2, 1, Lundi.AddDays(1), H8, H17), Plan(3, 2, Lundi, H8, H17),
         Plan(4, 2, Lundi.AddDays(1), TimeSpan.FromHours(22), TimeSpan.FromHours(6)), Plan(5, 3, Lundi, H8, H8),
         Plan(6, 1, Lundi.AddDays(2), H8, H17), Plan(7, 2, Lundi.AddDays(2), H8, H17, off: true)
     };
 
-    private static readonly T_POINTAGE[] Pointages =
+    private static readonly Pointage[] Pointages =
     {
         P("369", Lundi, H17), P("00369", Lundi, H8), P("369", Lundi, H8), P("369", Lundi, H8.Add(TimeSpan.FromSeconds(20))),
         P("500", Lundi.AddDays(1), TimeSpan.FromHours(22)), P("500", Lundi.AddDays(2), TimeSpan.FromHours(6)),
@@ -44,15 +44,15 @@ public class ClosingPunchIndexTests
         P("a12", Lundi, H8), P("A12", Lundi.AddDays(1), H8), P("A12", Lundi.AddDays(1), H17), P("A12", Lundi.AddDays(1), H17),
         P("369", Lundi.AddDays(1), H8), P("369", To.AddDays(1), H8), P("369", To.AddDays(1), H8), P("369", From.AddDays(-1), H8),
         P("999", Lundi, H8), P("999", Lundi, H8),
-        new() { MATRICULE_SAGE = " ", DATE_POINTAGE = Lundi, HEURE_POINTAGE = H8 },
-        new() { MATRICULE_SAGE = "369", DATE_POINTAGE = null, HEURE_POINTAGE = H8 },
-        new() { MATRICULE_SAGE = "369", DATE_POINTAGE = Lundi, HEURE_POINTAGE = null }
+        new() { MatriculeSage = " ", DatePointage = Lundi, HeurePointage = H8 },
+        new() { MatriculeSage = "369", DatePointage = null, HeurePointage = H8 },
+        new() { MatriculeSage = "369", DatePointage = Lundi, HeurePointage = null }
     };
 
-    private static readonly T_HEURECORRIGER[] Corrections =
+    private static readonly HeureCorrigee[] Corrections =
     {
-        new() { MATRICULE_SAGE = "500", DATE_POINTAGE_IN = Lundi, ORIGINE = "AUTO", HENTREE = H8, HSORTIE = H17 },
-        new() { MATRICULE_SAGE = "369", DATE_POINTAGE_IN = Lundi.AddDays(2), ORIGINE = "MANUEL", ABSENCE_AM = true }
+        new() { MatriculeSage = "500", DatePointageIn = Lundi, Origine = "AUTO", HEntree = H8, HSortie = H17 },
+        new() { MatriculeSage = "369", DatePointageIn = Lundi.AddDays(2), Origine = "MANUEL", AbsenceAm = true }
     };
 
     private static readonly Dictionary<string, List<LeaveDay>> Conges = new() { ["500"] = new() { new LeaveDay(Lundi.AddDays(1), 0.5m, "CP") } };
@@ -67,8 +67,8 @@ public class ClosingPunchIndexTests
     {
         var options = new ClosingRulesOptions { IgnorerSemainesValidees = false };
         Assert.Equal(
-            PayrollClosingRules.PointagesIncomplets(Cartes, Plannings, Pointages, Corrections, Array.Empty<T_HS_VALIDER>(), From, To, multi, options),
-            PayrollClosingRules.PointagesIncomplets(Cartes, Plannings, Index, Corrections, Array.Empty<T_HS_VALIDER>(), From, To, multi, options));
+            PayrollClosingRules.PointagesIncomplets(Cartes, Plannings, Pointages, Corrections, Array.Empty<HsValidee>(), From, To, multi, options),
+            PayrollClosingRules.PointagesIncomplets(Cartes, Plannings, Index, Corrections, Array.Empty<HsValidee>(), From, To, multi, options));
     }
 
     [Fact]

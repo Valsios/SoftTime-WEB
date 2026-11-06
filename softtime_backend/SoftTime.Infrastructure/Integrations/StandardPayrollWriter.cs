@@ -27,9 +27,9 @@ public class StandardPayrollWriter : IPayrollWriter
         _auditTrail = auditTrail;
     }
 
-    public bool CanHandle(T_BDD_SAGE database) => string.Equals(database.TYPE_BASE, "STANDARD", StringComparison.OrdinalIgnoreCase);
+    public bool CanHandle(BddSage database) => string.Equals(database.TypeBase, "STANDARD", StringComparison.OrdinalIgnoreCase);
 
-    public async Task<PayrollWriteResultDto> ValidateAsync(T_BDD_SAGE database, IReadOnlyList<HsExoDto> rows, CancellationToken ct = default)
+    public async Task<PayrollWriteResultDto> ValidateAsync(BddSage database, IReadOnlyList<HsExoDto> rows, CancellationToken ct = default)
     {
         using var sage = _sageFactory.Create(await _tenant.GetSageConnectionAsync(ct));
         var constants = sage.Constants.ToArray();
@@ -37,10 +37,10 @@ public class StandardPayrollWriter : IPayrollWriter
         foreach (var code in new[] { codes.Exo130, codes.Exo150, codes.I130, codes.I150, codes.Ferie, codes.Dim, codes.Nuit })
             if (!constants.Any(c => string.Equals(c.CodeConstante?.Trim(), code, StringComparison.OrdinalIgnoreCase)))
                 throw new DomainException($"Constante SAGE {code} introuvable.");
-        return new PayrollWriteResultDto(database.NOM_BD ?? string.Empty, "STANDARD", 0, 0, "Configuration SAGE valide.");
+        return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "STANDARD", 0, 0, "Configuration SAGE valide.");
     }
 
-    public async Task<PayrollWriteResultDto> WriteAsync(T_BDD_SAGE database, IReadOnlyList<HsExoDto> rows, PayrollSyncContext auditContext, CancellationToken ct = default)
+    public async Task<PayrollWriteResultDto> WriteAsync(BddSage database, IReadOnlyList<HsExoDto> rows, PayrollSyncContext auditContext, CancellationToken ct = default)
     {
         // Le flux ci-dessous est intentionnellement celui qui existait dans OvertimeService.
         var input = await GetInputAsync(ct);
@@ -72,7 +72,7 @@ public class StandardPayrollWriter : IPayrollWriter
 
         var written = rows.Count(h => h.NumSal.HasValue);
         await WriteAuditAsync(database, auditContext, written, categoryCounts.Values.Sum(), categoryCounts, "SUCCES", CancellationToken.None);
-        return new PayrollWriteResultDto(database.NOM_BD ?? string.Empty, "STANDARD", written, categoryCounts.Values.Sum(),
+        return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "STANDARD", written, categoryCounts.Values.Sum(),
             "Synchronisation des heures supplémentaires vers SAGE terminée.");
     }
 
@@ -86,7 +86,7 @@ public class StandardPayrollWriter : IPayrollWriter
     }
 
     private Task WriteAuditAsync(
-        T_BDD_SAGE database,
+        BddSage database,
         PayrollSyncContext context,
         int employees,
         int updatedRows,
@@ -94,8 +94,8 @@ public class StandardPayrollWriter : IPayrollWriter
         string status,
         CancellationToken ct)
         => _auditTrail.WritePayrollSyncAsync(new PayrollSyncAudit(
-            "T_CUMSAL", database.NOM_BD, context.PeriodFrom, context.PeriodTo, employees, updatedRows, 0,
+            "T_CUMSAL", database.NomBd, context.PeriodFrom, context.PeriodTo, employees, updatedRows, 0,
             categories, status, context.UserLogin, "SYNC_PAIE:STANDARD", context.Correlation), ct);
 
-    protected sealed record StandardPayrollInput(string Connection, T_CST[] Constants, OvertimeSageCodes Codes);
+    protected sealed record StandardPayrollInput(string Connection, ConstanteSage[] Constants, OvertimeSageCodes Codes);
 }

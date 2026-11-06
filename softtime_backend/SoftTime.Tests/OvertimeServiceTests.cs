@@ -25,42 +25,42 @@ public class OvertimeServiceTests
         public FakeExternalSourceService Source { get; } = new();
         public OvertimeService Service { get; }
 
-        public List<T_HEURECORRIGER> Corrections => Uow.Get<T_HEURECORRIGER>().Items;
-        public List<T_HS_VALIDER> Semaines => Uow.Get<T_HS_VALIDER>().Items;
-        public List<T_HSSemaine> Repartition => Uow.Get<T_HSSemaine>().Items;
-        public List<T_HSExoImp> Exo => Uow.Get<T_HSExoImp>().Items;
+        public List<HeureCorrigee> Corrections => Uow.Get<HeureCorrigee>().Items;
+        public List<HsValidee> Semaines => Uow.Get<HsValidee>().Items;
+        public List<HsSemaine> Repartition => Uow.Get<HsSemaine>().Items;
+        public List<HsExoImp> Exo => Uow.Get<HsExoImp>().Items;
 
         public Contexte(bool multi = true)
         {
-            Uow.Get<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 1, NOM_BD = "SAGE_TEST" });
-            Uow.Get<T_CLOCK>().Items.Add(new T_CLOCK { MULTIPOINT = multi });
-            Uow.Get<T_CARDPAIE>().Items.Add(new T_CARDPAIE
+            Uow.Get<BddSage>().Items.Add(new BddSage { Id = 1, NomBd = "SAGE_TEST" });
+            Uow.Get<ParametrePointeuse>().Items.Add(new ParametrePointeuse { MultiPoint = multi });
+            Uow.Get<CardPaie>().Items.Add(new CardPaie
             {
-                ID = 1,
-                SAGE_MATRICULE = "001",
-                SAGE_BDD = "SAGE_TEST",
-                POINTEUSE_BDD = "PTE_TEST"
+                Id = 1,
+                SageMatricule = "001",
+                SageBdd = "SAGE_TEST",
+                PointeuseBdd = "PTE_TEST"
             });
-            Uow.Get<T_CATEGORIE>().Items.Add(new T_CATEGORIE
+            Uow.Get<Categorie>().Items.Add(new Categorie
             {
-                IDCATEGORIE = 10,
-                INTITULE = "Sédentaire",
-                HEURESEMAINE = 40m,
-                PAUSE = TimeSpan.FromMinutes(30),
-                BDD_SAGE = "SAGE_TEST"
+                IdCategorie = 10,
+                Intitule = "Sédentaire",
+                HeureSemaine = 40m,
+                Pause = TimeSpan.FromMinutes(30),
+                BddSage = "SAGE_TEST"
             });
-            Uow.Get<T_CAT_SAL>().Items.Add(new T_CAT_SAL
+            Uow.Get<CategorieSalarie>().Items.Add(new CategorieSalarie
             {
-                ID = 1,
-                MATRICULE_SAGE = 1,
-                ID_CATEG = 10,
-                BDD_SAGE = "SAGE_TEST"
+                Id = 1,
+                MatriculeSage = 1,
+                IdCateg = 10,
+                BddSage = "SAGE_TEST"
             });
-            Uow.Get<T_MAJORATION>().Items.AddRange(new[]
+            Uow.Get<Majoration>().Items.AddRange(new[]
             {
-                new T_MAJORATION { Mojoration = "NUIT", Cotation = 1m },
-                new T_MAJORATION { Mojoration = "DIMANCHE", Cotation = 2m },
-                new T_MAJORATION { Mojoration = "FERIE", Cotation = 3m },
+                new Majoration { Mojoration = "NUIT", Cotation = 1m },
+                new Majoration { Mojoration = "DIMANCHE", Cotation = 2m },
+                new Majoration { Mojoration = "FERIE", Cotation = 3m },
             });
 
             var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
@@ -74,42 +74,42 @@ public class OvertimeServiceTests
         }
 
         public void Planning(DateTime jour, TimeSpan? pause, TimeSpan? ha = null, TimeSpan? hd = null)
-            => Uow.Get<T_PLANNING_SAL>().Items.Add(new T_PLANNING_SAL
+            => Uow.Get<PlanningSalarie>().Items.Add(new PlanningSalarie
             {
-                IDSAL = 1,
+                IdSal = 1,
                 DateP = jour.Date,
-                HA = jour.Date + (ha ?? Huit),
-                HD = jour.Date + (hd ?? DixSept),
+                Ha = jour.Date + (ha ?? Huit),
+                Hd = jour.Date + (hd ?? DixSept),
                 Pause = pause,
                 OffP = false,
-                BDD_SAGE = "SAGE_TEST",
-                BDD_POINTEUSE = "PTE_TEST"
+                BddSage = "SAGE_TEST",
+                BddPointeuse = "PTE_TEST"
             });
 
         public void Paire(DateTime jour, TimeSpan entree, TimeSpan sortie)
-            => Corrections.Add(new T_HEURECORRIGER
+            => Corrections.Add(new HeureCorrigee
             {
-                BDD_SAGE = "SAGE_TEST",
-                BDD_POINTEUSE = "PTE_TEST",
-                MATRICULE_SAGE = "001",
-                DATE_POINTAGE_IN = jour.Date,
-                DATE_POINTAGE_OUT = jour.Date,
-                HENTREE = entree,
-                HSORTIE = sortie,
-                VALIDER_CORRECTION = true,
-                ORIGINE = "AUTO"
+                BddSage = "SAGE_TEST",
+                BddPointeuse = "PTE_TEST",
+                MatriculeSage = "001",
+                DatePointageIn = jour.Date,
+                DatePointageOut = jour.Date,
+                HEntree = entree,
+                HSortie = sortie,
+                ValiderCorrection = true,
+                Origine = "AUTO"
             });
 
         public void SemaineValidee(DateTime debut, decimal hs, bool validee = true)
-            => Semaines.Add(new T_HS_VALIDER
+            => Semaines.Add(new HsValidee
             {
-                BDD_SAGE = "SAGE_TEST",
-                BDD_POINTAGE = "PTE_TEST",
-                MATRICULES = "001",
-                DATE_DEB = debut.Date,
-                DATE_FIN = debut.Date.AddDays(6),
-                HS = hs,
-                VALIDATION_HS = validee
+                BddSage = "SAGE_TEST",
+                BddPointage = "PTE_TEST",
+                Matricules = "001",
+                DateDeb = debut.Date,
+                DateFin = debut.Date.AddDays(6),
+                Hs = hs,
+                ValidationHs = validee
             });
 
         public Task<IReadOnlyList<WeeklyHsDto>> Apercu(DateTime from, DateTime to)
@@ -143,8 +143,8 @@ public class OvertimeServiceTests
         Assert.Equal(45m, ligne.Ht);
         Assert.Equal(5m, ligne.Hs);
         var persistee = Assert.Single(contexte.Semaines);
-        Assert.Equal(45m, persistee.HT);
-        Assert.False(persistee.VALIDATION_HS);
+        Assert.Equal(45m, persistee.Ht);
+        Assert.False(persistee.ValidationHs);
     }
 
     [Fact]
@@ -209,8 +209,8 @@ public class OvertimeServiceTests
         await contexte.Service.ValidateWeekAsync(request, true);
 
         var ligne = Assert.Single(contexte.Semaines);
-        Assert.True(ligne.VALIDATION_HS);
-        Assert.All(contexte.Corrections, h => Assert.True(h.VALIDER_HS));
+        Assert.True(ligne.ValidationHs);
+        Assert.All(contexte.Corrections, h => Assert.True(h.ValiderHs));
 
         // La semaine figée reste visible (pour pouvoir annuler la validation) et n'est pas recalculée.
         var pagine = await contexte.ApercuPagine(Lundi, Dimanche);
@@ -218,8 +218,8 @@ public class OvertimeServiceTests
 
         await contexte.Service.ValidateWeekAsync(request, false);
 
-        Assert.False(Assert.Single(contexte.Semaines).VALIDATION_HS);
-        Assert.All(contexte.Corrections, h => Assert.False(h.VALIDER_HS));
+        Assert.False(Assert.Single(contexte.Semaines).ValidationHs);
+        Assert.All(contexte.Corrections, h => Assert.False(h.ValiderHs));
     }
 
     [Fact]
@@ -232,7 +232,7 @@ public class OvertimeServiceTests
             new WeeklyValidationRequest(null, null, Lundi, Dimanche, Array.Empty<string>()), true);
 
         Assert.Empty(contexte.Semaines);
-        Assert.All(contexte.Corrections, h => Assert.Null(h.VALIDER_HS));
+        Assert.All(contexte.Corrections, h => Assert.Null(h.ValiderHs));
     }
 
     // ------------------------------------------------------------------ ventilation / exonération
@@ -257,12 +257,12 @@ public class OvertimeServiceTests
 
         Assert.Equal(2, contexte.Repartition.Count);
         Assert.Equal(1, contexte.Repartition[0].Semaine);
-        Assert.Equal(12m, contexte.Repartition[0].HS);
-        Assert.Equal(8m, contexte.Repartition[0].HS1);
-        Assert.Equal(4m, contexte.Repartition[0].HS2);
+        Assert.Equal(12m, contexte.Repartition[0].Hs);
+        Assert.Equal(8m, contexte.Repartition[0].Hs1);
+        Assert.Equal(4m, contexte.Repartition[0].Hs2);
         Assert.Equal(2, contexte.Repartition[1].Semaine);
-        Assert.Equal(8m, contexte.Repartition[1].HS1);
-        Assert.Equal(6m, contexte.Repartition[1].HS2);
+        Assert.Equal(8m, contexte.Repartition[1].Hs1);
+        Assert.Equal(6m, contexte.Repartition[1].Hs2);
     }
 
     [Fact]
@@ -273,12 +273,12 @@ public class OvertimeServiceTests
         var request = new PeriodRequest(null, null, Lundi, Dimanche);
 
         await contexte.Service.CalculateExoImpoAsync(request);
-        contexte.Semaines.Single().HS = 6;
+        contexte.Semaines.Single().Hs = 6;
         await contexte.Service.CalculateExoImpoAsync(request);
 
         var semaine = Assert.Single(contexte.Repartition);
-        Assert.Equal(6m, semaine.HS);
-        Assert.Equal(6m, semaine.HS1);
+        Assert.Equal(6m, semaine.Hs);
+        Assert.Equal(6m, semaine.Hs1);
     }
 
     [Fact]
@@ -335,15 +335,15 @@ public class OvertimeServiceTests
         var contexte = new Contexte();
         contexte.Planning(Lundi, TimeSpan.FromMinutes(30));
         // Anomalie d'absence validée : la journée porte une ligne d'absence, sans heure.
-        contexte.Corrections.Add(new T_HEURECORRIGER
+        contexte.Corrections.Add(new HeureCorrigee
         {
-            BDD_SAGE = "SAGE_TEST",
-            MATRICULE_SAGE = "001",
-            DATE_POINTAGE_IN = Lundi,
-            DATE_POINTAGE_OUT = Lundi,
-            ABSENCE_AM = true,
-            ABSENCE_PM = true,
-            ORIGINE = "MANUEL"
+            BddSage = "SAGE_TEST",
+            MatriculeSage = "001",
+            DatePointageIn = Lundi,
+            DatePointageOut = Lundi,
+            AbsenceAm = true,
+            AbsencePm = true,
+            Origine = "MANUEL"
         });
 
         var exo = await contexte.Service.CalculateExoImpoAsync(new PeriodRequest(null, null, Lundi, Dimanche));
@@ -365,7 +365,7 @@ public class OvertimeServiceTests
         await Assert.ThrowsAsync<DomainException>(
             () => contexte.Service.PurgeValidationAsync(new PeriodRequest(null, null, Lundi, Dimanche)));
 
-        Assert.True(Assert.Single(contexte.Semaines).VALIDATION_HS);
+        Assert.True(Assert.Single(contexte.Semaines).ValidationHs);
     }
 
     // ------------------------------------------------------------------ détail
@@ -404,17 +404,17 @@ public class OvertimeServiceTests
         var contexte = new Contexte();
         var debut = new DateTime(2025, 5, 1);
         var fin = new DateTime(2025, 5, 31);
-        contexte.Repartition.Add(new T_HSSemaine
+        contexte.Repartition.Add(new HsSemaine
         {
             Matricule = "001",
             PeriodeDebut = debut,
             PeriodeFin = fin,
             Semaine = 2,
-            HS = 3m,
-            HS1 = 3m,
-            HS2 = 0m,
-            BDD_SAGE = "SAGE_TEST",
-            BDD_POINTEUSE = "PTE_TEST"
+            Hs = 3m,
+            Hs1 = 3m,
+            Hs2 = 0m,
+            BddSage = "SAGE_TEST",
+            BddPointeuse = "PTE_TEST"
         });
 
         var detail = await contexte.Service.DetailAsync("001", debut, fin);

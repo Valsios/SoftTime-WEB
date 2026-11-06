@@ -22,8 +22,8 @@ public static class AdminRules
     /// <summary>
     /// Surcharge pour une entité rôle.
     /// </summary>
-    public static bool IsAdmin(T_ROLE? role)
-        => role != null && IsAdmin(role.IDROLE, role.NOMROLE);
+    public static bool IsAdmin(Role? role)
+        => role != null && IsAdmin(role.IdRole, role.NomRole);
 
     /// <summary>
     /// Détermine si un identifiant de rôle correspond au super-administrateur irrévocable (RoleId == 1).

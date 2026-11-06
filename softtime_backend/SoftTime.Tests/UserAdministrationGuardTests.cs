@@ -20,16 +20,16 @@ public class UserAdministrationGuardTests
 
     public UserAdministrationGuardTests()
     {
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 2, NOMROLE = "Utilisateur" });
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 3, NOMROLE = "Gestionnaire" });
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 1, IDROLE = 1, LOGIN = "admin" });
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 2, IDROLE = 3, LOGIN = "gestionnaire" });
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 3, IDROLE = 2, LOGIN = "cible" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 2, NomRole = "Utilisateur" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 3, NomRole = "Gestionnaire" });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 1, IdRole = 1, Login = "admin" });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 2, IdRole = 3, Login = "gestionnaire" });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 3, IdRole = 2, Login = "cible" });
     }
 
     private AuthService Service(decimal userId, decimal roleId)
-        => new(_uow, new Token(), _mapper, new Mail(), new FakeUser(userId, roleId), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<T_RESPONSABLE>());
+        => new(_uow, new Token(), _mapper, new Mail(), new FakeUser(userId, roleId), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<Responsable>());
 
     private static readonly UserDto NewUserDto = new(0, 2, "Nouveau", "nouveau", null, "ValidP@ss123!");
 
@@ -59,7 +59,7 @@ public class UserAdministrationGuardTests
         await svc.SaveUserDetailedPermissionsAsync(1, 3, new[] { "PROC:SHIFTS" });
         await svc.ResetUserDetailedPermissionsAsync(1, 3);
         await svc.DeleteUserAsync(1, created.Id);
-        Assert.DoesNotContain(_uow.GetRepo<T_RESPONSABLE>().Items, u => u.IDRESPONSABLE == created.Id);
+        Assert.DoesNotContain(_uow.GetRepo<Responsable>().Items, u => u.IdResponsable == created.Id);
     }
 
     [Fact]
@@ -75,8 +75,8 @@ public class UserAdministrationGuardTests
     [Fact]
     public async Task Role_named_admin_but_not_role_1_is_refused_by_the_guard_on_role_1_assignment_and_on_rights_changes()
     {
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 4, NOMROLE = "ROLE_ADMIN_CUSTOM" });
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 4, IDROLE = 4, LOGIN = "customadmin" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 4, NomRole = "ROLE_ADMIN_CUSTOM" });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 4, IdRole = 4, Login = "customadmin" });
         var svc = Service(4, 4);
         var before = _uow.Snapshot();
 
@@ -93,8 +93,8 @@ public class UserAdministrationGuardTests
     [Fact]
     public async Task Role_4_is_refused_on_every_guarded_overload_and_state_is_unchanged()
     {
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 4, NOMROLE = "ROLE_ADMIN_CUSTOM" });
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 4, IDROLE = 4, LOGIN = "customadmin" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 4, NomRole = "ROLE_ADMIN_CUSTOM" });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 4, IdRole = 4, Login = "customadmin" });
         var svc = Service(4, 4);
         var before = _uow.Snapshot();
 
@@ -116,8 +116,8 @@ public class UserAdministrationGuardTests
     [Fact]
     public async Task Role_4_changing_its_own_role_is_refused_the_same_way()
     {
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 4, NOMROLE = "ROLE_ADMIN_CUSTOM" });
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 4, IDROLE = 4, LOGIN = "customadmin" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 4, NomRole = "ROLE_ADMIN_CUSTOM" });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 4, IdRole = 4, Login = "customadmin" });
         var before = _uow.Snapshot();
 
         await Assert.ThrowsAsync<ForbiddenException>(() =>
@@ -126,7 +126,7 @@ public class UserAdministrationGuardTests
             Service(4, 4).SaveUserAsync(4, new UserDto(4, 2, "customadmin", "customadmin", null, null)));   // vers un autre rôle
 
         Assert.Equal(before, _uow.Snapshot());
-        Assert.Equal(4, _uow.GetRepo<T_RESPONSABLE>().Items.Single(u => u.IDRESPONSABLE == 4).IDROLE);
+        Assert.Equal(4, _uow.GetRepo<Responsable>().Items.Single(u => u.IdResponsable == 4).IdRole);
     }
 
     [Fact]
@@ -141,17 +141,17 @@ public class UserAdministrationGuardTests
         Assert.Equal("Impossible de supprimer le dernier administrateur.", delete.Message);
         var demote = await Assert.ThrowsAsync<DomainException>(() => svc.SaveUserAsync(new UserDto(1, 2, "Admin", "admin", null, null)));
         Assert.Equal("Impossible de rétrograder le dernier administrateur.", demote.Message);
-        Assert.Contains(_uow.GetRepo<T_RESPONSABLE>().Items, u => u.IDRESPONSABLE == 1 && u.IDROLE == 1);
+        Assert.Contains(_uow.GetRepo<Responsable>().Items, u => u.IdResponsable == 1 && u.IdRole == 1);
     }
 
     [Fact]
     public async Task Role_1_cannot_modify_or_delete_another_administrator_without_keeping_one()
     {
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 5, IDROLE = 1, LOGIN = "admin2" });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 5, IdRole = 1, Login = "admin2" });
         var svc = Service(1, 1);
         await svc.SaveUserAsync(1, new UserDto(5, 1, "Admin 2 renommé", "admin2", null, null));
         await svc.DeleteUserAsync(1, 5);
-        Assert.DoesNotContain(_uow.GetRepo<T_RESPONSABLE>().Items, u => u.IDRESPONSABLE == 5);
+        Assert.DoesNotContain(_uow.GetRepo<Responsable>().Items, u => u.IdResponsable == 5);
     }
 
     private sealed class FakeUser : ICurrentUser

@@ -29,27 +29,27 @@ public class DisplayedRightsTests
     public DisplayedRightsTests()
     {
         var mapper = new MapperConfiguration(c => c.AddProfile<MappingProfile>()).CreateMapper();
-        _auth = new AuthService(_uow, new Token(), mapper, new Mail(), new AdminCurrentUser(), TestRights.Service(_uow), new PasswordHasher<T_RESPONSABLE>());
+        _auth = new AuthService(_uow, new Token(), mapper, new Mail(), new AdminCurrentUser(), TestRights.Service(_uow), new PasswordHasher<Responsable>());
 
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 5, NOMROLE = "Sans lignes" });
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 6, NOMROLE = "Avec lignes" });
-        _uow.GetRepo<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 1, NOM_BD = "BASE1" });
-        _uow.GetRepo<T_BDD_POINTEUSE>().Items.Add(new T_BDD_POINTEUSE { ID = 1, NOM_BD = "PTG" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 5, NomRole = "Sans lignes" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 6, NomRole = "Avec lignes" });
+        _uow.GetRepo<BddSage>().Items.Add(new BddSage { Id = 1, NomBd = "BASE1" });
+        _uow.GetRepo<BddPointeuse>().Items.Add(new BddPointeuse { Id = 1, NomBd = "PTG" });
         // Rôle 5 : portes Bases + Traitements, aucune ligne. Rôle 6 : mêmes portes, lignes détaillées.
         foreach (var role in new decimal[] { 5, 6 })
         {
-            _uow.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = role, IDDROIT = 1 });
-            _uow.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = role, IDDROIT = 3 });
+            _uow.GetRepo<DroitRole>().Items.Add(new DroitRole { IdRole = role, IdDroit = 1 });
+            _uow.GetRepo<DroitRole>().Items.Add(new DroitRole { IdRole = role, IdDroit = 3 });
         }
-        _uow.GetRepo<T_ROLE_PERMISSION>().Items.Add(new T_ROLE_PERMISSION { IDROLE = 6, PERMISSION_CODE = "SAGE:CREATE", IS_GRANTED = true });
-        _uow.GetRepo<T_ROLE_PERMISSION>().Items.Add(new T_ROLE_PERMISSION { IDROLE = 6, PERMISSION_CODE = "PROC:SHIFTS", IS_GRANTED = true });
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 1, IDROLE = 1, LOGIN = "admin" });
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 15, IDROLE = 5, LOGIN = "sanslignes" });
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 16, IDROLE = 6, LOGIN = "aveclignes" });
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 17, IDROLE = 5, LOGIN = "ajustements" });
-        _uow.GetRepo<T_USER_PERMISSION>().Items.Add(new T_USER_PERMISSION { IDRESPONSABLE = 17, PERMISSION_CODE = "SAGE:CREATE", IS_GRANTED = true });
-        _uow.GetRepo<T_USER_PERMISSION>().Items.Add(new T_USER_PERMISSION { IDRESPONSABLE = 17, PERMISSION_CODE = "SAGE:BASE1:READ", IS_GRANTED = true });
+        _uow.GetRepo<RolePermission>().Items.Add(new RolePermission { IdRole = 6, PermissionCode = "SAGE:CREATE", IsGranted = true });
+        _uow.GetRepo<RolePermission>().Items.Add(new RolePermission { IdRole = 6, PermissionCode = "PROC:SHIFTS", IsGranted = true });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 1, IdRole = 1, Login = "admin" });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 15, IdRole = 5, Login = "sanslignes" });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 16, IdRole = 6, Login = "aveclignes" });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 17, IdRole = 5, Login = "ajustements" });
+        _uow.GetRepo<UserPermission>().Items.Add(new UserPermission { IdResponsable = 17, PermissionCode = "SAGE:CREATE", IsGranted = true });
+        _uow.GetRepo<UserPermission>().Items.Add(new UserPermission { IdResponsable = 17, PermissionCode = "SAGE:BASE1:READ", IsGranted = true });
     }
 
     [Fact]
@@ -113,11 +113,11 @@ public class DisplayedRightsTests
     {
         // Cas limite documenté : sans base, aucun droit SAGE/POINTEUSE n'est affiché, donc réenregistrer ces droits
         // ne conserve pas la porte Bases (elle ne donnerait de toute façon accès à rien).
-        _uow.GetRepo<T_BDD_SAGE>().Items.Clear();
-        _uow.GetRepo<T_BDD_POINTEUSE>().Items.Clear();
+        _uow.GetRepo<BddSage>().Items.Clear();
+        _uow.GetRepo<BddPointeuse>().Items.Clear();
         var role = await _auth.GetRoleDetailedPermissionsAsync(5);
         await _auth.SaveRoleDetailedPermissionsAsync(1, 5, role.GrantedPermissions);
-        var gates = _uow.GetRepo<T_DROIT_ROLE>().Items.Where(d => d.IDROLE == 5).Select(d => (int)d.IDDROIT).OrderBy(x => x);
+        var gates = _uow.GetRepo<DroitRole>().Items.Where(d => d.IdRole == 5).Select(d => (int)d.IdDroit).OrderBy(x => x);
         Assert.Equal(new[] { 3 }, gates);
     }
 

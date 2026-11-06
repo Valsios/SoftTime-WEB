@@ -5,7 +5,7 @@ namespace SoftTime.Application.Abstractions;
  
 public interface IEmployeeReader
 {
-    bool CanHandle(T_BDD_SAGE sageRow);
+    bool CanHandle(BddSage sageRow);
  
-    Task<IReadOnlyList<NormalizedEmployee>> ListActiveEmployeesAsync(T_BDD_SAGE sageRow, CancellationToken ct);
+    Task<IReadOnlyList<NormalizedEmployee>> ListActiveEmployeesAsync(BddSage sageRow, CancellationToken ct);
 }

@@ -60,7 +60,7 @@ public class MlTrainingServiceTests
     {
         var store = new FakeMlStore();
         Seed(store);
-        store.Models.Add(new T_ML_MODELE
+        store.Models.Add(new MlModele
         {
             BddSage = Sage,
             TypeModele = MlModelTypes.HsMontant,
@@ -114,7 +114,7 @@ public class MlTrainingServiceTests
         for (var i = 0; i < 120; i++)
         {
             var date = to.AddDays(-i);
-            store.Daily.Add(new T_ML_SALARIE_JOUR
+            store.Daily.Add(new MlSalarieJour
             {
                 BddSage = Sage,
                 Matricule = "001",
@@ -142,7 +142,7 @@ public class MlTrainingServiceTests
         for (var i = 0; i < 60; i++)
         {
             var monday = lundi.AddDays(-7 * i);
-            store.Weekly.Add(new T_ML_SALARIE_SEMAINE
+            store.Weekly.Add(new MlSalarieSemaine
             {
                 BddSage = Sage,
                 Matricule = "001",
@@ -153,8 +153,8 @@ public class MlTrainingServiceTests
                 HeuresTravaillees = 40m,
                 NbJoursPlanifies = 5,
                 NbJoursTravailles = 5,
-                HS = i % 3 == 0 ? 2m : 0m,
-                HSValidee = true,
+                Hs = i % 3 == 0 ? 2m : 0m,
+                HsValidee = true,
                 HsMoyenne4Semaines = 1m,
                 HsMoyenne8Semaines = 1m,
                 Departement = "Atelier",

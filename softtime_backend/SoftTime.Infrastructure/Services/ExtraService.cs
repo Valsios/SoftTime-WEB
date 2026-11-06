@@ -43,17 +43,17 @@ public class ExtraService : IExtraService
         var to = request.To.Date;
         var matriculeFrom = request.MatriculeFrom;
         var matriculeTo = request.MatriculeTo;
-        var list = await _uow.Repository<T_CANTINE>().ListReadOnlyAsync(
-            c => c.NOM_BDD_SAGE == sageDb
-                 && c.DATEDEB >= from
-                 && c.DATEFIN <= to
+        var list = await _uow.Repository<Cantine>().ListReadOnlyAsync(
+            c => c.NomBddSage == sageDb
+                 && c.DateDeb >= from
+                 && c.DateFin <= to
                  && (string.IsNullOrEmpty(matriculeFrom)
-                     || (c.MATRICULE_SAGE != null && string.Compare(c.MATRICULE_SAGE, matriculeFrom) >= 0))
+                     || (c.MatriculeSage != null && string.Compare(c.MatriculeSage, matriculeFrom) >= 0))
                  && (string.IsNullOrEmpty(matriculeTo)
-                     || (c.MATRICULE_SAGE != null && string.Compare(c.MATRICULE_SAGE, matriculeTo) <= 0)), ct);
+                     || (c.MatriculeSage != null && string.Compare(c.MatriculeSage, matriculeTo) <= 0)), ct);
         return list
-            .OrderBy(c => c.MATRICULE_SAGE)
-            .Select(c => new CanteenDto(c.IDCANTINE, c.MATRICULE_SAGE, c.DATEDEB, c.DATEFIN, c.TOTAL_CANTINE))
+            .OrderBy(c => c.MatriculeSage)
+            .Select(c => new CanteenDto(c.IdCantine, c.MatriculeSage, c.DateDeb, c.DateFin, c.TotalCantine))
             .ToList();
     }
 
@@ -68,20 +68,20 @@ public class ExtraService : IExtraService
         var matriculeFrom = request.MatriculeFrom;
         var matriculeTo = request.MatriculeTo;
         return await PagedLists.PageAsync(
-            _uow.Repository<T_CANTINE>(),
-            c => c.NOM_BDD_SAGE == sageDb
-                 && c.DATEDEB >= from
-                 && c.DATEFIN <= to
+            _uow.Repository<Cantine>(),
+            c => c.NomBddSage == sageDb
+                 && c.DateDeb >= from
+                 && c.DateFin <= to
                  && (string.IsNullOrEmpty(matriculeFrom)
-                     || (c.MATRICULE_SAGE != null && string.Compare(c.MATRICULE_SAGE, matriculeFrom) >= 0))
+                     || (c.MatriculeSage != null && string.Compare(c.MatriculeSage, matriculeFrom) >= 0))
                  && (string.IsNullOrEmpty(matriculeTo)
-                     || (c.MATRICULE_SAGE != null && string.Compare(c.MATRICULE_SAGE, matriculeTo) <= 0)),
-            q => q.OrderBy(c => c.MATRICULE_SAGE).ThenBy(c => c.DATEDEB).ThenBy(c => c.IDCANTINE),
+                     || (c.MatriculeSage != null && string.Compare(c.MatriculeSage, matriculeTo) <= 0)),
+            q => q.OrderBy(c => c.MatriculeSage).ThenBy(c => c.DateDeb).ThenBy(c => c.IdCantine),
             page,
             pageSize,
-            c => new CanteenDto(c.IDCANTINE, c.MATRICULE_SAGE, c.DATEDEB, c.DATEFIN, c.TOTAL_CANTINE),
+            c => new CanteenDto(c.IdCantine, c.MatriculeSage, c.DateDeb, c.DateFin, c.TotalCantine),
             request.Search,
-            new System.Linq.Expressions.Expression<Func<T_CANTINE, string?>>[] { c => c.MATRICULE_SAGE },
+            new System.Linq.Expressions.Expression<Func<Cantine, string?>>[] { c => c.MatriculeSage },
             ct);
     }
 
@@ -93,17 +93,17 @@ public class ExtraService : IExtraService
         var to = request.To.Date;
         var matriculeFrom = request.MatriculeFrom;
         var matriculeTo = request.MatriculeTo;
-        var list = await _uow.Repository<T_FRAIS>().ListReadOnlyAsync(
-            c => c.NOM_BDD_SAGE == sageDb
-                 && c.DATEDEB >= from
-                 && c.DATEFIN <= to
+        var list = await _uow.Repository<Frais>().ListReadOnlyAsync(
+            c => c.NomBddSage == sageDb
+                 && c.DateDeb >= from
+                 && c.DateFin <= to
                  && (string.IsNullOrEmpty(matriculeFrom)
-                     || (c.MATRICULE_SAGE != null && string.Compare(c.MATRICULE_SAGE, matriculeFrom) >= 0))
+                     || (c.MatriculeSage != null && string.Compare(c.MatriculeSage, matriculeFrom) >= 0))
                  && (string.IsNullOrEmpty(matriculeTo)
-                     || (c.MATRICULE_SAGE != null && string.Compare(c.MATRICULE_SAGE, matriculeTo) <= 0)), ct);
+                     || (c.MatriculeSage != null && string.Compare(c.MatriculeSage, matriculeTo) <= 0)), ct);
         return list
-            .OrderBy(c => c.MATRICULE_SAGE)
-            .Select(c => new TravelDto(c.IDPOINTAGE, c.MATRICULE_SAGE, c.DATEDEB, c.DATEFIN, c.TOTAL_POINT))
+            .OrderBy(c => c.MatriculeSage)
+            .Select(c => new TravelDto(c.IdPointage, c.MatriculeSage, c.DateDeb, c.DateFin, c.TotalPoint))
             .ToList();
     }
 
@@ -118,20 +118,20 @@ public class ExtraService : IExtraService
         var matriculeFrom = request.MatriculeFrom;
         var matriculeTo = request.MatriculeTo;
         return await PagedLists.PageAsync(
-            _uow.Repository<T_FRAIS>(),
-            c => c.NOM_BDD_SAGE == sageDb
-                 && c.DATEDEB >= from
-                 && c.DATEFIN <= to
+            _uow.Repository<Frais>(),
+            c => c.NomBddSage == sageDb
+                 && c.DateDeb >= from
+                 && c.DateFin <= to
                  && (string.IsNullOrEmpty(matriculeFrom)
-                     || (c.MATRICULE_SAGE != null && string.Compare(c.MATRICULE_SAGE, matriculeFrom) >= 0))
+                     || (c.MatriculeSage != null && string.Compare(c.MatriculeSage, matriculeFrom) >= 0))
                  && (string.IsNullOrEmpty(matriculeTo)
-                     || (c.MATRICULE_SAGE != null && string.Compare(c.MATRICULE_SAGE, matriculeTo) <= 0)),
-            q => q.OrderBy(c => c.MATRICULE_SAGE).ThenBy(c => c.DATEDEB).ThenBy(c => c.IDPOINTAGE),
+                     || (c.MatriculeSage != null && string.Compare(c.MatriculeSage, matriculeTo) <= 0)),
+            q => q.OrderBy(c => c.MatriculeSage).ThenBy(c => c.DateDeb).ThenBy(c => c.IdPointage),
             page,
             pageSize,
-            c => new TravelDto(c.IDPOINTAGE, c.MATRICULE_SAGE, c.DATEDEB, c.DATEFIN, c.TOTAL_POINT),
+            c => new TravelDto(c.IdPointage, c.MatriculeSage, c.DateDeb, c.DateFin, c.TotalPoint),
             request.Search,
-            new System.Linq.Expressions.Expression<Func<T_FRAIS, string?>>[] { c => c.MATRICULE_SAGE },
+            new System.Linq.Expressions.Expression<Func<Frais, string?>>[] { c => c.MatriculeSage },
             ct);
     }
 
@@ -145,24 +145,24 @@ public class ExtraService : IExtraService
             .GroupBy(j => j.Matricule)
             .Select(g => new PunchCountDto(g.Key, g.Select(j => j.Date.Date).Distinct().Count()))
             .ToList();
-        var repo = _uow.Repository<T_CANTINE>();
+        var repo = _uow.Repository<Cantine>();
         var old = await repo.ListAsync(
-            c => c.NOM_BDD_SAGE == _tenant.SageDb && c.DATEDEB == from && c.DATEFIN == to, ct);
+            c => c.NomBddSage == _tenant.SageDb && c.DateDeb == from && c.DateFin == to, ct);
         repo.RemoveRange(old);
         var result = new List<CanteenDto>();
         foreach (var row in counts)
         {
-            var entity = new T_CANTINE
+            var entity = new Cantine
             {
-                NOM_BDD_SAGE = _tenant.SageDb,
-                NOM_BDD_POINTEUSE = _tenant.PointeuseDb,
-                MATRICULE_SAGE = row.Matricule,
-                DATEDEB = from,
-                DATEFIN = to,
-                TOTAL_CANTINE = row.Total
+                NomBddSage = _tenant.SageDb,
+                NomBddPointeuse = _tenant.PointeuseDb,
+                MatriculeSage = row.Matricule,
+                DateDeb = from,
+                DateFin = to,
+                TotalCantine = row.Total
             };
             await repo.AddAsync(entity, ct);
-            result.Add(new CanteenDto(entity.IDCANTINE, entity.MATRICULE_SAGE, entity.DATEDEB, entity.DATEFIN, entity.TOTAL_CANTINE));
+            result.Add(new CanteenDto(entity.IdCantine, entity.MatriculeSage, entity.DateDeb, entity.DateFin, entity.TotalCantine));
         }
         await _uow.SaveChangesAsync(ct);
         return result.OrderBy(r => r.Matricule).ToList();
@@ -174,24 +174,24 @@ public class ExtraService : IExtraService
         var from = request.From.Date;
         var to = request.To.Date;
         var counts = await _punches.CountTravelPunchesAsync(_tenant.SageDb, from, to.AddDays(1), ct);
-        var repo = _uow.Repository<T_FRAIS>();
+        var repo = _uow.Repository<Frais>();
         var old = await repo.ListAsync(
-            c => c.NOM_BDD_SAGE == _tenant.SageDb && c.DATEDEB == from && c.DATEFIN == to, ct);
+            c => c.NomBddSage == _tenant.SageDb && c.DateDeb == from && c.DateFin == to, ct);
         repo.RemoveRange(old);
         var result = new List<TravelDto>();
         foreach (var row in counts)
         {
-            var entity = new T_FRAIS
+            var entity = new Frais
             {
-                NOM_BDD_SAGE = _tenant.SageDb,
-                NOM_BDD_POINTEUSE = _tenant.PointeuseDb,
-                MATRICULE_SAGE = row.Matricule,
-                DATEDEB = from,
-                DATEFIN = to,
-                TOTAL_POINT = row.Total
+                NomBddSage = _tenant.SageDb,
+                NomBddPointeuse = _tenant.PointeuseDb,
+                MatriculeSage = row.Matricule,
+                DateDeb = from,
+                DateFin = to,
+                TotalPoint = row.Total
             };
             await repo.AddAsync(entity, ct);
-            result.Add(new TravelDto(entity.IDPOINTAGE, entity.MATRICULE_SAGE, entity.DATEDEB, entity.DATEFIN, entity.TOTAL_POINT));
+            result.Add(new TravelDto(entity.IdPointage, entity.MatriculeSage, entity.DateDeb, entity.DateFin, entity.TotalPoint));
         }
         await _uow.SaveChangesAsync(ct);
         return result.OrderBy(r => r.Matricule).ToList();
@@ -215,21 +215,21 @@ public class ExtraService : IExtraService
             .Where(j => MatriculeRange.Contains(j.Matricule, request))
             .ToList();
 
-        var corrections = await _uow.Repository<T_HEURECORRIGER>().ListReadOnlyAsync(h =>
-            h.BDD_SAGE == sageDb
-            && h.DATE_POINTAGE_IN != null
-            && h.DATE_POINTAGE_IN >= from
-            && h.DATE_POINTAGE_IN < to.AddDays(1)
+        var corrections = await _uow.Repository<HeureCorrigee>().ListReadOnlyAsync(h =>
+            h.BddSage == sageDb
+            && h.DatePointageIn != null
+            && h.DatePointageIn >= from
+            && h.DatePointageIn < to.AddDays(1)
             // Filtre métier poussé en SQL : seules les absences complètes peuvent contredire un pointage.
-            && h.ABSENCE_AM == true
-            && h.ABSENCE_PM == true
+            && h.AbsenceAm == true
+            && h.AbsencePm == true
             && (string.IsNullOrEmpty(request.MatriculeFrom)
-                || (h.MATRICULE_SAGE != null && string.Compare(h.MATRICULE_SAGE, request.MatriculeFrom) >= 0))
+                || (h.MatriculeSage != null && string.Compare(h.MatriculeSage, request.MatriculeFrom) >= 0))
             && (string.IsNullOrEmpty(request.MatriculeTo)
-                || (h.MATRICULE_SAGE != null && string.Compare(h.MATRICULE_SAGE, request.MatriculeTo) <= 0)), ct);
+                || (h.MatriculeSage != null && string.Compare(h.MatriculeSage, request.MatriculeTo) <= 0)), ct);
         var absences = corrections
-            .Where(h => h.DATE_POINTAGE_IN.HasValue && !string.IsNullOrEmpty(h.MATRICULE_SAGE))
-            .Select(h => new CanteenDay(h.MATRICULE_SAGE!, h.DATE_POINTAGE_IN!.Value.Date))
+            .Where(h => h.DatePointageIn.HasValue && !string.IsNullOrEmpty(h.MatriculeSage))
+            .Select(h => new CanteenDay(h.MatriculeSage!, h.DatePointageIn!.Value.Date))
             .Where(d => MatriculeRange.Contains(d.Matricule, request))
             .ToList();
 
@@ -261,12 +261,12 @@ public class ExtraService : IExtraService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         EnsurePeriode(request);
-        var repo = _uow.Repository<T_CANTINE>();
+        var repo = _uow.Repository<Cantine>();
         var from = request.From.Date;
         var to = request.To.Date;
         var lignes = (await repo.ListAsync(c =>
-                c.NOM_BDD_SAGE == _tenant.SageDb && c.DATEDEB >= from && c.DATEFIN <= to, ct))
-            .Where(c => MatriculeRange.Contains(c.MATRICULE_SAGE, request))
+                c.NomBddSage == _tenant.SageDb && c.DateDeb >= from && c.DateFin <= to, ct))
+            .Where(c => MatriculeRange.Contains(c.MatriculeSage, request))
             .ToList();
         if (lignes.Count == 0)
             return new PurgeExtrasResultDto(0, "Aucune cantine à purger sur la période.");
@@ -301,7 +301,7 @@ public class ExtraService : IExtraService
         await _tenant.EnsureAuthorizedAsync(ct);
         EnsurePeriode(request);
         var sageRow = await _tenant.GetSageRowAsync(ct);
-        if (!string.Equals(sageRow.TYPE_BASE, "STANDARD", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(sageRow.TypeBase, "STANDARD", StringComparison.OrdinalIgnoreCase))
             throw new DomainException(
                 "La synchronisation des cumuls cantine / frais n'est possible que pour une base SAGE de type STANDARD.");
 
@@ -309,15 +309,15 @@ public class ExtraService : IExtraService
         var from = request.From.Date;
         var to = request.To.Date;
         var charges = cantine
-            ? (await _uow.Repository<T_CANTINE>().ListAsync(c =>
-                    c.NOM_BDD_SAGE == sageDb && c.DATEDEB == from && c.DATEFIN == to, ct))
-                .Where(c => MatriculeRange.Contains(c.MATRICULE_SAGE, request))
-                .Select(c => new ChargeCumul(c.MATRICULE_SAGE, c.TOTAL_CANTINE ?? 0))
+            ? (await _uow.Repository<Cantine>().ListAsync(c =>
+                    c.NomBddSage == sageDb && c.DateDeb == from && c.DateFin == to, ct))
+                .Where(c => MatriculeRange.Contains(c.MatriculeSage, request))
+                .Select(c => new ChargeCumul(c.MatriculeSage, c.TotalCantine ?? 0))
                 .ToList()
-            : (await _uow.Repository<T_FRAIS>().ListAsync(c =>
-                    c.NOM_BDD_SAGE == sageDb && c.DATEDEB == from && c.DATEFIN == to, ct))
-                .Where(c => MatriculeRange.Contains(c.MATRICULE_SAGE, request))
-                .Select(c => new ChargeCumul(c.MATRICULE_SAGE, c.TOTAL_POINT ?? 0))
+            : (await _uow.Repository<Frais>().ListAsync(c =>
+                    c.NomBddSage == sageDb && c.DateDeb == from && c.DateFin == to, ct))
+                .Where(c => MatriculeRange.Contains(c.MatriculeSage, request))
+                .Select(c => new ChargeCumul(c.MatriculeSage, c.TotalPoint ?? 0))
                 .ToList();
         if (charges.Count == 0)
             throw new DomainException(cantine
@@ -352,13 +352,13 @@ public class ExtraService : IExtraService
                 + (sansSalarie.Count > 10 ? "…" : string.Empty) + ".";
         if (sansCumul.Count > 0)
             message += $" {sansCumul.Count} salarié(s) sans ligne de cumul {codeConstante} (opérande {opCst}).";
-        return new ExtrasSyncResultDto(sageDb, sageRow.TYPE_BASE ?? string.Empty, employes, cumuls, message);
+        return new ExtrasSyncResultDto(sageDb, sageRow.TypeBase ?? string.Empty, employes, cumuls, message);
     }
 
     private sealed record ChargeCumul(string? Matricule, int Valeur);
 
     /// <summary>Résout la constante SAGE qui porte un cumul, en refusant une constante absente ou incomplète.</summary>
-    private async Task<short> ResolveConstantAsync(T_BDD_SAGE sageRow, string code, CancellationToken ct)
+    private async Task<short> ResolveConstantAsync(BddSage sageRow, string code, CancellationToken ct)
     {
         var constants = await _externalSource.GetConstantsAsync(sageRow, ct);
         var match = constants.FirstOrDefault(c => string.Equals(c.Code?.Trim(), code, StringComparison.OrdinalIgnoreCase));
@@ -369,7 +369,7 @@ public class ExtraService : IExtraService
     }
 
     /// <summary>Matricule → numéro de salarié SAGE, indexé par clé canonique (zéros de remplissage ignorés).</summary>
-    private async Task<Dictionary<string, int>> MapNumSalarieAsync(T_BDD_SAGE sageRow, CancellationToken ct)
+    private async Task<Dictionary<string, int>> MapNumSalarieAsync(BddSage sageRow, CancellationToken ct)
     {
         var map = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var employe in await _externalSource.GetEmployeesAsync(sageRow, ct))

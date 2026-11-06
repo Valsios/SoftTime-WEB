@@ -137,8 +137,8 @@ public static class EffectiveRightsCalculator
     {
         var all = PermissionCatalog.BuildDefaultPermissionsList(
             new HashSet<int> { 1, 2, 3, 4, 5, 6 },
-            sage.Select(n => new T_BDD_SAGE { NOM_BD = n }),
-            pointeuse.Select(n => new T_BDD_POINTEUSE { NOM_BD = n }));
+            sage.Select(n => new BddSage { NomBd = n }),
+            pointeuse.Select(n => new BddPointeuse { NomBd = n }));
         var permissions = new HashSet<string>(all, StringComparer.OrdinalIgnoreCase);
         return new EffectiveRights
         {
@@ -161,8 +161,8 @@ public static class EffectiveRightsCalculator
         var hasDatabases = gates.Contains(Rights.Databases);
         var defaults = PermissionCatalog.BuildDefaultPermissionsList(
             gates,
-            hasDatabases ? sage.Select(n => new T_BDD_SAGE { NOM_BD = n }) : Enumerable.Empty<T_BDD_SAGE>(),
-            hasDatabases ? pointeuse.Select(n => new T_BDD_POINTEUSE { NOM_BD = n }) : Enumerable.Empty<T_BDD_POINTEUSE>());
+            hasDatabases ? sage.Select(n => new BddSage { NomBd = n }) : Enumerable.Empty<BddSage>(),
+            hasDatabases ? pointeuse.Select(n => new BddPointeuse { NomBd = n }) : Enumerable.Empty<BddPointeuse>());
         return defaults.Where(c => !IsDatabaseConfiguration(c));
     }
 

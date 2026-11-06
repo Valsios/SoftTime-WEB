@@ -40,7 +40,7 @@ public interface IAuthService
 
     /// <summary>
     /// Crée le premier compte administrateur. Refusé dès qu'un compte existe, et le rôle
-    /// <see cref="RoleAdministrateur"/> se voit garantir tous les droits : sans cela, l'application
+    /// <c>RoleAdministrateur</c> se voit garantir tous les droits : sans cela, l'application
     /// serait inaccessible juste après son installation.
     /// </summary>
     Task<AdminSetupResultDto> CreateAdminAsync(AdminSetupDto dto, CancellationToken cancellationToken = default);

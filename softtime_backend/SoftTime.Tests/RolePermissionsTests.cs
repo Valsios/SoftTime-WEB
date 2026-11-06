@@ -21,7 +21,7 @@ public class RolePermissionsTests
     private readonly FakeTokenService _tokens;
     private readonly IMapper _mapper;
     private readonly FakeEmailService _email;
-    private readonly PasswordHasher<T_RESPONSABLE> _hasher;
+    private readonly PasswordHasher<Responsable> _hasher;
     private readonly AuthService _auth;
 
     public RolePermissionsTests()
@@ -33,18 +33,18 @@ public class RolePermissionsTests
         _mapper = config.CreateMapper();
 
         _email = new FakeEmailService();
-        _hasher = new PasswordHasher<T_RESPONSABLE>();
+        _hasher = new PasswordHasher<Responsable>();
         _auth = new AuthService(_uow, _tokens, _mapper, _email, new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), _hasher);
 
         // Rôles initiaux
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 2, NOMROLE = "Utilisateur" });
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 3, NOMROLE = "Manager" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 2, NomRole = "Utilisateur" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 3, NomRole = "Manager" });
 
         // Admin connecté
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 1, IDROLE = 1, LOGIN = "admin", NOMRESPONSABLE = "Super Admin" });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 1, IdRole = 1, Login = "admin", NomResponsable = "Super Admin" });
         // Non-admin connecté
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 2, IDROLE = 2, LOGIN = "user", NOMRESPONSABLE = "Simple User" });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 2, IdRole = 2, Login = "user", NomResponsable = "Simple User" });
     }
 
     #region C1, C3 — Contrôles d'accès et validation
@@ -68,7 +68,7 @@ public class RolePermissionsTests
     [Fact]
     public async Task SaveRoleDetailedPermissionsAsync_CallerWithMissingRole_ThrowsDomainException()
     {
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 10, IDROLE = 999, LOGIN = "orphan", NOMRESPONSABLE = "Orphan" });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 10, IdRole = 999, Login = "orphan", NomResponsable = "Orphan" });
 
         var ex = await Assert.ThrowsAsync<DomainException>(() =>
             _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 10, targetRoleId: 3, new[] { "PARAMS:USERS" }));
@@ -112,8 +112,8 @@ public class RolePermissionsTests
     public async Task SaveRoleDetailedPermissionsAsync_AdminPaieRole_ThrowsDomainException()
     {
         // Rôle "Admin Paie" (IDROLE = 4 != 1)
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 4, NOMROLE = "Admin Paie" });
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 30, IDROLE = 4, LOGIN = "adminpaie", NOMRESPONSABLE = "Admin Paie User" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 4, NomRole = "Admin Paie" });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 30, IdRole = 4, Login = "adminpaie", NomResponsable = "Admin Paie User" });
 
         var ex = await Assert.ThrowsAsync<DomainException>(() =>
             _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 30, targetRoleId: 3, new[] { "PARAMS:USERS" }));
@@ -133,9 +133,9 @@ public class RolePermissionsTests
     {
         await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { "params:users", "PARAMS:USERS" });
 
-        var perms = await _uow.GetRepo<T_ROLE_PERMISSION>().ListAsync(p => p.IDROLE == 3);
+        var perms = await _uow.GetRepo<RolePermission>().ListAsync(p => p.IdRole == 3);
         Assert.Single(perms);
-        Assert.Equal("PARAMS:USERS", perms[0].PERMISSION_CODE);
+        Assert.Equal("PARAMS:USERS", perms[0].PermissionCode);
     }
 
     [Fact]
@@ -143,9 +143,9 @@ public class RolePermissionsTests
     {
         await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { "  params:users  " });
 
-        var perms = await _uow.GetRepo<T_ROLE_PERMISSION>().ListAsync(p => p.IDROLE == 3);
+        var perms = await _uow.GetRepo<RolePermission>().ListAsync(p => p.IdRole == 3);
         Assert.Single(perms);
-        Assert.Equal("PARAMS:USERS", perms[0].PERMISSION_CODE);
+        Assert.Equal("PARAMS:USERS", perms[0].PermissionCode);
     }
 
     [Fact]
@@ -169,9 +169,9 @@ public class RolePermissionsTests
 
         await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { validCode });
 
-        var perms = await _uow.GetRepo<T_ROLE_PERMISSION>().ListAsync(p => p.IDROLE == 3);
+        var perms = await _uow.GetRepo<RolePermission>().ListAsync(p => p.IdRole == 3);
         Assert.Single(perms);
-        Assert.Equal(validCode, perms[0].PERMISSION_CODE);
+        Assert.Equal(validCode, perms[0].PermissionCode);
     }
 
     #endregion
@@ -182,45 +182,45 @@ public class RolePermissionsTests
     public async Task SaveRoleDetailedPermissionsAsync_ExactGates_ParamsOnly_OnlyGate2Assigned()
     {
         // Donnons initialement toutes les portes au rôle 3
-        _uow.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = 3, IDDROIT = Rights.Databases });
-        _uow.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = 3, IDDROIT = Rights.Parameters });
-        _uow.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = 3, IDDROIT = Rights.Processing });
+        _uow.GetRepo<DroitRole>().Items.Add(new DroitRole { IdRole = 3, IdDroit = Rights.Databases });
+        _uow.GetRepo<DroitRole>().Items.Add(new DroitRole { IdRole = 3, IdDroit = Rights.Parameters });
+        _uow.GetRepo<DroitRole>().Items.Add(new DroitRole { IdRole = 3, IdDroit = Rights.Processing });
 
         // Sauvegardons uniquement des permissions du module PARAMS
         await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { "PARAMS:USERS", "PARAMS:ROLES" });
 
-        var droits = await _uow.GetRepo<T_DROIT_ROLE>().ListAsync(d => d.IDROLE == 3);
+        var droits = await _uow.GetRepo<DroitRole>().ListAsync(d => d.IdRole == 3);
         Assert.Single(droits);
-        Assert.Equal(Rights.Parameters, (int)droits[0].IDDROIT);
+        Assert.Equal(Rights.Parameters, (int)droits[0].IdDroit);
     }
 
     [Fact]
     public async Task SaveRoleDetailedPermissionsAsync_ParamsUnchecked_GateRemoved()
     {
         // Rôle 3 a la porte Parameters
-        _uow.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = 3, IDDROIT = Rights.Parameters });
+        _uow.GetRepo<DroitRole>().Items.Add(new DroitRole { IdRole = 3, IdDroit = Rights.Parameters });
 
         // Sauvegarde de permissions PROC uniquement
         await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { "PROC:SHIFTS" });
 
-        var droits = await _uow.GetRepo<T_DROIT_ROLE>().ListAsync(d => d.IDROLE == 3);
+        var droits = await _uow.GetRepo<DroitRole>().ListAsync(d => d.IdRole == 3);
         Assert.Single(droits);
-        Assert.Equal(Rights.Processing, (int)droits[0].IDDROIT);
-        Assert.DoesNotContain(droits, d => (int)d.IDDROIT == Rights.Parameters);
+        Assert.Equal(Rights.Processing, (int)droits[0].IdDroit);
+        Assert.DoesNotContain(droits, d => (int)d.IdDroit == Rights.Parameters);
     }
 
     [Fact]
     public async Task SaveRoleDetailedPermissionsAsync_EmptyList_SentinelInsertedAndAllGatesRemoved()
     {
-        _uow.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = 3, IDDROIT = Rights.Parameters });
+        _uow.GetRepo<DroitRole>().Items.Add(new DroitRole { IdRole = 3, IdDroit = Rights.Parameters });
 
         await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, Array.Empty<string>());
 
-        var rolePerms = await _uow.GetRepo<T_ROLE_PERMISSION>().ListAsync(p => p.IDROLE == 3);
+        var rolePerms = await _uow.GetRepo<RolePermission>().ListAsync(p => p.IdRole == 3);
         Assert.Single(rolePerms);
-        Assert.Equal("__SOFTTIME_EMPTY_ROLE_PERMISSIONS__", rolePerms[0].PERMISSION_CODE);
+        Assert.Equal("__SOFTTIME_EMPTY_ROLE_PERMISSIONS__", rolePerms[0].PermissionCode);
 
-        var droits = await _uow.GetRepo<T_DROIT_ROLE>().ListAsync(d => d.IDROLE == 3);
+        var droits = await _uow.GetRepo<DroitRole>().ListAsync(d => d.IdRole == 3);
         Assert.Empty(droits);
 
         var res = await _auth.GetRoleDetailedPermissionsAsync(3);
@@ -232,7 +232,7 @@ public class RolePermissionsTests
     public async Task GetRoleDetailedPermissionsAsync_UnconfiguredRole_WithParametersGate_ReturnsParamsCodes_IsConfiguredFalse()
     {
         // Rôle 3 jamais configuré (aucune ligne T_ROLE_PERMISSION) mais ayant la porte Paramètres
-        _uow.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = 3, IDDROIT = Rights.Parameters });
+        _uow.GetRepo<DroitRole>().Items.Add(new DroitRole { IdRole = 3, IdDroit = Rights.Parameters });
 
         var res = await _auth.GetRoleDetailedPermissionsAsync(3);
         Assert.False(res.IsConfigured);
@@ -245,8 +245,8 @@ public class RolePermissionsTests
     public async Task GetRoleDetailedPermissionsAsync_ConfiguredRole_ReturnsConfiguredPermissions_IsConfiguredTrue()
     {
         // Rôle 3 ayant la porte Paramètres et configuré avec PROC:SHIFTS
-        _uow.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = 3, IDDROIT = Rights.Parameters });
-        _uow.GetRepo<T_ROLE_PERMISSION>().Items.Add(new T_ROLE_PERMISSION { IDROLE = 3, PERMISSION_CODE = "PROC:SHIFTS", IS_GRANTED = true });
+        _uow.GetRepo<DroitRole>().Items.Add(new DroitRole { IdRole = 3, IdDroit = Rights.Parameters });
+        _uow.GetRepo<RolePermission>().Items.Add(new RolePermission { IdRole = 3, PermissionCode = "PROC:SHIFTS", IsGranted = true });
 
         var res = await _auth.GetRoleDetailedPermissionsAsync(3);
         Assert.True(res.IsConfigured);
@@ -258,7 +258,7 @@ public class RolePermissionsTests
     public async Task SaveRoleDetailedPermissionsAsync_RoundTrip_ParametersGate_GatesUnchanged()
     {
         // Rôle 3 avec la porte Paramètres, jamais configuré
-        _uow.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = 3, IDDROIT = Rights.Parameters });
+        _uow.GetRepo<DroitRole>().Items.Add(new DroitRole { IdRole = 3, IdDroit = Rights.Parameters });
 
         var initial = await _auth.GetRoleDetailedPermissionsAsync(3);
         Assert.False(initial.IsConfigured);
@@ -266,9 +266,9 @@ public class RolePermissionsTests
 
         await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, initial.GrantedPermissions);
 
-        var portesApres = await _uow.GetRepo<T_DROIT_ROLE>().ListAsync(d => d.IDROLE == 3);
+        var portesApres = await _uow.GetRepo<DroitRole>().ListAsync(d => d.IdRole == 3);
         Assert.Single(portesApres);
-        Assert.Equal(Rights.Parameters, (int)portesApres[0].IDDROIT);
+        Assert.Equal(Rights.Parameters, (int)portesApres[0].IdDroit);
     }
 
     [Fact]
@@ -277,11 +277,11 @@ public class RolePermissionsTests
         // Rôle 3 avec les portes Databases + Processing + Reports, jamais configuré
         // Une base SAGE et une base pointeuse existent : leurs droits de lecture portent la porte Bases (depuis 4b-10 les droits
         // par défaut ne contiennent plus la configuration SAGE:CREATE, qui portait cette porte même sans aucune base).
-        _uow.GetRepo<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 1, NOM_BD = "BASE1" });
-        _uow.GetRepo<T_BDD_POINTEUSE>().Items.Add(new T_BDD_POINTEUSE { ID = 1, NOM_BD = "PTG" });
-        _uow.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = 3, IDDROIT = Rights.Databases });
-        _uow.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = 3, IDDROIT = Rights.Processing });
-        _uow.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = 3, IDDROIT = Rights.Reports });
+        _uow.GetRepo<BddSage>().Items.Add(new BddSage { Id = 1, NomBd = "BASE1" });
+        _uow.GetRepo<BddPointeuse>().Items.Add(new BddPointeuse { Id = 1, NomBd = "PTG" });
+        _uow.GetRepo<DroitRole>().Items.Add(new DroitRole { IdRole = 3, IdDroit = Rights.Databases });
+        _uow.GetRepo<DroitRole>().Items.Add(new DroitRole { IdRole = 3, IdDroit = Rights.Processing });
+        _uow.GetRepo<DroitRole>().Items.Add(new DroitRole { IdRole = 3, IdDroit = Rights.Reports });
 
         var initial = await _auth.GetRoleDetailedPermissionsAsync(3);
         Assert.False(initial.IsConfigured);
@@ -289,8 +289,8 @@ public class RolePermissionsTests
 
         await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, initial.GrantedPermissions);
 
-        var portesApres = await _uow.GetRepo<T_DROIT_ROLE>().ListAsync(d => d.IDROLE == 3);
-        var gateIds = portesApres.Select(p => (int)p.IDDROIT).OrderBy(x => x).ToList();
+        var portesApres = await _uow.GetRepo<DroitRole>().ListAsync(d => d.IdRole == 3);
+        var gateIds = portesApres.Select(p => (int)p.IdDroit).OrderBy(x => x).ToList();
         var expectedGates = new[] { Rights.Databases, Rights.Processing, Rights.Reports }.OrderBy(x => x).ToList();
         Assert.Equal(expectedGates, gateIds);
     }
@@ -308,11 +308,11 @@ public class RolePermissionsTests
 
         Assert.Equal(1, _uow.SaveChangesCount);
 
-        var audit = await _uow.GetRepo<T_AUDIT_DROIT>().ListAsync(a => a.TYPE_CIBLE == "ROLE" && a.ID_CIBLE == 3);
+        var audit = await _uow.GetRepo<AuditDroit>().ListAsync(a => a.TypeCible == "ROLE" && a.IdCible == 3);
         Assert.Single(audit);
-        Assert.Equal("UPDATE_ROLE_PERMS", audit[0].ACTION);
-        Assert.Equal("admin", audit[0].LOGIN_OPERATEUR);
-        Assert.Equal("PARAMS:USERS", audit[0].PERMS_APRES);
+        Assert.Equal("UPDATE_ROLE_PERMS", audit[0].Action);
+        Assert.Equal("admin", audit[0].LoginOperateur);
+        Assert.Equal("PARAMS:USERS", audit[0].PermsApres);
     }
 
     [Fact]
@@ -320,27 +320,27 @@ public class RolePermissionsTests
     {
         var longLogin = new string('A', 150);
         var longRoleName = new string('B', 150);
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 5, NOMROLE = longRoleName });
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 40, IDROLE = 1, LOGIN = longLogin, NOMRESPONSABLE = "Admin" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 5, NomRole = longRoleName });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 40, IdRole = 1, Login = longLogin, NomResponsable = "Admin" });
 
         await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 40, targetRoleId: 5, new[] { "PARAMS:USERS" });
 
-        var audit = await _uow.GetRepo<T_AUDIT_DROIT>().ListAsync(a => a.TYPE_CIBLE == "ROLE" && a.ID_CIBLE == 5);
+        var audit = await _uow.GetRepo<AuditDroit>().ListAsync(a => a.TypeCible == "ROLE" && a.IdCible == 5);
         Assert.Single(audit);
-        Assert.Equal(100, audit[0].LOGIN_OPERATEUR.Length);
-        Assert.Equal(100, audit[0].NOM_CIBLE?.Length);
+        Assert.Equal(100, audit[0].LoginOperateur.Length);
+        Assert.Equal(100, audit[0].NomCible?.Length);
     }
 
     [Fact]
     public async Task SaveUserAsync_RoleChangeWithConfirmedClear_SingleSaveChangesAsync_AuditResetPresent()
     {
         // Utilisateur 2 (actuellement IDROLE = 2) a des permissions personnalisées
-        _uow.GetRepo<T_USER_PERMISSION>().Items.Add(new T_USER_PERMISSION
+        _uow.GetRepo<UserPermission>().Items.Add(new UserPermission
         {
-            ID = 1,
-            IDRESPONSABLE = 2,
-            PERMISSION_CODE = "PARAMS:USERS",
-            IS_GRANTED = true
+            Id = 1,
+            IdResponsable = 2,
+            PermissionCode = "PARAMS:USERS",
+            IsGranted = true
         });
 
         var dto = new UserDto(2, 3, "Simple User", "user", null, null)
@@ -356,20 +356,20 @@ public class RolePermissionsTests
         Assert.Equal(1, _uow.SaveChangesCount);
 
         // L'audit RESET_USER_PERMS est bien présent
-        var audits = await _uow.GetRepo<T_AUDIT_DROIT>().ListAsync(
-            a => a.TYPE_CIBLE == "USER" && a.ID_CIBLE == 2 && a.ACTION == "RESET_USER_PERMS");
+        var audits = await _uow.GetRepo<AuditDroit>().ListAsync(
+            a => a.TypeCible == "USER" && a.IdCible == 2 && a.Action == "RESET_USER_PERMS");
         Assert.Single(audits);
-        Assert.Equal("admin", audits[0].LOGIN_OPERATEUR);
-        Assert.Equal("PARAMS:USERS", audits[0].PERMS_AVANT);
-        Assert.Null(audits[0].PERMS_APRES);
+        Assert.Equal("admin", audits[0].LoginOperateur);
+        Assert.Equal("PARAMS:USERS", audits[0].PermsAvant);
+        Assert.Null(audits[0].PermsApres);
 
         // Vérification que les permissions ont été nettoyées
-        var permsAfter = await _uow.GetRepo<T_USER_PERMISSION>().ListAsync(p => p.IDRESPONSABLE == 2);
+        var permsAfter = await _uow.GetRepo<UserPermission>().ListAsync(p => p.IdResponsable == 2);
         Assert.Empty(permsAfter);
 
         // Vérification que le rôle a bien été mis à jour
-        var userAfter = await _uow.GetRepo<T_RESPONSABLE>().GetByIdAsync(2);
-        Assert.Equal(3, userAfter!.IDROLE);
+        var userAfter = await _uow.GetRepo<Responsable>().GetByIdAsync(2);
+        Assert.Equal(3, userAfter!.IdRole);
     }
 
     #endregion
@@ -380,10 +380,10 @@ public class RolePermissionsTests
     public async Task GetEffectivePermissions_RoleConfigured_UserNotCustomized_InheritsRolePermissions()
     {
         // Rôle 3 configuré avec PROC:SHIFTS
-        _uow.GetRepo<T_ROLE_PERMISSION>().Items.Add(new T_ROLE_PERMISSION { IDROLE = 3, PERMISSION_CODE = "PROC:SHIFTS", IS_GRANTED = true });
+        _uow.GetRepo<RolePermission>().Items.Add(new RolePermission { IdRole = 3, PermissionCode = "PROC:SHIFTS", IsGranted = true });
 
         // Utilisateur 3 avec rôle 3, sans T_USER_PERMISSION
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 3, IDROLE = 3, LOGIN = "user3" });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 3, IdRole = 3, Login = "user3" });
 
         var perms = await _auth.GetUserDetailedPermissionsAsync(3);
         Assert.False(perms.IsCustomized);
@@ -395,11 +395,11 @@ public class RolePermissionsTests
     public async Task GetEffectivePermissions_UserCustomized_OverridesRolePermissions()
     {
         // Rôle 3 configuré avec PROC:SHIFTS
-        _uow.GetRepo<T_ROLE_PERMISSION>().Items.Add(new T_ROLE_PERMISSION { IDROLE = 3, PERMISSION_CODE = "PROC:SHIFTS", IS_GRANTED = true });
+        _uow.GetRepo<RolePermission>().Items.Add(new RolePermission { IdRole = 3, PermissionCode = "PROC:SHIFTS", IsGranted = true });
 
         // Utilisateur 3 avec rôle 3 et personnalisation T_USER_PERMISSION = PARAMS:USERS
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 3, IDROLE = 3, LOGIN = "user3" });
-        _uow.GetRepo<T_USER_PERMISSION>().Items.Add(new T_USER_PERMISSION { IDRESPONSABLE = 3, PERMISSION_CODE = "PARAMS:USERS", IS_GRANTED = true });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 3, IdRole = 3, Login = "user3" });
+        _uow.GetRepo<UserPermission>().Items.Add(new UserPermission { IdResponsable = 3, PermissionCode = "PARAMS:USERS", IsGranted = true });
 
         var perms = await _auth.GetUserDetailedPermissionsAsync(3);
         Assert.True(perms.IsCustomized);
@@ -412,10 +412,10 @@ public class RolePermissionsTests
     public async Task GetEffectivePermissions_RoleNeverConfigured_FallsBackToGates()
     {
         // Rôle 3 avec grande porte Traceability
-        _uow.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = 3, IDDROIT = Rights.Traceability });
+        _uow.GetRepo<DroitRole>().Items.Add(new DroitRole { IdRole = 3, IdDroit = Rights.Traceability });
 
         // Utilisateur 3 avec rôle 3, sans aucune configuration de rôle ni d'utilisateur
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 3, IDROLE = 3, LOGIN = "user3" });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 3, IdRole = 3, Login = "user3" });
 
         var perms = await _auth.GetUserDetailedPermissionsAsync(3);
         Assert.False(perms.IsCustomized);
@@ -430,17 +430,17 @@ public class RolePermissionsTests
     public async Task ResetUserPermissions_ClearsCustomizationAndReturnsToRolePermissions()
     {
         // Rôle 3 avec PROC:SHIFTS
-        _uow.GetRepo<T_ROLE_PERMISSION>().Items.Add(new T_ROLE_PERMISSION { IDROLE = 3, PERMISSION_CODE = "PROC:SHIFTS", IS_GRANTED = true });
+        _uow.GetRepo<RolePermission>().Items.Add(new RolePermission { IdRole = 3, PermissionCode = "PROC:SHIFTS", IsGranted = true });
 
         // Utilisateur 3 personnalisé avec PARAMS:USERS
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 3, IDROLE = 3, LOGIN = "user3", NOMRESPONSABLE = "User 3" });
-        _uow.GetRepo<T_USER_PERMISSION>().Items.Add(new T_USER_PERMISSION { IDRESPONSABLE = 3, PERMISSION_CODE = "PARAMS:USERS", IS_GRANTED = true });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 3, IdRole = 3, Login = "user3", NomResponsable = "User 3" });
+        _uow.GetRepo<UserPermission>().Items.Add(new UserPermission { IdResponsable = 3, PermissionCode = "PARAMS:USERS", IsGranted = true });
 
         // Reset par l'admin
         await _auth.ResetUserDetailedPermissionsAsync(currentUserId: 1, targetUserId: 3);
 
         // T_USER_PERMISSION est vidé
-        var userPerms = await _uow.GetRepo<T_USER_PERMISSION>().ListAsync(p => p.IDRESPONSABLE == 3);
+        var userPerms = await _uow.GetRepo<UserPermission>().ListAsync(p => p.IdResponsable == 3);
         Assert.Empty(userPerms);
 
         // L'utilisateur n'est plus personnalisé et hérite du rôle
@@ -449,10 +449,10 @@ public class RolePermissionsTests
         Assert.Contains("PROC:SHIFTS", perms.GrantedPermissions);
 
         // Journal d'audit créé
-        var audit = await _uow.GetRepo<T_AUDIT_DROIT>().ListAsync(a => a.TYPE_CIBLE == "USER" && a.ID_CIBLE == 3);
+        var audit = await _uow.GetRepo<AuditDroit>().ListAsync(a => a.TypeCible == "USER" && a.IdCible == 3);
         Assert.Single(audit);
-        Assert.Equal("RESET_USER_PERMS", audit[0].ACTION);
-        Assert.Equal("PARAMS:USERS", audit[0].PERMS_AVANT);
+        Assert.Equal("RESET_USER_PERMS", audit[0].Action);
+        Assert.Equal("PARAMS:USERS", audit[0].PermsAvant);
     }
 
     [Fact]
@@ -470,16 +470,16 @@ public class RolePermissionsTests
     [Fact]
     public async Task DeleteRole_CleansRolePermissionsAndDroitsRole()
     {
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 4, NOMROLE = "RoleToDelete" });
-        _uow.GetRepo<T_ROLE_PERMISSION>().Items.Add(new T_ROLE_PERMISSION { IDROLE = 4, PERMISSION_CODE = "PROC:SHIFTS", IS_GRANTED = true });
-        _uow.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = 4, IDDROIT = Rights.Processing });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 4, NomRole = "RoleToDelete" });
+        _uow.GetRepo<RolePermission>().Items.Add(new RolePermission { IdRole = 4, PermissionCode = "PROC:SHIFTS", IsGranted = true });
+        _uow.GetRepo<DroitRole>().Items.Add(new DroitRole { IdRole = 4, IdDroit = Rights.Processing });
 
         await _auth.DeleteRoleAsync(4);
 
-        Assert.Null(await _uow.GetRepo<T_ROLE>().GetByIdAsync(4));
-        var remainingPerms = await _uow.GetRepo<T_ROLE_PERMISSION>().ListAsync(p => p.IDROLE == 4);
+        Assert.Null(await _uow.GetRepo<Role>().GetByIdAsync(4));
+        var remainingPerms = await _uow.GetRepo<RolePermission>().ListAsync(p => p.IdRole == 4);
         Assert.Empty(remainingPerms);
-        var remainingDroits = await _uow.GetRepo<T_DROIT_ROLE>().ListAsync(d => d.IDROLE == 4);
+        var remainingDroits = await _uow.GetRepo<DroitRole>().ListAsync(d => d.IdRole == 4);
         Assert.Empty(remainingDroits);
     }
 
@@ -491,19 +491,19 @@ public class RolePermissionsTests
     public async Task SaveUserAsync_ConfirmClearAdjustments_AppliedWhenRoleActuallyChanges()
     {
         // Utilisateur 3 avec rôle 2 et personnalisation
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 3, IDROLE = 2, LOGIN = "user3", NOMRESPONSABLE = "User 3" });
-        _uow.GetRepo<T_USER_PERMISSION>().Items.Add(new T_USER_PERMISSION { IDRESPONSABLE = 3, PERMISSION_CODE = "PARAMS:USERS", IS_GRANTED = true });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 3, IdRole = 2, Login = "user3", NomResponsable = "User 3" });
+        _uow.GetRepo<UserPermission>().Items.Add(new UserPermission { IdResponsable = 3, PermissionCode = "PARAMS:USERS", IsGranted = true });
 
         // Changement de rôle vers 3 avec ConfirmClearAdjustments = true
         var updateDto = new UserDto(3, 3, "User 3", "user3", null, null) { ConfirmClearAdjustments = true };
         await _auth.SaveUserAsync(currentUserId: 1, updateDto);
 
         // Permissions personnalisées purgées
-        var userPerms = await _uow.GetRepo<T_USER_PERMISSION>().ListAsync(p => p.IDRESPONSABLE == 3);
+        var userPerms = await _uow.GetRepo<UserPermission>().ListAsync(p => p.IdResponsable == 3);
         Assert.Empty(userPerms);
 
         // Audit de réinitialisation créé
-        var audit = await _uow.GetRepo<T_AUDIT_DROIT>().ListAsync(a => a.TYPE_CIBLE == "USER" && a.ID_CIBLE == 3 && a.ACTION == "RESET_USER_PERMS");
+        var audit = await _uow.GetRepo<AuditDroit>().ListAsync(a => a.TypeCible == "USER" && a.IdCible == 3 && a.Action == "RESET_USER_PERMS");
         Assert.Single(audit);
     }
 
@@ -511,19 +511,19 @@ public class RolePermissionsTests
     public async Task SaveUserAsync_ConfirmClearAdjustments_IgnoredWhenRoleUnchanged()
     {
         // Utilisateur 3 avec rôle 2 et personnalisation
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 3, IDROLE = 2, LOGIN = "user3", NOMRESPONSABLE = "User 3" });
-        _uow.GetRepo<T_USER_PERMISSION>().Items.Add(new T_USER_PERMISSION { IDRESPONSABLE = 3, PERMISSION_CODE = "PARAMS:USERS", IS_GRANTED = true });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 3, IdRole = 2, Login = "user3", NomResponsable = "User 3" });
+        _uow.GetRepo<UserPermission>().Items.Add(new UserPermission { IdResponsable = 3, PermissionCode = "PARAMS:USERS", IsGranted = true });
 
         // Même rôle 2 avec ConfirmClearAdjustments = true
         var updateDto = new UserDto(3, 2, "User 3 Modif Nom", "user3", null, null) { ConfirmClearAdjustments = true };
         await _auth.SaveUserAsync(currentUserId: 1, updateDto);
 
         // Permissions personnalisées NON purgées (car le rôle n'a pas changé)
-        var userPerms = await _uow.GetRepo<T_USER_PERMISSION>().ListAsync(p => p.IDRESPONSABLE == 3);
+        var userPerms = await _uow.GetRepo<UserPermission>().ListAsync(p => p.IdResponsable == 3);
         Assert.Single(userPerms);
 
         // Aucun audit RESET_USER_PERMS
-        var audit = await _uow.GetRepo<T_AUDIT_DROIT>().ListAsync(a => a.TYPE_CIBLE == "USER" && a.ID_CIBLE == 3 && a.ACTION == "RESET_USER_PERMS");
+        var audit = await _uow.GetRepo<AuditDroit>().ListAsync(a => a.TypeCible == "USER" && a.IdCible == 3 && a.Action == "RESET_USER_PERMS");
         Assert.Empty(audit);
     }
 
@@ -542,11 +542,11 @@ public class RolePermissionsTests
             var decId = Convert.ToDecimal(id);
             var match = Items.FirstOrDefault(i =>
             {
-                if (i is T_RESPONSABLE r && r.IDRESPONSABLE == decId) return true;
-                if (i is T_ROLE ro && ro.IDROLE == decId) return true;
-                if (i is T_ROLE_PERMISSION rp && rp.ID == (int)decId) return true;
-                if (i is T_AUDIT_DROIT ad && ad.ID == (int)decId) return true;
-                if (i is T_USER_PERMISSION up && up.ID == (int)decId) return true;
+                if (i is Responsable r && r.IdResponsable == decId) return true;
+                if (i is Role ro && ro.IdRole == decId) return true;
+                if (i is RolePermission rp && rp.Id == (int)decId) return true;
+                if (i is AuditDroit ad && ad.Id == (int)decId) return true;
+                if (i is UserPermission up && up.Id == (int)decId) return true;
                 return false;
             });
             return Task.FromResult(match);
@@ -571,25 +571,25 @@ public class RolePermissionsTests
 
         public Task AddAsync(T entity, CancellationToken cancellationToken = default)
         {
-            if (entity is T_RESPONSABLE r && r.IDRESPONSABLE == 0)
+            if (entity is Responsable r && r.IdResponsable == 0)
             {
-                r.IDRESPONSABLE = Items.Count == 0 ? 1 : Items.OfType<T_RESPONSABLE>().Max(x => x.IDRESPONSABLE) + 1;
+                r.IdResponsable = Items.Count == 0 ? 1 : Items.OfType<Responsable>().Max(x => x.IdResponsable) + 1;
             }
-            if (entity is T_ROLE ro && ro.IDROLE == 0)
+            if (entity is Role ro && ro.IdRole == 0)
             {
-                ro.IDROLE = Items.Count == 0 ? 1 : Items.OfType<T_ROLE>().Max(x => x.IDROLE) + 1;
+                ro.IdRole = Items.Count == 0 ? 1 : Items.OfType<Role>().Max(x => x.IdRole) + 1;
             }
-            if (entity is T_ROLE_PERMISSION rp && rp.ID == 0)
+            if (entity is RolePermission rp && rp.Id == 0)
             {
-                rp.ID = Items.Count == 0 ? 1 : Items.OfType<T_ROLE_PERMISSION>().Max(x => x.ID) + 1;
+                rp.Id = Items.Count == 0 ? 1 : Items.OfType<RolePermission>().Max(x => x.Id) + 1;
             }
-            if (entity is T_AUDIT_DROIT ad && ad.ID == 0)
+            if (entity is AuditDroit ad && ad.Id == 0)
             {
-                ad.ID = Items.Count == 0 ? 1 : Items.OfType<T_AUDIT_DROIT>().Max(x => x.ID) + 1;
+                ad.Id = Items.Count == 0 ? 1 : Items.OfType<AuditDroit>().Max(x => x.Id) + 1;
             }
-            if (entity is T_USER_PERMISSION up && up.ID == 0)
+            if (entity is UserPermission up && up.Id == 0)
             {
-                up.ID = Items.Count == 0 ? 1 : Items.OfType<T_USER_PERMISSION>().Max(x => x.ID) + 1;
+                up.Id = Items.Count == 0 ? 1 : Items.OfType<UserPermission>().Max(x => x.Id) + 1;
             }
             Items.Add(entity);
             return Task.CompletedTask;

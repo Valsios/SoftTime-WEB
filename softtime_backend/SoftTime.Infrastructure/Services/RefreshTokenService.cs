@@ -39,13 +39,13 @@ public class RefreshTokenService : IRefreshTokenService
     {
         var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(TokenBytes));
         var now = DateTime.UtcNow;
-        await _uow.Repository<T_REFRESH_TOKEN>().AddAsync(new T_REFRESH_TOKEN
+        await _uow.Repository<RefreshTokenRecord>().AddAsync(new RefreshTokenRecord
         {
-            IDRESPONSABLE = userId,
-            TOKEN_HASH = Hash(token),
-            FAMILLE = family ?? Guid.NewGuid(),
-            DATE_CREATION = now,
-            DATE_EXPIRATION = now.AddDays(_options.RefreshTokenDays)
+            IdResponsable = userId,
+            TokenHash = Hash(token),
+            Famille = family ?? Guid.NewGuid(),
+            DateCreation = now,
+            DateExpiration = now.AddDays(_options.RefreshTokenDays)
         }, cancellationToken);
         return token;
     }
@@ -59,48 +59,48 @@ public class RefreshTokenService : IRefreshTokenService
         var current = await FindAsync(refreshToken, cancellationToken)
             ?? throw new UnauthorizedException(InvalidTokenMessage);
 
-        if (current.DATE_REVOCATION is DateTime revokedAt)
+        if (current.DateRevocation is DateTime revokedAt)
         {
             // Deux onglets qui rafraîchissent en même temps présentent le même jeton : refus simple pendant
             // quelques secondes après la rotation, révocation de toutes les sessions au-delà (vol probable).
-            var justRotated = current.REMPLACE_PAR is not null && DateTime.UtcNow - revokedAt < ConcurrentRotationGrace;
+            var justRotated = current.RemplacePar is not null && DateTime.UtcNow - revokedAt < ConcurrentRotationGrace;
             if (justRotated)
                 throw new UnauthorizedException(InvalidTokenMessage);
             _logger.LogWarning(
                 "Réutilisation d'un jeton de rafraîchissement déjà remplacé (compte {UserId}, famille {Family}) : vol probable, toutes les sessions du compte sont fermées.",
-                current.IDRESPONSABLE, current.FAMILLE);
-            await RevokeAllAsync(current.IDRESPONSABLE, cancellationToken);
+                current.IdResponsable, current.Famille);
+            await RevokeAllAsync(current.IdResponsable, cancellationToken);
             await _uow.SaveChangesAsync(cancellationToken);
             throw new UnauthorizedException(InvalidTokenMessage);
         }
-        if (current.DATE_EXPIRATION <= DateTime.UtcNow)
+        if (current.DateExpiration <= DateTime.UtcNow)
             throw new UnauthorizedException(InvalidTokenMessage);
 
-        var next = await IssueAsync(current.IDRESPONSABLE, current.FAMILLE, cancellationToken);
-        current.DATE_REVOCATION = DateTime.UtcNow;
-        current.REMPLACE_PAR = Hash(next);
-        _uow.Repository<T_REFRESH_TOKEN>().Update(current);
-        return new RefreshTokenRotation(current.IDRESPONSABLE, next);
+        var next = await IssueAsync(current.IdResponsable, current.Famille, cancellationToken);
+        current.DateRevocation = DateTime.UtcNow;
+        current.RemplacePar = Hash(next);
+        _uow.Repository<RefreshTokenRecord>().Update(current);
+        return new RefreshTokenRotation(current.IdResponsable, next);
     }
 
     /// <summary>Déconnexion : révoque le jeton présenté. Un jeton inconnu est ignoré (rien à révoquer).</summary>
     public async Task RevokeAsync(string? refreshToken, CancellationToken cancellationToken = default)
     {
         var current = await FindAsync(refreshToken, cancellationToken);
-        if (current is null || current.DATE_REVOCATION is not null)
+        if (current is null || current.DateRevocation is not null)
             return;
-        current.DATE_REVOCATION = DateTime.UtcNow;
-        _uow.Repository<T_REFRESH_TOKEN>().Update(current);
+        current.DateRevocation = DateTime.UtcNow;
+        _uow.Repository<RefreshTokenRecord>().Update(current);
     }
 
     /// <summary>Révoque toutes les sessions actives d'un compte (mot de passe changé, réutilisation détectée).</summary>
     public async Task RevokeAllAsync(decimal userId, CancellationToken cancellationToken = default)
     {
-        var repo = _uow.Repository<T_REFRESH_TOKEN>();
+        var repo = _uow.Repository<RefreshTokenRecord>();
         var now = DateTime.UtcNow;
-        foreach (var token in await repo.ListAsync(t => t.IDRESPONSABLE == userId && t.DATE_REVOCATION == null, cancellationToken))
+        foreach (var token in await repo.ListAsync(t => t.IdResponsable == userId && t.DateRevocation == null, cancellationToken))
         {
-            token.DATE_REVOCATION = now;
+            token.DateRevocation = now;
             repo.Update(token);
         }
     }
@@ -108,18 +108,18 @@ public class RefreshTokenService : IRefreshTokenService
     /// <summary>Compte supprimé : ses jetons partent avec lui, dans la même transaction.</summary>
     public async Task RemoveAllAsync(decimal userId, CancellationToken cancellationToken = default)
     {
-        var repo = _uow.Repository<T_REFRESH_TOKEN>();
-        repo.RemoveRange(await repo.ListAsync(t => t.IDRESPONSABLE == userId, cancellationToken));
+        var repo = _uow.Repository<RefreshTokenRecord>();
+        repo.RemoveRange(await repo.ListAsync(t => t.IdResponsable == userId, cancellationToken));
     }
 
     public static string Hash(string token)
         => Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(token)));
 
-    private async Task<T_REFRESH_TOKEN?> FindAsync(string? refreshToken, CancellationToken cancellationToken)
+    private async Task<RefreshTokenRecord?> FindAsync(string? refreshToken, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(refreshToken))
             return null;
         var hash = Hash(refreshToken.Trim());
-        return (await _uow.Repository<T_REFRESH_TOKEN>().ListAsync(t => t.TOKEN_HASH == hash, cancellationToken)).FirstOrDefault();
+        return (await _uow.Repository<RefreshTokenRecord>().ListAsync(t => t.TokenHash == hash, cancellationToken)).FirstOrDefault();
     }
 }

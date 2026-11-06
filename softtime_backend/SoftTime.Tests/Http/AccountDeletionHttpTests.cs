@@ -18,18 +18,18 @@ public class AccountDeletionHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Deleting_an_account_over_http_removes_its_rights_and_database_access_but_not_others()
     {
-        var joelRows = _f.Store.GetRepo<T_USER_PERMISSION>().Items.Count(p => p.IDRESPONSABLE == 10034);
-        Assert.Contains(_f.Store.GetRepo<T_USER_PERMISSION>().Items, p => p.IDRESPONSABLE == 10053);
-        Assert.Contains(_f.Store.GetRepo<T_BDD_AUTORISE>().Items, a => a.IDRESPONSABLE == 10053);
+        var joelRows = _f.Store.GetRepo<UserPermission>().Items.Count(p => p.IdResponsable == 10034);
+        Assert.Contains(_f.Store.GetRepo<UserPermission>().Items, p => p.IdResponsable == 10053);
+        Assert.Contains(_f.Store.GetRepo<BddAutorisee>().Items, a => a.IdResponsable == 10053);
 
         var resp = await _http.SendAsync(_f.Request("admin", HttpMethod.Delete, "/api/users/10053"));
 
         Assert.Equal(HttpStatusCode.NoContent, resp.StatusCode);
-        Assert.DoesNotContain(_f.Store.GetRepo<T_RESPONSABLE>().Items, u => u.IDRESPONSABLE == 10053);
-        Assert.DoesNotContain(_f.Store.GetRepo<T_USER_PERMISSION>().Items, p => p.IDRESPONSABLE == 10053);
-        Assert.DoesNotContain(_f.Store.GetRepo<T_BDD_AUTORISE>().Items, a => a.IDRESPONSABLE == 10053);
-        Assert.Equal(joelRows, _f.Store.GetRepo<T_USER_PERMISSION>().Items.Count(p => p.IDRESPONSABLE == 10034));
-        Assert.Contains(_f.Store.GetRepo<T_BDD_AUTORISE>().Items, a => a.IDRESPONSABLE == 14);
+        Assert.DoesNotContain(_f.Store.GetRepo<Responsable>().Items, u => u.IdResponsable == 10053);
+        Assert.DoesNotContain(_f.Store.GetRepo<UserPermission>().Items, p => p.IdResponsable == 10053);
+        Assert.DoesNotContain(_f.Store.GetRepo<BddAutorisee>().Items, a => a.IdResponsable == 10053);
+        Assert.Equal(joelRows, _f.Store.GetRepo<UserPermission>().Items.Count(p => p.IdResponsable == 10034));
+        Assert.Contains(_f.Store.GetRepo<BddAutorisee>().Items, a => a.IdResponsable == 14);
     }
 
     [Fact]

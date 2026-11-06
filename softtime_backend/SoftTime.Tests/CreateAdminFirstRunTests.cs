@@ -23,7 +23,7 @@ public class CreateAdminFirstRunTests
     public CreateAdminFirstRunTests()
     {
         var mapper = new MapperConfiguration(c => c.AddProfile<MappingProfile>()).CreateMapper();
-        _auth = new AuthService(_uow, new Token(), mapper, new Mail(), new AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<T_RESPONSABLE>());
+        _auth = new AuthService(_uow, new Token(), mapper, new Mail(), new AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<Responsable>());
     }
 
     private static AdminSetupDto Dto => new("Admin Test", "admin", "ValidP@ss123!", null);
@@ -31,39 +31,39 @@ public class CreateAdminFirstRunTests
     [Fact]
     public async Task Fresh_database_with_role_1_creates_an_account_with_IDROLE_1()
     {
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 2, NOMROLE = "Utilisateur" });
-        _uow.GetRepo<T_DROIT>().Items.Add(new T_DROIT { IDDROIT = 1, DROIT = "Bases" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 2, NomRole = "Utilisateur" });
+        _uow.GetRepo<DroitAcces>().Items.Add(new DroitAcces { IdDroit = 1, Droit = "Bases" });
 
         await _auth.CreateAdminAsync(Dto);
 
-        var created = Assert.Single(_uow.GetRepo<T_RESPONSABLE>().Items);
-        Assert.Equal(1, created.IDROLE);
-        Assert.Contains(_uow.GetRepo<T_DROIT_ROLE>().Items, d => d.IDROLE == 1 && d.IDDROIT == 1);
+        var created = Assert.Single(_uow.GetRepo<Responsable>().Items);
+        Assert.Equal(1, created.IdRole);
+        Assert.Contains(_uow.GetRepo<DroitRole>().Items, d => d.IdRole == 1 && d.IdDroit == 1);
     }
 
     [Fact]
     public async Task Administrator_role_with_another_identifier_is_refused_and_no_account_is_created()
     {
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 2, NOMROLE = "Administrateur" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 2, NomRole = "Administrateur" });
 
         var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.CreateAdminAsync(Dto));
 
         Assert.Equal(Missing, ex.Message);
-        Assert.Empty(_uow.GetRepo<T_RESPONSABLE>().Items);
-        Assert.Empty(_uow.GetRepo<T_DROIT_ROLE>().Items);
+        Assert.Empty(_uow.GetRepo<Responsable>().Items);
+        Assert.Empty(_uow.GetRepo<DroitRole>().Items);
     }
 
     [Fact]
     public async Task Existing_account_is_still_refused()
     {
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 5, IDROLE = 1, LOGIN = "deja" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 5, IdRole = 1, Login = "deja" });
 
         var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.CreateAdminAsync(Dto));
 
         Assert.StartsWith("Des comptes existent déjà", ex.Message);
-        Assert.Single(_uow.GetRepo<T_RESPONSABLE>().Items);
+        Assert.Single(_uow.GetRepo<Responsable>().Items);
     }
 
     [Fact]
@@ -72,15 +72,15 @@ public class CreateAdminFirstRunTests
         var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.CreateAdminAsync(Dto));
 
         Assert.Equal(Missing, ex.Message);
-        Assert.Empty(_uow.GetRepo<T_RESPONSABLE>().Items);
+        Assert.Empty(_uow.GetRepo<Responsable>().Items);
     }
 
     [Fact]
     public async Task Weak_password_is_still_refused_before_any_role_lookup()
     {
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
         await Assert.ThrowsAnyAsync<Exception>(() => _auth.CreateAdminAsync(new AdminSetupDto("Admin", "admin", "weak", null)));
-        Assert.Empty(_uow.GetRepo<T_RESPONSABLE>().Items);
+        Assert.Empty(_uow.GetRepo<Responsable>().Items);
     }
 
     private sealed class Token : ITokenService

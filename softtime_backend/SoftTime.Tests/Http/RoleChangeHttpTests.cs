@@ -32,7 +32,7 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
         return (resp, await resp.Content.ReadAsStringAsync());
     }
 
-    private int Rows(decimal id) => _f.Store.GetRepo<T_USER_PERMISSION>().Items.Count(p => p.IDRESPONSABLE == id);
+    private int Rows(decimal id) => _f.Store.GetRepo<UserPermission>().Items.Count(p => p.IdResponsable == id);
 
     [Fact]
     public async Task Preview_for_an_administrator_lists_the_adjustments_that_would_be_cleared()
@@ -90,7 +90,7 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
         Assert.Equal(2, doc.RootElement.GetProperty("count").GetInt32());
         Assert.Equal("adjusted1", doc.RootElement.GetProperty("accountLogin").GetString());
         Assert.Equal(before, _f.Snapshot());
-        Assert.Equal(91, _f.Store.GetRepo<T_RESPONSABLE>().Items.Single(u => u.IDRESPONSABLE == 10080).IDROLE);
+        Assert.Equal(91, _f.Store.GetRepo<Responsable>().Items.Single(u => u.IdResponsable == 10080).IdRole);
     }
 
     [Fact]
@@ -107,10 +107,10 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
         var (resp, _) = await Send("admin", HttpMethod.Put, "/api/users/10081", Put(10081, 40, "adjusted2", confirm: true));
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        Assert.Equal(40, _f.Store.GetRepo<T_RESPONSABLE>().Items.Single(u => u.IDRESPONSABLE == 10081).IDROLE);
+        Assert.Equal(40, _f.Store.GetRepo<Responsable>().Items.Single(u => u.IdResponsable == 10081).IdRole);
         Assert.Equal(0, Rows(10081));
         Assert.Equal(otherRows, Rows(10083));                                       // un autre compte n'est pas touché
-        Assert.Contains(_f.Store.GetRepo<T_AUDIT_DROIT>().Items, a => a.ID_CIBLE == 10081 && a.ACTION == "RESET_USER_PERMS");
+        Assert.Contains(_f.Store.GetRepo<AuditDroit>().Items, a => a.IdCible == 10081 && a.Action == "RESET_USER_PERMS");
         using var after = _f.Services.CreateScope();
         var fresh = await after.ServiceProvider.GetRequiredService<IEffectiveRightsService>().GetAsync(10081);
         Assert.False(fresh.Has("PROC:SHIFTS"));                                     // le cache a été invalidé
@@ -121,7 +121,7 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
     {
         var (resp, _) = await Send("admin", HttpMethod.Put, "/api/users/10050", Put(10050, 40, "cible"));
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        Assert.Equal(40, _f.Store.GetRepo<T_RESPONSABLE>().Items.Single(u => u.IDRESPONSABLE == 10050).IDROLE);
+        Assert.Equal(40, _f.Store.GetRepo<Responsable>().Items.Single(u => u.IdResponsable == 10050).IdRole);
     }
 
     [Fact]

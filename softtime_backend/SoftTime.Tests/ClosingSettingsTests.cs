@@ -167,12 +167,12 @@ public class ClosingSettingsTests
     private static ClosingService Service(ClosingOptions reglages)
     {
         var uow = new InMemoryUnitOfWork();
-        uow.Get<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 1, NOM_BD = "SAGE_TEST" });
-        uow.Get<T_CLOCK>().Items.Add(new T_CLOCK { IDPOINT = 1, MULTIPOINT = false });
-        uow.Get<T_CARDPAIE>().Items.Add(new T_CARDPAIE { ID = 1, SAGE_MATRICULE = "001", SAGE_BDD = "SAGE_TEST", POINTEUSE_BDD = "PTE_TEST" });
-        uow.Get<T_PLANNING_SAL>().Items.Add(new T_PLANNING_SAL
+        uow.Get<BddSage>().Items.Add(new BddSage { Id = 1, NomBd = "SAGE_TEST" });
+        uow.Get<ParametrePointeuse>().Items.Add(new ParametrePointeuse { IdPoint = 1, MultiPoint = false });
+        uow.Get<CardPaie>().Items.Add(new CardPaie { Id = 1, SageMatricule = "001", SageBdd = "SAGE_TEST", PointeuseBdd = "PTE_TEST" });
+        uow.Get<PlanningSalarie>().Items.Add(new PlanningSalarie
         {
-            ID = 1, IDSAL = 1, DateP = Lundi, HA = Lundi.AddHours(8), HD = Lundi.AddHours(17), OffP = false, BDD_SAGE = "SAGE_TEST"
+            Id = 1, IdSal = 1, DateP = Lundi, Ha = Lundi.AddHours(8), Hd = Lundi.AddHours(17), OffP = false, BddSage = "SAGE_TEST"
         });
         var tenant = new TenantConnectionService(uow, new FakeCompanyContext(), new FakeCurrentUser(),
             SoftTime.Tests.Http.TestRights.Service(uow), NullLogger<TenantConnectionService>.Instance);

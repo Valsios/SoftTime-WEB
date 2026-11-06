@@ -37,17 +37,17 @@ public class CatalogService : ICatalogService
     {
         await EnsureMappingSchemaAsync(ct);
         await MigrateLegacyMappingsAsync(ct);
-        var rows = await _uow.Repository<T_BDD_SAGE>().ListAsync(_ => true, ct);
+        var rows = await _uow.Repository<BddSage>().ListAsync(_ => true, ct);
         var byConnection = await LoadMappingLookupAsync(true, ct);
         return rows.Select(r => _mapper.Map<SageDbDto>(r) with
         {
-            Mappings = byConnection.TryGetValue(r.ID, out var m) ? m : Array.Empty<SourceEntityMappingDto>()
+            Mappings = byConnection.TryGetValue(r.Id, out var m) ? m : Array.Empty<SourceEntityMappingDto>()
         }).ToList();
     }
 
     public async Task<SageDbDto?> GetSageByIdAsync(int id, CancellationToken ct = default)
     {
-        var entity = await _uow.Repository<T_BDD_SAGE>().GetByIdAsync(id, ct);
+        var entity = await _uow.Repository<BddSage>().GetByIdAsync(id, ct);
         return entity == null ? null : _mapper.Map<SageDbDto>(entity);
     }
 
@@ -57,36 +57,36 @@ public class CatalogService : ICatalogService
             await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, dto.NomBd, ct);
         else
         {
-            var current = await _uow.Repository<T_BDD_SAGE>().GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
-            await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Update, current.NOM_BD, ct);
+            var current = await _uow.Repository<BddSage>().GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
+            await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Update, current.NomBd, ct);
         }
         if (dto.TypeBase != "STANDARD" && dto.TypeBase != "AUTRE")
             throw new DomainException("TypeBase doit valoir 'STANDARD' ou 'AUTRE'.");
         if (dto.TypeBase == "AUTRE" && (dto.Mappings is null || dto.Mappings.Count == 0))
             throw new DomainException("Une base 'Autre' nécessite au minimum un mapping de source.");
         await EnsureMappingSchemaAsync(ct);
-        var repo = _uow.Repository<T_BDD_SAGE>();
+        var repo = _uow.Repository<BddSage>();
         var doublon = (await repo.ListAsync(
-            s => s.ID != dto.Id
-                 && s.SERVEUR == dto.Serveur
-                 && s.NOM_BD == dto.NomBd, ct)).Any();
+            s => s.Id != dto.Id
+                 && s.Serveur == dto.Serveur
+                 && s.NomBd == dto.NomBd, ct)).Any();
         if (doublon)
             throw new DomainException("Cette base (serveur + nom) est déjà enregistrée.");
-        T_BDD_SAGE entity;
+        BddSage entity;
         if (dto.Id == 0)
         {
-            entity = _mapper.Map<T_BDD_SAGE>(dto);
+            entity = _mapper.Map<BddSage>(dto);
             await repo.AddAsync(entity, ct);
         }
         else
         {
             entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
-            entity.SERVEUR = dto.Serveur;
-            entity.TLOGIN = dto.Login;
-            if (!string.IsNullOrEmpty(dto.Password)) entity.TMDP = dto.Password;
-            entity.TYPE_AUTH = dto.SqlAuth;
-            entity.NOM_BD = dto.NomBd;
-            entity.TYPE_BASE = dto.TypeBase;
+            entity.Serveur = dto.Serveur;
+            entity.TLogin = dto.Login;
+            if (!string.IsNullOrEmpty(dto.Password)) entity.TMdp = dto.Password;
+            entity.TypeAuth = dto.SqlAuth;
+            entity.NomBd = dto.NomBd;
+            entity.TypeBase = dto.TypeBase;
             repo.Update(entity);
         }
         await _uow.SaveChangesAsync(ct);
@@ -94,10 +94,10 @@ public class CatalogService : ICatalogService
         if (dto.Mappings is not null)
         {
             await ValidateMappingsAsync(true, dto.Mappings, ct);
-            await ReplaceMappingsAsync(true, entity.ID, dto.Mappings, ct);
+            await ReplaceMappingsAsync(true, entity.Id, dto.Mappings, ct);
         }
         var result = _mapper.Map<SageDbDto>(entity);
-        return result with { Mappings = await LoadMappingsForAsync(true, entity.ID, ct) };
+        return result with { Mappings = await LoadMappingsForAsync(true, entity.Id, ct) };
     }
     // Verifie la connexion et, en mode STANDARD, la presence des tables attendues par le reste de l'application.
     private static readonly string[] SageStandardTables = { "T_SAL", "T_HST_AFFECTATION", "T_DEPARTEMENT", "T_GHRCAL_SOCIETE", "T_CST" };
@@ -143,9 +143,9 @@ public class CatalogService : ICatalogService
 
     public async Task DeleteSageAsync(int id, CancellationToken ct = default)
     {
-        var repo = _uow.Repository<T_BDD_SAGE>();
+        var repo = _uow.Repository<BddSage>();
         var e = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException();
-        await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Delete, e.NOM_BD, ct);
+        await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Delete, e.NomBd, ct);
         await RemoveMappingsAsync(true, id, ct);
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
@@ -156,8 +156,8 @@ public class CatalogService : ICatalogService
     // restent orphelines et bloquent la reutilisation de l'index unique (SageDbId/PointeuseDbId, EntityKind).
     private async Task RemoveMappingsAsync(bool isSage, int connectionId, CancellationToken ct)
     {
-        var entRepo = _uow.Repository<T_SOURCE_ENTITY_MAPPING>();
-        var fldRepo = _uow.Repository<T_SOURCE_FIELD_MAPPING>();
+        var entRepo = _uow.Repository<SourceEntityMapping>();
+        var fldRepo = _uow.Repository<SourceFieldMapping>();
         var existing = await entRepo.ListAsync(m => isSage ? m.SageDbId == connectionId : m.PointeuseDbId == connectionId, ct);
         if (existing.Count == 0) return;
         var ids = existing.Select(x => x.Id).ToHashSet();
@@ -171,17 +171,17 @@ public class CatalogService : ICatalogService
     {
         await EnsureMappingSchemaAsync(ct);
         await MigrateLegacyMappingsAsync(ct);
-        var rows = await _uow.Repository<T_BDD_POINTEUSE>().ListAsync(_ => true, ct);
+        var rows = await _uow.Repository<BddPointeuse>().ListAsync(_ => true, ct);
         var byConnection = await LoadMappingLookupAsync(false, ct);
         return rows.Select(r => _mapper.Map<PointeuseDbDto>(r) with
         {
-            Mappings = byConnection.TryGetValue(r.ID, out var m) ? m : Array.Empty<SourceEntityMappingDto>()
+            Mappings = byConnection.TryGetValue(r.Id, out var m) ? m : Array.Empty<SourceEntityMappingDto>()
         }).ToList();
     }
 
     public async Task<PointeuseDbDto?> GetPointeuseByIdAsync(int id, CancellationToken ct = default)
     {
-        var entity = await _uow.Repository<T_BDD_POINTEUSE>().GetByIdAsync(id, ct);
+        var entity = await _uow.Repository<BddPointeuse>().GetByIdAsync(id, ct);
         return entity == null ? null : _mapper.Map<PointeuseDbDto>(entity);
     }
 
@@ -191,19 +191,19 @@ public class CatalogService : ICatalogService
             await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Create, dto.NomBd, ct);
         else
         {
-            var current = await _uow.Repository<T_BDD_POINTEUSE>().GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
-            await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Update, current.NOM_BD, ct);
+            var current = await _uow.Repository<BddPointeuse>().GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
+            await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Update, current.NomBd, ct);
         }
         if (dto.TypeBase != "STANDARD" && dto.TypeBase != "AUTRE")
             throw new DomainException("TypeBase doit valoir 'STANDARD' ou 'AUTRE'.");
         if (dto.TypeBase == "AUTRE" && (dto.Mappings is null || dto.Mappings.Count == 0))
             throw new DomainException("Une base 'Autre' nécessite au minimum un mapping de source.");
         await EnsureMappingSchemaAsync(ct);
-        var repo = _uow.Repository<T_BDD_POINTEUSE>();
+        var repo = _uow.Repository<BddPointeuse>();
         var doublon = (await repo.ListAsync(
-            p => p.ID != dto.Id
-                 && p.SERVEUR == dto.Serveur
-                 && p.NOM_BD == dto.NomBd, ct)).Any();
+            p => p.Id != dto.Id
+                 && p.Serveur == dto.Serveur
+                 && p.NomBd == dto.NomBd, ct)).Any();
         if (doublon)
             throw new DomainException("Cette base (serveur + nom) est déjà enregistrée.");
         if (dto.Active == true)
@@ -211,27 +211,27 @@ public class CatalogService : ICatalogService
             var all = await repo.ListAsync(_ => true, ct);
             foreach (var p in all)
             {
-                p.ACTIVE = p.ID == dto.Id;
+                p.Active = p.Id == dto.Id;
                 repo.Update(p);
             }
         }
-        T_BDD_POINTEUSE entity;
+        BddPointeuse entity;
         if (dto.Id == 0)
         {
-            entity = _mapper.Map<T_BDD_POINTEUSE>(dto);
+            entity = _mapper.Map<BddPointeuse>(dto);
             await repo.AddAsync(entity, ct);
         }
         else
         {
             entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
-            entity.SERVEUR = dto.Serveur;
-            entity.TLOGIN = dto.Login;
-            if (!string.IsNullOrEmpty(dto.Password)) entity.TMDP = dto.Password;
-            entity.TYPE_AUTH = dto.SqlAuth;
-            entity.NOM_BD = dto.NomBd;
-            entity.TYPE_POINTAGE = dto.TypePointage;
-            entity.ACTIVE = dto.Active;
-            entity.TYPE_BASE = dto.TypeBase;
+            entity.Serveur = dto.Serveur;
+            entity.TLogin = dto.Login;
+            if (!string.IsNullOrEmpty(dto.Password)) entity.TMdp = dto.Password;
+            entity.TypeAuth = dto.SqlAuth;
+            entity.NomBd = dto.NomBd;
+            entity.TypePointage = dto.TypePointage;
+            entity.Active = dto.Active;
+            entity.TypeBase = dto.TypeBase;
             repo.Update(entity);
         }
         await _uow.SaveChangesAsync(ct);
@@ -239,10 +239,10 @@ public class CatalogService : ICatalogService
         if (dto.Mappings is not null)
         {
             await ValidateMappingsAsync(false, dto.Mappings, ct);
-            await ReplaceMappingsAsync(false, entity.ID, dto.Mappings, ct);
+            await ReplaceMappingsAsync(false, entity.Id, dto.Mappings, ct);
         }
         var result = _mapper.Map<PointeuseDbDto>(entity);
-        return result with { Mappings = await LoadMappingsForAsync(false, entity.ID, ct) };
+        return result with { Mappings = await LoadMappingsForAsync(false, entity.Id, ct) };
     }
     private static readonly string[] PointeuseStandardTables = { "USERINFO", "CHECKINOUT" };
     public async Task<ConnectionTestResultDto> TestPointeuseConnectionAsync(TestPointeuseConnectionDto dto, CancellationToken ct = default)
@@ -287,9 +287,9 @@ public class CatalogService : ICatalogService
 
     public async Task DeletePointeuseAsync(int id, CancellationToken ct = default)
     {
-        var repo = _uow.Repository<T_BDD_POINTEUSE>();
+        var repo = _uow.Repository<BddPointeuse>();
         var e = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException();
-        await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Delete, e.NOM_BD, ct);
+        await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Delete, e.NomBd, ct);
         await RemoveMappingsAsync(false, id, ct);
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
@@ -298,26 +298,26 @@ public class CatalogService : ICatalogService
 
     public async Task<ClockParamDto> GetClockAsync(CancellationToken ct = default)
     {
-        var row = (await _uow.Repository<T_CLOCK>().ListReadOnlyAsync(_ => true, ct)).FirstOrDefault();
-        return row == null ? new ClockParamDto(0, false) : new ClockParamDto(row.IDPOINT, row.MULTIPOINT);
+        var row = (await _uow.Repository<ParametrePointeuse>().ListReadOnlyAsync(_ => true, ct)).FirstOrDefault();
+        return row == null ? new ClockParamDto(0, false) : new ClockParamDto(row.IdPoint, row.MultiPoint);
     }
 
     public async Task<ClockParamDto> SaveClockAsync(ClockParamDto dto, CancellationToken ct = default)
     {
-        var repo = _uow.Repository<T_CLOCK>();
+        var repo = _uow.Repository<ParametrePointeuse>();
         var row = (await repo.ListAsync(_ => true, ct)).FirstOrDefault();
         if (row == null)
         {
-            row = new T_CLOCK { MULTIPOINT = dto.MultiPoint };
+            row = new ParametrePointeuse { MultiPoint = dto.MultiPoint };
             await repo.AddAsync(row, ct);
         }
         else
         {
-            row.MULTIPOINT = dto.MultiPoint;
+            row.MultiPoint = dto.MultiPoint;
             repo.Update(row);
         }
         await _uow.SaveChangesAsync(ct);
-        return new ClockParamDto(row.IDPOINT, row.MULTIPOINT);
+        return new ClockParamDto(row.IdPoint, row.MultiPoint);
     }
 
     public async Task<DepartementServiceDto> GetDepartementServiceAsync(string matricule, CancellationToken ct = default)
@@ -342,7 +342,7 @@ public class CatalogService : ICatalogService
         return new DepartementServiceDto(matricule, current?.Departement?.Trim(), current?.Service?.Trim());
     }
 
-    private static T_HST_AFFECTATION? PickCurrentAffectation(IEnumerable<T_HST_AFFECTATION> rows)
+    private static HistoriqueAffectationSage? PickCurrentAffectation(IEnumerable<HistoriqueAffectationSage> rows)
     {
         var list = rows.ToList();
         return list.Where(a => a.DateSortiePoste == null).OrderByDescending(a => a.DateDebut).FirstOrDefault()
@@ -401,16 +401,16 @@ public class CatalogService : ICatalogService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var database = await _tenant.GetSageRowAsync(ct);
-        if (!string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(database.TypeBase, "AUTRE", StringComparison.OrdinalIgnoreCase))
             return new DepartementServiceOptionsDto(Array.Empty<string>(), Array.Empty<string>());
 
-        var entity = (await _uow.Repository<T_SOURCE_ENTITY_MAPPING>()
-                .ListReadOnlyAsync(m => m.SageDbId == database.ID && m.EntityKind == "AFFECTATION", ct))
+        var entity = (await _uow.Repository<SourceEntityMapping>()
+                .ListReadOnlyAsync(m => m.SageDbId == database.Id && m.EntityKind == "AFFECTATION", ct))
             .FirstOrDefault();
         if (entity is null || string.IsNullOrWhiteSpace(entity.SourceTable))
             return new DepartementServiceOptionsDto(Array.Empty<string>(), Array.Empty<string>());
 
-        var fields = await _uow.Repository<T_SOURCE_FIELD_MAPPING>()
+        var fields = await _uow.Repository<SourceFieldMapping>()
             .ListReadOnlyAsync(f => f.EntityMappingId == entity.Id, ct);
         string? ColumnOf(string role) => fields
             .FirstOrDefault(f => string.Equals(f.FieldRoleCode, role, StringComparison.OrdinalIgnoreCase))
@@ -424,8 +424,8 @@ public class CatalogService : ICatalogService
             ValidateSourceIdentifier(entity.SourceTable);
             ValidateSourceIdentifier(column);
             return await _discovery.ListDistinctValuesAsync(
-                database.SERVEUR!, database.NOM_BD!, entity.SourceTable!, column!,
-                database.TYPE_AUTH == true, database.TLOGIN, database.TMDP, ct);
+                database.Serveur!, database.NomBd!, entity.SourceTable!, column!,
+                database.TypeAuth == true, database.TLogin, database.TMdp, ct);
         }
 
         return new DepartementServiceOptionsDto(
@@ -439,55 +439,55 @@ public class CatalogService : ICatalogService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         await PayrollWritingConfiguration.EnsureStorageAsync(_uow, ct);
-        var list = await _uow.Repository<T_PAIE_ECRITURE>().ListReadOnlyAsync(c => c.BDD_SAGE == _tenant.SageDb, ct);
-        return list.OrderBy(c => Array.IndexOf(PayrollWritingConfiguration.Categories, c.CATEGORIE))
-            .Select(c => new PayrollWriteConfigurationDto(c.ID, c.TABLE_CIBLE, c.COL_MATRICULE, c.CATEGORIE, c.COL_VALEUR)).ToList();
+        var list = await _uow.Repository<PaieEcriture>().ListReadOnlyAsync(c => c.BddSage == _tenant.SageDb, ct);
+        return list.OrderBy(c => Array.IndexOf(PayrollWritingConfiguration.Categories, c.Categorie))
+            .Select(c => new PayrollWriteConfigurationDto(c.Id, c.TableCible, c.ColMatricule, c.Categorie, c.ColValeur)).ToList();
     }
 
     public async Task<PayrollWriteConfigurationDto> SavePayrollWriteConfigurationAsync(PayrollWriteConfigurationDto dto, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var database = await _tenant.GetSageRowAsync(ct);
-        if (!string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(database.TypeBase, "AUTRE", StringComparison.OrdinalIgnoreCase))
             throw new DomainException("La configuration d'écriture dynamique est réservée aux bases AUTRE.");
         await PayrollWritingConfiguration.EnsureStorageAsync(_uow, ct);
         var category = PayrollWritingConfiguration.NormalizeCategory(dto.Categorie);
         PayrollWritingConfiguration.ValidateIdentifier(dto.TableCible, "La table cible", allowQualifiedTable: true);
         PayrollWritingConfiguration.ValidateIdentifier(dto.ColMatricule, "La colonne matricule");
         PayrollWritingConfiguration.ValidateIdentifier(dto.ColValeur, "La colonne de valeur");
-        var repo = _uow.Repository<T_PAIE_ECRITURE>();
-        var current = await repo.ListAsync(c => c.BDD_SAGE == _tenant.SageDb, ct);
-        if (current.Any(c => c.ID != dto.Id && string.Equals(c.CATEGORIE, category, StringComparison.OrdinalIgnoreCase)))
+        var repo = _uow.Repository<PaieEcriture>();
+        var current = await repo.ListAsync(c => c.BddSage == _tenant.SageDb, ct);
+        if (current.Any(c => c.Id != dto.Id && string.Equals(c.Categorie, category, StringComparison.OrdinalIgnoreCase)))
             throw new DomainException($"La catégorie {category} est déjà configurée pour cette base.");
-        T_PAIE_ECRITURE entity;
+        PaieEcriture entity;
         if (dto.Id == 0)
         {
-            entity = new T_PAIE_ECRITURE { BDD_SAGE = _tenant.SageDb };
+            entity = new PaieEcriture { BddSage = _tenant.SageDb };
             await repo.AddAsync(entity, ct);
         }
         else
         {
             entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
-            if (!string.Equals(entity.BDD_SAGE, _tenant.SageDb, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(entity.BddSage, _tenant.SageDb, StringComparison.OrdinalIgnoreCase))
                 throw new DomainException("Cette configuration appartient à une autre base.");
             repo.Update(entity);
         }
-        entity.TABLE_CIBLE = dto.TableCible!.Trim();
-        entity.COL_MATRICULE = dto.ColMatricule!.Trim();
-        entity.CATEGORIE = category;
-        entity.COL_VALEUR = dto.ColValeur!.Trim();
+        entity.TableCible = dto.TableCible!.Trim();
+        entity.ColMatricule = dto.ColMatricule!.Trim();
+        entity.Categorie = category;
+        entity.ColValeur = dto.ColValeur!.Trim();
         await _uow.SaveChangesAsync(ct);
-        return new PayrollWriteConfigurationDto(entity.ID, entity.TABLE_CIBLE, entity.COL_MATRICULE, entity.CATEGORIE, entity.COL_VALEUR);
+        return new PayrollWriteConfigurationDto(entity.Id, entity.TableCible, entity.ColMatricule, entity.Categorie, entity.ColValeur);
     }
 
     public async Task DeletePayrollWriteConfigurationAsync(int id, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         await PayrollWritingConfiguration.EnsureStorageAsync(_uow, ct);
-        var entity = await _uow.Repository<T_PAIE_ECRITURE>().GetByIdAsync(id, ct) ?? throw new NotFoundException();
-        if (!string.Equals(entity.BDD_SAGE, _tenant.SageDb, StringComparison.OrdinalIgnoreCase))
+        var entity = await _uow.Repository<PaieEcriture>().GetByIdAsync(id, ct) ?? throw new NotFoundException();
+        if (!string.Equals(entity.BddSage, _tenant.SageDb, StringComparison.OrdinalIgnoreCase))
             throw new DomainException("Cette configuration appartient à une autre base.");
-        _uow.Repository<T_PAIE_ECRITURE>().Remove(entity);
+        _uow.Repository<PaieEcriture>().Remove(entity);
         await _uow.SaveChangesAsync(ct);
     }
 
@@ -495,27 +495,27 @@ public class CatalogService : ICatalogService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var database = await _tenant.GetSageRowAsync(ct);
-        if (!string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(database.TypeBase, "AUTRE", StringComparison.OrdinalIgnoreCase))
             return new ConnectionTestResultDto(false, "Cette configuration est réservée aux bases AUTRE.");
         try
         {
             await PayrollWritingConfiguration.EnsureStorageAsync(_uow, ct);
-            var configs = await _uow.Repository<T_PAIE_ECRITURE>().ListReadOnlyAsync(c => c.BDD_SAGE == _tenant.SageDb, ct);
-            var missing = PayrollWritingConfiguration.Categories.FirstOrDefault(category => !configs.Any(c => string.Equals(c.CATEGORIE, category, StringComparison.OrdinalIgnoreCase)));
+            var configs = await _uow.Repository<PaieEcriture>().ListReadOnlyAsync(c => c.BddSage == _tenant.SageDb, ct);
+            var missing = PayrollWritingConfiguration.Categories.FirstOrDefault(category => !configs.Any(c => string.Equals(c.Categorie, category, StringComparison.OrdinalIgnoreCase)));
             if (missing != null)
                 return new ConnectionTestResultDto(false, $"La configuration d'écriture de la base AUTRE est incomplète : la catégorie {missing} n'est pas configurée.");
             var first = configs.First();
-            if (configs.Any(c => !string.Equals(c.TABLE_CIBLE, first.TABLE_CIBLE, StringComparison.OrdinalIgnoreCase)
-                || !string.Equals(c.COL_MATRICULE, first.COL_MATRICULE, StringComparison.OrdinalIgnoreCase)))
+            if (configs.Any(c => !string.Equals(c.TableCible, first.TableCible, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(c.ColMatricule, first.ColMatricule, StringComparison.OrdinalIgnoreCase)))
                 return new ConnectionTestResultDto(false, "Toutes les catégories doivent utiliser la même table cible et la même colonne matricule.");
-            var (schema, table) = PayrollWritingConfiguration.SplitTable(first.TABLE_CIBLE);
+            var (schema, table) = PayrollWritingConfiguration.SplitTable(first.TableCible);
             if (!string.Equals(schema, "dbo", StringComparison.OrdinalIgnoreCase))
                 return new ConnectionTestResultDto(false, "La découverte des tables ne prend actuellement en charge que le schéma dbo.");
-            var tables = await _discovery.ListTablesAsync(database.SERVEUR!, database.NOM_BD!, database.TYPE_AUTH == true, database.TLOGIN, database.TMDP, ct);
+            var tables = await _discovery.ListTablesAsync(database.Serveur!, database.NomBd!, database.TypeAuth == true, database.TLogin, database.TMdp, ct);
             if (!tables.Contains(table, StringComparer.OrdinalIgnoreCase))
-                return new ConnectionTestResultDto(false, $"La table {first.TABLE_CIBLE} n'existe pas.");
-            var columns = await _discovery.ListColumnsAsync(database.SERVEUR!, database.NOM_BD!, table, database.TYPE_AUTH == true, database.TLOGIN, database.TMDP, ct);
-            var required = configs.Select(c => c.COL_VALEUR).Append(first.COL_MATRICULE).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                return new ConnectionTestResultDto(false, $"La table {first.TableCible} n'existe pas.");
+            var columns = await _discovery.ListColumnsAsync(database.Serveur!, database.NomBd!, table, database.TypeAuth == true, database.TLogin, database.TMdp, ct);
+            var required = configs.Select(c => c.ColValeur).Append(first.ColMatricule).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             var missingColumn = required.FirstOrDefault(column => !columns.Contains(column, StringComparer.OrdinalIgnoreCase));
             return missingColumn == null
                 ? new ConnectionTestResultDto(true, "Configuration d'écriture valide.")
@@ -557,22 +557,22 @@ public class CatalogService : ICatalogService
         var (mappedTable, column) = await GetOtherCodeConstantMappingAsync(ct);
         ValidateSourceIdentifier(mappedTable);
         ValidateSourceIdentifier(column);
-        return await _discovery.ListDistinctValuesAsync(database.SERVEUR!, database.NOM_BD!, mappedTable, column,
-            database.TYPE_AUTH == true, database.TLOGIN, database.TMDP, ct);
+        return await _discovery.ListDistinctValuesAsync(database.Serveur!, database.NomBd!, mappedTable, column,
+            database.TypeAuth == true, database.TLogin, database.TMdp, ct);
     }
 
     // Resout la table/colonne du code constante depuis le mapping de l'entite CONSTANT.
     private async Task<(string Table, string Column)> GetOtherCodeConstantMappingAsync(CancellationToken ct)
     {
         var database = await _tenant.GetSageRowAsync(ct);
-        if (!string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(database.TypeBase, "AUTRE", StringComparison.OrdinalIgnoreCase))
             throw new DomainException("Cette liste est réservée aux bases AUTRE.");
-        var entity = (await _uow.Repository<T_SOURCE_ENTITY_MAPPING>()
-                .ListAsync(m => m.SageDbId == database.ID && m.EntityKind == "CONSTANT", ct))
+        var entity = (await _uow.Repository<SourceEntityMapping>()
+                .ListAsync(m => m.SageDbId == database.Id && m.EntityKind == "CONSTANT", ct))
             .FirstOrDefault();
         if (entity is null || string.IsNullOrWhiteSpace(entity.SourceTable))
             throw new DomainException("Configurez d'abord le mapping « Code constante » (table et colonne) dans Bases RH / paie.");
-        var field = (await _uow.Repository<T_SOURCE_FIELD_MAPPING>()
+        var field = (await _uow.Repository<SourceFieldMapping>()
                 .ListAsync(f => f.EntityMappingId == entity.Id && f.FieldRoleCode == "SAGE_CST_CODE", ct))
             .FirstOrDefault();
         if (field is null || string.IsNullOrWhiteSpace(field.SourceColumn))
@@ -617,13 +617,13 @@ public class CatalogService : ICatalogService
         bool storedSqlAuth;
         if (isSage)
         {
-            var row = await _uow.Repository<T_BDD_SAGE>().GetByIdAsync(id.Value, ct) ?? throw new NotFoundException();
-            (storedServeur, storedLogin, storedPassword, storedName, storedSqlAuth) = (row.SERVEUR, row.TLOGIN, row.TMDP, row.NOM_BD, row.TYPE_AUTH == true);
+            var row = await _uow.Repository<BddSage>().GetByIdAsync(id.Value, ct) ?? throw new NotFoundException();
+            (storedServeur, storedLogin, storedPassword, storedName, storedSqlAuth) = (row.Serveur, row.TLogin, row.TMdp, row.NomBd, row.TypeAuth == true);
         }
         else
         {
-            var row = await _uow.Repository<T_BDD_POINTEUSE>().GetByIdAsync(id.Value, ct) ?? throw new NotFoundException();
-            (storedServeur, storedLogin, storedPassword, storedName, storedSqlAuth) = (row.SERVEUR, row.TLOGIN, row.TMDP, row.NOM_BD, row.TYPE_AUTH == true);
+            var row = await _uow.Repository<BddPointeuse>().GetByIdAsync(id.Value, ct) ?? throw new NotFoundException();
+            (storedServeur, storedLogin, storedPassword, storedName, storedSqlAuth) = (row.Serveur, row.TLogin, row.TMdp, row.NomBd, row.TypeAuth == true);
         }
 
         await _configAuth.EnsureCanConfigureAsync(isSage ? DatabaseKind.Sage : DatabaseKind.Pointeuse, DatabaseConfigAction.Update, storedName, ct);
@@ -738,65 +738,65 @@ public class CatalogService : ICatalogService
     // Convertit une fois les anciennes colonnes MAP_* en mappings (idempotent).
     private async Task MigrateLegacyMappingsAsync(CancellationToken ct)
     {
-        var entRepo = _uow.Repository<T_SOURCE_ENTITY_MAPPING>();
-        var fldRepo = _uow.Repository<T_SOURCE_FIELD_MAPPING>();
+        var entRepo = _uow.Repository<SourceEntityMapping>();
+        var fldRepo = _uow.Repository<SourceFieldMapping>();
         var existing = await entRepo.ListAsync(_ => true, ct);
         var sageDone = existing.Where(e => e.SageDbId != null).Select(e => e.SageDbId!.Value).ToHashSet();
         var pteDone = existing.Where(e => e.PointeuseDbId != null).Select(e => e.PointeuseDbId!.Value).ToHashSet();
 
-        foreach (var row in await _uow.Repository<T_BDD_SAGE>().ListAsync(_ => true, ct))
+        foreach (var row in await _uow.Repository<BddSage>().ListAsync(_ => true, ct))
         {
-            if (sageDone.Contains(row.ID) || string.IsNullOrWhiteSpace(row.MAP_TABLE)) continue;
-            var ent = new T_SOURCE_ENTITY_MAPPING { SystemType = "SAGE", SageDbId = row.ID, EntityKind = "EMPLOYEE", SourceTable = row.MAP_TABLE!.Trim() };
+            if (sageDone.Contains(row.Id) || string.IsNullOrWhiteSpace(row.MapTable)) continue;
+            var ent = new SourceEntityMapping { SystemType = "SAGE", SageDbId = row.Id, EntityKind = "EMPLOYEE", SourceTable = row.MapTable!.Trim() };
             await entRepo.AddAsync(ent, ct);
             await _uow.SaveChangesAsync(ct);
             await AddLegacyFieldsAsync(fldRepo, ent.Id, new[]
             {
-                ("SAGE_MATRICULE", row.MAP_COL_MATRICULE),
-                ("SAGE_NOM", row.MAP_COL_NOM),
-                ("SAGE_PRENOM", row.MAP_COL_PRENOM),
-                ("SAGE_BADGE", row.MAP_COL_BADGE),
+                ("SAGE_MATRICULE", row.MapColMatricule),
+                ("SAGE_NOM", row.MapColNom),
+                ("SAGE_PRENOM", row.MapColPrenom),
+                ("SAGE_BADGE", row.MapColBadge),
             }, ct);
         }
 
-        foreach (var row in await _uow.Repository<T_BDD_POINTEUSE>().ListAsync(_ => true, ct))
+        foreach (var row in await _uow.Repository<BddPointeuse>().ListAsync(_ => true, ct))
         {
-            if (pteDone.Contains(row.ID)) continue;
-            if (!string.IsNullOrWhiteSpace(row.MAP_USER_TABLE))
+            if (pteDone.Contains(row.Id)) continue;
+            if (!string.IsNullOrWhiteSpace(row.MapUserTable))
             {
-                var ent = new T_SOURCE_ENTITY_MAPPING { SystemType = "POINTEUSE", PointeuseDbId = row.ID, EntityKind = "PUNCH_USER", SourceTable = row.MAP_USER_TABLE!.Trim() };
+                var ent = new SourceEntityMapping { SystemType = "POINTEUSE", PointeuseDbId = row.Id, EntityKind = "PUNCH_USER", SourceTable = row.MapUserTable!.Trim() };
                 await entRepo.AddAsync(ent, ct);
                 await _uow.SaveChangesAsync(ct);
                 await AddLegacyFieldsAsync(fldRepo, ent.Id, new[]
                 {
-                    ("PTE_USER_ID", row.MAP_USER_COL_ID),
-                    ("PTE_USER_BADGE", row.MAP_USER_COL_BADGE),
-                    ("PTE_USER_SSN", row.MAP_USER_COL_SSN),
-                    ("PTE_USER_NAME", row.MAP_USER_COL_NOM),
+                    ("PTE_USER_ID", row.MapUserColId),
+                    ("PTE_USER_BADGE", row.MapUserColBadge),
+                    ("PTE_USER_SSN", row.MapUserColSsn),
+                    ("PTE_USER_NAME", row.MapUserColNom),
                 }, ct);
             }
-            if (!string.IsNullOrWhiteSpace(row.MAP_PUNCH_TABLE))
+            if (!string.IsNullOrWhiteSpace(row.MapPunchTable))
             {
-                var ent = new T_SOURCE_ENTITY_MAPPING { SystemType = "POINTEUSE", PointeuseDbId = row.ID, EntityKind = "PUNCH", SourceTable = row.MAP_PUNCH_TABLE!.Trim() };
+                var ent = new SourceEntityMapping { SystemType = "POINTEUSE", PointeuseDbId = row.Id, EntityKind = "PUNCH", SourceTable = row.MapPunchTable!.Trim() };
                 await entRepo.AddAsync(ent, ct);
                 await _uow.SaveChangesAsync(ct);
                 await AddLegacyFieldsAsync(fldRepo, ent.Id, new[]
                 {
-                    ("PTE_PUNCH_USER_ID", row.MAP_PUNCH_COL_USER_ID),
-                    ("PTE_PUNCH_DATETIME", row.MAP_PUNCH_COL_DATETIME),
-                    ("PTE_PUNCH_TYPE", row.MAP_PUNCH_COL_TYPE),
+                    ("PTE_PUNCH_USER_ID", row.MapPunchColUserId),
+                    ("PTE_PUNCH_DATETIME", row.MapPunchColDatetime),
+                    ("PTE_PUNCH_TYPE", row.MapPunchColType),
                 }, ct);
             }
         }
         await _uow.SaveChangesAsync(ct);
     }
 
-    private static async Task AddLegacyFieldsAsync(IRepository<T_SOURCE_FIELD_MAPPING> repo, int entityMappingId, (string Role, string? Column)[] pairs, CancellationToken ct)
+    private static async Task AddLegacyFieldsAsync(IRepository<SourceFieldMapping> repo, int entityMappingId, (string Role, string? Column)[] pairs, CancellationToken ct)
     {
         foreach (var (role, column) in pairs)
         {
             if (string.IsNullOrWhiteSpace(column)) continue;
-            await repo.AddAsync(new T_SOURCE_FIELD_MAPPING
+            await repo.AddAsync(new SourceFieldMapping
             {
                 EntityMappingId = entityMappingId,
                 FieldRoleCode = role,
@@ -809,7 +809,7 @@ public class CatalogService : ICatalogService
     {
         await EnsureMappingSchemaAsync(ct);
         await MigrateLegacyMappingsAsync(ct);
-        var list = await _uow.Repository<T_FIELD_ROLE>().ListAsync(_ => true, ct);
+        var list = await _uow.Repository<FieldRole>().ListAsync(_ => true, ct);
         return list
             .Where(r => string.IsNullOrWhiteSpace(systemType)
                         || string.Equals(r.SystemType, systemType, StringComparison.OrdinalIgnoreCase))
@@ -831,7 +831,7 @@ public class CatalogService : ICatalogService
     private async Task ValidateMappingsAsync(bool isSage, IReadOnlyList<SourceEntityMappingDto> mappings, CancellationToken ct)
     {
         var system = isSage ? "SAGE" : "POINTEUSE";
-        var roles = await _uow.Repository<T_FIELD_ROLE>().ListAsync(r => r.SystemType == system, ct);
+        var roles = await _uow.Repository<FieldRole>().ListAsync(r => r.SystemType == system, ct);
         foreach (var m in mappings.Where(x => !string.IsNullOrWhiteSpace(x.EntityKind)))
         {
             if (string.IsNullOrWhiteSpace(m.SourceTable))
@@ -855,8 +855,8 @@ public class CatalogService : ICatalogService
 
     private async Task ReplaceMappingsAsync(bool isSage, int connectionId, IReadOnlyList<SourceEntityMappingDto> mappings, CancellationToken ct)
     {
-        var entRepo = _uow.Repository<T_SOURCE_ENTITY_MAPPING>();
-        var fldRepo = _uow.Repository<T_SOURCE_FIELD_MAPPING>();
+        var entRepo = _uow.Repository<SourceEntityMapping>();
+        var fldRepo = _uow.Repository<SourceFieldMapping>();
         var existing = await entRepo.ListAsync(m => isSage ? m.SageDbId == connectionId : m.PointeuseDbId == connectionId, ct);
         if (existing.Count > 0)
         {
@@ -868,7 +868,7 @@ public class CatalogService : ICatalogService
         }
         foreach (var m in mappings.Where(x => !string.IsNullOrWhiteSpace(x.EntityKind)))
         {
-            var ent = new T_SOURCE_ENTITY_MAPPING
+            var ent = new SourceEntityMapping
             {
                 SystemType = isSage ? "SAGE" : "POINTEUSE",
                 SageDbId = isSage ? connectionId : null,
@@ -880,7 +880,7 @@ public class CatalogService : ICatalogService
             await _uow.SaveChangesAsync(ct);
             foreach (var f in (m.Fields ?? Array.Empty<SourceFieldMappingDto>()).Where(x => !string.IsNullOrWhiteSpace(x.FieldRoleCode)))
             {
-                await fldRepo.AddAsync(new T_SOURCE_FIELD_MAPPING
+                await fldRepo.AddAsync(new SourceFieldMapping
                 {
                     EntityMappingId = ent.Id,
                     FieldRoleCode = f.FieldRoleCode.Trim(),
@@ -899,8 +899,8 @@ public class CatalogService : ICatalogService
 
     private async Task<Dictionary<int, List<SourceEntityMappingDto>>> LoadMappingLookupAsync(bool isSage, CancellationToken ct)
     {
-        var entities = await _uow.Repository<T_SOURCE_ENTITY_MAPPING>().ListAsync(_ => true, ct);
-        var fields = await _uow.Repository<T_SOURCE_FIELD_MAPPING>().ListAsync(_ => true, ct);
+        var entities = await _uow.Repository<SourceEntityMapping>().ListAsync(_ => true, ct);
+        var fields = await _uow.Repository<SourceFieldMapping>().ListAsync(_ => true, ct);
         var fieldsByEntity = fields.GroupBy(f => f.EntityMappingId).ToDictionary(g => g.Key, g => g.ToList());
         var result = new Dictionary<int, List<SourceEntityMappingDto>>();
         foreach (var e in entities)
@@ -909,7 +909,7 @@ public class CatalogService : ICatalogService
             if (key is not int id) continue;
             var dto = _mapper.Map<SourceEntityMappingDto>(e) with
             {
-                Fields = (fieldsByEntity.TryGetValue(e.Id, out var fs) ? fs : new List<T_SOURCE_FIELD_MAPPING>())
+                Fields = (fieldsByEntity.TryGetValue(e.Id, out var fs) ? fs : new List<SourceFieldMapping>())
                     .Select(_mapper.Map<SourceFieldMappingDto>)
                     .ToList()
             };
@@ -931,15 +931,15 @@ public class CatalogService : ICatalogService
 
         var ids = connectionIds.Distinct().ToList();
         var entities = isSage
-            ? await _uow.Repository<T_SOURCE_ENTITY_MAPPING>().ListAsync(
+            ? await _uow.Repository<SourceEntityMapping>().ListAsync(
                 e => e.SageDbId.HasValue && ids.Contains(e.SageDbId.Value), ct)
-            : await _uow.Repository<T_SOURCE_ENTITY_MAPPING>().ListAsync(
+            : await _uow.Repository<SourceEntityMapping>().ListAsync(
                 e => e.PointeuseDbId.HasValue && ids.Contains(e.PointeuseDbId.Value), ct);
         if (entities.Count == 0)
             return new Dictionary<int, List<SourceEntityMappingDto>>();
 
         var entityIds = entities.Select(e => e.Id).ToList();
-        var fields = await _uow.Repository<T_SOURCE_FIELD_MAPPING>().ListAsync(
+        var fields = await _uow.Repository<SourceFieldMapping>().ListAsync(
             f => entityIds.Contains(f.EntityMappingId), ct);
         var fieldsByEntity = fields.GroupBy(f => f.EntityMappingId).ToDictionary(g => g.Key, g => g.ToList());
 
@@ -950,7 +950,7 @@ public class CatalogService : ICatalogService
             if (key is not int id) continue;
             var dto = _mapper.Map<SourceEntityMappingDto>(e) with
             {
-                Fields = (fieldsByEntity.TryGetValue(e.Id, out var fs) ? fs : new List<T_SOURCE_FIELD_MAPPING>())
+                Fields = (fieldsByEntity.TryGetValue(e.Id, out var fs) ? fs : new List<SourceFieldMapping>())
                     .Select(_mapper.Map<SourceFieldMappingDto>)
                     .ToList()
             };
@@ -984,9 +984,9 @@ public class CatalogService : ICatalogService
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageRow = await _tenant.GetSageRowAsync(ct);
         var pteRow = await _tenant.GetPointeuseRowAsync(ct);
-        var row = (await _uow.Repository<T_ACTIVECORRESP>().ListReadOnlyAsync(a =>
-            a.SAGE_SERVEUR == sageRow.SERVEUR && a.SAGE_BDD == sageRow.NOM_BD &&
-            a.POINTEUSE_SERVEUR == pteRow.SERVEUR && a.POINTEUSE_BDD == pteRow.NOM_BD, ct)).FirstOrDefault();
+        var row = (await _uow.Repository<CorrespondanceActive>().ListReadOnlyAsync(a =>
+            a.SageServeur == sageRow.Serveur && a.SageBdd == sageRow.NomBd &&
+            a.PointeuseServeur == pteRow.Serveur && a.PointeuseBdd == pteRow.NomBd, ct)).FirstOrDefault();
         return new CorrespondenceModeDto(row?.Active == true);
     }
     public async Task<CorrespondenceModeDto> SetCorrespondenceAsync(bool active, CancellationToken ct = default)
@@ -994,27 +994,27 @@ public class CatalogService : ICatalogService
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageRow = await _tenant.GetSageRowAsync(ct);
         var pteRow = await _tenant.GetPointeuseRowAsync(ct);
-        var repo = _uow.Repository<T_ACTIVECORRESP>();
+        var repo = _uow.Repository<CorrespondanceActive>();
         var row = (await repo.ListAsync(a =>
-            a.SAGE_SERVEUR == sageRow.SERVEUR && a.SAGE_BDD == sageRow.NOM_BD &&
-            a.POINTEUSE_SERVEUR == pteRow.SERVEUR && a.POINTEUSE_BDD == pteRow.NOM_BD, ct)).FirstOrDefault();
+            a.SageServeur == sageRow.Serveur && a.SageBdd == sageRow.NomBd &&
+            a.PointeuseServeur == pteRow.Serveur && a.PointeuseBdd == pteRow.NomBd, ct)).FirstOrDefault();
         if (row == null)
         {
-            row = new T_ACTIVECORRESP
+            row = new CorrespondanceActive
             {
                 Active = active,
-                SAGE_SERVEUR = sageRow.SERVEUR,
-                SAGE_BDD = sageRow.NOM_BD,
-                POINTEUSE_SERVEUR = pteRow.SERVEUR,
-                POINTEUSE_BDD = pteRow.NOM_BD,
-                DATE_MODIF = DateTime.Now
+                SageServeur = sageRow.Serveur,
+                SageBdd = sageRow.NomBd,
+                PointeuseServeur = pteRow.Serveur,
+                PointeuseBdd = pteRow.NomBd,
+                DateModif = DateTime.Now
             };
             await repo.AddAsync(row, ct);
         }
         else
         {
             row.Active = active;
-            row.DATE_MODIF = DateTime.Now;
+            row.DateModif = DateTime.Now;
             repo.Update(row);
         }
         await _uow.SaveChangesAsync(ct);
@@ -1022,7 +1022,7 @@ public class CatalogService : ICatalogService
         {
             // Desactivation du mode manuel : on relance immediatement l'auto-mapping
             var result = await SyncCardPaieCoreAsync(sageRow, pteRow, ct);
-            row.DERNIERE_SYNC = DateTime.Now;
+            row.DerniereSync = DateTime.Now;
             repo.Update(row);
             await _uow.SaveChangesAsync(ct);
         }
@@ -1043,22 +1043,22 @@ public class CatalogService : ICatalogService
             return new PagedResult<SageDbDto>(Array.Empty<SageDbDto>(), 0, 1, taille, 1);
         }
 
-        System.Linq.Expressions.Expression<Func<T_BDD_SAGE, bool>> predicate = allowedNames is null
+        System.Linq.Expressions.Expression<Func<BddSage, bool>> predicate = allowedNames is null
             ? s => true
-            : s => s.NOM_BD != null && allowedNames.Contains(s.NOM_BD);
-        var searchPredicate = SearchExpression.For<T_BDD_SAGE>(
-            search, s => s.SERVEUR, s => s.NOM_BD, s => s.TYPE_BASE);
+            : s => s.NomBd != null && allowedNames.Contains(s.NomBd);
+        var searchPredicate = SearchExpression.For<BddSage>(
+            search, s => s.Serveur, s => s.NomBd, s => s.TypeBase);
         if (searchPredicate is not null)
             predicate = SearchExpression.AndAlso(predicate, searchPredicate);
-        var result = await _uow.Repository<T_BDD_SAGE>().ToPagedAsync(
-            predicate, q => q.OrderBy(s => s.ID), page, pageSize, ct);
+        var result = await _uow.Repository<BddSage>().ToPagedAsync(
+            predicate, q => q.OrderBy(s => s.Id), page, pageSize, ct);
         if (result.Total > 0 && result.Items.Count == 0 && result.Page > result.TotalPages)
-            result = await _uow.Repository<T_BDD_SAGE>().ToPagedAsync(
-                predicate, q => q.OrderBy(s => s.ID), result.TotalPages, result.PageSize, ct);
-        var mappings = await LoadMappingLookupAsync(true, result.Items.Select(s => s.ID).ToList(), ct);
+            result = await _uow.Repository<BddSage>().ToPagedAsync(
+                predicate, q => q.OrderBy(s => s.Id), result.TotalPages, result.PageSize, ct);
+        var mappings = await LoadMappingLookupAsync(true, result.Items.Select(s => s.Id).ToList(), ct);
         var items = result.Items.Select(s => _mapper.Map<SageDbDto>(s) with
         {
-            Mappings = mappings.TryGetValue(s.ID, out var m) ? m : Array.Empty<SourceEntityMappingDto>()
+            Mappings = mappings.TryGetValue(s.Id, out var m) ? m : Array.Empty<SourceEntityMappingDto>()
         }).ToList();
         var pageEffective = PaginationRules.PageEffective(result.Total, result.Page);
         return new PagedResult<SageDbDto>(items, result.Total, pageEffective, result.PageSize, result.TotalPages);
@@ -1076,22 +1076,22 @@ public class CatalogService : ICatalogService
             return new PagedResult<PointeuseDbDto>(Array.Empty<PointeuseDbDto>(), 0, 1, taille, 1);
         }
 
-        System.Linq.Expressions.Expression<Func<T_BDD_POINTEUSE, bool>> predicate = allowedNames is null
+        System.Linq.Expressions.Expression<Func<BddPointeuse, bool>> predicate = allowedNames is null
             ? p => true
-            : p => p.NOM_BD != null && allowedNames.Contains(p.NOM_BD);
-        var searchPredicate = SearchExpression.For<T_BDD_POINTEUSE>(
-            search, p => p.SERVEUR, p => p.NOM_BD, p => p.TYPE_BASE);
+            : p => p.NomBd != null && allowedNames.Contains(p.NomBd);
+        var searchPredicate = SearchExpression.For<BddPointeuse>(
+            search, p => p.Serveur, p => p.NomBd, p => p.TypeBase);
         if (searchPredicate is not null)
             predicate = SearchExpression.AndAlso(predicate, searchPredicate);
-        var result = await _uow.Repository<T_BDD_POINTEUSE>().ToPagedAsync(
-            predicate, q => q.OrderBy(p => p.ID), page, pageSize, ct);
+        var result = await _uow.Repository<BddPointeuse>().ToPagedAsync(
+            predicate, q => q.OrderBy(p => p.Id), page, pageSize, ct);
         if (result.Total > 0 && result.Items.Count == 0 && result.Page > result.TotalPages)
-            result = await _uow.Repository<T_BDD_POINTEUSE>().ToPagedAsync(
-                predicate, q => q.OrderBy(p => p.ID), result.TotalPages, result.PageSize, ct);
-        var mappings = await LoadMappingLookupAsync(false, result.Items.Select(p => p.ID).ToList(), ct);
+            result = await _uow.Repository<BddPointeuse>().ToPagedAsync(
+                predicate, q => q.OrderBy(p => p.Id), result.TotalPages, result.PageSize, ct);
+        var mappings = await LoadMappingLookupAsync(false, result.Items.Select(p => p.Id).ToList(), ct);
         var items = result.Items.Select(p => _mapper.Map<PointeuseDbDto>(p) with
         {
-            Mappings = mappings.TryGetValue(p.ID, out var m) ? m : Array.Empty<SourceEntityMappingDto>()
+            Mappings = mappings.TryGetValue(p.Id, out var m) ? m : Array.Empty<SourceEntityMappingDto>()
         }).ToList();
         var pageEffective = PaginationRules.PageEffective(result.Total, result.Page);
         return new PagedResult<PointeuseDbDto>(items, result.Total, pageEffective, result.PageSize, result.TotalPages);
@@ -1102,27 +1102,27 @@ public class CatalogService : ICatalogService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sage = (_tenant.SageDb ?? string.Empty).Trim().ToLowerInvariant();
-        System.Linq.Expressions.Expression<Func<T_CARDPAIE, bool>> predicate = c =>
-            c.SAGE_BDD == null
-            || c.SAGE_BDD.Trim() == ""
-            || c.SAGE_BDD.Trim().ToLower() == sage;
+        System.Linq.Expressions.Expression<Func<CardPaie, bool>> predicate = c =>
+            c.SageBdd == null
+            || c.SageBdd.Trim() == ""
+            || c.SageBdd.Trim().ToLower() == sage;
 
         return await PagedLists.PageAsync(
-            _uow.Repository<T_CARDPAIE>(),
+            _uow.Repository<CardPaie>(),
             predicate,
-            q => q.OrderBy(c => c.ID),
+            q => q.OrderBy(c => c.Id),
             page,
             pageSize,
             c => _mapper.Map<CardPaieDto>(c),
             search,
-            new System.Linq.Expressions.Expression<Func<T_CARDPAIE, string?>>[]
+            new System.Linq.Expressions.Expression<Func<CardPaie, string?>>[]
             {
-                c => c.SAGE_MATRICULE,
-                c => c.SAGE_NOM,
-                c => c.SAGE_PRENOM,
-                c => c.POINTEUSE_NUMERO,
-                c => c.POINTEUSE_NOM,
-                c => c.DEPARTEMENT,
+                c => c.SageMatricule,
+                c => c.SageNom,
+                c => c.SagePrenom,
+                c => c.PointeuseNumero,
+                c => c.PointeuseNom,
+                c => c.Departement,
             },
             ct);
     }
@@ -1136,24 +1136,24 @@ public class CatalogService : ICatalogService
         if (SearchText.Terms(search).Count > 0)
         {
             var sageKey = (sage ?? string.Empty).Trim().ToLowerInvariant();
-            var cards = await _uow.Repository<T_CARDPAIE>().ListReadOnlyAsync(
-                c => c.SAGE_BDD == null
-                     || c.SAGE_BDD.Trim() == ""
-                     || c.SAGE_BDD.Trim().ToLower() == sageKey,
+            var cards = await _uow.Repository<CardPaie>().ListReadOnlyAsync(
+                c => c.SageBdd == null
+                     || c.SageBdd.Trim() == ""
+                     || c.SageBdd.Trim().ToLower() == sageKey,
                 ct);
             supervisorIds = cards
-                .Where(c => SearchText.Matches(search, c.SAGE_MATRICULE, c.SAGE_NOM, c.SAGE_PRENOM))
-                .Select(c => c.ID)
+                .Where(c => SearchText.Matches(search, c.SageMatricule, c.SageNom, c.SagePrenom))
+                .Select(c => c.Id)
                 .ToArray();
         }
 
-        var searchPredicate = SearchExpression.For<T_CATEGORIE>(search, c => c.INTITULE);
-        System.Linq.Expressions.Expression<Func<T_CATEGORIE, bool>> predicate =
-            c => c.BDD_SAGE == sage;
+        var searchPredicate = SearchExpression.For<Categorie>(search, c => c.Intitule);
+        System.Linq.Expressions.Expression<Func<Categorie, bool>> predicate =
+            c => c.BddSage == sage;
         if (supervisorIds.Length > 0)
         {
-            System.Linq.Expressions.Expression<Func<T_CATEGORIE, bool>> supervisorPredicate =
-                c => supervisorIds.Contains(c.ID_CARDPAIE);
+            System.Linq.Expressions.Expression<Func<Categorie, bool>> supervisorPredicate =
+                c => supervisorIds.Contains(c.IdCardPaie);
             predicate = SearchExpression.AndAlso(
                 predicate,
                 searchPredicate is null
@@ -1166,9 +1166,9 @@ public class CatalogService : ICatalogService
         }
 
         return await PagedLists.PageAsync(
-            _uow.Repository<T_CATEGORIE>(),
+            _uow.Repository<Categorie>(),
             predicate,
-            q => q.OrderBy(c => c.IDCATEGORIE),
+            q => q.OrderBy(c => c.IdCategorie),
             page,
             pageSize,
             c => _mapper.Map<CategoryDto>(c),
@@ -1210,18 +1210,18 @@ public class CatalogService : ICatalogService
         }
 
         var sage = _tenant.SageDb;
-        System.Linq.Expressions.Expression<Func<T_CAT_SAL, bool>> predicate =
-            a => a.BDD_SAGE == sage && (!categoryId.HasValue || a.ID_CATEG == categoryId);
-        Func<IQueryable<T_CAT_SAL>, IOrderedQueryable<T_CAT_SAL>> order =
-            q => q.OrderBy(a => a.MATRICULE_SAGE).ThenBy(a => a.ID);
-        var result = await _uow.Repository<T_CAT_SAL>().ToPagedAsync(
+        System.Linq.Expressions.Expression<Func<CategorieSalarie, bool>> predicate =
+            a => a.BddSage == sage && (!categoryId.HasValue || a.IdCateg == categoryId);
+        Func<IQueryable<CategorieSalarie>, IOrderedQueryable<CategorieSalarie>> order =
+            q => q.OrderBy(a => a.MatriculeSage).ThenBy(a => a.Id);
+        var result = await _uow.Repository<CategorieSalarie>().ToPagedAsync(
             predicate, order, page, pageSize, ct);
         if (result.Total > 0 && result.Items.Count == 0 && result.Page > result.TotalPages)
-            result = await _uow.Repository<T_CAT_SAL>().ToPagedAsync(
+            result = await _uow.Repository<CategorieSalarie>().ToPagedAsync(
                 predicate, order, result.TotalPages, result.PageSize, ct);
-        var cards = await LoadCardsAsync(result.Items.Select(a => a.MATRICULE_SAGE).ToList(), ct);
+        var cards = await LoadCardsAsync(result.Items.Select(a => a.MatriculeSage).ToList(), ct);
         var matricules = cards.Values
-            .Select(c => c.SAGE_MATRICULE?.Trim())
+            .Select(c => c.SageMatricule?.Trim())
             .Where(m => !string.IsNullOrWhiteSpace(m))
             .Select(m => m!)
             .ToList();
@@ -1265,12 +1265,12 @@ public class CatalogService : ICatalogService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var labels = await LoadCategoryLabelsAsync(ct);
-        var list = await _uow.Repository<T_TOLERANCE>().ListReadOnlyAsync(
-            t => !categoryId.HasValue || t.IDCATEGORIE == categoryId, ct);
+        var list = await _uow.Repository<ToleranceRetard>().ListReadOnlyAsync(
+            t => !categoryId.HasValue || t.IdCategorie == categoryId, ct);
         var rows = list
-            .OrderBy(t => t.IDCATEGORIE)
-            .ThenBy(t => t.ID)
-            .Select(t => new ToleranceDto(t.ID, t.IDCATEGORIE, t.TOLERANCE, t.TYPES_TOL, t.SORTIE))
+            .OrderBy(t => t.IdCategorie)
+            .ThenBy(t => t.Id)
+            .Select(t => new ToleranceDto(t.Id, t.IdCategorie, t.Tolerance, t.TypesTol, t.Sortie))
             .Where(t => SearchText.Matches(
                 search,
                 labels.GetValueOrDefault(t.CategoryId),
@@ -1286,9 +1286,9 @@ public class CatalogService : ICatalogService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sage = _tenant.SageDb;
-        var list = await _uow.Repository<T_FERIE>().ListReadOnlyAsync(f => f.BDD_SAGE == sage, ct);
+        var list = await _uow.Repository<JourFerie>().ListReadOnlyAsync(f => f.BddSage == sage, ct);
         var rows = list
-            .OrderBy(f => f.ID)
+            .OrderBy(f => f.Id)
             .Select(_mapper.Map<HolidayDto>)
             .Where(f => SearchText.Matches(search, f.Intitule, f.Date))
             .ToList();
@@ -1298,10 +1298,10 @@ public class CatalogService : ICatalogService
     public async Task<PagedResult<MajorationDto>> ListMajorationsPagedAsync(
         int? page, int? pageSize, string? search = null, CancellationToken ct = default)
     {
-        var list = await _uow.Repository<T_MAJORATION>().ListReadOnlyAsync(_ => true, ct);
+        var list = await _uow.Repository<Majoration>().ListReadOnlyAsync(_ => true, ct);
         var rows = list
             .OrderBy(m => m.Cotation)
-            .ThenBy(m => m.ID)
+            .ThenBy(m => m.Id)
             .Select(_mapper.Map<MajorationDto>)
             .Where(m => SearchText.Matches(search, m.Mojoration, m.Cotation))
             .ToList();
@@ -1312,14 +1312,14 @@ public class CatalogService : ICatalogService
         int? page, int? pageSize, string? search = null, CancellationToken ct = default)
     {
         return await PagedLists.PageAsync(
-            _uow.Repository<T_CODEABSENCE>(),
+            _uow.Repository<CodeAbsence>(),
             _ => true,
-            q => q.OrderBy(a => a.ID_ABSENCE),
+            q => q.OrderBy(a => a.IdAbsence),
             page,
             pageSize,
-            a => new AbsenceCodeDto(a.ID_ABSENCE, a.INTITULE_ABSENCE, a.NOT_PAY),
+            a => new AbsenceCodeDto(a.IdAbsence, a.IntituleAbsence, a.NotPay),
             search,
-            new System.Linq.Expressions.Expression<Func<T_CODEABSENCE, string?>>[] { a => a.INTITULE_ABSENCE },
+            new System.Linq.Expressions.Expression<Func<CodeAbsence, string?>>[] { a => a.IntituleAbsence },
             ct);
     }
 
@@ -1342,12 +1342,12 @@ public class CatalogService : ICatalogService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sage = _tenant.SageDb;
-        var affectations = await _uow.Repository<T_CAT_SAL>().ListAsync(
-            a => a.BDD_SAGE == sage && (!categoryId.HasValue || a.ID_CATEG == categoryId), ct);
+        var affectations = await _uow.Repository<CategorieSalarie>().ListAsync(
+            a => a.BddSage == sage && (!categoryId.HasValue || a.IdCateg == categoryId), ct);
 
-        var cards = await LoadCardsAsync(affectations.Select(a => a.MATRICULE_SAGE).ToList(), ct);
+        var cards = await LoadCardsAsync(affectations.Select(a => a.MatriculeSage).ToList(), ct);
         var matricules = cards.Values
-            .Select(c => c.SAGE_MATRICULE?.Trim())
+            .Select(c => c.SageMatricule?.Trim())
             .Where(m => !string.IsNullOrWhiteSpace(m))
             .Select(m => m!)
             .ToList();
@@ -1358,21 +1358,21 @@ public class CatalogService : ICatalogService
     private async Task<Dictionary<int, string>> LoadCategoryLabelsAsync(CancellationToken ct)
     {
         var sage = _tenant.SageDb;
-        var categories = await _uow.Repository<T_CATEGORIE>().ListAsync(c => c.BDD_SAGE == sage, ct);
+        var categories = await _uow.Repository<Categorie>().ListAsync(c => c.BddSage == sage, ct);
         return categories.ToDictionary(
-            category => category.IDCATEGORIE,
-            category => category.INTITULE ?? "Catégorie introuvable");
+            category => category.IdCategorie,
+            category => category.Intitule ?? "Catégorie introuvable");
     }
 
-    private async Task<Dictionary<int, T_CARDPAIE>> LoadCardsAsync(
+    private async Task<Dictionary<int, CardPaie>> LoadCardsAsync(
         IReadOnlyCollection<int> cardIds, CancellationToken ct)
     {
-        var result = new Dictionary<int, T_CARDPAIE>();
+        var result = new Dictionary<int, CardPaie>();
         foreach (var chunk in cardIds.Distinct().Chunk(500))
         {
             var ids = chunk.ToList();
-            var cards = await _uow.Repository<T_CARDPAIE>().ListAsync(c => ids.Contains(c.ID), ct);
-            foreach (var card in cards) result[card.ID] = card;
+            var cards = await _uow.Repository<CardPaie>().ListAsync(c => ids.Contains(c.Id), ct);
+            foreach (var card in cards) result[card.Id] = card;
         }
         return result;
     }
@@ -1406,20 +1406,20 @@ public class CatalogService : ICatalogService
     }
 
     private static AffectationRowDto ToAffectationRow(
-        T_CAT_SAL affectation,
-        IReadOnlyDictionary<int, T_CARDPAIE> cards,
+        CategorieSalarie affectation,
+        IReadOnlyDictionary<int, CardPaie> cards,
         IReadOnlyDictionary<string, DepartementServiceDto> deptByMat)
     {
-        cards.TryGetValue(affectation.MATRICULE_SAGE, out var card);
-        var matricule = card?.SAGE_MATRICULE?.Trim();
+        cards.TryGetValue(affectation.MatriculeSage, out var card);
+        var matricule = card?.SageMatricule?.Trim();
         deptByMat.TryGetValue(matricule ?? string.Empty, out var dept);
         return new AffectationRowDto(
-            affectation.ID,
-            affectation.MATRICULE_SAGE,
-            affectation.ID_CATEG,
+            affectation.Id,
+            affectation.MatriculeSage,
+            affectation.IdCateg,
             matricule,
-            card?.SAGE_NOM,
-            card?.SAGE_PRENOM,
+            card?.SageNom,
+            card?.SagePrenom,
             dept?.Departement,
             dept?.Service);
     }
@@ -1438,11 +1438,11 @@ public class CatalogService : ICatalogService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sage = _tenant.SageDb;
-        var list = (await _uow.Repository<T_CARDPAIE>().ListReadOnlyAsync(_ => true, ct))
+        var list = (await _uow.Repository<CardPaie>().ListReadOnlyAsync(_ => true, ct))
             .Where(c =>
             {
-                if (string.IsNullOrWhiteSpace(c.SAGE_BDD)) return true;
-                return string.Equals(c.SAGE_BDD.Trim(), sage.Trim(), StringComparison.OrdinalIgnoreCase);
+                if (string.IsNullOrWhiteSpace(c.SageBdd)) return true;
+                return string.Equals(c.SageBdd.Trim(), sage.Trim(), StringComparison.OrdinalIgnoreCase);
             })
             .ToList();
         return list.Select(_mapper.Map<CardPaieDto>).ToList();
@@ -1451,13 +1451,13 @@ public class CatalogService : ICatalogService
     public async Task<CardPaieDto> SaveCardAsync(CardPaieDto dto, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var repo = _uow.Repository<T_CARDPAIE>();
-        T_CARDPAIE entity;
+        var repo = _uow.Repository<CardPaie>();
+        CardPaie entity;
         if (dto.Id == 0)
         {
-            entity = _mapper.Map<T_CARDPAIE>(dto);
-            entity.SAGE_BDD ??= _tenant.SageDb;
-            entity.DATE ??= DateTime.Now;
+            entity = _mapper.Map<CardPaie>(dto);
+            entity.SageBdd ??= _tenant.SageDb;
+            entity.Date ??= DateTime.Now;
             await repo.AddAsync(entity, ct);
         }
         else
@@ -1472,7 +1472,7 @@ public class CatalogService : ICatalogService
 
     public async Task DeleteCardAsync(int id, CancellationToken ct = default)
     {
-        var repo = _uow.Repository<T_CARDPAIE>();
+        var repo = _uow.Repository<CardPaie>();
         var e = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException();
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
@@ -1490,12 +1490,12 @@ public class CatalogService : ICatalogService
         if (string.IsNullOrWhiteSpace(matriculeSage))
             throw new DomainException("Matricule SAGE requis.");
         var sage = _tenant.SageDb;
-        var repo = _uow.Repository<T_CARDPAIE>();
+        var repo = _uow.Repository<CardPaie>();
         var candidates = (await repo.ListAsync(c =>
-                c.SAGE_BDD == sage && c.SAGE_MATRICULE == matriculeSage, ct))
-            .Where(c => MatriculeIdentity.MemeSalarie(c.SAGE_MATRICULE, matriculeSage))
+                c.SageBdd == sage && c.SageMatricule == matriculeSage, ct))
+            .Where(c => MatriculeIdentity.MemeSalarie(c.SageMatricule, matriculeSage))
             .Where(c => string.IsNullOrWhiteSpace(matriculePointeuse)
-                        || MatriculeIdentity.MemeSalarie(c.POINTEUSE_NUMERO, matriculePointeuse))
+                        || MatriculeIdentity.MemeSalarie(c.PointeuseNumero, matriculePointeuse))
             .ToList();
         if (candidates.Count == 0)
             throw new NotFoundException($"Aucune correspondance {matriculeSage} ↔ {matriculePointeuse ?? "*"} sur la base {sage}.");
@@ -1522,7 +1522,7 @@ public class CatalogService : ICatalogService
         var sageRow = await _tenant.GetSageRowAsync(ct);
 
         var holidaysImported = false;
-        if (sageRow.TYPE_BASE == "STANDARD")
+        if (sageRow.TypeBase == "STANDARD")
         {
             await ImportSageHolidaysAsync(ct);
             holidaysImported = true;
@@ -1533,7 +1533,7 @@ public class CatalogService : ICatalogService
 
         return new ActivationResultDto(holidaysImported, sync.Added, sync.Deactivated, sync.Message);
     }
-    private async Task<SyncResultDto> SyncCardPaieCoreAsync(T_BDD_SAGE sageRow, T_BDD_POINTEUSE pteRow, CancellationToken ct)
+    private async Task<SyncResultDto> SyncCardPaieCoreAsync(BddSage sageRow, BddPointeuse pteRow, CancellationToken ct)
     {
         var employees = await _externalSource.GetEmployeesAsync(sageRow, ct);
         var badges = await _externalSource.GetPunchUsersAsync(pteRow, ct);
@@ -1551,14 +1551,14 @@ public class CatalogService : ICatalogService
             return departments.TryGetValue(aff.Departement, out var intitule) && !string.IsNullOrWhiteSpace(intitule)
                 ? intitule : aff.Departement;
         }
-        var repo = _uow.Repository<T_CARDPAIE>();
+        var repo = _uow.Repository<CardPaie>();
         // L'identite d'une carte est le salarie (matricule) dans une base SAGE : le reste de
         // l'application (ListCardsAsync, ImportFromClockAsync) raisonne par base SAGE et non par
         // paire de serveurs. Filtrer ici sur la paire recreait un jeu complet de cartes des que
         // le libelle du serveur ou la base pointeuse changeait.
-        var sageDbName = (sageRow.NOM_BD ?? string.Empty).Trim();
+        var sageDbName = (sageRow.NomBd ?? string.Empty).Trim();
         var scopeCards = (await repo.ListAsync(_ => true, ct))
-            .Where(c => string.Equals((c.SAGE_BDD ?? string.Empty).Trim(), sageDbName, StringComparison.OrdinalIgnoreCase))
+            .Where(c => string.Equals((c.SageBdd ?? string.Empty).Trim(), sageDbName, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         static bool MemeIdentifiant(string? a, string? b)
@@ -1588,54 +1588,54 @@ public class CatalogService : ICatalogService
             var departement = DepartementDe(sal.EmployeeId);
             // Comparaison par identifiant (00369 == 369) : un simple changement de format du
             // matricule ne doit pas creer une nouvelle carte.
-            var existingCard = scopeCards.FirstOrDefault(c => MemeIdentifiant(c.SAGE_MATRICULE, matricule));
+            var existingCard = scopeCards.FirstOrDefault(c => MemeIdentifiant(c.SageMatricule, matricule));
             if (existingCard == null)
             {
-                var newCard = new T_CARDPAIE
+                var newCard = new CardPaie
                 {
-                    SAGE_MATRICULE = matricule,
-                    SAGE_NOM = sal.Nom,
-                    SAGE_PRENOM = sal.Prenom,
-                    POINTEUSE_NUMERO = match.Badge,
-                    POINTEUSE_NOM = match.Name,
-                    SAGE_SERVEUR = sageRow.SERVEUR,
-                    POINTEUSE_SERVEUR = pteRow.SERVEUR,
-                    SAGE_BDD = sageRow.NOM_BD,
-                    POINTEUSE_BDD = pteRow.NOM_BD,
-                    DEPARTEMENT = departement,
-                    ORIGINE = "AUTO",
-                    ACTIF = true,
-                    DATE = DateTime.Now
+                    SageMatricule = matricule,
+                    SageNom = sal.Nom,
+                    SagePrenom = sal.Prenom,
+                    PointeuseNumero = match.Badge,
+                    PointeuseNom = match.Name,
+                    SageServeur = sageRow.Serveur,
+                    PointeuseServeur = pteRow.Serveur,
+                    SageBdd = sageRow.NomBd,
+                    PointeuseBdd = pteRow.NomBd,
+                    Departement = departement,
+                    Origine = "AUTO",
+                    Actif = true,
+                    Date = DateTime.Now
                 };
                 await repo.AddAsync(newCard, ct);
                 scopeCards.Add(newCard); // sinon la carte creee n'est pas vue plus loin dans la meme passe
                 added++;
             }
-            else if (existingCard.ORIGINE == "AUTO")
+            else if (existingCard.Origine == "AUTO")
             {
-                existingCard.SAGE_NOM = sal.Nom;
-                existingCard.SAGE_PRENOM = sal.Prenom;
-                existingCard.POINTEUSE_NUMERO = match.Badge;
-                existingCard.POINTEUSE_NOM = match.Name;
+                existingCard.SageNom = sal.Nom;
+                existingCard.SagePrenom = sal.Prenom;
+                existingCard.PointeuseNumero = match.Badge;
+                existingCard.PointeuseNom = match.Name;
                 // La carte suit la configuration courante : la paire est mise a jour au lieu
                 // de creer une seconde carte pour le meme salarie.
-                existingCard.SAGE_SERVEUR = sageRow.SERVEUR;
-                existingCard.POINTEUSE_SERVEUR = pteRow.SERVEUR;
-                existingCard.POINTEUSE_BDD = pteRow.NOM_BD;
-                if (departement != null) existingCard.DEPARTEMENT = departement;
-                existingCard.ACTIF = true;
+                existingCard.SageServeur = sageRow.Serveur;
+                existingCard.PointeuseServeur = pteRow.Serveur;
+                existingCard.PointeuseBdd = pteRow.NomBd;
+                if (departement != null) existingCard.Departement = departement;
+                existingCard.Actif = true;
                 repo.Update(existingCard);
             }
         }
         var deactivated = 0;
-        foreach (var card in scopeCards.Where(c => c.ORIGINE == "AUTO" && c.ACTIF))
+        foreach (var card in scopeCards.Where(c => c.Origine == "AUTO" && c.Actif))
         {
-            if (matched.Any(m => MemeIdentifiant(m, card.SAGE_MATRICULE))) continue;
-            var hasPunches = (await _uow.Repository<T_POINTAGE>().ListAsync(p =>
-                p.NOM_BDD_SAGE == sageRow.NOM_BD && p.MATRICULE_SAGE == card.SAGE_MATRICULE, ct)).Any();
-            var hasCategorie = (await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.MATRICULE_SAGE == card.ID, ct)).Any();
+            if (matched.Any(m => MemeIdentifiant(m, card.SageMatricule))) continue;
+            var hasPunches = (await _uow.Repository<Pointage>().ListAsync(p =>
+                p.NomBddSage == sageRow.NomBd && p.MatriculeSage == card.SageMatricule, ct)).Any();
+            var hasCategorie = (await _uow.Repository<CategorieSalarie>().ListAsync(a => a.MatriculeSage == card.Id, ct)).Any();
             if (hasPunches || hasCategorie) continue; // donnees liees : jamais desactivee ni supprimee
-            card.ACTIF = false;
+            card.Actif = false;
             repo.Update(card);
             deactivated++;
         }
@@ -1647,8 +1647,8 @@ public class CatalogService : ICatalogService
     public async Task<ImportResultDto> ImportCorrespondencesCsvAsync(IReadOnlyList<string[]> lines, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var repo = _uow.Repository<T_CARDPAIE>();
-        var existing = await repo.ListAsync(c => c.SAGE_BDD == _tenant.SageDb, ct);
+        var repo = _uow.Repository<CardPaie>();
+        var existing = await repo.ListAsync(c => c.SageBdd == _tenant.SageDb, ct);
         var imported = 0;
         var skipped = 0;
         foreach (var parts in lines)
@@ -1676,23 +1676,23 @@ public class CatalogService : ICatalogService
                 // En-tête décalé (colonne matricule) : même traitement que l'en-tête.
                 continue;
             }
-            var card = existing.FirstOrDefault(c => string.Equals(c.SAGE_MATRICULE, matricule, StringComparison.OrdinalIgnoreCase));
+            var card = existing.FirstOrDefault(c => string.Equals(c.SageMatricule, matricule, StringComparison.OrdinalIgnoreCase));
             if (card == null)
             {
-                card = new T_CARDPAIE
+                card = new CardPaie
                 {
-                    SAGE_MATRICULE = matricule,
-                    POINTEUSE_NUMERO = badge,
-                    SAGE_BDD = _tenant.SageDb,
-                    POINTEUSE_BDD = _tenant.PointeuseDb,
-                    DATE = DateTime.Now
+                    SageMatricule = matricule,
+                    PointeuseNumero = badge,
+                    SageBdd = _tenant.SageDb,
+                    PointeuseBdd = _tenant.PointeuseDb,
+                    Date = DateTime.Now
                 };
                 await repo.AddAsync(card, ct);
                 existing.Add(card);
             }
             else
             {
-                card.POINTEUSE_NUMERO = badge;
+                card.PointeuseNumero = badge;
                 repo.Update(card);
             }
             imported++;
@@ -1706,7 +1706,7 @@ public class CatalogService : ICatalogService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sage = _tenant.SageDb;
-        var list = await _uow.Repository<T_CATEGORIE>().ListReadOnlyAsync(c => c.BDD_SAGE == sage, ct);
+        var list = await _uow.Repository<Categorie>().ListReadOnlyAsync(c => c.BddSage == sage, ct);
         return list.Select(_mapper.Map<CategoryDto>).ToList();
     }
 
@@ -1714,7 +1714,7 @@ public class CatalogService : ICatalogService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
 
-        var cardRepo = _uow.Repository<T_CARDPAIE>();
+        var cardRepo = _uow.Repository<CardPaie>();
         var supervisorCard = await cardRepo.GetByIdAsync(dto.SupervisorCardId, ct);
         if (supervisorCard == null)
             throw new NotFoundException($"Carte superviseur introuvable (ID={dto.SupervisorCardId}).");
@@ -1725,28 +1725,28 @@ public class CatalogService : ICatalogService
         if (dto.HeuresSemaine <= 0)
             throw new DomainException("Le nombre d'heures par semaine doit être supérieur à 0.");
 
-        var repo = _uow.Repository<T_CATEGORIE>();
-        T_CATEGORIE entity;
+        var repo = _uow.Repository<Categorie>();
+        Categorie entity;
         if (dto.Id == 0)
         {
-            entity = new T_CATEGORIE
+            entity = new Categorie
             {
-                INTITULE = dto.Intitule,
-                ID_CARDPAIE = dto.SupervisorCardId,
-                PAUSE = dto.Pause,
-                HEURESEMAINE = dto.HeuresSemaine,
-                BDD_SAGE = _tenant.SageDb,
-                BDD_POINTEUSE = _tenant.PointeuseDb
+                Intitule = dto.Intitule,
+                IdCardPaie = dto.SupervisorCardId,
+                Pause = dto.Pause,
+                HeureSemaine = dto.HeuresSemaine,
+                BddSage = _tenant.SageDb,
+                BddPointeuse = _tenant.PointeuseDb
             };
             await repo.AddAsync(entity, ct);
         }
         else
         {
             entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
-            entity.INTITULE = dto.Intitule;
-            entity.ID_CARDPAIE = dto.SupervisorCardId;
-            entity.PAUSE = dto.Pause;
-            entity.HEURESEMAINE = dto.HeuresSemaine;
+            entity.Intitule = dto.Intitule;
+            entity.IdCardPaie = dto.SupervisorCardId;
+            entity.Pause = dto.Pause;
+            entity.HeureSemaine = dto.HeuresSemaine;
             repo.Update(entity);
         }
         await _uow.SaveChangesAsync(ct);
@@ -1755,7 +1755,7 @@ public class CatalogService : ICatalogService
 
     public async Task DeleteCategoryAsync(int id, CancellationToken ct = default)
     {
-        var repo = _uow.Repository<T_CATEGORIE>();
+        var repo = _uow.Repository<Categorie>();
         var e = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException();
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
@@ -1765,43 +1765,43 @@ public class CatalogService : ICatalogService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sage = _tenant.SageDb;
-        var list = await _uow.Repository<T_CAT_SAL>().ListReadOnlyAsync(
-            a => a.BDD_SAGE == sage && (!categoryId.HasValue || a.ID_CATEG == categoryId), ct);
-        return list.Select(a => new AffectationDto(a.ID, a.MATRICULE_SAGE, a.ID_CATEG)).ToList();
+        var list = await _uow.Repository<CategorieSalarie>().ListReadOnlyAsync(
+            a => a.BddSage == sage && (!categoryId.HasValue || a.IdCateg == categoryId), ct);
+        return list.Select(a => new AffectationDto(a.Id, a.MatriculeSage, a.IdCateg)).ToList();
     }
 
     public async Task<AffectationDto> SaveAffectationAsync(AffectationDto dto, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
 
-        var cardExists = await _uow.Repository<T_CARDPAIE>().GetByIdAsync(dto.CardPaieId, ct);
+        var cardExists = await _uow.Repository<CardPaie>().GetByIdAsync(dto.CardPaieId, ct);
         if (cardExists == null)
             throw new NotFoundException($"Carte salarié introuvable (ID={dto.CardPaieId}).");
 
-        var categoryExists = await _uow.Repository<T_CATEGORIE>().GetByIdAsync(dto.CategoryId, ct);
+        var categoryExists = await _uow.Repository<Categorie>().GetByIdAsync(dto.CategoryId, ct);
         if (categoryExists == null)
             throw new NotFoundException($"Catégorie introuvable (ID={dto.CategoryId}).");
 
-        var repo = _uow.Repository<T_CAT_SAL>();
-        T_CAT_SAL entity;
+        var repo = _uow.Repository<CategorieSalarie>();
+        CategorieSalarie entity;
 
         if (dto.Id == 0)
         {
-            var existingForCard = (await repo.ListAsync(a => a.MATRICULE_SAGE == dto.CardPaieId, ct)).FirstOrDefault();
+            var existingForCard = (await repo.ListAsync(a => a.MatriculeSage == dto.CardPaieId, ct)).FirstOrDefault();
             if (existingForCard != null)
             {
-                existingForCard.ID_CATEG = dto.CategoryId;
+                existingForCard.IdCateg = dto.CategoryId;
                 repo.Update(existingForCard);
                 entity = existingForCard;
             }
             else
             {
-                entity = new T_CAT_SAL
+                entity = new CategorieSalarie
                 {
-                    MATRICULE_SAGE = dto.CardPaieId,
-                    ID_CATEG = dto.CategoryId,
-                    BDD_SAGE = _tenant.SageDb,
-                    BDD_POINTEUSE = _tenant.PointeuseDb
+                    MatriculeSage = dto.CardPaieId,
+                    IdCateg = dto.CategoryId,
+                    BddSage = _tenant.SageDb,
+                    BddPointeuse = _tenant.PointeuseDb
                 };
                 await repo.AddAsync(entity, ct);
             }
@@ -1809,21 +1809,21 @@ public class CatalogService : ICatalogService
         else
         {
             entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
-            entity.MATRICULE_SAGE = dto.CardPaieId;
-            entity.ID_CATEG = dto.CategoryId;
+            entity.MatriculeSage = dto.CardPaieId;
+            entity.IdCateg = dto.CategoryId;
             repo.Update(entity);
         }
         await _uow.SaveChangesAsync(ct);
-        return new AffectationDto(entity.ID, entity.MATRICULE_SAGE, entity.ID_CATEG);
+        return new AffectationDto(entity.Id, entity.MatriculeSage, entity.IdCateg);
     }
 
     public async Task<ImportResultDto> ImportAffectationsExcelAsync(IReadOnlyList<Dictionary<string, string>> rows, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var cats = await _uow.Repository<T_CATEGORIE>().ListAsync(c => c.BDD_SAGE == _tenant.SageDb, ct);
-        var cards = await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == _tenant.SageDb, ct);
-        var repo = _uow.Repository<T_CAT_SAL>();
-        var existing = await repo.ListAsync(a => a.BDD_SAGE == _tenant.SageDb, ct);
+        var cats = await _uow.Repository<Categorie>().ListAsync(c => c.BddSage == _tenant.SageDb, ct);
+        var cards = await _uow.Repository<CardPaie>().ListAsync(c => c.SageBdd == _tenant.SageDb, ct);
+        var repo = _uow.Repository<CategorieSalarie>();
+        var existing = await repo.ListAsync(a => a.BddSage == _tenant.SageDb, ct);
         var imported = 0;
         var skipped = 0;
         var lignesVides = 0;
@@ -1843,7 +1843,7 @@ public class CatalogService : ICatalogService
                 skipped++;
                 continue;
             }
-            var cat = cats.FirstOrDefault(c => string.Equals(c.INTITULE?.Trim(), catName.Trim(), StringComparison.OrdinalIgnoreCase));
+            var cat = cats.FirstOrDefault(c => string.Equals(c.Intitule?.Trim(), catName.Trim(), StringComparison.OrdinalIgnoreCase));
             if (cat == null)
             {
                 categoriesManquantes++;
@@ -1851,7 +1851,7 @@ public class CatalogService : ICatalogService
                 skipped++;
                 continue;
             }
-            var card = cards.FirstOrDefault(c => string.Equals(c.SAGE_MATRICULE?.Trim(), mat.Trim(), StringComparison.OrdinalIgnoreCase));
+            var card = cards.FirstOrDefault(c => string.Equals(c.SageMatricule?.Trim(), mat.Trim(), StringComparison.OrdinalIgnoreCase));
             if (card == null)
             {
                 matriculesManquants++;
@@ -1859,22 +1859,22 @@ public class CatalogService : ICatalogService
                 skipped++;
                 continue;
             }
-            var found = existing.FirstOrDefault(a => a.MATRICULE_SAGE == card.ID);
+            var found = existing.FirstOrDefault(a => a.MatriculeSage == card.Id);
             if (found == null)
             {
-                found = new T_CAT_SAL
+                found = new CategorieSalarie
                 {
-                    MATRICULE_SAGE = card.ID,
-                    ID_CATEG = cat.IDCATEGORIE,
-                    BDD_SAGE = _tenant.SageDb,
-                    BDD_POINTEUSE = _tenant.PointeuseDb
+                    MatriculeSage = card.Id,
+                    IdCateg = cat.IdCategorie,
+                    BddSage = _tenant.SageDb,
+                    BddPointeuse = _tenant.PointeuseDb
                 };
                 await repo.AddAsync(found, ct);
                 existing.Add(found);
             }
             else
             {
-                found.ID_CATEG = cat.IDCATEGORIE;
+                found.IdCateg = cat.IdCategorie;
                 repo.Update(found);
             }
             imported++;
@@ -1907,7 +1907,7 @@ public class CatalogService : ICatalogService
 
     public async Task DeleteAffectationAsync(int id, CancellationToken ct = default)
     {
-        var repo = _uow.Repository<T_CAT_SAL>();
+        var repo = _uow.Repository<CategorieSalarie>();
         var e = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException();
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
@@ -1915,14 +1915,14 @@ public class CatalogService : ICatalogService
 
     public async Task<IReadOnlyList<ToleranceDto>> ListTolerancesAsync(int? categoryId, CancellationToken ct = default)
     {
-        var list = await _uow.Repository<T_TOLERANCE>().ListReadOnlyAsync(
-            t => !categoryId.HasValue || t.IDCATEGORIE == categoryId, ct);
-        return list.Select(t => new ToleranceDto(t.ID, t.IDCATEGORIE, t.TOLERANCE, t.TYPES_TOL, t.SORTIE)).ToList();
+        var list = await _uow.Repository<ToleranceRetard>().ListReadOnlyAsync(
+            t => !categoryId.HasValue || t.IdCategorie == categoryId, ct);
+        return list.Select(t => new ToleranceDto(t.Id, t.IdCategorie, t.Tolerance, t.TypesTol, t.Sortie)).ToList();
     }
 
     public async Task<ToleranceDto> SaveToleranceAsync(ToleranceDto dto, CancellationToken ct = default)
     {
-        var categoryExists = await _uow.Repository<T_CATEGORIE>().GetByIdAsync(dto.CategoryId, ct);
+        var categoryExists = await _uow.Repository<Categorie>().GetByIdAsync(dto.CategoryId, ct);
         if (categoryExists == null)
             throw new NotFoundException($"Catégorie introuvable (ID={dto.CategoryId}).");
 
@@ -1932,35 +1932,35 @@ public class CatalogService : ICatalogService
         if (dto.Sortie < 0)
             throw new DomainException("La tolérance de sortie ne peut pas être négative.");
 
-        var repo = _uow.Repository<T_TOLERANCE>();
-        T_TOLERANCE entity;
+        var repo = _uow.Repository<ToleranceRetard>();
+        ToleranceRetard entity;
         if (dto.Id == 0)
         {
-            entity = new T_TOLERANCE
+            entity = new ToleranceRetard
             {
-                IDCATEGORIE = dto.CategoryId,
-                TOLERANCE = dto.Tolerance,
-                TYPES_TOL = dto.TypesTol,
-                SORTIE = dto.Sortie
+                IdCategorie = dto.CategoryId,
+                Tolerance = dto.Tolerance,
+                TypesTol = dto.TypesTol,
+                Sortie = dto.Sortie
             };
             await repo.AddAsync(entity, ct);
         }
         else
         {
             entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
-            entity.IDCATEGORIE = dto.CategoryId;
-            entity.TOLERANCE = dto.Tolerance;
-            entity.TYPES_TOL = dto.TypesTol;
-            entity.SORTIE = dto.Sortie;
+            entity.IdCategorie = dto.CategoryId;
+            entity.Tolerance = dto.Tolerance;
+            entity.TypesTol = dto.TypesTol;
+            entity.Sortie = dto.Sortie;
             repo.Update(entity);
         }
         await _uow.SaveChangesAsync(ct);
-        return new ToleranceDto(entity.ID, entity.IDCATEGORIE, entity.TOLERANCE, entity.TYPES_TOL, entity.SORTIE);
+        return new ToleranceDto(entity.Id, entity.IdCategorie, entity.Tolerance, entity.TypesTol, entity.Sortie);
     }
 
     public async Task DeleteToleranceAsync(int id, CancellationToken ct = default)
     {
-        var repo = _uow.Repository<T_TOLERANCE>();
+        var repo = _uow.Repository<ToleranceRetard>();
         var e = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException();
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
@@ -1970,36 +1970,36 @@ public class CatalogService : ICatalogService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sage = _tenant.SageDb;
-        var list = await _uow.Repository<T_FERIE>().ListReadOnlyAsync(f => f.BDD_SAGE == sage, ct);
+        var list = await _uow.Repository<JourFerie>().ListReadOnlyAsync(f => f.BddSage == sage, ct);
         return list.Select(_mapper.Map<HolidayDto>).ToList();
     }
 
     public async Task<HolidayDto> SaveHolidayAsync(HolidayDto dto, CancellationToken ct = default)
     {
-        var repo = _uow.Repository<T_FERIE>();
-        T_FERIE entity;
+        var repo = _uow.Repository<JourFerie>();
+        JourFerie entity;
         if (dto.Id == 0)
         {
             var duplicate = dto.Date.HasValue
-                ? (await repo.ListAsync(f => f.DATE.HasValue && f.DATE.Value.Date == dto.Date.Value.Date, ct)).FirstOrDefault()
+                ? (await repo.ListAsync(f => f.Date.HasValue && f.Date.Value.Date == dto.Date.Value.Date, ct)).FirstOrDefault()
                 : null;
             if (duplicate != null)
             {
-                duplicate.INTITULE = dto.Intitule;
+                duplicate.Intitule = dto.Intitule;
                 repo.Update(duplicate);
                 entity = duplicate;
             }
             else
             {
-                entity = new T_FERIE { INTITULE = dto.Intitule, DATE = dto.Date };
+                entity = new JourFerie { Intitule = dto.Intitule, Date = dto.Date };
                 await repo.AddAsync(entity, ct);
             }
         }
         else
         {
             entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
-            entity.INTITULE = dto.Intitule;
-            entity.DATE = dto.Date;
+            entity.Intitule = dto.Intitule;
+            entity.Date = dto.Date;
             repo.Update(entity);
         }
         await _uow.SaveChangesAsync(ct);
@@ -2008,7 +2008,7 @@ public class CatalogService : ICatalogService
 
     public async Task DeleteHolidayAsync(int id, CancellationToken ct = default)
     {
-        var repo = _uow.Repository<T_FERIE>();
+        var repo = _uow.Repository<JourFerie>();
         var e = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException();
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
@@ -2019,14 +2019,14 @@ public class CatalogService : ICatalogService
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageRow = await _tenant.GetSageRowAsync(ct);
         var holidays = await _externalSource.GetCompanyCalendarAsync(sageRow, ct);
-        var repo = _uow.Repository<T_FERIE>();
-        var existing = await repo.ListAsync(f => f.BDD_SAGE == _tenant.SageDb, ct);
+        var repo = _uow.Repository<JourFerie>();
+        var existing = await repo.ListAsync(f => f.BddSage == _tenant.SageDb, ct);
         foreach (var day in holidays)
         {
             var date = day.Date;
-            if (existing.Any(e => e.DATE.HasValue && e.DATE.Value.Date == date))
+            if (existing.Any(e => e.Date.HasValue && e.Date.Value.Date == date))
                 continue;
-            await repo.AddAsync(new T_FERIE { DATE = date, INTITULE = "Férié SAGE", BDD_SAGE = _tenant.SageDb }, ct);
+            await repo.AddAsync(new JourFerie { Date = date, Intitule = "Férié SAGE", BddSage = _tenant.SageDb }, ct);
         }
         await _uow.SaveChangesAsync(ct);
     }
@@ -2035,13 +2035,13 @@ public class CatalogService : ICatalogService
     {
         // Desktop (RExtensions.getListMajoration) returns every row: the SAGE/pointeuse
         // filter is commented out, and existing data often has BDD_SAGE null.
-        var list = await _uow.Repository<T_MAJORATION>().ListReadOnlyAsync(_ => true, ct);
+        var list = await _uow.Repository<Majoration>().ListReadOnlyAsync(_ => true, ct);
         return list.OrderBy(m => m.Cotation).Select(_mapper.Map<MajorationDto>).ToList();
     }
 
     public async Task<MajorationDto> SaveMajorationAsync(MajorationDto dto, CancellationToken ct = default)
     {
-        var repo = _uow.Repository<T_MAJORATION>();
+        var repo = _uow.Repository<Majoration>();
         var entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
         entity.Cotation = dto.Cotation;
         repo.Update(entity);
@@ -2051,46 +2051,46 @@ public class CatalogService : ICatalogService
 
     public async Task<IReadOnlyList<AbsenceCodeDto>> ListAbsenceCodesAsync(CancellationToken ct = default)
     {
-        var list = await _uow.Repository<T_CODEABSENCE>().ListReadOnlyAsync(_ => true, ct);
-        return list.Select(a => new AbsenceCodeDto(a.ID_ABSENCE, a.INTITULE_ABSENCE, a.NOT_PAY)).ToList();
+        var list = await _uow.Repository<CodeAbsence>().ListReadOnlyAsync(_ => true, ct);
+        return list.Select(a => new AbsenceCodeDto(a.IdAbsence, a.IntituleAbsence, a.NotPay)).ToList();
     }
 
     public async Task<AbsenceCodeDto> SaveAbsenceCodeAsync(AbsenceCodeDto dto, CancellationToken ct = default)
     {
-        var repo = _uow.Repository<T_CODEABSENCE>();
-        T_CODEABSENCE entity;
+        var repo = _uow.Repository<CodeAbsence>();
+        CodeAbsence entity;
         if (dto.Id == 0)
         {
-            entity = new T_CODEABSENCE { INTITULE_ABSENCE = dto.Intitule, NOT_PAY = dto.NotPay };
+            entity = new CodeAbsence { IntituleAbsence = dto.Intitule, NotPay = dto.NotPay };
             await repo.AddAsync(entity, ct);
         }
         else
         {
             entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
-            entity.INTITULE_ABSENCE = dto.Intitule;
-            entity.NOT_PAY = dto.NotPay;
+            entity.IntituleAbsence = dto.Intitule;
+            entity.NotPay = dto.NotPay;
             repo.Update(entity);
         }
         await _uow.SaveChangesAsync(ct);
-        return new AbsenceCodeDto(entity.ID_ABSENCE, entity.INTITULE_ABSENCE, entity.NOT_PAY);
+        return new AbsenceCodeDto(entity.IdAbsence, entity.IntituleAbsence, entity.NotPay);
     }
 
     public async Task<IReadOnlyList<CodeConstanteDto>> ListCodeConstantesAsync(CancellationToken ct = default)
     {
         await EnsureCodeConstantesAsync(ct);
-        var list = await _uow.Repository<T_CODE_CONSTANTE>().ListAsync(_ => true, ct);
+        var list = await _uow.Repository<CodeConstanteCategorie>().ListAsync(_ => true, ct);
         var order = OvertimeCodeKeys.Defaults.Select((d, i) => (d.Key, i)).ToDictionary(x => x.Key, x => x.i);
         // Sur une base AUTRE, la table cible provient du mapping « Code constante » : on l'expose
         // pour que l'ecran pre-selectionne la bonne table (le code reste global, comme dans la refonte).
         string? mappedTable = null;
         var database = await _tenant.GetSageRowAsync(ct);
-        if (string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(database.TypeBase, "AUTRE", StringComparison.OrdinalIgnoreCase))
         {
             try { mappedTable = (await GetOtherCodeConstantMappingAsync(ct)).Table; }
             catch (DomainException) { mappedTable = null; }
         }
         return list
-            .OrderBy(c => order.TryGetValue(c.CATEGORIE, out var i) ? i : 99)
+            .OrderBy(c => order.TryGetValue(c.Categorie, out var i) ? i : 99)
             .Select(c => _mapper.Map<CodeConstanteDto>(c) with { TableCible = mappedTable })
             .ToList();
     }
@@ -2102,7 +2102,7 @@ public class CatalogService : ICatalogService
         if (string.IsNullOrWhiteSpace(code))
             throw new DomainException("Le code constante SAGE est requis.");
         var database = await _tenant.GetSageRowAsync(ct);
-        if (string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(database.TypeBase, "AUTRE", StringComparison.OrdinalIgnoreCase))
         {
             // Herite de la fonctionnalite « code constante » de la base AUTRE : le code choisi doit
             // exister dans la colonne mappee (role SAGE_CST_CODE) de la table cible.
@@ -2110,9 +2110,9 @@ public class CatalogService : ICatalogService
             if (!values.Contains(code, StringComparer.OrdinalIgnoreCase))
                 throw new DomainException("Le code constante sélectionné n'existe pas dans la table mappée.");
         }
-        var repo = _uow.Repository<T_CODE_CONSTANTE>();
+        var repo = _uow.Repository<CodeConstanteCategorie>();
         var entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
-        entity.CODE_CONSTANTE = code;
+        entity.CodeConstante = code;
         repo.Update(entity);
         await _uow.SaveChangesAsync(ct);
         return _mapper.Map<CodeConstanteDto>(entity) with { TableCible = dto.TableCible };
@@ -2134,9 +2134,9 @@ public class CatalogService : ICatalogService
     public async Task<OvertimeSageCodes> GetOvertimeSageCodesAsync(CancellationToken ct = default)
     {
         await EnsureCodeConstantesAsync(ct);
-        var list = await _uow.Repository<T_CODE_CONSTANTE>().ListAsync(_ => true, ct);
+        var list = await _uow.Repository<CodeConstanteCategorie>().ListAsync(_ => true, ct);
         string Code(string key, string fallback) =>
-            list.FirstOrDefault(c => c.CATEGORIE == key)?.CODE_CONSTANTE is { Length: > 0 } v ? v.Trim() : fallback;
+            list.FirstOrDefault(c => c.Categorie == key)?.CodeConstante is { Length: > 0 } v ? v.Trim() : fallback;
 
         return new OvertimeSageCodes(
             Code(OvertimeCodeKeys.Exo130, "HS01"),
@@ -2173,18 +2173,18 @@ public class CatalogService : ICatalogService
             END
             """, ct);
 
-        var repo = _uow.Repository<T_CODE_CONSTANTE>();
+        var repo = _uow.Repository<CodeConstanteCategorie>();
         var existing = await repo.ListAsync(_ => true, ct);
         var added = false;
         foreach (var (key, intitule, defaultCode) in OvertimeCodeKeys.Defaults)
         {
-            if (existing.Any(c => c.CATEGORIE == key))
+            if (existing.Any(c => c.Categorie == key))
                 continue;
-            await repo.AddAsync(new T_CODE_CONSTANTE
+            await repo.AddAsync(new CodeConstanteCategorie
             {
-                CATEGORIE = key,
-                INTITULE = intitule,
-                CODE_CONSTANTE = defaultCode,
+                Categorie = key,
+                Intitule = intitule,
+                CodeConstante = defaultCode,
             }, ct);
             added = true;
         }
@@ -2197,13 +2197,13 @@ public class CatalogService : ICatalogService
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageRow = await _tenant.GetSageRowAsync(ct);
         var events = await _externalSource.GetEventsAsync(sageRow, ct);
-        var repo = _uow.Repository<T_CODEABSENCE>();
+        var repo = _uow.Repository<CodeAbsence>();
         var existing = await repo.ListAsync(_ => true, ct);
         foreach (var ev in events)
         {
-            if (existing.Any(e => e.INTITULE_ABSENCE == ev.Label || e.INTITULE_ABSENCE == ev.Code))
+            if (existing.Any(e => e.IntituleAbsence == ev.Label || e.IntituleAbsence == ev.Code))
                 continue;
-            var newCode = new T_CODEABSENCE { INTITULE_ABSENCE = ev.Label ?? ev.Code, NOT_PAY = false };
+            var newCode = new CodeAbsence { IntituleAbsence = ev.Label ?? ev.Code, NotPay = false };
             await repo.AddAsync(newCode, ct);
             existing.Add(newCode);
         }

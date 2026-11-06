@@ -48,17 +48,17 @@ public sealed class AuditTrail : IAuditTrail
 
             using var scope = _scopeFactory.CreateScope();
             var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-            await uow.Repository<suivi_JOURNAL>().AddAsync(new suivi_JOURNAL
+            await uow.Repository<JournalAudit>().AddAsync(new JournalAudit
             {
-                DATE_UTC = DateTime.UtcNow,
-                TABLES = audit.TargetTable,
-                ACTIONS = "SYNC_PAIE",
-                NOUVEAUX = summary,
-                USERS = string.IsNullOrWhiteSpace(audit.UserLogin) ? "SYSTEME:OvertimeService" : audit.UserLogin,
-                BASE_SAGE = sageDatabase,
-                BASE_POINTEUSE = pointeuseDatabase,
-                CORRELATIONS = audit.Correlation,
-                SOURCE = audit.Source
+                DateUtc = DateTime.UtcNow,
+                Tables = audit.TargetTable,
+                Actions = "SYNC_PAIE",
+                Nouveaux = summary,
+                Users = string.IsNullOrWhiteSpace(audit.UserLogin) ? "SYSTEME:OvertimeService" : audit.UserLogin,
+                BaseSage = sageDatabase,
+                BasePointeuse = pointeuseDatabase,
+                Correlations = audit.Correlation,
+                Source = audit.Source
             }, cancellationToken);
             await uow.SaveChangesAsync(cancellationToken);
         }

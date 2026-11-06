@@ -78,7 +78,7 @@ public class MlPredictionServiceTests
     private static MlPredictionService Service(IMlStore store)
     {
         var uow = new InMemoryUnitOfWork();
-        uow.Get<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 1, NOM_BD = Sage });
+        uow.Get<BddSage>().Items.Add(new BddSage { Id = 1, NomBd = Sage });
         var tenant = new TenantConnectionService(
             uow, new FakeCompanyContext(), new FakeCurrentUser(),
             SoftTime.Tests.Http.TestRights.Service(uow), NullLogger<TenantConnectionService>.Instance);
@@ -94,7 +94,7 @@ public class MlPredictionServiceTests
     }
 
     private static void Montant(FakeMlStore store, string matricule, DateTime semaine, decimal valeur, decimal basse, decimal haute)
-        => store.Predictions.Add(new T_ML_PREDICTION
+        => store.Predictions.Add(new MlPrediction
         {
             BddSage = Sage,
             Matricule = matricule,
@@ -109,12 +109,12 @@ public class MlPredictionServiceTests
         });
 
     private static void Reel(FakeMlStore store, string matricule, DateTime semaine, decimal hs)
-        => store.Weekly.Add(new T_ML_SALARIE_SEMAINE
+        => store.Weekly.Add(new MlSalarieSemaine
         {
             BddSage = Sage,
             Matricule = matricule,
             SemaineDebut = semaine,
-            HS = hs,
+            Hs = hs,
             VersionSchema = MlSchema.Version,
             SourceGenereeLe = DateTime.Now
         });

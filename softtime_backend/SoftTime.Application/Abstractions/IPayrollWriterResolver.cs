@@ -5,5 +5,5 @@ namespace SoftTime.Application.Abstractions;
 /// <summary>Contrat de <c>PayrollWriterResolver</c>.</summary>
 public interface IPayrollWriterResolver
 {
-    IPayrollWriter Resolve(T_BDD_SAGE database);
+    IPayrollWriter Resolve(BddSage database);
 }

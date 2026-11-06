@@ -26,16 +26,16 @@ public class AuditJournalTransactionalTests
         EnsureInitialized();
         using var db = CreateAuditedContext();
         using var transaction = db.Database.BeginTransaction();
-        var entity = new T_CODEABSENCE { INTITULE_ABSENCE = $"audit-{Guid.NewGuid():N}" };
+        var entity = new CodeAbsence { IntituleAbsence = $"audit-{Guid.NewGuid():N}" };
         db.Add(entity);
 
         db.SaveChanges();
 
-        var entries = db.suivi_JOURNAL.Where(item => item.TABLES == "T_CODEABSENCE").ToList();
-        Assert.True(entity.ID_ABSENCE > 0);
+        var entries = db.JournalAudits.Where(item => item.Tables == "T_CODEABSENCE").ToList();
+        Assert.True(entity.IdAbsence > 0);
         Assert.NotEmpty(entries);
-        Assert.All(entries, entry => Assert.Equal($"ID_ABSENCE={entity.ID_ABSENCE}", entry.CLES));
-        Assert.DoesNotContain(entries.Select(entry => entry.CLES), key => key!.Contains('-'));
+        Assert.All(entries, entry => Assert.Equal($"ID_ABSENCE={entity.IdAbsence}", entry.Cles));
+        Assert.DoesNotContain(entries.Select(entry => entry.Cles), key => key!.Contains('-'));
         transaction.Rollback();
     }
 
@@ -46,13 +46,13 @@ public class AuditJournalTransactionalTests
         using var db = CreateAuditedContext();
         using var transaction = db.Database.BeginTransaction();
         var code = $"AUDIT-{Guid.NewGuid():N}";
-        db.Add(new T_FIELD_ROLE { Code = code, EntityKind = "EMPLOYEE", Label = "Audit", SystemType = "SAGE" });
+        db.Add(new FieldRole { Code = code, EntityKind = "EMPLOYEE", Label = "Audit", SystemType = "SAGE" });
 
         db.SaveChanges();
 
-        var entries = db.suivi_JOURNAL.Where(item => item.TABLES == "T_FIELD_ROLE").ToList();
+        var entries = db.JournalAudits.Where(item => item.Tables == "T_FIELD_ROLE").ToList();
         Assert.NotEmpty(entries);
-        Assert.All(entries, entry => Assert.Equal($"Code={code}", entry.CLES));
+        Assert.All(entries, entry => Assert.Equal($"Code={code}", entry.Cles));
         transaction.Rollback();
     }
 
@@ -63,12 +63,12 @@ public class AuditJournalTransactionalTests
         var label = $"rollback-{Guid.NewGuid():N}";
         using (var db = CreateAuditedContext(new ThrowOnJournalInsertInterceptor()))
         {
-            db.Add(new T_CODEABSENCE { INTITULE_ABSENCE = label });
+            db.Add(new CodeAbsence { IntituleAbsence = label });
             Assert.Throws<DbUpdateException>(() => db.SaveChanges());
         }
 
         using var verification = CreatePlainContext();
-        Assert.False(verification.T_CODEABSENCE.Any(item => item.INTITULE_ABSENCE == label));
+        Assert.False(verification.CodeAbsences.Any(item => item.IntituleAbsence == label));
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public class AuditJournalTransactionalTests
         EnsureInitialized();
         using var db = CreateAuditedContext();
         using var transaction = db.Database.BeginTransaction();
-        db.Add(new T_CODEABSENCE { INTITULE_ABSENCE = $"external-{Guid.NewGuid():N}" });
+        db.Add(new CodeAbsence { IntituleAbsence = $"external-{Guid.NewGuid():N}" });
 
         db.SaveChanges();
 
@@ -92,11 +92,11 @@ public class AuditJournalTransactionalTests
         EnsureInitialized();
         using var db = CreateAuditedContext(options: new AuditJournalOptions { Enabled = false });
         using var transaction = db.Database.BeginTransaction();
-        db.Add(new T_CODEABSENCE { INTITULE_ABSENCE = $"disabled-{Guid.NewGuid():N}" });
+        db.Add(new CodeAbsence { IntituleAbsence = $"disabled-{Guid.NewGuid():N}" });
 
         db.SaveChanges();
 
-        Assert.Empty(db.suivi_JOURNAL);
+        Assert.Empty(db.JournalAudits);
         transaction.Rollback();
     }
 
@@ -136,19 +136,19 @@ public class AuditJournalTransactionalTests
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            var included = new HashSet<Type> { typeof(T_CODEABSENCE), typeof(T_FIELD_ROLE), typeof(suivi_JOURNAL) };
+            var included = new HashSet<Type> { typeof(CodeAbsence), typeof(FieldRole), typeof(JournalAudit) };
             foreach (var property in typeof(SoftTimeDbContext).GetProperties()
                          .Where(property => property.PropertyType.IsGenericType
                                             && property.PropertyType.GetGenericTypeDefinition() == typeof(DbSet<>)
                                             && !included.Contains(property.PropertyType.GenericTypeArguments[0])))
                 modelBuilder.Ignore(property.PropertyType.GenericTypeArguments[0]);
 
-            modelBuilder.Entity<T_CODEABSENCE>(entity =>
+            modelBuilder.Entity<CodeAbsence>(entity =>
             {
-                entity.HasKey(item => item.ID_ABSENCE);
-                entity.Property(item => item.ID_ABSENCE).ValueGeneratedOnAdd();
+                entity.HasKey(item => item.IdAbsence);
+                entity.Property(item => item.IdAbsence).ValueGeneratedOnAdd();
             });
-            modelBuilder.Entity<T_FIELD_ROLE>(entity =>
+            modelBuilder.Entity<FieldRole>(entity =>
             {
                 entity.HasKey(item => item.Code);
                 entity.Property(item => item.Code).HasMaxLength(64);
@@ -156,19 +156,19 @@ public class AuditJournalTransactionalTests
                 entity.Property(item => item.SystemType).HasMaxLength(16);
                 entity.Property(item => item.EntityKind).HasMaxLength(32);
             });
-            modelBuilder.Entity<suivi_JOURNAL>(entity =>
+            modelBuilder.Entity<JournalAudit>(entity =>
             {
                 entity.HasKey(item => item.Id);
                 entity.Property(item => item.Id).ValueGeneratedOnAdd();
-                entity.Property(item => item.DATE_UTC).HasColumnType("datetime2");
-                entity.Property(item => item.TABLES).HasMaxLength(128);
-                entity.Property(item => item.CLES).HasMaxLength(450);
-                entity.Property(item => item.COLONNES).HasMaxLength(128);
-                entity.Property(item => item.ACTIONS).HasMaxLength(32);
-                entity.Property(item => item.USERS).HasMaxLength(256);
-                entity.Property(item => item.BASE_SAGE).HasMaxLength(128);
-                entity.Property(item => item.BASE_POINTEUSE).HasMaxLength(128);
-                entity.Property(item => item.SOURCE).HasMaxLength(64);
+                entity.Property(item => item.DateUtc).HasColumnType("datetime2");
+                entity.Property(item => item.Tables).HasMaxLength(128);
+                entity.Property(item => item.Cles).HasMaxLength(450);
+                entity.Property(item => item.Colonnes).HasMaxLength(128);
+                entity.Property(item => item.Actions).HasMaxLength(32);
+                entity.Property(item => item.Users).HasMaxLength(256);
+                entity.Property(item => item.BaseSage).HasMaxLength(128);
+                entity.Property(item => item.BasePointeuse).HasMaxLength(128);
+                entity.Property(item => item.Source).HasMaxLength(64);
             });
         }
     }

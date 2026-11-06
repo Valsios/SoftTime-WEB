@@ -56,9 +56,9 @@ public class PunchProcessingService : IPunchProcessingService
         if (request.To.Date < request.From.Date)
             throw new DomainException("La date de fin doit être postérieure ou égale à la date de début.");
 
-        var clock = (await _uow.Repository<T_CLOCK>().ListAsync(_ => true, ct)).FirstOrDefault()
+        var clock = (await _uow.Repository<ParametrePointeuse>().ListAsync(_ => true, ct)).FirstOrDefault()
             ?? throw new DomainException("Paramètre pointeuse (T_CLOCK) manquant.");
-        var multiPointage = clock.MULTIPOINT == true;
+        var multiPointage = clock.MultiPoint == true;
 
         var sageDb = _tenant.SageDb;
         var pointeuseDb = _tenant.PointeuseDb;
@@ -66,53 +66,53 @@ public class PunchProcessingService : IPunchProcessingService
         var to = request.To.Date;
         var finExclusive = to.AddDays(1);
 
-        var cards = FilterCards(await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == sageDb, ct), request)
-            .Where(c => MatchesPointeuse(c.POINTEUSE_BDD, pointeuseDb))
-            .Where(c => !string.IsNullOrWhiteSpace(c.SAGE_MATRICULE))
-            .GroupBy(c => MatriculeIdentity.Cle(c.SAGE_MATRICULE))
-            .Select(g => g.OrderBy(c => c.ID).First())
+        var cards = FilterCards(await _uow.Repository<CardPaie>().ListAsync(c => c.SageBdd == sageDb, ct), request)
+            .Where(c => MatchesPointeuse(c.PointeuseBdd, pointeuseDb))
+            .Where(c => !string.IsNullOrWhiteSpace(c.SageMatricule))
+            .GroupBy(c => MatriculeIdentity.Cle(c.SageMatricule))
+            .Select(g => g.OrderBy(c => c.Id).First())
             .ToList();
 
-        var feries = (await _uow.Repository<T_FERIE>().ListAsync(f => f.BDD_SAGE == sageDb, ct))
-            .Where(f => f.DATE.HasValue)
-            .Select(f => f.DATE!.Value.Date)
+        var feries = (await _uow.Repository<JourFerie>().ListAsync(f => f.BddSage == sageDb, ct))
+            .Where(f => f.Date.HasValue)
+            .Select(f => f.Date!.Value.Date)
             .ToHashSet();
 
-        var planning = (await _uow.Repository<T_PLANNING_SAL>().ListAsync(
-                p => p.BDD_SAGE == sageDb && p.DateP >= from.AddDays(-1) && p.DateP <= to.AddDays(1), ct))
-            .Where(p => MatchesPointeuse(p.BDD_POINTEUSE, pointeuseDb))
+        var planning = (await _uow.Repository<PlanningSalarie>().ListAsync(
+                p => p.BddSage == sageDb && p.DateP >= from.AddDays(-1) && p.DateP <= to.AddDays(1), ct))
+            .Where(p => MatchesPointeuse(p.BddPointeuse, pointeuseDb))
             .Where(p => p.DateP.HasValue)
             .ToList();
 
         var planningParCarte = planning
-            .GroupBy(p => p.IDSAL)
+            .GroupBy(p => p.IdSal)
             .ToDictionary(
                 g => g.Key,
                 g => g.GroupBy(p => p.DateP!.Value.Date)
-                    .ToDictionary(gg => gg.Key, gg => gg.OrderBy(p => p.ID).First()));
+                    .ToDictionary(gg => gg.Key, gg => gg.OrderBy(p => p.Id).First()));
 
-        var semainesValidees = (await _uow.Repository<T_HS_VALIDER>().ListAsync(
-                v => v.BDD_SAGE == sageDb && v.VALIDATION_HS == true, ct))
-            .Where(v => v.DATE_DEB.HasValue && !string.IsNullOrWhiteSpace(v.MATRICULES))
+        var semainesValidees = (await _uow.Repository<HsValidee>().ListAsync(
+                v => v.BddSage == sageDb && v.ValidationHs == true, ct))
+            .Where(v => v.DateDeb.HasValue && !string.IsNullOrWhiteSpace(v.Matricules))
             .ToList();
 
-        var correctionsExistantes = await _uow.Repository<T_HEURECORRIGER>().ListAsync(
-            h => h.BDD_SAGE == sageDb && h.DATE_POINTAGE_IN >= from && h.DATE_POINTAGE_IN < finExclusive, ct);
-        var anomaliesExistantes = await _uow.Repository<T_HEUREANOMALIE>().ListAsync(
-            a => a.BDD_SAGE == sageDb && a.DATE_POINTAGE_IN >= from && a.DATE_POINTAGE_IN < finExclusive, ct);
-        var pointages = (await _uow.Repository<T_POINTAGE>().ListAsync(
-                p => p.NOM_BDD_SAGE == sageDb && p.DATE_POINTAGE >= from && p.DATE_POINTAGE < finExclusive, ct))
-            .Where(p => MatchesPointeuse(p.NOM_BDD_POINTEUSE, pointeuseDb))
-            .Where(p => p.DATE_POINTAGE.HasValue && p.HEURE_POINTAGE.HasValue)
-            .Where(p => !string.IsNullOrWhiteSpace(p.MATRICULE_SAGE))
+        var correctionsExistantes = await _uow.Repository<HeureCorrigee>().ListAsync(
+            h => h.BddSage == sageDb && h.DatePointageIn >= from && h.DatePointageIn < finExclusive, ct);
+        var anomaliesExistantes = await _uow.Repository<HeureAnomalie>().ListAsync(
+            a => a.BddSage == sageDb && a.DatePointageIn >= from && a.DatePointageIn < finExclusive, ct);
+        var pointages = (await _uow.Repository<Pointage>().ListAsync(
+                p => p.NomBddSage == sageDb && p.DatePointage >= from && p.DatePointage < finExclusive, ct))
+            .Where(p => MatchesPointeuse(p.NomBddPointeuse, pointeuseDb))
+            .Where(p => p.DatePointage.HasValue && p.HeurePointage.HasValue)
+            .Where(p => !string.IsNullOrWhiteSpace(p.MatriculeSage))
             .ToList();
 
-        var corrRepo = _uow.Repository<T_HEURECORRIGER>();
-        var anomRepo = _uow.Repository<T_HEUREANOMALIE>();
+        var corrRepo = _uow.Repository<HeureCorrigee>();
+        var anomRepo = _uow.Repository<HeureAnomalie>();
 
         var semainesProtegees = semainesValidees
-            .GroupBy(v => MatriculeIdentity.Cle(v.MATRICULES))
-            .ToDictionary(g => g.Key, g => g.Select(v => v.DATE_DEB!.Value.Date).ToHashSet());
+            .GroupBy(v => MatriculeIdentity.Cle(v.Matricules))
+            .ToDictionary(g => g.Key, g => g.Select(v => v.DateDeb!.Value.Date).ToHashSet());
         bool SemaineValidee(string cle, DateTime jour)
         {
             var lundi = jour.AddDays(-(((int)jour.DayOfWeek + 6) % 7));
@@ -123,38 +123,38 @@ public class PunchProcessingService : IPunchProcessingService
         // périmètre demandé (département, plage de matricules, pointeuse) hors semaines validées.
         // Les autres lignes AUTO de la période ne sont pas retraitées : les effacer les perdrait.
         var clesPerimetre = cards
-            .Select(c => MatriculeIdentity.Cle(c.SAGE_MATRICULE))
+            .Select(c => MatriculeIdentity.Cle(c.SageMatricule))
             .ToHashSet(StringComparer.Ordinal);
         var aPurger = correctionsExistantes
-            .Where(h => string.Equals(h.ORIGINE, PunchProcessingConfiguration.OrigineAuto, StringComparison.OrdinalIgnoreCase))
-            .Where(h => h.DATE_POINTAGE_IN.HasValue && !string.IsNullOrWhiteSpace(h.MATRICULE_SAGE))
-            .Where(h => clesPerimetre.Contains(MatriculeIdentity.Cle(h.MATRICULE_SAGE)))
-            .Where(h => !SemaineValidee(MatriculeIdentity.Cle(h.MATRICULE_SAGE), h.DATE_POINTAGE_IN!.Value.Date))
+            .Where(h => string.Equals(h.Origine, PunchProcessingConfiguration.OrigineAuto, StringComparison.OrdinalIgnoreCase))
+            .Where(h => h.DatePointageIn.HasValue && !string.IsNullOrWhiteSpace(h.MatriculeSage))
+            .Where(h => clesPerimetre.Contains(MatriculeIdentity.Cle(h.MatriculeSage)))
+            .Where(h => !SemaineValidee(MatriculeIdentity.Cle(h.MatriculeSage), h.DatePointageIn!.Value.Date))
             .ToList();
         if (aPurger.Count > 0)
             corrRepo.RemoveRange(aPurger);
 
         var joursProteges = correctionsExistantes
             .Except(aPurger)
-            .Where(h => h.DATE_POINTAGE_IN.HasValue && !string.IsNullOrWhiteSpace(h.MATRICULE_SAGE))
-            .GroupBy(h => MatriculeIdentity.Cle(h.MATRICULE_SAGE))
-            .ToDictionary(g => g.Key, g => g.Select(h => h.DATE_POINTAGE_IN!.Value.Date).ToHashSet());
+            .Where(h => h.DatePointageIn.HasValue && !string.IsNullOrWhiteSpace(h.MatriculeSage))
+            .GroupBy(h => MatriculeIdentity.Cle(h.MatriculeSage))
+            .ToDictionary(g => g.Key, g => g.Select(h => h.DatePointageIn!.Value.Date).ToHashSet());
 
         var pointagesParCle = pointages
-            .GroupBy(p => MatriculeIdentity.Cle(p.MATRICULE_SAGE))
+            .GroupBy(p => MatriculeIdentity.Cle(p.MatriculeSage))
             .ToDictionary(
                 g => g.Key,
-                g => g.Select(p => new PunchMoment(p.DATE_POINTAGE!.Value.Date, p.HEURE_POINTAGE!.Value)).ToList());
+                g => g.Select(p => new PunchMoment(p.DatePointage!.Value.Date, p.HeurePointage!.Value)).ToList());
 
         var anomaliesParJour = anomaliesExistantes
-            .Where(a => a.DATE_POINTAGE_IN.HasValue && !string.IsNullOrWhiteSpace(a.MATRICULE_SAGE))
-            .GroupBy(a => (Cle: MatriculeIdentity.Cle(a.MATRICULE_SAGE), Jour: a.DATE_POINTAGE_IN!.Value.Date))
-            .ToDictionary(g => g.Key, g => g.OrderBy(a => a.ID).ToList());
+            .Where(a => a.DatePointageIn.HasValue && !string.IsNullOrWhiteSpace(a.MatriculeSage))
+            .GroupBy(a => (Cle: MatriculeIdentity.Cle(a.MatriculeSage), Jour: a.DatePointageIn!.Value.Date))
+            .ToDictionary(g => g.Key, g => g.OrderBy(a => a.Id).ToList());
 
         var anomaliesASupprimer = new HashSet<decimal>();
         var anomaliesCreeesJour = new HashSet<(string Cle, DateTime Jour)>();
-        var nouvellesCorrections = new List<T_HEURECORRIGER>();
-        var nouvellesAnomalies = new List<T_HEUREANOMALIE>();
+        var nouvellesCorrections = new List<HeureCorrigee>();
+        var nouvellesAnomalies = new List<HeureAnomalie>();
         var correctionsCreees = 0;
         var anomaliesCreees = 0;
         var anomaliesMisesAJour = 0;
@@ -172,7 +172,7 @@ public class PunchProcessingService : IPunchProcessingService
             if (!anomaliesParJour.TryGetValue((cle, jour), out var existantes))
                 return;
             foreach (var anomalie in existantes)
-                anomaliesASupprimer.Add(anomalie.ID);
+                anomaliesASupprimer.Add(anomalie.Id);
         }
 
         void AjouterAnomalie(
@@ -190,44 +190,44 @@ public class PunchProcessingService : IPunchProcessingService
 
             if (anomaliesParJour.TryGetValue((cle, jour), out var existantes))
             {
-                var aGarder = existantes.Where(a => !anomaliesASupprimer.Contains(a.ID)).ToList();
+                var aGarder = existantes.Where(a => !anomaliesASupprimer.Contains(a.Id)).ToList();
                 if (aGarder.Count > 0)
                 {
                     var cible = aGarder[0];
-                    cible.BDD_SAGE = sageDb;
-                    cible.BDD_POINTEUSE = pointeuseDb;
-                    cible.MATRICULE_SAGE = matricule;
-                    cible.DATE_POINTAGE_IN = jour;
-                    cible.DATE_POINTAGE_OUT = jour;
+                    cible.BddSage = sageDb;
+                    cible.BddPointeuse = pointeuseDb;
+                    cible.MatriculeSage = matricule;
+                    cible.DatePointageIn = jour;
+                    cible.DatePointageOut = jour;
                     cible.H1 = h1;
                     cible.H2 = h2;
-                    cible.ABS_AM = absenceAm;
-                    cible.ABS_PM = absencePm;
-                    cible.FERIES = estFerie ? true : null;
-                    cible.FERIES_AM = estFerie ? true : null;
-                    cible.FERIES_PM = estFerie ? true : null;
+                    cible.AbsAm = absenceAm;
+                    cible.AbsPm = absencePm;
+                    cible.Feries = estFerie ? true : null;
+                    cible.FeriesAm = estFerie ? true : null;
+                    cible.FeriesPm = estFerie ? true : null;
                     anomRepo.Update(cible);
                     foreach (var doublon in aGarder.Skip(1))
-                        anomaliesASupprimer.Add(doublon.ID);
+                        anomaliesASupprimer.Add(doublon.Id);
                     anomaliesMisesAJour++;
                     return;
                 }
             }
 
-            nouvellesAnomalies.Add(new T_HEUREANOMALIE
+            nouvellesAnomalies.Add(new HeureAnomalie
             {
-                BDD_SAGE = sageDb,
-                BDD_POINTEUSE = pointeuseDb,
-                MATRICULE_SAGE = matricule,
-                DATE_POINTAGE_IN = jour,
-                DATE_POINTAGE_OUT = jour,
+                BddSage = sageDb,
+                BddPointeuse = pointeuseDb,
+                MatriculeSage = matricule,
+                DatePointageIn = jour,
+                DatePointageOut = jour,
                 H1 = h1,
                 H2 = h2,
-                ABS_AM = absenceAm,
-                ABS_PM = absencePm,
-                FERIES = estFerie ? true : null,
-                FERIES_AM = estFerie ? true : null,
-                FERIES_PM = estFerie ? true : null
+                AbsAm = absenceAm,
+                AbsPm = absencePm,
+                Feries = estFerie ? true : null,
+                FeriesAm = estFerie ? true : null,
+                FeriesPm = estFerie ? true : null
             });
             anomaliesCreees++;
         }
@@ -236,25 +236,25 @@ public class PunchProcessingService : IPunchProcessingService
         {
             var ferieEntree = feries.Contains(paire.EntreeDate.Date);
             var ferieSortie = feries.Contains(paire.SortieDate.Date);
-            nouvellesCorrections.Add(new T_HEURECORRIGER
+            nouvellesCorrections.Add(new HeureCorrigee
             {
-                BDD_SAGE = sageDb,
-                BDD_POINTEUSE = pointeuseDb,
-                MATRICULE_SAGE = matricule,
-                DATE_POINTAGE_IN = paire.EntreeDate.Date,
-                DATE_POINTAGE_OUT = paire.SortieDate.Date,
-                HENTREE = paire.EntreeHeure,
-                HSORTIE = paire.SortieHeure,
-                FERIER = ferieEntree || ferieSortie ? true : null,
-                FERIER_AM = ferieSortie ? true : null,
-                FERIER_PM = ferieEntree ? true : null,
-                VALIDER_CORRECTION = true,
-                ORIGINE = PunchProcessingConfiguration.OrigineAuto
+                BddSage = sageDb,
+                BddPointeuse = pointeuseDb,
+                MatriculeSage = matricule,
+                DatePointageIn = paire.EntreeDate.Date,
+                DatePointageOut = paire.SortieDate.Date,
+                HEntree = paire.EntreeHeure,
+                HSortie = paire.SortieHeure,
+                Ferier = ferieEntree || ferieSortie ? true : null,
+                FerierAm = ferieSortie ? true : null,
+                FerierPm = ferieEntree ? true : null,
+                ValiderCorrection = true,
+                Origine = PunchProcessingConfiguration.OrigineAuto
             });
             correctionsCreees++;
         }
 
-        bool EstTravaille(DateTime jour, T_PLANNING_SAL? plan, bool estFerie)
+        bool EstTravaille(DateTime jour, PlanningSalarie? plan, bool estFerie)
         {
             if (estFerie)
                 return false;
@@ -268,19 +268,19 @@ public class PunchProcessingService : IPunchProcessingService
 
         foreach (var card in cards)
         {
-            var matricule = (card.SAGE_MATRICULE ?? string.Empty).Trim();
+            var matricule = (card.SageMatricule ?? string.Empty).Trim();
             if (matricule.Length == 0)
                 continue;
 
             var cle = MatriculeIdentity.Cle(matricule);
             var punchs = pointagesParCle.GetValueOrDefault(cle) ?? new List<PunchMoment>();
-            var planningCarte = planningParCarte.GetValueOrDefault(card.ID)
-                                 ?? new Dictionary<DateTime, T_PLANNING_SAL>();
+            var planningCarte = planningParCarte.GetValueOrDefault(card.Id)
+                                 ?? new Dictionary<DateTime, PlanningSalarie>();
             var fenetres = planningCarte
                 .Where(kv => kv.Value.OffP != true)
                 .ToDictionary(
                     kv => kv.Key,
-                    kv => new PunchPlanningWindow(kv.Key, kv.Value.HA, kv.Value.HD, kv.Value.OffP == true));
+                    kv => new PunchPlanningWindow(kv.Key, kv.Value.Ha, kv.Value.Hd, kv.Value.OffP == true));
             var momentsParJour = multiPointage
                 ? PunchDayGrouping.Build(punchs, fenetres, from, to)
                 // Le mode mono ne consulte jamais le planning pour l'appariement : chaque journée
@@ -350,7 +350,7 @@ public class PunchProcessingService : IPunchProcessingService
         if (anomaliesASupprimer.Count > 0)
         {
             var aSupprimer = anomaliesExistantes
-                .Where(a => anomaliesASupprimer.Contains(a.ID))
+                .Where(a => anomaliesASupprimer.Contains(a.Id))
                 .ToList();
             if (aSupprimer.Count > 0)
                 anomRepo.RemoveRange(aSupprimer);
@@ -371,14 +371,14 @@ public class PunchProcessingService : IPunchProcessingService
     }
 
     /// <summary>Filtre de périmètre identique à <c>OvertimeService.TargetCardsAsync</c>.</summary>
-    private static List<T_CARDPAIE> FilterCards(List<T_CARDPAIE> cards, PeriodRequest request) =>
+    private static List<CardPaie> FilterCards(List<CardPaie> cards, PeriodRequest request) =>
         cards
             .Where(c => string.IsNullOrEmpty(request.Departement)
-                        || string.Equals(c.DEPARTEMENT, request.Departement, StringComparison.OrdinalIgnoreCase))
+                        || string.Equals(c.Departement, request.Departement, StringComparison.OrdinalIgnoreCase))
             .Where(c => string.IsNullOrEmpty(request.MatriculeFrom)
-                        || string.Compare(c.SAGE_MATRICULE, request.MatriculeFrom, StringComparison.Ordinal) >= 0)
+                        || string.Compare(c.SageMatricule, request.MatriculeFrom, StringComparison.Ordinal) >= 0)
             .Where(c => string.IsNullOrEmpty(request.MatriculeTo)
-                        || string.Compare(c.SAGE_MATRICULE, request.MatriculeTo, StringComparison.Ordinal) <= 0)
+                        || string.Compare(c.SageMatricule, request.MatriculeTo, StringComparison.Ordinal) <= 0)
             .ToList();
 
     /// <summary>Filtre tenant pointeuse, en tolérant les lignes héritées sans base renseignée.</summary>

@@ -13,23 +13,23 @@ public static class OvertimeDayRules
     private static readonly DateTime SentinelleHeure = new(2000, 1, 1);
 
     /// <summary>Le planning appartient-il à la pointeuse de la requête (ou à aucune) ?</summary>
-    public static bool EstDeLaPointeuse(T_PLANNING_SAL plan, string pointeuseDb)
-        => string.IsNullOrWhiteSpace(plan.BDD_POINTEUSE)
-           || string.Equals(plan.BDD_POINTEUSE.Trim(), pointeuseDb.Trim(), StringComparison.OrdinalIgnoreCase);
+    public static bool EstDeLaPointeuse(PlanningSalarie plan, string pointeuseDb)
+        => string.IsNullOrWhiteSpace(plan.BddPointeuse)
+           || string.Equals(plan.BddPointeuse.Trim(), pointeuseDb.Trim(), StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Planning retenu pour le calcul HS : le plus petit ID du jour.</summary>
-    public static T_PLANNING_SAL? PlanDuJour(IEnumerable<T_PLANNING_SAL> plansDuJour)
-        => plansDuJour.OrderBy(p => p.ID).FirstOrDefault();
+    public static PlanningSalarie? PlanDuJour(IEnumerable<PlanningSalarie> plansDuJour)
+        => plansDuJour.OrderBy(p => p.Id).FirstOrDefault();
 
     /// <summary>
     /// Une heure corrigée atteste-t-elle une présence ? Une ligne qui ne fait que déclarer une absence
     /// (arbitrage <c>ABSENCE_AM</c> / <c>ABSENCE_PM</c> sans aucune heure) n'en est pas une : sans
     /// cette distinction, arbitrer une anomalie en absence effaçait l'absence du calcul.
     /// </summary>
-    public static bool EstPresence(T_HEURECORRIGER ligne)
-        => ligne.HENTREE.HasValue
-           || ligne.HSORTIE.HasValue
-           || !(ligne.ABSENCE_AM == true || ligne.ABSENCE_PM == true);
+    public static bool EstPresence(HeureCorrigee ligne)
+        => ligne.HEntree.HasValue
+           || ligne.HSortie.HasValue
+           || !(ligne.AbsenceAm == true || ligne.AbsencePm == true);
 
     /// <summary>Règle du 8 mars : la civilité SAGE n'est utile que si la période contient un 8 mars.</summary>
     public static bool ContientHuitMars(DateTime from, DateTime to)
@@ -48,27 +48,27 @@ public static class OvertimeDayRules
     /// <summary>Journée du calcul : paires, planning (reconstruit s'il manque), férié, congé, retard saisi.</summary>
     public static OvertimeDayInput Construire(
         DateTime jour,
-        IEnumerable<T_HEURECORRIGER> lignesDuJour,
-        T_PLANNING_SAL? plan,
+        IEnumerable<HeureCorrigee> lignesDuJour,
+        PlanningSalarie? plan,
         bool ferie,
         decimal congeValeur)
     {
         var lignes = lignesDuJour
-            .OrderBy(h => h.HENTREE ?? TimeSpan.Zero)
+            .OrderBy(h => h.HEntree ?? TimeSpan.Zero)
             .ToList();
         var paires = lignes
-            .Where(h => h.HENTREE.HasValue && h.HSORTIE.HasValue)
+            .Where(h => h.HEntree.HasValue && h.HSortie.HasValue)
             .Select(h => new PunchPair(
-                h.DATE_POINTAGE_IN!.Value.Date,
-                h.HENTREE!.Value,
-                (h.DATE_POINTAGE_OUT ?? h.DATE_POINTAGE_IN)!.Value.Date,
-                h.HSORTIE!.Value))
+                h.DatePointageIn!.Value.Date,
+                h.HEntree!.Value,
+                (h.DatePointageOut ?? h.DatePointageIn)!.Value.Date,
+                h.HSortie!.Value))
             .ToList();
 
         var off = plan?.OffP == true;
         // Les heures de planning « vides » du desktop portent une date sentinelle : elles valent NULL.
-        var haPlanifiee = plan?.HA is DateTime haBrute && haBrute.Date > SentinelleHeure ? haBrute.TimeOfDay : (TimeSpan?)null;
-        var hdPlanifiee = plan?.HD is DateTime hdBrute && hdBrute.Date > SentinelleHeure ? hdBrute.TimeOfDay : (TimeSpan?)null;
+        var haPlanifiee = plan?.Ha is DateTime haBrute && haBrute.Date > SentinelleHeure ? haBrute.TimeOfDay : (TimeSpan?)null;
+        var hdPlanifiee = plan?.Hd is DateTime hdBrute && hdBrute.Date > SentinelleHeure ? hdBrute.TimeOfDay : (TimeSpan?)null;
         TimeSpan? ha = off ? null : haPlanifiee;
         TimeSpan? hd = off ? null : hdPlanifiee;
 
@@ -90,6 +90,6 @@ public static class OvertimeDayRules
             ferie,
             lignes.Any(EstPresence),
             congeValeur,
-            lignes.FirstOrDefault(h => h.RETARD.HasValue)?.RETARD);
+            lignes.FirstOrDefault(h => h.Retard.HasValue)?.Retard);
     }
 }

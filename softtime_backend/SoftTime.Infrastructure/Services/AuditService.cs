@@ -17,44 +17,44 @@ public class AuditService : IAuditService
 
     public async Task<IReadOnlyList<AuditConfigDto>> ListConfigAsync(CancellationToken ct = default)
     {
-        var list = await _uow.Repository<suivi_TBLCLN>().ListReadOnlyAsync(_ => true, ct);
-        return list.Select(c => new AuditConfigDto(c.Id, c.TABLES, c.COLONNES, c.TYPES, c.ETATS, c.BASES)).ToList();
+        var list = await _uow.Repository<SuiviConfiguration>().ListReadOnlyAsync(_ => true, ct);
+        return list.Select(c => new AuditConfigDto(c.Id, c.Tables, c.Colonnes, c.Types, c.Etats, c.Bases)).ToList();
     }
 
     public async Task SaveConfigAsync(AuditConfigDto dto, CancellationToken ct = default)
     {
-        var repo = _uow.Repository<suivi_TBLCLN>();
+        var repo = _uow.Repository<SuiviConfiguration>();
         if (dto.Id == 0)
         {
             AuditConfigurationRules.Valider(dto.Type);
             var typeCanonique = AuditConfigurationRules.Normalize(dto.Type!);
 
-            await repo.AddAsync(new suivi_TBLCLN
+            await repo.AddAsync(new SuiviConfiguration
             {
-                TABLES = dto.Table,
-                COLONNES = dto.Column,
-                TYPES = typeCanonique,
-                ETATS = dto.Enabled,
-                BASES = dto.Base
+                Tables = dto.Table,
+                Colonnes = dto.Column,
+                Types = typeCanonique,
+                Etats = dto.Enabled,
+                Bases = dto.Base
             }, ct);
         }
         else
         {
             var e = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
-            e.TABLES = dto.Table;
-            e.COLONNES = dto.Column;
+            e.Tables = dto.Table;
+            e.Colonnes = dto.Column;
 
             // Si le type a été modifié par rapport à l'existant (comparaison insensible)
-            var typeInchange = string.Equals(e.TYPES, dto.Type, StringComparison.OrdinalIgnoreCase);
+            var typeInchange = string.Equals(e.Types, dto.Type, StringComparison.OrdinalIgnoreCase);
             if (!typeInchange)
             {
                 AuditConfigurationRules.Valider(dto.Type);
-                e.TYPES = AuditConfigurationRules.Normalize(dto.Type!);
+                e.Types = AuditConfigurationRules.Normalize(dto.Type!);
             }
             // Si le type est inchangé, on préserve la valeur existante en base sans la réécrire ni la normaliser
 
-            e.ETATS = dto.Enabled;
-            e.BASES = dto.Base;
+            e.Etats = dto.Enabled;
+            e.Bases = dto.Base;
             repo.Update(e);
         }
         await _uow.SaveChangesAsync(ct);
@@ -64,16 +64,16 @@ public class AuditService : IAuditService
     {
         var fromDate = from ?? DateTime.Today.AddDays(-30);
         var toDate = to ?? DateTime.Today.AddDays(1);
-        var list = await _uow.Repository<suivi_SUIVI>().ListLatestAsync(
-            e => e._DATETIMES >= fromDate
-                 && e._DATETIMES <= toDate
-                 && (string.IsNullOrEmpty(table) || e._TABLES == table)
-                 && (string.IsNullOrEmpty(action) || e._ACTIONS == action),
-            e => e._DATETIMES,
+        var list = await _uow.Repository<SuiviModification>().ListLatestAsync(
+            e => e.Datetimes >= fromDate
+                 && e.Datetimes <= toDate
+                 && (string.IsNullOrEmpty(table) || e.Tables == table)
+                 && (string.IsNullOrEmpty(action) || e.Actions == action),
+            e => e.Datetimes,
             take: 500,
             ct);
         return list
-            .Select(e => new AuditEventDto(e.Id, e._TABLES, e._COLONNES, e._USERS, e._ACTIONS, e._DATETIMES, e._NOUVEAUX, e._ANCIENS, e._BASES))
+            .Select(e => new AuditEventDto(e.Id, e.Tables, e.Colonnes, e.Users, e.Actions, e.Datetimes, e.Nouveaux, e.Anciens, e.Bases))
             .ToList();
     }
 
@@ -81,18 +81,18 @@ public class AuditService : IAuditService
     public async Task<PagedResult<AuditConfigDto>> ListConfigPagedAsync(
         int? page, int? pageSize, string? search = null, CancellationToken ct = default)
     {
-        var searchPredicate = SearchExpression.For<suivi_TBLCLN>(
-            search, c => c.TABLES, c => c.COLONNES, c => c.BASES);
-        System.Linq.Expressions.Expression<Func<suivi_TBLCLN, bool>> predicate = _ => true;
+        var searchPredicate = SearchExpression.For<SuiviConfiguration>(
+            search, c => c.Tables, c => c.Colonnes, c => c.Bases);
+        System.Linq.Expressions.Expression<Func<SuiviConfiguration, bool>> predicate = _ => true;
         if (searchPredicate is not null)
             predicate = SearchExpression.AndAlso(predicate, searchPredicate);
         return await PagedLists.PageAsync(
-            _uow.Repository<suivi_TBLCLN>(),
+            _uow.Repository<SuiviConfiguration>(),
             predicate,
             q => q.OrderBy(c => c.Id),
             page,
             pageSize,
-            c => new AuditConfigDto(c.Id, c.TABLES, c.COLONNES, c.TYPES, c.ETATS, c.BASES),
+            c => new AuditConfigDto(c.Id, c.Tables, c.Colonnes, c.Types, c.Etats, c.Bases),
             ct);
     }
 
@@ -108,35 +108,35 @@ public class AuditService : IAuditService
         var toDate = to ?? DateTime.Today.AddDays(1);
         var tableFiltre = string.IsNullOrWhiteSpace(table) ? null : table;
         var actionFiltre = string.IsNullOrWhiteSpace(action) ? null : action;
-        var searchPredicate = SearchExpression.For<suivi_SUIVI>(
+        var searchPredicate = SearchExpression.For<SuiviModification>(
             search,
-            e => e._TABLES,
-            e => e._COLONNES,
-            e => e._USERS,
-            e => e._ACTIONS,
-            e => e._NOUVEAUX,
-            e => e._ANCIENS,
-            e => e._BASES);
-        System.Linq.Expressions.Expression<Func<suivi_SUIVI, bool>> predicate =
-            e => e._DATETIMES >= fromDate
-                 && e._DATETIMES <= toDate
-                 && (tableFiltre == null || e._TABLES == tableFiltre)
-                 && (actionFiltre == null || e._ACTIONS == actionFiltre);
+            e => e.Tables,
+            e => e.Colonnes,
+            e => e.Users,
+            e => e.Actions,
+            e => e.Nouveaux,
+            e => e.Anciens,
+            e => e.Bases);
+        System.Linq.Expressions.Expression<Func<SuiviModification, bool>> predicate =
+            e => e.Datetimes >= fromDate
+                 && e.Datetimes <= toDate
+                 && (tableFiltre == null || e.Tables == tableFiltre)
+                 && (actionFiltre == null || e.Actions == actionFiltre);
         if (searchPredicate is not null)
             predicate = SearchExpression.AndAlso(predicate, searchPredicate);
         return await PagedLists.PageAsync(
-            _uow.Repository<suivi_SUIVI>(),
+            _uow.Repository<SuiviModification>(),
             predicate,
-            q => q.OrderByDescending(e => e._DATETIMES).ThenByDescending(e => e.Id),
+            q => q.OrderByDescending(e => e.Datetimes).ThenByDescending(e => e.Id),
             page,
             pageSize,
-            e => new AuditEventDto(e.Id, e._TABLES, e._COLONNES, e._USERS, e._ACTIONS, e._DATETIMES, e._NOUVEAUX, e._ANCIENS, e._BASES),
+            e => new AuditEventDto(e.Id, e.Tables, e.Colonnes, e.Users, e.Actions, e.Datetimes, e.Nouveaux, e.Anciens, e.Bases),
             ct);
     }
 
     public async Task<IReadOnlyList<object>> ListDiscoveredSchemaAsync(CancellationToken ct = default)
     {
-        var list = await _uow.Repository<suivi_T>().ListReadOnlyAsync(_ => true, ct);
-        return list.Select(t => (object)new { t.Id, t.S_TABLES, t.S_COLONNES, t.S_TYPES, t.BASES }).ToList();
+        var list = await _uow.Repository<SuiviTable>().ListReadOnlyAsync(_ => true, ct);
+        return list.Select(t => (object)new { t.Id, S_TABLES = t.STables, S_COLONNES = t.SColonnes, S_TYPES = t.STypes, BASES = t.Bases }).ToList();
     }
 }

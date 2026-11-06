@@ -30,13 +30,13 @@ public class DatabasePasswordTests
 
     public DatabasePasswordTests()
     {
-        _auth = new AuthService(_uow, new FakeTokens(), _mapper, new FakeEmail(), new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<T_RESPONSABLE>());
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 5, NOMROLE = "Gestionnaire" });
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 1, IDROLE = 1, LOGIN = "a" });
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 2, IDROLE = 5, LOGIN = "g" });
-        _uow.GetRepo<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 7, NOM_BD = "BASE1", SERVEUR = "srv", TLOGIN = "sa", TMDP = Stored, TYPE_AUTH = true });
-        _uow.GetRepo<T_BDD_POINTEUSE>().Items.Add(new T_BDD_POINTEUSE { ID = 8, NOM_BD = "PTG", SERVEUR = "srv", TLOGIN = "sa", TMDP = Stored, TYPE_AUTH = true });
+        _auth = new AuthService(_uow, new FakeTokens(), _mapper, new FakeEmail(), new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<Responsable>());
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 5, NomRole = "Gestionnaire" });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 1, IdRole = 1, Login = "a" });
+        _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 2, IdRole = 5, Login = "g" });
+        _uow.GetRepo<BddSage>().Items.Add(new BddSage { Id = 7, NomBd = "BASE1", Serveur = "srv", TLogin = "sa", TMdp = Stored, TypeAuth = true });
+        _uow.GetRepo<BddPointeuse>().Items.Add(new BddPointeuse { Id = 8, NomBd = "PTG", Serveur = "srv", TLogin = "sa", TMdp = Stored, TypeAuth = true });
     }
 
     private CatalogService Catalog(decimal userId, decimal roleId, params int[] rights)
@@ -47,8 +47,8 @@ public class DatabasePasswordTests
     [Fact]
     public void Mapped_dto_has_no_password_and_serializes_without_it()
     {
-        var sage = _mapper.Map<SageDbDto>(_uow.GetRepo<T_BDD_SAGE>().Items[0]);
-        var pointeuse = _mapper.Map<PointeuseDbDto>(_uow.GetRepo<T_BDD_POINTEUSE>().Items[0]);
+        var sage = _mapper.Map<SageDbDto>(_uow.GetRepo<BddSage>().Items[0]);
+        var pointeuse = _mapper.Map<PointeuseDbDto>(_uow.GetRepo<BddPointeuse>().Items[0]);
         Assert.True(sage.PasswordDefined);
         Assert.True(pointeuse.PasswordDefined);
         Assert.Null(sage.Password);
@@ -65,7 +65,7 @@ public class DatabasePasswordTests
     [Fact]
     public void PasswordDefined_is_false_when_no_password_is_stored()
     {
-        var dto = _mapper.Map<SageDbDto>(new T_BDD_SAGE { ID = 1, NOM_BD = "X", TMDP = "" });
+        var dto = _mapper.Map<SageDbDto>(new BddSage { Id = 1, NomBd = "X", TMdp = "" });
         Assert.False(dto.PasswordDefined);
     }
 
@@ -81,30 +81,30 @@ public class DatabasePasswordTests
     public async Task Save_without_password_keeps_the_stored_one()
     {
         var result = await Admin().SaveSageAsync(new SageDbDto(7, "srv", "sa", null, true, "BASE1"));
-        Assert.Equal(Stored, _uow.GetRepo<T_BDD_SAGE>().Items[0].TMDP);
+        Assert.Equal(Stored, _uow.GetRepo<BddSage>().Items[0].TMdp);
         Assert.True(result.PasswordDefined);
         Assert.Null(result.Password);
 
         await Admin().SavePointeuseAsync(new PointeuseDbDto(8, "srv", "sa", "", true, "PTG", null, false));
-        Assert.Equal(Stored, _uow.GetRepo<T_BDD_POINTEUSE>().Items[0].TMDP);
+        Assert.Equal(Stored, _uow.GetRepo<BddPointeuse>().Items[0].TMdp);
     }
 
     [Fact]
     public async Task Save_with_password_replaces_the_stored_one()
     {
         var result = await Admin().SaveSageAsync(new SageDbDto(7, "srv", "sa", Typed, true, "BASE1"));
-        Assert.Equal(Typed, _uow.GetRepo<T_BDD_SAGE>().Items[0].TMDP);
+        Assert.Equal(Typed, _uow.GetRepo<BddSage>().Items[0].TMdp);
         Assert.Null(result.Password);
 
         await Admin().SavePointeuseAsync(new PointeuseDbDto(8, "srv", "sa", Typed, true, "PTG", null, false));
-        Assert.Equal(Typed, _uow.GetRepo<T_BDD_POINTEUSE>().Items[0].TMDP);
+        Assert.Equal(Typed, _uow.GetRepo<BddPointeuse>().Items[0].TMdp);
     }
 
     [Fact]
     public async Task Create_stores_the_password_and_does_not_return_it()
     {
         var result = await Admin().SaveSageAsync(new SageDbDto(0, "srv2", "sa", Typed, true, "NOUVELLE"));
-        Assert.Equal(Typed, _uow.GetRepo<T_BDD_SAGE>().Items.Single(s => s.NOM_BD == "NOUVELLE").TMDP);
+        Assert.Equal(Typed, _uow.GetRepo<BddSage>().Items.Single(s => s.NomBd == "NOUVELLE").TMdp);
         Assert.True(result.PasswordDefined);
         Assert.Null(result.Password);
     }
@@ -158,13 +158,13 @@ public class DatabasePasswordTests
     public async Task Stored_password_requires_the_update_permission_on_that_base()
     {
         // Compte avec la porte Bases mais seulement la lecture : l'usage du mot de passe stocké est refusé.
-        _uow.GetRepo<T_USER_PERMISSION>().Items.Add(new T_USER_PERMISSION { IDRESPONSABLE = 2, PERMISSION_CODE = "SAGE:BASE1:READ", IS_GRANTED = true });
+        _uow.GetRepo<UserPermission>().Items.Add(new UserPermission { IdResponsable = 2, PermissionCode = "SAGE:BASE1:READ", IsGranted = true });
         var svc = Catalog(2, 5, Rights.Databases);
         await Assert.ThrowsAsync<ForbiddenException>(() =>
             svc.TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "sa", null, "BASE1", "STANDARD", null, 7)));
         Assert.Null(_discovery.LastPassword);
 
-        _uow.GetRepo<T_USER_PERMISSION>().Items.Add(new T_USER_PERMISSION { IDRESPONSABLE = 2, PERMISSION_CODE = "SAGE:BASE1:UPDATE", IS_GRANTED = true });
+        _uow.GetRepo<UserPermission>().Items.Add(new UserPermission { IdResponsable = 2, PermissionCode = "SAGE:BASE1:UPDATE", IsGranted = true });
         await svc.TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "sa", null, "BASE1", "STANDARD", null, 7));
         Assert.Equal(Stored, _discovery.LastPassword);
     }
@@ -172,11 +172,11 @@ public class DatabasePasswordTests
     [Fact]
     public async Task Login_and_me_responses_carry_no_password()
     {
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });
-        var hasher = new PasswordHasher<T_RESPONSABLE>();
-        var user = new T_RESPONSABLE { IDRESPONSABLE = 9, IDROLE = 1, LOGIN = "logintest" };
-        user.PASSWORD = hasher.HashPassword(user, "FAKE-LOGIN-PWD");
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
+        var hasher = new PasswordHasher<Responsable>();
+        var user = new Responsable { IdResponsable = 9, IdRole = 1, Login = "logintest" };
+        user.Password = hasher.HashPassword(user, "FAKE-LOGIN-PWD");
+        _uow.GetRepo<Responsable>().Items.Add(user);
 
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         var login = await _auth.LoginAsync(new LoginRequest("logintest", "FAKE-LOGIN-PWD"));

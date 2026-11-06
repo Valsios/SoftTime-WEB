@@ -9,22 +9,22 @@ public class RetardReportRulesTests
     private static readonly DateTime Mardi = new(2025, 11, 4);  // Jour ouvré de référence
     private static readonly DateTime Samedi = new(2025, 11, 8);
 
-    private static T_CARDPAIE Carte(int id, string matricule, string? nom = "Dupont", string? prenom = "Jean", string? dep = "INFO")
-        => new() { ID = id, SAGE_MATRICULE = matricule, SAGE_NOM = nom, SAGE_PRENOM = prenom, DEPARTEMENT = dep };
+    private static CardPaie Carte(int id, string matricule, string? nom = "Dupont", string? prenom = "Jean", string? dep = "INFO")
+        => new() { Id = id, SageMatricule = matricule, SageNom = nom, SagePrenom = prenom, Departement = dep };
 
-    private static T_PLANNING_SAL Plan(
+    private static PlanningSalarie Plan(
         int id, int idsal, DateTime date, string? ha = "08:00", string? hd = "17:00", bool offP = false)
         => new()
         {
-            ID = id,
-            IDSAL = idsal,
+            Id = id,
+            IdSal = idsal,
             DateP = date,
-            HA = ha is null ? null : date.Date.Add(TimeSpan.Parse(ha)),
-            HD = hd is null ? null : date.Date.Add(TimeSpan.Parse(hd)),
+            Ha = ha is null ? null : date.Date.Add(TimeSpan.Parse(ha)),
+            Hd = hd is null ? null : date.Date.Add(TimeSpan.Parse(hd)),
             OffP = offP
         };
 
-    private static T_HEURECORRIGER Corr(
+    private static HeureCorrigee Corr(
         int id,
         string matricule,
         DateTime date,
@@ -34,41 +34,41 @@ public class RetardReportRulesTests
         bool absencePm = false)
         => new()
         {
-            ID = id,
-            MATRICULE_SAGE = matricule,
-            DATE_POINTAGE_IN = date,
-            DATE_POINTAGE_OUT = date,
-            HENTREE = entree is null ? null : TimeSpan.Parse(entree),
-            HSORTIE = TimeSpan.Parse("17:00"),
-            ABSENCE_AM = absenceAm,
-            ABSENCE_PM = absencePm,
-            RETARD = retard is null ? null : TimeSpan.Parse(retard),
-            VALIDER_CORRECTION = true
+            Id = id,
+            MatriculeSage = matricule,
+            DatePointageIn = date,
+            DatePointageOut = date,
+            HEntree = entree is null ? null : TimeSpan.Parse(entree),
+            HSortie = TimeSpan.Parse("17:00"),
+            AbsenceAm = absenceAm,
+            AbsencePm = absencePm,
+            Retard = retard is null ? null : TimeSpan.Parse(retard),
+            ValiderCorrection = true
         };
 
-    private static T_CAT_SAL Affectation(int carteId, int categorie)
-        => new() { MATRICULE_SAGE = carteId, ID_CATEG = categorie };
+    private static CategorieSalarie Affectation(int carteId, int categorie)
+        => new() { MatriculeSage = carteId, IdCateg = categorie };
 
-    private static T_TOLERANCE Tolerance(int categorie, int minutes)
-        => new() { IDCATEGORIE = categorie, TOLERANCE = minutes, TYPES_TOL = false };
+    private static ToleranceRetard Tolerance(int categorie, int minutes)
+        => new() { IdCategorie = categorie, Tolerance = minutes, TypesTol = false };
 
     private static IReadOnlyList<RetardReportRow> Calculer(
-        IReadOnlyList<T_CARDPAIE> cartes,
-        IReadOnlyList<T_HEURECORRIGER> corrections,
-        IReadOnlyList<T_PLANNING_SAL>? plannings = null,
-        IReadOnlyList<T_CAT_SAL>? affectations = null,
-        IReadOnlyList<T_TOLERANCE>? tolerances = null,
+        IReadOnlyList<CardPaie> cartes,
+        IReadOnlyList<HeureCorrigee> corrections,
+        IReadOnlyList<PlanningSalarie>? plannings = null,
+        IReadOnlyList<CategorieSalarie>? affectations = null,
+        IReadOnlyList<ToleranceRetard>? tolerances = null,
         IReadOnlySet<DateTime>? feries = null,
         DateTime? from = null,
         DateTime? to = null)
         => RetardReportRules.Calculer(
             cartes,
             corrections,
-            plannings ?? Array.Empty<T_PLANNING_SAL>(),
-            (affectations ?? Array.Empty<T_CAT_SAL>())
-                .GroupBy(a => a.MATRICULE_SAGE)
-                .ToDictionary(g => g.Key, g => g.First().ID_CATEG),
-            tolerances ?? Array.Empty<T_TOLERANCE>(),
+            plannings ?? Array.Empty<PlanningSalarie>(),
+            (affectations ?? Array.Empty<CategorieSalarie>())
+                .GroupBy(a => a.MatriculeSage)
+                .ToDictionary(g => g.Key, g => g.First().IdCateg),
+            tolerances ?? Array.Empty<ToleranceRetard>(),
             feries ?? new HashSet<DateTime>(),
             from ?? Mardi,
             to ?? Mardi,
@@ -326,11 +326,11 @@ public class RetardReportRulesTests
         Assert.Null(RetardReportRules.HeurePrevue(null));
         Assert.Null(RetardReportRules.HeurePrevue(Plan(1, 1, Mardi, offP: true)));
         Assert.Null(RetardReportRules.HeurePrevue(Plan(1, 1, Mardi, ha: null)));
-        Assert.Null(RetardReportRules.HeurePrevue(new T_PLANNING_SAL
+        Assert.Null(RetardReportRules.HeurePrevue(new PlanningSalarie
         {
-            ID = 1,
+            Id = 1,
             DateP = Mardi,
-            HA = new DateTime(1800, 1, 1, 8, 0, 0)
+            Ha = new DateTime(1800, 1, 1, 8, 0, 0)
         }));
         Assert.Equal(TimeSpan.Parse("08:00"), RetardReportRules.HeurePrevue(Plan(1, 1, Mardi)));
     }

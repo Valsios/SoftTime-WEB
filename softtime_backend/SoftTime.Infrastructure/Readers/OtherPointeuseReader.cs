@@ -12,7 +12,7 @@ public class OtherPointeuseReader : IPointeuseReader
 {
     private static readonly Regex SafeIdentifier = new("^[A-Za-z0-9_]+$", RegexOptions.Compiled);
 
-    public bool CanHandle(T_BDD_POINTEUSE pteRow) => pteRow.TYPE_BASE == "AUTRE";
+    public bool CanHandle(BddPointeuse pteRow) => pteRow.TypeBase == "AUTRE";
 
     private static void ValidateIdentifiers(params string?[] ids)
     {
@@ -21,21 +21,21 @@ public class OtherPointeuseReader : IPointeuseReader
                 throw new DomainException($"Nom de table/colonne invalide dans le mapping pointeuse 'Autre' : {id}");
     }
 
-    public async Task<IReadOnlyList<NormalizedPointeuseUser>> ListUsersAsync(T_BDD_POINTEUSE pteRow, CancellationToken ct)
+    public async Task<IReadOnlyList<NormalizedPointeuseUser>> ListUsersAsync(BddPointeuse pteRow, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(pteRow.MAP_USER_TABLE) || string.IsNullOrWhiteSpace(pteRow.MAP_USER_COL_ID))
+        if (string.IsNullOrWhiteSpace(pteRow.MapUserTable) || string.IsNullOrWhiteSpace(pteRow.MapUserColId))
             throw new DomainException("Mapping incomplet pour la base pointeuse 'Autre' : table et colonne ID utilisateur requises.");
 
-        ValidateIdentifiers(pteRow.MAP_USER_TABLE, pteRow.MAP_USER_COL_ID, pteRow.MAP_USER_COL_BADGE, pteRow.MAP_USER_COL_SSN, pteRow.MAP_USER_COL_NOM);
+        ValidateIdentifiers(pteRow.MapUserTable, pteRow.MapUserColId, pteRow.MapUserColBadge, pteRow.MapUserColSsn, pteRow.MapUserColNom);
 
-        var selId = $"[{pteRow.MAP_USER_COL_ID}]";
-        var selBadge = pteRow.MAP_USER_COL_BADGE is { Length: > 0 } b ? $"[{b}]" : "NULL";
-        var selSsn = pteRow.MAP_USER_COL_SSN is { Length: > 0 } s ? $"[{s}]" : "NULL";
-        var selNom = pteRow.MAP_USER_COL_NOM is { Length: > 0 } n ? $"[{n}]" : "NULL";
+        var selId = $"[{pteRow.MapUserColId}]";
+        var selBadge = pteRow.MapUserColBadge is { Length: > 0 } b ? $"[{b}]" : "NULL";
+        var selSsn = pteRow.MapUserColSsn is { Length: > 0 } s ? $"[{s}]" : "NULL";
+        var selNom = pteRow.MapUserColNom is { Length: > 0 } n ? $"[{n}]" : "NULL";
 
-        var sql = $"SELECT {selId} AS Id, {selBadge} AS Badge, {selSsn} AS Ssn, {selNom} AS Nom FROM [{pteRow.MAP_USER_TABLE}]";
+        var sql = $"SELECT {selId} AS Id, {selBadge} AS Badge, {selSsn} AS Ssn, {selNom} AS Nom FROM [{pteRow.MapUserTable}]";
 
-        var connStr = ExternalConnectionFactory.Build(pteRow.SERVEUR, pteRow.NOM_BD, pteRow.TYPE_AUTH == true, pteRow.TLOGIN, pteRow.TMDP);
+        var connStr = ExternalConnectionFactory.Build(pteRow.Serveur, pteRow.NomBd, pteRow.TypeAuth == true, pteRow.TLogin, pteRow.TMdp);
         await using var con = new SqlConnection(connStr);
         await con.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, con);
@@ -57,22 +57,22 @@ public class OtherPointeuseReader : IPointeuseReader
     }
 
     public async Task<IReadOnlyList<NormalizedPunch>> ListPunchesAsync(
-        T_BDD_POINTEUSE pteRow, DateTime from, DateTime to, CancellationToken ct)
+        BddPointeuse pteRow, DateTime from, DateTime to, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(pteRow.MAP_PUNCH_TABLE) || string.IsNullOrWhiteSpace(pteRow.MAP_PUNCH_COL_USER_ID)
-            || string.IsNullOrWhiteSpace(pteRow.MAP_PUNCH_COL_DATETIME))
+        if (string.IsNullOrWhiteSpace(pteRow.MapPunchTable) || string.IsNullOrWhiteSpace(pteRow.MapPunchColUserId)
+            || string.IsNullOrWhiteSpace(pteRow.MapPunchColDatetime))
             throw new DomainException("Mapping incomplet pour les pointages 'Autre' : table, colonne utilisateur et colonne date/heure requises.");
 
-        ValidateIdentifiers(pteRow.MAP_PUNCH_TABLE, pteRow.MAP_PUNCH_COL_USER_ID, pteRow.MAP_PUNCH_COL_DATETIME, pteRow.MAP_PUNCH_COL_TYPE);
+        ValidateIdentifiers(pteRow.MapPunchTable, pteRow.MapPunchColUserId, pteRow.MapPunchColDatetime, pteRow.MapPunchColType);
 
-        var selUserId = $"[{pteRow.MAP_PUNCH_COL_USER_ID}]";
-        var selDateHeure = $"[{pteRow.MAP_PUNCH_COL_DATETIME}]";
-        var selType = pteRow.MAP_PUNCH_COL_TYPE is { Length: > 0 } t ? $"[{t}]" : "NULL";
+        var selUserId = $"[{pteRow.MapPunchColUserId}]";
+        var selDateHeure = $"[{pteRow.MapPunchColDatetime}]";
+        var selType = pteRow.MapPunchColType is { Length: > 0 } t ? $"[{t}]" : "NULL";
 
         var sql = $"SELECT {selUserId} AS UserId, {selDateHeure} AS DateHeure, {selType} AS Type " +
-                  $"FROM [{pteRow.MAP_PUNCH_TABLE}] WHERE {selDateHeure} >= @from AND {selDateHeure} <= @to";
+                  $"FROM [{pteRow.MapPunchTable}] WHERE {selDateHeure} >= @from AND {selDateHeure} <= @to";
 
-        var connStr = ExternalConnectionFactory.Build(pteRow.SERVEUR, pteRow.NOM_BD, pteRow.TYPE_AUTH == true, pteRow.TLOGIN, pteRow.TMDP);
+        var connStr = ExternalConnectionFactory.Build(pteRow.Serveur, pteRow.NomBd, pteRow.TypeAuth == true, pteRow.TLogin, pteRow.TMdp);
         await using var con = new SqlConnection(connStr);
         await con.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, con);

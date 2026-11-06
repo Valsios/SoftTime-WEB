@@ -10,33 +10,33 @@ public class StandardPointeuseReader : IPointeuseReader
     private readonly IPointeuseContextFactory _pointeuseFactory;
     public StandardPointeuseReader(IPointeuseContextFactory pointeuseFactory) => _pointeuseFactory = pointeuseFactory;
  
-    public bool CanHandle(T_BDD_POINTEUSE pteRow) => pteRow.TYPE_BASE == "STANDARD";
+    public bool CanHandle(BddPointeuse pteRow) => pteRow.TypeBase == "STANDARD";
  
-    public async Task<IReadOnlyList<NormalizedPointeuseUser>> ListUsersAsync(T_BDD_POINTEUSE pteRow, CancellationToken ct)
+    public async Task<IReadOnlyList<NormalizedPointeuseUser>> ListUsersAsync(BddPointeuse pteRow, CancellationToken ct)
     {
         using var pte = _pointeuseFactory.Create(ExternalConnectionFactory.Build(
-            pteRow.SERVEUR, pteRow.NOM_BD, pteRow.TYPE_AUTH == true, pteRow.TLOGIN, pteRow.TMDP));
+            pteRow.Serveur, pteRow.NomBd, pteRow.TypeAuth == true, pteRow.TLogin, pteRow.TMdp));
         return pte.Users.ToList()
             .Select(u => new NormalizedPointeuseUser(
-                Id: u.USERID.ToString(),
-                Badge: u.BADGENUMBER,
-                Ssn: u.SSN,
-                Nom: u.NAME))
+                Id: u.UserId.ToString(),
+                Badge: u.BadgeNumber,
+                Ssn: u.Ssn,
+                Nom: u.Name))
             .ToList();
     }
  
     public async Task<IReadOnlyList<NormalizedPunch>> ListPunchesAsync(
-        T_BDD_POINTEUSE pteRow, DateTime from, DateTime to, CancellationToken ct)
+        BddPointeuse pteRow, DateTime from, DateTime to, CancellationToken ct)
     {
         using var pte = _pointeuseFactory.Create(ExternalConnectionFactory.Build(
-            pteRow.SERVEUR, pteRow.NOM_BD, pteRow.TYPE_AUTH == true, pteRow.TLOGIN, pteRow.TMDP));
+            pteRow.Serveur, pteRow.NomBd, pteRow.TypeAuth == true, pteRow.TLogin, pteRow.TMdp));
         return pte.CheckInOut
-            .Where(c => c.CHECKTIME >= from && c.CHECKTIME <= to)
+            .Where(c => c.CheckTime >= from && c.CheckTime <= to)
             .ToList()
             .Select(c => new NormalizedPunch(
-                UserId: c.USERID.ToString(),
-                DateHeure: c.CHECKTIME,
-                Type: c.CHECKTYPE))
+                UserId: c.UserId.ToString(),
+                DateHeure: c.CheckTime,
+                Type: c.CheckType))
             .ToList();
     }
 }

@@ -61,26 +61,26 @@ public sealed class MlPredictionService : IMlPredictionService
         // Sans pointage récent, les features décrivent un passé lointain : on ne prédit pas, et
         // les anciennes prévisions de l'horizon sont retirées pour ne pas rester affichées.
         var depuis = today.AddDays(-Math.Max(1, _options.RecentDataDays));
-        var pointagesRecents = (await _uow.Repository<T_HEURECORRIGER>().ListReadOnlyAsync(
-                h => h.BDD_SAGE == sage && h.DATE_POINTAGE_IN >= depuis && h.DATE_POINTAGE_IN < today, ct))
+        var pointagesRecents = (await _uow.Repository<HeureCorrigee>().ListReadOnlyAsync(
+                h => h.BddSage == sage && h.DatePointageIn >= depuis && h.DatePointageIn < today, ct))
             .Count;
         if (pointagesRecents == 0)
         {
-            await _store.ReplacePredictionsAsync(sage, MlModelType.Absence, today, absenceTo, Array.Empty<T_ML_PREDICTION>(), ct);
-            await _store.ReplacePredictionsAsync(sage, MlModelType.HsProbabilite, weekStart, weekEnd, Array.Empty<T_ML_PREDICTION>(), ct);
-            await _store.ReplacePredictionsAsync(sage, MlModelType.HsMontant, weekStart, weekEnd, Array.Empty<T_ML_PREDICTION>(), ct);
+            await _store.ReplacePredictionsAsync(sage, MlModelType.Absence, today, absenceTo, Array.Empty<MlPrediction>(), ct);
+            await _store.ReplacePredictionsAsync(sage, MlModelType.HsProbabilite, weekStart, weekEnd, Array.Empty<MlPrediction>(), ct);
+            await _store.ReplacePredictionsAsync(sage, MlModelType.HsMontant, weekStart, weekEnd, Array.Empty<MlPrediction>(), ct);
             var raison = $"Aucun pointage depuis {_options.RecentDataDays} jours : prévisions suspendues.";
             _logger.LogWarning("Prévisions {Sage} : {Raison}", sage, raison);
             return new MlPipelineResultDto("Baseline", raison, 0, 0, 0);
         }
 
         // La prévision d'absence n'est plus produite : on retire toutes les lignes héritées.
-        await _store.ReplacePredictionsAsync(sage, MlModelType.Absence, DebutRetention, absenceTo, Array.Empty<T_ML_PREDICTION>(), ct);
+        await _store.ReplacePredictionsAsync(sage, MlModelType.Absence, DebutRetention, absenceTo, Array.Empty<MlPrediction>(), ct);
 
         // Les semaines passées restent pour le suivi prévu / réel, dans la limite de l'historique.
         var finRetention = MondayOf(today.AddMonths(-Math.Max(1, _options.HistoryMonths))).AddDays(-1);
-        await _store.ReplacePredictionsAsync(sage, MlModelType.HsProbabilite, DebutRetention, finRetention, Array.Empty<T_ML_PREDICTION>(), ct);
-        await _store.ReplacePredictionsAsync(sage, MlModelType.HsMontant, DebutRetention, finRetention, Array.Empty<T_ML_PREDICTION>(), ct);
+        await _store.ReplacePredictionsAsync(sage, MlModelType.HsProbabilite, DebutRetention, finRetention, Array.Empty<MlPrediction>(), ct);
+        await _store.ReplacePredictionsAsync(sage, MlModelType.HsMontant, DebutRetention, finRetention, Array.Empty<MlPrediction>(), ct);
 
         var hsCount = 0;
         var weeklyRows = 0;
@@ -104,7 +104,7 @@ public sealed class MlPredictionService : IMlPredictionService
                 var probabilities = _predictor.PredictHsProbability(probabilityBinary, samples);
                 var amounts = _predictor.PredictHsAmount(amountBinary, samples);
 
-                var probabilityPredictions = weeks.Select((week, index) => new T_ML_PREDICTION
+                var probabilityPredictions = weeks.Select((week, index) => new MlPrediction
                 {
                     BddSage = sage,
                     Matricule = week.Matricule,
@@ -119,7 +119,7 @@ public sealed class MlPredictionService : IMlPredictionService
                 var amountPredictions = weeks.Select((week, index) =>
                 {
                     var valeur = Math.Max(0m, Math.Round((decimal)amounts[index], 2));
-                    return new T_ML_PREDICTION
+                    return new MlPrediction
                     {
                         BddSage = sage,
                         Matricule = week.Matricule,
@@ -141,8 +141,8 @@ public sealed class MlPredictionService : IMlPredictionService
         }
         if (hsCount == 0)
         {
-            await _store.ReplacePredictionsAsync(sage, MlModelType.HsProbabilite, weekStart, weekEnd, Array.Empty<T_ML_PREDICTION>(), ct);
-            await _store.ReplacePredictionsAsync(sage, MlModelType.HsMontant, weekStart, weekEnd, Array.Empty<T_ML_PREDICTION>(), ct);
+            await _store.ReplacePredictionsAsync(sage, MlModelType.HsProbabilite, weekStart, weekEnd, Array.Empty<MlPrediction>(), ct);
+            await _store.ReplacePredictionsAsync(sage, MlModelType.HsMontant, weekStart, weekEnd, Array.Empty<MlPrediction>(), ct);
         }
 
         _logger.LogInformation("Prévisions {Sage} : {Hs} ligne(s) HS.", sage, hsCount);
@@ -222,9 +222,9 @@ public sealed class MlPredictionService : IMlPredictionService
             probabilites.TryGetValue(matricule, out var probabilite);
             resultat.Add(new MlHsForecastDto(
                 matricule,
-                card?.SAGE_NOM,
-                card?.SAGE_PRENOM,
-                card?.DEPARTEMENT,
+                card?.SageNom,
+                card?.SagePrenom,
+                card?.Departement,
                 debut,
                 montant.ValeurPrevue ?? 0m,
                 montant.BorneBasse ?? 0m,
@@ -283,7 +283,7 @@ public sealed class MlPredictionService : IMlPredictionService
             return Array.Empty<MlHsAccuracyDto>();
 
         var reels = (await _store.GetWeeklyAsync(sage, debut, finDerniere, ct))
-            .ToDictionary(w => (w.Matricule, w.SemaineDebut.Date), w => w.HS);
+            .ToDictionary(w => (w.Matricule, w.SemaineDebut.Date), w => w.Hs);
 
         var resultat = new List<MlHsAccuracyDto>();
         foreach (var semaine in montants.GroupBy(p => p.Cible.Date).OrderByDescending(g => g.Key))
@@ -318,16 +318,16 @@ public sealed class MlPredictionService : IMlPredictionService
     /// <summary>Borne basse des purges de prédictions (avant toute donnée possible).</summary>
     private static readonly DateTime DebutRetention = new(2000, 1, 1);
 
-    private async Task<Dictionary<string, T_CARDPAIE>> LoadCardsAsync(string sage, CancellationToken ct)
+    private async Task<Dictionary<string, CardPaie>> LoadCardsAsync(string sage, CancellationToken ct)
     {
-        var cards = await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == sage, ct);
+        var cards = await _uow.Repository<CardPaie>().ListAsync(c => c.SageBdd == sage, ct);
         return cards
-            .Where(c => !string.IsNullOrWhiteSpace(c.SAGE_MATRICULE))
-            .GroupBy(c => MatriculeIdentity.Cle(c.SAGE_MATRICULE))
-            .ToDictionary(g => g.Key, g => g.OrderBy(c => c.ID).First(), StringComparer.Ordinal);
+            .Where(c => !string.IsNullOrWhiteSpace(c.SageMatricule))
+            .GroupBy(c => MatriculeIdentity.Cle(c.SageMatricule))
+            .ToDictionary(g => g.Key, g => g.OrderBy(c => c.Id).First(), StringComparer.Ordinal);
     }
 
-    private static string BaselineMessage(IReadOnlyList<T_ML_MODELE> models)
+    private static string BaselineMessage(IReadOnlyList<MlModele> models)
     {
         var dernier = models
             .Where(m => m.Statut == MlModelStatus.Rejete && !string.IsNullOrWhiteSpace(m.Commentaire))
@@ -340,7 +340,7 @@ public sealed class MlPredictionService : IMlPredictionService
     }
 
     /// <summary>Un modèle n'est utilisé que s'il a été entraîné sur le contrat de features courant.</summary>
-    private T_ML_MODELE? Utilisable(T_ML_MODELE? model)
+    private MlModele? Utilisable(MlModele? model)
     {
         if (model is null || model.SchemaHash == _predictor.FeatureSchemaHash)
             return model;
@@ -350,7 +350,7 @@ public sealed class MlPredictionService : IMlPredictionService
         return null;
     }
 
-    private static MlMetrics? LireMetriques(T_ML_MODELE model)
+    private static MlMetrics? LireMetriques(MlModele model)
     {
         try
         {
@@ -372,7 +372,7 @@ public sealed class MlPredictionService : IMlPredictionService
     private static DateTime MondayOf(DateTime date)
         => date.Date.AddDays(-(((int)date.Date.DayOfWeek + 6) % 7));
 
-    private static MlModelDto ToDto(T_ML_MODELE model) => new(
+    private static MlModelDto ToDto(MlModele model) => new(
         model.Id,
         model.TypeModele,
         model.Version,

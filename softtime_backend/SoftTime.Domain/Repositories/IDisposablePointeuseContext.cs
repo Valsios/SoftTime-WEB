@@ -2,6 +2,6 @@ namespace SoftTime.Domain.Repositories;
 
 public interface IDisposablePointeuseContext : IDisposable
 {
-    IQueryable<Entities.Pointeuse.CHECKINOUT> CheckInOut { get; }
-    IQueryable<Entities.Pointeuse.USERINFO> Users { get; }
+    IQueryable<Entities.Pointeuse.CheckInOut> CheckInOut { get; }
+    IQueryable<Entities.Pointeuse.UserInfo> Users { get; }
 }

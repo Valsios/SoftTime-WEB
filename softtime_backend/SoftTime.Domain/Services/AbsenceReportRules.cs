@@ -20,9 +20,9 @@ public static class AbsenceReportRules
     public const string TypeNonJustifiee = "Non justifiée";
 
     public static IReadOnlyList<AbsenceReportRow> Calculer(
-        IReadOnlyList<T_PLANNING_SAL> plannings,
-        IReadOnlyList<T_CARDPAIE> cartes,
-        IReadOnlyList<T_HEURECORRIGER> corrections,
+        IReadOnlyList<PlanningSalarie> plannings,
+        IReadOnlyList<CardPaie> cartes,
+        IReadOnlyList<HeureCorrigee> corrections,
         IReadOnlyDictionary<string, List<LeaveDay>> congesParCle,
         IReadOnlySet<DateTime> feries,
         DateTime from,
@@ -39,16 +39,16 @@ public static class AbsenceReportRules
 
         // C11 : Toutes les cartes de même clé matricule sont mappées par leur IDSAL
         var cleParIdSal = new Dictionary<int, string>();
-        var cartesParCle = new Dictionary<string, T_CARDPAIE>(StringComparer.OrdinalIgnoreCase);
+        var cartesParCle = new Dictionary<string, CardPaie>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var carte in cartes)
         {
-            var cle = MatriculeIdentity.Cle(carte.SAGE_MATRICULE);
+            var cle = MatriculeIdentity.Cle(carte.SageMatricule);
             if (string.IsNullOrEmpty(cle))
                 continue;
 
-            cleParIdSal[carte.ID] = cle;
-            if (!cartesParCle.TryGetValue(cle, out var existante) || carte.ID < existante.ID)
+            cleParIdSal[carte.Id] = cle;
+            if (!cartesParCle.TryGetValue(cle, out var existante) || carte.Id < existante.Id)
                 cartesParCle[cle] = carte;
         }
 
@@ -57,12 +57,12 @@ public static class AbsenceReportRules
 
         // C11 : plannings de TOUTES les cartes de même clé pris en compte. Une ligne de travail
         // prime sur une ligne OFF, puis le plus petit ID l'emporte (choix déterministe).
-        var planningsParCleEtDate = new Dictionary<(string Cle, DateTime Date), T_PLANNING_SAL>();
+        var planningsParCleEtDate = new Dictionary<(string Cle, DateTime Date), PlanningSalarie>();
         foreach (var plan in plannings)
         {
             if (plan.DateP is not DateTime dateP)
                 continue;
-            if (!cleParIdSal.TryGetValue(plan.IDSAL, out var cle))
+            if (!cleParIdSal.TryGetValue(plan.IdSal, out var cle))
                 continue;
 
             var jour = dateP.Date;
@@ -93,8 +93,8 @@ public static class AbsenceReportRules
 
         // Corrections indexées par clé matricule pour les salariés retenus
         var correctionsParCle = corrections
-            .Where(h => h.DATE_POINTAGE_IN.HasValue)
-            .GroupBy(h => MatriculeIdentity.Cle(h.MATRICULE_SAGE), StringComparer.OrdinalIgnoreCase)
+            .Where(h => h.DatePointageIn.HasValue)
+            .GroupBy(h => MatriculeIdentity.Cle(h.MatriculeSage), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
 
         var resultats = new List<AbsenceReportRow>();
@@ -103,17 +103,17 @@ public static class AbsenceReportRules
         {
             var cle = kvp.Key;
             var carte = kvp.Value;
-            var matriculeAffiche = !string.IsNullOrWhiteSpace(carte.SAGE_MATRICULE) ? carte.SAGE_MATRICULE.Trim() : cle;
-            var nomAffiche = carte.SAGE_NOM?.Trim();
-            var prenomAffiche = carte.SAGE_PRENOM?.Trim();
-            var deptAffiche = carte.DEPARTEMENT?.Trim();
+            var matriculeAffiche = !string.IsNullOrWhiteSpace(carte.SageMatricule) ? carte.SageMatricule.Trim() : cle;
+            var nomAffiche = carte.SageNom?.Trim();
+            var prenomAffiche = carte.SagePrenom?.Trim();
+            var deptAffiche = carte.Departement?.Trim();
 
             // Corrections du salarié
             correctionsParCle.TryGetValue(cle, out var corrsSalarie);
-            corrsSalarie ??= new List<T_HEURECORRIGER>();
+            corrsSalarie ??= new List<HeureCorrigee>();
             var corrsParJour = corrsSalarie
-                .Where(h => h.DATE_POINTAGE_IN.HasValue)
-                .GroupBy(h => h.DATE_POINTAGE_IN!.Value.Date)
+                .Where(h => h.DatePointageIn.HasValue)
+                .GroupBy(h => h.DatePointageIn!.Value.Date)
                 .ToDictionary(g => g.Key, g => g.ToList());
 
             // Congés SAGE du salarié (C12 : gestion de plusieurs LeaveDay le même jour)
@@ -147,7 +147,7 @@ public static class AbsenceReportRules
             // 2. Corrections arbitrées GTA dans [debut, fin]
             foreach (var h in corrsSalarie)
             {
-                if (h.DATE_POINTAGE_IN is DateTime d && (h.ABSENCE_AM == true || h.ABSENCE_PM == true))
+                if (h.DatePointageIn is DateTime d && (h.AbsenceAm == true || h.AbsencePm == true))
                 {
                     var j = d.Date;
                     if (j >= debut && j <= fin)
@@ -202,15 +202,15 @@ public static class AbsenceReportRules
                 // Priorité 2 : Arbitrée GTA (C4 : périodes AM/PM)
                 if (corrsParJour.TryGetValue(jour, out var corrsDuJour))
                 {
-                    var arb = corrsDuJour.FirstOrDefault(h => h.ABSENCE_AM == true || h.ABSENCE_PM == true);
+                    var arb = corrsDuJour.FirstOrDefault(h => h.AbsenceAm == true || h.AbsencePm == true);
                     if (arb != null)
                     {
                         string periode;
-                        if (arb.ABSENCE_AM == true && arb.ABSENCE_PM == true)
+                        if (arb.AbsenceAm == true && arb.AbsencePm == true)
                             periode = "Journée";
-                        else if (arb.ABSENCE_AM == true)
+                        else if (arb.AbsenceAm == true)
                             periode = "Matin";
-                        else if (arb.ABSENCE_PM == true)
+                        else if (arb.AbsencePm == true)
                             periode = "Après-midi";
                         else
                             periode = "Journée";
@@ -228,7 +228,7 @@ public static class AbsenceReportRules
                             Periode: periode,
                             DureeHeures: dureeTheorique,
                             Type: TypeArbitreeGta,
-                            Motif: arb.INTITULE_ABSENCE
+                            Motif: arb.IntituleAbsence
                         ));
                         continue;
                     }
@@ -263,7 +263,7 @@ public static class AbsenceReportRules
         jour.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || feries.Contains(jour.Date);
 
     /// <summary>Jour de repos planifié : la ligne de planning est explicitement marquée OFF.</summary>
-    public static bool EstJourOff(T_PLANNING_SAL? plan) => plan?.OffP == true;
+    public static bool EstJourOff(PlanningSalarie? plan) => plan?.OffP == true;
 
     /// <summary>
     /// Règle partagée avec le tableau de bord : un jour est une absence non justifiée quand il est
@@ -273,7 +273,7 @@ public static class AbsenceReportRules
     public static bool EstNonJustifiee(
         bool estNonTravaille,
         bool estConge,
-        T_PLANNING_SAL? plan,
+        PlanningSalarie? plan,
         bool aPointage)
         => !estNonTravaille
            && !estConge
@@ -281,13 +281,13 @@ public static class AbsenceReportRules
            && !EstJourOff(plan)
            && CalculerDureeHeures(plan) is not null;
 
-    public static decimal? CalculerDureeHeures(T_PLANNING_SAL? plan)
+    public static decimal? CalculerDureeHeures(PlanningSalarie? plan)
     {
-        if (plan == null || !plan.HA.HasValue || !plan.HD.HasValue)
+        if (plan == null || !plan.Ha.HasValue || !plan.Hd.HasValue)
             return null;
 
-        var ha = plan.HA.Value.TimeOfDay;
-        var hd = plan.HD.Value.TimeOfDay;
+        var ha = plan.Ha.Value.TimeOfDay;
+        var hd = plan.Hd.Value.TimeOfDay;
         var pause = plan.Pause ?? TimeSpan.Zero;
 
         // C7 & R10 : Shift "Pause" ou données avec HA == HD (ex. 00:00:00) -> null
@@ -312,13 +312,13 @@ public static class AbsenceReportRules
     }
 
     /// <summary>Une ligne de travail prime sur une ligne OFF ; à défaut le plus petit ID gagne.</summary>
-    private static bool PrimeSur(T_PLANNING_SAL candidat, T_PLANNING_SAL existant)
+    private static bool PrimeSur(PlanningSalarie candidat, PlanningSalarie existant)
     {
         var candidatOff = EstJourOff(candidat);
         var existantOff = EstJourOff(existant);
         if (candidatOff != existantOff)
             return !candidatOff;
 
-        return candidat.ID < existant.ID;
+        return candidat.Id < existant.Id;
     }
 }

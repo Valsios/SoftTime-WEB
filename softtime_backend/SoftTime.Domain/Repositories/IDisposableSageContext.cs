@@ -2,12 +2,12 @@ namespace SoftTime.Domain.Repositories;
 
 public interface IDisposableSageContext : IDisposable
 {
-    IQueryable<Entities.Sage.T_SAL> Employees { get; }
-    IQueryable<Entities.Sage.T_GHR> Events { get; }
-    IQueryable<Entities.Sage.T_GHRSAL> EmployeeEvents { get; }
-    IQueryable<Entities.Sage.T_CST> Constants { get; }
-    IQueryable<Entities.Sage.T_DEPARTEMENT> Departments { get; }
-    IQueryable<Entities.Sage.T_HST_AFFECTATION> Affectations { get; }
-    IQueryable<Entities.Sage.T_GHRCAL_SOCIETE> CompanyCalendar { get; }
+    IQueryable<Entities.Sage.SalarieSage> Employees { get; }
+    IQueryable<Entities.Sage.EvenementSage> Events { get; }
+    IQueryable<Entities.Sage.EvenementSalarieSage> EmployeeEvents { get; }
+    IQueryable<Entities.Sage.ConstanteSage> Constants { get; }
+    IQueryable<Entities.Sage.DepartementSage> Departments { get; }
+    IQueryable<Entities.Sage.HistoriqueAffectationSage> Affectations { get; }
+    IQueryable<Entities.Sage.CalendrierSocieteSage> CompanyCalendar { get; }
     string ConnectionString { get; }
 }

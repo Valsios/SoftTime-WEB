@@ -23,39 +23,39 @@ public class ImportResultMessageTests
 
         public Contexte()
         {
-            Uow.Get<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 1, NOM_BD = "SAGE_TEST" });
-            Uow.Get<T_BDD_POINTEUSE>().Items.Add(new T_BDD_POINTEUSE { ID = 1, NOM_BD = "PTE_TEST", ACTIVE = true });
-            Uow.Get<T_CARDPAIE>().Items.AddRange(new[]
+            Uow.Get<BddSage>().Items.Add(new BddSage { Id = 1, NomBd = "SAGE_TEST" });
+            Uow.Get<BddPointeuse>().Items.Add(new BddPointeuse { Id = 1, NomBd = "PTE_TEST", Active = true });
+            Uow.Get<CardPaie>().Items.AddRange(new[]
             {
-                new T_CARDPAIE
+                new CardPaie
                 {
-                    ID = 1, SAGE_MATRICULE = "04285", SAGE_BDD = "SAGE_TEST",
-                    POINTEUSE_BDD = "PTE_TEST", POINTEUSE_NUMERO = "00123"
+                    Id = 1, SageMatricule = "04285", SageBdd = "SAGE_TEST",
+                    PointeuseBdd = "PTE_TEST", PointeuseNumero = "00123"
                 },
-                new T_CARDPAIE
+                new CardPaie
                 {
-                    ID = 2, SAGE_MATRICULE = "04301", SAGE_BDD = "SAGE_TEST",
-                    POINTEUSE_BDD = "PTE_TEST", POINTEUSE_NUMERO = "00124"
+                    Id = 2, SageMatricule = "04301", SageBdd = "SAGE_TEST",
+                    PointeuseBdd = "PTE_TEST", PointeuseNumero = "00124"
                 }
             });
-            Uow.Get<T_CATEGORIE>().Items.Add(new T_CATEGORIE
+            Uow.Get<Categorie>().Items.Add(new Categorie
             {
-                IDCATEGORIE = 10,
-                INTITULE = "Sédentaire",
-                HEURESEMAINE = 40m,
-                PAUSE = new TimeSpan(0, 30, 0),
-                BDD_SAGE = "SAGE_TEST",
-                BDD_POINTEUSE = "PTE_TEST"
+                IdCategorie = 10,
+                Intitule = "Sédentaire",
+                HeureSemaine = 40m,
+                Pause = new TimeSpan(0, 30, 0),
+                BddSage = "SAGE_TEST",
+                BddPointeuse = "PTE_TEST"
             });
-            Uow.Get<T_CAT_SAL>().Items.Add(new T_CAT_SAL
+            Uow.Get<CategorieSalarie>().Items.Add(new CategorieSalarie
             {
-                ID = 1, MATRICULE_SAGE = 1, ID_CATEG = 10,
-                BDD_SAGE = "SAGE_TEST", BDD_POINTEUSE = "PTE_TEST"
+                Id = 1, MatriculeSage = 1, IdCateg = 10,
+                BddSage = "SAGE_TEST", BddPointeuse = "PTE_TEST"
             });
-            Uow.Get<T_PLANNING>().Items.Add(new T_PLANNING
+            Uow.Get<Planning>().Items.Add(new Planning
             {
-                NoSHIFT = 1, HA = new TimeSpan(8, 0, 0), PAUSE = new TimeSpan(0, 30, 0),
-                HD = new TimeSpan(17, 0, 0), Intitule = "Journée"
+                NoShift = 1, Ha = new TimeSpan(8, 0, 0), Pause = new TimeSpan(0, 30, 0),
+                Hd = new TimeSpan(17, 0, 0), Intitule = "Journée"
             });
 
             var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);

@@ -27,17 +27,17 @@ public class AuditTrailTests
             ["Nuit"] = 2
         }));
 
-        var entry = Assert.Single(uow.Get<suivi_JOURNAL>().Items);
-        Assert.Equal("T_CUMSAL", entry.TABLES);
-        Assert.Equal("SYNC_PAIE", entry.ACTIONS);
-        Assert.Equal("admin", entry.USERS);
-        Assert.Equal("SAGE_TEST", entry.BASE_SAGE);
-        Assert.Equal("SYNC_PAIE:STANDARD", entry.SOURCE);
-        Assert.Contains("Statut=SUCCES", entry.NOUVEAUX);
-        Assert.Contains("LignesMisesÀJour=4", entry.NOUVEAUX);
-        Assert.Contains("Exo130=2", entry.NOUVEAUX);
-        Assert.DoesNotContain("123.45", entry.NOUVEAUX);
-        Assert.DoesNotContain("Dupont", entry.NOUVEAUX);
+        var entry = Assert.Single(uow.Get<JournalAudit>().Items);
+        Assert.Equal("T_CUMSAL", entry.Tables);
+        Assert.Equal("SYNC_PAIE", entry.Actions);
+        Assert.Equal("admin", entry.Users);
+        Assert.Equal("SAGE_TEST", entry.BaseSage);
+        Assert.Equal("SYNC_PAIE:STANDARD", entry.Source);
+        Assert.Contains("Statut=SUCCES", entry.Nouveaux);
+        Assert.Contains("LignesMisesÀJour=4", entry.Nouveaux);
+        Assert.Contains("Exo130=2", entry.Nouveaux);
+        Assert.DoesNotContain("123.45", entry.Nouveaux);
+        Assert.DoesNotContain("Dupont", entry.Nouveaux);
     }
 
     [Fact]
@@ -48,10 +48,10 @@ public class AuditTrailTests
 
         await trail.WritePayrollSyncAsync(Audit("ECHEC", new Dictionary<string, int> { ["Exo130"] = 3 }));
 
-        var entry = Assert.Single(uow.Get<suivi_JOURNAL>().Items);
-        Assert.Contains("Statut=ECHEC", entry.NOUVEAUX);
-        Assert.Contains("LignesMisesÀJour=3", entry.NOUVEAUX);
-        Assert.DoesNotContain("matricule", entry.NOUVEAUX, StringComparison.OrdinalIgnoreCase);
+        var entry = Assert.Single(uow.Get<JournalAudit>().Items);
+        Assert.Contains("Statut=ECHEC", entry.Nouveaux);
+        Assert.Contains("LignesMisesÀJour=3", entry.Nouveaux);
+        Assert.DoesNotContain("matricule", entry.Nouveaux, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -62,7 +62,7 @@ public class AuditTrailTests
 
         await trail.WritePayrollSyncAsync(Audit("SUCCES", new Dictionary<string, int>()));
 
-        Assert.Empty(uow.Get<suivi_JOURNAL>().Items);
+        Assert.Empty(uow.Get<JournalAudit>().Items);
     }
 
     [Fact]
@@ -91,9 +91,9 @@ public class AuditTrailTests
 
         await trail.WritePayrollSyncAsync(audit);
 
-        var entry = Assert.Single(uow.Get<suivi_JOURNAL>().Items);
-        Assert.Equal("SAGE_COURANTE", entry.BASE_SAGE);
-        Assert.Equal("POINTEUSE_COURANTE", entry.BASE_POINTEUSE);
+        var entry = Assert.Single(uow.Get<JournalAudit>().Items);
+        Assert.Equal("SAGE_COURANTE", entry.BaseSage);
+        Assert.Equal("POINTEUSE_COURANTE", entry.BasePointeuse);
     }
 
     [Fact]
@@ -181,16 +181,16 @@ public class AuditTrailTests
         Assert.Equal(CancellationToken.None, audit.Tokens.Single());
     }
 
-    private static T_BDD_SAGE Database() => new() { NOM_BD = "SAGE_TEST", TYPE_BASE = "STANDARD" };
+    private static BddSage Database() => new() { NomBd = "SAGE_TEST", TypeBase = "STANDARD" };
     private static IReadOnlyList<HsExoDto> Rows() => [new HsExoDto(1, null, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0)];
     private static PayrollSyncContext Context() => new(new DateTime(2026, 1, 1), new DateTime(2026, 1, 31), "admin", Guid.NewGuid());
 
     private sealed class FailingUnitOfWork : IUnitOfWork
     {
-        private readonly InMemoryRepository<suivi_JOURNAL> _journal = new();
+        private readonly InMemoryRepository<JournalAudit> _journal = new();
 
         public IRepository<T> Repository<T>() where T : class
-            => typeof(T) == typeof(suivi_JOURNAL)
+            => typeof(T) == typeof(JournalAudit)
                 ? (IRepository<T>)(object)_journal
                 : throw new InvalidOperationException("Unexpected repository.");
 
@@ -250,14 +250,14 @@ public class AuditTrailTests
 
     private sealed class SuccessfulSageWriter : ISagePayrollWriter
     {
-        public Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(string connection, T_CST[] constants, int number, OvertimeSageCodes codes, decimal exo130, decimal exo150, decimal i130, decimal i150, decimal ferie, decimal nuit, decimal dim, CancellationToken ct = default)
+        public Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(string connection, ConstanteSage[] constants, int number, OvertimeSageCodes codes, decimal exo130, decimal exo150, decimal i130, decimal i150, decimal ferie, decimal nuit, decimal dim, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyDictionary<string, int>>(PayrollWritingConfiguration.Categories.ToDictionary(category => category, _ => 1));
         public Task<int> UpdateCumulAsync(string connection, int number, short operand, decimal value, CancellationToken ct = default) => Task.FromResult(1);
     }
 
     private sealed class FailingSageWriter(Exception exception, int completed) : ISagePayrollWriter
     {
-        public Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(string connection, T_CST[] constants, int number, OvertimeSageCodes codes, decimal exo130, decimal exo150, decimal i130, decimal i150, decimal ferie, decimal nuit, decimal dim, CancellationToken ct = default)
+        public Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(string connection, ConstanteSage[] constants, int number, OvertimeSageCodes codes, decimal exo130, decimal exo150, decimal i130, decimal i150, decimal ferie, decimal nuit, decimal dim, CancellationToken ct = default)
         {
             var categories = PayrollWritingConfiguration.Categories.Take(completed).ToDictionary(category => category, _ => 1);
             throw new PayrollSyncWriteException(exception, completed, categories);
@@ -267,14 +267,14 @@ public class AuditTrailTests
 
     private sealed class CancelledSageWriter : ISagePayrollWriter
     {
-        public Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(string connection, T_CST[] constants, int number, OvertimeSageCodes codes, decimal exo130, decimal exo150, decimal i130, decimal i150, decimal ferie, decimal nuit, decimal dim, CancellationToken ct = default)
+        public Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(string connection, ConstanteSage[] constants, int number, OvertimeSageCodes codes, decimal exo130, decimal exo150, decimal i130, decimal i150, decimal ferie, decimal nuit, decimal dim, CancellationToken ct = default)
             => throw new OperationCanceledException(ct);
         public Task<int> UpdateCumulAsync(string connection, int number, short operand, decimal value, CancellationToken ct = default) => Task.FromResult(0);
     }
 
     private sealed class CancellingSageWriter(CancellationTokenSource cancellation) : ISagePayrollWriter
     {
-        public Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(string connection, T_CST[] constants, int number, OvertimeSageCodes codes, decimal exo130, decimal exo150, decimal i130, decimal i150, decimal ferie, decimal nuit, decimal dim, CancellationToken ct = default)
+        public Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(string connection, ConstanteSage[] constants, int number, OvertimeSageCodes codes, decimal exo130, decimal exo150, decimal i130, decimal i150, decimal ferie, decimal nuit, decimal dim, CancellationToken ct = default)
         {
             cancellation.Cancel();
             return Task.FromResult<IReadOnlyDictionary<string, int>>(PayrollWritingConfiguration.Categories.ToDictionary(category => category, _ => 1));

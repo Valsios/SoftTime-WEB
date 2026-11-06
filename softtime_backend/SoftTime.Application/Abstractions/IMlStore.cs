@@ -13,36 +13,36 @@ public interface IMlStore
 
     Task ReplaceDailyAsync(
         string bddSage, DateTime from, DateTime to,
-        IReadOnlyCollection<T_ML_SALARIE_JOUR> rows, CancellationToken ct = default);
+        IReadOnlyCollection<MlSalarieJour> rows, CancellationToken ct = default);
 
     Task ReplaceWeeklyAsync(
         string bddSage, DateTime from, DateTime to,
-        IReadOnlyCollection<T_ML_SALARIE_SEMAINE> rows, CancellationToken ct = default);
+        IReadOnlyCollection<MlSalarieSemaine> rows, CancellationToken ct = default);
 
-    Task<IReadOnlyList<T_ML_SALARIE_JOUR>> GetDailyAsync(
+    Task<IReadOnlyList<MlSalarieJour>> GetDailyAsync(
         string bddSage, DateTime from, DateTime to, CancellationToken ct = default);
 
-    Task<IReadOnlyList<T_ML_SALARIE_SEMAINE>> GetWeeklyAsync(
+    Task<IReadOnlyList<MlSalarieSemaine>> GetWeeklyAsync(
         string bddSage, DateTime from, DateTime to, CancellationToken ct = default);
 
     /// <summary>Charge au plus <paramref name="maxRows"/> lignes récentes pour l'entraînement.</summary>
-    Task<IReadOnlyList<T_ML_SALARIE_JOUR>> GetDailyForTrainingAsync(
+    Task<IReadOnlyList<MlSalarieJour>> GetDailyForTrainingAsync(
         string bddSage, DateTime from, DateTime to, int maxRows, CancellationToken ct = default);
 
-    Task<IReadOnlyList<T_ML_SALARIE_SEMAINE>> GetWeeklyForTrainingAsync(
+    Task<IReadOnlyList<MlSalarieSemaine>> GetWeeklyForTrainingAsync(
         string bddSage, DateTime from, DateTime to, int maxRows, CancellationToken ct = default);
 
-    Task SaveModelAsync(T_ML_MODELE model, CancellationToken ct = default);
+    Task SaveModelAsync(MlModele model, CancellationToken ct = default);
 
-    Task<T_ML_MODELE?> GetActiveModelAsync(string bddSage, MlModelType type, CancellationToken ct = default);
+    Task<MlModele?> GetActiveModelAsync(string bddSage, MlModelType type, CancellationToken ct = default);
 
-    Task<IReadOnlyList<T_ML_MODELE>> ListModelsAsync(string bddSage, CancellationToken ct = default);
+    Task<IReadOnlyList<MlModele>> ListModelsAsync(string bddSage, CancellationToken ct = default);
 
     Task ReplacePredictionsAsync(
         string bddSage, MlModelType type, DateTime from, DateTime to,
-        IReadOnlyCollection<T_ML_PREDICTION> rows, CancellationToken ct = default);
+        IReadOnlyCollection<MlPrediction> rows, CancellationToken ct = default);
 
-    Task<IReadOnlyList<T_ML_PREDICTION>> GetPredictionsAsync(
+    Task<IReadOnlyList<MlPrediction>> GetPredictionsAsync(
         string bddSage, MlModelType type, DateTime from, DateTime to, CancellationToken ct = default);
 
     Task ArchiveActiveModelsAsync(string bddSage, MlModelType type, CancellationToken ct = default);

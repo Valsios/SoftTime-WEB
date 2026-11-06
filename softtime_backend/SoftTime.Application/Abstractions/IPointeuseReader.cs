@@ -5,10 +5,10 @@ namespace SoftTime.Application.Abstractions;
  
 public interface IPointeuseReader
 {
-    bool CanHandle(T_BDD_POINTEUSE pteRow);
+    bool CanHandle(BddPointeuse pteRow);
  
-    Task<IReadOnlyList<NormalizedPointeuseUser>> ListUsersAsync(T_BDD_POINTEUSE pteRow, CancellationToken ct);
+    Task<IReadOnlyList<NormalizedPointeuseUser>> ListUsersAsync(BddPointeuse pteRow, CancellationToken ct);
  
     Task<IReadOnlyList<NormalizedPunch>> ListPunchesAsync(
-        T_BDD_POINTEUSE pteRow, DateTime from, DateTime to, CancellationToken ct);
+        BddPointeuse pteRow, DateTime from, DateTime to, CancellationToken ct);
 }

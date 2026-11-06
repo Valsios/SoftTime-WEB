@@ -6,7 +6,7 @@ namespace SoftTime.Infrastructure.Services;
 /// <summary>Mapping unique entre les instantanés persistés et les échantillons ML.NET.</summary>
 internal static class MlSampleMapper
 {
-    public static MlAbsenceSample ToAbsence(T_ML_SALARIE_JOUR row) => new()
+    public static MlAbsenceSample ToAbsence(MlSalarieJour row) => new()
     {
         Label = row.AbsenceNonJustifiee,
         JourSemaine = row.JourSemaine,
@@ -37,10 +37,10 @@ internal static class MlSampleMapper
         PlanningConnu = row.PlanningConnu
     };
 
-    public static MlHsSample ToHs(T_ML_SALARIE_SEMAINE row) => new()
+    public static MlHsSample ToHs(MlSalarieSemaine row) => new()
     {
-        HsPositive = row.HS > 0m,
-        HsAmount = (float)row.HS,
+        HsPositive = row.Hs > 0m,
+        HsAmount = (float)row.Hs,
         SemaineIso = row.SemaineIso,
         Mois = row.SemaineDebut.Month,
         HeuresPlanifiees = (float)row.HeuresPlanifiees,

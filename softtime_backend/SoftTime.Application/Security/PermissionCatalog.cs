@@ -71,11 +71,11 @@ public static class PermissionCatalog
 
     public static List<string> BuildDefaultPermissionsList(
         HashSet<int> rights,
-        IEnumerable<T_BDD_SAGE> sageDbs,
-        IEnumerable<T_BDD_POINTEUSE> pointeuseDbs)
+        IEnumerable<BddSage> sageDbs,
+        IEnumerable<BddPointeuse> pointeuseDbs)
     {
         var defaults = new List<string>();
-        var sageList = sageDbs as IReadOnlyCollection<T_BDD_SAGE> ?? sageDbs.ToList();
+        var sageList = sageDbs as IReadOnlyCollection<BddSage> ?? sageDbs.ToList();
 
         if (sageList.Count > 0 || rights.Contains(Rights.Databases))
         {
@@ -84,7 +84,7 @@ public static class PermissionCatalog
 
         foreach (var s in sageList)
         {
-            var name = s.NOM_BD ?? string.Empty;
+            var name = s.NomBd ?? string.Empty;
             if (string.IsNullOrWhiteSpace(name)) continue;
             defaults.Add($"SAGE:{name}:READ");
             defaults.Add($"SAGE:{name}:UPDATE");
@@ -96,7 +96,7 @@ public static class PermissionCatalog
             defaults.Add("POINTEUSE:CREATE");
             foreach (var p in pointeuseDbs)
             {
-                var name = p.NOM_BD ?? string.Empty;
+                var name = p.NomBd ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(name)) continue;
                 defaults.Add($"POINTEUSE:{name}:READ");
                 defaults.Add($"POINTEUSE:{name}:UPDATE");

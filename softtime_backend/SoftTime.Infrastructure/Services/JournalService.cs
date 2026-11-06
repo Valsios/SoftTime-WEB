@@ -41,15 +41,15 @@ public class JournalService : IJournalService
 
         var page = query.Page is null or < 1 ? 1 : query.Page.Value;
         var pageSize = query.PageSize is null or < 1 ? DefaultPageSize : Math.Min(query.PageSize.Value, MaxPageSize);
-        var repo = _uow.Repository<suivi_JOURNAL>();
+        var repo = _uow.Repository<JournalAudit>();
         var filtered = repo.QueryReadOnly().Where(Filter(query));
 
         var total = await repo.CountAsync(filtered, ct);
         var offset = (long)(page - 1) * pageSize;
         var rows = offset >= total
-            ? new List<suivi_JOURNAL>()
+            ? new List<JournalAudit>()
             : await repo.ToListAsync(filtered
-                .OrderByDescending(e => e.DATE_UTC)
+                .OrderByDescending(e => e.DateUtc)
                 .ThenByDescending(e => e.Id)
                 .Skip((int)offset)
                 .Take(pageSize), ct);
@@ -61,7 +61,7 @@ public class JournalService : IJournalService
     {
         await EnsureCanReadAsync(ct);
 
-        var repo = _uow.Repository<suivi_JOURNAL>();
+        var repo = _uow.Repository<JournalAudit>();
         var row = (await repo.ToListAsync(repo.QueryReadOnly().Where(e => e.Id == id).Take(1), ct)).FirstOrDefault()
                   ?? throw new NotFoundException("Ligne de journal introuvable.");
         return ToDto(row);
@@ -71,11 +71,11 @@ public class JournalService : IJournalService
     {
         await EnsureCanReadAsync(ct);
 
-        var repo = _uow.Repository<suivi_JOURNAL>();
+        var repo = _uow.Repository<JournalAudit>();
         var period = repo.QueryReadOnly().Where(Filter(new JournalQuery(From: from, To: to)));
-        var tables = await repo.ToListAsync(period.Select(e => e.TABLES).Distinct().OrderBy(v => v).Take(MaxFacetValues), ct);
-        var actions = await repo.ToListAsync(period.Select(e => e.ACTIONS).Distinct().OrderBy(v => v).Take(MaxFacetValues), ct);
-        var users = await repo.ToListAsync(period.Select(e => e.USERS).Distinct().OrderBy(v => v).Take(MaxFacetValues), ct);
+        var tables = await repo.ToListAsync(period.Select(e => e.Tables).Distinct().OrderBy(v => v).Take(MaxFacetValues), ct);
+        var actions = await repo.ToListAsync(period.Select(e => e.Actions).Distinct().OrderBy(v => v).Take(MaxFacetValues), ct);
+        var users = await repo.ToListAsync(period.Select(e => e.Users).Distinct().OrderBy(v => v).Take(MaxFacetValues), ct);
         return new JournalFacetsDto(tables, actions, users);
     }
 
@@ -84,7 +84,7 @@ public class JournalService : IJournalService
         => FineReadAccess.EnsureAsync(_user, _rights, Rights.Traceability, "TRACE:AUDIT", ct);
 
     /// <summary>Filtres traduits en paramètres SQL par EF (aucune valeur concaténée dans une requête).</summary>
-    private static Expression<Func<suivi_JOURNAL, bool>> Filter(JournalQuery q)
+    private static Expression<Func<JournalAudit, bool>> Filter(JournalQuery q)
     {
         var from = Utc(q.From);
         var to = Utc(q.To);
@@ -94,14 +94,14 @@ public class JournalService : IJournalService
         var key = Blank(q.Key);
         var correlation = q.Correlation;
         var sage = Blank(q.SageDatabase);
-        return e => (from == null || e.DATE_UTC >= from)
-                    && (to == null || e.DATE_UTC <= to)
-                    && (user == null || e.USERS == user)
-                    && (action == null || e.ACTIONS == action)
-                    && (table == null || e.TABLES == table)
-                    && (key == null || e.CLES == key)
-                    && (correlation == null || e.CORRELATIONS == correlation)
-                    && (sage == null || e.BASE_SAGE == sage);
+        return e => (from == null || e.DateUtc >= from)
+                    && (to == null || e.DateUtc <= to)
+                    && (user == null || e.Users == user)
+                    && (action == null || e.Actions == action)
+                    && (table == null || e.Tables == table)
+                    && (key == null || e.Cles == key)
+                    && (correlation == null || e.Correlations == correlation)
+                    && (sage == null || e.BaseSage == sage);
     }
 
     /// <summary>
@@ -113,18 +113,18 @@ public class JournalService : IJournalService
 
     private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private static JournalEntryDto ToDto(suivi_JOURNAL e) => new(
+    private static JournalEntryDto ToDto(JournalAudit e) => new(
         e.Id,
-        e.DATE_UTC,
-        e.TABLES,
-        AuditMaskingPolicy.MaskKey(e.TABLES, e.CLES),
-        e.COLONNES,
-        e.ACTIONS,
-        AuditMaskingPolicy.MaskValue(e.TABLES, e.COLONNES, e.ANCIENS),
-        AuditMaskingPolicy.MaskValue(e.TABLES, e.COLONNES, e.NOUVEAUX),
-        e.USERS,
-        e.BASE_SAGE,
-        e.BASE_POINTEUSE,
-        e.CORRELATIONS,
-        e.SOURCE);
+        e.DateUtc,
+        e.Tables,
+        AuditMaskingPolicy.MaskKey(e.Tables, e.Cles),
+        e.Colonnes,
+        e.Actions,
+        AuditMaskingPolicy.MaskValue(e.Tables, e.Colonnes, e.Anciens),
+        AuditMaskingPolicy.MaskValue(e.Tables, e.Colonnes, e.Nouveaux),
+        e.Users,
+        e.BaseSage,
+        e.BasePointeuse,
+        e.Correlations,
+        e.Source);
 }

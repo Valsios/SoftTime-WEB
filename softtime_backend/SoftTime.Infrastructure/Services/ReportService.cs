@@ -38,7 +38,7 @@ public class ReportService : IReportService
     public async Task<IReadOnlyList<CorrectedHourDto>> PointageAsync(ReportFilter filter, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var list = await _uow.Repository<T_HEURECORRIGER>().ListReadOnlyAsync(PointagePredicate(filter, _tenant.SageDb), ct);
+        var list = await _uow.Repository<HeureCorrigee>().ListReadOnlyAsync(PointagePredicate(filter, _tenant.SageDb), ct);
         return list.Select(ToCorrectedHourDto).ToList();
     }
 
@@ -48,11 +48,11 @@ public class ReportService : IReportService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         return await PagedLists.PageAsync(
-            _uow.Repository<T_HEURECORRIGER>(),
+            _uow.Repository<HeureCorrigee>(),
             PointagePredicate(filter, _tenant.SageDb),
-            q => q.OrderBy(h => h.DATE_POINTAGE_IN)
-                  .ThenBy(h => h.MATRICULE_SAGE)
-                  .ThenBy(h => h.ID),
+            q => q.OrderBy(h => h.DatePointageIn)
+                  .ThenBy(h => h.MatriculeSage)
+                  .ThenBy(h => h.Id),
             page,
             pageSize,
             h => (object)ToCorrectedHourDto(h),
@@ -141,7 +141,7 @@ public class ReportService : IReportService
     public async Task<IReadOnlyList<HsExoDto>> HsRecapAsync(ReportFilter filter, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var list = await _uow.Repository<T_HSExoImp>().ListReadOnlyAsync(HsRecapPredicate(filter, _tenant.SageDb), ct);
+        var list = await _uow.Repository<HsExoImp>().ListReadOnlyAsync(HsRecapPredicate(filter, _tenant.SageDb), ct);
         return list.Select(ToHsExoDto).ToList();
     }
 
@@ -151,9 +151,9 @@ public class ReportService : IReportService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         return await PagedLists.PageAsync(
-            _uow.Repository<T_HSExoImp>(),
+            _uow.Repository<HsExoImp>(),
             HsRecapPredicate(filter, _tenant.SageDb),
-            q => q.OrderBy(h => h.Matricule).ThenBy(h => h.OID),
+            q => q.OrderBy(h => h.Matricule).ThenBy(h => h.Oid),
             page,
             pageSize,
             h => (object)ToHsExoDto(h),
@@ -164,7 +164,7 @@ public class ReportService : IReportService
     {
         EnsureMondayToSunday(filter);
         await _tenant.EnsureAuthorizedAsync(ct);
-        var hs = await _uow.Repository<T_HS_VALIDER>().ListReadOnlyAsync(HeuresSemainePredicate(filter, _tenant.SageDb), ct);
+        var hs = await _uow.Repository<HsValidee>().ListReadOnlyAsync(HeuresSemainePredicate(filter, _tenant.SageDb), ct);
         return hs.Select(ToHeuresSemaineRow).ToList();
     }
 
@@ -175,9 +175,9 @@ public class ReportService : IReportService
         EnsureMondayToSunday(filter);
         await _tenant.EnsureAuthorizedAsync(ct);
         return await PagedLists.PageAsync(
-            _uow.Repository<T_HS_VALIDER>(),
+            _uow.Repository<HsValidee>(),
             HeuresSemainePredicate(filter, _tenant.SageDb),
-            q => q.OrderBy(h => h.MATRICULES).ThenBy(h => h.ID),
+            q => q.OrderBy(h => h.Matricules).ThenBy(h => h.Id),
             page,
             pageSize,
             ToHeuresSemaineRow,
@@ -187,7 +187,7 @@ public class ReportService : IReportService
     public async Task<IReadOnlyList<object>> HeuresDimancheAsync(ReportFilter filter, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var list = await _uow.Repository<T_HEUREDIMANCHE>().ListReadOnlyAsync(HeuresDimanchePredicate(filter, _tenant.SageDb), ct);
+        var list = await _uow.Repository<HeureDimanche>().ListReadOnlyAsync(HeuresDimanchePredicate(filter, _tenant.SageDb), ct);
         return list.Select(ToHeuresDimancheRow).ToList();
     }
 
@@ -197,9 +197,9 @@ public class ReportService : IReportService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         return await PagedLists.PageAsync(
-            _uow.Repository<T_HEUREDIMANCHE>(),
+            _uow.Repository<HeureDimanche>(),
             HeuresDimanchePredicate(filter, _tenant.SageDb),
-            q => q.OrderBy(h => h.Date_Dim).ThenBy(h => h.MATRICULE_SAGE).ThenBy(h => h.ID),
+            q => q.OrderBy(h => h.DateDim).ThenBy(h => h.MatriculeSage).ThenBy(h => h.Id),
             page,
             pageSize,
             ToHeuresDimancheRow,
@@ -282,17 +282,17 @@ public class ReportService : IReportService
             throw new DomainException("La semaine doit aller du lundi au dimanche.");
     }
 
-    private static Expression<Func<T_HEURECORRIGER, bool>> PointagePredicate(ReportFilter filter, string sageDb)
+    private static Expression<Func<HeureCorrigee, bool>> PointagePredicate(ReportFilter filter, string sageDb)
     {
         var from = filter.From;
         var to = filter.To;
         var matriculeFrom = filter.MatriculeFrom;
         var matriculeTo = filter.MatriculeTo;
-        return h => h.BDD_SAGE == sageDb
-            && h.DATE_POINTAGE_IN >= from
-            && h.DATE_POINTAGE_IN <= to
-            && (string.IsNullOrEmpty(matriculeFrom) || string.Compare(h.MATRICULE_SAGE, matriculeFrom) >= 0)
-            && (string.IsNullOrEmpty(matriculeTo) || string.Compare(h.MATRICULE_SAGE, matriculeTo) <= 0);
+        return h => h.BddSage == sageDb
+            && h.DatePointageIn >= from
+            && h.DatePointageIn <= to
+            && (string.IsNullOrEmpty(matriculeFrom) || string.Compare(h.MatriculeSage, matriculeFrom) >= 0)
+            && (string.IsNullOrEmpty(matriculeTo) || string.Compare(h.MatriculeSage, matriculeTo) <= 0);
     }
 
     /// <summary>
@@ -314,25 +314,25 @@ public class ReportService : IReportService
 
         // 1. Cartes filtrées par tenant SAGE, plage de matricules (MatriculeRange) et Département
         var periodRequest = new PeriodRequest(filter.MatriculeFrom?.Trim(), filter.MatriculeTo?.Trim(), filter.From, filter.To, filter.Departement);
-        var cartes = (await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == sageDb, ct))
-            .Where(c => MatriculeRange.Contains(c.SAGE_MATRICULE?.Trim(), periodRequest))
+        var cartes = (await _uow.Repository<CardPaie>().ListAsync(c => c.SageBdd == sageDb, ct))
+            .Where(c => MatriculeRange.Contains(c.SageMatricule?.Trim(), periodRequest))
             .Where(c => string.IsNullOrWhiteSpace(filter.Departement)
-                        || string.Equals(c.DEPARTEMENT?.Trim(), filter.Departement.Trim(), StringComparison.OrdinalIgnoreCase))
+                        || string.Equals(c.Departement?.Trim(), filter.Departement.Trim(), StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         if (cartes.Count == 0)
             return null;
 
-        var idsalSet = cartes.Select(c => c.ID).ToHashSet();
+        var idsalSet = cartes.Select(c => c.Id).ToHashSet();
         var clesCartes = cartes
-            .Select(c => MatriculeIdentity.Cle(c.SAGE_MATRICULE))
+            .Select(c => MatriculeIdentity.Cle(c.SageMatricule))
             .Where(c => !string.IsNullOrEmpty(c))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         // 2. Fériés de la base SAGE
-        var feries = (await _uow.Repository<T_FERIE>().ListAsync(f => f.BDD_SAGE == sageDb, ct))
-            .Where(f => f.DATE.HasValue)
-            .Select(f => f.DATE!.Value.Date)
+        var feries = (await _uow.Repository<JourFerie>().ListAsync(f => f.BddSage == sageDb, ct))
+            .Where(f => f.Date.HasValue)
+            .Select(f => f.Date!.Value.Date)
             .ToHashSet();
 
         // 3. Congés SAGE chargés une seule fois pour le tenant (C6 : log warning si indisponible)
@@ -347,64 +347,64 @@ public class ReportService : IReportService
         }
 
         // 4. Corrections de la plage [from, veille] restreintes aux salariés retenus (C5)
-        var corrections = (await _uow.Repository<T_HEURECORRIGER>().ListAsync(h =>
-            h.BDD_SAGE == sageDb
-            && h.DATE_POINTAGE_IN >= from && h.DATE_POINTAGE_IN < borneFinExclusive, ct))
-            .Where(h => clesCartes.Contains(MatriculeIdentity.Cle(h.MATRICULE_SAGE)))
+        var corrections = (await _uow.Repository<HeureCorrigee>().ListAsync(h =>
+            h.BddSage == sageDb
+            && h.DatePointageIn >= from && h.DatePointageIn < borneFinExclusive, ct))
+            .Where(h => clesCartes.Contains(MatriculeIdentity.Cle(h.MatriculeSage)))
             .ToList();
 
         // 5. Plannings de la plage [from, veille]. Les jours OFF sont conservés ici : ils sont
         // interprétés par les règles (un jour OFF n'est jamais une absence ni un retard).
-        var plannings = (await _uow.Repository<T_PLANNING_SAL>().ListAsync(p =>
-            p.BDD_SAGE == sageDb
+        var plannings = (await _uow.Repository<PlanningSalarie>().ListAsync(p =>
+            p.BddSage == sageDb
             && p.DateP >= from && p.DateP < borneFinExclusive, ct))
-            .Where(p => idsalSet.Contains(p.IDSAL))
+            .Where(p => idsalSet.Contains(p.IdSal))
             .ToList();
 
         // 6. Catégorie du salarié (T_CAT_SAL référence T_CARDPAIE.ID) et tolérances de catégorie
-        var categorieParCarte = (await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == sageDb, ct))
-            .GroupBy(a => a.MATRICULE_SAGE)
-            .ToDictionary(g => g.Key, g => g.First().ID_CATEG);
-        var tolerances = await _uow.Repository<T_TOLERANCE>().ListAsync(_ => true, ct);
+        var categorieParCarte = (await _uow.Repository<CategorieSalarie>().ListAsync(a => a.BddSage == sageDb, ct))
+            .GroupBy(a => a.MatriculeSage)
+            .ToDictionary(g => g.Key, g => g.First().IdCateg);
+        var tolerances = await _uow.Repository<ToleranceRetard>().ListAsync(_ => true, ct);
 
         return new ReportContext(cartes, feries, conges, corrections, plannings, categorieParCarte, tolerances);
     }
 
     /// <summary>Données chargées une fois pour les états calculés (absences et retards).</summary>
     private sealed record ReportContext(
-        IReadOnlyList<T_CARDPAIE> Cartes,
+        IReadOnlyList<CardPaie> Cartes,
         IReadOnlySet<DateTime> Feries,
         IReadOnlyDictionary<string, List<LeaveDay>> Conges,
-        IReadOnlyList<T_HEURECORRIGER> Corrections,
-        IReadOnlyList<T_PLANNING_SAL> Plannings,
+        IReadOnlyList<HeureCorrigee> Corrections,
+        IReadOnlyList<PlanningSalarie> Plannings,
         IReadOnlyDictionary<int, int> CategorieParCarte,
-        IReadOnlyList<T_TOLERANCE> Tolerances);
+        IReadOnlyList<ToleranceRetard> Tolerances);
 
-    private static Expression<Func<T_HSExoImp, bool>> HsRecapPredicate(ReportFilter filter, string sageDb)
+    private static Expression<Func<HsExoImp, bool>> HsRecapPredicate(ReportFilter filter, string sageDb)
     {
         var from = filter.From.Date;
         var to = filter.To.Date;
-        return h => h.BDD_SAGE == sageDb && h.PeriodeDebut == from && h.PeriodeFin == to;
+        return h => h.BddSage == sageDb && h.PeriodeDebut == from && h.PeriodeFin == to;
     }
 
-    private static Expression<Func<T_HS_VALIDER, bool>> HeuresSemainePredicate(ReportFilter filter, string sageDb)
+    private static Expression<Func<HsValidee, bool>> HeuresSemainePredicate(ReportFilter filter, string sageDb)
     {
         var from = filter.From.Date;
         var to = filter.To.Date;
         var matriculeFrom = filter.MatriculeFrom;
         var matriculeTo = filter.MatriculeTo;
-        return h => h.BDD_SAGE == sageDb
-            && h.DATE_DEB == from
-            && h.DATE_FIN == to
-            && (string.IsNullOrEmpty(matriculeFrom) || string.Compare(h.MATRICULES, matriculeFrom) >= 0)
-            && (string.IsNullOrEmpty(matriculeTo) || string.Compare(h.MATRICULES, matriculeTo) <= 0);
+        return h => h.BddSage == sageDb
+            && h.DateDeb == from
+            && h.DateFin == to
+            && (string.IsNullOrEmpty(matriculeFrom) || string.Compare(h.Matricules, matriculeFrom) >= 0)
+            && (string.IsNullOrEmpty(matriculeTo) || string.Compare(h.Matricules, matriculeTo) <= 0);
     }
 
-    private static Expression<Func<T_HEUREDIMANCHE, bool>> HeuresDimanchePredicate(ReportFilter filter, string sageDb)
+    private static Expression<Func<HeureDimanche, bool>> HeuresDimanchePredicate(ReportFilter filter, string sageDb)
     {
         var from = filter.From;
         var to = filter.To;
-        return h => h.BDD_SAGE == sageDb && h.Date_Dim >= from && h.Date_Dim <= to;
+        return h => h.BddSage == sageDb && h.DateDim >= from && h.DateDim <= to;
     }
 
     /// <summary>
@@ -413,54 +413,54 @@ public class ReportService : IReportService
     /// </summary>
     private async Task WriteRetardsPrintAsync(IReadOnlyList<RetardReportRow> rows, CancellationToken ct)
     {
-        var print = _uow.Repository<T_impr_RET>();
+        var print = _uow.Repository<ImpressionRetard>();
         var old = await print.ListAsync(_ => true, ct);
         print.RemoveRange(old);
         foreach (var row in rows)
         {
-            await print.AddAsync(new T_impr_RET
+            await print.AddAsync(new ImpressionRetard
             {
-                BDD_SAGE = _tenant.SageDb,
-                BDD_POINTEUSE = _tenant.PointeuseDb,
-                MATRICULES = row.Matricule,
-                DATE_POINTAGE = row.Date.ToString("dd/MM/yyyy"),
-                HEURE_ENTREE = row.HeureEntree,
-                RETARDS = TimeSpan.FromMinutes(row.MinutesRetard)
+                BddSage = _tenant.SageDb,
+                BddPointeuse = _tenant.PointeuseDb,
+                Matricules = row.Matricule,
+                DatePointage = row.Date.ToString("dd/MM/yyyy"),
+                HeureEntree = row.HeureEntree,
+                Retards = TimeSpan.FromMinutes(row.MinutesRetard)
             }, ct);
         }
         await _uow.SaveChangesAsync(ct);
     }
 
-    private static CorrectedHourDto ToCorrectedHourDto(T_HEURECORRIGER a) => new(
-        a.ID, a.MATRICULE_SAGE, a.DATE_POINTAGE_IN, a.DATE_POINTAGE_OUT, a.HENTREE, a.HPS, a.HPE, a.HSORTIE,
-        a.ABSENCE_AM, a.ABSENCE_PM, a.INTITULE_ABSENCE, a.RETARD, a.FERIER, a.FERIER_AM, a.FERIER_PM,
-        a.VALIDER_CORRECTION, a.VALIDER_HS, a.HS, a.M_NUIT, a.M_DIMANCHE, a.M_FERIES);
+    private static CorrectedHourDto ToCorrectedHourDto(HeureCorrigee a) => new(
+        a.Id, a.MatriculeSage, a.DatePointageIn, a.DatePointageOut, a.HEntree, a.Hps, a.Hpe, a.HSortie,
+        a.AbsenceAm, a.AbsencePm, a.IntituleAbsence, a.Retard, a.Ferier, a.FerierAm, a.FerierPm,
+        a.ValiderCorrection, a.ValiderHs, a.Hs, a.MNuit, a.MDimanche, a.MFeries);
 
-    private static HsExoDto ToHsExoDto(T_HSExoImp h) => new(
-        h.OID, h.Matricule, h.NumSal, h.EXO130, h.EXO150, h.I130, h.I150,
-        h.FERIE, h.NUIT, h.DIM, h.RETARD, h.ABSENCE);
+    private static HsExoDto ToHsExoDto(HsExoImp h) => new(
+        h.Oid, h.Matricule, h.NumSal, h.Exo130, h.Exo150, h.I130, h.I150,
+        h.Ferie, h.Nuit, h.Dim, h.Retard, h.Absence);
 
-    private static object ToHeuresSemaineRow(T_HS_VALIDER h)
+    private static object ToHeuresSemaineRow(HsValidee h)
     {
-        var split = OvertimeRules.SplitWeekly(h.HS ?? 0);
+        var split = OvertimeRules.SplitWeekly(h.Hs ?? 0);
         return new
         {
-            h.MATRICULES,
-            h.HT,
-            h.HS,
+            MATRICULES = h.Matricules,
+            HT = h.Ht,
+            HS = h.Hs,
             HS130 = split.Hs1,
             HS150 = split.Hs2,
-            h.NUIT,
-            h.DIMANCHE,
-            h.FERIES,
-            h.RETARD
+            NUIT = h.Nuit,
+            DIMANCHE = h.Dimanche,
+            FERIES = h.Feries,
+            RETARD = h.Retard
         };
     }
 
-    private static object ToHeuresDimancheRow(T_HEUREDIMANCHE h) => new
+    private static object ToHeuresDimancheRow(HeureDimanche h) => new
     {
-        h.MATRICULE_SAGE,
-        h.Date_Dim,
+        MATRICULE_SAGE = h.MatriculeSage,
+        Date_Dim = h.DateDim,
         h.HeureDebut,
         h.HeureFin,
         h.Valeur

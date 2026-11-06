@@ -9,9 +9,9 @@ namespace SoftTime.Application.Abstractions;
 /// période et de la période précédente de même longueur, puis applique toutes les règles de
 /// <see cref="PayrollClosingRules"/>. Aucune écriture en base, aucun appel au journal.
 ///
-/// Modèle d'orchestration : <see cref="DashboardService"/> (base active et droits via
-/// <see cref="TenantConnectionService.EnsureAuthorizedAsync"/>, congés via
-/// <see cref="SageLeaveCalendar"/>, filtre département appliqué aux cartes avant tout calcul).
+/// Modèle d'orchestration : <see cref="IDashboardService"/> (base active et droits via
+/// <see cref="ITenantConnectionService.EnsureAuthorizedAsync"/>, congés via
+/// <see cref="ISageLeaveCalendar"/>, filtre département appliqué aux cartes avant tout calcul).
 ///
 /// Conventions :
 /// <list type="bullet">

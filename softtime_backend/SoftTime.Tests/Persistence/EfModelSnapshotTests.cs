@@ -4,6 +4,8 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations.Operations;
 
 using SoftTime.Infrastructure.Persistence;
 
@@ -37,6 +39,34 @@ public class EfModelSnapshotTests
         // Assert
         actual.Should().Be(expected);
     }
+
+    [Fact]
+    public void MlModel_ComparedToTheMigrationSnapshot_HasNoPendingChange()
+    {
+        // Arrange
+        using var db = new MlDbContext(Options<MlDbContext>());
+        var snapshot = db.GetService<IMigrationsAssembly>().ModelSnapshot!.Model;
+        if (snapshot is IMutableModel mutable)
+            snapshot = mutable.FinalizeModel();
+        snapshot = db.GetService<IModelRuntimeInitializer>().Initialize(snapshot);
+        var current = db.GetService<IDesignTimeModel>().Model;
+
+        // Act
+        var pending = db.GetService<IMigrationsModelDiffer>()
+            .GetDifferences(snapshot.GetRelationalModel(), current.GetRelationalModel())
+            .Select(Describe)
+            .ToList();
+
+        // Assert : une modification du modèle ML exige une nouvelle migration EF.
+        pending.Should().BeEmpty();
+    }
+
+    private static string Describe(MigrationOperation operation) => operation switch
+    {
+        ColumnOperation c => $"{operation.GetType().Name} {c.Table}.{c.Name} {c.ColumnType} null={c.IsNullable}",
+        RenameColumnOperation r => $"RenameColumn {r.Table}.{r.Name} -> {r.NewName}",
+        _ => operation.GetType().Name
+    };
 
     private static DbContextOptions<TContext> Options<TContext>() where TContext : DbContext
         => new DbContextOptionsBuilder<TContext>()

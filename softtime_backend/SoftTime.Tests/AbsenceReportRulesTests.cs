@@ -8,40 +8,40 @@ public class AbsenceReportRulesTests
 {
     private static readonly DateTime Today = new(2025, 11, 20); // Hier = 2025-11-19
 
-    private static T_CARDPAIE Carte(int id, string matricule, string? nom = "Dupont", string? prenom = "Jean", string? dep = "INFO")
-        => new() { ID = id, SAGE_MATRICULE = matricule, SAGE_NOM = nom, SAGE_PRENOM = prenom, DEPARTEMENT = dep };
+    private static CardPaie Carte(int id, string matricule, string? nom = "Dupont", string? prenom = "Jean", string? dep = "INFO")
+        => new() { Id = id, SageMatricule = matricule, SageNom = nom, SagePrenom = prenom, Departement = dep };
 
-    private static T_PLANNING_SAL Plan(int id, int idsal, DateTime date, TimeSpan? ha = null, TimeSpan? hd = null, TimeSpan? pause = null, bool offP = false)
+    private static PlanningSalarie Plan(int id, int idsal, DateTime date, TimeSpan? ha = null, TimeSpan? hd = null, TimeSpan? pause = null, bool offP = false)
         => new()
         {
-            ID = id,
-            IDSAL = idsal,
+            Id = id,
+            IdSal = idsal,
             DateP = date,
-            HA = ha.HasValue ? date.Date.Add(ha.Value) : null,
-            HD = hd.HasValue ? date.Date.Add(hd.Value) : null,
+            Ha = ha.HasValue ? date.Date.Add(ha.Value) : null,
+            Hd = hd.HasValue ? date.Date.Add(hd.Value) : null,
             Pause = pause,
             OffP = offP
         };
 
-    private static T_HEURECORRIGER Corr(int id, string matricule, DateTime date, bool am = false, bool pm = false, string? intitule = null)
+    private static HeureCorrigee Corr(int id, string matricule, DateTime date, bool am = false, bool pm = false, string? intitule = null)
         => new()
         {
-            ID = id,
-            MATRICULE_SAGE = matricule,
-            DATE_POINTAGE_IN = date,
-            ABSENCE_AM = am,
-            ABSENCE_PM = pm,
-            INTITULE_ABSENCE = intitule,
-            VALIDER_CORRECTION = true
+            Id = id,
+            MatriculeSage = matricule,
+            DatePointageIn = date,
+            AbsenceAm = am,
+            AbsencePm = pm,
+            IntituleAbsence = intitule,
+            ValiderCorrection = true
         };
 
     [Fact]
     public void Calculer_ListeVide_RetourneVideSansException()
     {
         var result = AbsenceReportRules.Calculer(
-            Array.Empty<T_PLANNING_SAL>(),
-            Array.Empty<T_CARDPAIE>(),
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<PlanningSalarie>(),
+            Array.Empty<CardPaie>(),
+            Array.Empty<HeureCorrigee>(),
             new Dictionary<string, List<LeaveDay>>(),
             new HashSet<DateTime>(),
             new DateTime(2025, 11, 1),
@@ -61,7 +61,7 @@ public class AbsenceReportRulesTests
         var result = AbsenceReportRules.Calculer(
             plannings,
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             new Dictionary<string, List<LeaveDay>>(),
             new HashSet<DateTime>(),
             new DateTime(2025, 11, 22),
@@ -111,7 +111,7 @@ public class AbsenceReportRulesTests
         var result = AbsenceReportRules.Calculer(
             plannings,
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             new Dictionary<string, List<LeaveDay>>(),
             new HashSet<DateTime>(),
             date,
@@ -174,7 +174,7 @@ public class AbsenceReportRulesTests
         var result = AbsenceReportRules.Calculer(
             plannings,
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             new Dictionary<string, List<LeaveDay>>(),
             new HashSet<DateTime>(),
             Today,
@@ -227,9 +227,9 @@ public class AbsenceReportRulesTests
         };
 
         var result = AbsenceReportRules.Calculer(
-            Array.Empty<T_PLANNING_SAL>(),
+            Array.Empty<PlanningSalarie>(),
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             conges,
             new HashSet<DateTime>(),
             new DateTime(2025, 11, 10),
@@ -257,7 +257,7 @@ public class AbsenceReportRulesTests
         var result = AbsenceReportRules.Calculer(
             plannings,
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             conges,
             new HashSet<DateTime>(),
             date,
@@ -285,7 +285,7 @@ public class AbsenceReportRulesTests
         var result = AbsenceReportRules.Calculer(
             plannings,
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             conges,
             new HashSet<DateTime>(),
             date,
@@ -314,7 +314,7 @@ public class AbsenceReportRulesTests
         var result = AbsenceReportRules.Calculer(
             plannings,
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             conges,
             new HashSet<DateTime>(),
             date,
@@ -340,9 +340,9 @@ public class AbsenceReportRulesTests
         };
 
         var result = AbsenceReportRules.Calculer(
-            Array.Empty<T_PLANNING_SAL>(),
+            Array.Empty<PlanningSalarie>(),
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             conges,
             new HashSet<DateTime>(),
             date,
@@ -436,7 +436,7 @@ public class AbsenceReportRulesTests
         var result = AbsenceReportRules.Calculer(
             plannings,
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             new Dictionary<string, List<LeaveDay>>(),
             new HashSet<DateTime>(),
             date,
@@ -459,9 +459,9 @@ public class AbsenceReportRulesTests
         };
 
         var result = AbsenceReportRules.Calculer(
-            Array.Empty<T_PLANNING_SAL>(),
+            Array.Empty<PlanningSalarie>(),
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             conges,
             new HashSet<DateTime>(),
             date,
@@ -485,9 +485,9 @@ public class AbsenceReportRulesTests
         };
 
         var result = AbsenceReportRules.Calculer(
-            Array.Empty<T_PLANNING_SAL>(),
+            Array.Empty<PlanningSalarie>(),
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             conges,
             new HashSet<DateTime>(),
             date,
@@ -512,7 +512,7 @@ public class AbsenceReportRulesTests
         var result = AbsenceReportRules.Calculer(
             plannings,
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             new Dictionary<string, List<LeaveDay>>(),
             new HashSet<DateTime>(),
             date,
@@ -533,7 +533,7 @@ public class AbsenceReportRulesTests
         var result = AbsenceReportRules.Calculer(
             plannings,
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             new Dictionary<string, List<LeaveDay>>(),
             new HashSet<DateTime>(),
             date,
@@ -556,7 +556,7 @@ public class AbsenceReportRulesTests
         var result = AbsenceReportRules.Calculer(
             plannings,
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             new Dictionary<string, List<LeaveDay>>(),
             new HashSet<DateTime>(),
             date,
@@ -583,7 +583,7 @@ public class AbsenceReportRulesTests
         var result = AbsenceReportRules.Calculer(
             plannings,
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             conges,
             new HashSet<DateTime>(),
             date,
@@ -611,7 +611,7 @@ public class AbsenceReportRulesTests
         var result = AbsenceReportRules.Calculer(
             plannings,
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             new Dictionary<string, List<LeaveDay>>(),
             new HashSet<DateTime>(),
             j1,
@@ -638,7 +638,7 @@ public class AbsenceReportRulesTests
         var result = AbsenceReportRules.Calculer(
             plannings,
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             new Dictionary<string, List<LeaveDay>>(),
             new HashSet<DateTime>(),
             date,
@@ -649,15 +649,15 @@ public class AbsenceReportRulesTests
         Assert.Equal("001", row.Matricule);
     }
 
-    private static T_PLANNING_SAL PlanWithShift(int id, int idsal, DateTime date, int noShift, TimeSpan? ha = null, TimeSpan? hd = null, TimeSpan? pause = null, bool offP = false)
+    private static PlanningSalarie PlanWithShift(int id, int idsal, DateTime date, int noShift, TimeSpan? ha = null, TimeSpan? hd = null, TimeSpan? pause = null, bool offP = false)
         => new()
         {
-            ID = id,
-            IDSAL = idsal,
-            NoSHIFT = noShift,
+            Id = id,
+            IdSal = idsal,
+            NoShift = noShift,
             DateP = date,
-            HA = ha.HasValue ? date.Date.Add(ha.Value) : null,
-            HD = hd.HasValue ? date.Date.Add(hd.Value) : null,
+            Ha = ha.HasValue ? date.Date.Add(ha.Value) : null,
+            Hd = hd.HasValue ? date.Date.Add(hd.Value) : null,
             Pause = pause,
             OffP = offP
         };
@@ -673,7 +673,7 @@ public class AbsenceReportRulesTests
         var result = AbsenceReportRules.Calculer(
             plannings,
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             new Dictionary<string, List<LeaveDay>>(),
             new HashSet<DateTime>(),
             date,
@@ -698,7 +698,7 @@ public class AbsenceReportRulesTests
         var result = AbsenceReportRules.Calculer(
             plannings,
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             conges,
             new HashSet<DateTime>(),
             date,
@@ -722,7 +722,7 @@ public class AbsenceReportRulesTests
         var result = AbsenceReportRules.Calculer(
             plannings,
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             new Dictionary<string, List<LeaveDay>>(),
             new HashSet<DateTime>(),
             date,
@@ -746,7 +746,7 @@ public class AbsenceReportRulesTests
         var result = AbsenceReportRules.Calculer(
             plannings,
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             new Dictionary<string, List<LeaveDay>>(),
             new HashSet<DateTime>(),
             date,
@@ -795,7 +795,7 @@ public class AbsenceReportRulesTests
         var result = AbsenceReportRules.Calculer(
             plannings,
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             new Dictionary<string, List<LeaveDay>>(),
             new HashSet<DateTime>(),
             jTravail,
@@ -823,7 +823,7 @@ public class AbsenceReportRulesTests
         var result = AbsenceReportRules.Calculer(
             plannings,
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             conges,
             new HashSet<DateTime>(),
             date,
@@ -866,7 +866,7 @@ public class AbsenceReportRulesTests
         var result = AbsenceReportRules.Calculer(
             plannings,
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             new Dictionary<string, List<LeaveDay>>(),
             new HashSet<DateTime>(),
             date,
@@ -891,7 +891,7 @@ public class AbsenceReportRulesTests
         var result = AbsenceReportRules.Calculer(
             plannings,
             cartes,
-            Array.Empty<T_HEURECORRIGER>(),
+            Array.Empty<HeureCorrigee>(),
             new Dictionary<string, List<LeaveDay>>(),
             new HashSet<DateTime>(),
             date,

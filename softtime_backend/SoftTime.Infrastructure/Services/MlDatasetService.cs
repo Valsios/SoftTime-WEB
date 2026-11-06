@@ -84,7 +84,7 @@ public sealed class MlDatasetService : IMlDatasetService
     }
 
     /// <summary>Lignes d'inférence (planning futur) réutilisées par <see cref="MlPredictionService"/>.</summary>
-    public async Task<IReadOnlyList<T_ML_SALARIE_JOUR>> BuildInferenceDailyAsync(
+    public async Task<IReadOnlyList<MlSalarieJour>> BuildInferenceDailyAsync(
         DateTime from, DateTime to, CancellationToken ct = default)
     {
         var ctx = await LoadContextAsync(from.Date, to.Date, ct);
@@ -98,7 +98,7 @@ public sealed class MlDatasetService : IMlDatasetService
     }
 
     /// <summary>Lignes d'inférence hebdomadaires (semaines futures).</summary>
-    public async Task<IReadOnlyList<T_ML_SALARIE_SEMAINE>> BuildInferenceWeeklyAsync(
+    public async Task<IReadOnlyList<MlSalarieSemaine>> BuildInferenceWeeklyAsync(
         DateTime from, DateTime to, CancellationToken ct = default)
     {
         var ctx = await LoadContextAsync(from.Date, to.Date, ct);
@@ -132,74 +132,74 @@ public sealed class MlDatasetService : IMlDatasetService
         var pointeuseDb = _tenant.PointeuseDb;
         var warmupFrom = from.AddDays(-Math.Max(0, _options.WarmupDays));
 
-        var allCards = (await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == sageDb, ct))
-            .Where(c => !string.IsNullOrWhiteSpace(c.SAGE_MATRICULE))
+        var allCards = (await _uow.Repository<CardPaie>().ListAsync(c => c.SageBdd == sageDb, ct))
+            .Where(c => !string.IsNullOrWhiteSpace(c.SageMatricule))
             .ToList();
         var cards = allCards
-            .Where(c => string.IsNullOrWhiteSpace(c.POINTEUSE_BDD)
-                        || string.Equals(c.POINTEUSE_BDD.Trim(), pointeuseDb.Trim(), StringComparison.OrdinalIgnoreCase))
-            .GroupBy(c => MlKey(c.SAGE_MATRICULE))
-            .Select(g => g.OrderBy(c => c.ID).First())
+            .Where(c => string.IsNullOrWhiteSpace(c.PointeuseBdd)
+                        || string.Equals(c.PointeuseBdd.Trim(), pointeuseDb.Trim(), StringComparison.OrdinalIgnoreCase))
+            .GroupBy(c => MlKey(c.SageMatricule))
+            .Select(g => g.OrderBy(c => c.Id).First())
             .ToList();
 
-        var categories = await _uow.Repository<T_CATEGORIE>().ListAsync(c => c.BDD_SAGE == sageDb, ct);
-        var affectations = await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == sageDb, ct);
-        var tolerances = await _uow.Repository<T_TOLERANCE>().ListAsync(_ => true, ct);
-        var majorations = await _uow.Repository<T_MAJORATION>().ListAsync(_ => true, ct);
-        var feries = (await _uow.Repository<T_FERIE>().ListAsync(f => f.BDD_SAGE == sageDb, ct))
-            .Where(f => f.DATE.HasValue)
-            .Select(f => f.DATE!.Value.Date)
+        var categories = await _uow.Repository<Categorie>().ListAsync(c => c.BddSage == sageDb, ct);
+        var affectations = await _uow.Repository<CategorieSalarie>().ListAsync(a => a.BddSage == sageDb, ct);
+        var tolerances = await _uow.Repository<ToleranceRetard>().ListAsync(_ => true, ct);
+        var majorations = await _uow.Repository<Majoration>().ListAsync(_ => true, ct);
+        var feries = (await _uow.Repository<JourFerie>().ListAsync(f => f.BddSage == sageDb, ct))
+            .Where(f => f.Date.HasValue)
+            .Select(f => f.Date!.Value.Date)
             .ToHashSet();
-        var clock = (await _uow.Repository<T_CLOCK>().ListAsync(_ => true, ct)).FirstOrDefault();
-        var multiPointage = clock?.MULTIPOINT ?? true;
+        var clock = (await _uow.Repository<ParametrePointeuse>().ListAsync(_ => true, ct)).FirstOrDefault();
+        var multiPointage = clock?.MultiPoint ?? true;
 
-        var corrections = (await _uow.Repository<T_HEURECORRIGER>().ListAsync(
-                h => h.BDD_SAGE == sageDb
-                     && h.MATRICULE_SAGE != null
-                     && h.DATE_POINTAGE_IN >= warmupFrom
-                     && h.DATE_POINTAGE_IN <= to, ct))
-            .GroupBy(h => MlKey(h.MATRICULE_SAGE))
+        var corrections = (await _uow.Repository<HeureCorrigee>().ListAsync(
+                h => h.BddSage == sageDb
+                     && h.MatriculeSage != null
+                     && h.DatePointageIn >= warmupFrom
+                     && h.DatePointageIn <= to, ct))
+            .GroupBy(h => MlKey(h.MatriculeSage))
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
 
-        var plannings = (await _uow.Repository<T_PLANNING_SAL>().ListAsync(
-                p => p.BDD_SAGE == sageDb && p.DateP >= warmupFrom && p.DateP <= to, ct))
+        var plannings = (await _uow.Repository<PlanningSalarie>().ListAsync(
+                p => p.BddSage == sageDb && p.DateP >= warmupFrom && p.DateP <= to, ct))
             .Where(p => p.DateP.HasValue)
             .ToList();
 
         // Vue HS (écran heures supplémentaires) : planning de la carte et de la pointeuse active.
         var planningHs = plannings
             .Where(p => OvertimeDayRules.EstDeLaPointeuse(p, pointeuseDb))
-            .GroupBy(p => p.IDSAL)
+            .GroupBy(p => p.IdSal)
             .ToDictionary(g => g.Key, g => g.ToList());
 
         // Vue absences / retards (états et tableau de bord) : plannings de toutes les cartes de même
         // clé matricule (C11), toutes pointeuses confondues.
         var cleParIdSal = allCards
-            .GroupBy(c => c.ID)
-            .ToDictionary(g => g.Key, g => MlKey(g.First().SAGE_MATRICULE));
+            .GroupBy(c => c.Id)
+            .ToDictionary(g => g.Key, g => MlKey(g.First().SageMatricule));
         var planningEtats = plannings
-            .Where(p => cleParIdSal.ContainsKey(p.IDSAL))
-            .GroupBy(p => cleParIdSal[p.IDSAL], StringComparer.Ordinal)
+            .Where(p => cleParIdSal.ContainsKey(p.IdSal))
+            .GroupBy(p => cleParIdSal[p.IdSal], StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
 
         var categorieParCarte = affectations
-            .GroupBy(a => a.MATRICULE_SAGE)
-            .ToDictionary(g => g.Key, g => g.First().ID_CATEG);
+            .GroupBy(a => a.MatriculeSage)
+            .ToDictionary(g => g.Key, g => g.First().IdCateg);
 
         var conges = await _leaves.LoadAsync(ct);
         var civilites = OvertimeDayRules.ContientHuitMars(warmupFrom, to)
             ? await SageCivilites.ChargerAsync(_tenant, _externalSource, ct)
             : new Dictionary<string, byte?>(StringComparer.Ordinal);
 
-        var validees = (await _uow.Repository<T_HS_VALIDER>().ListAsync(
-                v => v.BDD_SAGE == sageDb
-                     && v.VALIDATION_HS == true
-                     && v.DATE_DEB != null
-                     && v.DATE_DEB >= from.AddDays(-7)
-                     && v.DATE_DEB <= to, ct))
-            .Where(v => v.DATE_DEB.HasValue && !string.IsNullOrWhiteSpace(v.MATRICULES))
-            .GroupBy(v => (MlKey(v.MATRICULES), v.DATE_DEB!.Value.Date))
-            .ToDictionary(g => g.Key, g => g.OrderBy(v => v.ID).First());
+        var validees = (await _uow.Repository<HsValidee>().ListAsync(
+                v => v.BddSage == sageDb
+                     && v.ValidationHs == true
+                     && v.DateDeb != null
+                     && v.DateDeb >= from.AddDays(-7)
+                     && v.DateDeb <= to, ct))
+            .Where(v => v.DateDeb.HasValue && !string.IsNullOrWhiteSpace(v.Matricules))
+            .GroupBy(v => (MlKey(v.Matricules), v.DateDeb!.Value.Date))
+            .ToDictionary(g => g.Key, g => g.OrderBy(v => v.Id).First());
 
         var ctx = new DatasetContext
         {
@@ -227,7 +227,7 @@ public sealed class MlDatasetService : IMlDatasetService
 
         foreach (var card in cards)
         {
-            var cle = MlKey(card.SAGE_MATRICULE);
+            var cle = MlKey(card.SageMatricule);
             ctx.CardByKey[cle] = card;
             ctx.Configs[cle] = BuildConfig(ctx, card);
             ctx.EmployeeDays[cle] = new List<DayRow>();
@@ -236,31 +236,31 @@ public sealed class MlDatasetService : IMlDatasetService
         return ctx;
     }
 
-    private static EmployeeConfig BuildConfig(DatasetContext ctx, T_CARDPAIE card)
+    private static EmployeeConfig BuildConfig(DatasetContext ctx, CardPaie card)
     {
-        var affectation = ctx.Affectations.FirstOrDefault(a => a.MATRICULE_SAGE == card.ID);
+        var affectation = ctx.Affectations.FirstOrDefault(a => a.MatriculeSage == card.Id);
         var categorie = affectation == null
             ? null
-            : ctx.Categories.FirstOrDefault(c => c.IDCATEGORIE == affectation.ID_CATEG);
+            : ctx.Categories.FirstOrDefault(c => c.IdCategorie == affectation.IdCateg);
         var tolerance = categorie == null
             ? null
-            : ctx.Tolerances.FirstOrDefault(t => t.IDCATEGORIE == categorie.IDCATEGORIE && !t.TYPES_TOL);
+            : ctx.Tolerances.FirstOrDefault(t => t.IdCategorie == categorie.IdCategorie && !t.TypesTol);
 
         var week = new OvertimeWeekConfig(
             MultiPointage: ctx.MultiPointage,
-            HeuresSemaine: categorie?.HEURESEMAINE ?? OvertimeRules.DefaultWeeklyHours,
-            PauseCategorie: categorie?.PAUSE,
-            ToleranceEntreeMinutes: tolerance?.TOLERANCE ?? 0,
-            PasSortieMinutes: tolerance?.SORTIE,
+            HeuresSemaine: categorie?.HeureSemaine ?? OvertimeRules.DefaultWeeklyHours,
+            PauseCategorie: categorie?.Pause,
+            ToleranceEntreeMinutes: tolerance?.Tolerance ?? 0,
+            PasSortieMinutes: tolerance?.Sortie,
             CotationNuit: Cotation(ctx.Majorations, "NUIT"),
             CotationDimanche: Cotation(ctx.Majorations, "DIMANCHE"),
             CotationFerie: Cotation(ctx.Majorations, "FERIE"),
-            EstFemme: OvertimeDayRules.EstFemme(ctx.Civilites.GetValueOrDefault(MlKey(card.SAGE_MATRICULE))));
+            EstFemme: OvertimeDayRules.EstFemme(ctx.Civilites.GetValueOrDefault(MlKey(card.SageMatricule))));
 
-        return new EmployeeConfig(week, categorie?.IDCATEGORIE, categorie?.HEURESEMAINE);
+        return new EmployeeConfig(week, categorie?.IdCategorie, categorie?.HeureSemaine);
     }
 
-    private static decimal Cotation(IReadOnlyList<T_MAJORATION> majorations, string type)
+    private static decimal Cotation(IReadOnlyList<Majoration> majorations, string type)
         => majorations
             .Where(m => string.Equals(m.Mojoration?.Trim(), type, StringComparison.OrdinalIgnoreCase))
             .Select(m => m.Cotation ?? 0m)
@@ -273,24 +273,24 @@ public sealed class MlDatasetService : IMlDatasetService
     {
         foreach (var card in ctx.Cards)
         {
-            var cle = MlKey(card.SAGE_MATRICULE);
+            var cle = MlKey(card.SageMatricule);
             var config = ctx.Configs[cle];
             var conges = ctx.Conges.GetValueOrDefault(cle) ?? new List<LeaveDay>();
-            var corrections = ctx.Corrections.GetValueOrDefault(cle) ?? new List<T_HEURECORRIGER>();
+            var corrections = ctx.Corrections.GetValueOrDefault(cle) ?? new List<HeureCorrigee>();
             var correctionsParJour = corrections
-                .Where(h => h.DATE_POINTAGE_IN.HasValue)
-                .GroupBy(h => h.DATE_POINTAGE_IN!.Value.Date)
+                .Where(h => h.DatePointageIn.HasValue)
+                .GroupBy(h => h.DatePointageIn!.Value.Date)
                 .ToDictionary(g => g.Key, g => g.ToList());
             // Deux vues du planning, chacune alignée sur l'écran qui l'utilise :
             // états absences/retards (toutes cartes de la clé, travail prioritaire sur OFF) et
             // écran HS (carte et pointeuse actives, plus petit ID).
-            var plansParJour = (ctx.PlanningEtats.GetValueOrDefault(cle) ?? new List<T_PLANNING_SAL>())
+            var plansParJour = (ctx.PlanningEtats.GetValueOrDefault(cle) ?? new List<PlanningSalarie>())
                 .GroupBy(p => p.DateP!.Value.Date)
                 .ToDictionary(g => g.Key, g => SelectPlan(g));
-            var plansHsParJour = (ctx.PlanningHs.GetValueOrDefault(card.ID) ?? new List<T_PLANNING_SAL>())
+            var plansHsParJour = (ctx.PlanningHs.GetValueOrDefault(card.Id) ?? new List<PlanningSalarie>())
                 .GroupBy(p => p.DateP!.Value.Date)
                 .ToDictionary(g => g.Key, g => OvertimeDayRules.PlanDuJour(g));
-            var toleranceEntree = RetardReportRules.ToleranceEntree(card.ID, ctx.CategorieParCarte, ctx.Tolerances);
+            var toleranceEntree = RetardReportRules.ToleranceEntree(card.Id, ctx.CategorieParCarte, ctx.Tolerances);
 
             var days = new List<DayRow>();
             for (var date = ctx.WarmupFrom; date <= ctx.To; date = date.AddDays(1))
@@ -298,7 +298,7 @@ public sealed class MlDatasetService : IMlDatasetService
                 plansParJour.TryGetValue(date, out var plan);
                 plansHsParJour.TryGetValue(date, out var planHs);
                 correctionsParJour.TryGetValue(date, out var lignes);
-                lignes ??= new List<T_HEURECORRIGER>();
+                lignes ??= new List<HeureCorrigee>();
 
                 var off = AbsenceReportRules.EstJourOff(plan);
                 var ferie = ctx.Feries.Contains(date);
@@ -316,16 +316,16 @@ public sealed class MlDatasetService : IMlDatasetService
                         estConge: conge,
                         plan,
                         aPointage);
-                var absenceDeclaree = lignes.Any(h => h.ABSENCE_AM == true || h.ABSENCE_PM == true);
+                var absenceDeclaree = lignes.Any(h => h.AbsenceAm == true || h.AbsencePm == true);
 
                 // Même règle que l'état des retards et le tableau de bord : valeur saisie prioritaire,
                 // sinon première entrée du jour vs heure planifiée + tolérance de la catégorie.
-                var entrees = lignes.Where(h => h.HENTREE.HasValue).Select(h => h.HENTREE!.Value).ToList();
+                var entrees = lignes.Where(h => h.HEntree.HasValue).Select(h => h.HEntree!.Value).ToList();
                 var retardMinutes = weekend || ferie || lignes.Count == 0
                     ? 0
                     : RetardReportRules.MinutesRetardJour(
-                        absenceMatin: lignes.Any(h => h.ABSENCE_AM == true),
-                        retardsSaisis: lignes.Select(h => h.RETARD),
+                        absenceMatin: lignes.Any(h => h.AbsenceAm == true),
+                        retardsSaisis: lignes.Select(h => h.Retard),
                         premiereEntree: entrees.Count > 0 ? entrees.Min() : null,
                         heurePrevue: RetardReportRules.HeurePrevue(plan),
                         toleranceMinutes: toleranceEntree);
@@ -334,7 +334,7 @@ public sealed class MlDatasetService : IMlDatasetService
                 {
                     Matricule = cle,
                     Date = date,
-                    Departement = card.DEPARTEMENT,
+                    Departement = card.Departement,
                     Off = off,
                     Ferie = ferie,
                     Weekend = weekend,
@@ -366,12 +366,12 @@ public sealed class MlDatasetService : IMlDatasetService
                 if (ctx.HsValidees.TryGetValue((cle, groupe.Key), out var validee))
                 {
                     ctx.WeekResults[(cle, groupe.Key)] = new WeekComputation(
-                        validee.HS ?? 0m,
-                        validee.NUIT ?? 0m,
-                        validee.DIMANCHE ?? 0m,
-                        validee.FERIES ?? 0m,
-                        validee.RETARD ?? 0m,
-                        validee.ABSENCE ?? 0m,
+                        validee.Hs ?? 0m,
+                        validee.Nuit ?? 0m,
+                        validee.Dimanche ?? 0m,
+                        validee.Feries ?? 0m,
+                        validee.Retard ?? 0m,
+                        validee.Absence ?? 0m,
                         Validee: true);
                 }
                 else
@@ -384,10 +384,10 @@ public sealed class MlDatasetService : IMlDatasetService
         }
     }
 
-    private static T_PLANNING_SAL? SelectPlan(IEnumerable<T_PLANNING_SAL> plans)
+    private static PlanningSalarie? SelectPlan(IEnumerable<PlanningSalarie> plans)
         => plans
             .OrderBy(p => p.OffP == true ? 1 : 0)
-            .ThenBy(p => p.ID)
+            .ThenBy(p => p.Id)
             .FirstOrDefault();
 
     private static decimal HeuresTravaillees(IReadOnlyList<PunchPair> paires)
@@ -514,9 +514,9 @@ public sealed class MlDatasetService : IMlDatasetService
 
     // ------------------------------------------------------------------ semaines
 
-    private static List<T_ML_SALARIE_SEMAINE> BuildWeekly(DatasetContext ctx, DateTime from, DateTime to)
+    private static List<MlSalarieSemaine> BuildWeekly(DatasetContext ctx, DateTime from, DateTime to)
     {
-        var rows = new List<T_ML_SALARIE_SEMAINE>();
+        var rows = new List<MlSalarieSemaine>();
 
         foreach (var (cle, days) in ctx.EmployeeDays)
         {
@@ -550,7 +550,7 @@ public sealed class MlDatasetService : IMlDatasetService
                         ? 0m
                         : Math.Round(semainesSource.Average(w => ctx.WeekResults[(cle, w.Key)].Hs), 2);
 
-                rows.Add(new T_ML_SALARIE_SEMAINE
+                rows.Add(new MlSalarieSemaine
                 {
                     BddSage = ctx.SageDb,
                     Matricule = cle,
@@ -562,8 +562,8 @@ public sealed class MlDatasetService : IMlDatasetService
                     NbJoursPlanifies = jours.Count(d => d.EstJourPlanifie),
                     NbJoursTravailles = jours.Count(d => d.HeuresTravaillees > 0m),
                     CongeJours = Math.Round(jours.Sum(d => d.CongeValeur), 1),
-                    HS = Math.Round(computation.Hs, 2),
-                    HSValidee = computation.Validee,
+                    Hs = Math.Round(computation.Hs, 2),
+                    HsValidee = computation.Validee,
                     Nuit = Math.Round(computation.Nuit, 2),
                     Dimanche = Math.Round(computation.Dimanche, 2),
                     Ferie = Math.Round(computation.Ferie, 2),
@@ -575,7 +575,7 @@ public sealed class MlDatasetService : IMlDatasetService
                     Retards4Semaines = precedentes4.Sum(w => w.Count(d => d.RetardMinutes > 0 && Observe(d))),
                     HeuresTravaillees4Semaines = Math.Round(precedentes4.Sum(w => w.Sum(d => d.HeuresTravaillees)), 2),
                     CategorieId = config.CategorieId,
-                    Departement = card.DEPARTEMENT,
+                    Departement = card.Departement,
                     HeuresSemaineContrat = config.HeuresSemaine,
                     MultiPointage = ctx.MultiPointage,
                     SourceGenereeLe = DateTime.Now,
@@ -587,12 +587,12 @@ public sealed class MlDatasetService : IMlDatasetService
         return rows;
     }
 
-    private static T_ML_SALARIE_JOUR ToDailyEntity(DatasetContext ctx, DayRow day)
+    private static MlSalarieJour ToDailyEntity(DatasetContext ctx, DayRow day)
     {
         var config = ctx.Configs[day.Matricule];
         var card = ctx.CardByKey[day.Matricule];
 
-        return new T_ML_SALARIE_JOUR
+        return new MlSalarieJour
         {
             BddSage = ctx.SageDb,
             Matricule = day.Matricule,
@@ -619,10 +619,10 @@ public sealed class MlDatasetService : IMlDatasetService
             DebutMois = day.Date.Day <= 3,
             FinMois = day.Date.Day >= DateTime.DaysInMonth(day.Date.Year, day.Date.Month) - 2,
             CategorieId = config.CategorieId,
-            Departement = card.DEPARTEMENT,
+            Departement = card.Departement,
             HeuresSemaineContrat = config.HeuresSemaine,
             MultiPointage = ctx.MultiPointage,
-            AncienneteJours = card.DATE.HasValue ? (day.Date - card.DATE.Value.Date).Days : null,
+            AncienneteJours = card.Date.HasValue ? (day.Date - card.Date.Value.Date).Days : null,
             Absences7j = day.Absences7j,
             Absences30j = day.Absences30j,
             Absences90j = day.Absences90j,
@@ -673,21 +673,21 @@ public sealed class MlDatasetService : IMlDatasetService
 
         public HashSet<DateTime> JoursSansPointage { get; set; } = new();
         public bool MultiPointage { get; init; }
-        public List<T_CARDPAIE> Cards { get; init; } = new();
-        public List<T_CATEGORIE> Categories { get; init; } = new();
-        public List<T_CAT_SAL> Affectations { get; init; } = new();
-        public List<T_TOLERANCE> Tolerances { get; init; } = new();
-        public List<T_MAJORATION> Majorations { get; init; } = new();
+        public List<CardPaie> Cards { get; init; } = new();
+        public List<Categorie> Categories { get; init; } = new();
+        public List<CategorieSalarie> Affectations { get; init; } = new();
+        public List<ToleranceRetard> Tolerances { get; init; } = new();
+        public List<Majoration> Majorations { get; init; } = new();
         public HashSet<DateTime> Feries { get; init; } = new();
-        public Dictionary<string, List<T_HEURECORRIGER>> Corrections { get; init; } = new(StringComparer.Ordinal);
-        public Dictionary<int, List<T_PLANNING_SAL>> PlanningHs { get; init; } = new();
-        public Dictionary<string, List<T_PLANNING_SAL>> PlanningEtats { get; init; } = new(StringComparer.Ordinal);
+        public Dictionary<string, List<HeureCorrigee>> Corrections { get; init; } = new(StringComparer.Ordinal);
+        public Dictionary<int, List<PlanningSalarie>> PlanningHs { get; init; } = new();
+        public Dictionary<string, List<PlanningSalarie>> PlanningEtats { get; init; } = new(StringComparer.Ordinal);
         public Dictionary<int, int> CategorieParCarte { get; init; } = new();
         public Dictionary<string, List<LeaveDay>> Conges { get; init; } = new(StringComparer.Ordinal);
         public Dictionary<string, byte?> Civilites { get; init; } = new(StringComparer.Ordinal);
-        public Dictionary<(string, DateTime), T_HS_VALIDER> HsValidees { get; init; } = new();
+        public Dictionary<(string, DateTime), HsValidee> HsValidees { get; init; } = new();
 
-        public Dictionary<string, T_CARDPAIE> CardByKey { get; } = new(StringComparer.Ordinal);
+        public Dictionary<string, CardPaie> CardByKey { get; } = new(StringComparer.Ordinal);
         public Dictionary<string, EmployeeConfig> Configs { get; } = new(StringComparer.Ordinal);
         public Dictionary<string, List<DayRow>> EmployeeDays { get; } = new(StringComparer.Ordinal);
         public Dictionary<(string, DateTime), WeekComputation> WeekResults { get; } = new();

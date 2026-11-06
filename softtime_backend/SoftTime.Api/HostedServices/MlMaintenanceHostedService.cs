@@ -129,17 +129,17 @@ public sealed class MlMaintenanceHostedService : BackgroundService
     {
         using var scope = _scopeFactory.CreateScope();
         var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-        var sages = await uow.Repository<T_BDD_SAGE>().ListAsync(_ => true, ct);
-        var cartes = await uow.Repository<T_CARDPAIE>().ListAsync(_ => true, ct);
+        var sages = await uow.Repository<BddSage>().ListAsync(_ => true, ct);
+        var cartes = await uow.Repository<CardPaie>().ListAsync(_ => true, ct);
 
         var avecCartes = cartes
-            .Where(c => !string.IsNullOrWhiteSpace(c.SAGE_BDD))
-            .Select(c => c.SAGE_BDD!)
+            .Where(c => !string.IsNullOrWhiteSpace(c.SageBdd))
+            .Select(c => c.SageBdd!)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         return sages
-            .Where(s => !string.IsNullOrWhiteSpace(s.NOM_BD) && avecCartes.Contains(s.NOM_BD!))
-            .Select(s => s.NOM_BD!)
+            .Where(s => !string.IsNullOrWhiteSpace(s.NomBd) && avecCartes.Contains(s.NomBd!))
+            .Select(s => s.NomBd!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
     }

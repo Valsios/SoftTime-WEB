@@ -29,50 +29,50 @@ public class MlDatasetParityTests
         public FakeExternalSourceService Source { get; } = new();
         public FakeMlStore Store { get; } = new();
         public TenantConnectionService Tenant { get; }
-        public T_CARDPAIE Carte { get; }
+        public CardPaie Carte { get; }
 
-        public List<T_HEURECORRIGER> Corrections => Uow.Get<T_HEURECORRIGER>().Items;
-        public List<T_PLANNING_SAL> Plannings => Uow.Get<T_PLANNING_SAL>().Items;
+        public List<HeureCorrigee> Corrections => Uow.Get<HeureCorrigee>().Items;
+        public List<PlanningSalarie> Plannings => Uow.Get<PlanningSalarie>().Items;
 
         public Contexte()
         {
             Tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), NullLogger<TenantConnectionService>.Instance);
 
-            Uow.Get<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 1, NOM_BD = "SAGE_TEST" });
-            Uow.Get<T_CLOCK>().Items.Add(new T_CLOCK { IDPOINT = 1, MULTIPOINT = true });
+            Uow.Get<BddSage>().Items.Add(new BddSage { Id = 1, NomBd = "SAGE_TEST" });
+            Uow.Get<ParametrePointeuse>().Items.Add(new ParametrePointeuse { IdPoint = 1, MultiPoint = true });
 
-            Carte = new T_CARDPAIE
+            Carte = new CardPaie
             {
-                ID = 1,
-                SAGE_MATRICULE = "001",
-                SAGE_NOM = "Dupont",
-                SAGE_PRENOM = "Jean",
-                SAGE_BDD = "SAGE_TEST",
-                POINTEUSE_BDD = "PTE_TEST",
-                DEPARTEMENT = "Atelier",
-                ACTIF = true
+                Id = 1,
+                SageMatricule = "001",
+                SageNom = "Dupont",
+                SagePrenom = "Jean",
+                SageBdd = "SAGE_TEST",
+                PointeuseBdd = "PTE_TEST",
+                Departement = "Atelier",
+                Actif = true
             };
-            Uow.Get<T_CARDPAIE>().Items.Add(Carte);
-            Uow.Get<T_CATEGORIE>().Items.Add(new T_CATEGORIE
+            Uow.Get<CardPaie>().Items.Add(Carte);
+            Uow.Get<Categorie>().Items.Add(new Categorie
             {
-                IDCATEGORIE = 10,
-                INTITULE = "Sédentaire",
-                HEURESEMAINE = 40m,
-                PAUSE = TimeSpan.FromMinutes(30),
-                BDD_SAGE = "SAGE_TEST"
+                IdCategorie = 10,
+                Intitule = "Sédentaire",
+                HeureSemaine = 40m,
+                Pause = TimeSpan.FromMinutes(30),
+                BddSage = "SAGE_TEST"
             });
-            Uow.Get<T_CAT_SAL>().Items.Add(new T_CAT_SAL
+            Uow.Get<CategorieSalarie>().Items.Add(new CategorieSalarie
             {
-                ID = 1,
-                MATRICULE_SAGE = 1,
-                ID_CATEG = 10,
-                BDD_SAGE = "SAGE_TEST"
+                Id = 1,
+                MatriculeSage = 1,
+                IdCateg = 10,
+                BddSage = "SAGE_TEST"
             });
-            Uow.Get<T_MAJORATION>().Items.AddRange(new[]
+            Uow.Get<Majoration>().Items.AddRange(new[]
             {
-                new T_MAJORATION { Mojoration = "NUIT", Cotation = 1m },
-                new T_MAJORATION { Mojoration = "DIMANCHE", Cotation = 2m },
-                new T_MAJORATION { Mojoration = "FERIE", Cotation = 3m },
+                new Majoration { Mojoration = "NUIT", Cotation = 1m },
+                new Majoration { Mojoration = "DIMANCHE", Cotation = 2m },
+                new Majoration { Mojoration = "FERIE", Cotation = 3m },
             });
 
             // Planning : lundi → vendredi, 8 h – 17 h avec 30 min de pause.
@@ -99,15 +99,15 @@ public class MlDatasetParityTests
         // Lundi et mercredi pointés ; mardi et jeudi absents ; vendredi absence déclarée.
         ctx.Corrections.Add(Pointage(Lundi, Huit, DixSept));
         ctx.Corrections.Add(Pointage(Lundi.AddDays(2), Huit, DixSept));
-        ctx.Corrections.Add(new T_HEURECORRIGER
+        ctx.Corrections.Add(new HeureCorrigee
         {
-            BDD_SAGE = "SAGE_TEST",
-            BDD_POINTEUSE = "PTE_TEST",
-            MATRICULE_SAGE = "001",
-            DATE_POINTAGE_IN = Vendredi,
-            ABSENCE_AM = true,
-            ABSENCE_PM = true,
-            ORIGINE = "MANUEL"
+            BddSage = "SAGE_TEST",
+            BddPointeuse = "PTE_TEST",
+            MatriculeSage = "001",
+            DatePointageIn = Vendredi,
+            AbsenceAm = true,
+            AbsencePm = true,
+            Origine = "MANUEL"
         });
 
         var result = await ctx.Dataset().BuildAsync(Lundi, Dimanche, persist: true);
@@ -142,7 +142,7 @@ public class MlDatasetParityTests
         Assert.Equal(datesEtat, datesMl);
 
         Assert.Single(ctx.Store.Weekly);
-        Assert.False(ctx.Store.Weekly[0].HSValidee);
+        Assert.False(ctx.Store.Weekly[0].HsValidee);
         Assert.Equal(1, result.WeeklyRows);
     }
 
@@ -150,7 +150,7 @@ public class MlDatasetParityTests
     public async Task Les_retards_sont_identiques_a_l_etat_des_retards_sans_valeur_saisie()
     {
         var ctx = new Contexte();
-        ctx.Uow.Get<T_TOLERANCE>().Items.Add(new T_TOLERANCE { ID = 1, IDCATEGORIE = 10, TOLERANCE = 5, TYPES_TOL = false });
+        ctx.Uow.Get<ToleranceRetard>().Items.Add(new ToleranceRetard { Id = 1, IdCategorie = 10, Tolerance = 5, TypesTol = false });
 
         // Aucune valeur RETARD saisie : le retard vient de la première entrée vs 8 h + 5 min.
         ctx.Corrections.Add(Pointage(Lundi, new TimeSpan(8, 20, 0), DixSept));
@@ -165,7 +165,7 @@ public class MlDatasetParityTests
                 ctx.Corrections,
                 ctx.Plannings,
                 new Dictionary<int, int> { [1] = 10 },
-                ctx.Uow.Get<T_TOLERANCE>().Items,
+                ctx.Uow.Get<ToleranceRetard>().Items,
                 new HashSet<DateTime>(),
                 Lundi,
                 Dimanche,
@@ -193,14 +193,14 @@ public class MlDatasetParityTests
         // 8 h – 19 h chaque jour, et une ligne d'absence déclarée seule le samedi.
         for (var jour = Lundi; jour <= Vendredi; jour = jour.AddDays(1))
             ctx.Corrections.Add(Pointage(jour, Huit, new TimeSpan(19, 0, 0)));
-        ctx.Corrections.Add(new T_HEURECORRIGER
+        ctx.Corrections.Add(new HeureCorrigee
         {
-            BDD_SAGE = "SAGE_TEST",
-            BDD_POINTEUSE = "PTE_TEST",
-            MATRICULE_SAGE = "001",
-            DATE_POINTAGE_IN = Dimanche.AddDays(-1),
-            ABSENCE_AM = true,
-            ORIGINE = "MANUEL"
+            BddSage = "SAGE_TEST",
+            BddPointeuse = "PTE_TEST",
+            MatriculeSage = "001",
+            DatePointageIn = Dimanche.AddDays(-1),
+            AbsenceAm = true,
+            Origine = "MANUEL"
         });
 
         await ctx.Dataset().BuildAsync(Lundi, Dimanche, persist: true);
@@ -209,7 +209,7 @@ public class MlDatasetParityTests
 
         var semaine = Assert.Single(ctx.Store.Weekly);
         Assert.True(ecran.Hs > 0m);
-        Assert.Equal(Math.Round(ecran.Hs ?? 0m, 2), semaine.HS);
+        Assert.Equal(Math.Round(ecran.Hs ?? 0m, 2), semaine.Hs);
         Assert.Equal(Math.Round(ecran.Absence ?? 0m, 2), semaine.AbsenceHeures);
     }
 
@@ -273,28 +273,28 @@ public class MlDatasetParityTests
             Assert.Equal(tranches[i - 1].End.AddDays(1), tranches[i].Start);
     }
 
-    private static T_PLANNING_SAL Plan(int id, DateTime jour, TimeSpan fin, string pointeuse) => new()
+    private static PlanningSalarie Plan(int id, DateTime jour, TimeSpan fin, string pointeuse) => new()
     {
-        ID = id,
-        IDSAL = 1,
+        Id = id,
+        IdSal = 1,
         DateP = jour,
-        HA = jour + Huit,
-        HD = jour + fin,
+        Ha = jour + Huit,
+        Hd = jour + fin,
         Pause = TimeSpan.FromMinutes(30),
         OffP = false,
-        BDD_SAGE = "SAGE_TEST",
-        BDD_POINTEUSE = pointeuse
+        BddSage = "SAGE_TEST",
+        BddPointeuse = pointeuse
     };
 
-    private static T_HEURECORRIGER Pointage(DateTime jour, TimeSpan entree, TimeSpan sortie) => new()
+    private static HeureCorrigee Pointage(DateTime jour, TimeSpan entree, TimeSpan sortie) => new()
     {
-        BDD_SAGE = "SAGE_TEST",
-        BDD_POINTEUSE = "PTE_TEST",
-        MATRICULE_SAGE = "001",
-        DATE_POINTAGE_IN = jour,
-        DATE_POINTAGE_OUT = jour,
-        HENTREE = entree,
-        HSORTIE = sortie,
-        ORIGINE = "AUTO"
+        BddSage = "SAGE_TEST",
+        BddPointeuse = "PTE_TEST",
+        MatriculeSage = "001",
+        DatePointageIn = jour,
+        DatePointageOut = jour,
+        HEntree = entree,
+        HSortie = sortie,
+        Origine = "AUTO"
     };
 }

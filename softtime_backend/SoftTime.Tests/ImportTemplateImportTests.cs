@@ -34,39 +34,39 @@ public class ImportTemplateImportTests
 
         public Contexte()
         {
-            Uow.Get<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 1, NOM_BD = "SAGE_TEST" });
-            Uow.Get<T_BDD_POINTEUSE>().Items.Add(new T_BDD_POINTEUSE { ID = 1, NOM_BD = "PTE_TEST", ACTIVE = true });
-            Uow.Get<T_CARDPAIE>().Items.AddRange(new[]
+            Uow.Get<BddSage>().Items.Add(new BddSage { Id = 1, NomBd = "SAGE_TEST" });
+            Uow.Get<BddPointeuse>().Items.Add(new BddPointeuse { Id = 1, NomBd = "PTE_TEST", Active = true });
+            Uow.Get<CardPaie>().Items.AddRange(new[]
             {
-                new T_CARDPAIE
+                new CardPaie
                 {
-                    ID = 1, SAGE_MATRICULE = "04285", SAGE_BDD = "SAGE_TEST",
-                    POINTEUSE_BDD = "PTE_TEST", POINTEUSE_NUMERO = "00123"
+                    Id = 1, SageMatricule = "04285", SageBdd = "SAGE_TEST",
+                    PointeuseBdd = "PTE_TEST", PointeuseNumero = "00123"
                 },
-                new T_CARDPAIE
+                new CardPaie
                 {
-                    ID = 2, SAGE_MATRICULE = "04301", SAGE_BDD = "SAGE_TEST",
-                    POINTEUSE_BDD = "PTE_TEST", POINTEUSE_NUMERO = "00124"
+                    Id = 2, SageMatricule = "04301", SageBdd = "SAGE_TEST",
+                    PointeuseBdd = "PTE_TEST", PointeuseNumero = "00124"
                 }
             });
-            Uow.Get<T_CATEGORIE>().Items.Add(new T_CATEGORIE
+            Uow.Get<Categorie>().Items.Add(new Categorie
             {
-                IDCATEGORIE = 10,
-                INTITULE = "Sédentaire",
-                HEURESEMAINE = 40m,
-                PAUSE = Pause,
-                BDD_SAGE = "SAGE_TEST",
-                BDD_POINTEUSE = "PTE_TEST"
+                IdCategorie = 10,
+                Intitule = "Sédentaire",
+                HeureSemaine = 40m,
+                Pause = Pause,
+                BddSage = "SAGE_TEST",
+                BddPointeuse = "PTE_TEST"
             });
-            Uow.Get<T_CAT_SAL>().Items.Add(new T_CAT_SAL
+            Uow.Get<CategorieSalarie>().Items.Add(new CategorieSalarie
             {
-                ID = 1, MATRICULE_SAGE = 1, ID_CATEG = 10,
-                BDD_SAGE = "SAGE_TEST", BDD_POINTEUSE = "PTE_TEST"
+                Id = 1, MatriculeSage = 1, IdCateg = 10,
+                BddSage = "SAGE_TEST", BddPointeuse = "PTE_TEST"
             });
-            Uow.Get<T_PLANNING>().Items.AddRange(new[]
+            Uow.Get<Planning>().Items.AddRange(new[]
             {
-                new T_PLANNING { NoSHIFT = 1, HA = Huit, PAUSE = Pause, HD = DixSept, Intitule = "Journée" },
-                new T_PLANNING { NoSHIFT = 2, HA = VingtDeux, PAUSE = Pause, HD = Six, Intitule = "Nuit" }
+                new Planning { NoShift = 1, Ha = Huit, Pause = Pause, Hd = DixSept, Intitule = "Journée" },
+                new Planning { NoShift = 2, Ha = VingtDeux, Pause = Pause, Hd = Six, Intitule = "Nuit" }
             });
 
             var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
@@ -78,10 +78,10 @@ public class ImportTemplateImportTests
             Catalog = new CatalogService(Uow, mapper, tenant, external, null!, null!, SoftTime.Tests.Http.TestRights.Service(Uow));
         }
 
-        public List<T_POINTAGE> Pointages => Uow.Get<T_POINTAGE>().Items;
-        public List<T_HEURECORRIGER> Corrections => Uow.Get<T_HEURECORRIGER>().Items;
-        public List<T_PLANNING_SAL> PlanningSalaries => Uow.Get<T_PLANNING_SAL>().Items;
-        public List<T_CARDPAIE> Cards => Uow.Get<T_CARDPAIE>().Items;
+        public List<Pointage> Pointages => Uow.Get<Pointage>().Items;
+        public List<HeureCorrigee> Corrections => Uow.Get<HeureCorrigee>().Items;
+        public List<PlanningSalarie> PlanningSalaries => Uow.Get<PlanningSalarie>().Items;
+        public List<CardPaie> Cards => Uow.Get<CardPaie>().Items;
     }
 
     private static ImportTemplateDefinition Modele(string key)
@@ -131,8 +131,8 @@ public class ImportTemplateImportTests
         Assert.Equal(rows.Count, contexte.Corrections.Count);
         Assert.All(contexte.Corrections, c =>
         {
-            Assert.True(c.VALIDER_CORRECTION);
-            Assert.Equal(PunchProcessingConfiguration.OrigineManuel, c.ORIGINE);
+            Assert.True(c.ValiderCorrection);
+            Assert.Equal(PunchProcessingConfiguration.OrigineManuel, c.Origine);
         });
     }
 
@@ -174,7 +174,7 @@ public class ImportTemplateImportTests
         Assert.Equal(7, resultat.Imported);
         Assert.Equal(0, resultat.Skipped);
         Assert.Contains("7 ligne(s) de planning importée(s), 0 élément(s) ignoré(s).", resultat.Message);
-        Assert.All(contexte.PlanningSalaries, p => Assert.Equal(1, p.IDSAL));
+        Assert.All(contexte.PlanningSalaries, p => Assert.Equal(1, p.IdSal));
     }
 
     [Fact]
@@ -226,7 +226,7 @@ public class ImportTemplateImportTests
         Assert.Equal(2, resultat.Imported);
         Assert.Equal(0, resultat.Skipped);
         Assert.Contains("2 correspondance(s) importée(s), 0 ligne(s) ignorée(s).", resultat.Message);
-        Assert.Equal("00123", contexte.Cards.Single(c => c.SAGE_MATRICULE == "04285").POINTEUSE_NUMERO);
-        Assert.Equal("00124", contexte.Cards.Single(c => c.SAGE_MATRICULE == "04301").POINTEUSE_NUMERO);
+        Assert.Equal("00123", contexte.Cards.Single(c => c.SageMatricule == "04285").PointeuseNumero);
+        Assert.Equal("00124", contexte.Cards.Single(c => c.SageMatricule == "04301").PointeuseNumero);
     }
 }

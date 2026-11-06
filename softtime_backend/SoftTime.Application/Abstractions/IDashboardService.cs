@@ -8,7 +8,7 @@ namespace SoftTime.Application.Abstractions;
 /// commentées (code mort qui lisait la table brute de la pointeuse).
 ///
 /// Les absences « explicites » et les retards se déduisent des heures corrigées, du planning et
-/// des tolérances — exactement les mêmes règles que <see cref="OvertimeService"/> pour la semaine,
+/// des tolérances — exactement les mêmes règles que <see cref="IOvertimeService"/> pour la semaine,
 /// afin que le tableau de bord ne raconte pas autre chose que la paie.
 /// </summary>
 public interface IDashboardService

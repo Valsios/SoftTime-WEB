@@ -32,12 +32,12 @@ public static class UserAccountConfiguration
     /// </summary>
     public static async Task<PasswordMigrationResult> MigrateLegacyPasswordsDetailedAsync(
         IUnitOfWork uow,
-        IPasswordHasher<T_RESPONSABLE>? hasher = null,
+        IPasswordHasher<Responsable>? hasher = null,
         CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        hasher ??= new PasswordHasher<T_RESPONSABLE>();
-        var repo = uow.Repository<T_RESPONSABLE>();
+        hasher ??= new PasswordHasher<Responsable>();
+        var repo = uow.Repository<Responsable>();
         var users = await repo.ListAsync(_ => true, ct);
 
         var result = new PasswordMigrationResult { TotalScanned = users.Count };
@@ -50,7 +50,7 @@ public static class UserAccountConfiguration
         foreach (var user in users)
         {
             ct.ThrowIfCancellationRequested();
-            var classification = PasswordHashClassifier.Classify(user.PASSWORD);
+            var classification = PasswordHashClassifier.Classify(user.Password);
 
             switch (classification)
             {
@@ -69,7 +69,7 @@ public static class UserAccountConfiguration
 
                 case PasswordClassification.LegacyPlainText:
                     // Mot de passe en clair avéré : sécurisation immédiate en PBKDF2 HMAC-SHA256 (100k itérations)
-                    user.PASSWORD = hasher.HashPassword(user, user.PASSWORD!);
+                    user.Password = hasher.HashPassword(user, user.Password!);
                     repo.Update(user);
                     migrated++;
                     break;
@@ -77,8 +77,8 @@ public static class UserAccountConfiguration
                 case PasswordClassification.UnrecognizedHash:
                     ambiguousCount++;
                     result.AmbiguousAccounts.Add(new AmbiguousAccountEntry(
-                        user.IDRESPONSABLE,
-                        user.LOGIN,
+                        user.IdResponsable,
+                        user.Login,
                         classification,
                         "Format de hachage externe (MD5, SHA, BCrypt, etc.). Valeur préservée intacte. Réinitialisation administrative requise."));
                     break;
@@ -86,8 +86,8 @@ public static class UserAccountConfiguration
                 case PasswordClassification.AmbiguousOrMalformed:
                     ambiguousCount++;
                     result.AmbiguousAccounts.Add(new AmbiguousAccountEntry(
-                        user.IDRESPONSABLE,
-                        user.LOGIN,
+                        user.IdResponsable,
+                        user.Login,
                         classification,
                         "Valeur mal formée ou tronquée. Valeur préservée sans altération pour traitement contrôlé."));
                     break;
@@ -115,7 +115,7 @@ public static class UserAccountConfiguration
     /// </summary>
     public static async Task<int> MigrateLegacyPasswordsAsync(
         IUnitOfWork uow,
-        IPasswordHasher<T_RESPONSABLE>? hasher = null,
+        IPasswordHasher<Responsable>? hasher = null,
         CancellationToken ct = default)
     {
         var result = await MigrateLegacyPasswordsDetailedAsync(uow, hasher, ct);

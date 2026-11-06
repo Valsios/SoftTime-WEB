@@ -12,17 +12,17 @@ public class PlanningServiceTests
     {
         public InMemoryUnitOfWork Uow { get; } = new();
         public PlanningService Service { get; }
-        public List<T_PLANNING_SAL> Planning => Uow.Get<T_PLANNING_SAL>().Items;
+        public List<PlanningSalarie> Planning => Uow.Get<PlanningSalarie>().Items;
 
         public Contexte()
         {
-            Uow.Get<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 1, NOM_BD = "SAGE_TEST" });
-            Uow.Get<T_CARDPAIE>().Items.Add(new T_CARDPAIE
+            Uow.Get<BddSage>().Items.Add(new BddSage { Id = 1, NomBd = "SAGE_TEST" });
+            Uow.Get<CardPaie>().Items.Add(new CardPaie
             {
-                ID = 1,
-                SAGE_MATRICULE = "001",
-                SAGE_BDD = "SAGE_TEST",
-                POINTEUSE_BDD = "PTE_TEST"
+                Id = 1,
+                SageMatricule = "001",
+                SageBdd = "SAGE_TEST",
+                PointeuseBdd = "PTE_TEST"
             });
             var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
             Service = new PlanningService(Uow, tenant, new FakePlanningStatisticsReader());
@@ -30,12 +30,12 @@ public class PlanningServiceTests
 
         public void Shift(int noShift, int haHeure, int haMinute, int hdHeure, int hdMinute, int? pauseHeure = 0)
         {
-            Uow.Get<T_PLANNING>().Items.Add(new T_PLANNING
+            Uow.Get<Planning>().Items.Add(new Planning
             {
-                NoSHIFT = noShift,
-                HA = new TimeSpan(haHeure, haMinute, 0),
-                HD = new TimeSpan(hdHeure, hdMinute, 0),
-                PAUSE = pauseHeure.HasValue ? new TimeSpan(pauseHeure.Value, 0, 0) : null,
+                NoShift = noShift,
+                Ha = new TimeSpan(haHeure, haMinute, 0),
+                Hd = new TimeSpan(hdHeure, hdMinute, 0),
+                Pause = pauseHeure.HasValue ? new TimeSpan(pauseHeure.Value, 0, 0) : null,
                 Intitule = $"Shift {noShift}"
             });
         }
@@ -54,11 +54,11 @@ public class PlanningServiceTests
 
         var ligne = Assert.Single(contexte.Planning);
         Assert.Equal(Lundi.Date, ligne.DateP);
-        Assert.Equal(Lundi.AddHours(17), ligne.HA);
-        Assert.Equal(Lundi.AddDays(1).AddHours(7), ligne.HD);
+        Assert.Equal(Lundi.AddHours(17), ligne.Ha);
+        Assert.Equal(Lundi.AddDays(1).AddHours(7), ligne.Hd);
         Assert.Equal(TimeSpan.Zero, ligne.Pause);
         Assert.False(ligne.OffP);
-        Assert.Equal(1, ligne.NoSHIFT);
+        Assert.Equal(1, ligne.NoShift);
     }
 
     [Fact]
@@ -73,25 +73,25 @@ public class PlanningServiceTests
         });
 
         var ligne = Assert.Single(contexte.Planning);
-        Assert.Equal(Lundi.AddHours(7).AddMinutes(30), ligne.HA);
-        Assert.Equal(Lundi.AddHours(17), ligne.HD);
+        Assert.Equal(Lundi.AddHours(7).AddMinutes(30), ligne.Ha);
+        Assert.Equal(Lundi.AddHours(17), ligne.Hd);
     }
 
     [Fact]
     public async Task SaveEmployeePlanning_LigneSansShift_ConserveHeuresExistantes()
     {
         var contexte = new Contexte();
-        contexte.Uow.Get<T_PLANNING_SAL>().Items.Add(new T_PLANNING_SAL
+        contexte.Uow.Get<PlanningSalarie>().Items.Add(new PlanningSalarie
         {
-            ID = 10,
-            IDSAL = 1,
+            Id = 10,
+            IdSal = 1,
             DateP = Lundi.Date,
-            HA = Lundi.AddHours(8),
-            HD = Lundi.AddHours(17),
+            Ha = Lundi.AddHours(8),
+            Hd = Lundi.AddHours(17),
             Pause = TimeSpan.Zero,
             OffP = false,
-            BDD_SAGE = "SAGE_TEST",
-            BDD_POINTEUSE = "PTE_TEST"
+            BddSage = "SAGE_TEST",
+            BddPointeuse = "PTE_TEST"
         });
 
         await contexte.Service.SaveEmployeePlanningAsync(new[]
@@ -100,8 +100,8 @@ public class PlanningServiceTests
         });
 
         var ligne = Assert.Single(contexte.Planning);
-        Assert.Equal(Lundi.AddHours(8), ligne.HA);
-        Assert.Equal(Lundi.AddHours(17), ligne.HD);
+        Assert.Equal(Lundi.AddHours(8), ligne.Ha);
+        Assert.Equal(Lundi.AddHours(17), ligne.Hd);
     }
 
     [Fact]
@@ -115,8 +115,8 @@ public class PlanningServiceTests
         });
 
         var ligne = Assert.Single(contexte.Planning);
-        Assert.Equal(Lundi.AddHours(22), ligne.HA);
-        Assert.Equal(Lundi.AddDays(1).AddHours(6), ligne.HD);
+        Assert.Equal(Lundi.AddHours(22), ligne.Ha);
+        Assert.Equal(Lundi.AddDays(1).AddHours(6), ligne.Hd);
     }
 
     [Fact]
@@ -131,8 +131,8 @@ public class PlanningServiceTests
         });
 
         var ligne = Assert.Single(contexte.Planning);
-        Assert.Null(ligne.HA);
-        Assert.Null(ligne.HD);
+        Assert.Null(ligne.Ha);
+        Assert.Null(ligne.Hd);
         Assert.Equal(TimeSpan.Zero, ligne.Pause);
         Assert.True(ligne.OffP);
     }
@@ -208,9 +208,9 @@ public class PlanningServiceTests
 
         Assert.Equal(1, resultat.Imported);
         var ligne = Assert.Single(contexte.Planning);
-        Assert.Equal(Lundi.AddHours(17), ligne.HA);
-        Assert.Equal(Lundi.AddDays(1).AddHours(7), ligne.HD);
-        Assert.Equal(1, ligne.NoSHIFT);
+        Assert.Equal(Lundi.AddHours(17), ligne.Ha);
+        Assert.Equal(Lundi.AddDays(1).AddHours(7), ligne.Hd);
+        Assert.Equal(1, ligne.NoShift);
         Assert.Equal(TimeSpan.Zero, ligne.Pause);
     }
 
@@ -228,9 +228,9 @@ public class PlanningServiceTests
 
         var ligne = Assert.Single(contexte.Planning);
         Assert.True(ligne.OffP);
-        Assert.Null(ligne.HA);
-        Assert.Null(ligne.HD);
-        Assert.Null(ligne.NoSHIFT);
+        Assert.Null(ligne.Ha);
+        Assert.Null(ligne.Hd);
+        Assert.Null(ligne.NoShift);
         Assert.Equal(TimeSpan.Zero, ligne.Pause);
     }
 
@@ -264,9 +264,9 @@ public class PlanningServiceTests
 
         Assert.Equal(1, resultat.Imported);
         var ligne = Assert.Single(contexte.Planning);
-        Assert.Equal(Lundi.AddHours(22), ligne.HA);
-        Assert.Equal(Lundi.AddDays(1).AddHours(6), ligne.HD);
+        Assert.Equal(Lundi.AddHours(22), ligne.Ha);
+        Assert.Equal(Lundi.AddDays(1).AddHours(6), ligne.Hd);
         Assert.Equal(TimeSpan.Zero, ligne.Pause);
-        Assert.Null(ligne.NoSHIFT);
+        Assert.Null(ligne.NoShift);
     }
 }

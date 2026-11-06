@@ -19,40 +19,40 @@ public class PayrollClosingRulesTests
     private static readonly TimeSpan H17 = TimeSpan.FromHours(17);
     private static readonly TimeSpan H12 = TimeSpan.FromHours(12);
 
-    private static T_CARDPAIE Carte(int id, string matricule) => new() { ID = id, SAGE_MATRICULE = matricule };
+    private static CardPaie Carte(int id, string matricule) => new() { Id = id, SageMatricule = matricule };
 
-    private static T_PLANNING_SAL Plan(int id, int idsal, DateTime date, TimeSpan? ha = null, TimeSpan? hd = null, bool offP = false)
+    private static PlanningSalarie Plan(int id, int idsal, DateTime date, TimeSpan? ha = null, TimeSpan? hd = null, bool offP = false)
         => new()
         {
-            ID = id,
-            IDSAL = idsal,
+            Id = id,
+            IdSal = idsal,
             DateP = date,
-            HA = ha.HasValue ? date.Date.Add(ha.Value) : null,
-            HD = hd.HasValue ? date.Date.Add(hd.Value) : null,
+            Ha = ha.HasValue ? date.Date.Add(ha.Value) : null,
+            Hd = hd.HasValue ? date.Date.Add(hd.Value) : null,
             OffP = offP
         };
 
-    private static T_PLANNING_SAL Travail(int id, int idsal, DateTime date) => Plan(id, idsal, date, H8, H17);
+    private static PlanningSalarie Travail(int id, int idsal, DateTime date) => Plan(id, idsal, date, H8, H17);
 
-    private static T_PLANNING_SAL Pause(int id, int idsal, DateTime date) => Plan(id, idsal, date, H12, H12);
+    private static PlanningSalarie Pause(int id, int idsal, DateTime date) => Plan(id, idsal, date, H12, H12);
 
-    private static T_POINTAGE Punch(string matricule, DateTime date, TimeSpan heure)
-        => new() { MATRICULE_SAGE = matricule, DATE_POINTAGE = date, HEURE_POINTAGE = heure };
+    private static Pointage Punch(string matricule, DateTime date, TimeSpan heure)
+        => new() { MatriculeSage = matricule, DatePointage = date, HeurePointage = heure };
 
-    private static T_HEURECORRIGER Corr(
+    private static HeureCorrigee Corr(
         string matricule, DateTime date, string? origine = "AUTO", bool am = false, bool pm = false,
         TimeSpan? entree = null, TimeSpan? sortie = null, bool? ferier = null, decimal? mFeries = null)
         => new()
         {
-            MATRICULE_SAGE = matricule,
-            DATE_POINTAGE_IN = date,
-            ORIGINE = origine,
-            ABSENCE_AM = am,
-            ABSENCE_PM = pm,
-            HENTREE = entree,
-            HSORTIE = sortie,
-            FERIER = ferier,
-            M_FERIES = mFeries
+            MatriculeSage = matricule,
+            DatePointageIn = date,
+            Origine = origine,
+            AbsenceAm = am,
+            AbsencePm = pm,
+            HEntree = entree,
+            HSortie = sortie,
+            Ferier = ferier,
+            MFeries = mFeries
         };
 
     private static Dictionary<string, List<LeaveDay>> Conges(string cle, params LeaveDay[] jours)
@@ -63,48 +63,48 @@ public class PayrollClosingRulesTests
     private static readonly HashSet<DateTime> Feries = new() { Ferie };
 
     private static IReadOnlyList<ClosingAnomaly> Incomplets(
-        IReadOnlyList<T_POINTAGE> pointages,
-        IReadOnlyList<T_HEURECORRIGER>? corrections = null,
-        IReadOnlyList<T_HS_VALIDER>? validees = null,
-        IReadOnlyList<T_PLANNING_SAL>? plannings = null,
+        IReadOnlyList<Pointage> pointages,
+        IReadOnlyList<HeureCorrigee>? corrections = null,
+        IReadOnlyList<HsValidee>? validees = null,
+        IReadOnlyList<PlanningSalarie>? plannings = null,
         bool multi = false)
         => PayrollClosingRules.PointagesIncomplets(
             new[] { Carte(1, "00369") },
-            plannings ?? Array.Empty<T_PLANNING_SAL>(),
+            plannings ?? Array.Empty<PlanningSalarie>(),
             pointages,
-            corrections ?? Array.Empty<T_HEURECORRIGER>(),
-            validees ?? Array.Empty<T_HS_VALIDER>(),
+            corrections ?? Array.Empty<HeureCorrigee>(),
+            validees ?? Array.Empty<HsValidee>(),
             From, To, multi);
 
     private static IReadOnlyList<ClosingAnomaly> Manquants(
-        IReadOnlyList<T_PLANNING_SAL> plannings,
-        IReadOnlyList<T_POINTAGE>? pointages = null,
-        IReadOnlyList<T_HEURECORRIGER>? corrections = null,
+        IReadOnlyList<PlanningSalarie> plannings,
+        IReadOnlyList<Pointage>? pointages = null,
+        IReadOnlyList<HeureCorrigee>? corrections = null,
         IReadOnlyDictionary<string, List<LeaveDay>>? conges = null,
         IReadOnlySet<DateTime>? feries = null)
         => PayrollClosingRules.PointagesManquants(
             new[] { Carte(1, "00369") }, plannings,
-            pointages ?? Array.Empty<T_POINTAGE>(),
-            corrections ?? Array.Empty<T_HEURECORRIGER>(),
+            pointages ?? Array.Empty<Pointage>(),
+            corrections ?? Array.Empty<HeureCorrigee>(),
             conges ?? SansConge, feries ?? SansFerie, From, To, Today);
 
     private static IReadOnlyList<ClosingAnomaly> SansPointage(
-        IReadOnlyList<T_PLANNING_SAL> plannings,
-        IReadOnlyList<T_POINTAGE>? pointages = null,
-        IReadOnlyList<T_HEURECORRIGER>? corrections = null,
+        IReadOnlyList<PlanningSalarie> plannings,
+        IReadOnlyList<Pointage>? pointages = null,
+        IReadOnlyList<HeureCorrigee>? corrections = null,
         IReadOnlyDictionary<string, List<LeaveDay>>? conges = null)
         => PayrollClosingRules.PlanningsSansPointage(
             new[] { Carte(1, "00369") }, plannings,
-            pointages ?? Array.Empty<T_POINTAGE>(),
-            corrections ?? Array.Empty<T_HEURECORRIGER>(),
+            pointages ?? Array.Empty<Pointage>(),
+            corrections ?? Array.Empty<HeureCorrigee>(),
             conges ?? SansConge, SansFerie, From, To, Today);
 
     private static IReadOnlyList<ClosingAnomaly> FeriesNonAppliques(
-        IReadOnlyList<T_PLANNING_SAL> plannings,
-        IReadOnlyList<T_HEURECORRIGER>? corrections = null)
+        IReadOnlyList<PlanningSalarie> plannings,
+        IReadOnlyList<HeureCorrigee>? corrections = null)
         => PayrollClosingRules.FeriesNonAppliques(
             new[] { Carte(1, "00369") }, plannings,
-            corrections ?? Array.Empty<T_HEURECORRIGER>(),
+            corrections ?? Array.Empty<HeureCorrigee>(),
             Feries, From, To, Today);
 
     // ---------- Gravités par défaut ----------
@@ -186,7 +186,7 @@ public class PayrollClosingRulesTests
     [Fact]
     public void Incomplete_ValidatedWeek_IsIgnored()
     {
-        var validee = new T_HS_VALIDER { MATRICULES = "00369", DATE_DEB = Lundi, DATE_FIN = Lundi.AddDays(6), VALIDATION_HS = true };
+        var validee = new HsValidee { Matricules = "00369", DateDeb = Lundi, DateFin = Lundi.AddDays(6), ValidationHs = true };
 
         var result = Incomplets(new[] { Punch("369", Mercredi, H8) }, validees: new[] { validee });
 
@@ -196,7 +196,7 @@ public class PayrollClosingRulesTests
     [Fact]
     public void Incomplete_UnvalidatedWeekRow_IsNotIgnored()
     {
-        var nonValidee = new T_HS_VALIDER { MATRICULES = "369", DATE_DEB = Lundi, VALIDATION_HS = false };
+        var nonValidee = new HsValidee { Matricules = "369", DateDeb = Lundi, ValidationHs = false };
 
         var result = Incomplets(new[] { Punch("369", Mercredi, H8) }, validees: new[] { nonValidee });
 
@@ -509,11 +509,11 @@ public class PayrollClosingRulesTests
         var plannings = new[] { Pause(1, 1, Lundi), Pause(2, 1, Ferie), Pause(3, 1, Mardi) };
         var conges = Conges("369", new LeaveDay(Mardi, 0.5m, "CP"));
         var cartes = new[] { Carte(1, "00369") };
-        var aucunPointage = Array.Empty<T_POINTAGE>();
-        var aucuneCorrection = Array.Empty<T_HEURECORRIGER>();
+        var aucunPointage = Array.Empty<Pointage>();
+        var aucuneCorrection = Array.Empty<HeureCorrigee>();
 
         var toutes = new List<ClosingAnomaly>();
-        toutes.AddRange(PayrollClosingRules.PointagesIncomplets(cartes, plannings, aucunPointage, aucuneCorrection, Array.Empty<T_HS_VALIDER>(), From, To, multiPointage: true));
+        toutes.AddRange(PayrollClosingRules.PointagesIncomplets(cartes, plannings, aucunPointage, aucuneCorrection, Array.Empty<HsValidee>(), From, To, multiPointage: true));
         toutes.AddRange(PayrollClosingRules.PointagesManquants(cartes, plannings, aucunPointage, aucuneCorrection, conges, Feries, From, To, Today));
         toutes.AddRange(PayrollClosingRules.PlanningsSansPointage(cartes, plannings, aucunPointage, aucuneCorrection, conges, Feries, From, To, Today));
         toutes.AddRange(PayrollClosingRules.PointagesSansPlanning(cartes, plannings, aucunPointage, From, To));
@@ -586,7 +586,7 @@ public class PayrollClosingRulesTests
     [Fact]
     public void Rules_SameInputShuffled_ProduceSameOrder()
     {
-        var pointages = new List<T_POINTAGE>
+        var pointages = new List<Pointage>
         {
             Punch("500", Mardi, H8), Punch("500", Mardi, H8),
             Punch("369", Mardi, H8), Punch("369", Mardi, H8),
@@ -596,7 +596,7 @@ public class PayrollClosingRulesTests
         };
         var inverses = Enumerable.Reverse(pointages).ToList();
 
-        IReadOnlyList<ClosingAnomaly> Tout(IReadOnlyList<T_POINTAGE> p) => PayrollClosingRules.Trier(
+        IReadOnlyList<ClosingAnomaly> Tout(IReadOnlyList<Pointage> p) => PayrollClosingRules.Trier(
             PayrollClosingRules.DoublonsExacts(p, From, To).Concat(PayrollClosingRules.QuasiDoublons(p, From, To)));
 
         var premier = Tout(pointages);
@@ -615,8 +615,8 @@ public class PayrollClosingRulesTests
         var cartes = new[] { Carte(2, "500"), Carte(1, "00369") };
         var plannings = new[] { Travail(4, 2, Mardi), Travail(3, 1, Mardi), Travail(2, 2, Lundi), Travail(1, 1, Lundi) };
 
-        var premier = PayrollClosingRules.PointagesManquants(cartes, plannings, Array.Empty<T_POINTAGE>(), Array.Empty<T_HEURECORRIGER>(), SansConge, SansFerie, From, To, Today);
-        var second = PayrollClosingRules.PointagesManquants(cartes.Reverse().ToArray(), plannings.Reverse().ToArray(), Array.Empty<T_POINTAGE>(), Array.Empty<T_HEURECORRIGER>(), SansConge, SansFerie, From, To, Today);
+        var premier = PayrollClosingRules.PointagesManquants(cartes, plannings, Array.Empty<Pointage>(), Array.Empty<HeureCorrigee>(), SansConge, SansFerie, From, To, Today);
+        var second = PayrollClosingRules.PointagesManquants(cartes.Reverse().ToArray(), plannings.Reverse().ToArray(), Array.Empty<Pointage>(), Array.Empty<HeureCorrigee>(), SansConge, SansFerie, From, To, Today);
 
         Assert.Equal(premier, second);
         Assert.Equal(

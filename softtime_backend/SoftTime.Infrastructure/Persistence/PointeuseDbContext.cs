@@ -10,9 +10,9 @@ public class PointeuseDbContext : DbContext
 {
     public PointeuseDbContext(DbContextOptions<PointeuseDbContext> options) : base(options) { }
 
-    public DbSet<CHECKINOUT> CHECKINOUT => Set<CHECKINOUT>();
-    public DbSet<USERINFO> USERINFO => Set<USERINFO>();
+    public DbSet<CheckInOut> CheckInOuts => Set<CheckInOut>();
+    public DbSet<UserInfo> UserInfos => Set<UserInfo>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
-        => modelBuilder.ApplyConfigurationsOf<USERINFOConfiguration>();
+        => modelBuilder.ApplyConfigurationsOf<UserInfoConfiguration>();
 }

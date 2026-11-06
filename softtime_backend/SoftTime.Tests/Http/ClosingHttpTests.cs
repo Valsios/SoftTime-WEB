@@ -41,36 +41,36 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     /// </summary>
     private static void Seed(SnapshotInMemoryUnitOfWork store)
     {
-        var users = store.GetRepo<T_RESPONSABLE>().Items;
-        if (users.Any(u => u.IDRESPONSABLE == LecteurId))
+        var users = store.GetRepo<Responsable>().Items;
+        if (users.Any(u => u.IdResponsable == LecteurId))
             return;
 
-        var perms = store.GetRepo<T_USER_PERMISSION>().Items;
-        users.Add(new T_RESPONSABLE { IDRESPONSABLE = LecteurId, IDROLE = 91, LOGIN = "closereader", NOMRESPONSABLE = "closereader" });
-        store.GetRepo<T_BDD_AUTORISE>().Items.Add(new T_BDD_AUTORISE { IDBDDAUTORISE = (int)LecteurId, IDRESPONSABLE = LecteurId, IDBDD = 3033 });
-        perms.Add(new T_USER_PERMISSION { IDRESPONSABLE = LecteurId, PERMISSION_CODE = "REPORTS:CLOSING", IS_GRANTED = true });
-        perms.Add(new T_USER_PERMISSION { IDRESPONSABLE = LecteurId, PERMISSION_CODE = $"SAGE:{ApiFactory.SageName}:READ", IS_GRANTED = true });
+        var perms = store.GetRepo<UserPermission>().Items;
+        users.Add(new Responsable { IdResponsable = LecteurId, IdRole = 91, Login = "closereader", NomResponsable = "closereader" });
+        store.GetRepo<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = (int)LecteurId, IdResponsable = LecteurId, IdBdd = 3033 });
+        perms.Add(new UserPermission { IdResponsable = LecteurId, PermissionCode = "REPORTS:CLOSING", IsGranted = true });
+        perms.Add(new UserPermission { IdResponsable = LecteurId, PermissionCode = $"SAGE:{ApiFactory.SageName}:READ", IsGranted = true });
         // L'analyse lit les pointages : la base pointeuse active doit aussi être lisible (comme le pré-traitement).
-        perms.Add(new T_USER_PERMISSION { IDRESPONSABLE = LecteurId, PERMISSION_CODE = "POINTEUSE:PTG:READ", IS_GRANTED = true });
+        perms.Add(new UserPermission { IdResponsable = LecteurId, PermissionCode = "POINTEUSE:PTG:READ", IsGranted = true });
         // Base SAGE cochée et lisible, mais sans lecture de la base pointeuse.
-        users.Add(new T_RESPONSABLE { IDRESPONSABLE = SansPointeuseId, IDROLE = 91, LOGIN = "closenopte", NOMRESPONSABLE = "closenopte" });
-        store.GetRepo<T_BDD_AUTORISE>().Items.Add(new T_BDD_AUTORISE { IDBDDAUTORISE = (int)SansPointeuseId, IDRESPONSABLE = SansPointeuseId, IDBDD = 3033 });
-        perms.Add(new T_USER_PERMISSION { IDRESPONSABLE = SansPointeuseId, PERMISSION_CODE = "REPORTS:CLOSING", IS_GRANTED = true });
-        perms.Add(new T_USER_PERMISSION { IDRESPONSABLE = SansPointeuseId, PERMISSION_CODE = $"SAGE:{ApiFactory.SageName}:READ", IS_GRANTED = true });
+        users.Add(new Responsable { IdResponsable = SansPointeuseId, IdRole = 91, Login = "closenopte", NomResponsable = "closenopte" });
+        store.GetRepo<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = (int)SansPointeuseId, IdResponsable = SansPointeuseId, IdBdd = 3033 });
+        perms.Add(new UserPermission { IdResponsable = SansPointeuseId, PermissionCode = "REPORTS:CLOSING", IsGranted = true });
+        perms.Add(new UserPermission { IdResponsable = SansPointeuseId, PermissionCode = $"SAGE:{ApiFactory.SageName}:READ", IsGranted = true });
         // Permission fine de clôture, mais base non cochée dans « Accès bases ».
-        users.Add(new T_RESPONSABLE { IDRESPONSABLE = SansBaseId, IDROLE = 91, LOGIN = "closenobase", NOMRESPONSABLE = "closenobase" });
-        perms.Add(new T_USER_PERMISSION { IDRESPONSABLE = SansBaseId, PERMISSION_CODE = "REPORTS:CLOSING", IS_GRANTED = true });
+        users.Add(new Responsable { IdResponsable = SansBaseId, IdRole = 91, Login = "closenobase", NomResponsable = "closenobase" });
+        perms.Add(new UserPermission { IdResponsable = SansBaseId, PermissionCode = "REPORTS:CLOSING", IsGranted = true });
 
         var lundi = new DateTime(2025, 11, 3);
-        store.GetRepo<T_CARDPAIE>().Items.Add(new T_CARDPAIE
+        store.GetRepo<CardPaie>().Items.Add(new CardPaie
         {
-            ID = 70777, SAGE_MATRICULE = "00777", SAGE_NOM = "Testnom", SAGE_PRENOM = "Testprenom",
-            DEPARTEMENT = "DEP1", SAGE_BDD = ApiFactory.SageName
+            Id = 70777, SageMatricule = "00777", SageNom = "Testnom", SagePrenom = "Testprenom",
+            Departement = "DEP1", SageBdd = ApiFactory.SageName
         });
-        store.GetRepo<T_PLANNING_SAL>().Items.Add(new T_PLANNING_SAL
+        store.GetRepo<PlanningSalarie>().Items.Add(new PlanningSalarie
         {
-            ID = 70777, IDSAL = 70777, DateP = lundi, HA = lundi.AddHours(8), HD = lundi.AddHours(17), OffP = false,
-            BDD_SAGE = ApiFactory.SageName
+            Id = 70777, IdSal = 70777, DateP = lundi, Ha = lundi.AddHours(8), Hd = lundi.AddHours(17), OffP = false,
+            BddSage = ApiFactory.SageName
         });
     }
 

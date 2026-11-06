@@ -48,51 +48,51 @@ public class DashboardService : IDashboardService
 
         // T_CAT_SAL.MATRICULE_SAGE référence en réalité T_CARDPAIE.ID et ID_CATEG pointe vers
         // T_CATEGORIE : c'est le seul lien carte -> catégorie de personnel.
-        var categorieParCarte = (await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == sageDb, ct))
-            .GroupBy(a => a.MATRICULE_SAGE)
-            .ToDictionary(g => g.Key, g => g.First().ID_CATEG);
-        var categoriesParId = (await _uow.Repository<T_CATEGORIE>().ListAsync(_ => true, ct))
-            .GroupBy(c => c.IDCATEGORIE)
+        var categorieParCarte = (await _uow.Repository<CategorieSalarie>().ListAsync(a => a.BddSage == sageDb, ct))
+            .GroupBy(a => a.MatriculeSage)
+            .ToDictionary(g => g.Key, g => g.First().IdCateg);
+        var categoriesParId = (await _uow.Repository<Categorie>().ListAsync(_ => true, ct))
+            .GroupBy(c => c.IdCategorie)
             .ToDictionary(g => g.Key, g => g.First());
 
-        var cartes = (await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == sageDb, ct))
-            .Where(c => MatriculeRange.Contains(c.SAGE_MATRICULE, filter))
+        var cartes = (await _uow.Repository<CardPaie>().ListAsync(c => c.SageBdd == sageDb, ct))
+            .Where(c => MatriculeRange.Contains(c.SageMatricule, filter))
             .Where(c => string.IsNullOrWhiteSpace(filter.Departement)
-                        || string.Equals(c.DEPARTEMENT, filter.Departement, StringComparison.OrdinalIgnoreCase))
+                        || string.Equals(c.Departement, filter.Departement, StringComparison.OrdinalIgnoreCase))
             .Where(c => categorieFiltre is not int idCat
-                        || (categorieParCarte.TryGetValue(c.ID, out var carteCat) && carteCat == idCat))
+                        || (categorieParCarte.TryGetValue(c.Id, out var carteCat) && carteCat == idCat))
             .ToList();
 
         if (cartes.Count == 0)
             return Vide(await BuildKpiAsync(sageDb, from, to, 0, VideMetrics, ct));
 
         var cles = cartes
-            .GroupBy(c => Cle(c.SAGE_MATRICULE), StringComparer.OrdinalIgnoreCase)
+            .GroupBy(c => Cle(c.SageMatricule), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
         var categorieParCle = cartes
-            .GroupBy(c => Cle(c.SAGE_MATRICULE), StringComparer.OrdinalIgnoreCase)
+            .GroupBy(c => Cle(c.SageMatricule), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => LibelleCategorie(g.First(), categorieParCarte, categoriesParId),
                 StringComparer.OrdinalIgnoreCase);
-        var feries = (await _uow.Repository<T_FERIE>().ListAsync(f => f.BDD_SAGE == sageDb, ct))
-            .Where(f => f.DATE.HasValue)
-            .Select(f => f.DATE!.Value.Date)
+        var feries = (await _uow.Repository<JourFerie>().ListAsync(f => f.BddSage == sageDb, ct))
+            .Where(f => f.Date.HasValue)
+            .Select(f => f.Date!.Value.Date)
             .ToHashSet();
         // Congés SAGE du tenant, charges une seule fois pour toute la periode (LOT 9).
         var congesParCle = await _leaves.LoadAsync(ct);
 
-        var corrections = await _uow.Repository<T_HEURECORRIGER>().ListAsync(
-            h => h.BDD_SAGE == sageDb && h.DATE_POINTAGE_IN >= from && h.DATE_POINTAGE_IN <= to, ct);
+        var corrections = await _uow.Repository<HeureCorrigee>().ListAsync(
+            h => h.BddSage == sageDb && h.DatePointageIn >= from && h.DatePointageIn <= to, ct);
         var correctionsParCle = corrections
-            .Where(h => cles.ContainsKey(Cle(h.MATRICULE_SAGE)))
-            .GroupBy(h => Cle(h.MATRICULE_SAGE), StringComparer.OrdinalIgnoreCase)
+            .Where(h => cles.ContainsKey(Cle(h.MatriculeSage)))
+            .GroupBy(h => Cle(h.MatriculeSage), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
 
         // Planning de chaque carte, indexé par jour : une ligne de travail prime sur une ligne OFF,
         // puis le plus petit ID (même convention déterministe que l'état des absences).
-        var planning = (await _uow.Repository<T_PLANNING_SAL>().ListAsync(
-                p => p.BDD_SAGE == sageDb && p.DateP >= from && p.DateP <= to, ct))
+        var planning = (await _uow.Repository<PlanningSalarie>().ListAsync(
+                p => p.BddSage == sageDb && p.DateP >= from && p.DateP <= to, ct))
             .Where(p => p.DateP.HasValue)
-            .GroupBy(p => p.IDSAL)
+            .GroupBy(p => p.IdSal)
             .ToDictionary(
                 g => g.Key,
                 g => g
@@ -101,16 +101,16 @@ public class DashboardService : IDashboardService
                         d => d.Key,
                         d => d
                             .OrderBy(p => AbsenceReportRules.EstJourOff(p) ? 1 : 0)
-                            .ThenBy(p => p.ID)
+                            .ThenBy(p => p.Id)
                             .First()));
 
-        var tolerances = await _uow.Repository<T_TOLERANCE>().ListAsync(_ => true, ct);
+        var tolerances = await _uow.Repository<ToleranceRetard>().ListAsync(_ => true, ct);
 
         // Heures validées de la période, ramenées à la carte pour se plier aux filtres de la page.
-        var semaines = (await _uow.Repository<T_HS_VALIDER>().ListAsync(
-                v => v.BDD_SAGE == sageDb && v.DATE_DEB >= from && v.DATE_DEB <= to, ct))
-            .Where(v => v.DATE_DEB.HasValue && cles.ContainsKey(Cle(v.MATRICULES)))
-            .Select(v => new SemaineHs(Cle(v.MATRICULES), v.DATE_DEB!.Value, v.HT ?? 0, v.HS ?? 0, v.VALIDATION_HS == true))
+        var semaines = (await _uow.Repository<HsValidee>().ListAsync(
+                v => v.BddSage == sageDb && v.DateDeb >= from && v.DateDeb <= to, ct))
+            .Where(v => v.DateDeb.HasValue && cles.ContainsKey(Cle(v.Matricules)))
+            .Select(v => new SemaineHs(Cle(v.Matricules), v.DateDeb!.Value, v.Ht ?? 0, v.Hs ?? 0, v.ValidationHs == true))
             .ToList();
         var hsParCle = semaines
             .GroupBy(s => s.Cle, StringComparer.OrdinalIgnoreCase)
@@ -123,17 +123,17 @@ public class DashboardService : IDashboardService
 
         foreach (var carte in cartes)
         {
-            var cle = Cle(carte.SAGE_MATRICULE);
+            var cle = Cle(carte.SageMatricule);
             correctionsParCle.TryGetValue(cle, out var lignes);
-            lignes ??= new List<T_HEURECORRIGER>();
+            lignes ??= new List<HeureCorrigee>();
             var conges = congesParCle.TryGetValue(cle, out var joursConge) ? joursConge : new List<LeaveDay>();
-            var plansDuSalarie = planning.TryGetValue(carte.ID, out var plansCarte) ? plansCarte : PlansVides;
+            var plansDuSalarie = planning.TryGetValue(carte.Id, out var plansCarte) ? plansCarte : PlansVides;
 
             // Absences explicites : l'absence est portée par l'heure corrigée. Un jour de repos
             // planifié (OFF) n'est jamais une absence, même si une correction le mentionne.
-            foreach (var ligne in lignes.Where(h => h.ABSENCE_AM == true || h.ABSENCE_PM == true))
+            foreach (var ligne in lignes.Where(h => h.AbsenceAm == true || h.AbsencePm == true))
             {
-                if (ligne.DATE_POINTAGE_IN is not DateTime jour)
+                if (ligne.DatePointageIn is not DateTime jour)
                     continue;
                 var jourDate = jour.Date;
                 if (jourDate > finEvenements || EstNonTravaille(jourDate, feries))
@@ -160,16 +160,16 @@ public class DashboardService : IDashboardService
 
                 joursPlanifies++;
                 // Règle partagée avec l'état des absences : jour planifié avec heures, sans pointage.
-                var aPointage = lignes.Any(h => h.DATE_POINTAGE_IN?.Date == jour);
+                var aPointage = lignes.Any(h => h.DatePointageIn?.Date == jour);
                 if (AbsenceReportRules.EstNonJustifiee(estNonTravaille, estConge, plan, aPointage))
                     absences.Add((cle, jour));
             }
 
             // Présence : jour réellement pointé (entrée saisie) hors week-end et férié. C'est le
             // dénominateur du taux de ponctualité.
-            foreach (var ligne in lignes.Where(h => h.DATE_POINTAGE_IN.HasValue && h.HENTREE.HasValue))
+            foreach (var ligne in lignes.Where(h => h.DatePointageIn.HasValue && h.HEntree.HasValue))
             {
-                var jour = ligne.DATE_POINTAGE_IN!.Value.Date;
+                var jour = ligne.DatePointageIn!.Value.Date;
                 if (jour > finEvenements || EstNonTravaille(jour, feries))
                     continue;
                 presences.Add((cle, jour));
@@ -179,23 +179,23 @@ public class DashboardService : IDashboardService
             // première entrée du jour vs planning + tolérance d'entrée). On raisonne par journée pour
             // ne pas compter l'entrée d'une deuxième paire (après-midi) comme un retard.
             foreach (var groupeJour in lignes
-                         .Where(h => h.DATE_POINTAGE_IN.HasValue)
-                         .GroupBy(h => h.DATE_POINTAGE_IN!.Value.Date))
+                         .Where(h => h.DatePointageIn.HasValue)
+                         .GroupBy(h => h.DatePointageIn!.Value.Date))
             {
                 var jour = groupeJour.Key;
                 if (jour > finEvenements || EstNonTravaille(jour, feries))
                     continue;
 
                 var entrees = groupeJour
-                    .Where(h => h.HENTREE.HasValue)
-                    .Select(h => h.HENTREE!.Value)
+                    .Where(h => h.HEntree.HasValue)
+                    .Select(h => h.HEntree!.Value)
                     .ToList();
                 var minutes = RetardReportRules.MinutesRetardJour(
-                    absenceMatin: groupeJour.Any(h => h.ABSENCE_AM == true),
-                    retardsSaisis: groupeJour.Select(h => h.RETARD),
+                    absenceMatin: groupeJour.Any(h => h.AbsenceAm == true),
+                    retardsSaisis: groupeJour.Select(h => h.Retard),
                     premiereEntree: entrees.Count > 0 ? entrees.Min() : null,
                     heurePrevue: RetardReportRules.HeurePrevue(plansDuSalarie.GetValueOrDefault(jour)),
-                    toleranceMinutes: RetardReportRules.ToleranceEntree(carte.ID, categorieParCarte, tolerances));
+                    toleranceMinutes: RetardReportRules.ToleranceEntree(carte.Id, categorieParCarte, tolerances));
 
                 if (minutes > 0)
                     retards.Add((cle, jour, minutes));
@@ -247,7 +247,7 @@ public class DashboardService : IDashboardService
             .ToList();
 
         var explicites = joursAbsence.Count(a => correctionsParCle.TryGetValue(a.Cle, out var l)
-            && l.Any(h => h.DATE_POINTAGE_IN?.Date == a.Date && (h.ABSENCE_AM == true || h.ABSENCE_PM == true)));
+            && l.Any(h => h.DatePointageIn?.Date == a.Date && (h.AbsenceAm == true || h.AbsencePm == true)));
 
         var series = periodes
             .Select(p => heuresParCle.TryGetValue(p.Cle, out var heures)
@@ -256,14 +256,14 @@ public class DashboardService : IDashboardService
             .ToList();
 
         var kpi = await BuildKpiAsync(
-            sageDb, from, to, cartes.Count(c => c.ACTIF),
+            sageDb, from, to, cartes.Count(c => c.Actif),
             new PeriodeMetrics(joursPlanifies, joursPresence.Count, joursAbsence.Count, joursRetard.Count,
                 joursRetard.Sum(r => r.Minutes), semaines),
             ct);
 
         var repartition = new DashboardRepartitionDto(
-            Repartition(cartes, c => categorieParCle.GetValueOrDefault(Cle(c.SAGE_MATRICULE)), joursAbsence, joursRetard, hsParCle),
-            Repartition(cartes, c => c.DEPARTEMENT, joursAbsence, joursRetard, hsParCle));
+            Repartition(cartes, c => categorieParCle.GetValueOrDefault(Cle(c.SageMatricule)), joursAbsence, joursRetard, hsParCle),
+            Repartition(cartes, c => c.Departement, joursAbsence, joursRetard, hsParCle));
 
         return new DashboardStatsDto(
             cartes.Count,
@@ -281,18 +281,18 @@ public class DashboardService : IDashboardService
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageDb = _tenant.SageDb;
 
-        var cartes = await _uow.Repository<T_CARDPAIE>().ListReadOnlyAsync(c => c.SAGE_BDD == sageDb, ct);
+        var cartes = await _uow.Repository<CardPaie>().ListReadOnlyAsync(c => c.SageBdd == sageDb, ct);
 
-        var categorieParCarte = (await _uow.Repository<T_CAT_SAL>().ListReadOnlyAsync(a => a.BDD_SAGE == sageDb, ct))
-            .GroupBy(a => a.MATRICULE_SAGE)
-            .ToDictionary(g => g.Key, g => g.First().ID_CATEG);
-        var categoriesParId = (await _uow.Repository<T_CATEGORIE>().ListReadOnlyAsync(_ => true, ct))
-            .GroupBy(c => c.IDCATEGORIE)
+        var categorieParCarte = (await _uow.Repository<CategorieSalarie>().ListReadOnlyAsync(a => a.BddSage == sageDb, ct))
+            .GroupBy(a => a.MatriculeSage)
+            .ToDictionary(g => g.Key, g => g.First().IdCateg);
+        var categoriesParId = (await _uow.Repository<Categorie>().ListReadOnlyAsync(_ => true, ct))
+            .GroupBy(c => c.IdCategorie)
             .ToDictionary(g => g.Key, g => g.First());
 
         var categories = cartes
-            .Select(c => categorieParCarte.TryGetValue(c.ID, out var idCat) && categoriesParId.TryGetValue(idCat, out var cat)
-                ? new DashboardOptionDto(cat.IDCATEGORIE, string.IsNullOrWhiteSpace(cat.INTITULE) ? $"Catégorie {cat.IDCATEGORIE}" : cat.INTITULE!)
+            .Select(c => categorieParCarte.TryGetValue(c.Id, out var idCat) && categoriesParId.TryGetValue(idCat, out var cat)
+                ? new DashboardOptionDto(cat.IdCategorie, string.IsNullOrWhiteSpace(cat.Intitule) ? $"Catégorie {cat.IdCategorie}" : cat.Intitule!)
                 : null)
             .Where(o => o is not null)
             .GroupBy(o => o!.Id)
@@ -301,7 +301,7 @@ public class DashboardService : IDashboardService
             .ToList();
 
         return new DashboardFiltersDto(
-            Valeurs(cartes.Select(c => c.DEPARTEMENT)),
+            Valeurs(cartes.Select(c => c.Departement)),
             categories);
     }
 
@@ -315,12 +315,12 @@ public class DashboardService : IDashboardService
     private async Task<DashboardKpiDto> BuildKpiAsync(
         string sageDb, DateTime from, DateTime to, int cartesActives, PeriodeMetrics metrics, CancellationToken ct)
     {
-        var anomalies = (await _uow.Repository<T_HEUREANOMALIE>().ListAsync(
-            a => a.BDD_SAGE == sageDb && a.DATE_POINTAGE_IN >= from && a.DATE_POINTAGE_IN <= to, ct)).Count;
-        var corrections = await _uow.Repository<T_HEURECORRIGER>().ListAsync(
-            h => h.BDD_SAGE == sageDb && h.DATE_POINTAGE_IN >= from && h.DATE_POINTAGE_IN <= to, ct);
+        var anomalies = (await _uow.Repository<HeureAnomalie>().ListAsync(
+            a => a.BddSage == sageDb && a.DatePointageIn >= from && a.DatePointageIn <= to, ct)).Count;
+        var corrections = await _uow.Repository<HeureCorrigee>().ListAsync(
+            h => h.BddSage == sageDb && h.DatePointageIn >= from && h.DatePointageIn <= to, ct);
         var manuelles = corrections.Count(h =>
-            string.Equals(h.ORIGINE, PunchProcessingConfiguration.OrigineManuel, StringComparison.OrdinalIgnoreCase));
+            string.Equals(h.Origine, PunchProcessingConfiguration.OrigineManuel, StringComparison.OrdinalIgnoreCase));
 
         var validees = metrics.Semaines.Count(s => s.Validee);
 
@@ -358,16 +358,16 @@ public class DashboardService : IDashboardService
     /// et les événements sont donc restreints aux mêmes salariés pour que la ligne reste cohérente.
     /// </summary>
     private static List<DashboardSliceDto> Repartition(
-        IReadOnlyCollection<T_CARDPAIE> cartes,
-        Func<T_CARDPAIE, string?> axe,
+        IReadOnlyCollection<CardPaie> cartes,
+        Func<CardPaie, string?> axe,
         IReadOnlyList<(string Cle, DateTime Date)> absences,
         IReadOnlyList<(string Cle, DateTime Date, int Minutes)> retards,
         IReadOnlyDictionary<string, decimal> hsParCle) => cartes
-        .Where(c => c.ACTIF)
+        .Where(c => c.Actif)
         .GroupBy(c => Normaliser(axe(c)), StringComparer.OrdinalIgnoreCase)
         .Select(g =>
         {
-            var clesGroupe = g.Select(c => Cle(c.SAGE_MATRICULE)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var clesGroupe = g.Select(c => Cle(c.SageMatricule)).ToHashSet(StringComparer.OrdinalIgnoreCase);
             return new DashboardSliceDto(
                 g.Key,
                 g.Count(),
@@ -385,7 +385,7 @@ public class DashboardService : IDashboardService
     /// salarié sans pointage apparaîtrait « le plus ponctuel » à 0 jour travaillé).
     /// </summary>
     private static DashboardAssiduiteDto Assiduite(
-        IReadOnlyDictionary<string, T_CARDPAIE> cles,
+        IReadOnlyDictionary<string, CardPaie> cles,
         IReadOnlyDictionary<string, string?> categorieParCle,
         IReadOnlyList<(string Cle, DateTime Date)> presences,
         IReadOnlyList<(string Cle, DateTime Date)> absences,
@@ -408,9 +408,9 @@ public class DashboardService : IDashboardService
                 categorieParCle.TryGetValue(kv.Key, out var categorie);
                 return new DashboardAssiduiteRowDto(
                     kv.Key,
-                    kv.Value.SAGE_NOM,
-                    kv.Value.SAGE_PRENOM,
-                    kv.Value.DEPARTEMENT,
+                    kv.Value.SageNom,
+                    kv.Value.SagePrenom,
+                    kv.Value.Departement,
                     categorie,
                     joursTravailles,
                     joursAbsence,
@@ -440,11 +440,11 @@ public class DashboardService : IDashboardService
     }
 
     private static string? LibelleCategorie(
-        T_CARDPAIE carte,
+        CardPaie carte,
         IReadOnlyDictionary<int, int> categorieParCarte,
-        IReadOnlyDictionary<int, T_CATEGORIE> categories) =>
-        categorieParCarte.TryGetValue(carte.ID, out var idCat) && categories.TryGetValue(idCat, out var categorie)
-            ? categorie.INTITULE
+        IReadOnlyDictionary<int, Categorie> categories) =>
+        categorieParCarte.TryGetValue(carte.Id, out var idCat) && categories.TryGetValue(idCat, out var categorie)
+            ? categorie.Intitule
             : null;
 
     private static string Normaliser(string? valeur) =>
@@ -463,13 +463,13 @@ public class DashboardService : IDashboardService
         IReadOnlyList<SemaineHs> Semaines);
 
     /// <summary>Planning vide partagé : évite une allocation par salarié sans planning.</summary>
-    private static readonly Dictionary<DateTime, T_PLANNING_SAL> PlansVides = new();
+    private static readonly Dictionary<DateTime, PlanningSalarie> PlansVides = new();
 
     private static DashboardTopDto ToTop(
-        string cle, int count, int minutes, IReadOnlyDictionary<string, T_CARDPAIE> cles)
+        string cle, int count, int minutes, IReadOnlyDictionary<string, CardPaie> cles)
     {
         cles.TryGetValue(cle, out var carte);
-        return new DashboardTopDto(cle, carte?.SAGE_NOM, carte?.SAGE_PRENOM, carte?.DEPARTEMENT, count, minutes);
+        return new DashboardTopDto(cle, carte?.SageNom, carte?.SagePrenom, carte?.Departement, count, minutes);
     }
 
     private static bool EstNonTravaille(DateTime jour, IReadOnlySet<DateTime> feries) =>

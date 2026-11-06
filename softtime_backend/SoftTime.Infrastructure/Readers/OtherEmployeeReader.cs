@@ -12,26 +12,26 @@ public class OtherEmployeeReader : IEmployeeReader
 {
     private static readonly Regex SafeIdentifier = new("^[A-Za-z0-9_]+$", RegexOptions.Compiled);
 
-    public bool CanHandle(T_BDD_SAGE sageRow) => sageRow.TYPE_BASE == "AUTRE";
+    public bool CanHandle(BddSage sageRow) => sageRow.TypeBase == "AUTRE";
 
-    public async Task<IReadOnlyList<NormalizedEmployee>> ListActiveEmployeesAsync(T_BDD_SAGE sageRow, CancellationToken ct)
+    public async Task<IReadOnlyList<NormalizedEmployee>> ListActiveEmployeesAsync(BddSage sageRow, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(sageRow.MAP_TABLE) || string.IsNullOrWhiteSpace(sageRow.MAP_COL_MATRICULE))
+        if (string.IsNullOrWhiteSpace(sageRow.MapTable) || string.IsNullOrWhiteSpace(sageRow.MapColMatricule))
             throw new DomainException("Mapping incomplet pour la base SAGE 'Autre' : table et colonne matricule requises.");
 
-        foreach (var id in new[] { sageRow.MAP_TABLE, sageRow.MAP_COL_MATRICULE, sageRow.MAP_COL_NOM, sageRow.MAP_COL_PRENOM, sageRow.MAP_COL_BADGE })
+        foreach (var id in new[] { sageRow.MapTable, sageRow.MapColMatricule, sageRow.MapColNom, sageRow.MapColPrenom, sageRow.MapColBadge })
             if (!string.IsNullOrWhiteSpace(id) && !SafeIdentifier.IsMatch(id))
                 throw new DomainException($"Nom de table/colonne invalide dans le mapping SAGE 'Autre' : {id}");
 
-        var selMatricule = $"[{sageRow.MAP_COL_MATRICULE}]";
-        var selNom = sageRow.MAP_COL_NOM is { Length: > 0 } n ? $"[{n}]" : "NULL";
-        var selPrenom = sageRow.MAP_COL_PRENOM is { Length: > 0 } p ? $"[{p}]" : "NULL";
-        var selBadge = sageRow.MAP_COL_BADGE is { Length: > 0 } b ? $"[{b}]" : "NULL";
+        var selMatricule = $"[{sageRow.MapColMatricule}]";
+        var selNom = sageRow.MapColNom is { Length: > 0 } n ? $"[{n}]" : "NULL";
+        var selPrenom = sageRow.MapColPrenom is { Length: > 0 } p ? $"[{p}]" : "NULL";
+        var selBadge = sageRow.MapColBadge is { Length: > 0 } b ? $"[{b}]" : "NULL";
 
         var sql = $"SELECT {selMatricule} AS Matricule, {selNom} AS Nom, {selPrenom} AS Prenom, {selBadge} AS Badge " +
-                  $"FROM [{sageRow.MAP_TABLE}]";
+                  $"FROM [{sageRow.MapTable}]";
 
-        var connStr = ExternalConnectionFactory.Build(sageRow.SERVEUR, sageRow.NOM_BD, sageRow.TYPE_AUTH == true, sageRow.TLOGIN, sageRow.TMDP);
+        var connStr = ExternalConnectionFactory.Build(sageRow.Serveur, sageRow.NomBd, sageRow.TypeAuth == true, sageRow.TLogin, sageRow.TMdp);
         await using var con = new SqlConnection(connStr);
         await con.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, con);

@@ -9,13 +9,13 @@ public sealed class DisposableSageContext : IDisposableSageContext
 {
     private readonly SageDbContext _db;
     public DisposableSageContext(SageDbContext db) => _db = db;
-    public IQueryable<T_SAL> Employees => _db.T_SAL;
-    public IQueryable<T_GHR> Events => _db.T_GHR;
-    public IQueryable<T_GHRSAL> EmployeeEvents => _db.T_GHRSAL;
-    public IQueryable<T_CST> Constants => _db.T_CST;
-    public IQueryable<T_DEPARTEMENT> Departments => _db.T_DEPARTEMENT;
-    public IQueryable<T_HST_AFFECTATION> Affectations => _db.T_HST_AFFECTATION;
-    public IQueryable<T_GHRCAL_SOCIETE> CompanyCalendar => _db.T_GHRCAL_SOCIETE;
+    public IQueryable<SalarieSage> Employees => _db.SalarieSages;
+    public IQueryable<EvenementSage> Events => _db.EvenementSages;
+    public IQueryable<EvenementSalarieSage> EmployeeEvents => _db.EvenementSalarieSages;
+    public IQueryable<ConstanteSage> Constants => _db.ConstanteSages;
+    public IQueryable<DepartementSage> Departments => _db.DepartementSages;
+    public IQueryable<HistoriqueAffectationSage> Affectations => _db.HistoriqueAffectationSages;
+    public IQueryable<CalendrierSocieteSage> CompanyCalendar => _db.CalendrierSocieteSages;
     public string ConnectionString => _db.Database.GetConnectionString() ?? string.Empty;
     public SageDbContext Db => _db;
     public void Dispose() => _db.Dispose();

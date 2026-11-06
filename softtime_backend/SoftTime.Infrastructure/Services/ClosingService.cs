@@ -136,80 +136,80 @@ public class ClosingService : IClosingService
         var debut = request.IncludeComparison ? debutPrecedent : request.From.Date;
         var fin = request.To.Date;
 
-        var clock = (await _uow.Repository<T_CLOCK>().ListAsync(_ => true, ct)).FirstOrDefault()
+        var clock = (await _uow.Repository<ParametrePointeuse>().ListAsync(_ => true, ct)).FirstOrDefault()
             ?? throw new DomainException("Paramètre pointeuse (T_CLOCK) manquant.");
 
-        var cartes = (await _uow.Repository<T_CARDPAIE>().ListAsync(c => c.SAGE_BDD == sageDb, ct))
-            .Where(c => CorrespondPointeuse(c.POINTEUSE_BDD, pointeuseDb))
-            .Where(c => !string.IsNullOrWhiteSpace(c.SAGE_MATRICULE))
+        var cartes = (await _uow.Repository<CardPaie>().ListAsync(c => c.SageBdd == sageDb, ct))
+            .Where(c => CorrespondPointeuse(c.PointeuseBdd, pointeuseDb))
+            .Where(c => !string.IsNullOrWhiteSpace(c.SageMatricule))
             .Where(c => string.IsNullOrWhiteSpace(request.Departement)
-                        || string.Equals(c.DEPARTEMENT?.Trim(), request.Departement.Trim(), StringComparison.OrdinalIgnoreCase))
+                        || string.Equals(c.Departement?.Trim(), request.Departement.Trim(), StringComparison.OrdinalIgnoreCase))
             .ToList();
-        var idsCartes = cartes.Select(c => c.ID).ToHashSet();
-        var cles = cartes.Select(c => MatriculeIdentity.Cle(c.SAGE_MATRICULE)).ToHashSet(StringComparer.Ordinal);
+        var idsCartes = cartes.Select(c => c.Id).ToHashSet();
+        var cles = cartes.Select(c => MatriculeIdentity.Cle(c.SageMatricule)).ToHashSet(StringComparer.Ordinal);
 
-        var feries = (await _uow.Repository<T_FERIE>().ListAsync(f => f.BDD_SAGE == sageDb, ct))
-            .Where(f => f.DATE.HasValue)
-            .Select(f => f.DATE!.Value.Date)
+        var feries = (await _uow.Repository<JourFerie>().ListAsync(f => f.BddSage == sageDb, ct))
+            .Where(f => f.Date.HasValue)
+            .Select(f => f.Date!.Value.Date)
             .ToHashSet();
 
         if (cartes.Count == 0)
-            return new ClosingData(clock.MULTIPOINT == true, cartes,
-                new List<T_PLANNING_SAL>(), new List<T_POINTAGE>(), new List<T_HEURECORRIGER>(),
-                new List<T_HS_VALIDER>(), feries, new Dictionary<string, List<LeaveDay>>(), Today());
+            return new ClosingData(clock.MultiPoint == true, cartes,
+                new List<PlanningSalarie>(), new List<Pointage>(), new List<HeureCorrigee>(),
+                new List<HsValidee>(), feries, new Dictionary<string, List<LeaveDay>>(), Today());
 
         // Marge d'un jour de planning de chaque côté (postes de nuit), comme le pré-traitement.
         var planDebut = debut.AddDays(-1);
         var planFin = fin.AddDays(1);
-        var repoPlanning = _uow.Repository<T_PLANNING_SAL>();
+        var repoPlanning = _uow.Repository<PlanningSalarie>();
         var plannings = (await repoPlanning.ToListAsync(repoPlanning.Query()
-                .Where(p => p.BDD_SAGE == sageDb && p.DateP >= planDebut && p.DateP <= planFin)
-                .OrderBy(p => p.ID)
-                .Select(p => new T_PLANNING_SAL
+                .Where(p => p.BddSage == sageDb && p.DateP >= planDebut && p.DateP <= planFin)
+                .OrderBy(p => p.Id)
+                .Select(p => new PlanningSalarie
                 {
-                    ID = p.ID, IDSAL = p.IDSAL, DateP = p.DateP, HA = p.HA, HD = p.HD, Pause = p.Pause, OffP = p.OffP
+                    Id = p.Id, IdSal = p.IdSal, DateP = p.DateP, Ha = p.Ha, Hd = p.Hd, Pause = p.Pause, OffP = p.OffP
                 }), ct))
-            .Where(p => p.DateP.HasValue && idsCartes.Contains(p.IDSAL))
+            .Where(p => p.DateP.HasValue && idsCartes.Contains(p.IdSal))
             .ToList();
 
         // Sorties de nuit : les pointages du lendemain de la fin de période sont aussi chargés.
         var pointagesFinExclusive = fin.AddDays(2);
-        var repoPointage = _uow.Repository<T_POINTAGE>();
+        var repoPointage = _uow.Repository<Pointage>();
         var pointages = (await repoPointage.ToListAsync(repoPointage.Query()
-                .Where(p => p.NOM_BDD_SAGE == sageDb && p.DATE_POINTAGE >= debut && p.DATE_POINTAGE < pointagesFinExclusive)
-                .OrderBy(p => p.IDPOINTAGE)
-                .Select(p => new T_POINTAGE
+                .Where(p => p.NomBddSage == sageDb && p.DatePointage >= debut && p.DatePointage < pointagesFinExclusive)
+                .OrderBy(p => p.IdPointage)
+                .Select(p => new Pointage
                 {
-                    IDPOINTAGE = p.IDPOINTAGE, MATRICULE_SAGE = p.MATRICULE_SAGE, DATE_POINTAGE = p.DATE_POINTAGE,
-                    HEURE_POINTAGE = p.HEURE_POINTAGE, NOM_BDD_POINTEUSE = p.NOM_BDD_POINTEUSE
+                    IdPointage = p.IdPointage, MatriculeSage = p.MatriculeSage, DatePointage = p.DatePointage,
+                    HeurePointage = p.HeurePointage, NomBddPointeuse = p.NomBddPointeuse
                 }), ct))
-            .Where(p => CorrespondPointeuse(p.NOM_BDD_POINTEUSE, pointeuseDb))
-            .Where(p => cles.Contains(MatriculeIdentity.Cle(p.MATRICULE_SAGE)))
+            .Where(p => CorrespondPointeuse(p.NomBddPointeuse, pointeuseDb))
+            .Where(p => cles.Contains(MatriculeIdentity.Cle(p.MatriculeSage)))
             .ToList();
 
         var correctionsFinExclusive = fin.AddDays(1);
-        var repoCorrection = _uow.Repository<T_HEURECORRIGER>();
+        var repoCorrection = _uow.Repository<HeureCorrigee>();
         var corrections = (await repoCorrection.ToListAsync(repoCorrection.Query()
-                .Where(h => h.BDD_SAGE == sageDb && h.DATE_POINTAGE_IN >= debut && h.DATE_POINTAGE_IN < correctionsFinExclusive)
-                .OrderBy(h => h.ID)
-                .Select(h => new T_HEURECORRIGER
+                .Where(h => h.BddSage == sageDb && h.DatePointageIn >= debut && h.DatePointageIn < correctionsFinExclusive)
+                .OrderBy(h => h.Id)
+                .Select(h => new HeureCorrigee
                 {
-                    ID = h.ID, MATRICULE_SAGE = h.MATRICULE_SAGE, DATE_POINTAGE_IN = h.DATE_POINTAGE_IN,
-                    HENTREE = h.HENTREE, HSORTIE = h.HSORTIE, HPS = h.HPS, HPE = h.HPE,
-                    ABSENCE_AM = h.ABSENCE_AM, ABSENCE_PM = h.ABSENCE_PM, INTITULE_ABSENCE = h.INTITULE_ABSENCE,
-                    FERIER = h.FERIER, FERIER_AM = h.FERIER_AM, FERIER_PM = h.FERIER_PM, M_FERIES = h.M_FERIES,
-                    ORIGINE = h.ORIGINE
+                    Id = h.Id, MatriculeSage = h.MatriculeSage, DatePointageIn = h.DatePointageIn,
+                    HEntree = h.HEntree, HSortie = h.HSortie, Hps = h.Hps, Hpe = h.Hpe,
+                    AbsenceAm = h.AbsenceAm, AbsencePm = h.AbsencePm, IntituleAbsence = h.IntituleAbsence,
+                    Ferier = h.Ferier, FerierAm = h.FerierAm, FerierPm = h.FerierPm, MFeries = h.MFeries,
+                    Origine = h.Origine
                 }), ct))
-            .Where(h => cles.Contains(MatriculeIdentity.Cle(h.MATRICULE_SAGE)))
+            .Where(h => cles.Contains(MatriculeIdentity.Cle(h.MatriculeSage)))
             .ToList();
 
         var lundiDebut = debut.AddDays(-(((int)debut.DayOfWeek + 6) % 7));
-        var repoSemaine = _uow.Repository<T_HS_VALIDER>();
+        var repoSemaine = _uow.Repository<HsValidee>();
         var semainesValidees = (await repoSemaine.ToListAsync(repoSemaine.Query()
-                .Where(v => v.BDD_SAGE == sageDb && v.VALIDATION_HS == true && v.DATE_DEB >= lundiDebut && v.DATE_DEB <= fin)
-                .OrderBy(v => v.ID)
-                .Select(v => new T_HS_VALIDER { ID = v.ID, MATRICULES = v.MATRICULES, DATE_DEB = v.DATE_DEB, VALIDATION_HS = v.VALIDATION_HS }), ct))
-            .Where(v => cles.Contains(MatriculeIdentity.Cle(v.MATRICULES)))
+                .Where(v => v.BddSage == sageDb && v.ValidationHs == true && v.DateDeb >= lundiDebut && v.DateDeb <= fin)
+                .OrderBy(v => v.Id)
+                .Select(v => new HsValidee { Id = v.Id, Matricules = v.Matricules, DateDeb = v.DateDeb, ValidationHs = v.ValidationHs }), ct))
+            .Where(v => cles.Contains(MatriculeIdentity.Cle(v.Matricules)))
             .ToList();
 
         var congesTenant = await _leaves.LoadAsync(ct);
@@ -217,7 +217,7 @@ public class ClosingService : IClosingService
             .Where(kv => cles.Contains(kv.Key))
             .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
 
-        return new ClosingData(clock.MULTIPOINT == true, cartes, plannings, pointages, corrections,
+        return new ClosingData(clock.MultiPoint == true, cartes, plannings, pointages, corrections,
             semainesValidees, feries, conges, Today());
     }
 
@@ -238,10 +238,10 @@ public class ClosingService : IClosingService
         var (debutPrecedent, finPrecedente) = PeriodePrecedente(from, to);
 
         var departementParCle = donnees.Cartes
-            .GroupBy(c => MatriculeIdentity.Cle(c.SAGE_MATRICULE), StringComparer.Ordinal)
+            .GroupBy(c => MatriculeIdentity.Cle(c.SageMatricule), StringComparer.Ordinal)
             .ToDictionary(
                 g => g.Key,
-                g => Departement(g.OrderBy(c => c.ID).First().DEPARTEMENT),
+                g => Departement(g.OrderBy(c => c.Id).First().Departement),
                 StringComparer.Ordinal);
 
         var actuel = Controler(donnees, from, to, options);
@@ -380,12 +380,12 @@ public class ClosingService : IClosingService
     {
         var cleParIdSal = new Dictionary<int, string>();
         foreach (var carte in d.Cartes)
-            cleParIdSal[carte.ID] = MatriculeIdentity.Cle(carte.SAGE_MATRICULE);
+            cleParIdSal[carte.Id] = MatriculeIdentity.Cle(carte.SageMatricule);
 
         var jours = d.Plannings
-            .Where(p => p.DateP!.Value.Date >= from && p.DateP!.Value.Date <= fin && cleParIdSal.ContainsKey(p.IDSAL))
-            .GroupBy(p => (Cle: cleParIdSal[p.IDSAL], Jour: p.DateP!.Value.Date))
-            .Select(g => (g.Key, Retenu: g.OrderBy(p => AbsenceReportRules.EstJourOff(p) ? 1 : 0).ThenBy(p => p.ID).First()))
+            .Where(p => p.DateP!.Value.Date >= from && p.DateP!.Value.Date <= fin && cleParIdSal.ContainsKey(p.IdSal))
+            .GroupBy(p => (Cle: cleParIdSal[p.IdSal], Jour: p.DateP!.Value.Date))
+            .Select(g => (g.Key, Retenu: g.OrderBy(p => AbsenceReportRules.EstJourOff(p) ? 1 : 0).ThenBy(p => p.Id).First()))
             .Where(x => !AbsenceReportRules.EstJourOff(x.Retenu) && AbsenceReportRules.CalculerDureeHeures(x.Retenu) is not null)
             .Select(x => x.Key)
             .ToHashSet();
@@ -454,11 +454,11 @@ internal sealed record AnalysePreparee(
 /// <summary>Données chargées pour une analyse de clôture (période demandée et période précédente).</summary>
 internal sealed record ClosingData(
     bool MultiPointage,
-    IReadOnlyList<T_CARDPAIE> Cartes,
-    IReadOnlyList<T_PLANNING_SAL> Plannings,
-    IReadOnlyList<T_POINTAGE> Pointages,
-    IReadOnlyList<T_HEURECORRIGER> Corrections,
-    IReadOnlyList<T_HS_VALIDER> SemainesValidees,
+    IReadOnlyList<CardPaie> Cartes,
+    IReadOnlyList<PlanningSalarie> Plannings,
+    IReadOnlyList<Pointage> Pointages,
+    IReadOnlyList<HeureCorrigee> Corrections,
+    IReadOnlyList<HsValidee> SemainesValidees,
     IReadOnlySet<DateTime> Feries,
     IReadOnlyDictionary<string, List<LeaveDay>> Conges,
     DateTime DateDuJour)

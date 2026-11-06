@@ -104,8 +104,8 @@ public class EffectiveRightsTests
 
         var old = PermissionCatalog.BuildDefaultPermissionsList(
             gates.ToHashSet(),
-            new[] { new T_BDD_SAGE { NOM_BD = "BASE1" }, new T_BDD_SAGE { NOM_BD = "BASE2" } },
-            new[] { new T_BDD_POINTEUSE { NOM_BD = "PTG" } });
+            new[] { new BddSage { NomBd = "BASE1" }, new BddSage { NomBd = "BASE2" } },
+            new[] { new BddPointeuse { NomBd = "PTG" } });
         var configuration = new[] { "SAGE:CREATE", "SAGE:BASE1:UPDATE", "SAGE:BASE1:DELETE", "SAGE:BASE2:UPDATE", "SAGE:BASE2:DELETE",
             "POINTEUSE:CREATE", "POINTEUSE:PTG:UPDATE", "POINTEUSE:PTG:DELETE" };
         Assert.True(r.Permissions.SetEquals(old.Except(configuration)));
@@ -286,9 +286,9 @@ public class EffectiveRightsTests
     public void Legacy_list_of_a_user_like_joel_gives_37_additions_and_no_removal()
     {
         var roleRights = new[] { "SAGE:BASE1:READ", "POINTEUSE:PTG:READ" }
-            .Concat(PermissionCatalog.BuildDefaultPermissionsList(new HashSet<int> { Processing }, Array.Empty<T_BDD_SAGE>(), Array.Empty<T_BDD_POINTEUSE>()))
+            .Concat(PermissionCatalog.BuildDefaultPermissionsList(new HashSet<int> { Processing }, Array.Empty<BddSage>(), Array.Empty<BddPointeuse>()))
             .ToList();
-        var params37 = PermissionCatalog.BuildDefaultPermissionsList(new HashSet<int> { Parameters }, Array.Empty<T_BDD_SAGE>(), Array.Empty<T_BDD_POINTEUSE>());
+        var params37 = PermissionCatalog.BuildDefaultPermissionsList(new HashSet<int> { Parameters }, Array.Empty<BddSage>(), Array.Empty<BddPointeuse>());
         Assert.Equal(37, params37.Count);
 
         var (additions, removals) = ConvertLegacyList(roleRights, roleRights.Concat(params37).ToList());
@@ -393,17 +393,17 @@ public class EffectiveRightsTests
         public OldWorld()
         {
             var mapper = new MapperConfiguration(c => c.AddProfile<MappingProfile>()).CreateMapper();
-            Auth = new AuthService(Uow, new Token(), mapper, new Mail(), new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), new PasswordHasher<T_RESPONSABLE>());
-            Uow.GetRepo<T_BDD_SAGE>().Items.AddRange(new[] { new T_BDD_SAGE { ID = 1, NOM_BD = "BASE1" }, new T_BDD_SAGE { ID = 2, NOM_BD = "BASE2" } });
-            Uow.GetRepo<T_BDD_POINTEUSE>().Items.Add(new T_BDD_POINTEUSE { ID = 1, NOM_BD = "PTG" });
+            Auth = new AuthService(Uow, new Token(), mapper, new Mail(), new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), new PasswordHasher<Responsable>());
+            Uow.GetRepo<BddSage>().Items.AddRange(new[] { new BddSage { Id = 1, NomBd = "BASE1" }, new BddSage { Id = 2, NomBd = "BASE2" } });
+            Uow.GetRepo<BddPointeuse>().Items.Add(new BddPointeuse { Id = 1, NomBd = "PTG" });
         }
 
         public async Task<HashSet<string>> OldAsync(decimal roleId, string[]? roleRows, int[] gates)
         {
-            Uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = roleId, NOMROLE = $"R{roleId}" });
-            Uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 100 + roleId, IDROLE = roleId, LOGIN = "u" });
-            foreach (var g in gates) Uow.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = roleId, IDDROIT = g });
-            foreach (var c in roleRows ?? Array.Empty<string>()) Uow.GetRepo<T_ROLE_PERMISSION>().Items.Add(new T_ROLE_PERMISSION { IDROLE = roleId, PERMISSION_CODE = c, IS_GRANTED = true });
+            Uow.GetRepo<Role>().Items.Add(new Role { IdRole = roleId, NomRole = $"R{roleId}" });
+            Uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 100 + roleId, IdRole = roleId, Login = "u" });
+            foreach (var g in gates) Uow.GetRepo<DroitRole>().Items.Add(new DroitRole { IdRole = roleId, IdDroit = g });
+            foreach (var c in roleRows ?? Array.Empty<string>()) Uow.GetRepo<RolePermission>().Items.Add(new RolePermission { IdRole = roleId, PermissionCode = c, IsGranted = true });
             return (await Auth.GetUserDetailedPermissionsAsync(100 + roleId)).GrantedPermissions.ToHashSet();
         }
     }

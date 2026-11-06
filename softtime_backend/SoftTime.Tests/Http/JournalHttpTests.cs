@@ -40,16 +40,16 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
 
     private static void Seed(ApiFactory f)
     {
-        var users = f.Store.GetRepo<T_RESPONSABLE>().Items;
-        if (users.Any(u => u.IDRESPONSABLE == 10100))
+        var users = f.Store.GetRepo<Responsable>().Items;
+        if (users.Any(u => u.IdResponsable == 10100))
             return;
-        users.Add(new T_RESPONSABLE { IDRESPONSABLE = 10100, IDROLE = 91, LOGIN = "tracereader", NOMRESPONSABLE = "tracereader" });
-        users.Add(new T_RESPONSABLE { IDRESPONSABLE = 10101, IDROLE = 91, LOGIN = "gate5only", NOMRESPONSABLE = "gate5only" });
-        var perms = f.Store.GetRepo<T_USER_PERMISSION>().Items;
-        perms.Add(new T_USER_PERMISSION { IDRESPONSABLE = 10100, PERMISSION_CODE = "TRACE:AUDIT", IS_GRANTED = true });
-        perms.Add(new T_USER_PERMISSION { IDRESPONSABLE = 10101, PERMISSION_CODE = "PROC:SHIFTS", IS_GRANTED = true });
+        users.Add(new Responsable { IdResponsable = 10100, IdRole = 91, Login = "tracereader", NomResponsable = "tracereader" });
+        users.Add(new Responsable { IdResponsable = 10101, IdRole = 91, Login = "gate5only", NomResponsable = "gate5only" });
+        var perms = f.Store.GetRepo<UserPermission>().Items;
+        perms.Add(new UserPermission { IdResponsable = 10100, PermissionCode = "TRACE:AUDIT", IsGranted = true });
+        perms.Add(new UserPermission { IdResponsable = 10101, PermissionCode = "PROC:SHIFTS", IsGranted = true });
 
-        var journal = f.Store.GetRepo<suivi_JOURNAL>().Items;
+        var journal = f.Store.GetRepo<JournalAudit>().Items;
         journal.Add(Row(1, Base, "T_FERIE", "Insertion", "agent1", "INTITULE", null, "Noel"));
         journal.Add(Row(2, Base.AddDays(1), "T_FERIE", "Modification", "agent2", "INTITULE", "Noel", "Noël"));
         journal.Add(Row(3, Base.AddDays(2), "T_RESPONSABLE", "Suppression", "agent1", "EMAIL", "a@exemple.test", null));
@@ -62,13 +62,13 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
             journal.Add(Row(1000 + i, Base.AddMonths(-3).AddMinutes(i), "T_VOLUME", "Insertion", "volume", "COL", null, $"v{i}"));
     }
 
-    private static suivi_JOURNAL Row(long id, DateTime date, string table, string action, string user, string? column,
+    private static JournalAudit Row(long id, DateTime date, string table, string action, string user, string? column,
         string? before, string? after, string? key = null)
         => new()
         {
-            Id = id, DATE_UTC = date, TABLES = table, ACTIONS = action, USERS = user, COLONNES = column,
-            ANCIENS = before, NOUVEAUX = after, CLES = key ?? $"ID={id}", BASE_SAGE = ApiFactory.SageName,
-            CORRELATIONS = new Guid((int)id, 0, 0, new byte[8]), SOURCE = "TEST"
+            Id = id, DateUtc = date, Tables = table, Actions = action, Users = user, Colonnes = column,
+            Anciens = before, Nouveaux = after, Cles = key ?? $"ID={id}", BaseSage = ApiFactory.SageName,
+            Correlations = new Guid((int)id, 0, 0, new byte[8]), Source = "TEST"
         };
 
     private async Task<(HttpStatusCode Status, string Text)> Send(string profile, HttpMethod method, string url, string? body = null)
@@ -125,7 +125,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
         Assert.Equal(AuditMaskingPolicy.Mask, doc.RootElement.GetProperty("before").GetString());
         Assert.Equal(AuditMaskingPolicy.Mask, doc.RootElement.GetProperty("after").GetString());
         // Le stockage n'est pas modifié par la lecture (aucune purge implicite).
-        Assert.Equal(InjectedClearValue, _f.Store.GetRepo<suivi_JOURNAL>().Items.Single(e => e.Id == ClearRowId).NOUVEAUX);
+        Assert.Equal(InjectedClearValue, _f.Store.GetRepo<JournalAudit>().Items.Single(e => e.Id == ClearRowId).Nouveaux);
     }
 
     [Fact]
@@ -245,7 +245,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     {
         var (status, _) = await Send("admin", HttpMethod.Post, "/api/audit/config", ConfigBody);
         Assert.Equal(HttpStatusCode.NoContent, status);
-        Assert.Contains(_f.Store.GetRepo<suivi_TBLCLN>().Items, c => c.TABLES == "T_JOURNAL_TEST");
+        Assert.Contains(_f.Store.GetRepo<SuiviConfiguration>().Items, c => c.Tables == "T_JOURNAL_TEST");
     }
 
     [Fact]

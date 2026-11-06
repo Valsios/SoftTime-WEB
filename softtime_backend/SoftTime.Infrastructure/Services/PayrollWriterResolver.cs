@@ -9,6 +9,6 @@ public sealed class PayrollWriterResolver : IPayrollWriterResolver
 
     public PayrollWriterResolver(IEnumerable<IPayrollWriter> writers) => _writers = writers.ToList();
 
-    public IPayrollWriter Resolve(T_BDD_SAGE database) => _writers.SingleOrDefault(w => w.CanHandle(database))
-        ?? throw new DomainException($"Aucun writer de paie n'est configuré pour le type de base '{database.TYPE_BASE}'.");
+    public IPayrollWriter Resolve(BddSage database) => _writers.SingleOrDefault(w => w.CanHandle(database))
+        ?? throw new DomainException($"Aucun writer de paie n'est configuré pour le type de base '{database.TypeBase}'.");
 }

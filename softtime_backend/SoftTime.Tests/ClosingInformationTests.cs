@@ -42,8 +42,8 @@ public class ClosingInformationTests
 
         public Contexte(bool multiPointage, ClosingOptions? reglages = null)
         {
-            Uow.Get<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 1, NOM_BD = "SAGE_TEST" });
-            Uow.Get<T_CLOCK>().Items.Add(new T_CLOCK { IDPOINT = 1, MULTIPOINT = multiPointage });
+            Uow.Get<BddSage>().Items.Add(new BddSage { Id = 1, NomBd = "SAGE_TEST" });
+            Uow.Get<ParametrePointeuse>().Items.Add(new ParametrePointeuse { IdPoint = 1, MultiPoint = multiPointage });
             Tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(),
                 SoftTime.Tests.Http.TestRights.Service(Uow), NullLogger<TenantConnectionService>.Instance);
             Service = new ClosingService(Uow, Tenant, new SageLeaveCalendar(Tenant, new FakeExternalSourceService()),
@@ -51,30 +51,30 @@ public class ClosingInformationTests
         }
 
         public void Carte(int id, string matricule) =>
-            Uow.Get<T_CARDPAIE>().Items.Add(new T_CARDPAIE
+            Uow.Get<CardPaie>().Items.Add(new CardPaie
             {
-                ID = id, SAGE_MATRICULE = matricule, DEPARTEMENT = "D", SAGE_BDD = "SAGE_TEST", POINTEUSE_BDD = "PTE_TEST"
+                Id = id, SageMatricule = matricule, Departement = "D", SageBdd = "SAGE_TEST", PointeuseBdd = "PTE_TEST"
             });
 
         public void Plan(int idsal, DateTime jour, bool off = false) =>
-            Uow.Get<T_PLANNING_SAL>().Items.Add(new T_PLANNING_SAL
+            Uow.Get<PlanningSalarie>().Items.Add(new PlanningSalarie
             {
-                ID = Uow.Get<T_PLANNING_SAL>().Items.Count + 1, IDSAL = idsal, DateP = jour,
-                HA = jour.Add(H8), HD = jour.Add(H17), OffP = off, BDD_SAGE = "SAGE_TEST", BDD_POINTEUSE = "PTE_TEST"
+                Id = Uow.Get<PlanningSalarie>().Items.Count + 1, IdSal = idsal, DateP = jour,
+                Ha = jour.Add(H8), Hd = jour.Add(H17), OffP = off, BddSage = "SAGE_TEST", BddPointeuse = "PTE_TEST"
             });
 
         public void Punch(string matricule, DateTime jour, params TimeSpan[] heures)
         {
             foreach (var heure in heures)
-                Uow.Get<T_POINTAGE>().Items.Add(new T_POINTAGE
+                Uow.Get<Pointage>().Items.Add(new Pointage
                 {
-                    MATRICULE_SAGE = matricule, DATE_POINTAGE = jour, HEURE_POINTAGE = heure,
-                    NOM_BDD_SAGE = "SAGE_TEST", NOM_BDD_POINTEUSE = "PTE_TEST"
+                    MatriculeSage = matricule, DatePointage = jour, HeurePointage = heure,
+                    NomBddSage = "SAGE_TEST", NomBddPointeuse = "PTE_TEST"
                 });
         }
 
         public void Ferie(DateTime jour) =>
-            Uow.Get<T_FERIE>().Items.Add(new T_FERIE { DATE = jour, BDD_SAGE = "SAGE_TEST" });
+            Uow.Get<JourFerie>().Items.Add(new JourFerie { Date = jour, BddSage = "SAGE_TEST" });
 
         /// <summary>
         /// Semaine du 17 au 21 novembre 2025, trois salariés.
@@ -201,10 +201,10 @@ public class ClosingInformationTests
 
     // ---------- Étape 2 : doublons selon le mode ----------
 
-    private static T_POINTAGE Punch(string matricule, DateTime jour, TimeSpan heure) =>
-        new() { MATRICULE_SAGE = matricule, DATE_POINTAGE = jour, HEURE_POINTAGE = heure };
+    private static Pointage Punch(string matricule, DateTime jour, TimeSpan heure) =>
+        new() { MatriculeSage = matricule, DatePointage = jour, HeurePointage = heure };
 
-    private static readonly T_POINTAGE[] Doublons =
+    private static readonly Pointage[] Doublons =
     {
         Punch("369", Lundi, H8), Punch("369", Lundi, H8), Punch("369", Lundi, Plus(H8, 10)), Punch("369", Lundi, H17)
     };
@@ -299,15 +299,15 @@ public class ClosingInformationTests
 
     // ---------- Étape 3 : salariés sans planning ----------
 
-    private static readonly T_CARDPAIE[] Cartes =
+    private static readonly CardPaie[] Cartes =
     {
-        new() { ID = 1, SAGE_MATRICULE = "001" }, new() { ID = 2, SAGE_MATRICULE = "002" }, new() { ID = 3, SAGE_MATRICULE = "003" }
+        new() { Id = 1, SageMatricule = "001" }, new() { Id = 2, SageMatricule = "002" }, new() { Id = 3, SageMatricule = "003" }
     };
 
-    private static T_PLANNING_SAL Planning(int id, int idsal, DateTime jour, bool off = false) =>
-        new() { ID = id, IDSAL = idsal, DateP = jour, HA = jour.Add(H8), HD = off ? jour.Add(H8) : jour.Add(H17), OffP = off };
+    private static PlanningSalarie Planning(int id, int idsal, DateTime jour, bool off = false) =>
+        new() { Id = id, IdSal = idsal, DateP = jour, Ha = jour.Add(H8), Hd = off ? jour.Add(H8) : jour.Add(H17), OffP = off };
 
-    private static readonly T_POINTAGE[] PointagesSansPlanning =
+    private static readonly Pointage[] PointagesSansPlanning =
     {
         Punch("001", Lundi, H8), Punch("002", Lundi, H8), Punch("003", Lundi, H8), Punch("003", Mardi, H8)
     };
@@ -410,8 +410,8 @@ public class ClosingInformationTests
         var feries = new HashSet<DateTime> { Mercredi };
         var plannings = new[] { Planning(1, 1, Mercredi) };
 
-        var sans = PayrollClosingRules.FeriesNonAppliques(Cartes, plannings, Array.Empty<T_HEURECORRIGER>(), feries, Lundi, Vendredi, new DateTime(2025, 12, 1));
-        var avec = PayrollClosingRules.FeriesNonAppliques(Cartes, plannings, Array.Empty<T_HEURECORRIGER>(), feries, Lundi, Vendredi, new DateTime(2025, 12, 1),
+        var sans = PayrollClosingRules.FeriesNonAppliques(Cartes, plannings, Array.Empty<HeureCorrigee>(), feries, Lundi, Vendredi, new DateTime(2025, 12, 1));
+        var avec = PayrollClosingRules.FeriesNonAppliques(Cartes, plannings, Array.Empty<HeureCorrigee>(), feries, Lundi, Vendredi, new DateTime(2025, 12, 1),
             ClosingPunchIndex.Build(new[] { Punch("001", Mercredi, H8) }));
 
         Assert.Null(Assert.Single(sans).PointageExiste);

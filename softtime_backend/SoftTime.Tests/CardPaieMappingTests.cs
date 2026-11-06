@@ -21,8 +21,8 @@ public class CardPaieMappingTests
             Departement = "INFO",
         };
 
-        var entity = mapper.Map<T_CARDPAIE>(dto);
+        var entity = mapper.Map<CardPaie>(dto);
 
-        Assert.Equal("INFO", entity.DEPARTEMENT);
+        Assert.Equal("INFO", entity.Departement);
     }
 }

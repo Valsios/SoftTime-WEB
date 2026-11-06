@@ -93,8 +93,8 @@ public class ClosingServiceTests
 
         public Contexte(TimeProvider? horloge = null)
         {
-            Uow.Inner.Get<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 1, NOM_BD = "SAGE_TEST" });
-            Uow.Inner.Get<T_CLOCK>().Items.Add(new T_CLOCK { IDPOINT = 1, MULTIPOINT = false });
+            Uow.Inner.Get<BddSage>().Items.Add(new BddSage { Id = 1, NomBd = "SAGE_TEST" });
+            Uow.Inner.Get<ParametrePointeuse>().Items.Add(new ParametrePointeuse { IdPoint = 1, MultiPoint = false });
             var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(),
                 SoftTime.Tests.Http.TestRights.Service(Uow), NullLogger<TenantConnectionService>.Instance);
             Service = new ClosingService(Uow, tenant, new SageLeaveCalendar(tenant, Source), horloge ?? new HorlogeFixe());
@@ -102,33 +102,33 @@ public class ClosingServiceTests
 
         public void Carte(int id, string matricule, string? departement)
         {
-            Uow.Inner.Get<T_CARDPAIE>().Items.Add(new T_CARDPAIE
+            Uow.Inner.Get<CardPaie>().Items.Add(new CardPaie
             {
-                ID = id, SAGE_MATRICULE = matricule, DEPARTEMENT = departement, SAGE_BDD = "SAGE_TEST", POINTEUSE_BDD = "PTE_TEST"
+                Id = id, SageMatricule = matricule, Departement = departement, SageBdd = "SAGE_TEST", PointeuseBdd = "PTE_TEST"
             });
             Source.Employees.Add(new ExternalEmployee(matricule, id, "X", "Y", null, false));
         }
 
         public void Plan(int idsal, DateTime jour, TimeSpan? ha = null, TimeSpan? hd = null)
-            => Uow.Inner.Get<T_PLANNING_SAL>().Items.Add(new T_PLANNING_SAL
+            => Uow.Inner.Get<PlanningSalarie>().Items.Add(new PlanningSalarie
             {
-                ID = Uow.Inner.Get<T_PLANNING_SAL>().Items.Count + 1,
-                IDSAL = idsal,
+                Id = Uow.Inner.Get<PlanningSalarie>().Items.Count + 1,
+                IdSal = idsal,
                 DateP = jour.Date,
-                HA = jour.Date.Add(ha ?? H8),
-                HD = jour.Date.Add(hd ?? H17),
+                Ha = jour.Date.Add(ha ?? H8),
+                Hd = jour.Date.Add(hd ?? H17),
                 OffP = false,
-                BDD_SAGE = "SAGE_TEST",
-                BDD_POINTEUSE = "PTE_TEST"
+                BddSage = "SAGE_TEST",
+                BddPointeuse = "PTE_TEST"
             });
 
         public void Punch(string matricule, DateTime jour, params TimeSpan[] heures)
         {
             foreach (var heure in heures)
-                Uow.Inner.Get<T_POINTAGE>().Items.Add(new T_POINTAGE
+                Uow.Inner.Get<Pointage>().Items.Add(new Pointage
                 {
-                    MATRICULE_SAGE = matricule, DATE_POINTAGE = jour.Date, HEURE_POINTAGE = heure,
-                    NOM_BDD_SAGE = "SAGE_TEST", NOM_BDD_POINTEUSE = "PTE_TEST"
+                    MatriculeSage = matricule, DatePointage = jour.Date, HeurePointage = heure,
+                    NomBddSage = "SAGE_TEST", NomBddPointeuse = "PTE_TEST"
                 });
         }
 
@@ -140,13 +140,13 @@ public class ClosingServiceTests
         }
 
         public void SemaineValidee(string matricule, DateTime lundi)
-            => Uow.Inner.Get<T_HS_VALIDER>().Items.Add(new T_HS_VALIDER
+            => Uow.Inner.Get<HsValidee>().Items.Add(new HsValidee
             {
-                BDD_SAGE = "SAGE_TEST", MATRICULES = matricule, DATE_DEB = lundi, DATE_FIN = lundi.AddDays(6), VALIDATION_HS = true
+                BddSage = "SAGE_TEST", Matricules = matricule, DateDeb = lundi, DateFin = lundi.AddDays(6), ValidationHs = true
             });
 
         public void Ferie(DateTime jour) =>
-            Uow.Inner.Get<T_FERIE>().Items.Add(new T_FERIE { DATE = jour, BDD_SAGE = "SAGE_TEST" });
+            Uow.Inner.Get<JourFerie>().Items.Add(new JourFerie { Date = jour, BddSage = "SAGE_TEST" });
 
         /// <summary>
         /// Jeu fixe, semaine du lundi 17 au vendredi 21 novembre 2025, deux salariés planifiés 8 h–17 h :
@@ -478,9 +478,9 @@ public class ClosingServiceTests
         var sans = await ctx.Service.ChargerAsync(Semaine(), CancellationToken.None);
         var avec = await ctx.Service.ChargerAsync(Semaine() with { IncludeComparison = true }, CancellationToken.None);
 
-        Assert.DoesNotContain(sans.Pointages, p => p.DATE_POINTAGE < Lundi);
+        Assert.DoesNotContain(sans.Pointages, p => p.DatePointage < Lundi);
         Assert.DoesNotContain(sans.Plannings, p => p.DateP < Lundi.AddDays(-1));
-        Assert.Contains(avec.Pointages, p => p.DATE_POINTAGE < Lundi);
+        Assert.Contains(avec.Pointages, p => p.DatePointage < Lundi);
     }
 
     [Fact]

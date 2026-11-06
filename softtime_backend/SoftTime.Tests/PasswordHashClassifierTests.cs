@@ -9,7 +9,7 @@ namespace SoftTime.Tests;
 
 public class PasswordHashClassifierTests
 {
-    private readonly PasswordHasher<T_RESPONSABLE> _hasher = new();
+    private readonly PasswordHasher<Responsable> _hasher = new();
 
     public static string CreateLegacyIdentityV2Hash(string password)
     {
@@ -109,7 +109,7 @@ public class PasswordHashClassifierTests
     [Fact]
     public void IsHashedPassword_WithIdentityV3StandardHash_ReturnsTrueAndIdentifiesV3()
     {
-        var user = new T_RESPONSABLE { IDRESPONSABLE = 1, LOGIN = "admin" };
+        var user = new Responsable { IdResponsable = 1, Login = "admin" };
         var hash = _hasher.HashPassword(user, "admin");
 
         Assert.NotNull(hash);
@@ -126,7 +126,7 @@ public class PasswordHashClassifierTests
     public void PasswordHasher_RealProjectConfiguration_GeneratesV3Hash_ValidatesBinaryStructureAndClassification()
     {
         // 1. Instanciation réelle du hasher tel que configuré dans DependencyInjection.cs
-        var user = new T_RESPONSABLE { IDRESPONSABLE = 10, LOGIN = "audit_user" };
+        var user = new Responsable { IdResponsable = 10, Login = "audit_user" };
         var rawHash = _hasher.HashPassword(user, "SuperAuditSecret!2026");
 
         Assert.NotNull(rawHash);
@@ -184,7 +184,7 @@ public class PasswordHashClassifierTests
         Assert.Equal(PasswordClassification.IdentityV3, PasswordHashClassifier.Classify(hashSha512With32BSubkey));
 
         // Vérification avec PasswordHasher standard
-        var user = new T_RESPONSABLE { IDRESPONSABLE = 4, LOGIN = "sha512_32b_user" };
+        var user = new Responsable { IdResponsable = 4, Login = "sha512_32b_user" };
         var verifyResult = _hasher.VerifyHashedPassword(user, hashSha512With32BSubkey, "sha512_32b_secret");
         Assert.True(verifyResult == PasswordVerificationResult.Success || verifyResult == PasswordVerificationResult.SuccessRehashNeeded);
     }
@@ -205,7 +205,7 @@ public class PasswordHashClassifierTests
         Assert.Equal(PasswordClassification.IdentityV3, PasswordHashClassifier.Classify(hash512));
 
         // Must also verify with ASP.NET Core PasswordHasher
-        var user = new T_RESPONSABLE { IDRESPONSABLE = 2, LOGIN = "sha512_user" };
+        var user = new Responsable { IdResponsable = 2, Login = "sha512_user" };
         var verifyResult = _hasher.VerifyHashedPassword(user, hash512, "sha512_secret");
         Assert.True(verifyResult == PasswordVerificationResult.Success || verifyResult == PasswordVerificationResult.SuccessRehashNeeded);
     }
@@ -225,7 +225,7 @@ public class PasswordHashClassifierTests
         Assert.Equal(PasswordClassification.IdentityV2, PasswordHashClassifier.Classify(v2Hash));
 
         // Must verify with ASP.NET Core PasswordHasher (returns SuccessRehashNeeded)
-        var user = new T_RESPONSABLE { IDRESPONSABLE = 3, LOGIN = "v2_user" };
+        var user = new Responsable { IdResponsable = 3, Login = "v2_user" };
         var verifyResult = _hasher.VerifyHashedPassword(user, v2Hash, "legacy_password");
         Assert.Equal(PasswordVerificationResult.SuccessRehashNeeded, verifyResult);
     }

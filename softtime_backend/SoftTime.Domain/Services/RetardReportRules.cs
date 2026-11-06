@@ -70,11 +70,11 @@ public static class RetardReportRules
     /// exploitables (shift Pause, HA = HD). Même notion de « jour travaillé » que l'état des
     /// absences, pour que les deux états parlent des mêmes journées.
     /// </summary>
-    public static TimeSpan? HeurePrevue(T_PLANNING_SAL? plan)
+    public static TimeSpan? HeurePrevue(PlanningSalarie? plan)
     {
         if (plan is null || plan.OffP == true)
             return null;
-        if (plan.HA is not DateTime ha || ha.Date <= SentinelleHeure)
+        if (plan.Ha is not DateTime ha || ha.Date <= SentinelleHeure)
             return null;
         if (AbsenceReportRules.CalculerDureeHeures(plan) is null)
             return null;
@@ -86,21 +86,21 @@ public static class RetardReportRules
     public static int ToleranceEntree(
         int carteId,
         IReadOnlyDictionary<int, int> categorieParCarte,
-        IReadOnlyList<T_TOLERANCE> tolerances)
+        IReadOnlyList<ToleranceRetard> tolerances)
     {
         if (!categorieParCarte.TryGetValue(carteId, out var idCategorie))
             return 0;
 
         return tolerances
-            .FirstOrDefault(t => t.IDCATEGORIE == idCategorie && t.TYPES_TOL == false)?.TOLERANCE ?? 0;
+            .FirstOrDefault(t => t.IdCategorie == idCategorie && t.TypesTol == false)?.Tolerance ?? 0;
     }
 
     public static IReadOnlyList<RetardReportRow> Calculer(
-        IReadOnlyList<T_CARDPAIE> cartes,
-        IReadOnlyList<T_HEURECORRIGER> corrections,
-        IReadOnlyList<T_PLANNING_SAL> plannings,
+        IReadOnlyList<CardPaie> cartes,
+        IReadOnlyList<HeureCorrigee> corrections,
+        IReadOnlyList<PlanningSalarie> plannings,
         IReadOnlyDictionary<int, int> categorieParCarte,
-        IReadOnlyList<T_TOLERANCE> tolerances,
+        IReadOnlyList<ToleranceRetard> tolerances,
         IReadOnlySet<DateTime> feries,
         DateTime from,
         DateTime to,
@@ -114,16 +114,16 @@ public static class RetardReportRules
         if (debut > fin)
             return Array.Empty<RetardReportRow>();
 
-        var cartesParCle = new Dictionary<string, T_CARDPAIE>(StringComparer.OrdinalIgnoreCase);
+        var cartesParCle = new Dictionary<string, CardPaie>(StringComparer.OrdinalIgnoreCase);
         var cleParIdSal = new Dictionary<int, string>();
         foreach (var carte in cartes)
         {
-            var cle = MatriculeIdentity.Cle(carte.SAGE_MATRICULE);
+            var cle = MatriculeIdentity.Cle(carte.SageMatricule);
             if (string.IsNullOrEmpty(cle))
                 continue;
 
-            cleParIdSal[carte.ID] = cle;
-            if (!cartesParCle.TryGetValue(cle, out var existante) || carte.ID < existante.ID)
+            cleParIdSal[carte.Id] = cle;
+            if (!cartesParCle.TryGetValue(cle, out var existante) || carte.Id < existante.Id)
                 cartesParCle[cle] = carte;
         }
 
@@ -131,12 +131,12 @@ public static class RetardReportRules
             return Array.Empty<RetardReportRow>();
 
         // Planning du jour travaillé, par clé matricule et par date (plus petite ligne retenue).
-        var planningsParCleEtDate = new Dictionary<(string Cle, DateTime Date), T_PLANNING_SAL>();
+        var planningsParCleEtDate = new Dictionary<(string Cle, DateTime Date), PlanningSalarie>();
         foreach (var plan in plannings)
         {
             if (plan.DateP is not DateTime dateP || plan.OffP == true)
                 continue;
-            if (!cleParIdSal.TryGetValue(plan.IDSAL, out var cle))
+            if (!cleParIdSal.TryGetValue(plan.IdSal, out var cle))
                 continue;
 
             var jour = dateP.Date;
@@ -144,13 +144,13 @@ public static class RetardReportRules
                 continue;
 
             var key = (cle, jour);
-            if (!planningsParCleEtDate.TryGetValue(key, out var existant) || plan.ID < existant.ID)
+            if (!planningsParCleEtDate.TryGetValue(key, out var existant) || plan.Id < existant.Id)
                 planningsParCleEtDate[key] = plan;
         }
 
         var correctionsParCle = corrections
-            .Where(h => h.DATE_POINTAGE_IN.HasValue)
-            .GroupBy(h => MatriculeIdentity.Cle(h.MATRICULE_SAGE), StringComparer.OrdinalIgnoreCase)
+            .Where(h => h.DatePointageIn.HasValue)
+            .GroupBy(h => MatriculeIdentity.Cle(h.MatriculeSage), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
 
         var resultats = new List<RetardReportRow>();
@@ -160,15 +160,15 @@ public static class RetardReportRules
             if (!correctionsParCle.TryGetValue(cle, out var lignes) || lignes.Count == 0)
                 continue;
 
-            var matriculeAffiche = !string.IsNullOrWhiteSpace(carte.SAGE_MATRICULE) ? carte.SAGE_MATRICULE.Trim() : cle;
-            var nomAffiche = carte.SAGE_NOM?.Trim();
-            var prenomAffiche = carte.SAGE_PRENOM?.Trim();
-            var deptAffiche = carte.DEPARTEMENT?.Trim();
-            var tolerance = ToleranceEntree(carte.ID, categorieParCarte, tolerances);
+            var matriculeAffiche = !string.IsNullOrWhiteSpace(carte.SageMatricule) ? carte.SageMatricule.Trim() : cle;
+            var nomAffiche = carte.SageNom?.Trim();
+            var prenomAffiche = carte.SagePrenom?.Trim();
+            var deptAffiche = carte.Departement?.Trim();
+            var tolerance = ToleranceEntree(carte.Id, categorieParCarte, tolerances);
 
             foreach (var groupeJour in lignes
-                         .Where(h => h.DATE_POINTAGE_IN.HasValue)
-                         .GroupBy(h => h.DATE_POINTAGE_IN!.Value.Date))
+                         .Where(h => h.DatePointageIn.HasValue)
+                         .GroupBy(h => h.DatePointageIn!.Value.Date))
             {
                 var jour = groupeJour.Key;
                 if (jour < debut || jour > fin || AbsenceReportRules.EstNonTravaille(jour, feries))
@@ -177,14 +177,14 @@ public static class RetardReportRules
                 planningsParCleEtDate.TryGetValue((cle, jour), out var plan);
                 var heurePrevue = HeurePrevue(plan);
                 var entrees = groupeJour
-                    .Where(h => h.HENTREE.HasValue)
-                    .Select(h => h.HENTREE!.Value)
+                    .Where(h => h.HEntree.HasValue)
+                    .Select(h => h.HEntree!.Value)
                     .ToList();
                 TimeSpan? premiereEntree = entrees.Count > 0 ? entrees.Min() : null;
-                var retardsSaisis = groupeJour.Select(h => h.RETARD).ToList();
+                var retardsSaisis = groupeJour.Select(h => h.Retard).ToList();
 
                 var minutes = MinutesRetardJour(
-                    absenceMatin: groupeJour.Any(h => h.ABSENCE_AM == true),
+                    absenceMatin: groupeJour.Any(h => h.AbsenceAm == true),
                     retardsSaisis: retardsSaisis,
                     premiereEntree: premiereEntree,
                     heurePrevue: heurePrevue,

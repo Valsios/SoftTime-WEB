@@ -16,10 +16,10 @@ public sealed class InMemoryRepository<T> : IRepository<T> where T : class
         var d = Convert.ToDecimal(id);
         var match = Items.FirstOrDefault(i => i switch
         {
-            T_RESPONSABLE r => r.IDRESPONSABLE == d,
-            T_ROLE ro => ro.IDROLE == d,
-            T_BDD_SAGE s => s.ID == d,
-            T_BDD_POINTEUSE p => p.ID == d,
+            Responsable r => r.IdResponsable == d,
+            Role ro => ro.IdRole == d,
+            BddSage s => s.Id == d,
+            BddPointeuse p => p.Id == d,
             _ => false
         });
         return Task.FromResult(match);
@@ -33,8 +33,8 @@ public sealed class InMemoryRepository<T> : IRepository<T> where T : class
 
     public Task AddAsync(T entity, CancellationToken cancellationToken = default)
     {
-        if (entity is T_RESPONSABLE r && r.IDRESPONSABLE == 0)
-            r.IDRESPONSABLE = Items.OfType<T_RESPONSABLE>().Select(x => x.IDRESPONSABLE).DefaultIfEmpty(0).Max() + 1;
+        if (entity is Responsable r && r.IdResponsable == 0)
+            r.IdResponsable = Items.OfType<Responsable>().Select(x => x.IdResponsable).DefaultIfEmpty(0).Max() + 1;
         Items.Add(entity);
         return Task.CompletedTask;
     }

@@ -60,11 +60,11 @@ public static class PayrollClosingRules
     /// dans le pré-traitement.
     /// </summary>
     public static IReadOnlyList<ClosingAnomaly> PointagesIncomplets(
-        IReadOnlyList<T_CARDPAIE> cartes,
-        IReadOnlyList<T_PLANNING_SAL> plannings,
-        IReadOnlyList<T_POINTAGE> pointages,
-        IReadOnlyList<T_HEURECORRIGER> corrections,
-        IReadOnlyList<T_HS_VALIDER> semainesValidees,
+        IReadOnlyList<CardPaie> cartes,
+        IReadOnlyList<PlanningSalarie> plannings,
+        IReadOnlyList<Pointage> pointages,
+        IReadOnlyList<HeureCorrigee> corrections,
+        IReadOnlyList<HsValidee> semainesValidees,
         DateTime from,
         DateTime to,
         bool multiPointage,
@@ -74,11 +74,11 @@ public static class PayrollClosingRules
 
     /// <summary>3.1 sur un index de pointages déjà construit (même résultat que la surcharge par liste).</summary>
     public static IReadOnlyList<ClosingAnomaly> PointagesIncomplets(
-        IReadOnlyList<T_CARDPAIE> cartes,
-        IReadOnlyList<T_PLANNING_SAL> plannings,
+        IReadOnlyList<CardPaie> cartes,
+        IReadOnlyList<PlanningSalarie> plannings,
         ClosingPunchIndex pointages,
-        IReadOnlyList<T_HEURECORRIGER> corrections,
-        IReadOnlyList<T_HS_VALIDER> semainesValidees,
+        IReadOnlyList<HeureCorrigee> corrections,
+        IReadOnlyList<HsValidee> semainesValidees,
         DateTime from,
         DateTime to,
         bool multiPointage,
@@ -92,14 +92,14 @@ public static class PayrollClosingRules
 
         var lundisValides = semainesValidees
             .Where(_ => options.IgnorerSemainesValidees)
-            .Where(v => v.VALIDATION_HS == true && v.DATE_DEB.HasValue && !string.IsNullOrWhiteSpace(v.MATRICULES))
-            .GroupBy(v => MatriculeIdentity.Cle(v.MATRICULES))
-            .ToDictionary(g => g.Key, g => g.Select(v => v.DATE_DEB!.Value.Date).ToHashSet());
+            .Where(v => v.ValidationHs == true && v.DateDeb.HasValue && !string.IsNullOrWhiteSpace(v.Matricules))
+            .GroupBy(v => MatriculeIdentity.Cle(v.Matricules))
+            .ToDictionary(g => g.Key, g => g.Select(v => v.DateDeb!.Value.Date).ToHashSet());
 
         var joursManuels = corrections
-            .Where(h => h.DATE_POINTAGE_IN.HasValue && !string.IsNullOrWhiteSpace(h.MATRICULE_SAGE))
-            .Where(h => !string.Equals(h.ORIGINE, OrigineAuto, StringComparison.OrdinalIgnoreCase))
-            .Select(h => (Cle: MatriculeIdentity.Cle(h.MATRICULE_SAGE), Jour: h.DATE_POINTAGE_IN!.Value.Date))
+            .Where(h => h.DatePointageIn.HasValue && !string.IsNullOrWhiteSpace(h.MatriculeSage))
+            .Where(h => !string.Equals(h.Origine, OrigineAuto, StringComparison.OrdinalIgnoreCase))
+            .Select(h => (Cle: MatriculeIdentity.Cle(h.MatriculeSage), Jour: h.DatePointageIn!.Value.Date))
             .ToHashSet();
 
         bool EstIgnore(string cle, DateTime jour)
@@ -113,11 +113,11 @@ public static class PayrollClosingRules
         // Même planning que le pré-traitement : par carte et par jour, la ligne de plus petit ID.
         var planningParCarte = plannings
             .Where(p => p.DateP.HasValue)
-            .GroupBy(p => p.IDSAL)
+            .GroupBy(p => p.IdSal)
             .ToDictionary(
                 g => g.Key,
                 g => g.GroupBy(p => p.DateP!.Value.Date)
-                    .ToDictionary(gg => gg.Key, gg => gg.OrderBy(p => p.ID).First()));
+                    .ToDictionary(gg => gg.Key, gg => gg.OrderBy(p => p.Id).First()));
 
         var resultats = new List<ClosingAnomaly>();
         foreach (var (cle, carte) in CartesParCle(cartes))
@@ -126,14 +126,14 @@ public static class PayrollClosingRules
             if (punchs.Count == 0)
                 continue;
 
-            var planningCarte = planningParCarte.GetValueOrDefault(carte.ID)
-                                ?? new Dictionary<DateTime, T_PLANNING_SAL>();
+            var planningCarte = planningParCarte.GetValueOrDefault(carte.Id)
+                                ?? new Dictionary<DateTime, PlanningSalarie>();
             var fenetres = multiPointage
                 ? planningCarte
                     .Where(kv => kv.Value.OffP != true)
                     .ToDictionary(
                         kv => kv.Key,
-                        kv => new PunchPlanningWindow(kv.Key, kv.Value.HA, kv.Value.HD, kv.Value.OffP == true))
+                        kv => new PunchPlanningWindow(kv.Key, kv.Value.Ha, kv.Value.Hd, kv.Value.OffP == true))
                 : new Dictionary<DateTime, PunchPlanningWindow>();
             var momentsParJour = PunchDayGrouping.Build(punchs, fenetres, debut, fin);
 
@@ -163,10 +163,10 @@ public static class PayrollClosingRules
     /// futurs déjà exclus), dont le jour ne porte de surcroît aucun pointage brut.
     /// </summary>
     public static IReadOnlyList<ClosingAnomaly> PointagesManquants(
-        IReadOnlyList<T_CARDPAIE> cartes,
-        IReadOnlyList<T_PLANNING_SAL> plannings,
-        IReadOnlyList<T_POINTAGE> pointages,
-        IReadOnlyList<T_HEURECORRIGER> corrections,
+        IReadOnlyList<CardPaie> cartes,
+        IReadOnlyList<PlanningSalarie> plannings,
+        IReadOnlyList<Pointage> pointages,
+        IReadOnlyList<HeureCorrigee> corrections,
         IReadOnlyDictionary<string, List<LeaveDay>> congesParCle,
         IReadOnlySet<DateTime> feries,
         DateTime from,
@@ -204,10 +204,10 @@ public static class PayrollClosingRules
     /// qu'un <see cref="ClosingAnomalyType.PointageManquant"/> (populations disjointes).
     /// </summary>
     public static IReadOnlyList<ClosingAnomaly> PlanningsSansPointage(
-        IReadOnlyList<T_CARDPAIE> cartes,
-        IReadOnlyList<T_PLANNING_SAL> plannings,
-        IReadOnlyList<T_POINTAGE> pointages,
-        IReadOnlyList<T_HEURECORRIGER> corrections,
+        IReadOnlyList<CardPaie> cartes,
+        IReadOnlyList<PlanningSalarie> plannings,
+        IReadOnlyList<Pointage> pointages,
+        IReadOnlyList<HeureCorrigee> corrections,
         IReadOnlyDictionary<string, List<LeaveDay>> congesParCle,
         IReadOnlySet<DateTime> feries,
         DateTime from,
@@ -222,11 +222,11 @@ public static class PayrollClosingRules
     public static IReadOnlyList<ClosingAnomaly> PlanningsSansPointage(
         IReadOnlyList<AbsenceReportRow> lignesAbsence,
         ClosingPunchIndex pointages,
-        IReadOnlyList<T_HEURECORRIGER> corrections)
+        IReadOnlyList<HeureCorrigee> corrections)
     {
         var correctionsParJour = corrections
-            .Where(h => h.DATE_POINTAGE_IN.HasValue && !string.IsNullOrWhiteSpace(h.MATRICULE_SAGE))
-            .GroupBy(h => (Cle: MatriculeIdentity.Cle(h.MATRICULE_SAGE), Jour: h.DATE_POINTAGE_IN!.Value.Date))
+            .Where(h => h.DatePointageIn.HasValue && !string.IsNullOrWhiteSpace(h.MatriculeSage))
+            .GroupBy(h => (Cle: MatriculeIdentity.Cle(h.MatriculeSage), Jour: h.DatePointageIn!.Value.Date))
             .ToDictionary(g => g.Key, g => g.ToList());
 
         var resultats = new List<ClosingAnomaly>();
@@ -246,13 +246,13 @@ public static class PayrollClosingRules
             if (pointages.APointage(cle, jour))
                 continue;
 
-            var corrsDuJour = correctionsParJour.GetValueOrDefault((cle, jour)) ?? new List<T_HEURECORRIGER>();
+            var corrsDuJour = correctionsParJour.GetValueOrDefault((cle, jour)) ?? new List<HeureCorrigee>();
             if (corrsDuJour.Any(AHeuresCorrigees))
                 continue;
 
             // Congé d'une demi-journée : la moitié du congé n'est pas connue (matin ou après-midi),
             // une absence arbitrée le même jour peut donc couvrir l'autre moitié. Prudence : rien.
-            if (demiConge && corrsDuJour.Any(h => h.ABSENCE_AM == true || h.ABSENCE_PM == true))
+            if (demiConge && corrsDuJour.Any(h => h.AbsenceAm == true || h.AbsencePm == true))
                 continue;
 
             resultats.Add(Anomalie(
@@ -272,9 +272,9 @@ public static class PayrollClosingRules
     /// sont contrôlés.
     /// </summary>
     public static IReadOnlyList<ClosingAnomaly> PointagesSansPlanning(
-        IReadOnlyList<T_CARDPAIE> cartes,
-        IReadOnlyList<T_PLANNING_SAL> plannings,
-        IReadOnlyList<T_POINTAGE> pointages,
+        IReadOnlyList<CardPaie> cartes,
+        IReadOnlyList<PlanningSalarie> plannings,
+        IReadOnlyList<Pointage> pointages,
         DateTime from,
         DateTime to,
         ClosingRulesOptions? options = null)
@@ -282,8 +282,8 @@ public static class PayrollClosingRules
 
     /// <summary>3.4 sur un index de pointages déjà construit.</summary>
     public static IReadOnlyList<ClosingAnomaly> PointagesSansPlanning(
-        IReadOnlyList<T_CARDPAIE> cartes,
-        IReadOnlyList<T_PLANNING_SAL> plannings,
+        IReadOnlyList<CardPaie> cartes,
+        IReadOnlyList<PlanningSalarie> plannings,
         ClosingPunchIndex pointages,
         DateTime from,
         DateTime to,
@@ -298,8 +298,8 @@ public static class PayrollClosingRules
             : new HashSet<string>(StringComparer.Ordinal);
 
         var joursPlanifies = plannings
-            .Where(p => p.DateP.HasValue && cleParIdSal.ContainsKey(p.IDSAL))
-            .Select(p => (Cle: cleParIdSal[p.IDSAL], Jour: p.DateP!.Value.Date))
+            .Where(p => p.DateP.HasValue && cleParIdSal.ContainsKey(p.IdSal))
+            .Select(p => (Cle: cleParIdSal[p.IdSal], Jour: p.DateP!.Value.Date))
             .ToHashSet();
         var clesConnues = cleParIdSal.Values.ToHashSet();
 
@@ -322,8 +322,8 @@ public static class PayrollClosingRules
     /// est vrai. Un salarié partiellement planifié n'en fait pas partie.
     /// </summary>
     public static IReadOnlySet<string> SalariesSansPlanningSurPeriode(
-        IReadOnlyList<T_CARDPAIE> cartes,
-        IReadOnlyList<T_PLANNING_SAL> plannings,
+        IReadOnlyList<CardPaie> cartes,
+        IReadOnlyList<PlanningSalarie> plannings,
         ClosingPunchIndex pointages,
         DateTime from,
         DateTime to)
@@ -333,9 +333,9 @@ public static class PayrollClosingRules
         var cleParIdSal = CleParIdSal(cartes);
 
         var planifies = plannings
-            .Where(p => p.DateP.HasValue && cleParIdSal.ContainsKey(p.IDSAL))
+            .Where(p => p.DateP.HasValue && cleParIdSal.ContainsKey(p.IdSal))
             .Where(p => p.DateP!.Value.Date >= debut && p.DateP!.Value.Date <= fin)
-            .Select(p => cleParIdSal[p.IDSAL])
+            .Select(p => cleParIdSal[p.IdSal])
             .ToHashSet(StringComparer.Ordinal);
         var clesConnues = cleParIdSal.Values.ToHashSet(StringComparer.Ordinal);
 
@@ -347,7 +347,7 @@ public static class PayrollClosingRules
 
     /// <summary>3.5 — Plusieurs pointages du même matricule à la même date et à la même heure exacte.</summary>
     public static IReadOnlyList<ClosingAnomaly> DoublonsExacts(
-        IReadOnlyList<T_POINTAGE> pointages,
+        IReadOnlyList<Pointage> pointages,
         DateTime from,
         DateTime to,
         ClosingRulesOptions? options = null,
@@ -397,7 +397,7 @@ public static class PayrollClosingRules
     /// L'anomalie est datée du premier pointage de la paire.
     /// </summary>
     public static IReadOnlyList<ClosingAnomaly> QuasiDoublons(
-        IReadOnlyList<T_POINTAGE> pointages,
+        IReadOnlyList<Pointage> pointages,
         DateTime from,
         DateTime to,
         ClosingRulesOptions? options = null,
@@ -455,9 +455,9 @@ public static class PayrollClosingRules
     /// ligne de travail prime sur une ligne OFF, puis le plus petit ID. Aucun jour futur.
     /// </summary>
     public static IReadOnlyList<ClosingAnomaly> FeriesNonAppliques(
-        IReadOnlyList<T_CARDPAIE> cartes,
-        IReadOnlyList<T_PLANNING_SAL> plannings,
-        IReadOnlyList<T_HEURECORRIGER> corrections,
+        IReadOnlyList<CardPaie> cartes,
+        IReadOnlyList<PlanningSalarie> plannings,
+        IReadOnlyList<HeureCorrigee> corrections,
         IReadOnlySet<DateTime> feries,
         DateTime from,
         DateTime to,
@@ -472,10 +472,10 @@ public static class PayrollClosingRules
 
         var cleParIdSal = CleParIdSal(cartes);
 
-        var planningRetenu = new Dictionary<(string Cle, DateTime Jour), T_PLANNING_SAL>();
+        var planningRetenu = new Dictionary<(string Cle, DateTime Jour), PlanningSalarie>();
         foreach (var plan in plannings)
         {
-            if (plan.DateP is not DateTime dateP || !cleParIdSal.TryGetValue(plan.IDSAL, out var cle))
+            if (plan.DateP is not DateTime dateP || !cleParIdSal.TryGetValue(plan.IdSal, out var cle))
                 continue;
             var jour = dateP.Date;
             if (jour < debut || jour > fin || !feries.Contains(jour))
@@ -487,9 +487,9 @@ public static class PayrollClosingRules
         }
 
         var joursFeriesAppliques = corrections
-            .Where(h => h.DATE_POINTAGE_IN.HasValue && !string.IsNullOrWhiteSpace(h.MATRICULE_SAGE))
-            .Where(h => h.FERIER == true || h.FERIER_AM == true || h.FERIER_PM == true || h.M_FERIES > 0)
-            .Select(h => (Cle: MatriculeIdentity.Cle(h.MATRICULE_SAGE), Jour: h.DATE_POINTAGE_IN!.Value.Date))
+            .Where(h => h.DatePointageIn.HasValue && !string.IsNullOrWhiteSpace(h.MatriculeSage))
+            .Where(h => h.Ferier == true || h.FerierAm == true || h.FerierPm == true || h.MFeries > 0)
+            .Select(h => (Cle: MatriculeIdentity.Cle(h.MatriculeSage), Jour: h.DatePointageIn!.Value.Date))
             .ToHashSet();
 
         var resultats = new List<ClosingAnomaly>();
@@ -564,39 +564,39 @@ public static class PayrollClosingRules
     private static string EffetDoublon(bool multiPointage) =>
         multiPointage ? "double passage sans effet sur la paie (multi-pointage)" : "peut fausser les heures";
 
-    private static bool AHeuresCorrigees(T_HEURECORRIGER h) =>
-        h.HENTREE.HasValue || h.HSORTIE.HasValue || h.HPS.HasValue || h.HPE.HasValue;
+    private static bool AHeuresCorrigees(HeureCorrigee h) =>
+        h.HEntree.HasValue || h.HSortie.HasValue || h.Hps.HasValue || h.Hpe.HasValue;
 
     /// <summary>Toutes les cartes d'une même clé matricule (règle C11 de l'état des absences).</summary>
-    private static Dictionary<int, string> CleParIdSal(IEnumerable<T_CARDPAIE> cartes)
+    private static Dictionary<int, string> CleParIdSal(IEnumerable<CardPaie> cartes)
     {
         var resultat = new Dictionary<int, string>();
         foreach (var carte in cartes)
         {
-            var cle = MatriculeIdentity.Cle(carte.SAGE_MATRICULE);
+            var cle = MatriculeIdentity.Cle(carte.SageMatricule);
             if (cle.Length > 0)
-                resultat[carte.ID] = cle;
+                resultat[carte.Id] = cle;
         }
         return resultat;
     }
 
     /// <summary>Une carte par clé matricule : la plus petite ID, dans l'ordre des clés.</summary>
-    private static IEnumerable<(string Cle, T_CARDPAIE Carte)> CartesParCle(IEnumerable<T_CARDPAIE> cartes) =>
+    private static IEnumerable<(string Cle, CardPaie Carte)> CartesParCle(IEnumerable<CardPaie> cartes) =>
         cartes
-            .Select(c => (Cle: MatriculeIdentity.Cle(c.SAGE_MATRICULE), Carte: c))
+            .Select(c => (Cle: MatriculeIdentity.Cle(c.SageMatricule), Carte: c))
             .Where(x => x.Cle.Length > 0)
             .GroupBy(x => x.Cle, StringComparer.Ordinal)
             .OrderBy(g => g.Key, StringComparer.Ordinal)
-            .Select(g => (g.Key, g.OrderBy(x => x.Carte.ID).First().Carte));
+            .Select(g => (g.Key, g.OrderBy(x => x.Carte.Id).First().Carte));
 
     /// <summary>Même départage que <see cref="AbsenceReportRules"/> : travail avant OFF, puis plus petit ID.</summary>
-    private static bool PrimeSur(T_PLANNING_SAL candidat, T_PLANNING_SAL existant)
+    private static bool PrimeSur(PlanningSalarie candidat, PlanningSalarie existant)
     {
         var candidatOff = AbsenceReportRules.EstJourOff(candidat);
         var existantOff = AbsenceReportRules.EstJourOff(existant);
         if (candidatOff != existantOff)
             return !candidatOff;
-        return candidat.ID < existant.ID;
+        return candidat.Id < existant.Id;
     }
 
     private static string FormatHeure(TimeSpan heure) => heure.ToString(@"hh\:mm\:ss");

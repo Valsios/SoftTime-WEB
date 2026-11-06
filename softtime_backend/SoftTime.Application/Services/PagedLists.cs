@@ -10,8 +10,8 @@ namespace SoftTime.Application.Services;
 /// <list type="bullet">
 /// <item><see cref="Page{T}(IReadOnlyList{T}, int?, int?)"/> : listes déjà calculées ou agrégées
 /// en mémoire. Le découpage intervient <b>après</b> l'agrégation, jamais avant.</item>
-/// <item><see cref="PageAsync{T,TDto}"/> : listes stockées, déléguées à
-/// <see cref="IRepository{T}.ToPagedAsync{TResult}"/> (COUNT + OFFSET/FETCH SQL via EF Core).</item>
+/// <item><c>PageAsync</c> : listes stockées, déléguées à
+/// <c>IRepository.ToPagedAsync</c> (COUNT + OFFSET/FETCH SQL via EF Core).</item>
 /// </list>
 /// Les deux méthodes bornent la page effective à <c>[1, totalPages]</c>, afin qu'une page vidée par
 /// une suppression retombe sur la dernière page non vide au lieu d'un écran vide.

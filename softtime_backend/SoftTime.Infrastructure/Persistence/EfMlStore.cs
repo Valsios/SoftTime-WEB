@@ -27,7 +27,7 @@ public sealed class EfMlStore : IMlStore
 
     public async Task ReplaceDailyAsync(
         string bddSage, DateTime from, DateTime to,
-        IReadOnlyCollection<T_ML_SALARIE_JOUR> rows, CancellationToken ct = default)
+        IReadOnlyCollection<MlSalarieJour> rows, CancellationToken ct = default)
     {
         var table = BuildDailyTable(rows);
         var strategy = _db.Database.CreateExecutionStrategy();
@@ -42,7 +42,7 @@ public sealed class EfMlStore : IMlStore
 
     public async Task ReplaceWeeklyAsync(
         string bddSage, DateTime from, DateTime to,
-        IReadOnlyCollection<T_ML_SALARIE_SEMAINE> rows, CancellationToken ct = default)
+        IReadOnlyCollection<MlSalarieSemaine> rows, CancellationToken ct = default)
     {
         var table = BuildWeeklyTable(rows);
         var strategy = _db.Database.CreateExecutionStrategy();
@@ -55,15 +55,15 @@ public sealed class EfMlStore : IMlStore
         });
     }
 
-    public Task<IReadOnlyList<T_ML_SALARIE_JOUR>> GetDailyAsync(
+    public Task<IReadOnlyList<MlSalarieJour>> GetDailyAsync(
         string bddSage, DateTime from, DateTime to, CancellationToken ct = default)
         => QueryDailyAsync(bddSage, from, to, ct);
 
-    public Task<IReadOnlyList<T_ML_SALARIE_SEMAINE>> GetWeeklyAsync(
+    public Task<IReadOnlyList<MlSalarieSemaine>> GetWeeklyAsync(
         string bddSage, DateTime from, DateTime to, CancellationToken ct = default)
         => QueryWeeklyAsync(bddSage, from, to, ct);
 
-    public async Task<IReadOnlyList<T_ML_SALARIE_JOUR>> GetDailyForTrainingAsync(
+    public async Task<IReadOnlyList<MlSalarieJour>> GetDailyForTrainingAsync(
         string bddSage, DateTime from, DateTime to, int maxRows, CancellationToken ct = default)
     {
         // Pas de ORDER BY/Take côté SQL : un tri de plusieurs centaines de milliers de lignes
@@ -77,7 +77,7 @@ public sealed class EfMlStore : IMlStore
         return rows.Count <= maxRows ? rows : rows.TakeLast(Math.Max(1, maxRows)).ToList();
     }
 
-    public async Task<IReadOnlyList<T_ML_SALARIE_SEMAINE>> GetWeeklyForTrainingAsync(
+    public async Task<IReadOnlyList<MlSalarieSemaine>> GetWeeklyForTrainingAsync(
         string bddSage, DateTime from, DateTime to, int maxRows, CancellationToken ct = default)
     {
         var rows = await _db.SalarieSemaine
@@ -88,13 +88,13 @@ public sealed class EfMlStore : IMlStore
         return rows.Count <= maxRows ? rows : rows.TakeLast(Math.Max(1, maxRows)).ToList();
     }
 
-    public async Task SaveModelAsync(T_ML_MODELE model, CancellationToken ct = default)
+    public async Task SaveModelAsync(MlModele model, CancellationToken ct = default)
     {
         _db.Modele.Add(model);
         await _db.SaveChangesAsync(ct);
     }
 
-    public Task<T_ML_MODELE?> GetActiveModelAsync(string bddSage, MlModelType type, CancellationToken ct = default)
+    public Task<MlModele?> GetActiveModelAsync(string bddSage, MlModelType type, CancellationToken ct = default)
     {
         var storageType = MlModelTypes.ToStorage(type);
         return _db.Modele
@@ -104,7 +104,7 @@ public sealed class EfMlStore : IMlStore
             .FirstOrDefaultAsync(ct);
     }
 
-    public async Task<IReadOnlyList<T_ML_MODELE>> ListModelsAsync(string bddSage, CancellationToken ct = default)
+    public async Task<IReadOnlyList<MlModele>> ListModelsAsync(string bddSage, CancellationToken ct = default)
         => await _db.Modele
             .AsNoTracking()
             .Where(x => x.BddSage == bddSage)
@@ -113,7 +113,7 @@ public sealed class EfMlStore : IMlStore
 
     public async Task ReplacePredictionsAsync(
         string bddSage, MlModelType type, DateTime from, DateTime to,
-        IReadOnlyCollection<T_ML_PREDICTION> rows, CancellationToken ct = default)
+        IReadOnlyCollection<MlPrediction> rows, CancellationToken ct = default)
     {
         var storageType = MlModelTypes.ToStorage(type);
         await _db.Prediction
@@ -127,7 +127,7 @@ public sealed class EfMlStore : IMlStore
         await _db.SaveChangesAsync(ct);
     }
 
-    public async Task<IReadOnlyList<T_ML_PREDICTION>> GetPredictionsAsync(
+    public async Task<IReadOnlyList<MlPrediction>> GetPredictionsAsync(
         string bddSage, MlModelType type, DateTime from, DateTime to, CancellationToken ct = default)
     {
         var storageType = MlModelTypes.ToStorage(type);
@@ -185,7 +185,7 @@ public sealed class EfMlStore : IMlStore
 
     // ------------------------------------------------------------------ lecture
 
-    private async Task<IReadOnlyList<T_ML_SALARIE_JOUR>> QueryDailyAsync(
+    private async Task<IReadOnlyList<MlSalarieJour>> QueryDailyAsync(
         string bddSage, DateTime from, DateTime to, CancellationToken ct)
         => await _db.SalarieJour
             .AsNoTracking()
@@ -193,7 +193,7 @@ public sealed class EfMlStore : IMlStore
             .OrderBy(x => x.Matricule).ThenBy(x => x.Date)
             .ToListAsync(ct);
 
-    private async Task<IReadOnlyList<T_ML_SALARIE_SEMAINE>> QueryWeeklyAsync(
+    private async Task<IReadOnlyList<MlSalarieSemaine>> QueryWeeklyAsync(
         string bddSage, DateTime from, DateTime to, CancellationToken ct)
         => await _db.SalarieSemaine
             .AsNoTracking()
@@ -248,7 +248,7 @@ public sealed class EfMlStore : IMlStore
         await bulk.WriteToServerAsync(table, ct);
     }
 
-    private static DataTable BuildDailyTable(IReadOnlyCollection<T_ML_SALARIE_JOUR> rows)
+    private static DataTable BuildDailyTable(IReadOnlyCollection<MlSalarieJour> rows)
     {
         var table = new DataTable();
         table.Columns.Add("BddSage", typeof(string));
@@ -345,7 +345,7 @@ public sealed class EfMlStore : IMlStore
         return table;
     }
 
-    private static DataTable BuildWeeklyTable(IReadOnlyCollection<T_ML_SALARIE_SEMAINE> rows)
+    private static DataTable BuildWeeklyTable(IReadOnlyCollection<MlSalarieSemaine> rows)
     {
         var table = new DataTable();
         table.Columns.Add("BddSage", typeof(string));
@@ -390,8 +390,8 @@ public sealed class EfMlStore : IMlStore
             row["NbJoursPlanifies"] = entity.NbJoursPlanifies;
             row["NbJoursTravailles"] = entity.NbJoursTravailles;
             row["CongeJours"] = entity.CongeJours;
-            row["HS"] = entity.HS;
-            row["HSValidee"] = entity.HSValidee;
+            row["HS"] = entity.Hs;
+            row["HSValidee"] = entity.HsValidee;
             row["Nuit"] = entity.Nuit;
             row["Dimanche"] = entity.Dimanche;
             row["Ferie"] = entity.Ferie;

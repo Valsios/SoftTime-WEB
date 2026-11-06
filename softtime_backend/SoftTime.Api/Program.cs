@@ -204,7 +204,7 @@ using (var scope = app.Services.CreateScope())
     {
         await UserAccountConfiguration.MigrateLegacyPasswordsAsync(
             scope.ServiceProvider.GetRequiredService<IUnitOfWork>(),
-            scope.ServiceProvider.GetRequiredService<IPasswordHasher<T_RESPONSABLE>>(),
+            scope.ServiceProvider.GetRequiredService<IPasswordHasher<Responsable>>(),
             CancellationToken.None);
     }
 }

@@ -30,17 +30,17 @@ public class UserPermissionsTests
     [Fact]
     public void T_USER_PERMISSION_InitializesCorrectly()
     {
-        var entity = new T_USER_PERMISSION
+        var entity = new UserPermission
         {
-            ID = 1,
-            IDRESPONSABLE = 10,
-            PERMISSION_CODE = "POINTEUSE:CLOCK1:READ",
-            IS_GRANTED = true
+            Id = 1,
+            IdResponsable = 10,
+            PermissionCode = "POINTEUSE:CLOCK1:READ",
+            IsGranted = true
         };
 
-        Assert.Equal(1, entity.ID);
-        Assert.Equal(10, entity.IDRESPONSABLE);
-        Assert.Equal("POINTEUSE:CLOCK1:READ", entity.PERMISSION_CODE);
-        Assert.True(entity.IS_GRANTED);
+        Assert.Equal(1, entity.Id);
+        Assert.Equal(10, entity.IdResponsable);
+        Assert.Equal("POINTEUSE:CLOCK1:READ", entity.PermissionCode);
+        Assert.True(entity.IsGranted);
     }
 }

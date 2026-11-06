@@ -35,12 +35,12 @@ public class TokenGatesTests
             Audience = "SoftTime.Tests.Web",
         });
         var mapper = new MapperConfiguration(c => c.AddProfile<MappingProfile>()).CreateMapper();
-        _auth = new AuthService(_uow, new JwtTokenService(jwt), mapper, new Mail(), new AdminCurrentUser(), TestRights.Service(_uow), new PasswordHasher<T_RESPONSABLE>());
+        _auth = new AuthService(_uow, new JwtTokenService(jwt), mapper, new Mail(), new AdminCurrentUser(), TestRights.Service(_uow), new PasswordHasher<Responsable>());
 
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 29, NOMROLE = "Consultation" });
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 10034, NOMROLE = "Utilisateur ordinaire" });
-        _uow.GetRepo<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 3033, NOM_BD = "BASE1" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 29, NomRole = "Consultation" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 10034, NomRole = "Utilisateur ordinaire" });
+        _uow.GetRepo<BddSage>().Items.Add(new BddSage { Id = 3033, NomBd = "BASE1" });
 
         // Consultation : lignes détaillées « Rapports » seulement.
         Role(29, new[] { "REPORTS:REPORTS" }, 6);
@@ -50,16 +50,16 @@ public class TokenGatesTests
 
     private void Role(decimal id, string[] codes, params int[] gates)
     {
-        foreach (var c in codes) _uow.GetRepo<T_ROLE_PERMISSION>().Items.Add(new T_ROLE_PERMISSION { IDROLE = id, PERMISSION_CODE = c, IS_GRANTED = true });
-        foreach (var g in gates) _uow.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = id, IDDROIT = g });
+        foreach (var c in codes) _uow.GetRepo<RolePermission>().Items.Add(new RolePermission { IdRole = id, PermissionCode = c, IsGranted = true });
+        foreach (var g in gates) _uow.GetRepo<DroitRole>().Items.Add(new DroitRole { IdRole = id, IdDroit = g });
     }
 
     private void Account(decimal id, decimal role, string login, params string[] userRows)
     {
-        var user = new T_RESPONSABLE { IDRESPONSABLE = id, IDROLE = role, LOGIN = login };
-        user.PASSWORD = new PasswordHasher<T_RESPONSABLE>().HashPassword(user, FakePassword);
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
-        foreach (var c in userRows) _uow.GetRepo<T_USER_PERMISSION>().Items.Add(new T_USER_PERMISSION { IDRESPONSABLE = id, PERMISSION_CODE = c, IS_GRANTED = true });
+        var user = new Responsable { IdResponsable = id, IdRole = role, Login = login };
+        user.Password = new PasswordHasher<Responsable>().HashPassword(user, FakePassword);
+        _uow.GetRepo<Responsable>().Items.Add(user);
+        foreach (var c in userRows) _uow.GetRepo<UserPermission>().Items.Add(new UserPermission { IdResponsable = id, PermissionCode = c, IsGranted = true });
     }
 
     private async Task<(int[] TokenGates, int[] ResponseGates, LoginResponse Login)> GatesOf(string login, decimal id)
@@ -102,7 +102,7 @@ public class TokenGatesTests
     public async Task Account_like_joel_with_role_only_has_gates_1_and_3_and_keeps_its_databases()
     {
         Account(10034, 10034, "joel");
-        _uow.GetRepo<T_BDD_AUTORISE>().Items.Add(new T_BDD_AUTORISE { IDBDDAUTORISE = 1, IDRESPONSABLE = 10034, IDBDD = 3033 });
+        _uow.GetRepo<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = 1, IdResponsable = 10034, IdBdd = 3033 });
         var (token, _, login) = await GatesOf("joel", 10034);
         Assert.Equal(new[] { 1, 3 }, token);
         Assert.Equal("BASE1", Assert.Single(login.AuthorizedDatabases).NomBd);   // bases proposées : règle de l'étape 4b-5
@@ -151,11 +151,11 @@ public class TokenGatesTests
     {
         var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.SetPrivilegesAsync(10034, new List<decimal> { 6 }));
         Assert.Contains("droits détaillés", ex.Message);
-        Assert.Equal(new[] { 1m, 3m }, _uow.GetRepo<T_DROIT_ROLE>().Items.Where(d => d.IDROLE == 10034).Select(d => d.IDDROIT).OrderBy(x => x));
+        Assert.Equal(new[] { 1m, 3m }, _uow.GetRepo<DroitRole>().Items.Where(d => d.IdRole == 10034).Select(d => d.IdDroit).OrderBy(x => x));
 
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 50, NOMROLE = "Sans lignes" });
+        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 50, NomRole = "Sans lignes" });
         await _auth.SetPrivilegesAsync(50, new List<decimal> { 6 });
-        Assert.Single(_uow.GetRepo<T_DROIT_ROLE>().Items.Where(d => d.IDROLE == 50));
+        Assert.Single(_uow.GetRepo<DroitRole>().Items.Where(d => d.IdRole == 50));
     }
 
     private const string PermissionCatalogMarker = "__SOFTTIME_EMPTY_CUSTOM_PERMISSIONS__";

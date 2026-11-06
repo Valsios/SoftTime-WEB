@@ -112,7 +112,7 @@ public static class DependencyInjection
         services.AddScoped<IPlanningStatisticsReader, PlanningStatisticsReader>();
         services.AddScoped<IEmailService, EmailService>();
         // BCrypt remplace le hacheur Identity enregistré par AddApplication (les anciens hachages migrent à la connexion).
-        services.Replace(ServiceDescriptor.Scoped<IPasswordHasher<T_RESPONSABLE>, BcryptPasswordHasher>());
+        services.Replace(ServiceDescriptor.Scoped<IPasswordHasher<Responsable>, BcryptPasswordHasher>());
 
         // Base analytique « model-ready » : schéma ml dans la base SoftTime par défaut,
         // ou base dédiée via ConnectionStrings:SoftTimeMl (aucun changement de code).

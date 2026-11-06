@@ -118,12 +118,12 @@ public sealed class MlTrainingService : IMlTrainingService
 
         var probModel = await PersistAsync(
             bddSage, MlModelType.HsProbabilite, probability, probMetrics, from, to,
-            rows.Count, rows.Count(w => w.HS > 0), probAccepted,
+            rows.Count, rows.Count(w => w.Hs > 0), probAccepted,
             probAccepted ? null : $"P(HS>0) : AUC {probAuc:F3}, baseline {baselineAuc:F3}.", ct);
 
         var amountModel = await PersistAsync(
             bddSage, MlModelType.HsMontant, amount, amountMetrics, from, to,
-            rows.Count, rows.Count(w => w.HS > 0), amountAccepted,
+            rows.Count, rows.Count(w => w.Hs > 0), amountAccepted,
             amountAccepted ? null : $"Montant HS : MAE {amountMae:F2}, baseline {baselineMae:F2}.", ct);
 
         _logger.LogInformation(
@@ -155,7 +155,7 @@ public sealed class MlTrainingService : IMlTrainingService
         DateTime to,
         CancellationToken ct)
     {
-        var model = new T_ML_MODELE
+        var model = new MlModele
         {
             BddSage = bddSage,
             TypeModele = MlModelTypes.ToStorage(type),
@@ -178,7 +178,7 @@ public sealed class MlTrainingService : IMlTrainingService
         await _store.PurgeModelsAsync(bddSage, type, _options.ModelRetentionPerType, ct);
     }
 
-    private async Task<T_ML_MODELE> PersistAsync(
+    private async Task<MlModele> PersistAsync(
         string bddSage,
         MlModelType type,
         MlTrainingResult result,
@@ -194,7 +194,7 @@ public sealed class MlTrainingService : IMlTrainingService
         if (accepted)
             await _store.ArchiveActiveModelsAsync(bddSage, type, ct);
 
-        var model = new T_ML_MODELE
+        var model = new MlModele
         {
             BddSage = bddSage,
             TypeModele = MlModelTypes.ToStorage(type),
@@ -244,5 +244,5 @@ public sealed class MlTrainingService : IMlTrainingService
     }
 
     private sealed record HsOutcome(
-        T_ML_MODELE? HsProbabilite, T_ML_MODELE? HsMontant, MlMetrics? HsMetrics, string Message);
+        MlModele? HsProbabilite, MlModele? HsMontant, MlMetrics? HsMetrics, string Message);
 }

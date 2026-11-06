@@ -43,21 +43,21 @@ public class PayrollCategoryMappingTests
     public void DuplicateCategoryIsRejected()
     {
         var configuration = Configuration();
-        configuration.Add(new T_PAIE_ECRITURE
+        configuration.Add(new PaieEcriture
         {
-            BDD_SAGE = "TEST_AUTRE_RH", TABLE_CIBLE = "PAIE_CUMULS", COL_MATRICULE = "MatriculeEmploye",
-            CATEGORIE = "Exo130", COL_VALEUR = "HeuresExo130Bis"
+            BddSage = "TEST_AUTRE_RH", TableCible = "PAIE_CUMULS", ColMatricule = "MatriculeEmploye",
+            Categorie = "Exo130", ColValeur = "HeuresExo130Bis"
         });
         Assert.Throws<DomainException>(() => PayrollWritingConfiguration.ValidateConfigurationRows(configuration));
     }
 
-    private static List<T_PAIE_ECRITURE> Configuration() => PayrollWritingConfiguration.Categories
-        .Select(category => new T_PAIE_ECRITURE
+    private static List<PaieEcriture> Configuration() => PayrollWritingConfiguration.Categories
+        .Select(category => new PaieEcriture
         {
-            BDD_SAGE = "TEST_AUTRE_RH",
-            TABLE_CIBLE = "PAIE_CUMULS",
-            COL_MATRICULE = "MatriculeEmploye",
-            CATEGORIE = category,
-            COL_VALEUR = $"Heures{category}",
+            BddSage = "TEST_AUTRE_RH",
+            TableCible = "PAIE_CUMULS",
+            ColMatricule = "MatriculeEmploye",
+            Categorie = category,
+            ColValeur = $"Heures{category}",
         }).ToList();
 }

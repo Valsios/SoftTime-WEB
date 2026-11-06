@@ -17,7 +17,7 @@ public static class DependencyInjection
     {
         services.AddAutoMapper(typeof(MappingProfile).Assembly);
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
-        services.AddScoped<IPasswordHasher<T_RESPONSABLE>, PasswordHasher<T_RESPONSABLE>>();
+        services.AddScoped<IPasswordHasher<Responsable>, PasswordHasher<Responsable>>();
         services.AddSingleton<EffectiveRightsCache>();
 
         // Moteur prédictif : options liées à la section « Ml », services de la base analytique.

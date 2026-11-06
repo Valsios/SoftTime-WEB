@@ -8,7 +8,7 @@ public class EmployeeReaderResolver : IEmployeeReaderResolver
     private readonly IEnumerable<IEmployeeReader> _readers;
     public EmployeeReaderResolver(IEnumerable<IEmployeeReader> readers) => _readers = readers;
 
-    public IEmployeeReader Resolve(T_BDD_SAGE sageRow)
+    public IEmployeeReader Resolve(BddSage sageRow)
         => _readers.FirstOrDefault(r => r.CanHandle(sageRow))
-           ?? throw new DomainException($"Aucun lecteur employé ne gère le type de base '{sageRow.TYPE_BASE}'.");
+           ?? throw new DomainException($"Aucun lecteur employé ne gère le type de base '{sageRow.TypeBase}'.");
 }

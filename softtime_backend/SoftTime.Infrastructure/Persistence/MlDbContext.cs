@@ -17,14 +17,14 @@ public class MlDbContext : DbContext
 
     public MlDbContext(DbContextOptions<MlDbContext> options) : base(options) { }
 
-    public DbSet<T_ML_SALARIE_JOUR> SalarieJour => Set<T_ML_SALARIE_JOUR>();
-    public DbSet<T_ML_SALARIE_SEMAINE> SalarieSemaine => Set<T_ML_SALARIE_SEMAINE>();
-    public DbSet<T_ML_MODELE> Modele => Set<T_ML_MODELE>();
-    public DbSet<T_ML_PREDICTION> Prediction => Set<T_ML_PREDICTION>();
+    public DbSet<MlSalarieJour> SalarieJour => Set<MlSalarieJour>();
+    public DbSet<MlSalarieSemaine> SalarieSemaine => Set<MlSalarieSemaine>();
+    public DbSet<MlModele> Modele => Set<MlModele>();
+    public DbSet<MlPrediction> Prediction => Set<MlPrediction>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema(Schema);
-        modelBuilder.ApplyConfigurationsOf<T_ML_MODELEConfiguration>();
+        modelBuilder.ApplyConfigurationsOf<MlModeleConfiguration>();
     }
 }

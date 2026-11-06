@@ -31,83 +31,83 @@ public class HistoryArchiveService : IHistoryArchiveService
 
     // ---------------------------------------------------------------- Archivage (interne)
 
-    public Task ArchivePunchesAsync(IReadOnlyCollection<T_POINTAGE> rows, CancellationToken ct = default)
+    public Task ArchivePunchesAsync(IReadOnlyCollection<Pointage> rows, CancellationToken ct = default)
     {
         if (rows.Count == 0)
             return Task.CompletedTask;
         var now = DateTime.Now;
-        var archives = rows.Select(p => new T_HISTORIQUE_POINTAGE
+        var archives = rows.Select(p => new HistoriquePointage
         {
-            POINTAGE_ID = p.IDPOINTAGE,
-            NOM_BDD_SAGE = p.NOM_BDD_SAGE,
-            NOM_BDD_POINTEUSE = p.NOM_BDD_POINTEUSE,
-            MATRICULE_SAGE = p.MATRICULE_SAGE,
-            DATE_POINTAGE = p.DATE_POINTAGE,
-            HEURE_POINTAGE = p.HEURE_POINTAGE,
-            DATE_IMPORTATION = p.DATE_IMPORTATION,
-            IDUNIQUE_POINTAGE = p.IDUNIQUE_POINTAGE,
-            TYPE_POINTAGE = p.TYPE_POINTAGE,
-            DATE_SUPPRESSION = now
+            PointageId = p.IdPointage,
+            NomBddSage = p.NomBddSage,
+            NomBddPointeuse = p.NomBddPointeuse,
+            MatriculeSage = p.MatriculeSage,
+            DatePointage = p.DatePointage,
+            HeurePointage = p.HeurePointage,
+            DateImportation = p.DateImportation,
+            IdUniquePointage = p.IdUniquePointage,
+            TypePointage = p.TypePointage,
+            DateSuppression = now
         }).ToList();
-        return _uow.Repository<T_HISTORIQUE_POINTAGE>().AddRangeAsync(archives, ct);
+        return _uow.Repository<HistoriquePointage>().AddRangeAsync(archives, ct);
     }
 
-    public Task ArchiveAnomaliesAsync(IReadOnlyCollection<T_HEUREANOMALIE> rows, CancellationToken ct = default)
+    public Task ArchiveAnomaliesAsync(IReadOnlyCollection<HeureAnomalie> rows, CancellationToken ct = default)
     {
         if (rows.Count == 0)
             return Task.CompletedTask;
         var now = DateTime.Now;
-        var archives = rows.Select(a => new T_HISTORIQUE_ANOMALIE
+        var archives = rows.Select(a => new HistoriqueAnomalie
         {
-            ANOMALIE_ID = a.ID,
-            BDD_SAGE = a.BDD_SAGE,
-            BDD_POINTEUSE = a.BDD_POINTEUSE,
-            MATRICULE_SAGE = a.MATRICULE_SAGE,
-            DATE_POINTAGE_IN = a.DATE_POINTAGE_IN,
-            DATE_POINTAGE_OUT = a.DATE_POINTAGE_OUT,
+            AnomalieId = a.Id,
+            BddSage = a.BddSage,
+            BddPointeuse = a.BddPointeuse,
+            MatriculeSage = a.MatriculeSage,
+            DatePointageIn = a.DatePointageIn,
+            DatePointageOut = a.DatePointageOut,
             H1 = a.H1,
             H2 = a.H2,
-            HENTREE = a.HENTREE,
-            HPS = a.HPS,
-            HPE = a.HPE,
-            HSORTIE = a.HSORTIE,
-            ABS_AM = a.ABS_AM,
-            ABS_PM = a.ABS_PM,
-            FERIES = a.FERIES,
-            FERIES_AM = a.FERIES_AM,
-            FERIES_PM = a.FERIES_PM,
-            INTITULE_ABSENCE = a.INTITULE_ABSENCE,
-            DATE_SUPPRESSION = now
+            HEntree = a.HEntree,
+            Hps = a.Hps,
+            Hpe = a.Hpe,
+            HSortie = a.HSortie,
+            AbsAm = a.AbsAm,
+            AbsPm = a.AbsPm,
+            Feries = a.Feries,
+            FeriesAm = a.FeriesAm,
+            FeriesPm = a.FeriesPm,
+            IntituleAbsence = a.IntituleAbsence,
+            DateSuppression = now
         }).ToList();
-        return _uow.Repository<T_HISTORIQUE_ANOMALIE>().AddRangeAsync(archives, ct);
+        return _uow.Repository<HistoriqueAnomalie>().AddRangeAsync(archives, ct);
     }
 
-    public Task ArchiveHsAsync(IReadOnlyCollection<T_HSExoImp> rows, CancellationToken ct = default)
+    public Task ArchiveHsAsync(IReadOnlyCollection<HsExoImp> rows, CancellationToken ct = default)
     {
         if (rows.Count == 0)
             return Task.CompletedTask;
         var now = DateTime.Now;
-        var archives = rows.Select(h => new T_HISTORIQUE_HS
+        var archives = rows.Select(h => new HistoriqueHs
         {
-            HS_ID = h.OID,
-            MATRICULE = h.Matricule,
-            NUM_SAL = h.NumSal,
-            EXO130 = h.EXO130,
-            EXO150 = h.EXO150,
+            HsId = h.Oid,
+            Matricule = h.Matricule,
+            NumSal = h.NumSal,
+            Exo130 = h.Exo130,
+            Exo150 = h.Exo150,
             I130 = h.I130,
             I150 = h.I150,
-            PERIODE_DEBUT = h.PeriodeDebut,
-            PERIODE_FIN = h.PeriodeFin,
-            FERIE = h.FERIE,
-            NUIT = h.NUIT,
-            DIM = h.DIM,
-            RETARD = h.RETARD,
-            ABSENCE = h.ABSENCE,
-            BDD_SAGE = h.BDD_SAGE,
-            BDD_POINTEUSE = h.BDD_POINTEUSE,
-            DATE_SUPPRESSION = now
+            PeriodeDebut = h.PeriodeDebut,
+            PeriodeFin = h.PeriodeFin,
+            Ferie = h.Ferie,
+            Nuit = h.Nuit,
+            Dim = h.Dim,
+            Retard = h.Retard,
+            Absence = h.Absence,
+            BddSage = h.BddSage,
+            BddPointeuse = h.BddPointeuse,
+            DateSuppression = now
         }).ToList();
-        return _uow.Repository<T_HISTORIQUE_HS>().AddRangeAsync(archives, ct);
+        return _uow.Repository<HistoriqueHs>().AddRangeAsync(archives, ct);
     }
 
     // ---------------------------------------------------------------- Consultation
@@ -117,14 +117,14 @@ public class HistoryArchiveService : IHistoryArchiveService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageDb = _tenant.SageDb;
-        var rows = await _uow.Repository<T_HISTORIQUE_POINTAGE>().ListReadOnlyAsync(
-            h => h.NOM_BDD_SAGE == sageDb
-                 && h.DATE_SUPPRESSION >= filter.From
-                 && h.DATE_SUPPRESSION <= filter.To, ct);
+        var rows = await _uow.Repository<HistoriquePointage>().ListReadOnlyAsync(
+            h => h.NomBddSage == sageDb
+                 && h.DateSuppression >= filter.From
+                 && h.DateSuppression <= filter.To, ct);
         return rows
-            .Where(h => DansPlage(h.MATRICULE_SAGE, filter))
-            .OrderByDescending(h => h.DATE_SUPPRESSION)
-            .Select(h => new HistoryPointageDto(h.ID, h.MATRICULE_SAGE, h.DATE_POINTAGE, h.HEURE_POINTAGE, h.TYPE_POINTAGE, h.DATE_SUPPRESSION))
+            .Where(h => DansPlage(h.MatriculeSage, filter))
+            .OrderByDescending(h => h.DateSuppression)
+            .Select(h => new HistoryPointageDto(h.Id, h.MatriculeSage, h.DatePointage, h.HeurePointage, h.TypePointage, h.DateSuppression))
             .ToList();
     }
 
@@ -132,15 +132,15 @@ public class HistoryArchiveService : IHistoryArchiveService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageDb = _tenant.SageDb;
-        var rows = await _uow.Repository<T_HISTORIQUE_ANOMALIE>().ListReadOnlyAsync(
-            h => h.BDD_SAGE == sageDb
-                 && h.DATE_SUPPRESSION >= filter.From
-                 && h.DATE_SUPPRESSION <= filter.To, ct);
+        var rows = await _uow.Repository<HistoriqueAnomalie>().ListReadOnlyAsync(
+            h => h.BddSage == sageDb
+                 && h.DateSuppression >= filter.From
+                 && h.DateSuppression <= filter.To, ct);
         return rows
-            .Where(h => DansPlage(h.MATRICULE_SAGE, filter))
-            .OrderByDescending(h => h.DATE_SUPPRESSION)
-            .Select(h => new HistoryAnomalieDto(h.ID, h.MATRICULE_SAGE, h.DATE_POINTAGE_IN, h.DATE_POINTAGE_OUT,
-                h.HENTREE, h.HSORTIE, h.ABS_AM, h.ABS_PM, h.INTITULE_ABSENCE, h.DATE_SUPPRESSION))
+            .Where(h => DansPlage(h.MatriculeSage, filter))
+            .OrderByDescending(h => h.DateSuppression)
+            .Select(h => new HistoryAnomalieDto(h.Id, h.MatriculeSage, h.DatePointageIn, h.DatePointageOut,
+                h.HEntree, h.HSortie, h.AbsAm, h.AbsPm, h.IntituleAbsence, h.DateSuppression))
             .ToList();
     }
 
@@ -148,15 +148,15 @@ public class HistoryArchiveService : IHistoryArchiveService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageDb = _tenant.SageDb;
-        var rows = await _uow.Repository<T_HISTORIQUE_HS>().ListReadOnlyAsync(
-            h => h.BDD_SAGE == sageDb
-                 && h.DATE_SUPPRESSION >= filter.From
-                 && h.DATE_SUPPRESSION <= filter.To, ct);
+        var rows = await _uow.Repository<HistoriqueHs>().ListReadOnlyAsync(
+            h => h.BddSage == sageDb
+                 && h.DateSuppression >= filter.From
+                 && h.DateSuppression <= filter.To, ct);
         return rows
-            .Where(h => DansPlage(h.MATRICULE, filter))
-            .OrderByDescending(h => h.DATE_SUPPRESSION)
-            .Select(h => new HistoryHsDto(h.ID, h.MATRICULE, h.PERIODE_DEBUT, h.PERIODE_FIN,
-                h.EXO130, h.EXO150, h.I130, h.I150, h.DATE_SUPPRESSION))
+            .Where(h => DansPlage(h.Matricule, filter))
+            .OrderByDescending(h => h.DateSuppression)
+            .Select(h => new HistoryHsDto(h.Id, h.Matricule, h.PeriodeDebut, h.PeriodeFin,
+                h.Exo130, h.Exo150, h.I130, h.I150, h.DateSuppression))
             .ToList();
     }
 
@@ -172,26 +172,26 @@ public class HistoryArchiveService : IHistoryArchiveService
         var to = filter.To;
         var matriculeFrom = filter.MatriculeFrom;
         var matriculeTo = filter.MatriculeTo;
-        System.Linq.Expressions.Expression<Func<T_HISTORIQUE_POINTAGE, bool>> predicate =
-            h => h.NOM_BDD_SAGE == sageDb
-                 && h.DATE_SUPPRESSION >= from
-                 && h.DATE_SUPPRESSION <= to
+        System.Linq.Expressions.Expression<Func<HistoriquePointage, bool>> predicate =
+            h => h.NomBddSage == sageDb
+                 && h.DateSuppression >= from
+                 && h.DateSuppression <= to
                  && (string.IsNullOrEmpty(matriculeFrom)
-                     || (h.MATRICULE_SAGE != null && string.Compare(h.MATRICULE_SAGE, matriculeFrom) >= 0))
+                     || (h.MatriculeSage != null && string.Compare(h.MatriculeSage, matriculeFrom) >= 0))
                  && (string.IsNullOrEmpty(matriculeTo)
-                     || (h.MATRICULE_SAGE != null && string.Compare(h.MATRICULE_SAGE, matriculeTo) <= 0));
-        var searchPredicate = SearchExpression.For<T_HISTORIQUE_POINTAGE>(
-            filter.Search, h => h.MATRICULE_SAGE, h => h.TYPE_POINTAGE);
+                     || (h.MatriculeSage != null && string.Compare(h.MatriculeSage, matriculeTo) <= 0));
+        var searchPredicate = SearchExpression.For<HistoriquePointage>(
+            filter.Search, h => h.MatriculeSage, h => h.TypePointage);
         if (searchPredicate is not null)
             predicate = SearchExpression.AndAlso(predicate, searchPredicate);
         return await PagedLists.PageAsync(
-            _uow.Repository<T_HISTORIQUE_POINTAGE>(),
+            _uow.Repository<HistoriquePointage>(),
             predicate,
-            q => q.OrderByDescending(h => h.DATE_SUPPRESSION).ThenByDescending(h => h.ID),
+            q => q.OrderByDescending(h => h.DateSuppression).ThenByDescending(h => h.Id),
             page,
             pageSize,
-            h => new HistoryPointageDto(h.ID, h.MATRICULE_SAGE, h.DATE_POINTAGE, h.HEURE_POINTAGE,
-                h.TYPE_POINTAGE, h.DATE_SUPPRESSION),
+            h => new HistoryPointageDto(h.Id, h.MatriculeSage, h.DatePointage, h.HeurePointage,
+                h.TypePointage, h.DateSuppression),
             ct);
     }
 
@@ -205,26 +205,26 @@ public class HistoryArchiveService : IHistoryArchiveService
         var to = filter.To;
         var matriculeFrom = filter.MatriculeFrom;
         var matriculeTo = filter.MatriculeTo;
-        System.Linq.Expressions.Expression<Func<T_HISTORIQUE_ANOMALIE, bool>> predicate =
-            h => h.BDD_SAGE == sageDb
-                 && h.DATE_SUPPRESSION >= from
-                 && h.DATE_SUPPRESSION <= to
+        System.Linq.Expressions.Expression<Func<HistoriqueAnomalie, bool>> predicate =
+            h => h.BddSage == sageDb
+                 && h.DateSuppression >= from
+                 && h.DateSuppression <= to
                  && (string.IsNullOrEmpty(matriculeFrom)
-                     || (h.MATRICULE_SAGE != null && string.Compare(h.MATRICULE_SAGE, matriculeFrom) >= 0))
+                     || (h.MatriculeSage != null && string.Compare(h.MatriculeSage, matriculeFrom) >= 0))
                  && (string.IsNullOrEmpty(matriculeTo)
-                     || (h.MATRICULE_SAGE != null && string.Compare(h.MATRICULE_SAGE, matriculeTo) <= 0));
-        var searchPredicate = SearchExpression.For<T_HISTORIQUE_ANOMALIE>(
-            filter.Search, h => h.MATRICULE_SAGE, h => h.INTITULE_ABSENCE);
+                     || (h.MatriculeSage != null && string.Compare(h.MatriculeSage, matriculeTo) <= 0));
+        var searchPredicate = SearchExpression.For<HistoriqueAnomalie>(
+            filter.Search, h => h.MatriculeSage, h => h.IntituleAbsence);
         if (searchPredicate is not null)
             predicate = SearchExpression.AndAlso(predicate, searchPredicate);
         return await PagedLists.PageAsync(
-            _uow.Repository<T_HISTORIQUE_ANOMALIE>(),
+            _uow.Repository<HistoriqueAnomalie>(),
             predicate,
-            q => q.OrderByDescending(h => h.DATE_SUPPRESSION).ThenByDescending(h => h.ID),
+            q => q.OrderByDescending(h => h.DateSuppression).ThenByDescending(h => h.Id),
             page,
             pageSize,
-            h => new HistoryAnomalieDto(h.ID, h.MATRICULE_SAGE, h.DATE_POINTAGE_IN, h.DATE_POINTAGE_OUT,
-                h.HENTREE, h.HSORTIE, h.ABS_AM, h.ABS_PM, h.INTITULE_ABSENCE, h.DATE_SUPPRESSION),
+            h => new HistoryAnomalieDto(h.Id, h.MatriculeSage, h.DatePointageIn, h.DatePointageOut,
+                h.HEntree, h.HSortie, h.AbsAm, h.AbsPm, h.IntituleAbsence, h.DateSuppression),
             ct);
     }
 
@@ -238,26 +238,26 @@ public class HistoryArchiveService : IHistoryArchiveService
         var to = filter.To;
         var matriculeFrom = filter.MatriculeFrom;
         var matriculeTo = filter.MatriculeTo;
-        System.Linq.Expressions.Expression<Func<T_HISTORIQUE_HS, bool>> predicate =
-            h => h.BDD_SAGE == sageDb
-                 && h.DATE_SUPPRESSION >= from
-                 && h.DATE_SUPPRESSION <= to
+        System.Linq.Expressions.Expression<Func<HistoriqueHs, bool>> predicate =
+            h => h.BddSage == sageDb
+                 && h.DateSuppression >= from
+                 && h.DateSuppression <= to
                  && (string.IsNullOrEmpty(matriculeFrom)
-                     || (h.MATRICULE != null && string.Compare(h.MATRICULE, matriculeFrom) >= 0))
+                     || (h.Matricule != null && string.Compare(h.Matricule, matriculeFrom) >= 0))
                  && (string.IsNullOrEmpty(matriculeTo)
-                     || (h.MATRICULE != null && string.Compare(h.MATRICULE, matriculeTo) <= 0));
-        var searchPredicate = SearchExpression.For<T_HISTORIQUE_HS>(
-            filter.Search, h => h.MATRICULE);
+                     || (h.Matricule != null && string.Compare(h.Matricule, matriculeTo) <= 0));
+        var searchPredicate = SearchExpression.For<HistoriqueHs>(
+            filter.Search, h => h.Matricule);
         if (searchPredicate is not null)
             predicate = SearchExpression.AndAlso(predicate, searchPredicate);
         return await PagedLists.PageAsync(
-            _uow.Repository<T_HISTORIQUE_HS>(),
+            _uow.Repository<HistoriqueHs>(),
             predicate,
-            q => q.OrderByDescending(h => h.DATE_SUPPRESSION).ThenByDescending(h => h.ID),
+            q => q.OrderByDescending(h => h.DateSuppression).ThenByDescending(h => h.Id),
             page,
             pageSize,
-            h => new HistoryHsDto(h.ID, h.MATRICULE, h.PERIODE_DEBUT, h.PERIODE_FIN,
-                h.EXO130, h.EXO150, h.I130, h.I150, h.DATE_SUPPRESSION),
+            h => new HistoryHsDto(h.Id, h.Matricule, h.PeriodeDebut, h.PeriodeFin,
+                h.Exo130, h.Exo150, h.I130, h.I150, h.DateSuppression),
             ct);
     }
 
@@ -267,8 +267,8 @@ public class HistoryArchiveService : IHistoryArchiveService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageDb = _tenant.SageDb;
-        var repo = _uow.Repository<T_HISTORIQUE_POINTAGE>();
-        var entity = (await repo.ListAsync(h => h.NOM_BDD_SAGE == sageDb, ct)).FirstOrDefault(h => h.ID == id);
+        var repo = _uow.Repository<HistoriquePointage>();
+        var entity = (await repo.ListAsync(h => h.NomBddSage == sageDb, ct)).FirstOrDefault(h => h.Id == id);
         if (entity is null)
             return 0;
         repo.Remove(entity);
@@ -280,8 +280,8 @@ public class HistoryArchiveService : IHistoryArchiveService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageDb = _tenant.SageDb;
-        var repo = _uow.Repository<T_HISTORIQUE_ANOMALIE>();
-        var entity = (await repo.ListAsync(h => h.BDD_SAGE == sageDb, ct)).FirstOrDefault(h => h.ID == id);
+        var repo = _uow.Repository<HistoriqueAnomalie>();
+        var entity = (await repo.ListAsync(h => h.BddSage == sageDb, ct)).FirstOrDefault(h => h.Id == id);
         if (entity is null)
             return 0;
         repo.Remove(entity);
@@ -293,8 +293,8 @@ public class HistoryArchiveService : IHistoryArchiveService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageDb = _tenant.SageDb;
-        var repo = _uow.Repository<T_HISTORIQUE_HS>();
-        var entity = (await repo.ListAsync(h => h.BDD_SAGE == sageDb, ct)).FirstOrDefault(h => h.ID == id);
+        var repo = _uow.Repository<HistoriqueHs>();
+        var entity = (await repo.ListAsync(h => h.BddSage == sageDb, ct)).FirstOrDefault(h => h.Id == id);
         if (entity is null)
             return 0;
         repo.Remove(entity);
@@ -306,8 +306,8 @@ public class HistoryArchiveService : IHistoryArchiveService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageDb = _tenant.SageDb;
-        var repo = _uow.Repository<T_HISTORIQUE_POINTAGE>();
-        var entities = await repo.ListAsync(h => h.NOM_BDD_SAGE == sageDb, ct);
+        var repo = _uow.Repository<HistoriquePointage>();
+        var entities = await repo.ListAsync(h => h.NomBddSage == sageDb, ct);
         if (entities.Count > 0)
         {
             repo.RemoveRange(entities);
@@ -321,8 +321,8 @@ public class HistoryArchiveService : IHistoryArchiveService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageDb = _tenant.SageDb;
-        var repo = _uow.Repository<T_HISTORIQUE_ANOMALIE>();
-        var entities = await repo.ListAsync(h => h.BDD_SAGE == sageDb, ct);
+        var repo = _uow.Repository<HistoriqueAnomalie>();
+        var entities = await repo.ListAsync(h => h.BddSage == sageDb, ct);
         if (entities.Count > 0)
         {
             repo.RemoveRange(entities);
@@ -336,8 +336,8 @@ public class HistoryArchiveService : IHistoryArchiveService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageDb = _tenant.SageDb;
-        var repo = _uow.Repository<T_HISTORIQUE_HS>();
-        var entities = await repo.ListAsync(h => h.BDD_SAGE == sageDb, ct);
+        var repo = _uow.Repository<HistoriqueHs>();
+        var entities = await repo.ListAsync(h => h.BddSage == sageDb, ct);
         if (entities.Count > 0)
         {
             repo.RemoveRange(entities);

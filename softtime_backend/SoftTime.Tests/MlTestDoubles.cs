@@ -7,16 +7,16 @@ namespace SoftTime.Tests;
 /// <summary>Doublure en mémoire de la base analytique pour les tests de services ML.</summary>
 internal sealed class FakeMlStore : IMlStore
 {
-    public List<T_ML_SALARIE_JOUR> Daily { get; } = new();
-    public List<T_ML_SALARIE_SEMAINE> Weekly { get; } = new();
-    public List<T_ML_MODELE> Models { get; } = new();
-    public List<T_ML_PREDICTION> Predictions { get; } = new();
+    public List<MlSalarieJour> Daily { get; } = new();
+    public List<MlSalarieSemaine> Weekly { get; } = new();
+    public List<MlModele> Models { get; } = new();
+    public List<MlPrediction> Predictions { get; } = new();
 
     public Task EnsureSchemaAsync(CancellationToken ct = default) => Task.CompletedTask;
 
     public Task ReplaceDailyAsync(
         string bddSage, DateTime from, DateTime to,
-        IReadOnlyCollection<T_ML_SALARIE_JOUR> rows, CancellationToken ct = default)
+        IReadOnlyCollection<MlSalarieJour> rows, CancellationToken ct = default)
     {
         Daily.RemoveAll(r => r.BddSage == bddSage && r.Date >= from.Date && r.Date <= to.Date);
         Daily.AddRange(rows);
@@ -25,56 +25,56 @@ internal sealed class FakeMlStore : IMlStore
 
     public Task ReplaceWeeklyAsync(
         string bddSage, DateTime from, DateTime to,
-        IReadOnlyCollection<T_ML_SALARIE_SEMAINE> rows, CancellationToken ct = default)
+        IReadOnlyCollection<MlSalarieSemaine> rows, CancellationToken ct = default)
     {
         Weekly.RemoveAll(r => r.BddSage == bddSage && r.SemaineDebut >= from.Date && r.SemaineDebut <= to.Date);
         Weekly.AddRange(rows);
         return Task.CompletedTask;
     }
 
-    public Task<IReadOnlyList<T_ML_SALARIE_JOUR>> GetDailyAsync(
+    public Task<IReadOnlyList<MlSalarieJour>> GetDailyAsync(
         string bddSage, DateTime from, DateTime to, CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<T_ML_SALARIE_JOUR>>(
+        => Task.FromResult<IReadOnlyList<MlSalarieJour>>(
             Daily.Where(r => r.BddSage == bddSage && r.Date >= from.Date && r.Date <= to.Date).ToList());
 
-    public Task<IReadOnlyList<T_ML_SALARIE_SEMAINE>> GetWeeklyAsync(
+    public Task<IReadOnlyList<MlSalarieSemaine>> GetWeeklyAsync(
         string bddSage, DateTime from, DateTime to, CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<T_ML_SALARIE_SEMAINE>>(
+        => Task.FromResult<IReadOnlyList<MlSalarieSemaine>>(
             Weekly.Where(r => r.BddSage == bddSage && r.SemaineDebut >= from.Date && r.SemaineDebut <= to.Date).ToList());
 
-    public Task<IReadOnlyList<T_ML_SALARIE_JOUR>> GetDailyForTrainingAsync(
+    public Task<IReadOnlyList<MlSalarieJour>> GetDailyForTrainingAsync(
         string bddSage, DateTime from, DateTime to, int maxRows, CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<T_ML_SALARIE_JOUR>>(
+        => Task.FromResult<IReadOnlyList<MlSalarieJour>>(
             Daily.Where(r => r.BddSage == bddSage && r.Date >= from.Date && r.Date <= to.Date)
                 .OrderByDescending(r => r.Date).Take(Math.Max(1, maxRows)).OrderBy(r => r.Date).ToList());
 
-    public Task<IReadOnlyList<T_ML_SALARIE_SEMAINE>> GetWeeklyForTrainingAsync(
+    public Task<IReadOnlyList<MlSalarieSemaine>> GetWeeklyForTrainingAsync(
         string bddSage, DateTime from, DateTime to, int maxRows, CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<T_ML_SALARIE_SEMAINE>>(
+        => Task.FromResult<IReadOnlyList<MlSalarieSemaine>>(
             Weekly.Where(r => r.BddSage == bddSage && r.SemaineDebut >= from.Date && r.SemaineDebut <= to.Date)
                 .OrderByDescending(r => r.SemaineDebut).Take(Math.Max(1, maxRows)).OrderBy(r => r.SemaineDebut).ToList());
 
-    public Task SaveModelAsync(T_ML_MODELE model, CancellationToken ct = default)
+    public Task SaveModelAsync(MlModele model, CancellationToken ct = default)
     {
         model.Id = Models.Count + 1;
         Models.Add(model);
         return Task.CompletedTask;
     }
 
-    public Task<T_ML_MODELE?> GetActiveModelAsync(string bddSage, MlModelType type, CancellationToken ct = default)
+    public Task<MlModele?> GetActiveModelAsync(string bddSage, MlModelType type, CancellationToken ct = default)
     {
         var storageType = MlModelTypes.ToStorage(type);
         return Task.FromResult(Models.LastOrDefault(m =>
             m.BddSage == bddSage && m.TypeModele == storageType && m.EstActif));
     }
 
-    public Task<IReadOnlyList<T_ML_MODELE>> ListModelsAsync(string bddSage, CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<T_ML_MODELE>>(
+    public Task<IReadOnlyList<MlModele>> ListModelsAsync(string bddSage, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<MlModele>>(
             Models.Where(m => m.BddSage == bddSage).OrderByDescending(m => m.EntraineLe).ToList());
 
     public Task ReplacePredictionsAsync(
         string bddSage, MlModelType type, DateTime from, DateTime to,
-        IReadOnlyCollection<T_ML_PREDICTION> rows, CancellationToken ct = default)
+        IReadOnlyCollection<MlPrediction> rows, CancellationToken ct = default)
     {
         var storageType = MlModelTypes.ToStorage(type);
         Predictions.RemoveAll(p => p.BddSage == bddSage
@@ -85,11 +85,11 @@ internal sealed class FakeMlStore : IMlStore
         return Task.CompletedTask;
     }
 
-    public Task<IReadOnlyList<T_ML_PREDICTION>> GetPredictionsAsync(
+    public Task<IReadOnlyList<MlPrediction>> GetPredictionsAsync(
         string bddSage, MlModelType type, DateTime from, DateTime to, CancellationToken ct = default)
     {
         var storageType = MlModelTypes.ToStorage(type);
-        return Task.FromResult<IReadOnlyList<T_ML_PREDICTION>>(
+        return Task.FromResult<IReadOnlyList<MlPrediction>>(
             Predictions.Where(p => p.BddSage == bddSage
                                    && p.TypeModele == storageType
                                    && p.Cible >= from.Date

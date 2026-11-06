@@ -80,23 +80,23 @@ internal sealed class InMemoryRepository<T> : IRepository<T> where T : class
     {
         switch (entity)
         {
-            case T_POINTAGE pointage when pointage.IDPOINTAGE == 0:
-                pointage.IDPOINTAGE = _nextId++;
+            case Pointage pointage when pointage.IdPointage == 0:
+                pointage.IdPointage = _nextId++;
                 break;
-            case T_HEUREANOMALIE anomalie when anomalie.ID == 0:
-                anomalie.ID = _nextId++;
+            case HeureAnomalie anomalie when anomalie.Id == 0:
+                anomalie.Id = _nextId++;
                 break;
-            case T_HEURECORRIGER correction when correction.ID == 0:
-                correction.ID = _nextId++;
+            case HeureCorrigee correction when correction.Id == 0:
+                correction.Id = _nextId++;
                 break;
-            case T_CARDPAIE carte when carte.ID == 0:
-                carte.ID = (int)_nextId++;
+            case CardPaie carte when carte.Id == 0:
+                carte.Id = (int)_nextId++;
                 break;
-            case T_PLANNING_SAL planning when planning.ID == 0:
-                planning.ID = (int)_nextId++;
+            case PlanningSalarie planning when planning.Id == 0:
+                planning.Id = (int)_nextId++;
                 break;
-            case T_CLOCK clock when clock.IDPOINT == 0:
-                clock.IDPOINT = (int)_nextId++;
+            case ParametrePointeuse clock when clock.IdPoint == 0:
+                clock.IdPoint = (int)_nextId++;
                 break;
         }
     }
@@ -133,31 +133,31 @@ internal sealed class FakeExternalSourceService : IExternalSourceService
     public List<ExternalEvent> Events { get; } = new();
     public List<ExternalEmployeeEvent> EmployeeEvents { get; } = new();
 
-    public Task<IReadOnlyList<ExternalEmployee>> GetEmployeesAsync(T_BDD_SAGE row, CancellationToken ct = default)
+    public Task<IReadOnlyList<ExternalEmployee>> GetEmployeesAsync(BddSage row, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<ExternalEmployee>>(Employees.ToList());
 
-    public Task<IReadOnlyList<ExternalAffectation>> GetAffectationsAsync(T_BDD_SAGE row, CancellationToken ct = default)
+    public Task<IReadOnlyList<ExternalAffectation>> GetAffectationsAsync(BddSage row, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<ExternalAffectation>>(Array.Empty<ExternalAffectation>());
 
-    public Task<IReadOnlyList<ExternalDepartment>> GetDepartmentsAsync(T_BDD_SAGE row, CancellationToken ct = default)
+    public Task<IReadOnlyList<ExternalDepartment>> GetDepartmentsAsync(BddSage row, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<ExternalDepartment>>(Array.Empty<ExternalDepartment>());
 
-    public Task<IReadOnlyList<ExternalHoliday>> GetCompanyCalendarAsync(T_BDD_SAGE row, CancellationToken ct = default)
+    public Task<IReadOnlyList<ExternalHoliday>> GetCompanyCalendarAsync(BddSage row, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<ExternalHoliday>>(Array.Empty<ExternalHoliday>());
 
-    public Task<IReadOnlyList<ExternalConstant>> GetConstantsAsync(T_BDD_SAGE row, CancellationToken ct = default)
+    public Task<IReadOnlyList<ExternalConstant>> GetConstantsAsync(BddSage row, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<ExternalConstant>>(Array.Empty<ExternalConstant>());
 
-    public Task<IReadOnlyList<ExternalEvent>> GetEventsAsync(T_BDD_SAGE row, CancellationToken ct = default)
+    public Task<IReadOnlyList<ExternalEvent>> GetEventsAsync(BddSage row, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<ExternalEvent>>(Events.ToList());
 
-    public Task<IReadOnlyList<ExternalEmployeeEvent>> GetEmployeeEventsAsync(T_BDD_SAGE row, CancellationToken ct = default)
+    public Task<IReadOnlyList<ExternalEmployeeEvent>> GetEmployeeEventsAsync(BddSage row, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<ExternalEmployeeEvent>>(EmployeeEvents.ToList());
 
-    public Task<IReadOnlyList<ExternalPunchUser>> GetPunchUsersAsync(T_BDD_POINTEUSE row, CancellationToken ct = default)
+    public Task<IReadOnlyList<ExternalPunchUser>> GetPunchUsersAsync(BddPointeuse row, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<ExternalPunchUser>>(Users.ToList());
 
-    public Task<IReadOnlyList<ExternalPunch>> GetPunchesAsync(T_BDD_POINTEUSE row, DateTime from, DateTime to, CancellationToken ct = default)
+    public Task<IReadOnlyList<ExternalPunch>> GetPunchesAsync(BddPointeuse row, DateTime from, DateTime to, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<ExternalPunch>>(Punches.ToList());
 }
 

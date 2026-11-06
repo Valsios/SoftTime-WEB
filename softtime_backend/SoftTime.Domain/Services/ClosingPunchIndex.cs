@@ -23,17 +23,17 @@ public sealed class ClosingPunchIndex
         _nombreParJour = nombreParJour;
     }
 
-    public static ClosingPunchIndex Build(IEnumerable<T_POINTAGE> pointages)
+    public static ClosingPunchIndex Build(IEnumerable<Pointage> pointages)
     {
         var listes = new Dictionary<string, List<PunchMoment>>(StringComparer.Ordinal);
         var nombreParJour = new Dictionary<(string Cle, DateTime Jour), int>();
         foreach (var p in pointages)
         {
-            if (p.DATE_POINTAGE is not DateTime date || p.HEURE_POINTAGE is not TimeSpan heure
-                || string.IsNullOrWhiteSpace(p.MATRICULE_SAGE))
+            if (p.DatePointage is not DateTime date || p.HeurePointage is not TimeSpan heure
+                || string.IsNullOrWhiteSpace(p.MatriculeSage))
                 continue;
 
-            var cle = MatriculeIdentity.Cle(p.MATRICULE_SAGE);
+            var cle = MatriculeIdentity.Cle(p.MatriculeSage);
             var jour = date.Date;
             if (!listes.TryGetValue(cle, out var liste))
             {

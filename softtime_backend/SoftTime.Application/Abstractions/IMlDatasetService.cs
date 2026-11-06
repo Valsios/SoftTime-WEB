@@ -20,9 +20,9 @@ public interface IMlDatasetService
     /// </summary>
     Task<MlDatasetBuildResult> BuildAsync(DateTime from, DateTime to, bool persist, CancellationToken ct = default);
 
-    /// <summary>Lignes d'inférence (planning futur) réutilisées par <see cref="MlPredictionService"/>.</summary>
-    Task<IReadOnlyList<T_ML_SALARIE_JOUR>> BuildInferenceDailyAsync(DateTime from, DateTime to, CancellationToken ct = default);
+    /// <summary>Lignes d'inférence (planning futur) réutilisées par <see cref="IMlPredictionService"/>.</summary>
+    Task<IReadOnlyList<MlSalarieJour>> BuildInferenceDailyAsync(DateTime from, DateTime to, CancellationToken ct = default);
 
     /// <summary>Lignes d'inférence hebdomadaires (semaines futures).</summary>
-    Task<IReadOnlyList<T_ML_SALARIE_SEMAINE>> BuildInferenceWeeklyAsync(DateTime from, DateTime to, CancellationToken ct = default);
+    Task<IReadOnlyList<MlSalarieSemaine>> BuildInferenceWeeklyAsync(DateTime from, DateTime to, CancellationToken ct = default);
 }

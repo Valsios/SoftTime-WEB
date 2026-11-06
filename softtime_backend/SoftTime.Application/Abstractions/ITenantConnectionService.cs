@@ -22,9 +22,9 @@ public interface ITenantConnectionService
     /// </summary>
     Task ResolvePointeuseAsync(CancellationToken cancellationToken = default);
 
-    Task<T_BDD_SAGE> GetSageRowAsync(CancellationToken cancellationToken = default);
+    Task<BddSage> GetSageRowAsync(CancellationToken cancellationToken = default);
 
-    Task<T_BDD_POINTEUSE> GetPointeuseRowAsync(CancellationToken cancellationToken = default);
+    Task<BddPointeuse> GetPointeuseRowAsync(CancellationToken cancellationToken = default);
 
     Task<string> GetSageConnectionAsync(CancellationToken cancellationToken = default);
 

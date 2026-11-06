@@ -5,5 +5,5 @@ namespace SoftTime.Application.Abstractions;
 /// <summary>Contrat de <c>EmployeeReaderResolver</c>.</summary>
 public interface IEmployeeReaderResolver
 {
-    IEmployeeReader Resolve(T_BDD_SAGE sageRow);
+    IEmployeeReader Resolve(BddSage sageRow);
 }

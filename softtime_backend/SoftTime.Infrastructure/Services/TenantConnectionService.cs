@@ -55,13 +55,13 @@ public class TenantConnectionService : ITenantConnectionService
     public async Task EnsureAuthorizedAsync(CancellationToken cancellationToken = default)
     {
         var sageName = SageDb;
-        var sage = (await _uow.Repository<T_BDD_SAGE>().ListAsync(s => s.NOM_BD == sageName, cancellationToken)).FirstOrDefault()
+        var sage = (await _uow.Repository<BddSage>().ListAsync(s => s.NomBd == sageName, cancellationToken)).FirstOrDefault()
             ?? throw new DomainException("Base SAGE inconnue.");
 
         if (!IsAdministrator)
         {
             _effective = await LoadRightsOrDenyAsync(cancellationToken);
-            if (!_effective.CanUseDatabase(DatabaseKind.Sage, sage.NOM_BD))
+            if (!_effective.CanUseDatabase(DatabaseKind.Sage, sage.NomBd))
                 throw new ForbiddenException(AccessDenied);
         }
         await ResolvePointeuseAsync(cancellationToken);
@@ -99,42 +99,42 @@ public class TenantConnectionService : ITenantConnectionService
     {
         if (!string.IsNullOrWhiteSpace(_company.PointeuseDatabase))
             return;
-        var all = await _uow.Repository<T_BDD_POINTEUSE>().ListReadOnlyAsync(_ => true, cancellationToken);
-        var row = all.FirstOrDefault(p => p.ACTIVE == true)
-                  ?? all.FirstOrDefault(p => !string.IsNullOrWhiteSpace(p.NOM_BD));
-        if (row?.NOM_BD is string name && !string.IsNullOrWhiteSpace(_company.SageDatabase))
+        var all = await _uow.Repository<BddPointeuse>().ListReadOnlyAsync(_ => true, cancellationToken);
+        var row = all.FirstOrDefault(p => p.Active == true)
+                  ?? all.FirstOrDefault(p => !string.IsNullOrWhiteSpace(p.NomBd));
+        if (row?.NomBd is string name && !string.IsNullOrWhiteSpace(_company.SageDatabase))
             _company.Set(_company.SageDatabase, name);
     }
 
-    public async Task<T_BDD_SAGE> GetSageRowAsync(CancellationToken cancellationToken = default)
+    public async Task<BddSage> GetSageRowAsync(CancellationToken cancellationToken = default)
     {
         var name = SageDb;
-        return (await _uow.Repository<T_BDD_SAGE>().ListAsync(s => s.NOM_BD == name, cancellationToken)).FirstOrDefault()
+        return (await _uow.Repository<BddSage>().ListAsync(s => s.NomBd == name, cancellationToken)).FirstOrDefault()
             ?? throw new DomainException("Base SAGE inconnue.");
     }
 
-    public async Task<T_BDD_POINTEUSE> GetPointeuseRowAsync(CancellationToken cancellationToken = default)
+    public async Task<BddPointeuse> GetPointeuseRowAsync(CancellationToken cancellationToken = default)
     {
         var name = _company.PointeuseDatabase;
-        T_BDD_POINTEUSE? row = null;
+        BddPointeuse? row = null;
         if (!string.IsNullOrWhiteSpace(name))
-            row = (await _uow.Repository<T_BDD_POINTEUSE>().ListAsync(p => p.NOM_BD == name, cancellationToken)).FirstOrDefault();
-        row ??= (await _uow.Repository<T_BDD_POINTEUSE>().ListAsync(p => p.ACTIVE == true, cancellationToken)).FirstOrDefault();
-        row ??= (await _uow.Repository<T_BDD_POINTEUSE>().ListAsync(_ => true, cancellationToken)).FirstOrDefault();
+            row = (await _uow.Repository<BddPointeuse>().ListAsync(p => p.NomBd == name, cancellationToken)).FirstOrDefault();
+        row ??= (await _uow.Repository<BddPointeuse>().ListAsync(p => p.Active == true, cancellationToken)).FirstOrDefault();
+        row ??= (await _uow.Repository<BddPointeuse>().ListAsync(_ => true, cancellationToken)).FirstOrDefault();
         if (row is null) throw new DomainException("Aucune base pointeuse configurée.");
-        EnsurePointeuseUsable(row.NOM_BD ?? string.Empty);
+        EnsurePointeuseUsable(row.NomBd ?? string.Empty);
         return row;
     }
 
     public async Task<string> GetSageConnectionAsync(CancellationToken cancellationToken = default)
     {
         var row = await GetSageRowAsync(cancellationToken);
-        return ExternalConnectionFactory.Build(row.SERVEUR, row.NOM_BD, row.TYPE_AUTH == true, row.TLOGIN, row.TMDP);
+        return ExternalConnectionFactory.Build(row.Serveur, row.NomBd, row.TypeAuth == true, row.TLogin, row.TMdp);
     }
 
     public async Task<string> GetPointeuseConnectionAsync(CancellationToken cancellationToken = default)
     {
         var row = await GetPointeuseRowAsync(cancellationToken);
-        return ExternalConnectionFactory.Build(row.SERVEUR, row.NOM_BD, row.TYPE_AUTH == true, row.TLOGIN, row.TMDP);
+        return ExternalConnectionFactory.Build(row.Serveur, row.NomBd, row.TypeAuth == true, row.TLogin, row.TMdp);
     }
 }

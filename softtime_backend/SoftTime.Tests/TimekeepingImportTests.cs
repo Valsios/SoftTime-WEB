@@ -17,22 +17,22 @@ public class TimekeepingImportTests
 
         public Contexte()
         {
-            Uow.Get<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 1, NOM_BD = "SAGE_TEST" });
-            Uow.Get<T_BDD_POINTEUSE>().Items.Add(new T_BDD_POINTEUSE { ID = 1, NOM_BD = "PTE_TEST", ACTIVE = true });
-            Uow.Get<T_CARDPAIE>().Items.Add(new T_CARDPAIE
+            Uow.Get<BddSage>().Items.Add(new BddSage { Id = 1, NomBd = "SAGE_TEST" });
+            Uow.Get<BddPointeuse>().Items.Add(new BddPointeuse { Id = 1, NomBd = "PTE_TEST", Active = true });
+            Uow.Get<CardPaie>().Items.Add(new CardPaie
             {
-                ID = 1,
-                SAGE_MATRICULE = "001",
-                SAGE_BDD = "SAGE_TEST",
-                POINTEUSE_BDD = "PTE_TEST",
-                POINTEUSE_NUMERO = "B1"
+                Id = 1,
+                SageMatricule = "001",
+                SageBdd = "SAGE_TEST",
+                PointeuseBdd = "PTE_TEST",
+                PointeuseNumero = "B1"
             });
-            Uow.Get<T_CLOCK>().Items.Add(new T_CLOCK { MULTIPOINT = true });
+            Uow.Get<ParametrePointeuse>().Items.Add(new ParametrePointeuse { MultiPoint = true });
             var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
             Service = new TimekeepingService(Uow, tenant, External, new HistoryArchiveService(Uow, tenant));
         }
 
-        public List<T_POINTAGE> Pointages => Uow.Get<T_POINTAGE>().Items;
+        public List<Pointage> Pointages => Uow.Get<Pointage>().Items;
     }
 
     [Fact]
@@ -57,13 +57,13 @@ public class TimekeepingImportTests
     public async Task ImportPunchesExcel_DedoublonneContreLaBase()
     {
         var contexte = new Contexte();
-        contexte.Pointages.Add(new T_POINTAGE
+        contexte.Pointages.Add(new Pointage
         {
-            NOM_BDD_SAGE = "SAGE_TEST",
-            NOM_BDD_POINTEUSE = "PTE_TEST",
-            MATRICULE_SAGE = "001",
-            DATE_POINTAGE = Lundi.Date,
-            HEURE_POINTAGE = new TimeSpan(8, 0, 0)
+            NomBddSage = "SAGE_TEST",
+            NomBddPointeuse = "PTE_TEST",
+            MatriculeSage = "001",
+            DatePointage = Lundi.Date,
+            HeurePointage = new TimeSpan(8, 0, 0)
         });
         var rows = new List<Dictionary<string, string>>
         {
@@ -99,29 +99,29 @@ public class TimekeepingImportTests
     // ------------------------------------------------------------------ semaine validée / arbitrage
 
     private static void ValiderSemaine(Contexte contexte, DateTime lundi)
-        => contexte.Uow.Get<T_HS_VALIDER>().Items.Add(new T_HS_VALIDER
+        => contexte.Uow.Get<HsValidee>().Items.Add(new HsValidee
         {
-            BDD_SAGE = "SAGE_TEST",
-            MATRICULES = "001",
-            DATE_DEB = lundi,
-            DATE_FIN = lundi.AddDays(6),
-            VALIDATION_HS = true
+            BddSage = "SAGE_TEST",
+            Matricules = "001",
+            DateDeb = lundi,
+            DateFin = lundi.AddDays(6),
+            ValidationHs = true
         });
 
-    private static T_HEUREANOMALIE AnomalieAbsence(Contexte contexte, DateTime jour)
+    private static HeureAnomalie AnomalieAbsence(Contexte contexte, DateTime jour)
     {
-        var anomalie = new T_HEUREANOMALIE
+        var anomalie = new HeureAnomalie
         {
-            ID = 1,
-            BDD_SAGE = "SAGE_TEST",
-            BDD_POINTEUSE = "PTE_TEST",
-            MATRICULE_SAGE = "001",
-            DATE_POINTAGE_IN = jour,
-            DATE_POINTAGE_OUT = jour,
-            ABS_AM = true,
-            ABS_PM = true
+            Id = 1,
+            BddSage = "SAGE_TEST",
+            BddPointeuse = "PTE_TEST",
+            MatriculeSage = "001",
+            DatePointageIn = jour,
+            DatePointageOut = jour,
+            AbsAm = true,
+            AbsPm = true
         };
-        contexte.Uow.Get<T_HEUREANOMALIE>().Items.Add(anomalie);
+        contexte.Uow.Get<HeureAnomalie>().Items.Add(anomalie);
         return anomalie;
     }
 
@@ -130,16 +130,16 @@ public class TimekeepingImportTests
     {
         var contexte = new Contexte();
         ValiderSemaine(contexte, Lundi);
-        var existante = new T_HEURECORRIGER
+        var existante = new HeureCorrigee
         {
-            ID = 5,
-            BDD_SAGE = "SAGE_TEST",
-            MATRICULE_SAGE = "001",
-            DATE_POINTAGE_IN = Lundi,
-            HENTREE = new TimeSpan(8, 0, 0),
-            HSORTIE = new TimeSpan(17, 0, 0)
+            Id = 5,
+            BddSage = "SAGE_TEST",
+            MatriculeSage = "001",
+            DatePointageIn = Lundi,
+            HEntree = new TimeSpan(8, 0, 0),
+            HSortie = new TimeSpan(17, 0, 0)
         };
-        contexte.Uow.Get<T_HEURECORRIGER>().Items.Add(existante);
+        contexte.Uow.Get<HeureCorrigee>().Items.Add(existante);
 
         await Assert.ThrowsAsync<DomainException>(() => contexte.Service.SaveCorrectionAsync(
             new CorrectedHourDto { Matricule = "001", DateIn = Lundi.AddDays(1), HEntree = new TimeSpan(8, 0, 0), HSortie = new TimeSpan(20, 0, 0) }));
@@ -152,7 +152,7 @@ public class TimekeepingImportTests
 
         Assert.Equal(0, import.Imported);
         Assert.Equal(1, import.Skipped);
-        Assert.Same(existante, Assert.Single(contexte.Uow.Get<T_HEURECORRIGER>().Items));
+        Assert.Same(existante, Assert.Single(contexte.Uow.Get<HeureCorrigee>().Items));
     }
 
     [Fact]
@@ -161,14 +161,14 @@ public class TimekeepingImportTests
         var contexte = new Contexte();
         var anomalie = AnomalieAbsence(contexte, Lundi);
 
-        await contexte.Service.ValidateAnomaliesAsync(new[] { anomalie.ID });
+        await contexte.Service.ValidateAnomaliesAsync(new[] { anomalie.Id });
 
-        var correction = Assert.Single(contexte.Uow.Get<T_HEURECORRIGER>().Items);
-        Assert.True(correction.ABSENCE_AM);
-        Assert.True(correction.ABSENCE_PM);
-        Assert.Null(correction.HENTREE);
-        Assert.Null(correction.HSORTIE);
-        Assert.Empty(contexte.Uow.Get<T_HEUREANOMALIE>().Items);
+        var correction = Assert.Single(contexte.Uow.Get<HeureCorrigee>().Items);
+        Assert.True(correction.AbsenceAm);
+        Assert.True(correction.AbsencePm);
+        Assert.Null(correction.HEntree);
+        Assert.Null(correction.HSortie);
+        Assert.Empty(contexte.Uow.Get<HeureAnomalie>().Items);
     }
 
     [Fact]
@@ -179,8 +179,8 @@ public class TimekeepingImportTests
         var anomalie = AnomalieAbsence(contexte, Lundi.AddDays(2));
 
         await Assert.ThrowsAsync<DomainException>(
-            () => contexte.Service.ValidateAnomaliesAsync(new[] { anomalie.ID }));
+            () => contexte.Service.ValidateAnomaliesAsync(new[] { anomalie.Id }));
 
-        Assert.Empty(contexte.Uow.Get<T_HEURECORRIGER>().Items);
+        Assert.Empty(contexte.Uow.Get<HeureCorrigee>().Items);
     }
 }

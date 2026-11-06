@@ -33,14 +33,14 @@ public class AuditServiceTests
 
         await _service.SaveConfigAsync(dto);
 
-        var repo = _uow.GetRepo<suivi_TBLCLN>();
+        var repo = _uow.GetRepo<SuiviConfiguration>();
         Assert.Single(repo.Items);
         var added = repo.Items[0];
-        Assert.Equal("T_EMPLOYEE", added.TABLES);
-        Assert.Equal("NOM", added.COLONNES);
-        Assert.Equal("varchar", added.TYPES);
-        Assert.True(added.ETATS);
-        Assert.Equal("SOFTTIME_SUITE", added.BASES);
+        Assert.Equal("T_EMPLOYEE", added.Tables);
+        Assert.Equal("NOM", added.Colonnes);
+        Assert.Equal("varchar", added.Types);
+        Assert.True(added.Etats);
+        Assert.Equal("SOFTTIME_SUITE", added.Bases);
     }
 
     [Theory]
@@ -56,22 +56,22 @@ public class AuditServiceTests
 
         await Assert.ThrowsAsync<DomainException>(() => _service.SaveConfigAsync(dto));
 
-        var repo = _uow.GetRepo<suivi_TBLCLN>();
+        var repo = _uow.GetRepo<SuiviConfiguration>();
         Assert.Empty(repo.Items);
     }
 
     [Fact]
     public async Task SaveConfigAsync_Update_WithUnchangedLegacyType_DoesNotThrowAndPreservesValue()
     {
-        var repo = _uow.GetRepo<suivi_TBLCLN>();
-        var existing = new suivi_TBLCLN
+        var repo = _uow.GetRepo<SuiviConfiguration>();
+        var existing = new SuiviConfiguration
         {
             Id = 42,
-            TABLES = "T_LOG",
-            COLONNES = "COMMENTAIRE",
-            TYPES = "legacy_exotic_type",
-            ETATS = true,
-            BASES = "SOFTTIME_SUITE"
+            Tables = "T_LOG",
+            Colonnes = "COMMENTAIRE",
+            Types = "legacy_exotic_type",
+            Etats = true,
+            Bases = "SOFTTIME_SUITE"
         };
         repo.Items.Add(existing);
 
@@ -79,23 +79,23 @@ public class AuditServiceTests
 
         await _service.SaveConfigAsync(dto);
 
-        Assert.Equal("COMMENTAIRE_RENOMME", existing.COLONNES);
-        Assert.Equal("legacy_exotic_type", existing.TYPES);
-        Assert.False(existing.ETATS);
+        Assert.Equal("COMMENTAIRE_RENOMME", existing.Colonnes);
+        Assert.Equal("legacy_exotic_type", existing.Types);
+        Assert.False(existing.Etats);
     }
 
     [Fact]
     public async Task SaveConfigAsync_Update_WithModifiedValidType_ValidatesAndNormalizes()
     {
-        var repo = _uow.GetRepo<suivi_TBLCLN>();
-        var existing = new suivi_TBLCLN
+        var repo = _uow.GetRepo<SuiviConfiguration>();
+        var existing = new SuiviConfiguration
         {
             Id = 10,
-            TABLES = "T_TEST",
-            COLONNES = "COL1",
-            TYPES = "varchar",
-            ETATS = true,
-            BASES = "SOFTTIME_SUITE"
+            Tables = "T_TEST",
+            Colonnes = "COL1",
+            Types = "varchar",
+            Etats = true,
+            Bases = "SOFTTIME_SUITE"
         };
         repo.Items.Add(existing);
 
@@ -103,21 +103,21 @@ public class AuditServiceTests
 
         await _service.SaveConfigAsync(dto);
 
-        Assert.Equal("int", existing.TYPES);
+        Assert.Equal("int", existing.Types);
     }
 
     [Fact]
     public async Task SaveConfigAsync_Update_WithModifiedInvalidType_ThrowsDomainExceptionAndLeavesOriginal()
     {
-        var repo = _uow.GetRepo<suivi_TBLCLN>();
-        var existing = new suivi_TBLCLN
+        var repo = _uow.GetRepo<SuiviConfiguration>();
+        var existing = new SuiviConfiguration
         {
             Id = 10,
-            TABLES = "T_TEST",
-            COLONNES = "COL1",
-            TYPES = "varchar",
-            ETATS = true,
-            BASES = "SOFTTIME_SUITE"
+            Tables = "T_TEST",
+            Colonnes = "COL1",
+            Types = "varchar",
+            Etats = true,
+            Bases = "SOFTTIME_SUITE"
         };
         repo.Items.Add(existing);
 
@@ -125,7 +125,7 @@ public class AuditServiceTests
 
         await Assert.ThrowsAsync<DomainException>(() => _service.SaveConfigAsync(dto));
 
-        Assert.Equal("varchar", existing.TYPES);
+        Assert.Equal("varchar", existing.Types);
     }
 
     [Fact]
@@ -149,7 +149,7 @@ public class AuditServiceTests
             var intId = Convert.ToInt32(id);
             var match = Items.FirstOrDefault(i =>
             {
-                if (i is suivi_TBLCLN c && c.Id == intId) return true;
+                if (i is SuiviConfiguration c && c.Id == intId) return true;
                 return false;
             });
             return Task.FromResult(match);
@@ -174,9 +174,9 @@ public class AuditServiceTests
 
         public Task AddAsync(T entity, CancellationToken cancellationToken = default)
         {
-            if (entity is suivi_TBLCLN c && c.Id == 0)
+            if (entity is SuiviConfiguration c && c.Id == 0)
             {
-                c.Id = Items.Count == 0 ? 1 : Items.OfType<suivi_TBLCLN>().Max(x => x.Id) + 1;
+                c.Id = Items.Count == 0 ? 1 : Items.OfType<SuiviConfiguration>().Max(x => x.Id) + 1;
             }
             Items.Add(entity);
             return Task.CompletedTask;

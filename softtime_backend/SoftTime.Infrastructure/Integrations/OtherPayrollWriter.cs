@@ -30,15 +30,15 @@ public sealed class OtherPayrollWriter : IPayrollWriter
         _logger = logger;
     }
 
-    public bool CanHandle(T_BDD_SAGE database) => string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase);
+    public bool CanHandle(BddSage database) => string.Equals(database.TypeBase, "AUTRE", StringComparison.OrdinalIgnoreCase);
 
-    public async Task<PayrollWriteResultDto> ValidateAsync(T_BDD_SAGE database, IReadOnlyList<HsExoDto> rows, CancellationToken ct = default)
+    public async Task<PayrollWriteResultDto> ValidateAsync(BddSage database, IReadOnlyList<HsExoDto> rows, CancellationToken ct = default)
     {
         await PreflightAsync(database, rows, ct);
-        return new PayrollWriteResultDto(database.NOM_BD ?? string.Empty, "AUTRE", 0, 0, "Configuration d'écriture valide.");
+        return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "AUTRE", 0, 0, "Configuration d'écriture valide.");
     }
 
-    public async Task<PayrollWriteResultDto> WriteAsync(T_BDD_SAGE database, IReadOnlyList<HsExoDto> rows, PayrollSyncContext auditContext, CancellationToken ct = default)
+    public async Task<PayrollWriteResultDto> WriteAsync(BddSage database, IReadOnlyList<HsExoDto> rows, PayrollSyncContext auditContext, CancellationToken ct = default)
     {
         var plan = await PreflightAsync(database, rows, ct); // aucune écriture avant la fin du préflight
         await using var connection = new SqlConnection(await _tenant.GetSageConnectionAsync(ct));
@@ -59,7 +59,7 @@ public sealed class OtherPayrollWriter : IPayrollWriter
             }
             await transaction.CommitAsync(ct);
             await WriteAuditAsync(database, plan, auditContext, rows.Count, categoryCounts.Values.Sum(), 0, categoryCounts, "SUCCES", CancellationToken.None);
-            return new PayrollWriteResultDto(database.NOM_BD ?? string.Empty, "AUTRE", rows.Count, updates,
+            return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "AUTRE", rows.Count, updates,
                 "Synchronisation des heures supplémentaires terminée.");
         }
         catch
@@ -86,7 +86,7 @@ public sealed class OtherPayrollWriter : IPayrollWriter
     }
 
     private Task WriteAuditAsync(
-        T_BDD_SAGE database,
+        BddSage database,
         WritePlan plan,
         PayrollSyncContext context,
         int employees,
@@ -96,14 +96,14 @@ public sealed class OtherPayrollWriter : IPayrollWriter
         string status,
         CancellationToken ct)
         => _auditTrail.WritePayrollSyncAsync(new PayrollSyncAudit(
-            $"{plan.Schema}.{plan.Table}", database.NOM_BD, context.PeriodFrom, context.PeriodTo,
+            $"{plan.Schema}.{plan.Table}", database.NomBd, context.PeriodFrom, context.PeriodTo,
             employees, updatedRows, cancelledRows, categories, status, context.UserLogin, "SYNC_PAIE:AUTRE", context.Correlation), ct);
 
-    private async Task<WritePlan> PreflightAsync(T_BDD_SAGE database, IReadOnlyList<HsExoDto> rows, CancellationToken ct)
+    private async Task<WritePlan> PreflightAsync(BddSage database, IReadOnlyList<HsExoDto> rows, CancellationToken ct)
     {
         await PayrollWritingConfiguration.EnsureStorageAsync(_uow, ct);
-        var configs = await _uow.Repository<T_PAIE_ECRITURE>().ListAsync(c => c.BDD_SAGE == database.NOM_BD, ct);
-        var plan = BuildPlan(database.NOM_BD, configs);
+        var configs = await _uow.Repository<PaieEcriture>().ListAsync(c => c.BddSage == database.NomBd, ct);
+        var plan = BuildPlan(database.NomBd, configs);
         await using var connection = new SqlConnection(await _tenant.GetSageConnectionAsync(ct));
         await connection.OpenAsync(ct);
         var columns = await ReadColumnsAsync(connection, plan, ct);
@@ -113,16 +113,16 @@ public sealed class OtherPayrollWriter : IPayrollWriter
         return plan;
     }
 
-    internal static WritePlan BuildPlan(string? database, IReadOnlyList<T_PAIE_ECRITURE> configs)
+    internal static WritePlan BuildPlan(string? database, IReadOnlyList<PaieEcriture> configs)
     {
         PayrollWritingConfiguration.ValidateConfigurationRows(configs);
-        var table = configs[0].TABLE_CIBLE;
-        var matricule = configs[0].COL_MATRICULE;
+        var table = configs[0].TableCible;
+        var matricule = configs[0].ColMatricule;
         var columns = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var config in configs)
         {
-            var category = PayrollWritingConfiguration.NormalizeCategory(config.CATEGORIE);
-            columns.Add(category, config.COL_VALEUR);
+            var category = PayrollWritingConfiguration.NormalizeCategory(config.Categorie);
+            columns.Add(category, config.ColValeur);
         }
         var (schema, targetTable) = PayrollWritingConfiguration.SplitTable(table);
         return new WritePlan(database ?? string.Empty, schema, targetTable, matricule, columns);

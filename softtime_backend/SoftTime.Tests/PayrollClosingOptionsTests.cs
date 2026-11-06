@@ -12,17 +12,17 @@ public class PayrollClosingOptionsTests
     private static readonly DateTime From = new(2025, 11, 10);
     private static readonly DateTime To = new(2025, 11, 30);
 
-    private static readonly T_HS_VALIDER SemaineValidee =
-        new() { MATRICULES = "00369", DATE_DEB = Lundi, DATE_FIN = Lundi.AddDays(6), VALIDATION_HS = true };
+    private static readonly HsValidee SemaineValidee =
+        new() { Matricules = "00369", DateDeb = Lundi, DateFin = Lundi.AddDays(6), ValidationHs = true };
 
     private static IReadOnlyList<ClosingAnomaly> Incomplets(
         ClosingRulesOptions? options,
-        IReadOnlyList<T_HEURECORRIGER>? corrections = null)
+        IReadOnlyList<HeureCorrigee>? corrections = null)
         => PayrollClosingRules.PointagesIncomplets(
-            new[] { new T_CARDPAIE { ID = 1, SAGE_MATRICULE = "00369" } },
-            Array.Empty<T_PLANNING_SAL>(),
-            new[] { new T_POINTAGE { MATRICULE_SAGE = "369", DATE_POINTAGE = Mercredi, HEURE_POINTAGE = TimeSpan.FromHours(8) } },
-            corrections ?? Array.Empty<T_HEURECORRIGER>(),
+            new[] { new CardPaie { Id = 1, SageMatricule = "00369" } },
+            Array.Empty<PlanningSalarie>(),
+            new[] { new Pointage { MatriculeSage = "369", DatePointage = Mercredi, HeurePointage = TimeSpan.FromHours(8) } },
+            corrections ?? Array.Empty<HeureCorrigee>(),
             new[] { SemaineValidee },
             From, To, multiPointage: false, options);
 
@@ -53,7 +53,7 @@ public class PayrollClosingOptionsTests
     [Fact]
     public void IgnoreValidatedWeeks_False_StillIgnoresManualDays()
     {
-        var manuelle = new T_HEURECORRIGER { MATRICULE_SAGE = "369", DATE_POINTAGE_IN = Mercredi, ORIGINE = "MANUEL" };
+        var manuelle = new HeureCorrigee { MatriculeSage = "369", DatePointageIn = Mercredi, Origine = "MANUEL" };
 
         Assert.Empty(Incomplets(new ClosingRulesOptions { IgnorerSemainesValidees = false }, new[] { manuelle }));
     }

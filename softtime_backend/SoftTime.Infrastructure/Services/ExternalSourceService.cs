@@ -29,11 +29,11 @@ public sealed class ExternalSourceService : IExternalSourceService
     private static bool IsAutre(string? typeBase)
         => string.Equals(typeBase?.Trim(), "AUTRE", StringComparison.OrdinalIgnoreCase);
 
-    private static string BuildSage(T_BDD_SAGE row)
-        => ExternalConnectionFactory.Build(row.SERVEUR, row.NOM_BD, row.TYPE_AUTH == true, row.TLOGIN, row.TMDP);
+    private static string BuildSage(BddSage row)
+        => ExternalConnectionFactory.Build(row.Serveur, row.NomBd, row.TypeAuth == true, row.TLogin, row.TMdp);
 
-    private static string BuildPointeuse(T_BDD_POINTEUSE row)
-        => ExternalConnectionFactory.Build(row.SERVEUR, row.NOM_BD, row.TYPE_AUTH == true, row.TLOGIN, row.TMDP);
+    private static string BuildPointeuse(BddPointeuse row)
+        => ExternalConnectionFactory.Build(row.Serveur, row.NomBd, row.TypeAuth == true, row.TLogin, row.TMdp);
 
     private static bool? ParseBool(string? value)
     {
@@ -60,11 +60,11 @@ public sealed class ExternalSourceService : IExternalSourceService
     private async Task<(string? Table, Dictionary<string, string> RoleToColumn)> LoadRoleMapAsync(bool isSage, int connectionId, string entityKind, CancellationToken ct)
     {
         var entities = isSage
-            ? await _uow.Repository<T_SOURCE_ENTITY_MAPPING>().ListAsync(m => m.SageDbId == connectionId && m.EntityKind == entityKind, ct)
-            : await _uow.Repository<T_SOURCE_ENTITY_MAPPING>().ListAsync(m => m.PointeuseDbId == connectionId && m.EntityKind == entityKind, ct);
+            ? await _uow.Repository<SourceEntityMapping>().ListAsync(m => m.SageDbId == connectionId && m.EntityKind == entityKind, ct)
+            : await _uow.Repository<SourceEntityMapping>().ListAsync(m => m.PointeuseDbId == connectionId && m.EntityKind == entityKind, ct);
         var entity = entities.FirstOrDefault()
             ?? throw new DomainException($"Aucun mapping '{entityKind}' configuré pour cette base.");
-        var fields = await _uow.Repository<T_SOURCE_FIELD_MAPPING>().ListAsync(f => f.EntityMappingId == entity.Id, ct);
+        var fields = await _uow.Repository<SourceFieldMapping>().ListAsync(f => f.EntityMappingId == entity.Id, ct);
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var f in fields)
             if (!string.IsNullOrWhiteSpace(f.SourceColumn))
@@ -80,18 +80,18 @@ public sealed class ExternalSourceService : IExternalSourceService
         return await _reader.ReadAsync(connectionString, table!, map, query, ct);
     }
 
-    public async Task<IReadOnlyList<ExternalEmployee>> GetEmployeesAsync(T_BDD_SAGE row, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ExternalEmployee>> GetEmployeesAsync(BddSage row, CancellationToken ct = default)
     {
         var conn = BuildSage(row);
-        if (!IsAutre(row.TYPE_BASE))
+        if (!IsAutre(row.TypeBase))
         {
             using var sage = _sageFactory.Create(conn);
             return sage.Employees.ToList()
                 .Where(e => e.SalarieDesactive != 1)
-                .Select(e => new ExternalEmployee(e.MatriculeSalarie.Trim(), e.SA_CompteurNumero, e.Nom, e.Prenom, e.NumeroDeBadge, false, e.Civilite))
+                .Select(e => new ExternalEmployee(e.MatriculeSalarie.Trim(), e.SaCompteurNumero, e.Nom, e.Prenom, e.NumeroDeBadge, false, e.Civilite))
                 .ToList();
         }
-        var rows = await ReadEntityAsync(true, row.ID, "EMPLOYEE", conn, null, ct);
+        var rows = await ReadEntityAsync(true, row.Id, "EMPLOYEE", conn, null, ct);
         var result = new List<ExternalEmployee>();
         foreach (var r in rows)
         {
@@ -104,17 +104,17 @@ public sealed class ExternalSourceService : IExternalSourceService
         return result;
     }
 
-    public async Task<IReadOnlyList<ExternalAffectation>> GetAffectationsAsync(T_BDD_SAGE row, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ExternalAffectation>> GetAffectationsAsync(BddSage row, CancellationToken ct = default)
     {
         var conn = BuildSage(row);
-        if (!IsAutre(row.TYPE_BASE))
+        if (!IsAutre(row.TypeBase))
         {
             using var sage = _sageFactory.Create(conn);
             return sage.Affectations.ToList()
                 .Select(a => new ExternalAffectation(a.NumSalarie, a.Departement, a.Service, a.DateDebut, a.DateSortiePoste))
                 .ToList();
         }
-        var rows = await ReadEntityAsync(true, row.ID, "AFFECTATION", conn, null, ct);
+        var rows = await ReadEntityAsync(true, row.Id, "AFFECTATION", conn, null, ct);
         var result = new List<ExternalAffectation>();
         foreach (var r in rows)
         {
@@ -125,17 +125,17 @@ public sealed class ExternalSourceService : IExternalSourceService
         return result;
     }
 
-    public async Task<IReadOnlyList<ExternalDepartment>> GetDepartmentsAsync(T_BDD_SAGE row, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ExternalDepartment>> GetDepartmentsAsync(BddSage row, CancellationToken ct = default)
     {
         var conn = BuildSage(row);
-        if (!IsAutre(row.TYPE_BASE))
+        if (!IsAutre(row.TypeBase))
         {
             using var sage = _sageFactory.Create(conn);
             return sage.Departments.ToList()
                 .Select(d => new ExternalDepartment(d.Code, d.Intitule))
                 .ToList();
         }
-        var rows = await ReadEntityAsync(true, row.ID, "DEPARTMENT", conn, null, ct);
+        var rows = await ReadEntityAsync(true, row.Id, "DEPARTMENT", conn, null, ct);
         var result = new List<ExternalDepartment>();
         foreach (var r in rows)
         {
@@ -146,10 +146,10 @@ public sealed class ExternalSourceService : IExternalSourceService
         return result;
     }
 
-    public async Task<IReadOnlyList<ExternalHoliday>> GetCompanyCalendarAsync(T_BDD_SAGE row, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ExternalHoliday>> GetCompanyCalendarAsync(BddSage row, CancellationToken ct = default)
     {
         var conn = BuildSage(row);
-        if (!IsAutre(row.TYPE_BASE))
+        if (!IsAutre(row.TypeBase))
         {
             using var sage = _sageFactory.Create(conn);
             return sage.CompanyCalendar.ToList()
@@ -157,7 +157,7 @@ public sealed class ExternalSourceService : IExternalSourceService
                 .Select(c => new ExternalHoliday(c.PeriodeDebut!.Value.Date))
                 .ToList();
         }
-        var rows = await ReadEntityAsync(true, row.ID, "COMPANY_CALENDAR", conn, null, ct);
+        var rows = await ReadEntityAsync(true, row.Id, "COMPANY_CALENDAR", conn, null, ct);
         var result = new List<ExternalHoliday>();
         foreach (var r in rows)
         {
@@ -169,38 +169,38 @@ public sealed class ExternalSourceService : IExternalSourceService
         return result;
     }
 
-    public async Task<IReadOnlyList<ExternalConstant>> GetConstantsAsync(T_BDD_SAGE row, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ExternalConstant>> GetConstantsAsync(BddSage row, CancellationToken ct = default)
     {
         var conn = BuildSage(row);
-        if (!IsAutre(row.TYPE_BASE))
+        if (!IsAutre(row.TypeBase))
         {
             using var sage = _sageFactory.Create(conn);
             return sage.Constants.ToList()
                 .Select(c => new ExternalConstant(c.CodeConstante, c.CodeOperande1, c.Intitule))
                 .ToList();
         }
-        var rows = await ReadEntityAsync(true, row.ID, "CONSTANT", conn, null, ct);
+        var rows = await ReadEntityAsync(true, row.Id, "CONSTANT", conn, null, ct);
         return rows.Select(r => new ExternalConstant(r["SAGE_CST_CODE"], ParseShort(r["SAGE_CST_OPERANDE"]), r["SAGE_CST_LABEL"])).ToList();
     }
 
-    public async Task<IReadOnlyList<ExternalEvent>> GetEventsAsync(T_BDD_SAGE row, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ExternalEvent>> GetEventsAsync(BddSage row, CancellationToken ct = default)
     {
         var conn = BuildSage(row);
-        if (!IsAutre(row.TYPE_BASE))
+        if (!IsAutre(row.TypeBase))
         {
             using var sage = _sageFactory.Create(conn);
             return sage.Events.ToList()
                 .Select(e => new ExternalEvent(e.CodeNE, e.Intitule))
                 .ToList();
         }
-        var rows = await ReadEntityAsync(true, row.ID, "ABSENCE_EVENT", conn, null, ct);
+        var rows = await ReadEntityAsync(true, row.Id, "ABSENCE_EVENT", conn, null, ct);
         return rows.Select(r => new ExternalEvent(r["SAGE_EVT_CODE"], r["SAGE_EVT_LABEL"])).ToList();
     }
 
-    public async Task<IReadOnlyList<ExternalEmployeeEvent>> GetEmployeeEventsAsync(T_BDD_SAGE row, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ExternalEmployeeEvent>> GetEmployeeEventsAsync(BddSage row, CancellationToken ct = default)
     {
         var conn = BuildSage(row);
-        if (!IsAutre(row.TYPE_BASE))
+        if (!IsAutre(row.TypeBase))
         {
             using var sage = _sageFactory.Create(conn);
             return sage.EmployeeEvents.ToList()
@@ -213,7 +213,7 @@ public sealed class ExternalSourceService : IExternalSourceService
                     e.ApresMidi.HasValue ? e.ApresMidi.Value != 0 : null))
                 .ToList();
         }
-        var rows = await ReadEntityAsync(true, row.ID, "EMPLOYEE_EVENT", conn, null, ct);
+        var rows = await ReadEntityAsync(true, row.Id, "EMPLOYEE_EVENT", conn, null, ct);
         var result = new List<ExternalEmployeeEvent>();
         foreach (var r in rows)
         {
@@ -224,17 +224,17 @@ public sealed class ExternalSourceService : IExternalSourceService
         return result;
     }
 
-    public async Task<IReadOnlyList<ExternalPunchUser>> GetPunchUsersAsync(T_BDD_POINTEUSE row, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ExternalPunchUser>> GetPunchUsersAsync(BddPointeuse row, CancellationToken ct = default)
     {
         var conn = BuildPointeuse(row);
-        if (!IsAutre(row.TYPE_BASE))
+        if (!IsAutre(row.TypeBase))
         {
             using var pte = _pointeuseFactory.Create(conn);
             return pte.Users.ToList()
-                .Select(u => new ExternalPunchUser(u.USERID, u.BADGENUMBER, u.SSN, u.NAME))
+                .Select(u => new ExternalPunchUser(u.UserId, u.BadgeNumber, u.Ssn, u.Name))
                 .ToList();
         }
-        var rows = await ReadEntityAsync(false, row.ID, "PUNCH_USER", conn, null, ct);
+        var rows = await ReadEntityAsync(false, row.Id, "PUNCH_USER", conn, null, ct);
         var result = new List<ExternalPunchUser>();
         foreach (var r in rows)
         {
@@ -245,22 +245,22 @@ public sealed class ExternalSourceService : IExternalSourceService
         return result;
     }
 
-    public async Task<IReadOnlyList<ExternalPunch>> GetPunchesAsync(T_BDD_POINTEUSE row, DateTime from, DateTime to, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ExternalPunch>> GetPunchesAsync(BddPointeuse row, DateTime from, DateTime to, CancellationToken ct = default)
     {
         var conn = BuildPointeuse(row);
-        if (!IsAutre(row.TYPE_BASE))
+        if (!IsAutre(row.TypeBase))
         {
             using var pte = _pointeuseFactory.Create(conn);
             // Le filtre de date doit rester cote SQL : charger CHECKINOUT en entier puis filtrer en
             // memoire fait expirer le delai de commande des que la table est volumineuse.
             var punches = pte.CheckInOut
-                .Where(c => c.CHECKTIME >= from && c.CHECKTIME < to)
+                .Where(c => c.CheckTime >= from && c.CheckTime < to)
                 .ToList();
             return punches
-                .Select(c => new ExternalPunch(c.USERID, c.CHECKTIME, c.CHECKTYPE))
+                .Select(c => new ExternalPunch(c.UserId, c.CheckTime, c.CheckType))
                 .ToList();
         }
-        var (table, map) = await LoadRoleMapAsync(false, row.ID, "PUNCH", ct);
+        var (table, map) = await LoadRoleMapAsync(false, row.Id, "PUNCH", ct);
         if (string.IsNullOrWhiteSpace(table))
             throw new DomainException("Table source non définie pour l'entité 'PUNCH'.");
         var dateColumn = map.TryGetValue("PTE_PUNCH_DATETIME", out var dc) ? dc : null;
