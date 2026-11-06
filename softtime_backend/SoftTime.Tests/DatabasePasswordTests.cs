@@ -39,10 +39,10 @@ public class DatabasePasswordTests
         _uow.GetRepo<BddPointeuse>().Items.Add(new BddPointeuse { Id = 8, NomBd = "PTG", Serveur = "srv", TLogin = "sa", TMdp = Stored, TypeAuth = true });
     }
 
-    private CatalogService Catalog(decimal userId, decimal roleId, params int[] rights)
+    private CatalogServices Catalog(decimal userId, decimal roleId, params int[] rights)
         => new(_uow, _mapper, null!, null!, _discovery, new DatabaseConfigurationAuthorizer(new FakeUser(userId, roleId, rights), _auth), SoftTime.Tests.Http.TestRights.Service(_uow));
 
-    private CatalogService Admin() => Catalog(1, 1);
+    private CatalogServices Admin() => Catalog(1, 1);
 
     [Fact]
     public void Mapped_dto_has_no_password_and_serializes_without_it()
@@ -80,30 +80,30 @@ public class DatabasePasswordTests
     [Fact]
     public async Task Save_without_password_keeps_the_stored_one()
     {
-        var result = await Admin().SaveSageAsync(new SageDbDto(7, "srv", "sa", null, true, "BASE1"));
+        var result = await Admin().Sage.SaveSageAsync(new SageDbDto(7, "srv", "sa", null, true, "BASE1"));
         Assert.Equal(Stored, _uow.GetRepo<BddSage>().Items[0].TMdp);
         Assert.True(result.PasswordDefined);
         Assert.Null(result.Password);
 
-        await Admin().SavePointeuseAsync(new PointeuseDbDto(8, "srv", "sa", "", true, "PTG", null, false));
+        await Admin().Pointeuse.SavePointeuseAsync(new PointeuseDbDto(8, "srv", "sa", "", true, "PTG", null, false));
         Assert.Equal(Stored, _uow.GetRepo<BddPointeuse>().Items[0].TMdp);
     }
 
     [Fact]
     public async Task Save_with_password_replaces_the_stored_one()
     {
-        var result = await Admin().SaveSageAsync(new SageDbDto(7, "srv", "sa", Typed, true, "BASE1"));
+        var result = await Admin().Sage.SaveSageAsync(new SageDbDto(7, "srv", "sa", Typed, true, "BASE1"));
         Assert.Equal(Typed, _uow.GetRepo<BddSage>().Items[0].TMdp);
         Assert.Null(result.Password);
 
-        await Admin().SavePointeuseAsync(new PointeuseDbDto(8, "srv", "sa", Typed, true, "PTG", null, false));
+        await Admin().Pointeuse.SavePointeuseAsync(new PointeuseDbDto(8, "srv", "sa", Typed, true, "PTG", null, false));
         Assert.Equal(Typed, _uow.GetRepo<BddPointeuse>().Items[0].TMdp);
     }
 
     [Fact]
     public async Task Create_stores_the_password_and_does_not_return_it()
     {
-        var result = await Admin().SaveSageAsync(new SageDbDto(0, "srv2", "sa", Typed, true, "NOUVELLE"));
+        var result = await Admin().Sage.SaveSageAsync(new SageDbDto(0, "srv2", "sa", Typed, true, "NOUVELLE"));
         Assert.Equal(Typed, _uow.GetRepo<BddSage>().Items.Single(s => s.NomBd == "NOUVELLE").TMdp);
         Assert.True(result.PasswordDefined);
         Assert.Null(result.Password);
@@ -112,24 +112,24 @@ public class DatabasePasswordTests
     [Fact]
     public async Task Connection_test_of_an_existing_base_uses_the_stored_password()
     {
-        await Admin().TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "sa", null, "BASE1", "STANDARD", null, 7));
+        await Admin().Sage.TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "sa", null, "BASE1", "STANDARD", null, 7));
         Assert.Equal(Stored, _discovery.LastPassword);
 
-        await Admin().TestPointeuseConnectionAsync(new TestPointeuseConnectionDto("srv", true, "sa", "", "PTG", "STANDARD", null, 8));
+        await Admin().Pointeuse.TestPointeuseConnectionAsync(new TestPointeuseConnectionDto("srv", true, "sa", "", "PTG", "STANDARD", null, 8));
         Assert.Equal(Stored, _discovery.LastPassword);
     }
 
     [Fact]
     public async Task Connection_test_prefers_a_typed_password()
     {
-        await Admin().TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "sa", Typed, "BASE1", "STANDARD", null, 7));
+        await Admin().Sage.TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "sa", Typed, "BASE1", "STANDARD", null, 7));
         Assert.Equal(Typed, _discovery.LastPassword);
     }
 
     [Fact]
     public async Task Connection_test_of_a_new_base_without_password_sends_none()
     {
-        await Admin().TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "sa", null, "BASE1", "STANDARD", null, null));
+        await Admin().Sage.TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "sa", null, "BASE1", "STANDARD", null, null));
         Assert.Null(_discovery.LastPassword);
     }
 
@@ -137,20 +137,20 @@ public class DatabasePasswordTests
     public async Task Stored_password_is_never_sent_to_another_server_or_login()
     {
         await Assert.ThrowsAsync<DomainException>(() =>
-            Admin().TestSageConnectionAsync(new TestSageConnectionDto("autre-serveur", true, "sa", null, "BASE1", "STANDARD", null, 7)));
+            Admin().Sage.TestSageConnectionAsync(new TestSageConnectionDto("autre-serveur", true, "sa", null, "BASE1", "STANDARD", null, 7)));
         await Assert.ThrowsAsync<DomainException>(() =>
-            Admin().TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "autre-login", null, "BASE1", "STANDARD", null, 7)));
+            Admin().Sage.TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "autre-login", null, "BASE1", "STANDARD", null, 7)));
         Assert.Null(_discovery.LastPassword);
     }
 
     [Fact]
     public async Task Discovery_of_an_existing_base_uses_the_stored_password()
     {
-        await Admin().DiscoverTablesAsync(new DiscoverTablesDto("srv", "BASE1", true, "sa", null, 7, "SAGE"));
+        await Admin().Discovery.DiscoverTablesAsync(new DiscoverTablesDto("srv", "BASE1", true, "sa", null, 7, "SAGE"));
         Assert.Equal(Stored, _discovery.LastPassword);
-        await Admin().DiscoverColumnsAsync(new DiscoverColumnsDto("srv", "PTG", "T", true, "sa", "", 8, "POINTEUSE"));
+        await Admin().Discovery.DiscoverColumnsAsync(new DiscoverColumnsDto("srv", "PTG", "T", true, "sa", "", 8, "POINTEUSE"));
         Assert.Equal(Stored, _discovery.LastPassword);
-        await Admin().DiscoverDatabasesAsync(new DiscoverDatabasesDto("srv", true, "sa", null, 7, "SAGE"));
+        await Admin().Discovery.DiscoverDatabasesAsync(new DiscoverDatabasesDto("srv", true, "sa", null, 7, "SAGE"));
         Assert.Equal(Stored, _discovery.LastPassword);
     }
 
@@ -161,11 +161,11 @@ public class DatabasePasswordTests
         _uow.GetRepo<UserPermission>().Items.Add(new UserPermission { IdResponsable = 2, PermissionCode = "SAGE:BASE1:READ", IsGranted = true });
         var svc = Catalog(2, 5, Rights.Databases);
         await Assert.ThrowsAsync<ForbiddenException>(() =>
-            svc.TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "sa", null, "BASE1", "STANDARD", null, 7)));
+            svc.Sage.TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "sa", null, "BASE1", "STANDARD", null, 7)));
         Assert.Null(_discovery.LastPassword);
 
         _uow.GetRepo<UserPermission>().Items.Add(new UserPermission { IdResponsable = 2, PermissionCode = "SAGE:BASE1:UPDATE", IsGranted = true });
-        await svc.TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "sa", null, "BASE1", "STANDARD", null, 7));
+        await svc.Sage.TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "sa", null, "BASE1", "STANDARD", null, 7));
         Assert.Equal(Stored, _discovery.LastPassword);
     }
 

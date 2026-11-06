@@ -11,8 +11,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("FieldRoles")]
 public class FieldRolesController : ControllerBase
 {
-    private readonly ICatalogService _svc;
-    public FieldRolesController(ICatalogService svc) => _svc = svc;
+    private readonly IFieldRoleService _svc;
+    public FieldRolesController(IFieldRoleService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] string? systemType, CancellationToken ct)

@@ -14,8 +14,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("ClockParams")]
 public class ClockParamsController : ControllerBase
 {
-    private readonly ICatalogService _svc;
-    public ClockParamsController(ICatalogService svc) => _svc = svc;
+    private readonly IClockParameterService _svc;
+    public ClockParamsController(IClockParameterService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> Get(CancellationToken ct) => Ok(await _svc.GetClockAsync(ct));

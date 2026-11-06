@@ -15,10 +15,10 @@ public class StandardPayrollWriter : IPayrollWriter
     private readonly ISagePayrollWriter _sageWriter;
     private readonly ISageContextFactory _sageFactory;
     private readonly ITenantConnectionService _tenant;
-    private readonly ICatalogService _catalog;
+    private readonly ICodeConstanteService _catalog;
     private readonly IAuditTrail _auditTrail;
 
-    public StandardPayrollWriter(ISagePayrollWriter sageWriter, ISageContextFactory sageFactory, ITenantConnectionService tenant, ICatalogService catalog, IAuditTrail auditTrail)
+    public StandardPayrollWriter(ISagePayrollWriter sageWriter, ISageContextFactory sageFactory, ITenantConnectionService tenant, ICodeConstanteService catalog, IAuditTrail auditTrail)
     {
         _sageWriter = sageWriter;
         _sageFactory = sageFactory;

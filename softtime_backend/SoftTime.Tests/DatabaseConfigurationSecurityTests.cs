@@ -160,7 +160,7 @@ public class DatabaseConfigurationSecurityTests
 
     #region CatalogService : refus avant toute écriture
 
-    private CatalogService CatalogFor(DatabaseConfigurationAuthorizer authorizer)
+    private CatalogServices CatalogFor(DatabaseConfigurationAuthorizer authorizer)
         => new(_uow, _mapper, null!, null!, null!, authorizer, SoftTime.Tests.Http.TestRights.Service(_uow));
 
     [Fact]
@@ -168,7 +168,7 @@ public class DatabaseConfigurationSecurityTests
     {
         var svc = CatalogFor(AuthorizerFor(30, 5, Rights.Databases));
         GrantUser(30, $"SAGE:{Base}:READ");
-        await Refused(() => svc.DeleteSageAsync(7));
+        await Refused(() => svc.Sage.DeleteSageAsync(7));
         Assert.Single(_uow.GetRepo<BddSage>().Items);
     }
 
@@ -178,7 +178,7 @@ public class DatabaseConfigurationSecurityTests
         _uow.GetRepo<BddSage>().Items.Add(new BddSage { Id = 9, NomBd = "", Serveur = "srv" });
         GrantUser(31, "SAGE:CREATE", "SAGE::DELETE");
         var svc = CatalogFor(AuthorizerFor(31, 5, Rights.Databases));
-        await Refused(() => svc.DeleteSageAsync(9));
+        await Refused(() => svc.Sage.DeleteSageAsync(9));
         Assert.Equal(2, _uow.GetRepo<BddSage>().Items.Count);
     }
 
@@ -187,8 +187,8 @@ public class DatabaseConfigurationSecurityTests
     {
         var svc = CatalogFor(AuthorizerFor(32, 5, Rights.Reports));
         var dto = new SageDbDto(0, "srv", null, null, true, "NOUVELLE");
-        await Refused(() => svc.SaveSageAsync(dto));
-        await Refused(() => svc.SaveSageAsync(dto with { Id = 7 }));
+        await Refused(() => svc.Sage.SaveSageAsync(dto));
+        await Refused(() => svc.Sage.SaveSageAsync(dto with { Id = 7 }));
         Assert.Single(_uow.GetRepo<BddSage>().Items);
     }
 
@@ -196,8 +196,8 @@ public class DatabaseConfigurationSecurityTests
     public async Task CatalogService_Pointeuse_SaveAndDelete_RefusedWithoutPermission()
     {
         var svc = CatalogFor(AuthorizerFor(33, 5, Rights.Reports));
-        await Refused(() => svc.DeletePointeuseAsync(8));
-        await Refused(() => svc.SavePointeuseAsync(new PointeuseDbDto(0, "srv", null, null, true, "NEW", null, false)));
+        await Refused(() => svc.Pointeuse.DeletePointeuseAsync(8));
+        await Refused(() => svc.Pointeuse.SavePointeuseAsync(new PointeuseDbDto(0, "srv", null, null, true, "NEW", null, false)));
         Assert.Single(_uow.GetRepo<BddPointeuse>().Items);
     }
 

@@ -14,8 +14,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("Holidays")]
 public class HolidaysController : ControllerBase
 {
-    private readonly ICatalogService _svc;
-    public HolidaysController(ICatalogService svc) => _svc = svc;
+    private readonly IHolidayService _svc;
+    public HolidaysController(IHolidayService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListHolidaysAsync(ct));

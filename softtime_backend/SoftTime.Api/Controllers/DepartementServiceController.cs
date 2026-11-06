@@ -13,8 +13,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("DepartementService")]
 public class DepartementServiceController : ControllerBase
 {
-    private readonly ICatalogService _svc;
-    public DepartementServiceController(ICatalogService svc) => _svc = svc;
+    private readonly IDepartementServiceLookup _svc;
+    public DepartementServiceController(IDepartementServiceLookup svc) => _svc = svc;
 
     [HttpGet("lookup/{matricule}")]
     public async Task<IActionResult> Lookup(string matricule, CancellationToken ct)

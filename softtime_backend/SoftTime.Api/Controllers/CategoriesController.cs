@@ -14,8 +14,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("Categories")]
 public class CategoriesController : ControllerBase
 {
-    private readonly ICatalogService _svc;
-    public CategoriesController(ICatalogService svc) => _svc = svc;
+    private readonly ICategoryService _svc;
+    public CategoriesController(ICategoryService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListCategoriesAsync(ct));

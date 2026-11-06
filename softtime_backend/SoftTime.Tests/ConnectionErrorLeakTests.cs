@@ -28,11 +28,11 @@ public class ConnectionErrorLeakTests
 
     private readonly InMemoryUnitOfWork _uow = new();
 
-    private CatalogService Catalog()
+    private CatalogServices Catalog()
     {
         var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
         var auth = new AuthService(_uow, new Token(), mapper, new Mail(), new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<Responsable>());
-        return new CatalogService(_uow, mapper, null!, null!, new ExternalDiscoveryService(),
+        return new CatalogServices(_uow, mapper, null!, null!, new ExternalDiscoveryService(),
             new DatabaseConfigurationAuthorizer(new Admin(), auth), SoftTime.Tests.Http.TestRights.Service(_uow));
     }
 
@@ -67,11 +67,11 @@ public class ConnectionErrorLeakTests
         }
 
         var results = await Task.WhenAll(
-            Msg("test sage", () => svc.TestSageConnectionAsync(new TestSageConnectionDto(Host, true, FakeLogin, FakePassword, "BASE", "STANDARD"), ct)),
-            Msg("test pointeuse", () => svc.TestPointeuseConnectionAsync(new TestPointeuseConnectionDto(Host, true, FakeLogin, FakePassword, "BASE", "STANDARD"), ct)),
-            Thrown("découverte bases", () => svc.DiscoverDatabasesAsync(new DiscoverDatabasesDto(Host, true, FakeLogin, FakePassword), ct)),
-            Thrown("découverte tables", () => svc.DiscoverTablesAsync(new DiscoverTablesDto(Host, "BASE", true, FakeLogin, FakePassword), ct)),
-            Thrown("découverte colonnes", () => svc.DiscoverColumnsAsync(new DiscoverColumnsDto(Host, "BASE", "T", true, FakeLogin, FakePassword), ct)));
+            Msg("test sage", () => svc.Sage.TestSageConnectionAsync(new TestSageConnectionDto(Host, true, FakeLogin, FakePassword, "BASE", "STANDARD"), ct)),
+            Msg("test pointeuse", () => svc.Pointeuse.TestPointeuseConnectionAsync(new TestPointeuseConnectionDto(Host, true, FakeLogin, FakePassword, "BASE", "STANDARD"), ct)),
+            Thrown("découverte bases", () => svc.Discovery.DiscoverDatabasesAsync(new DiscoverDatabasesDto(Host, true, FakeLogin, FakePassword), ct)),
+            Thrown("découverte tables", () => svc.Discovery.DiscoverTablesAsync(new DiscoverTablesDto(Host, "BASE", true, FakeLogin, FakePassword), ct)),
+            Thrown("découverte colonnes", () => svc.Discovery.DiscoverColumnsAsync(new DiscoverColumnsDto(Host, "BASE", "T", true, FakeLogin, FakePassword), ct)));
 
         foreach (var (name, text) in results)
         {

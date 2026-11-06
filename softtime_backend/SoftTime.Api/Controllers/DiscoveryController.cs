@@ -13,9 +13,9 @@ namespace SoftTime.Api.Controllers;
 [Tags("Discovery")]
 public class DiscoveryController : ControllerBase
 {
-    private readonly ICatalogService _svc;
+    private readonly IDiscoveryService _svc;
     private readonly IDatabaseConfigurationAuthorizer _configAuth;
-    public DiscoveryController(ICatalogService svc, IDatabaseConfigurationAuthorizer configAuth)
+    public DiscoveryController(IDiscoveryService svc, IDatabaseConfigurationAuthorizer configAuth)
     {
         _svc = svc;
         _configAuth = configAuth;

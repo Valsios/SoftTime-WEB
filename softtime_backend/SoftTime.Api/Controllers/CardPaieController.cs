@@ -13,8 +13,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("CardPaie")]
 public class CardPaieController : ControllerBase
 {
-    private readonly ICatalogService _svc;
-    public CardPaieController(ICatalogService svc) => _svc = svc;
+    private readonly ICardPaieService _svc;
+    public CardPaieController(ICardPaieService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListCardsAsync(ct));

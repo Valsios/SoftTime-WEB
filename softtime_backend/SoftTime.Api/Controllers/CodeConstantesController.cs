@@ -14,8 +14,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("CodeConstantes")]
 public class CodeConstantesController : ControllerBase
 {
-    private readonly ICatalogService _svc;
-    public CodeConstantesController(ICatalogService svc) => _svc = svc;
+    private readonly ICodeConstanteService _svc;
+    public CodeConstantesController(ICodeConstanteService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListCodeConstantesAsync(ct));

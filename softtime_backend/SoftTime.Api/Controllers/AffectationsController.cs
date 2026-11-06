@@ -15,8 +15,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("Affectations")]
 public class AffectationsController : ControllerBase
 {
-    private readonly ICatalogService _svc;
-    public AffectationsController(ICatalogService svc) => _svc = svc;
+    private readonly IAffectationService _svc;
+    public AffectationsController(IAffectationService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] int? categoryId, CancellationToken ct)

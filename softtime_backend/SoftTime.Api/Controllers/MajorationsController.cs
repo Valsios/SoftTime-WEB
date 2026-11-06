@@ -14,8 +14,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("Majorations")]
 public class MajorationsController : ControllerBase
 {
-    private readonly ICatalogService _svc;
-    public MajorationsController(ICatalogService svc) => _svc = svc;
+    private readonly IMajorationService _svc;
+    public MajorationsController(IMajorationService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListMajorationsAsync(ct));

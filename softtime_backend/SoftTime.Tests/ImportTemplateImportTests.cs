@@ -30,7 +30,7 @@ public class ImportTemplateImportTests
         public InMemoryUnitOfWork Uow { get; } = new();
         public TimekeepingService Timekeeping { get; }
         public PlanningService Planning { get; }
-        public CatalogService Catalog { get; }
+        public CatalogServices Catalog { get; }
 
         public Contexte()
         {
@@ -75,7 +75,7 @@ public class ImportTemplateImportTests
             Planning = new PlanningService(Uow, tenant, new FakePlanningStatisticsReader());
             // La découverte de bases n'est pas utilisée par les imports testés ici.
             var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
-            Catalog = new CatalogService(Uow, mapper, tenant, external, null!, null!, SoftTime.Tests.Http.TestRights.Service(Uow));
+            Catalog = new CatalogServices(Uow, mapper, tenant, external, null!, null!, SoftTime.Tests.Http.TestRights.Service(Uow));
         }
 
         public List<Pointage> Pointages => Uow.Get<Pointage>().Items;
@@ -207,7 +207,7 @@ public class ImportTemplateImportTests
         var contexte = new Contexte();
         var rows = LireXlsx("affectations", out _);
 
-        var resultat = await contexte.Catalog.ImportAffectationsExcelAsync(rows);
+        var resultat = await contexte.Catalog.Affectations.ImportAffectationsExcelAsync(rows);
 
         Assert.Equal(1, resultat.Imported);
         Assert.Equal(0, resultat.Skipped);
@@ -220,7 +220,7 @@ public class ImportTemplateImportTests
         var contexte = new Contexte();
         var lignes = LireCsv("correspondences");
 
-        var resultat = await contexte.Catalog.ImportCorrespondencesCsvAsync(lignes);
+        var resultat = await contexte.Catalog.Cards.ImportCorrespondencesCsvAsync(lignes);
 
         // La ligne d'en-tête est reconnue et ignorée : elle n'est pas comptée comme ligne ignorée.
         Assert.Equal(2, resultat.Imported);

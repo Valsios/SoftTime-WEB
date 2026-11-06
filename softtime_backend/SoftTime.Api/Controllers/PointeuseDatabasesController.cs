@@ -14,12 +14,12 @@ namespace SoftTime.Api.Controllers;
 [Tags("PointeuseDatabases")]
 public class PointeuseDatabasesController : ControllerBase
 {
-    private readonly ICatalogService _svc;
+    private readonly IPointeuseDatabaseService _svc;
     private readonly IAuthService _auth;
     private readonly ICurrentUser _user;
     private readonly IDatabaseConfigurationAuthorizer _configAuth;
 
-    public PointeuseDatabasesController(ICatalogService svc, IAuthService auth, ICurrentUser user, IDatabaseConfigurationAuthorizer configAuth)
+    public PointeuseDatabasesController(IPointeuseDatabaseService svc, IAuthService auth, ICurrentUser user, IDatabaseConfigurationAuthorizer configAuth)
     {
         _svc = svc;
         _auth = auth;

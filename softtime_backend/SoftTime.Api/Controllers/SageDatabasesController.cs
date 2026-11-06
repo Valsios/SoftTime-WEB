@@ -14,14 +14,21 @@ namespace SoftTime.Api.Controllers;
 [Tags("SageDatabases")]
 public class SageDatabasesController : ControllerBase
 {
-    private readonly ICatalogService _svc;
+    private readonly ISageDatabaseService _svc;
+    private readonly IDepartementServiceLookup _departements;
     private readonly IAuthService _auth;
     private readonly ICurrentUser _user;
     private readonly IDatabaseConfigurationAuthorizer _configAuth;
 
-    public SageDatabasesController(ICatalogService svc, IAuthService auth, ICurrentUser user, IDatabaseConfigurationAuthorizer configAuth)
+    public SageDatabasesController(
+        ISageDatabaseService svc,
+        IDepartementServiceLookup departements,
+        IAuthService auth,
+        ICurrentUser user,
+        IDatabaseConfigurationAuthorizer configAuth)
     {
         _svc = svc;
+        _departements = departements;
         _auth = auth;
         _user = user;
         _configAuth = configAuth;
@@ -88,11 +95,11 @@ public class SageDatabasesController : ControllerBase
 
     [HttpGet("lookup/{matricule}")]
     public async Task<IActionResult> Lookup(string matricule, CancellationToken ct)
-        => Ok(await _svc.GetDepartementServiceAsync(matricule, ct));
+        => Ok(await _departements.GetDepartementServiceAsync(matricule, ct));
 
     [HttpPost("lookup-batch")]
     public async Task<IActionResult> LookupBatch([FromBody] string[] matricules, CancellationToken ct)
-        => Ok(await _svc.GetDepartementServiceBatchAsync(matricules ?? Array.Empty<string>(), ct));
+        => Ok(await _departements.GetDepartementServiceBatchAsync(matricules ?? Array.Empty<string>(), ct));
 
     [HttpGet("departement-service-options")]
     public async Task<IActionResult> DepartementServiceOptions(CancellationToken ct)

@@ -14,8 +14,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("CorrespondenceMode")]
 public class CorrespondenceModeController : ControllerBase
 {
-    private readonly ICatalogService _svc;
-    public CorrespondenceModeController(ICatalogService svc) => _svc = svc;
+    private readonly ICorrespondenceModeService _svc;
+    public CorrespondenceModeController(ICorrespondenceModeService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> Get(CancellationToken ct) => Ok(await _svc.GetCorrespondenceAsync(ct));

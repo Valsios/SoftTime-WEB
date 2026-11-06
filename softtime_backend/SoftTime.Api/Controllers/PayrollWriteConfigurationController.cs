@@ -14,8 +14,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("PayrollWriteConfiguration")]
 public class PayrollWriteConfigurationController : ControllerBase
 {
-    private readonly ICatalogService _svc;
-    public PayrollWriteConfigurationController(ICatalogService svc) => _svc = svc;
+    private readonly IPayrollWriteConfigurationService _svc;
+    public PayrollWriteConfigurationController(IPayrollWriteConfigurationService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListPayrollWriteConfigurationsAsync(ct));

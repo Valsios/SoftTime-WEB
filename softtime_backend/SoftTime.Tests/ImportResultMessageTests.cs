@@ -19,7 +19,7 @@ public class ImportResultMessageTests
         public InMemoryUnitOfWork Uow { get; } = new();
         public TimekeepingService Timekeeping { get; }
         public PlanningService Planning { get; }
-        public CatalogService Catalog { get; }
+        public CatalogServices Catalog { get; }
 
         public Contexte()
         {
@@ -63,7 +63,7 @@ public class ImportResultMessageTests
             Timekeeping = new TimekeepingService(Uow, tenant, external, new HistoryArchiveService(Uow, tenant));
             Planning = new PlanningService(Uow, tenant, new FakePlanningStatisticsReader());
             var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
-            Catalog = new CatalogService(Uow, mapper, tenant, external, null!, null!, SoftTime.Tests.Http.TestRights.Service(Uow));
+            Catalog = new CatalogServices(Uow, mapper, tenant, external, null!, null!, SoftTime.Tests.Http.TestRights.Service(Uow));
         }
     }
 
@@ -78,7 +78,7 @@ public class ImportResultMessageTests
             new() { ["Categorie"] = "Sédentaire", ["Matricule"] = "9999" }
         };
 
-        var resultat = await contexte.Catalog.ImportAffectationsExcelAsync(rows);
+        var resultat = await contexte.Catalog.Affectations.ImportAffectationsExcelAsync(rows);
 
         Assert.Equal(1, resultat.Imported);
         Assert.Equal(2, resultat.Skipped);
@@ -97,7 +97,7 @@ public class ImportResultMessageTests
             new[] { "00123", "04285" }
         };
 
-        var resultat = await contexte.Catalog.ImportCorrespondencesCsvAsync(lignes);
+        var resultat = await contexte.Catalog.Cards.ImportCorrespondencesCsvAsync(lignes);
 
         Assert.Equal(1, resultat.Imported);
         Assert.Equal(0, resultat.Skipped);

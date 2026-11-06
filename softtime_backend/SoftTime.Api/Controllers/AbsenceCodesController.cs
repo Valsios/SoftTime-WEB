@@ -14,8 +14,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("AbsenceCodes")]
 public class AbsenceCodesController : ControllerBase
 {
-    private readonly ICatalogService _svc;
-    public AbsenceCodesController(ICatalogService svc) => _svc = svc;
+    private readonly IAbsenceCodeService _svc;
+    public AbsenceCodesController(IAbsenceCodeService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListAbsenceCodesAsync(ct));
