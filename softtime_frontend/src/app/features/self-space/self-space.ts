@@ -14,6 +14,7 @@ import {
   minutesText,
   monthOptions,
   SCOPE_NOTE,
+  STRADDLE_NOTE,
   timeText,
 } from './self-space.logic';
 import { describeSelfError, SelfErrorNotice, strongestNotice } from './self-space.errors';
@@ -129,6 +130,9 @@ const loading = <T>(): CardState<T> => ({ status: 'loading', data: null });
         }
       </section>
     </soft-card>
+    @if (weeks().data?.semaines?.length) {
+      <p class="self-note">{{ straddleNote }}</p>
+    }
 
     <soft-card variant="bordered" padding="sm">
       <section aria-labelledby="self-anomalies" [attr.aria-busy]="anomalies().status === 'loading'">
@@ -223,6 +227,7 @@ const loading = <T>(): CardState<T> => ({ status: 'loading', data: null });
       .self-month { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text-secondary); }
       .self-title { margin: 0; padding: 8px 8px 4px; font-family: var(--font-heading); font-size: 16px; color: var(--app-text-strong); }
       .self-subtitle { margin: 16px 8px 4px; font-size: 14px; color: var(--app-text-strong); }
+      .self-note { margin: -8px 0 0; padding: 0 8px; font-size: 12.5px; color: var(--text-secondary); }
       .self-muted { margin: 0; padding: 8px; font-size: 13.5px; color: var(--text-secondary); }
       .self-list { margin: 0; padding: 4px 8px 8px 28px; display: grid; gap: 6px; font-size: 14px; color: var(--app-text); }
       .self-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
@@ -247,6 +252,7 @@ export class SelfSpacePage implements OnInit, OnDestroy {
   readonly showCards = computed(() => !this.notice()?.masksCards);
 
   readonly scopeNote = SCOPE_NOTE;
+  readonly straddleNote = STRADDLE_NOTE;
   readonly loadingText = LOADING;
   readonly errorText = CARD_ERROR;
   readonly emptyWeeks = EMPTY_WEEKS;
