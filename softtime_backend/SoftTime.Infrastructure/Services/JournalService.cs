@@ -42,7 +42,7 @@ public class JournalService : IJournalService
         var page = query.Page is null or < 1 ? 1 : query.Page.Value;
         var pageSize = query.PageSize is null or < 1 ? DefaultPageSize : Math.Min(query.PageSize.Value, MaxPageSize);
         var repo = _uow.Repository<suivi_JOURNAL>();
-        var filtered = repo.Query().Where(Filter(query));
+        var filtered = repo.QueryReadOnly().Where(Filter(query));
 
         var total = await repo.CountAsync(filtered, ct);
         var offset = (long)(page - 1) * pageSize;
@@ -62,7 +62,7 @@ public class JournalService : IJournalService
         await EnsureCanReadAsync(ct);
 
         var repo = _uow.Repository<suivi_JOURNAL>();
-        var row = (await repo.ToListAsync(repo.Query().Where(e => e.Id == id).Take(1), ct)).FirstOrDefault()
+        var row = (await repo.ToListAsync(repo.QueryReadOnly().Where(e => e.Id == id).Take(1), ct)).FirstOrDefault()
                   ?? throw new NotFoundException("Ligne de journal introuvable.");
         return ToDto(row);
     }
@@ -72,7 +72,7 @@ public class JournalService : IJournalService
         await EnsureCanReadAsync(ct);
 
         var repo = _uow.Repository<suivi_JOURNAL>();
-        var period = repo.Query().Where(Filter(new JournalQuery(From: from, To: to)));
+        var period = repo.QueryReadOnly().Where(Filter(new JournalQuery(From: from, To: to)));
         var tables = await repo.ToListAsync(period.Select(e => e.TABLES).Distinct().OrderBy(v => v).Take(MaxFacetValues), ct);
         var actions = await repo.ToListAsync(period.Select(e => e.ACTIONS).Distinct().OrderBy(v => v).Take(MaxFacetValues), ct);
         var users = await repo.ToListAsync(period.Select(e => e.USERS).Distinct().OrderBy(v => v).Take(MaxFacetValues), ct);

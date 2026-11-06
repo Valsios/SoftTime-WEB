@@ -17,7 +17,7 @@ public class AuditService : IAuditService
 
     public async Task<IReadOnlyList<AuditConfigDto>> ListConfigAsync(CancellationToken ct = default)
     {
-        var list = await _uow.Repository<suivi_TBLCLN>().ListAsync(_ => true, ct);
+        var list = await _uow.Repository<suivi_TBLCLN>().ListReadOnlyAsync(_ => true, ct);
         return list.Select(c => new AuditConfigDto(c.Id, c.TABLES, c.COLONNES, c.TYPES, c.ETATS, c.BASES)).ToList();
     }
 
@@ -136,7 +136,7 @@ public class AuditService : IAuditService
 
     public async Task<IReadOnlyList<object>> ListDiscoveredSchemaAsync(CancellationToken ct = default)
     {
-        var list = await _uow.Repository<suivi_T>().ListAsync(_ => true, ct);
+        var list = await _uow.Repository<suivi_T>().ListReadOnlyAsync(_ => true, ct);
         return list.Select(t => (object)new { t.Id, t.S_TABLES, t.S_COLONNES, t.S_TYPES, t.BASES }).ToList();
     }
 }

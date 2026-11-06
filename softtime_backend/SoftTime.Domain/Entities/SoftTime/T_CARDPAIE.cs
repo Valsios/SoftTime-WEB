@@ -1,11 +1,6 @@
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
 namespace SoftTime.Domain.Entities.SoftTime;
-[Table("T_CARDPAIE")]
 public class T_CARDPAIE
 {
-    [Key]
-    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int ID { get; set; }
     public string? SAGE_MATRICULE { get; set; }
     public string? SAGE_NOM { get; set; }

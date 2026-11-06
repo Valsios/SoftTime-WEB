@@ -1,13 +1,7 @@
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
-
 namespace SoftTime.Domain.Entities.Sage;
 
-[Table("T_GHRCAL_SOCIETE")]
 public class T_GHRCAL_SOCIETE
 {
-    [Key]
-    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int IdGHRCal { get; set; }
 
     public DateTime? PeriodeDebut { get; set; }

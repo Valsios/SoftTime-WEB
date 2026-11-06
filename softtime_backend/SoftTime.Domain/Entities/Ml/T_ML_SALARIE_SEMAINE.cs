@@ -1,6 +1,3 @@
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
-
 namespace SoftTime.Domain.Entities.Ml;
 
 /// <summary>
@@ -8,11 +5,8 @@ namespace SoftTime.Domain.Entities.Ml;
 /// <see cref="HS"/> reprend la valeur validée de <c>T_HS_VALIDER</c> quand elle existe, sinon le
 /// résultat de <c>OvertimeCalculator</c> — c'est-à-dire la définition métier des heures supplémentaires.
 /// </summary>
-[Table("SalarieSemaine", Schema = "ml")]
 public class T_ML_SALARIE_SEMAINE
 {
-    [Key]
-    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public long Id { get; set; }
 
     public string BddSage { get; set; } = string.Empty;

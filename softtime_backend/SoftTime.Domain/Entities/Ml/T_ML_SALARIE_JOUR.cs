@@ -1,6 +1,3 @@
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
-
 namespace SoftTime.Domain.Entities.Ml;
 
 /// <summary>
@@ -9,11 +6,8 @@ namespace SoftTime.Domain.Entities.Ml;
 /// qui s'est réellement produit le jour J. C'est cette table — et non les tables métier — qui
 /// sert à entraîner le modèle d'absentéisme.
 /// </summary>
-[Table("SalarieJour", Schema = "ml")]
 public class T_ML_SALARIE_JOUR
 {
-    [Key]
-    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public long Id { get; set; }
 
     public string BddSage { get; set; } = string.Empty;
@@ -21,7 +15,6 @@ public class T_ML_SALARIE_JOUR
     /// <summary>Clé canonique du matricule (<c>MatriculeIdentity.Cle</c>).</summary>
     public string Matricule { get; set; } = string.Empty;
 
-    [Column("Date")]
     public DateTime Date { get; set; }
 
     // ---------------------------------------------------------------- population / statut

@@ -24,7 +24,7 @@ public class PlanningService : IPlanningService
 
     public async Task<IReadOnlyList<ShiftDto>> ListShiftsAsync(CancellationToken ct = default)
     {
-        var list = await _uow.Repository<T_PLANNING>().ListAsync(_ => true, ct);
+        var list = await _uow.Repository<T_PLANNING>().ListReadOnlyAsync(_ => true, ct);
         return list.Select(ToShiftDto).ToList();
     }
 
@@ -85,7 +85,7 @@ public class PlanningService : IPlanningService
     public async Task<IReadOnlyList<PlanningEmployeeDto>> ListEmployeesAsync(CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var cards = await _uow.Repository<T_CARDPAIE>().ListAsync(_ => true, ct);
+        var cards = await _uow.Repository<T_CARDPAIE>().ListReadOnlyAsync(_ => true, ct);
         return cards
             .Where(c => MatchesSage(c.SAGE_BDD))
             .OrderBy(c => c.SAGE_MATRICULE)
@@ -99,10 +99,10 @@ public class PlanningService : IPlanningService
         await _tenant.EnsureAuthorizedAsync(ct);
         var fromDate = from.Date;
         var toDate = to.Date;
-        var cards = (await _uow.Repository<T_CARDPAIE>().ListAsync(_ => true, ct))
+        var cards = (await _uow.Repository<T_CARDPAIE>().ListReadOnlyAsync(_ => true, ct))
             .Where(c => MatchesSage(c.SAGE_BDD))
             .ToDictionary(c => c.ID);
-        var list = await _uow.Repository<T_PLANNING_SAL>().ListAsync(
+        var list = await _uow.Repository<T_PLANNING_SAL>().ListReadOnlyAsync(
             p => (!cardId.HasValue || p.IDSAL == cardId)
                  && p.DateP != null
                  && p.DateP >= fromDate.AddDays(-1)
@@ -137,7 +137,7 @@ public class PlanningService : IPlanningService
         var sageDb = _tenant.SageDb;
         var start = from.Date;
         var end = to.Date.AddDays(1);
-        var cards = (await _uow.Repository<T_CARDPAIE>().ListAsync(EmployeeCardPredicate(sageDb), ct))
+        var cards = (await _uow.Repository<T_CARDPAIE>().ListReadOnlyAsync(EmployeeCardPredicate(sageDb), ct))
             .ToDictionary(c => c.ID);
         var hasSearch = SearchText.Terms(search).Count > 0;
         var cardIds = hasSearch
@@ -177,7 +177,7 @@ public class PlanningService : IPlanningService
         var sageDb = _tenant.SageDb;
         var counts = (await _planningStats.CountPlannedDaysAsync(sageDb, from, to, ct))
             .ToDictionary(x => x.CardPaieId, x => x.PlannedDays);
-        var cards = await _uow.Repository<T_CARDPAIE>().ListAsync(EmployeeCardPredicate(sageDb), ct);
+        var cards = await _uow.Repository<T_CARDPAIE>().ListReadOnlyAsync(EmployeeCardPredicate(sageDb), ct);
         return cards
             .Where(c => MatchesSage(c.SAGE_BDD))
             .OrderBy(c => c.SAGE_MATRICULE)

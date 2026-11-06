@@ -360,7 +360,7 @@ public class AuthService : IAuthService
     public async Task<IReadOnlyList<UserDto>> GetUsersAsync(CancellationToken cancellationToken = default)
     {
         await EnsureCanReadAsync(ReadPermissions.UserList, cancellationToken);
-        var list = await _uow.Repository<T_RESPONSABLE>().ListAsync(_ => true, cancellationToken);
+        var list = await _uow.Repository<T_RESPONSABLE>().ListReadOnlyAsync(_ => true, cancellationToken);
         return list
             .OrderBy(u => u.NOMRESPONSABLE)
             .ThenBy(u => u.LOGIN)
@@ -375,7 +375,7 @@ public class AuthService : IAuthService
         decimal[] roleIds = Array.Empty<decimal>();
         if (SearchText.Terms(search).Count > 0)
         {
-            roleIds = (await _uow.Repository<T_ROLE>().ListAsync(_ => true, cancellationToken))
+            roleIds = (await _uow.Repository<T_ROLE>().ListReadOnlyAsync(_ => true, cancellationToken))
                 .Where(role => SearchText.Matches(search, role.NOMROLE))
                 .Select(role => role.IDROLE)
                 .ToArray();
@@ -417,7 +417,7 @@ public class AuthService : IAuthService
     public async Task<bool> IsFirstRunAsync(CancellationToken cancellationToken = default)
     {
         var repo = _uow.Repository<T_RESPONSABLE>();
-        return await repo.CountAsync(repo.Query().Take(1), cancellationToken) == 0;
+        return await repo.CountAsync(repo.QueryReadOnly().Take(1), cancellationToken) == 0;
     }
 
     /// <summary>Verrou applicatif de la création initiale : deux appels simultanés passent l'un après l'autre.</summary>
@@ -803,7 +803,7 @@ public class AuthService : IAuthService
     public async Task<IReadOnlyList<RoleDto>> GetRolesAsync(CancellationToken cancellationToken = default)
     {
         await EnsureCanReadAsync(ReadPermissions.RoleList, cancellationToken);
-        return (await _uow.Repository<T_ROLE>().ListAsync(_ => true, cancellationToken))
+        return (await _uow.Repository<T_ROLE>().ListReadOnlyAsync(_ => true, cancellationToken))
             .Select(r => new RoleDto(r.IDROLE, r.NOMROLE)).ToList();
     }
 
@@ -869,14 +869,14 @@ public class AuthService : IAuthService
     public async Task<IReadOnlyList<DroitDto>> GetDroitsAsync(CancellationToken cancellationToken = default)
     {
         await EnsureCanReadAsync(ReadPermissions.PrivilegeList, cancellationToken);
-        return (await _uow.Repository<T_DROIT>().ListAsync(_ => true, cancellationToken))
+        return (await _uow.Repository<T_DROIT>().ListReadOnlyAsync(_ => true, cancellationToken))
             .Select(d => new DroitDto(d.IDDROIT, d.DROIT)).ToList();
     }
 
     public async Task<IReadOnlyList<PrivilegeDto>> GetPrivilegesAsync(decimal? roleId, CancellationToken cancellationToken = default)
     {
         await EnsureCanReadAsync(ReadPermissions.PrivilegeList, cancellationToken);
-        var list = await _uow.Repository<T_DROIT_ROLE>().ListAsync(
+        var list = await _uow.Repository<T_DROIT_ROLE>().ListReadOnlyAsync(
             p => !roleId.HasValue || p.IDROLE == roleId.Value, cancellationToken);
         return list.Select(p => new PrivilegeDto(p.IDDROITROLE, p.IDROLE, p.IDDROIT)).ToList();
     }
@@ -901,7 +901,7 @@ public class AuthService : IAuthService
     public async Task<IReadOnlyList<DbAccessDto>> GetDbAccessAsync(decimal? userId, CancellationToken cancellationToken = default)
     {
         await EnsureCanReadAsync(ReadPermissions.DbAccess, cancellationToken);
-        var list = await _uow.Repository<T_BDD_AUTORISE>().ListAsync(
+        var list = await _uow.Repository<T_BDD_AUTORISE>().ListReadOnlyAsync(
             a => !userId.HasValue || a.IDRESPONSABLE == userId.Value, cancellationToken);
         return list.Select(a => new DbAccessDto(a.IDBDDAUTORISE, a.IDRESPONSABLE, a.IDBDD)).ToList();
     }
@@ -923,10 +923,10 @@ public class AuthService : IAuthService
         var user = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(userId, cancellationToken)
             ?? throw new NotFoundException("Utilisateur introuvable.");
 
-        var customList = await _uow.Repository<T_USER_PERMISSION>().ListAsync(
+        var customList = await _uow.Repository<T_USER_PERMISSION>().ListReadOnlyAsync(
             p => p.IDRESPONSABLE == userId && p.IS_GRANTED, cancellationToken);
 
-        var rolePrivileges = await _uow.Repository<T_DROIT_ROLE>().ListAsync(p => p.IDROLE == user.IDROLE, cancellationToken);
+        var rolePrivileges = await _uow.Repository<T_DROIT_ROLE>().ListReadOnlyAsync(p => p.IDROLE == user.IDROLE, cancellationToken);
         var rights = rolePrivileges.Select(p => (int)p.IDDROIT).ToHashSet();
         var isAdmin = user.IDROLE == 1;
         if (isAdmin)
@@ -934,13 +934,13 @@ public class AuthService : IAuthService
             rights = new HashSet<int> { Rights.Databases, Rights.Parameters, Rights.Processing, Rights.Other, Rights.Traceability, Rights.Reports };
         }
 
-        var access = await _uow.Repository<T_BDD_AUTORISE>().ListAsync(a => a.IDRESPONSABLE == userId, cancellationToken);
+        var access = await _uow.Repository<T_BDD_AUTORISE>().ListReadOnlyAsync(a => a.IDRESPONSABLE == userId, cancellationToken);
         var sageIds = access.Select(a => a.IDBDD).ToHashSet();
         // Admin : toutes les bases ; autres : seulement celles de T_BDD_AUTORISE.
         var sageDbs = (isAdmin || rights.Contains(Rights.Databases))
-            ? await _uow.Repository<T_BDD_SAGE>().ListAsync(_ => true, cancellationToken)
-            : await _uow.Repository<T_BDD_SAGE>().ListAsync(s => sageIds.Contains(s.ID), cancellationToken);
-        var pointeuseDbs = await _uow.Repository<T_BDD_POINTEUSE>().ListAsync(_ => true, cancellationToken);
+            ? await _uow.Repository<T_BDD_SAGE>().ListReadOnlyAsync(_ => true, cancellationToken)
+            : await _uow.Repository<T_BDD_SAGE>().ListReadOnlyAsync(s => sageIds.Contains(s.ID), cancellationToken);
+        var pointeuseDbs = await _uow.Repository<T_BDD_POINTEUSE>().ListReadOnlyAsync(_ => true, cancellationToken);
 
         var defaults = BuildDefaultPermissionsList(rights, sageDbs, pointeuseDbs);
 
@@ -961,7 +961,7 @@ public class AuthService : IAuthService
         }
 
         // B2 — Droits effectifs : droits du rôle si configurés
-        var roleCustomPerms = await _uow.Repository<T_ROLE_PERMISSION>().ListAsync(
+        var roleCustomPerms = await _uow.Repository<T_ROLE_PERMISSION>().ListReadOnlyAsync(
             p => p.IDROLE == user.IDROLE && p.IS_GRANTED, cancellationToken);
         if (roleCustomPerms.Count > 0)
         {
@@ -1082,7 +1082,7 @@ public class AuthService : IAuthService
     public async Task<RoleDetailedPermissionsDto> GetRoleDetailedPermissionsAsync(decimal roleId, CancellationToken cancellationToken = default)
     {
         await EnsureCanReadAsync(ReadPermissions.Privileges, cancellationToken);
-        var roleList = await _uow.Repository<T_ROLE_PERMISSION>().ListAsync(
+        var roleList = await _uow.Repository<T_ROLE_PERMISSION>().ListReadOnlyAsync(
             p => p.IDROLE == roleId && p.IS_GRANTED, cancellationToken);
 
         if (roleList.Count == 0)

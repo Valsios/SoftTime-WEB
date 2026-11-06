@@ -1,13 +1,7 @@
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
-
 namespace SoftTime.Domain.Entities.Sage;
 
-[Table("T_HST_AFFECTATION")]
 public class T_HST_AFFECTATION
 {
-    [Key]
-    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int IdHstAffectation { get; set; }
 
     public int NumSalarie { get; set; }

@@ -1,13 +1,7 @@
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
-
 namespace SoftTime.Domain.Entities.Pointeuse;
 
-[Table("USERINFO")]
 public class USERINFO
 {
-    [Key]
-    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int USERID { get; set; }
 
     public string BADGENUMBER { get; set; } = string.Empty;
@@ -103,5 +97,4 @@ public class USERINFO
     public int? TimeZone2 { get; set; }
 
     public int? TimeZone3 { get; set; }
-
 }

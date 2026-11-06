@@ -1,17 +1,11 @@
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
-
 namespace SoftTime.Domain.Entities.SoftTime;
 
 /// <summary>
 /// Journal applicatif central, indépendant du journal historique <c>suivi_SUIVI</c>
 /// alimenté par les déclencheurs de l'ancienne application.
 /// </summary>
-[Table("suivi_JOURNAL")]
 public class suivi_JOURNAL
 {
-    [Key]
-    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public long Id { get; set; }
 
     public DateTime DATE_UTC { get; set; }

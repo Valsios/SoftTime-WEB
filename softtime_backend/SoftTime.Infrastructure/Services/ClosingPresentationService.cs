@@ -36,7 +36,7 @@ public class ClosingPresentationService : IClosingPresentationService
         {
             var sageDb = _tenant.SageDb;
             var repo = _uow.Repository<T_CARDPAIE>();
-            var cartes = await repo.ToListAsync(repo.Query()
+            var cartes = await repo.ToListAsync(repo.QueryReadOnly()
                 .Where(c => c.SAGE_BDD == sageDb)
                 .Select(c => new T_CARDPAIE { ID = c.ID, SAGE_MATRICULE = c.SAGE_MATRICULE, SAGE_NOM = c.SAGE_NOM, SAGE_PRENOM = c.SAGE_PRENOM }), ct);
             var clesPage = analyse.Anomalies.Items.Select(a => a.Matricule).ToHashSet(StringComparer.Ordinal);

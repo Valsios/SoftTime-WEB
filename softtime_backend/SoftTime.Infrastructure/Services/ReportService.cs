@@ -38,7 +38,7 @@ public class ReportService : IReportService
     public async Task<IReadOnlyList<CorrectedHourDto>> PointageAsync(ReportFilter filter, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var list = await _uow.Repository<T_HEURECORRIGER>().ListAsync(PointagePredicate(filter, _tenant.SageDb), ct);
+        var list = await _uow.Repository<T_HEURECORRIGER>().ListReadOnlyAsync(PointagePredicate(filter, _tenant.SageDb), ct);
         return list.Select(ToCorrectedHourDto).ToList();
     }
 
@@ -141,7 +141,7 @@ public class ReportService : IReportService
     public async Task<IReadOnlyList<HsExoDto>> HsRecapAsync(ReportFilter filter, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var list = await _uow.Repository<T_HSExoImp>().ListAsync(HsRecapPredicate(filter, _tenant.SageDb), ct);
+        var list = await _uow.Repository<T_HSExoImp>().ListReadOnlyAsync(HsRecapPredicate(filter, _tenant.SageDb), ct);
         return list.Select(ToHsExoDto).ToList();
     }
 
@@ -164,7 +164,7 @@ public class ReportService : IReportService
     {
         EnsureMondayToSunday(filter);
         await _tenant.EnsureAuthorizedAsync(ct);
-        var hs = await _uow.Repository<T_HS_VALIDER>().ListAsync(HeuresSemainePredicate(filter, _tenant.SageDb), ct);
+        var hs = await _uow.Repository<T_HS_VALIDER>().ListReadOnlyAsync(HeuresSemainePredicate(filter, _tenant.SageDb), ct);
         return hs.Select(ToHeuresSemaineRow).ToList();
     }
 
@@ -187,7 +187,7 @@ public class ReportService : IReportService
     public async Task<IReadOnlyList<object>> HeuresDimancheAsync(ReportFilter filter, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var list = await _uow.Repository<T_HEUREDIMANCHE>().ListAsync(HeuresDimanchePredicate(filter, _tenant.SageDb), ct);
+        var list = await _uow.Repository<T_HEUREDIMANCHE>().ListReadOnlyAsync(HeuresDimanchePredicate(filter, _tenant.SageDb), ct);
         return list.Select(ToHeuresDimancheRow).ToList();
     }
 

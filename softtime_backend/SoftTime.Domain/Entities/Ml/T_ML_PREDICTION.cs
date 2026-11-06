@@ -1,6 +1,3 @@
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
-
 namespace SoftTime.Domain.Entities.Ml;
 
 /// <summary>
@@ -8,11 +5,8 @@ namespace SoftTime.Domain.Entities.Ml;
 /// ou le lundi de la semaine (heures supplémentaires). Les lignes sont supprimées puis réinsérées
 /// à chaque génération pour rester idempotentes.
 /// </summary>
-[Table("Prediction", Schema = "ml")]
 public class T_ML_PREDICTION
 {
-    [Key]
-    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public long Id { get; set; }
 
     public string BddSage { get; set; } = string.Empty;

@@ -1,13 +1,7 @@
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
-
 namespace SoftTime.Domain.Entities.Sage;
 
-[Table("T_GHRSAL")]
 public class T_GHRSAL
 {
-    [Key]
-    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int IdGhrSal { get; set; }
 
     public int NumSalarie { get; set; }

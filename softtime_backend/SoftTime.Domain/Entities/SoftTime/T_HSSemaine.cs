@@ -1,13 +1,7 @@
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
-
 namespace SoftTime.Domain.Entities.SoftTime;
 
-[Table("T_HSSemaine")]
 public class T_HSSemaine
 {
-    [Key]
-    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int OID { get; set; }
 
     public string? Matricule { get; set; }
@@ -31,5 +25,4 @@ public class T_HSSemaine
     public string? BDD_SAGE { get; set; }
 
     public string? BDD_POINTEUSE { get; set; }
-
 }

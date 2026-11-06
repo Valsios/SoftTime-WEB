@@ -1,13 +1,7 @@
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
-
 namespace SoftTime.Domain.Entities.SoftTime;
 
-[Table("T_HEUREANOMALIE")]
 public class T_HEUREANOMALIE
 {
-    [Key]
-    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public decimal ID { get; set; }
 
     public string? MATRICULE_SAGE { get; set; }
@@ -43,5 +37,4 @@ public class T_HEUREANOMALIE
     public bool? FERIES { get; set; }
 
     public string? INTITULE_ABSENCE { get; set; }
-
 }

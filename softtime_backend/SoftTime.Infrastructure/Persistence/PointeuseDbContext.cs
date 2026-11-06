@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 
 using SoftTime.Domain.Entities.Pointeuse;
+using SoftTime.Infrastructure.Persistence.Configurations;
+using SoftTime.Infrastructure.Persistence.Configurations.PointeuseDb;
 
 namespace SoftTime.Infrastructure.Persistence;
 
@@ -12,7 +14,5 @@ public class PointeuseDbContext : DbContext
     public DbSet<USERINFO> USERINFO => Set<USERINFO>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<CHECKINOUT>().HasKey(e => new { e.USERID, e.CHECKTIME });
-    }
+        => modelBuilder.ApplyConfigurationsOf<USERINFOConfiguration>();
 }

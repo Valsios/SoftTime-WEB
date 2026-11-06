@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 
 using SoftTime.Domain.Entities.Sage;
+using SoftTime.Infrastructure.Persistence.Configurations;
+using SoftTime.Infrastructure.Persistence.Configurations.SageDb;
 
 namespace SoftTime.Infrastructure.Persistence;
 
@@ -17,7 +19,5 @@ public class SageDbContext : DbContext
     public DbSet<T_GHRCAL_SOCIETE> T_GHRCAL_SOCIETE => Set<T_GHRCAL_SOCIETE>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<T_CST>().HasKey(e => new { e.CodeConstante, e.NoOrdre });
-    }
+        => modelBuilder.ApplyConfigurationsOf<T_SALConfiguration>();
 }

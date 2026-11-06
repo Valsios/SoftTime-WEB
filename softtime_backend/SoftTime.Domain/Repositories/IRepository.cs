@@ -8,8 +8,17 @@ namespace SoftTime.Domain.Repositories;
 public interface IRepository<T> where T : class
 {
     IQueryable<T> Query();
+
+    /// <summary>Requête en lecture seule (AsNoTracking).</summary>
+    IQueryable<T> QueryReadOnly() => Query();
+
     Task<T?> GetByIdAsync(object id, CancellationToken cancellationToken = default);
     Task<List<T>> ListAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);
+
+    /// <summary>Lecture seule : entités non suivies (AsNoTracking), à ne pas modifier puis sauvegarder.</summary>
+    Task<List<T>> ListReadOnlyAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default)
+        => ListAsync(predicate, cancellationToken);
+
     Task<List<T>> ListLatestAsync(
         Expression<Func<T, bool>> predicate,
         Expression<Func<T, DateTime?>> orderByDescending,

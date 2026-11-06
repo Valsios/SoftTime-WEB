@@ -28,4 +28,8 @@
     <ProjectReference Include="..\SoftTime.Infrastructure\SoftTime.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="Persistence\ef-model.snapshot.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

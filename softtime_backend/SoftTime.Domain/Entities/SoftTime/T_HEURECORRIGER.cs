@@ -1,13 +1,7 @@
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
-
 namespace SoftTime.Domain.Entities.SoftTime;
 
-[Table("T_HEURECORRIGER")]
 public class T_HEURECORRIGER
 {
-    [Key]
-    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public decimal ID { get; set; }
 
     public string? BDD_SAGE { get; set; }
@@ -64,5 +58,4 @@ public class T_HEURECORRIGER
     /// Colonne ajoutée de façon idempotente par <see cref="PunchProcessingService"/>.
     /// </summary>
     public string? ORIGINE { get; set; }
-
 }

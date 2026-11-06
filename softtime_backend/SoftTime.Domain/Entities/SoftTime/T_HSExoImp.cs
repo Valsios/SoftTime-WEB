@@ -1,13 +1,7 @@
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
-
 namespace SoftTime.Domain.Entities.SoftTime;
 
-[Table("T_HSExoImp")]
 public class T_HSExoImp
 {
-    [Key]
-    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int OID { get; set; }
 
     public string? Matricule { get; set; }
@@ -39,5 +33,4 @@ public class T_HSExoImp
     public string? BDD_SAGE { get; set; }
 
     public string? BDD_POINTEUSE { get; set; }
-
 }

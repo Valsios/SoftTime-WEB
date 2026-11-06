@@ -1,6 +1,3 @@
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
-
 namespace SoftTime.Domain.Entities.Ml;
 
 /// <summary>
@@ -8,11 +5,8 @@ namespace SoftTime.Domain.Entities.Ml;
 /// (<see cref="MlModelTypes"/>), garanti par un index filtré côté base. Le binaire ML.NET est
 /// stocké en base pour que le déploiement reste multi-instance et sans partage de fichiers.
 /// </summary>
-[Table("Modele", Schema = "ml")]
 public class T_ML_MODELE
 {
-    [Key]
-    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int Id { get; set; }
 
     public string BddSage { get; set; } = string.Empty;

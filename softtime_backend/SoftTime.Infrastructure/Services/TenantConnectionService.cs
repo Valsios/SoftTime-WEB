@@ -99,7 +99,7 @@ public class TenantConnectionService : ITenantConnectionService
     {
         if (!string.IsNullOrWhiteSpace(_company.PointeuseDatabase))
             return;
-        var all = await _uow.Repository<T_BDD_POINTEUSE>().ListAsync(_ => true, cancellationToken);
+        var all = await _uow.Repository<T_BDD_POINTEUSE>().ListReadOnlyAsync(_ => true, cancellationToken);
         var row = all.FirstOrDefault(p => p.ACTIVE == true)
                   ?? all.FirstOrDefault(p => !string.IsNullOrWhiteSpace(p.NOM_BD));
         if (row?.NOM_BD is string name && !string.IsNullOrWhiteSpace(_company.SageDatabase))

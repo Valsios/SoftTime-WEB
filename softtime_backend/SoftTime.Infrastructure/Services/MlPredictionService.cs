@@ -61,7 +61,7 @@ public sealed class MlPredictionService : IMlPredictionService
         // Sans pointage récent, les features décrivent un passé lointain : on ne prédit pas, et
         // les anciennes prévisions de l'horizon sont retirées pour ne pas rester affichées.
         var depuis = today.AddDays(-Math.Max(1, _options.RecentDataDays));
-        var pointagesRecents = (await _uow.Repository<T_HEURECORRIGER>().ListAsync(
+        var pointagesRecents = (await _uow.Repository<T_HEURECORRIGER>().ListReadOnlyAsync(
                 h => h.BDD_SAGE == sage && h.DATE_POINTAGE_IN >= depuis && h.DATE_POINTAGE_IN < today, ct))
             .Count;
         if (pointagesRecents == 0)

@@ -1,13 +1,7 @@
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
-
 namespace SoftTime.Domain.Entities.SoftTime;
 
-[Table("T_RESPONSABLE")]
 public class T_RESPONSABLE
 {
-    [Key]
-    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public decimal IDRESPONSABLE { get; set; }
 
     public decimal IDROLE { get; set; }
@@ -28,5 +22,4 @@ public class T_RESPONSABLE
 
     /// <summary>Fin du verrouillage temporaire après trop d'échecs (UTC, migration 004).</summary>
     public DateTime? VERROUILLE_JUSQUA { get; set; }
-
 }
