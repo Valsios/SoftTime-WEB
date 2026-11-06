@@ -43,8 +43,10 @@ public static class DependencyInjection
         services.AddScoped<ITenantConnectionService, TenantConnectionService>();
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
         services.AddScoped<IAuthenticationService, AuthenticationService>();
+        services.AddScoped<IFirstRunService, FirstRunService>();
         services.AddScoped<IUserDirectoryService, UserDirectoryService>();
         services.AddScoped<IUserAdministrationService, UserAdministrationService>();
+        services.AddScoped<IUserDeletionService, UserDeletionService>();
         services.AddScoped<IRoleService, RoleService>();
         services.AddScoped<IPrivilegeService, PrivilegeService>();
         services.AddScoped<IParametersAccessGuard, ParametersAccessGuard>();
@@ -57,6 +59,7 @@ public static class DependencyInjection
         services.AddScoped<IDatabaseConfigurationAuthorizer, DatabaseConfigurationAuthorizer>();
         services.AddScoped<IAbsenceCodeService, AbsenceCodeService>();
         services.AddScoped<IAffectationService, AffectationService>();
+        services.AddScoped<IAffectationImportService, AffectationImportService>();
         services.AddScoped<ICardPaieService, CardPaieService>();
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<IClockParameterService, ClockParameterService>();
@@ -81,6 +84,7 @@ public static class DependencyInjection
         services.AddScoped<IPlanningImportService, PlanningImportService>();
         services.AddScoped<IPlanningDatabaseFilter, PlanningDatabaseFilter>();
         services.AddScoped<IPunchService, PunchService>();
+        services.AddScoped<IPunchImportService, PunchImportService>();
         services.AddScoped<IAnomalyService, AnomalyService>();
         services.AddScoped<ICorrectedHoursService, CorrectedHoursService>();
         services.AddScoped<IValidatedWeekGuard, ValidatedWeekGuard>();

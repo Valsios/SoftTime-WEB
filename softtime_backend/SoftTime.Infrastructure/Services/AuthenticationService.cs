@@ -26,7 +26,6 @@ public sealed class AuthenticationService : IAuthenticationService
     private readonly IUnitOfWork _uow;
     private readonly ITokenService _tokens;
     private readonly IMapper _mapper;
-    private readonly IEmailService _email;
     private readonly IPasswordHasher<Responsable> _passwordHasher;
     private readonly IEffectiveRightsService _effectiveRights;
     private readonly IRefreshTokenService _refreshTokens;
@@ -38,7 +37,6 @@ public sealed class AuthenticationService : IAuthenticationService
         IUnitOfWork uow,
         ITokenService tokens,
         IMapper mapper,
-        IEmailService email,
         IEffectiveRightsService effectiveRights,
         IUserPermissionService userPermissionService,
         IPasswordHasher<Responsable>? passwordHasher = null,
@@ -49,7 +47,6 @@ public sealed class AuthenticationService : IAuthenticationService
         _uow = uow;
         _tokens = tokens;
         _mapper = mapper;
-        _email = email;
         _passwordHasher = passwordHasher ?? new PasswordHasher<Responsable>();
         _effectiveRights = effectiveRights;
         _refreshTokens = refreshTokens ?? new RefreshTokenService(uow, securityOptions);
@@ -243,90 +240,5 @@ public sealed class AuthenticationService : IAuthenticationService
         var detailed = await _userPermissionService.GetUserDetailedPermissionsAsync(user.IdResponsable, cancellationToken);
         var authorizedSages = await UsableSageDatabasesAsync(user, effective, cancellationToken);
         return new LoginResponse(string.Empty, user.IdResponsable, user.Login ?? string.Empty, user.NomResponsable ?? string.Empty, user.IdRole, user.Matricule, rights, authorizedSages.Select(_mapper.Map<SageDbDto>).ToList(), detailed.GrantedPermissions, detailed.IsCustomized);
-    }
-
-    /// <summary>
-    /// Installation vierge ? Portage de <c>is-first-run</c> du desktop, avec un critère plus sain :
-    /// le desktop cherchait un rôle nommé « administrateur », ici on constate simplement qu'aucun
-    /// compte n'existe. Le critère ne dépend donc pas d'une convention de nommage des rôles, et il
-    /// reste vrai après la suppression du dernier compte (seul moyen de sortir d'un verrouillage total).
-    /// </summary>
-    public async Task<bool> IsFirstRunAsync(CancellationToken cancellationToken = default)
-    {
-        var repo = _uow.Repository<Responsable>();
-        return await repo.CountAsync(repo.QueryReadOnly().Take(1), cancellationToken) == 0;
-    }
-
-    /// <summary>Verrou applicatif de la création initiale : deux appels simultanés passent l'un après l'autre.</summary>
-    internal const string CreateAdminLockResource = "SoftTime.CreateAdmin";
-
-    /// <summary>
-    /// Crée le premier compte administrateur. Refusé dès qu'un compte existe, et le rôle
-    /// <see cref="RoleAdministrateur"/> se voit garantir tous les droits : sans cela, l'application
-    /// serait inaccessible juste après son installation.
-    /// </summary>
-    public async Task<AdminSetupResultDto> CreateAdminAsync(AdminSetupDto dto, CancellationToken cancellationToken = default)
-    {
-        if (!await IsFirstRunAsync(cancellationToken))
-            throw new DomainException(
-                "Des comptes existent déjà : la création initiale n'est plus possible. Utilisez l'écran Utilisateurs.");
-        var login = (dto.Login ?? string.Empty).Trim();
-        var motDePasse = dto.Password ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(dto.Nom))
-            throw new DomainException("Le nom est requis.");
-        if (string.IsNullOrWhiteSpace(login))
-            throw new DomainException("L'identifiant est requis.");
-        if (string.IsNullOrWhiteSpace(motDePasse))
-            throw new DomainException("Le mot de passe est requis.");
-        PasswordPolicy.EnsureValid(motDePasse);
-        var passwordHash = _passwordHasher.HashPassword(null!, motDePasse);
-
-        // La vérification ci-dessus ne suffit pas : deux requêtes simultanées sur une base vide la passeraient
-        // toutes les deux. Sous le verrou, la seconde attend la fin de la première, puis voit le compte créé.
-        var entity = await _uow.RunExclusiveAsync(CreateAdminLockResource, async ct =>
-        {
-            if (!await IsFirstRunAsync(ct))
-                throw new DomainException(
-                    "Des comptes existent déjà : la création initiale n'est plus possible. Utilisez l'écran Utilisateurs.");
-
-            // Le premier compte reçoit toujours le rôle d'identifiant 1 : seul ce rôle est administrateur.
-            var role = await _uow.Repository<Role>().GetByIdAsync(AdminRules.AdminRoleId, ct)
-                ?? throw new DomainException(
-                    "Le rôle Administrateur (identifiant 1) est introuvable : exécutez le script de création de la base.");
-
-            var created = new Responsable
-            {
-                IdRole = role.IdRole,
-                NomResponsable = dto.Nom.Trim(),
-                Login = login,
-                Password = passwordHash,
-                Email = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim()
-            };
-            await _uow.Repository<Responsable>().AddAsync(created, ct);
-            await EnsureRoleHasAllRightsAsync(role.IdRole, ct);
-            await _uow.SaveChangesAsync(ct);
-            return created;
-        }, cancellationToken);
-
-        var envoye = await _email.SendUserCredentialsAsync(entity.Email, entity.Login, motDePasse, entity.NomResponsable, null, cancellationToken);
-        var message = envoye
-            ? "Compte administrateur créé et identifiants envoyés par e-mail."
-            : _email.EstConfigure
-                ? "Compte administrateur créé. L'envoi de l'e-mail a échoué : communiquez les identifiants manuellement."
-                : "Compte administrateur créé. Aucune configuration SMTP (« Email ») : communiquez les identifiants manuellement.";
-        return new AdminSetupResultDto(entity.IdResponsable, entity.Login ?? login, envoye, message);
-    }
-
-    /// <summary>Garantit que le rôle d'administration détient tous les droits (idempotent).</summary>
-    private async Task EnsureRoleHasAllRightsAsync(decimal roleId, CancellationToken cancellationToken)
-    {
-        var droits = await _uow.Repository<DroitAcces>().ListAsync(_ => true, cancellationToken);
-        var existants = await _uow.Repository<DroitRole>().ListAsync(p => p.IdRole == roleId, cancellationToken);
-        var manquants = droits.Where(d => existants.All(e => e.IdDroit != d.IdDroit)).ToList();
-        if (manquants.Count == 0)
-            return;
-        var repo = _uow.Repository<DroitRole>();
-        foreach (var droit in manquants)
-            await repo.AddAsync(new DroitRole { IdRole = roleId, IdDroit = droit.IdDroit }, cancellationToken);
     }
 }

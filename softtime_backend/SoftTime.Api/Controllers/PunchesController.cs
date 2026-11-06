@@ -16,10 +16,12 @@ namespace SoftTime.Api.Controllers;
 public class PunchesController : ControllerBase
 {
     private readonly IPunchService _svc;
+    private readonly IPunchImportService _imports;
     private readonly IPunchProcessingService _processing;
-    public PunchesController(IPunchService svc, IPunchProcessingService processing)
+    public PunchesController(IPunchService svc, IPunchImportService imports, IPunchProcessingService processing)
     {
         _svc = svc;
+        _imports = imports;
         _processing = processing;
     }
 
@@ -37,7 +39,7 @@ public class PunchesController : ControllerBase
 
     [HttpPost("import-clock")]
     public async Task<IActionResult> ImportClock([FromBody] ImportPunchesRequest request, CancellationToken ct)
-        => Ok(await _svc.ImportFromClockAsync(request, ct));
+        => Ok(await _imports.ImportFromClockAsync(request, ct));
 
     /// <summary>Pré-traitement : pointages → heures corrigées (T_HEURECORRIGER) + anomalies.</summary>
     [HttpPost("preprocess")]
@@ -59,6 +61,6 @@ public class PunchesController : ControllerBase
     public async Task<IActionResult> ImportExcel(IFormFile file, CancellationToken ct)
     {
         await using var s = file.OpenReadStream();
-        return Ok(await _svc.ImportPunchesExcelAsync(ExcelWorkbook.ReadFirstSheet(s), ct));
+        return Ok(await _imports.ImportPunchesExcelAsync(ExcelWorkbook.ReadFirstSheet(s), ct));
     }
 }

@@ -29,6 +29,7 @@ internal sealed class CatalogServices
         var correspondence = new CorrespondenceModeService(uow, tenant, externalSource);
 
         Affectations = new AffectationService(uow, tenant, categories, departements);
+        AffectationImports = new AffectationImportService(uow, tenant);
         Cards = new CardPaieService(uow, mapper, tenant, correspondence);
         Discovery = new DiscoveryService(discovery, mappingStore);
         Holidays = new HolidayService(uow, mapper, tenant, externalSource);
@@ -41,6 +42,8 @@ internal sealed class CatalogServices
     }
 
     public AffectationService Affectations { get; }
+
+    public AffectationImportService AffectationImports { get; }
 
     public CardPaieService Cards { get; }
 

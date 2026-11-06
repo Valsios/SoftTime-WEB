@@ -21,7 +21,5 @@ public interface IAffectationService
 
     Task<AffectationDto> SaveAffectationAsync(AffectationDto dto, CancellationToken ct = default);
 
-    Task<ImportResultDto> ImportAffectationsExcelAsync(IReadOnlyList<Dictionary<string, string>> rows, CancellationToken ct = default);
-
     Task DeleteAffectationAsync(int id, CancellationToken ct = default);
 }

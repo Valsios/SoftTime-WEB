@@ -16,7 +16,13 @@ namespace SoftTime.Api.Controllers;
 public class AffectationsController : ControllerBase
 {
     private readonly IAffectationService _svc;
-    public AffectationsController(IAffectationService svc) => _svc = svc;
+    private readonly IAffectationImportService _imports;
+
+    public AffectationsController(IAffectationService svc, IAffectationImportService imports)
+    {
+        _svc = svc;
+        _imports = imports;
+    }
 
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] int? categoryId, CancellationToken ct)
@@ -65,6 +71,6 @@ public class AffectationsController : ControllerBase
     public async Task<IActionResult> ImportExcel(IFormFile file, CancellationToken ct)
     {
         await using var s = file.OpenReadStream();
-        return Ok(await _svc.ImportAffectationsExcelAsync(ExcelWorkbook.ReadFirstSheet(s), ct));
+        return Ok(await _imports.ImportAffectationsExcelAsync(ExcelWorkbook.ReadFirstSheet(s), ct));
     }
 }

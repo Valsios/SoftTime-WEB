@@ -37,7 +37,9 @@ internal sealed class AuthServices : IUserPermissionService
         UserPermissions = new UserPermissionService(uow, effectiveRights, Guard, journal);
         RolePermissions = new RolePermissionService(uow, effectiveRights, Guard, journal);
         Authentication = new AuthenticationService(
-            uow, tokens, mapper, email, effectiveRights, UserPermissions, passwordHasher, refreshTokens, securityOptions, logger);
+            uow, tokens, mapper, effectiveRights, UserPermissions, passwordHasher, refreshTokens, securityOptions, logger);
+        FirstRun = new FirstRunService(uow, email, passwordHasher);
+        Deletion = new UserDeletionService(uow, effectiveRights, Guard, refreshTokens, securityOptions);
         Directory = new UserDirectoryService(uow, Guard);
         Administration = new UserAdministrationService(
             uow, email, effectiveRights, Guard, journal, passwordHasher, refreshTokens, securityOptions);
@@ -50,6 +52,10 @@ internal sealed class AuthServices : IUserPermissionService
     public ParametersAccessGuard Guard { get; }
 
     public AuthenticationService Authentication { get; }
+
+    public FirstRunService FirstRun { get; }
+
+    public UserDeletionService Deletion { get; }
 
     public UserDirectoryService Directory { get; }
 
@@ -80,10 +86,10 @@ internal sealed class AuthServices : IUserPermissionService
         => Authentication.GetMeAsync(userId, cancellationToken);
 
     public Task<bool> IsFirstRunAsync(CancellationToken cancellationToken = default)
-        => Authentication.IsFirstRunAsync(cancellationToken);
+        => FirstRun.IsFirstRunAsync(cancellationToken);
 
     public Task<AdminSetupResultDto> CreateAdminAsync(AdminSetupDto dto, CancellationToken cancellationToken = default)
-        => Authentication.CreateAdminAsync(dto, cancellationToken);
+        => FirstRun.CreateAdminAsync(dto, cancellationToken);
 
     public Task<UserDto> GetUserAsync(decimal id, CancellationToken cancellationToken = default)
         => Directory.GetUserAsync(id, cancellationToken);
@@ -101,7 +107,7 @@ internal sealed class AuthServices : IUserPermissionService
         => Administration.PreviewRoleChangeAsync(userId, newRoleId, cancellationToken);
 
     public Task DeleteUserAsync(decimal currentUserId, decimal id, CancellationToken cancellationToken = default)
-        => Administration.DeleteUserAsync(currentUserId, id, cancellationToken);
+        => Deletion.DeleteUserAsync(currentUserId, id, cancellationToken);
 
     public Task<IReadOnlyList<RoleDto>> GetRolesAsync(CancellationToken cancellationToken = default)
         => Roles.GetRolesAsync(cancellationToken);
@@ -158,5 +164,5 @@ internal sealed class AuthServices : IUserPermissionService
         => Administration.SaveUserAsync(dto, cancellationToken);
 
     public Task DeleteUserAsync(decimal id, CancellationToken cancellationToken = default)
-        => Administration.DeleteUserAsync(id, cancellationToken);
+        => Deletion.DeleteUserAsync(id, cancellationToken);
 }

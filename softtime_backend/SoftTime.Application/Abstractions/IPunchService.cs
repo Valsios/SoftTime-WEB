@@ -26,8 +26,4 @@ public interface IPunchService
     /// corrections <b>manuelles</b> sont conservées (le desktop effaçait tout sans distinction).
     /// </summary>
     Task<PurgePunchesResultDto> PurgePunchesAsync(PeriodRequest request, CancellationToken ct = default);
-
-    Task<ImportResultDto> ImportFromClockAsync(ImportPunchesRequest request, CancellationToken ct = default);
-
-    Task<ImportResultDto> ImportPunchesExcelAsync(IReadOnlyList<Dictionary<string, string>> rows, CancellationToken ct = default);
 }

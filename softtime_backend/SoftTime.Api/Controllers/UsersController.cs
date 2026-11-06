@@ -16,11 +16,17 @@ public class UsersController : ControllerBase
 {
     private readonly IUserDirectoryService _directory;
     private readonly IUserAdministrationService _administration;
+    private readonly IUserDeletionService _deletion;
     private readonly ICurrentUser _user;
-    public UsersController(IUserDirectoryService directory, IUserAdministrationService administration, ICurrentUser user)
+    public UsersController(
+        IUserDirectoryService directory,
+        IUserAdministrationService administration,
+        IUserDeletionService deletion,
+        ICurrentUser user)
     {
         _directory = directory;
         _administration = administration;
+        _deletion = deletion;
         _user = user;
     }
 
@@ -66,7 +72,7 @@ public class UsersController : ControllerBase
     {
         if (_user.UserId is not decimal currentUserId)
             return Unauthorized();
-        await _administration.DeleteUserAsync(currentUserId, id, ct);
+        await _deletion.DeleteUserAsync(currentUserId, id, ct);
         return NoContent();
     }
 }

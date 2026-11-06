@@ -207,7 +207,7 @@ public class ImportTemplateImportTests
         var contexte = new Contexte();
         var rows = LireXlsx("affectations", out _);
 
-        var resultat = await contexte.Catalog.Affectations.ImportAffectationsExcelAsync(rows);
+        var resultat = await contexte.Catalog.AffectationImports.ImportAffectationsExcelAsync(rows);
 
         Assert.Equal(1, resultat.Imported);
         Assert.Equal(0, resultat.Skipped);

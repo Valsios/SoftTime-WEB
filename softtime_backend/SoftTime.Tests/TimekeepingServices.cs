@@ -16,12 +16,15 @@ internal sealed class TimekeepingServices
         IHistoryArchiveService history)
     {
         var guard = new ValidatedWeekGuard(uow);
-        Punches = new PunchService(uow, tenant, externalSource, history, guard);
+        Punches = new PunchService(uow, tenant, history, guard);
+        PunchImports = new PunchImportService(uow, tenant, externalSource);
         Anomalies = new AnomalyService(uow, tenant, history, guard);
         Corrections = new CorrectedHoursService(uow, tenant, guard);
     }
 
     public PunchService Punches { get; }
+
+    public PunchImportService PunchImports { get; }
 
     public AnomalyService Anomalies { get; }
 
@@ -40,10 +43,10 @@ internal sealed class TimekeepingServices
         => Punches.PurgePunchesAsync(request, ct);
 
     public Task<ImportResultDto> ImportFromClockAsync(ImportPunchesRequest request, CancellationToken ct = default)
-        => Punches.ImportFromClockAsync(request, ct);
+        => PunchImports.ImportFromClockAsync(request, ct);
 
     public Task<ImportResultDto> ImportPunchesExcelAsync(IReadOnlyList<Dictionary<string, string>> rows, CancellationToken ct = default)
-        => Punches.ImportPunchesExcelAsync(rows, ct);
+        => PunchImports.ImportPunchesExcelAsync(rows, ct);
 
     public Task<IReadOnlyList<AnomalyDto>> ListAnomaliesAsync(PeriodRequest filter, CancellationToken ct = default)
         => Anomalies.ListAnomaliesAsync(filter, ct);

@@ -78,7 +78,7 @@ public class ImportResultMessageTests
             new() { ["Categorie"] = "Sédentaire", ["Matricule"] = "9999" }
         };
 
-        var resultat = await contexte.Catalog.Affectations.ImportAffectationsExcelAsync(rows);
+        var resultat = await contexte.Catalog.AffectationImports.ImportAffectationsExcelAsync(rows);
 
         Assert.Equal(1, resultat.Imported);
         Assert.Equal(2, resultat.Skipped);

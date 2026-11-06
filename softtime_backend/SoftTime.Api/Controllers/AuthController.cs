@@ -17,11 +17,13 @@ namespace SoftTime.Api.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthenticationService _auth;
+    private readonly IFirstRunService _firstRun;
     private readonly ICurrentUser _user;
     private readonly AccountSecurityOptions _security;
-    public AuthController(IAuthenticationService auth, ICurrentUser user, IOptions<AccountSecurityOptions> security)
+    public AuthController(IAuthenticationService auth, IFirstRunService firstRun, ICurrentUser user, IOptions<AccountSecurityOptions> security)
     {
         _auth = auth;
+        _firstRun = firstRun;
         _user = user;
         _security = security.Value;
     }
@@ -85,7 +87,7 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     [HttpGet("is-first-run")]
     public async Task<ActionResult<bool>> IsFirstRun(CancellationToken ct)
-        => Ok(await _auth.IsFirstRunAsync(ct));
+        => Ok(await _firstRun.IsFirstRunAsync(ct));
 
     /// <summary>
     /// POST — Cree le premier compte administrateur. Anonyme, mais refuse dès qu'un compte existe.
@@ -96,7 +98,7 @@ public class AuthController : ControllerBase
     [HttpPost("create-admin")]
     [ProducesResponseType(typeof(AdminSetupResultDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<AdminSetupResultDto>> CreateAdmin([FromBody] AdminSetupDto dto, CancellationToken ct)
-        => Ok(await _auth.CreateAdminAsync(dto, ct));
+        => Ok(await _firstRun.CreateAdminAsync(dto, ct));
 
     /// <summary>
     /// GET — Politique de mot de passe (anonyme) : règles et libellés utilisés par l'écran de

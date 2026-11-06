@@ -11,6 +11,4 @@ public interface IUserAdministrationService
     /// Si le rôle ne change pas ou si le compte n'a aucun ajustement, Count vaut 0.
     /// </summary>
     Task<RoleChangePreviewDto> PreviewRoleChangeAsync(decimal userId, decimal newRoleId, CancellationToken cancellationToken = default);
-
-    Task DeleteUserAsync(decimal currentUserId, decimal id, CancellationToken cancellationToken = default);
 }
