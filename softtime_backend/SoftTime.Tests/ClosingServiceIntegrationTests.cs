@@ -70,13 +70,13 @@ public class ClosingServiceIntegrationTests
             action();
             rapport.AppendLine($"{regle};{chrono.ElapsedMilliseconds}");
         }
-        Mesurer("PointagesIncomplets", () => PayrollClosingRules.PointagesIncomplets(d.Cartes, d.Plannings, d.Pointages, d.Corrections, d.SemainesValidees, debut, fin, d.MultiPointage));
-        Mesurer("PointagesManquants", () => PayrollClosingRules.PointagesManquants(d.Cartes, d.Plannings, d.Pointages, d.Corrections, d.Conges, d.Feries, debut, fin, d.DateDuJour));
-        Mesurer("PlanningsSansPointage", () => PayrollClosingRules.PlanningsSansPointage(d.Cartes, d.Plannings, d.Pointages, d.Corrections, d.Conges, d.Feries, debut, fin, d.DateDuJour));
-        Mesurer("PointagesSansPlanning", () => PayrollClosingRules.PointagesSansPlanning(d.Cartes, d.Plannings, d.Pointages, debut, fin));
-        Mesurer("DoublonsExacts", () => PayrollClosingRules.DoublonsExacts(d.Pointages, debut, fin));
-        Mesurer("QuasiDoublons", () => PayrollClosingRules.QuasiDoublons(d.Pointages, debut, fin));
-        Mesurer("FeriesNonAppliques", () => PayrollClosingRules.FeriesNonAppliques(d.Cartes, d.Plannings, d.Corrections, d.Feries, debut, fin, d.DateDuJour));
+        Mesurer("PointagesIncomplets", () => PunchCompletenessRules.PointagesIncomplets(d.Cartes, d.Plannings, d.Pointages, d.Corrections, d.SemainesValidees, debut, fin, d.MultiPointage));
+        Mesurer("PointagesManquants", () => PunchCompletenessRules.PointagesManquants(d.Cartes, d.Plannings, d.Pointages, d.Corrections, d.Conges, d.Feries, debut, fin, d.DateDuJour));
+        Mesurer("PlanningsSansPointage", () => PlanningCoverageRules.PlanningsSansPointage(d.Cartes, d.Plannings, d.Pointages, d.Corrections, d.Conges, d.Feries, debut, fin, d.DateDuJour));
+        Mesurer("PointagesSansPlanning", () => PlanningCoverageRules.PointagesSansPlanning(d.Cartes, d.Plannings, d.Pointages, debut, fin));
+        Mesurer("DoublonsExacts", () => DuplicatePunchRules.DoublonsExacts(d.Pointages, debut, fin));
+        Mesurer("QuasiDoublons", () => DuplicatePunchRules.QuasiDoublons(d.Pointages, debut, fin));
+        Mesurer("FeriesNonAppliques", () => HolidayPunchRules.FeriesNonAppliques(d.Cartes, d.Plannings, d.Corrections, d.Feries, debut, fin, d.DateDuJour));
         Mesurer("AbsenceReportRules.Calculer", () => AbsenceReportRules.Calculer(d.Plannings, d.Cartes, d.Corrections, d.Conges, d.Feries, debut, fin, d.DateDuJour));
         Mesurer("chargement_conges_SAGE", () => scope.ServiceProvider.GetRequiredService<ISageLeaveCalendar>().LoadAsync().GetAwaiter().GetResult());
 

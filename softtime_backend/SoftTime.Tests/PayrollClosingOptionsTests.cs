@@ -18,7 +18,7 @@ public class PayrollClosingOptionsTests
     private static IReadOnlyList<ClosingAnomaly> Incomplets(
         ClosingRulesOptions? options,
         IReadOnlyList<HeureCorrigee>? corrections = null)
-        => PayrollClosingRules.PointagesIncomplets(
+        => PunchCompletenessRules.PointagesIncomplets(
             new[] { new CardPaie { Id = 1, SageMatricule = "00369" } },
             Array.Empty<PlanningSalarie>(),
             new[] { new Pointage { MatriculeSage = "369", DatePointage = Mercredi, HeurePointage = TimeSpan.FromHours(8) } },

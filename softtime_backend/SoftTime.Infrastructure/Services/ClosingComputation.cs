@@ -181,18 +181,18 @@ internal static class ClosingComputation
         var lignesAbsence = AbsenceReportRules.Calculer(d.Plannings, d.Cartes, d.Corrections, d.Conges, d.Feries, from, fin, d.DateDuJour);
 
         var anomalies = new List<ClosingAnomaly>();
-        anomalies.AddRange(PayrollClosingRules.PointagesIncomplets(
+        anomalies.AddRange(PunchCompletenessRules.PointagesIncomplets(
             d.Cartes, d.Plannings, index, d.Corrections, d.SemainesValidees, from, fin, d.MultiPointage, options));
-        anomalies.AddRange(PayrollClosingRules.PointagesManquants(lignesAbsence, index));
-        anomalies.AddRange(PayrollClosingRules.PlanningsSansPointage(lignesAbsence, index, d.Corrections));
-        anomalies.AddRange(PayrollClosingRules.PointagesSansPlanning(d.Cartes, d.Plannings, index, from, fin, options));
-        anomalies.AddRange(PayrollClosingRules.DoublonsExacts(index, from, fin, options, d.MultiPointage));
-        anomalies.AddRange(PayrollClosingRules.QuasiDoublons(index, from, fin, options, d.MultiPointage));
-        anomalies.AddRange(PayrollClosingRules.FeriesNonAppliques(
+        anomalies.AddRange(PunchCompletenessRules.PointagesManquants(lignesAbsence, index));
+        anomalies.AddRange(PlanningCoverageRules.PlanningsSansPointage(lignesAbsence, index, d.Corrections));
+        anomalies.AddRange(PlanningCoverageRules.PointagesSansPlanning(d.Cartes, d.Plannings, index, from, fin, options));
+        anomalies.AddRange(DuplicatePunchRules.DoublonsExacts(index, from, fin, options, d.MultiPointage));
+        anomalies.AddRange(DuplicatePunchRules.QuasiDoublons(index, from, fin, options, d.MultiPointage));
+        anomalies.AddRange(HolidayPunchRules.FeriesNonAppliques(
             d.Cartes, d.Plannings, d.Corrections, d.Feries, from, fin, d.DateDuJour, index));
 
         var exclus = options.ExclureSansPlanningSurPeriode
-            ? PayrollClosingRules.SalariesSansPlanningSurPeriode(d.Cartes, d.Plannings, index, from, fin).Count
+            ? PlanningCoverageRules.SalariesSansPlanningSurPeriode(d.Cartes, d.Plannings, index, from, fin).Count
             : 0;
         return new ResultatPeriode(
             PayrollClosingRules.AppliquerGravites(PayrollClosingRules.Trier(anomalies), options),

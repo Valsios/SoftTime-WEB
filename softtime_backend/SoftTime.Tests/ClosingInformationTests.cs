@@ -214,15 +214,15 @@ public class ClosingInformationTests
     {
         var options = ClosingRulesOptions.Default;
 
-        Assert.All(PayrollClosingRules.DoublonsExacts(Doublons, Lundi, Vendredi, options, multiPointage: true),
+        Assert.All(DuplicatePunchRules.DoublonsExacts(Doublons, Lundi, Vendredi, options, multiPointage: true),
             a => Assert.Equal(ClosingSeverity.Information, a.Severity));
-        Assert.All(PayrollClosingRules.QuasiDoublons(Doublons, Lundi, Vendredi, options, multiPointage: true),
+        Assert.All(DuplicatePunchRules.QuasiDoublons(Doublons, Lundi, Vendredi, options, multiPointage: true),
             a => Assert.Equal(ClosingSeverity.Information, a.Severity));
-        Assert.All(PayrollClosingRules.DoublonsExacts(Doublons, Lundi, Vendredi, options, multiPointage: false),
+        Assert.All(DuplicatePunchRules.DoublonsExacts(Doublons, Lundi, Vendredi, options, multiPointage: false),
             a => Assert.Equal(ClosingSeverity.Mineure, a.Severity));
-        Assert.All(PayrollClosingRules.QuasiDoublons(Doublons, Lundi, Vendredi, options, multiPointage: false),
+        Assert.All(DuplicatePunchRules.QuasiDoublons(Doublons, Lundi, Vendredi, options, multiPointage: false),
             a => Assert.Equal(ClosingSeverity.Mineure, a.Severity));
-        Assert.NotEmpty(PayrollClosingRules.QuasiDoublons(Doublons, Lundi, Vendredi, options, multiPointage: true));
+        Assert.NotEmpty(DuplicatePunchRules.QuasiDoublons(Doublons, Lundi, Vendredi, options, multiPointage: true));
     }
 
     [Fact]
@@ -233,7 +233,7 @@ public class ClosingInformationTests
         Assert.Equal(ClosingSeverity.Importante, options.Gravite(ClosingAnomalyType.DoublonExact, multiPointage: false));
         Assert.Equal(ClosingSeverity.Importante, options.Gravite(ClosingAnomalyType.QuasiDoublon, multiPointage: false));
         Assert.Equal(ClosingSeverity.Information, options.Gravite(ClosingAnomalyType.DoublonExact, multiPointage: true));
-        Assert.All(PayrollClosingRules.DoublonsExacts(Doublons, Lundi, Vendredi, options, multiPointage: false),
+        Assert.All(DuplicatePunchRules.DoublonsExacts(Doublons, Lundi, Vendredi, options, multiPointage: false),
             a => Assert.Equal(ClosingSeverity.Importante, a.Severity));
     }
 
@@ -263,7 +263,7 @@ public class ClosingInformationTests
         {
             Gravites = new Dictionary<ClosingAnomalyType, ClosingSeverity> { [ClosingAnomalyType.QuasiDoublon] = ClosingSeverity.Importante }
         };
-        var exacts = PayrollClosingRules.DoublonsExacts(Doublons, Lundi, Vendredi, options, multiPointage: true);
+        var exacts = DuplicatePunchRules.DoublonsExacts(Doublons, Lundi, Vendredi, options, multiPointage: true);
 
         var appliquees = PayrollClosingRules.AppliquerGravites(exacts, options);
 
@@ -273,10 +273,10 @@ public class ClosingInformationTests
     [Fact]
     public void Duplicates_DetailTextStatesTheEffectOnPayroll()
     {
-        var exactMulti = Assert.Single(PayrollClosingRules.DoublonsExacts(Doublons, Lundi, Vendredi, multiPointage: true));
-        var exactMono = Assert.Single(PayrollClosingRules.DoublonsExacts(Doublons, Lundi, Vendredi, multiPointage: false));
-        var quasiMulti = Assert.Single(PayrollClosingRules.QuasiDoublons(Doublons, Lundi, Vendredi, multiPointage: true));
-        var quasiMono = Assert.Single(PayrollClosingRules.QuasiDoublons(Doublons, Lundi, Vendredi, multiPointage: false));
+        var exactMulti = Assert.Single(DuplicatePunchRules.DoublonsExacts(Doublons, Lundi, Vendredi, multiPointage: true));
+        var exactMono = Assert.Single(DuplicatePunchRules.DoublonsExacts(Doublons, Lundi, Vendredi, multiPointage: false));
+        var quasiMulti = Assert.Single(DuplicatePunchRules.QuasiDoublons(Doublons, Lundi, Vendredi, multiPointage: true));
+        var quasiMono = Assert.Single(DuplicatePunchRules.QuasiDoublons(Doublons, Lundi, Vendredi, multiPointage: false));
 
         Assert.Contains("double passage sans effet sur la paie (multi-pointage)", exactMulti.Detail);
         Assert.Contains("double passage sans effet sur la paie (multi-pointage)", quasiMulti.Detail);
@@ -294,7 +294,7 @@ public class ClosingInformationTests
     {
         var pointages = new[] { Punch("369", Lundi, H8), Punch("369", Lundi, Plus(H8, secondes)) };
 
-        Assert.Equal(attendu, PayrollClosingRules.QuasiDoublons(pointages, Lundi, Vendredi).Count);
+        Assert.Equal(attendu, DuplicatePunchRules.QuasiDoublons(pointages, Lundi, Vendredi).Count);
     }
 
     // ---------- Étape 3 : salariés sans planning ----------
@@ -318,7 +318,7 @@ public class ClosingInformationTests
         // 001 planifié lundi, 002 sans aucune ligne, 003 planifié lundi seulement (partiellement planifié).
         var plannings = new[] { Planning(1, 1, Lundi), Planning(2, 3, Lundi) };
 
-        var resultat = PayrollClosingRules.PointagesSansPlanning(Cartes, plannings, PointagesSansPlanning, Lundi, Vendredi);
+        var resultat = PlanningCoverageRules.PointagesSansPlanning(Cartes, plannings, PointagesSansPlanning, Lundi, Vendredi);
 
         var anomalie = Assert.Single(resultat);
         Assert.Equal("3", anomalie.Matricule);          // salarié partiellement planifié : PAS exclu
@@ -331,7 +331,7 @@ public class ClosingInformationTests
         var plannings = new[] { Planning(1, 1, Lundi), Planning(2, 3, Lundi) };
         var options = new ClosingRulesOptions { ExclureSansPlanningSurPeriode = false };
 
-        var resultat = PayrollClosingRules.PointagesSansPlanning(Cartes, plannings, PointagesSansPlanning, Lundi, Vendredi, options);
+        var resultat = PlanningCoverageRules.PointagesSansPlanning(Cartes, plannings, PointagesSansPlanning, Lundi, Vendredi, options);
 
         Assert.Equal(new[] { ("2", Lundi), ("3", Mardi) }, resultat.Select(a => (a.Matricule, a.Date)));
     }
@@ -342,7 +342,7 @@ public class ClosingInformationTests
         // 002 n'a qu'une ligne OFF un autre jour : « de toute nature » → contrôlé, son lundi pointé est signalé.
         var plannings = new[] { Planning(1, 1, Lundi), Planning(2, 2, Mercredi, off: true) };
 
-        var resultat = PayrollClosingRules.PointagesSansPlanning(Cartes, plannings, PointagesSansPlanning, Lundi, Vendredi);
+        var resultat = PlanningCoverageRules.PointagesSansPlanning(Cartes, plannings, PointagesSansPlanning, Lundi, Vendredi);
 
         Assert.Contains(resultat, a => a.Matricule == "2" && a.Date == Lundi);
     }
@@ -353,7 +353,7 @@ public class ClosingInformationTests
         var plannings = new[] { Planning(1, 1, Lundi), Planning(2, 2, Lundi.AddDays(-14)), Planning(3, 3, Mardi) };
         var index = ClosingPunchIndex.Build(PointagesSansPlanning);
 
-        var exclus = PayrollClosingRules.SalariesSansPlanningSurPeriode(Cartes, plannings, index, Lundi, Vendredi);
+        var exclus = PlanningCoverageRules.SalariesSansPlanningSurPeriode(Cartes, plannings, index, Lundi, Vendredi);
 
         Assert.Contains("2", exclus);
         Assert.DoesNotContain("1", exclus);
@@ -410,8 +410,8 @@ public class ClosingInformationTests
         var feries = new HashSet<DateTime> { Mercredi };
         var plannings = new[] { Planning(1, 1, Mercredi) };
 
-        var sans = PayrollClosingRules.FeriesNonAppliques(Cartes, plannings, Array.Empty<HeureCorrigee>(), feries, Lundi, Vendredi, new DateTime(2025, 12, 1));
-        var avec = PayrollClosingRules.FeriesNonAppliques(Cartes, plannings, Array.Empty<HeureCorrigee>(), feries, Lundi, Vendredi, new DateTime(2025, 12, 1),
+        var sans = HolidayPunchRules.FeriesNonAppliques(Cartes, plannings, Array.Empty<HeureCorrigee>(), feries, Lundi, Vendredi, new DateTime(2025, 12, 1));
+        var avec = HolidayPunchRules.FeriesNonAppliques(Cartes, plannings, Array.Empty<HeureCorrigee>(), feries, Lundi, Vendredi, new DateTime(2025, 12, 1),
             ClosingPunchIndex.Build(new[] { Punch("001", Mercredi, H8) }));
 
         Assert.Null(Assert.Single(sans).PointageExiste);
