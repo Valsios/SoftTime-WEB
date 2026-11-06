@@ -87,10 +87,12 @@ public class SageDatabasesController : ControllerBase
         => Ok(await _svc.ActivateSagePairAsync(ct));
 
     [HttpGet("lookup/{matricule}")]
+    [RequireAnyDroit(Droit.Databases, Droit.Parameters)]
     public async Task<IActionResult> Lookup(string matricule, CancellationToken ct)
         => Ok(await _svc.GetDepartementServiceAsync(matricule, ct));
 
     [HttpPost("lookup-batch")]
+    [RequireAnyDroit(Droit.Databases, Droit.Parameters)]
     public async Task<IActionResult> LookupBatch([FromBody] string[] matricules, CancellationToken ct)
         => Ok(await _svc.GetDepartementServiceBatchAsync(matricules ?? Array.Empty<string>(), ct));
 
