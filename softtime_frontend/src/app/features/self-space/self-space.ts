@@ -16,6 +16,7 @@ import {
   SCOPE_NOTE,
   timeText,
 } from './self-space.logic';
+import { describeSelfError, SelfErrorNotice, strongestNotice } from './self-space.errors';
 import { SelfAbsences, SelfAnomalies, SelfDelays, SelfSpaceService, SelfWeeks } from './self-space.service';
 
 interface CardState<T> {
@@ -46,6 +47,14 @@ const loading = <T>(): CardState<T> => ({ status: 'loading', data: null });
       </select>
     </label>
 
+    @if (notice(); as n) {
+      <div class="self-notice" role="status" [attr.data-kind]="n.kind">
+        <p class="self-notice__message">{{ n.message }}</p>
+        <p class="self-notice__hint">{{ n.hint }}</p>
+      </div>
+    }
+
+    @if (showCards()) {
     <soft-card variant="bordered" padding="sm">
       <section aria-labelledby="self-hours" [attr.aria-busy]="weeks().status === 'loading'">
         <h2 id="self-hours" class="self-title">Mes heures par semaine</h2>
@@ -200,11 +209,16 @@ const loading = <T>(): CardState<T> => ({ status: 'loading', data: null });
         }
       </section>
     </soft-card>
+    }
   `,
   styles: [
     `
       :host { display: flex; flex-direction: column; gap: 16px; }
       :host ::ng-deep .soft-page-header { margin-bottom: 0; }
+      .self-notice { padding: 14px 16px; border: 1px solid var(--danger-border); border-radius: var(--radius-md); background: var(--danger-bg); color: var(--danger); }
+      .self-notice[data-kind='server'], .self-notice[data-kind='network'] { border-color: var(--warning-border); background: var(--warning-bg); color: var(--warning); }
+      .self-notice__message { margin: 0; font-size: 14.5px; font-weight: 600; }
+      .self-notice__hint { margin: 4px 0 0; font-size: 13.5px; }
       .self-month { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text-secondary); }
       .self-title { margin: 0; padding: 8px 8px 4px; font-family: var(--font-heading); font-size: 16px; color: var(--app-text-strong); }
       .self-subtitle { margin: 16px 8px 4px; font-size: 14px; color: var(--app-text-strong); }
@@ -225,6 +239,11 @@ export class SelfSpacePage implements OnInit, OnDestroy {
   readonly anomalies = signal<CardState<SelfAnomalies>>(loading());
   readonly absences = signal<CardState<SelfAbsences>>(loading());
   readonly delays = signal<CardState<SelfDelays>>(loading());
+
+  /** Encadré durable de la page (erreur de api/me/space/*) ; vide tant qu'aucune lecture n'a échoué. */
+  readonly notice = signal<SelfErrorNotice | null>(null);
+  /** Une erreur de compte, de période ou de session remplace les cartes : « aucune donnée » serait trompeur. */
+  readonly showCards = computed(() => !this.notice()?.masksCards);
 
   readonly scopeNote = SCOPE_NOTE;
   readonly loadingText = LOADING;
@@ -275,9 +294,13 @@ export class SelfSpacePage implements OnInit, OnDestroy {
     this.anomalies.set(loading());
     this.absences.set(loading());
     this.delays.set(loading());
+    this.notice.set(null);
     const track = <T>(state: { set(v: CardState<T>): void }) => ({
       next: (data: T) => state.set({ status: 'ok', data }),
-      error: () => state.set({ status: 'error', data: null }),
+      error: (err: unknown) => {
+        state.set({ status: 'error', data: null });
+        this.notice.update((courant) => strongestNotice(courant, describeSelfError(err)));
+      },
     });
     this.requests = [
       this.api.weeks(range).subscribe(track(this.weeks)),
