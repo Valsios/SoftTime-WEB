@@ -1,8 +1,6 @@
-using System.Globalization;
-
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.ChangeTracking;
+﻿using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 using SoftTime.Application.Abstractions;
@@ -19,6 +17,21 @@ namespace SoftTime.Infrastructure.Persistence;
 /// </summary>
 public sealed class AuditJournalSaveChangesInterceptor : SaveChangesInterceptor
 {
+    private readonly ICurrentUser _user;
+    private readonly ICompanyContext _company;
+    private readonly AuditJournalOptions _options;
+    private readonly HashSet<object> _capturedEntities = new(ReferenceEqualityComparer.Instance);
+
+    public AuditJournalSaveChangesInterceptor(
+        ICurrentUser user,
+        ICompanyContext company,
+        IOptions<AuditJournalOptions> options)
+    {
+        _user = user;
+        _company = company;
+        _options = options.Value;
+    }
+
     /// <summary>
     /// Tables jamais journalisées : journaux eux-mêmes, historiques, <c>T_AUDIT_DROIT</c> qui est déjà le journal
     /// spécialisé des changements de droits, et <c>T_REFRESH_TOKEN</c> (une ligne par connexion et par rafraîchissement).
@@ -29,18 +42,6 @@ public sealed class AuditJournalSaveChangesInterceptor : SaveChangesInterceptor
         "T_HISTORIQUE_POINTAGE", "T_HISTORIQUE_ANOMALIE", "T_HISTORIQUE_HS",
         "T_AUDIT_DROIT", "T_REFRESH_TOKEN"
     };
-
-    private readonly ICurrentUser _user;
-    private readonly ICompanyContext _company;
-    private readonly AuditJournalOptions _options;
-    private readonly HashSet<object> _capturedEntities = new(ReferenceEqualityComparer.Instance);
-
-    public AuditJournalSaveChangesInterceptor(ICurrentUser user, ICompanyContext company, IOptions<AuditJournalOptions> options)
-    {
-        _user = user;
-        _company = company;
-        _options = options.Value;
-    }
 
     /// <summary>
     /// Sauvegarde métier et audit dans une transaction commune. Les insertions sont différées
@@ -121,7 +122,7 @@ public sealed class AuditJournalSaveChangesInterceptor : SaveChangesInterceptor
 
         var correlation = Guid.NewGuid();
         var journal = new List<JournalAudit>();
-        foreach (var group in entries.GroupBy(TableName, StringComparer.OrdinalIgnoreCase))
+        foreach (var group in entries.GroupBy(AuditValueFormat.TableName, StringComparer.OrdinalIgnoreCase))
         {
             if (group.Count() > _options.DetailThreshold)
             {
@@ -151,7 +152,7 @@ public sealed class AuditJournalSaveChangesInterceptor : SaveChangesInterceptor
         var correlation = Guid.NewGuid();
         var beforeSave = new List<JournalAudit>();
         var deferredAdditions = new List<DeferredAddition>();
-        foreach (var group in entries.GroupBy(TableName, StringComparer.OrdinalIgnoreCase))
+        foreach (var group in entries.GroupBy(AuditValueFormat.TableName, StringComparer.OrdinalIgnoreCase))
         {
             if (group.Count() > _options.DetailThreshold)
             {
@@ -207,10 +208,7 @@ public sealed class AuditJournalSaveChangesInterceptor : SaveChangesInterceptor
 
     private bool IsAuditable(EntityEntry entry)
         => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted
-           && !ExcludedTables.Contains(TableName(entry));
-
-    private static string TableName(EntityEntry entry)
-        => entry.Metadata.GetTableName() ?? entry.Metadata.ClrType.Name;
+           && !ExcludedTables.Contains(AuditValueFormat.TableName(entry));
 
     private IEnumerable<JournalAudit> CreateDetails(
         string table,
@@ -218,18 +216,18 @@ public sealed class AuditJournalSaveChangesInterceptor : SaveChangesInterceptor
         Guid correlation,
         EntityState state)
     {
-        var action = ActionFor(state);
+        var action = AuditValueFormat.ActionFor(state);
         foreach (var property in ChangedProperties(entry, state))
         {
             var column = property.Metadata.GetColumnName() ?? property.Metadata.Name;
             var masked = AuditMaskingPolicy.IsSensitive(table, column);
             yield return CreateEntry(
                 table,
-                AuditMaskingPolicy.MaskKey(table, KeyFor(entry, state)),
+                AuditMaskingPolicy.MaskKey(table, AuditValueFormat.KeyFor(entry, state)),
                 column,
                 action,
-                masked ? AuditMaskingPolicy.Mask : OldValueFor(property, state),
-                masked ? AuditMaskingPolicy.Mask : NewValueFor(property, state),
+                masked ? AuditMaskingPolicy.Mask : AuditValueFormat.OldValueFor(property, state),
+                masked ? AuditMaskingPolicy.Mask : AuditValueFormat.NewValueFor(property, state),
                 correlation);
         }
     }
@@ -255,55 +253,8 @@ public sealed class AuditJournalSaveChangesInterceptor : SaveChangesInterceptor
         var primaryKey = entry.Metadata.FindPrimaryKey()?.Properties.ToHashSet() ?? [];
         return entry.Properties.Where(property =>
             !primaryKey.Contains(property.Metadata)
-            && (state != EntityState.Modified || (property.IsModified && ValuesDiffer(property))));
+            && (state != EntityState.Modified || (property.IsModified && AuditValueFormat.ValuesDiffer(property))));
     }
-
-    private static bool ValuesDiffer(PropertyEntry property)
-    {
-        var comparer = property.Metadata.GetValueComparer();
-        return comparer is null
-            ? !Equals(property.OriginalValue, property.CurrentValue)
-            : !comparer.Equals(property.OriginalValue, property.CurrentValue);
-    }
-
-    private static string? KeyFor(EntityEntry entry, EntityState state)
-    {
-        var key = entry.Metadata.FindPrimaryKey();
-        if (key is null)
-            return null;
-        return string.Join(";", key.Properties.Select(property =>
-        {
-            var value = entry.Property(property.Name);
-            var source = state == EntityState.Deleted ? value.OriginalValue : value.CurrentValue;
-            return $"{property.GetColumnName() ?? property.Name}={Format(source)}";
-        }));
-    }
-
-    private static string? ValueFor(PropertyEntry property, bool original)
-        => Format(original ? property.OriginalValue : property.CurrentValue);
-
-    private static string? OldValueFor(PropertyEntry property, EntityState state)
-        => state == EntityState.Added ? null : ValueFor(property, true);
-
-    private static string? NewValueFor(PropertyEntry property, EntityState state)
-        => state == EntityState.Deleted ? null : ValueFor(property, false);
-
-    private static string? Format(object? value)
-        => value switch
-        {
-            null => null,
-            DateTime date => date.ToString("yyyy-MM-dd HH:mm:ss.fffffff", CultureInfo.InvariantCulture),
-            DateTimeOffset date => date.ToString("yyyy-MM-dd HH:mm:ss.fffffff zzz", CultureInfo.InvariantCulture),
-            IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
-            _ => value.ToString()
-        };
-
-    private static string ActionFor(EntityState state) => state switch
-    {
-        EntityState.Added => "Insertion",
-        EntityState.Deleted => "Suppression",
-        _ => "Modification"
-    };
 
     private JournalAudit CreateEntry(
         string table,
