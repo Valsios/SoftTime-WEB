@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SoftTime.Api.Authorization;
 using SoftTime.Application.SelfService;
 
 namespace SoftTime.Api.Controllers;
@@ -14,6 +15,7 @@ namespace SoftTime.Api.Controllers;
 [Authorize]
 [Route("api/me/space")]
 [Tags("MonEspace")]
+[NoStore]
 public class SelfSpaceController : ControllerBase
 {
     private readonly SelfSpaceService _space;

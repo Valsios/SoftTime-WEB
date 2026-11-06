@@ -179,16 +179,39 @@ public class SelfSpaceAdversarialTests : IClassFixture<ApiFactory>
 
     // ---------------------------------------------------------------- en-têtes de réponse
 
-    [Fact]
-    public async Task Limite_connue_personal_responses_do_not_forbid_caching()
+    [Theory]
+    [InlineData("summary")]
+    [InlineData("weeks")]
+    [InlineData("anomalies")]
+    [InlineData("absences")]
+    [InlineData("delays")]
+    public async Task Personal_responses_forbid_caching_on_every_route_including_refusals(string route)
     {
-        // Les réponses de Mon espace sont personnelles mais n'envoient pas « Cache-Control: no-store » : un navigateur partagé ou un
-        // mandataire pourrait les conserver. Correction minimale proposée : [ResponseCache(NoStore = true, Location = None)] sur SelfSpaceController.
-        using var f = Actif();
-        var (reponse, _) = await Lire(f.CreateClient(), $"/api/me/space/weeks?{Periode}", Jeton(CompteId, 92, MatA));
+        // Correction : [NoStore] sur SelfSpaceController. Chaque route répond Cache-Control: no-store et Pragma: no-cache
+        // pour un succès, un refus 403, une erreur de saisie 400 et le 404 de la fonction désactivée.
+        static void VerifierEntetes(HttpResponseMessage reponse, string cas)
+        {
+            Assert.True(reponse.Headers.CacheControl?.NoStore ?? false, $"{cas} : Cache-Control: no-store absent");
+            Assert.Contains("no-cache", reponse.Headers.Pragma.ToString());
+        }
 
-        Assert.Equal(HttpStatusCode.OK, reponse.StatusCode);
-        Assert.False(reponse.Headers.CacheControl?.NoStore ?? false);
+        using var f = Actif();
+        var http = f.CreateClient();
+        var (ok, _) = await Lire(http, $"/api/me/space/{route}?{Periode}", Jeton(CompteId, 92, MatA));
+        Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        VerifierEntetes(ok, "200");
+
+        var (refus, _) = await Lire(http, $"/api/me/space/{route}?{Periode}", Jeton(99999, 92, MatA));        // compte inconnu : sans SELF:READ
+        Assert.Equal(HttpStatusCode.Forbidden, refus.StatusCode);
+        VerifierEntetes(refus, "403");
+
+        var (saisie, _) = await Lire(http, $"/api/me/space/{route}?from=pas-une-date", Jeton(CompteId, 92, MatA));
+        Assert.Equal(HttpStatusCode.BadRequest, saisie.StatusCode);
+        VerifierEntetes(saisie, "400");
+
+        var (desactivee, _) = await Lire(_f.CreateClient(), $"/api/me/space/{route}?{Periode}", Jeton(CompteId, 92, MatA));
+        Assert.Equal(HttpStatusCode.NotFound, desactivee.StatusCode);
+        VerifierEntetes(desactivee, "404");
     }
 
     // ---------------------------------------------------------------- limites connues démontrées
