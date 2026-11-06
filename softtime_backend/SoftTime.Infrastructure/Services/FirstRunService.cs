@@ -47,9 +47,7 @@ public sealed class FirstRunService : IFirstRunService
     /// </summary>
     public async Task<AdminSetupResultDto> CreateAdminAsync(AdminSetupDto dto, CancellationToken cancellationToken = default)
     {
-        if (!await IsFirstRunAsync(cancellationToken))
-            throw new DomainException(
-                "Des comptes existent déjà : la création initiale n'est plus possible. Utilisez l'écran Utilisateurs.");
+        await EnsureFirstRunAsync(cancellationToken);
         var login = (dto.Login ?? string.Empty).Trim();
         var motDePasse = dto.Password ?? string.Empty;
         if (string.IsNullOrWhiteSpace(dto.Nom))
@@ -59,34 +57,17 @@ public sealed class FirstRunService : IFirstRunService
         if (string.IsNullOrWhiteSpace(motDePasse))
             throw new DomainException("Le mot de passe est requis.");
         PasswordPolicy.EnsureValid(motDePasse);
-        var passwordHash = _passwordHasher.HashPassword(null!, motDePasse);
+        var admin = new Responsable
+        {
+            NomResponsable = dto.Nom.Trim(),
+            Login = login,
+            Password = _passwordHasher.HashPassword(null!, motDePasse),
+            Email = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim()
+        };
 
         // La vérification ci-dessus ne suffit pas : deux requêtes simultanées sur une base vide la passeraient
         // toutes les deux. Sous le verrou, la seconde attend la fin de la première, puis voit le compte créé.
-        var entity = await _uow.RunExclusiveAsync(CreateAdminLockResource, async ct =>
-        {
-            if (!await IsFirstRunAsync(ct))
-                throw new DomainException(
-                    "Des comptes existent déjà : la création initiale n'est plus possible. Utilisez l'écran Utilisateurs.");
-
-            // Le premier compte reçoit toujours le rôle d'identifiant 1 : seul ce rôle est administrateur.
-            var role = await _uow.Repository<Role>().GetByIdAsync(AdminRules.AdminRoleId, ct)
-                ?? throw new DomainException(
-                    "Le rôle Administrateur (identifiant 1) est introuvable : exécutez le script de création de la base.");
-
-            var created = new Responsable
-            {
-                IdRole = role.IdRole,
-                NomResponsable = dto.Nom.Trim(),
-                Login = login,
-                Password = passwordHash,
-                Email = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim()
-            };
-            await _uow.Repository<Responsable>().AddAsync(created, ct);
-            await EnsureRoleHasAllRightsAsync(role.IdRole, ct);
-            await _uow.SaveChangesAsync(ct);
-            return created;
-        }, cancellationToken);
+        var entity = await _uow.RunExclusiveAsync(CreateAdminLockResource, ct => AddAdminAsync(admin, ct), cancellationToken);
 
         var envoye = await _email.SendUserCredentialsAsync(entity.Email, entity.Login, motDePasse, entity.NomResponsable, null, cancellationToken);
         var message = envoye
@@ -95,6 +76,27 @@ public sealed class FirstRunService : IFirstRunService
                 ? "Compte administrateur créé. L'envoi de l'e-mail a échoué : communiquez les identifiants manuellement."
                 : "Compte administrateur créé. Aucune configuration SMTP (« Email ») : communiquez les identifiants manuellement.";
         return new AdminSetupResultDto(entity.IdResponsable, entity.Login ?? login, envoye, message);
+    }
+
+    private async Task EnsureFirstRunAsync(CancellationToken ct)
+    {
+        if (!await IsFirstRunAsync(ct))
+            throw new DomainException(
+                "Des comptes existent déjà : la création initiale n'est plus possible. Utilisez l'écran Utilisateurs.");
+    }
+
+    /// <summary>Le premier compte reçoit toujours le rôle d'identifiant 1 : seul ce rôle est administrateur.</summary>
+    private async Task<Responsable> AddAdminAsync(Responsable admin, CancellationToken ct)
+    {
+        await EnsureFirstRunAsync(ct);
+        var role = await _uow.Repository<Role>().GetByIdAsync(AdminRules.AdminRoleId, ct)
+            ?? throw new DomainException(
+                "Le rôle Administrateur (identifiant 1) est introuvable : exécutez le script de création de la base.");
+        admin.IdRole = role.IdRole;
+        await _uow.Repository<Responsable>().AddAsync(admin, ct);
+        await EnsureRoleHasAllRightsAsync(role.IdRole, ct);
+        await _uow.SaveChangesAsync(ct);
+        return admin;
     }
 
     /// <summary>Garantit que le rôle d'administration détient tous les droits (idempotent).</summary>

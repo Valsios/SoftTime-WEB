@@ -32,41 +32,20 @@ public sealed class OvertimeWeekContext : IOvertimeWeekContext
         var from = request.From.Date;
         var to = request.To.Date;
         var sageDb = _tenant.SageDb;
-        var pointeuseDb = _tenant.PointeuseDb;
-
         var cards = (await TargetCardsAsync(request, ct))
             .OrderBy(c => c.SageMatricule, StringComparer.OrdinalIgnoreCase)
             .ToList();
         var clock = (await _uow.Repository<ParametrePointeuse>().ListAsync(_ => true, ct)).FirstOrDefault();
-
-        var heures = (await _uow.Repository<HeureCorrigee>().ListAsync(
-                h => h.BddSage == sageDb
-                     && h.MatriculeSage != null
-                     && h.DatePointageIn >= from
-                     && h.DatePointageIn <= to, ct))
-            .GroupBy(h => MatriculeIdentity.Cle(h.MatriculeSage))
-            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
-
-        var planning = (await _uow.Repository<PlanningSalarie>().ListAsync(
-                p => p.BddSage == sageDb && p.DateP >= from && p.DateP <= to, ct))
-            .Where(p => OvertimeDayRules.EstDeLaPointeuse(p, pointeuseDb))
-            .GroupBy(p => p.IdSal)
-            .ToDictionary(g => g.Key, g => g.ToList());
-
-        var existantes = new Dictionary<string, HsValidee>(StringComparer.Ordinal);
-        if (avecExistantes)
-        {
-            existantes = (await _uow.Repository<HsValidee>().ListAsync(
-                    x => x.BddSage == sageDb && x.DateDeb == from, ct))
-                .Where(x => !string.IsNullOrEmpty(x.Matricules))
-                .GroupBy(x => MatriculeIdentity.Cle(x.Matricules))
-                .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Id).First(), StringComparer.Ordinal);
-        }
+        var heures = await ChargerHeuresAsync(from, to, ct);
+        var planning = await ChargerPlanningAsync(from, to, ct);
+        var existantes = avecExistantes
+            ? await ChargerExistantesAsync(from, ct)
+            : new Dictionary<string, HsValidee>(StringComparer.Ordinal);
 
         return new WeeklyContext
         {
             SageDb = sageDb,
-            PointeuseDb = pointeuseDb,
+            PointeuseDb = _tenant.PointeuseDb,
             MultiPointage = clock?.MultiPoint ?? true,
             Cards = cards,
             Feries = await _uow.Repository<JourFerie>().ListAsync(f => f.BddSage == sageDb, ct),
@@ -82,6 +61,37 @@ public sealed class OvertimeWeekContext : IOvertimeWeekContext
                 ? await ChargerCivilitesAsync(ct)
                 : new Dictionary<string, byte?>(StringComparer.Ordinal)
         };
+    }
+
+    private async Task<Dictionary<string, List<HeureCorrigee>>> ChargerHeuresAsync(DateTime from, DateTime to, CancellationToken ct)
+    {
+        var sageDb = _tenant.SageDb;
+        return (await _uow.Repository<HeureCorrigee>().ListAsync(
+                h => h.BddSage == sageDb && h.MatriculeSage != null && h.DatePointageIn >= from && h.DatePointageIn <= to, ct))
+            .GroupBy(h => MatriculeIdentity.Cle(h.MatriculeSage))
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+    }
+
+    /// <summary>Planning de la pointeuse active, par carte.</summary>
+    private async Task<Dictionary<int, List<PlanningSalarie>>> ChargerPlanningAsync(DateTime from, DateTime to, CancellationToken ct)
+    {
+        var sageDb = _tenant.SageDb;
+        var pointeuseDb = _tenant.PointeuseDb;
+        return (await _uow.Repository<PlanningSalarie>().ListAsync(
+                p => p.BddSage == sageDb && p.DateP >= from && p.DateP <= to, ct))
+            .Where(p => OvertimeDayRules.EstDeLaPointeuse(p, pointeuseDb))
+            .GroupBy(p => p.IdSal)
+            .ToDictionary(g => g.Key, g => g.ToList());
+    }
+
+    /// <summary>Lignes de semaine déjà enregistrées (la plus ancienne par salarié).</summary>
+    private async Task<Dictionary<string, HsValidee>> ChargerExistantesAsync(DateTime lundi, CancellationToken ct)
+    {
+        var sageDb = _tenant.SageDb;
+        return (await _uow.Repository<HsValidee>().ListAsync(x => x.BddSage == sageDb && x.DateDeb == lundi, ct))
+            .Where(x => !string.IsNullOrEmpty(x.Matricules))
+            .GroupBy(x => MatriculeIdentity.Cle(x.Matricules))
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Id).First(), StringComparer.Ordinal);
     }
 
     /// <summary>

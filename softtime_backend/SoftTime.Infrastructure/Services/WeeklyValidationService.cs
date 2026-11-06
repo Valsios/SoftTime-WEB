@@ -137,34 +137,26 @@ public sealed class WeeklyValidationService : IWeeklyValidationService
             from,
             lignes.Select(v => MatriculeIdentity.Cle(v.Matricules)).Where(cle => cle.Length > 0).ToHashSet(StringComparer.Ordinal),
             ct);
-
-        var corrRepo = _uow.Repository<HeureCorrigee>();
-        var corrections = await corrRepo.ListAsync(h => h.BddSage == sageDb
-            && h.DatePointageIn >= from && h.DatePointageIn <= to, ct);
-        var correctionsParCle = corrections
-            .Where(h => !string.IsNullOrEmpty(h.MatriculeSage))
-            .GroupBy(h => MatriculeIdentity.Cle(h.MatriculeSage))
-            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
-
-        var deverrouillees = 0;
-        foreach (var ligne in lignes)
-        {
-            if (!correctionsParCle.TryGetValue(MatriculeIdentity.Cle(ligne.Matricules), out var heures))
-                continue;
-            foreach (var heure in heures)
-            {
-                if (heure.ValiderHs != true)
-                    continue;
-                heure.ValiderHs = false;
-                corrRepo.Update(heure);
-                deverrouillees++;
-            }
-        }
+        var correctionsParCle = await ChargerCorrectionsParCleAsync(from, to, ct);
+        var deverrouillees = lignes.Sum(ligne =>
+            Deverrouiller(correctionsParCle.GetValueOrDefault(MatriculeIdentity.Cle(ligne.Matricules))));
 
         repo.RemoveRange(lignes);
         await _uow.SaveChangesAsync(ct);
         return new PurgeValidationResultDto(lignes.Count, deverrouillees,
             $"{lignes.Count} validation(s) purgée(s), {deverrouillees} heure(s) corrigée(s) déverrouillée(s).");
+    }
+
+    /// <summary>Rouvre les heures corrigées verrouillées par la validation ; retourne leur nombre.</summary>
+    private int Deverrouiller(List<HeureCorrigee>? heures)
+    {
+        var verrouillees = (heures ?? new List<HeureCorrigee>()).Where(h => h.ValiderHs == true).ToList();
+        foreach (var heure in verrouillees)
+        {
+            heure.ValiderHs = false;
+            _uow.Repository<HeureCorrigee>().Update(heure);
+        }
+        return verrouillees.Count;
     }
 
     /// <summary>

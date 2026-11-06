@@ -61,44 +61,56 @@ public sealed class SchemaMigrator
                 + "Une autre instance de l'API applique peut-être les migrations ; réessayez après son démarrage.");
         try
         {
-            await connection.EnsureVersionTableAsync(ct);
-            var applied = (await connection.GetAppliedAsync(ct)).ToDictionary(a => a.Version);
-            var appliedNow = new List<string>();
-            var mismatches = new List<string>();
-
-            foreach (var script in scripts)
-            {
-                if (applied.TryGetValue(script.Version, out var previous))
-                {
-                    if (!string.Equals(previous.Checksum, script.Checksum, StringComparison.OrdinalIgnoreCase))
-                    {
-                        mismatches.Add(script.Name);
-                        _logger.LogWarning(
-                            "Le script de migration {Script} a été modifié après son application (somme de contrôle {Recorded} enregistrée, {Current} actuelle). Il n'est pas rejoué : ajoutez un nouveau script.",
-                            script.Name, previous.Checksum, script.Checksum);
-                    }
-                    continue;
-                }
-
-                await ApplyAsync(connection, script, ct);
-                appliedNow.Add(script.Name);
-            }
-
-            if (appliedNow.Count == 0)
-                _logger.LogInformation("Schéma à jour : aucune migration à appliquer.");
-            return new SchemaMigrationResult(appliedNow, mismatches) { AlreadyUpToDate = scripts.Count - appliedNow.Count };
+            return await ApplyPendingAsync(connection, scripts, ct);
         }
         finally
         {
-            try
+            await ReleaseLockAsync(connection);
+        }
+    }
+
+    /// <summary>
+    /// Applique les scripts absents de la table des versions. Un script déjà appliqué mais modifié
+    /// depuis n'est pas rejoué : il est seulement signalé.
+    /// </summary>
+    private async Task<SchemaMigrationResult> ApplyPendingAsync(
+        ISchemaMigrationConnection connection, IReadOnlyList<MigrationScript> scripts, CancellationToken ct)
+    {
+        await connection.EnsureVersionTableAsync(ct);
+        var applied = (await connection.GetAppliedAsync(ct)).ToDictionary(a => a.Version);
+        var appliedNow = new List<string>();
+        var mismatches = new List<string>();
+        foreach (var script in scripts)
+        {
+            if (!applied.TryGetValue(script.Version, out var previous))
             {
-                await connection.ReleaseLockAsync(CancellationToken.None);
+                await ApplyAsync(connection, script, ct);
+                appliedNow.Add(script.Name);
             }
-            catch (Exception ex)
+            else if (!string.Equals(previous.Checksum, script.Checksum, StringComparison.OrdinalIgnoreCase))
             {
-                // La fermeture de la connexion libère de toute façon un verrou de session.
-                _logger.LogWarning(ex, "Libération du verrou de migration impossible.");
+                mismatches.Add(script.Name);
+                _logger.LogWarning(
+                    "Le script de migration {Script} a été modifié après son application (somme de contrôle {Recorded} enregistrée, {Current} actuelle). Il n'est pas rejoué : ajoutez un nouveau script.",
+                    script.Name, previous.Checksum, script.Checksum);
             }
+        }
+
+        if (appliedNow.Count == 0)
+            _logger.LogInformation("Schéma à jour : aucune migration à appliquer.");
+        return new SchemaMigrationResult(appliedNow, mismatches) { AlreadyUpToDate = scripts.Count - appliedNow.Count };
+    }
+
+    /// <summary>La fermeture de la connexion libère de toute façon un verrou de session.</summary>
+    private async Task ReleaseLockAsync(ISchemaMigrationConnection connection)
+    {
+        try
+        {
+            await connection.ReleaseLockAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Libération du verrou de migration impossible.");
         }
     }
 

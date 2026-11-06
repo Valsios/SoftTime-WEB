@@ -118,45 +118,59 @@ public sealed class CorrectedHoursService : ICorrectedHoursService
     public async Task<ImportResultDto> ImportCorrectionsExcelAsync(IReadOnlyList<Dictionary<string, string>> rows, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var repo = _uow.Repository<HeureCorrigee>();
         var semainesValidees = await _validatedWeekGuard.ChargerSemainesValideesAsync(_tenant.SageDb, ct);
-        var imported = 0;
-        var sansMatricule = 0;
-        var verrouillees = 0;
+        var (imported, sansMatricule, verrouillees) = (0, 0, 0);
         foreach (var row in rows)
         {
-            var matr = ExcelCells.Get(row, "Matricule", "MATRICULE", "Matricule SAGE");
-            if (string.IsNullOrWhiteSpace(matr))
+            var correction = LireCorrection(row);
+            if (correction is null)
             {
                 sansMatricule++;
                 continue;
             }
-            ExcelCells.TryDate(ExcelCells.Get(row, "DateEntree", "DATE ENTREE", "Date entrée", "Date in"), out var dIn);
-            ExcelCells.TryDate(ExcelCells.Get(row, "DateSortie", "DATE SORTIE", "Date sortie", "Date out"), out var dOut);
-            ExcelCells.TryTime(ExcelCells.Get(row, "HeureEntree", "HEURE ENTREE", "Heure entrée"), out var hIn);
-            ExcelCells.TryTime(ExcelCells.Get(row, "HeureSortie", "HEURE SORTIE", "Heure sortie"), out var hOut);
             // Une semaine validée est figée : la ligne est ignorée plutôt que d'en changer les heures.
-            if (dIn != default && semainesValidees.Contains((MatriculeIdentity.Cle(matr), ValidatedWeeks.Lundi(dIn))))
+            if (correction.DatePointageIn is DateTime dIn
+                && semainesValidees.Contains((MatriculeIdentity.Cle(correction.MatriculeSage), ValidatedWeeks.Lundi(dIn))))
             {
                 verrouillees++;
                 continue;
             }
-            await repo.AddAsync(new HeureCorrigee
-            {
-                MatriculeSage = matr,
-                DatePointageIn = dIn == default ? null : dIn,
-                DatePointageOut = dOut == default ? null : dOut,
-                HEntree = hIn,
-                HSortie = hOut,
-                BddSage = _tenant.SageDb,
-                BddPointeuse = _tenant.PointeuseDb,
-                ValiderCorrection = true,
-                // Une correction importée est protégée du pré-traitement des pointages.
-                Origine = PunchProcessingConfiguration.OrigineManuel
-            }, ct);
+            correction.BddSage = _tenant.SageDb;
+            correction.BddPointeuse = _tenant.PointeuseDb;
+            await _uow.Repository<HeureCorrigee>().AddAsync(correction, ct);
             imported++;
         }
         await _uow.SaveChangesAsync(ct);
+        return ImportResult(imported, sansMatricule, verrouillees);
+    }
+
+    /// <summary>
+    /// Ligne Excel en correction manuelle validée (protégée du pré-traitement des pointages), ou
+    /// <c>null</c> sans matricule.
+    /// </summary>
+    private static HeureCorrigee? LireCorrection(Dictionary<string, string> row)
+    {
+        var matr = ExcelCells.Get(row, "Matricule", "MATRICULE", "Matricule SAGE");
+        if (string.IsNullOrWhiteSpace(matr))
+            return null;
+        ExcelCells.TryDate(ExcelCells.Get(row, "DateEntree", "DATE ENTREE", "Date entrée", "Date in"), out var dIn);
+        ExcelCells.TryDate(ExcelCells.Get(row, "DateSortie", "DATE SORTIE", "Date sortie", "Date out"), out var dOut);
+        ExcelCells.TryTime(ExcelCells.Get(row, "HeureEntree", "HEURE ENTREE", "Heure entrée"), out var hIn);
+        ExcelCells.TryTime(ExcelCells.Get(row, "HeureSortie", "HEURE SORTIE", "Heure sortie"), out var hOut);
+        return new HeureCorrigee
+        {
+            MatriculeSage = matr,
+            DatePointageIn = dIn == default ? null : dIn,
+            DatePointageOut = dOut == default ? null : dOut,
+            HEntree = hIn,
+            HSortie = hOut,
+            ValiderCorrection = true,
+            Origine = PunchProcessingConfiguration.OrigineManuel
+        };
+    }
+
+    private static ImportResultDto ImportResult(int imported, int sansMatricule, int verrouillees)
+    {
         var skipped = sansMatricule + verrouillees;
         var message = $"{imported} correction(s) importée(s), {skipped} ligne(s) ignorée(s)";
         var motifs = new List<string>();

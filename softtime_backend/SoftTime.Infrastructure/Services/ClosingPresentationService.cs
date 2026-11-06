@@ -31,23 +31,9 @@ public class ClosingPresentationService : IClosingPresentationService
     public async Task<ClosingReportDto> PresenterAsync(ClosingAnalysisDto analyse, CancellationToken ct = default)
     {
         var afficherNoms = _reglages.ShowNames;
-        var noms = new Dictionary<string, (string? Nom, string? Prenom)>(StringComparer.Ordinal);
-        if (afficherNoms && analyse.Anomalies.Items.Count > 0)
-        {
-            var sageDb = _tenant.SageDb;
-            var repo = _uow.Repository<CardPaie>();
-            var cartes = await repo.ToListAsync(repo.QueryReadOnly()
-                .Where(c => c.SageBdd == sageDb)
-                .Select(c => new CardPaie { Id = c.Id, SageMatricule = c.SageMatricule, SageNom = c.SageNom, SagePrenom = c.SagePrenom }), ct);
-            var clesPage = analyse.Anomalies.Items.Select(a => a.Matricule).ToHashSet(StringComparer.Ordinal);
-            foreach (var carte in cartes.OrderBy(c => c.Id))
-            {
-                var cle = MatriculeIdentity.Cle(carte.SageMatricule);
-                if (clesPage.Contains(cle) && !noms.ContainsKey(cle))
-                    noms[cle] = (Texte(carte.SageNom), Texte(carte.SagePrenom));
-            }
-        }
-
+        var noms = afficherNoms && analyse.Anomalies.Items.Count > 0
+            ? await ChargerNomsAsync(analyse.Anomalies.Items.Select(a => a.Matricule), ct)
+            : new Dictionary<string, (string? Nom, string? Prenom)>(StringComparer.Ordinal);
         var items = analyse.Anomalies.Items
             .Select(a =>
             {
@@ -76,6 +62,26 @@ public class ClosingPresentationService : IClosingPresentationService
             analyse.Comparaison,
             afficherNoms,
             analyse.SalariesSansPlanningExclus);
+    }
+
+    /// <summary>Nom et prénom des salariés de la page (carte de plus petit ID par clé matricule).</summary>
+    private async Task<Dictionary<string, (string? Nom, string? Prenom)>> ChargerNomsAsync(
+        IEnumerable<string> matricules, CancellationToken ct)
+    {
+        var sageDb = _tenant.SageDb;
+        var repo = _uow.Repository<CardPaie>();
+        var cartes = await repo.ToListAsync(repo.QueryReadOnly()
+            .Where(c => c.SageBdd == sageDb)
+            .Select(c => new CardPaie { Id = c.Id, SageMatricule = c.SageMatricule, SageNom = c.SageNom, SagePrenom = c.SagePrenom }), ct);
+        var clesPage = matricules.ToHashSet(StringComparer.Ordinal);
+        var noms = new Dictionary<string, (string? Nom, string? Prenom)>(StringComparer.Ordinal);
+        foreach (var carte in cartes.OrderBy(c => c.Id))
+        {
+            var cle = MatriculeIdentity.Cle(carte.SageMatricule);
+            if (clesPage.Contains(cle))
+                noms.TryAdd(cle, (Texte(carte.SageNom), Texte(carte.SagePrenom)));
+        }
+        return noms;
     }
 
     private static string? Texte(string? valeur) => string.IsNullOrWhiteSpace(valeur) ? null : valeur.Trim();

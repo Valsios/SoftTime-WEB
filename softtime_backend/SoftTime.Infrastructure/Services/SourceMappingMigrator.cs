@@ -127,57 +127,53 @@ public sealed class SourceMappingMigrator : ISourceMappingMigrator
     // Convertit une fois les anciennes colonnes MAP_* en mappings (idempotent).
     public async Task MigrateLegacyMappingsAsync(CancellationToken ct)
     {
-        var entRepo = _uow.Repository<SourceEntityMapping>();
-        var fldRepo = _uow.Repository<SourceFieldMapping>();
-        var existing = await entRepo.ListAsync(_ => true, ct);
+        var existing = await _uow.Repository<SourceEntityMapping>().ListAsync(_ => true, ct);
         var sageDone = existing.Where(e => e.SageDbId != null).Select(e => e.SageDbId!.Value).ToHashSet();
         var pteDone = existing.Where(e => e.PointeuseDbId != null).Select(e => e.PointeuseDbId!.Value).ToHashSet();
 
         foreach (var row in await _uow.Repository<BddSage>().ListAsync(_ => true, ct))
         {
-            if (sageDone.Contains(row.Id) || string.IsNullOrWhiteSpace(row.MapTable)) continue;
-            var ent = new SourceEntityMapping { SystemType = "SAGE", SageDbId = row.Id, EntityKind = "EMPLOYEE", SourceTable = row.MapTable!.Trim() };
-            await entRepo.AddAsync(ent, ct);
-            await _uow.SaveChangesAsync(ct);
-            await AddLegacyFieldsAsync(fldRepo, ent.Id, new[]
-            {
-                ("SAGE_MATRICULE", row.MapColMatricule),
-                ("SAGE_NOM", row.MapColNom),
-                ("SAGE_PRENOM", row.MapColPrenom),
-                ("SAGE_BADGE", row.MapColBadge),
-            }, ct);
+            if (sageDone.Contains(row.Id) || string.IsNullOrWhiteSpace(row.MapTable))
+                continue;
+            await AddLegacyMappingAsync(
+                new SourceEntityMapping { SystemType = "SAGE", SageDbId = row.Id, EntityKind = "EMPLOYEE", SourceTable = row.MapTable!.Trim() },
+                new[] { ("SAGE_MATRICULE", row.MapColMatricule), ("SAGE_NOM", row.MapColNom), ("SAGE_PRENOM", row.MapColPrenom), ("SAGE_BADGE", row.MapColBadge) },
+                ct);
         }
 
         foreach (var row in await _uow.Repository<BddPointeuse>().ListAsync(_ => true, ct))
         {
-            if (pteDone.Contains(row.Id)) continue;
-            if (!string.IsNullOrWhiteSpace(row.MapUserTable))
-            {
-                var ent = new SourceEntityMapping { SystemType = "POINTEUSE", PointeuseDbId = row.Id, EntityKind = "PUNCH_USER", SourceTable = row.MapUserTable!.Trim() };
-                await entRepo.AddAsync(ent, ct);
-                await _uow.SaveChangesAsync(ct);
-                await AddLegacyFieldsAsync(fldRepo, ent.Id, new[]
-                {
-                    ("PTE_USER_ID", row.MapUserColId),
-                    ("PTE_USER_BADGE", row.MapUserColBadge),
-                    ("PTE_USER_SSN", row.MapUserColSsn),
-                    ("PTE_USER_NAME", row.MapUserColNom),
-                }, ct);
-            }
-            if (!string.IsNullOrWhiteSpace(row.MapPunchTable))
-            {
-                var ent = new SourceEntityMapping { SystemType = "POINTEUSE", PointeuseDbId = row.Id, EntityKind = "PUNCH", SourceTable = row.MapPunchTable!.Trim() };
-                await entRepo.AddAsync(ent, ct);
-                await _uow.SaveChangesAsync(ct);
-                await AddLegacyFieldsAsync(fldRepo, ent.Id, new[]
-                {
-                    ("PTE_PUNCH_USER_ID", row.MapPunchColUserId),
-                    ("PTE_PUNCH_DATETIME", row.MapPunchColDatetime),
-                    ("PTE_PUNCH_TYPE", row.MapPunchColType),
-                }, ct);
-            }
+            if (!pteDone.Contains(row.Id))
+                await MigrateLegacyPointeuseAsync(row, ct);
         }
         await _uow.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Tables utilisateurs et pointages d'une pointeuse héritée, chacune si elle est renseignée.</summary>
+    private async Task MigrateLegacyPointeuseAsync(BddPointeuse row, CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(row.MapUserTable))
+        {
+            await AddLegacyMappingAsync(
+                new SourceEntityMapping { SystemType = "POINTEUSE", PointeuseDbId = row.Id, EntityKind = "PUNCH_USER", SourceTable = row.MapUserTable!.Trim() },
+                new[] { ("PTE_USER_ID", row.MapUserColId), ("PTE_USER_BADGE", row.MapUserColBadge), ("PTE_USER_SSN", row.MapUserColSsn), ("PTE_USER_NAME", row.MapUserColNom) },
+                ct);
+        }
+        if (!string.IsNullOrWhiteSpace(row.MapPunchTable))
+        {
+            await AddLegacyMappingAsync(
+                new SourceEntityMapping { SystemType = "POINTEUSE", PointeuseDbId = row.Id, EntityKind = "PUNCH", SourceTable = row.MapPunchTable!.Trim() },
+                new[] { ("PTE_PUNCH_USER_ID", row.MapPunchColUserId), ("PTE_PUNCH_DATETIME", row.MapPunchColDatetime), ("PTE_PUNCH_TYPE", row.MapPunchColType) },
+                ct);
+        }
+    }
+
+    /// <summary>Enregistre le mapping d'entité (pour obtenir son identifiant) puis ses colonnes.</summary>
+    private async Task AddLegacyMappingAsync(SourceEntityMapping entity, (string Role, string? Column)[] fields, CancellationToken ct)
+    {
+        await _uow.Repository<SourceEntityMapping>().AddAsync(entity, ct);
+        await _uow.SaveChangesAsync(ct);
+        await AddLegacyFieldsAsync(_uow.Repository<SourceFieldMapping>(), entity.Id, fields, ct);
     }
 
     public async Task AddLegacyFieldsAsync(IRepository<SourceFieldMapping> repo, int entityMappingId, (string Role, string? Column)[] pairs, CancellationToken ct)
