@@ -3,10 +3,10 @@ using SoftTime.Domain.Entities.SoftTime;
 namespace SoftTime.Domain.Services;
 
 /// <summary>
-/// Cadre commun du rapport des absences : période effective (plafonnée à la veille), jours
+/// Cadre commun des rapports d'absences et de retards : période effective (plafonnée à la veille), jours
 /// fériés et planning retenu par (clé matricule, jour).
 /// </summary>
-internal sealed record AbsenceReportCalendar(
+internal sealed record ReportCalendar(
     DateTime Debut,
     DateTime Fin,
     IReadOnlySet<DateTime> Feries,

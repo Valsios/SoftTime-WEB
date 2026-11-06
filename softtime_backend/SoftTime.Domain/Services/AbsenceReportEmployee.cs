@@ -31,7 +31,7 @@ internal sealed class AbsenceReportEmployee
             .ToDictionary(g => g.Key, g => CumulerConges(g.ToList()));
     }
 
-    public IEnumerable<AbsenceReportRow> Lignes(AbsenceReportCalendar calendrier, IEnumerable<DateTime> datesPlanifiees)
+    public IEnumerable<AbsenceReportRow> Lignes(ReportCalendar calendrier, IEnumerable<DateTime> datesPlanifiees)
     {
         foreach (var jour in DatesCandidates(calendrier, datesPlanifiees).OrderBy(d => d))
         {
@@ -57,7 +57,7 @@ internal sealed class AbsenceReportEmployee
     }
 
     /// <summary>Congés SAGE, absences arbitrées et jours planifiés travaillés de la période.</summary>
-    private HashSet<DateTime> DatesCandidates(AbsenceReportCalendar calendrier, IEnumerable<DateTime> datesPlanifiees)
+    private HashSet<DateTime> DatesCandidates(ReportCalendar calendrier, IEnumerable<DateTime> datesPlanifiees)
     {
         var dates = new HashSet<DateTime>();
         dates.UnionWith(_conges.Select(c => c.Date.Date).Where(calendrier.Contient));

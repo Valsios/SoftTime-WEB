@@ -41,7 +41,7 @@ public static class AbsenceReportRules
         if (cartesParCle.Count == 0)
             return Array.Empty<AbsenceReportRow>();
 
-        var calendrier = new AbsenceReportCalendar(debut, fin, feries, IndexerPlannings(plannings, cleParIdSal, debut, fin));
+        var calendrier = new ReportCalendar(debut, fin, feries, IndexerPlannings(plannings, cleParIdSal, debut, fin));
         var datesPlanifieesParCle = DatesPlanifieesParCle(calendrier.Plannings);
         var correctionsParCle = corrections
             .Where(h => h.DatePointageIn.HasValue)
@@ -64,7 +64,7 @@ public static class AbsenceReportRules
     /// C11 : toutes les cartes de même clé matricule sont mappées par leur IDSAL ; la carte de
     /// plus petit ID représente le salarié.
     /// </summary>
-    private static (Dictionary<int, string> CleParIdSal, Dictionary<string, CardPaie> CartesParCle) IndexerCartes(
+    internal static (Dictionary<int, string> CleParIdSal, Dictionary<string, CardPaie> CartesParCle) IndexerCartes(
         IReadOnlyList<CardPaie> cartes)
     {
         var cleParIdSal = new Dictionary<int, string>();
@@ -86,7 +86,7 @@ public static class AbsenceReportRules
     /// C11 : plannings de toutes les cartes de même clé pris en compte. Une ligne de travail
     /// prime sur une ligne OFF, puis le plus petit ID l'emporte (choix déterministe).
     /// </summary>
-    private static Dictionary<(string Cle, DateTime Date), PlanningSalarie> IndexerPlannings(
+    internal static Dictionary<(string Cle, DateTime Date), PlanningSalarie> IndexerPlannings(
         IReadOnlyList<PlanningSalarie> plannings, Dictionary<int, string> cleParIdSal, DateTime debut, DateTime fin)
     {
         var parCleEtDate = new Dictionary<(string Cle, DateTime Date), PlanningSalarie>();

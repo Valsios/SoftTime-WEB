@@ -22,7 +22,7 @@ public sealed class ValidatedWeekGuard : IValidatedWeekGuard
         var lundi = jour.Value.Date.AddDays(-(((int)jour.Value.DayOfWeek + 6) % 7));
         var semaines = await _uow.Repository<HsValidee>().ListAsync(
             v => v.BddSage == sageDb && v.DateDeb == lundi && v.ValidationHs == true, ct);
-        if (semaines.Any(v => MemeIdentifiant(v.Matricules, matricule)))
+        if (semaines.Any(v => MatriculeIdentity.MemeIdentifiant(v.Matricules, matricule)))
             throw new DomainException(
                 $"La semaine du {lundi:dd/MM/yyyy} est validée : annulez la validation avant de modifier les pointages.");
     }
@@ -37,16 +37,4 @@ public sealed class ValidatedWeekGuard : IValidatedWeekGuard
             .Where(v => !string.IsNullOrWhiteSpace(v.Matricules))
             .Select(v => (MatriculeIdentity.Cle(v.Matricules), v.DateDeb!.Value.Date))
             .ToHashSet();
-
-    /// <summary>Comparaison de matricule insensible au remplissage par des zéros (« 00369 » == « 369 »).</summary>
-    private static bool MemeIdentifiant(string? a, string? b)
-    {
-        a = a?.Trim();
-        b = b?.Trim();
-        if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b))
-            return false;
-        if (long.TryParse(a, out var na) && long.TryParse(b, out var nb))
-            return na == nb;
-        return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
-    }
 }

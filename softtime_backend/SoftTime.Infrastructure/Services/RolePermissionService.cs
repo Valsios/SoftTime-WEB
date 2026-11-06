@@ -88,85 +88,15 @@ public sealed class RolePermissionService : IRolePermissionService
         if (permissions == null)
             throw new DomainException("La liste des permissions ne peut pas être nulle.");
 
-        var caller = await _uow.Repository<Responsable>().GetByIdAsync(currentUserId, cancellationToken)
-            ?? throw new DomainException("Utilisateur appelant introuvable.");
-
-        var callerRole = await _uow.Repository<Role>().GetByIdAsync(caller.IdRole, cancellationToken)
-            ?? throw new DomainException("Utilisateur appelant introuvable.");
-
-        if (!AdminRules.IsSuperAdmin(caller.IdRole))
-            throw new DomainException("Seul un administrateur peut modifier les permissions d'un rôle.");
-
+        var caller = await RequireAdministratorCallerAsync(currentUserId, cancellationToken);
         if (targetRoleId == AdminRules.AdminRoleId)
             throw new DomainException("Les privilèges du rôle Administrateur ne sont pas modifiables.");
-
         var targetRole = await _uow.Repository<Role>().GetByIdAsync(targetRoleId, cancellationToken)
             ?? throw new NotFoundException("Rôle cible introuvable.");
 
-        var normalizedPermissions = permissions
-            .Where(p => !string.IsNullOrWhiteSpace(p))
-            .Select(p => p.Trim())
-            .Select(p =>
-            {
-                if (p.StartsWith("SAGE:", StringComparison.OrdinalIgnoreCase) ||
-                    p.StartsWith("POINTEUSE:", StringComparison.OrdinalIgnoreCase))
-                    return p;
-                return p.ToUpperInvariant();
-            })
-            .Where(p => p != PermissionMarkers.EmptyRolePermissionsMarker)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        var tooLongCodes = normalizedPermissions
-            .Where(p => p.Length > 128)
-            .ToList();
-        if (tooLongCodes.Count > 0)
-            throw new DomainException($"Code de permission trop long (128 caractères maximum) : {string.Join(", ", tooLongCodes)}.");
-
-        var invalidCodes = normalizedPermissions
-            .Where(p => !IsKnownPermissionCode(p))
-            .ToList();
-        if (invalidCodes.Count > 0)
-            throw new DomainException($"Codes de permission inconnus : {string.Join(", ", invalidCodes)}.");
-
-        var rpRepo = _uow.Repository<RolePermission>();
-        var existing = await rpRepo.ListAsync(p => p.IdRole == targetRoleId, cancellationToken);
-        var permsAvant = existing
-            .Where(p => p.PermissionCode != PermissionMarkers.EmptyRolePermissionsMarker)
-            .Select(p => p.PermissionCode)
-            .ToList();
-
-        rpRepo.RemoveRange(existing);
-
-        foreach (var p in normalizedPermissions)
-        {
-            await rpRepo.AddAsync(new RolePermission
-            {
-                IdRole = targetRoleId,
-                PermissionCode = p,
-                IsGranted = true
-            }, cancellationToken);
-        }
-
-        if (normalizedPermissions.Count == 0)
-        {
-            await rpRepo.AddAsync(new RolePermission
-            {
-                IdRole = targetRoleId,
-                PermissionCode = PermissionMarkers.EmptyRolePermissionsMarker,
-                IsGranted = true
-            }, cancellationToken);
-        }
-
-        var droitRepo = _uow.Repository<DroitRole>();
-        var existingDroits = await droitRepo.ListAsync(d => d.IdRole == targetRoleId, cancellationToken);
-        droitRepo.RemoveRange(existingDroits);
-
-        var portesDeduites = DeduirePortes(normalizedPermissions);
-        foreach (var porte in portesDeduites)
-        {
-            await droitRepo.AddAsync(new DroitRole { IdRole = targetRoleId, IdDroit = porte }, cancellationToken);
-        }
+        var normalizedPermissions = NormalizePermissions(permissions);
+        var permsAvant = await ReplaceRolePermissionsAsync(targetRoleId, normalizedPermissions, cancellationToken);
+        await ReplaceDroitsAsync(targetRoleId, normalizedPermissions, cancellationToken);
 
         await _rightsChangeJournal.EcrireAuditDroitAsync(
             currentUserId, caller.Login ?? string.Empty,
@@ -177,5 +107,76 @@ public sealed class RolePermissionService : IRolePermissionService
 
         await _uow.SaveChangesAsync(cancellationToken);
         _effectiveRights.InvalidateAll();
+    }
+
+    private async Task<Responsable> RequireAdministratorCallerAsync(decimal currentUserId, CancellationToken ct)
+    {
+        var caller = await _uow.Repository<Responsable>().GetByIdAsync(currentUserId, ct)
+            ?? throw new DomainException("Utilisateur appelant introuvable.");
+        _ = await _uow.Repository<Role>().GetByIdAsync(caller.IdRole, ct)
+            ?? throw new DomainException("Utilisateur appelant introuvable.");
+        if (!AdminRules.IsSuperAdmin(caller.IdRole))
+            throw new DomainException("Seul un administrateur peut modifier les permissions d'un rôle.");
+        return caller;
+    }
+
+    /// <summary>
+    /// Codes nettoyés et dédoublonnés : majuscules sauf les codes de base (SAGE:/POINTEUSE:, dont le
+    /// nom de base est conservé), marqueur « aucune permission » retiré, codes trop longs ou
+    /// inconnus refusés.
+    /// </summary>
+    private static List<string> NormalizePermissions(IReadOnlyCollection<string> permissions)
+    {
+        var normalized = permissions
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => p.Trim())
+            .Select(p => p.StartsWith("SAGE:", StringComparison.OrdinalIgnoreCase)
+                         || p.StartsWith("POINTEUSE:", StringComparison.OrdinalIgnoreCase)
+                ? p
+                : p.ToUpperInvariant())
+            .Where(p => p != PermissionMarkers.EmptyRolePermissionsMarker)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var tooLongCodes = normalized.Where(p => p.Length > 128).ToList();
+        if (tooLongCodes.Count > 0)
+            throw new DomainException($"Code de permission trop long (128 caractères maximum) : {string.Join(", ", tooLongCodes)}.");
+
+        var invalidCodes = normalized.Where(p => !IsKnownPermissionCode(p)).ToList();
+        if (invalidCodes.Count > 0)
+            throw new DomainException($"Codes de permission inconnus : {string.Join(", ", invalidCodes)}.");
+        return normalized;
+    }
+
+    /// <summary>
+    /// Remplace les permissions du rôle ; une liste vide est mémorisée par un marqueur. Retourne les
+    /// permissions d'avant pour le journal.
+    /// </summary>
+    private async Task<List<string>> ReplaceRolePermissionsAsync(
+        decimal roleId, List<string> permissions, CancellationToken ct)
+    {
+        var rpRepo = _uow.Repository<RolePermission>();
+        var existing = await rpRepo.ListAsync(p => p.IdRole == roleId, ct);
+        var permsAvant = existing
+            .Where(p => p.PermissionCode != PermissionMarkers.EmptyRolePermissionsMarker)
+            .Select(p => p.PermissionCode)
+            .ToList();
+        rpRepo.RemoveRange(existing);
+
+        var codes = permissions.Count == 0
+            ? new List<string> { PermissionMarkers.EmptyRolePermissionsMarker }
+            : permissions;
+        foreach (var code in codes)
+            await rpRepo.AddAsync(new RolePermission { IdRole = roleId, PermissionCode = code, IsGranted = true }, ct);
+        return permsAvant;
+    }
+
+    /// <summary>Recalcule les portes d'écran (T_DROITROLE) déduites des permissions.</summary>
+    private async Task ReplaceDroitsAsync(decimal roleId, List<string> permissions, CancellationToken ct)
+    {
+        var droitRepo = _uow.Repository<DroitRole>();
+        droitRepo.RemoveRange(await droitRepo.ListAsync(d => d.IdRole == roleId, ct));
+        foreach (var porte in DeduirePortes(permissions))
+            await droitRepo.AddAsync(new DroitRole { IdRole = roleId, IdDroit = porte }, ct);
     }
 }

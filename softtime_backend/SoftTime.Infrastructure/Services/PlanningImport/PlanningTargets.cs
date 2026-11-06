@@ -1,4 +1,5 @@
 using SoftTime.Domain.Entities.SoftTime;
+using SoftTime.Domain.Services;
 using SoftTime.Domain.Repositories;
 
 namespace SoftTime.Infrastructure.Services.PlanningImport;
@@ -31,7 +32,7 @@ internal sealed class PlanningTargets
     }
 
     public CardPaie? Carte(string matricule) =>
-        _cards.FirstOrDefault(c => MemeIdentifiant(c.SageMatricule, matricule));
+        _cards.FirstOrDefault(c => MatriculeIdentity.MemeIdentifiant(c.SageMatricule, matricule));
 
     public Categorie? Categorie(string intitule, bool ignorerEspaces) =>
         _categories.FirstOrDefault(c =>
@@ -45,17 +46,5 @@ internal sealed class PlanningTargets
             .Select(a => a.MatriculeSage)
             .ToHashSet();
         return _cards.Where(c => ids.Contains(c.Id)).ToList();
-    }
-
-    /// <summary>Comparaison de matricule insensible au remplissage par des zéros (« 00369 » == « 369 »).</summary>
-    private static bool MemeIdentifiant(string? a, string? b)
-    {
-        a = a?.Trim();
-        b = b?.Trim();
-        if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b))
-            return false;
-        if (long.TryParse(a, out var na) && long.TryParse(b, out var nb))
-            return na == nb;
-        return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
     }
 }

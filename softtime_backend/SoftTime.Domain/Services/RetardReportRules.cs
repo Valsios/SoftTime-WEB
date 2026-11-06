@@ -114,101 +114,27 @@ public static class RetardReportRules
         if (debut > fin)
             return Array.Empty<RetardReportRow>();
 
-        var cartesParCle = new Dictionary<string, CardPaie>(StringComparer.OrdinalIgnoreCase);
-        var cleParIdSal = new Dictionary<int, string>();
-        foreach (var carte in cartes)
-        {
-            var cle = MatriculeIdentity.Cle(carte.SageMatricule);
-            if (string.IsNullOrEmpty(cle))
-                continue;
-
-            cleParIdSal[carte.Id] = cle;
-            if (!cartesParCle.TryGetValue(cle, out var existante) || carte.Id < existante.Id)
-                cartesParCle[cle] = carte;
-        }
-
+        var (cleParIdSal, cartesParCle) = AbsenceReportRules.IndexerCartes(cartes);
         if (cartesParCle.Count == 0)
             return Array.Empty<RetardReportRow>();
 
         // Planning du jour travaillé, par clé matricule et par date (plus petite ligne retenue).
-        var planningsParCleEtDate = new Dictionary<(string Cle, DateTime Date), PlanningSalarie>();
-        foreach (var plan in plannings)
-        {
-            if (plan.DateP is not DateTime dateP || plan.OffP == true)
-                continue;
-            if (!cleParIdSal.TryGetValue(plan.IdSal, out var cle))
-                continue;
-
-            var jour = dateP.Date;
-            if (jour < debut || jour > fin)
-                continue;
-
-            var key = (cle, jour);
-            if (!planningsParCleEtDate.TryGetValue(key, out var existant) || plan.Id < existant.Id)
-                planningsParCleEtDate[key] = plan;
-        }
-
+        var planningsTravailles = plannings.Where(p => p.OffP != true).ToList();
+        var calendrier = new ReportCalendar(
+            debut, fin, feries, AbsenceReportRules.IndexerPlannings(planningsTravailles, cleParIdSal, debut, fin));
         var correctionsParCle = corrections
             .Where(h => h.DatePointageIn.HasValue)
             .GroupBy(h => MatriculeIdentity.Cle(h.MatriculeSage), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
 
-        var resultats = new List<RetardReportRow>();
-
-        foreach (var (cle, carte) in cartesParCle)
-        {
-            if (!correctionsParCle.TryGetValue(cle, out var lignes) || lignes.Count == 0)
-                continue;
-
-            var matriculeAffiche = !string.IsNullOrWhiteSpace(carte.SageMatricule) ? carte.SageMatricule.Trim() : cle;
-            var nomAffiche = carte.SageNom?.Trim();
-            var prenomAffiche = carte.SagePrenom?.Trim();
-            var deptAffiche = carte.Departement?.Trim();
-            var tolerance = ToleranceEntree(carte.Id, categorieParCarte, tolerances);
-
-            foreach (var groupeJour in lignes
-                         .Where(h => h.DatePointageIn.HasValue)
-                         .GroupBy(h => h.DatePointageIn!.Value.Date))
-            {
-                var jour = groupeJour.Key;
-                if (jour < debut || jour > fin || AbsenceReportRules.EstNonTravaille(jour, feries))
-                    continue;
-
-                planningsParCleEtDate.TryGetValue((cle, jour), out var plan);
-                var heurePrevue = HeurePrevue(plan);
-                var entrees = groupeJour
-                    .Where(h => h.HEntree.HasValue)
-                    .Select(h => h.HEntree!.Value)
-                    .ToList();
-                TimeSpan? premiereEntree = entrees.Count > 0 ? entrees.Min() : null;
-                var retardsSaisis = groupeJour.Select(h => h.Retard).ToList();
-
-                var minutes = MinutesRetardJour(
-                    absenceMatin: groupeJour.Any(h => h.AbsenceAm == true),
-                    retardsSaisis: retardsSaisis,
-                    premiereEntree: premiereEntree,
-                    heurePrevue: heurePrevue,
-                    toleranceMinutes: tolerance);
-
-                if (minutes <= 0)
-                    continue;
-
-                resultats.Add(new RetardReportRow(
-                    Matricule: matriculeAffiche,
-                    Nom: nomAffiche,
-                    Prenom: prenomAffiche,
-                    Departement: deptAffiche,
-                    Date: jour,
-                    HeureEntree: premiereEntree,
-                    HeurePrevue: heurePrevue,
-                    ToleranceMinutes: tolerance,
-                    MinutesRetard: minutes,
-                    RetardSaisi: retardsSaisis.Any(r => r.HasValue)
-                ));
-            }
-        }
-
-        return resultats
+        return cartesParCle
+            .Where(kv => correctionsParCle.TryGetValue(kv.Key, out var lignes) && lignes.Count > 0)
+            .SelectMany(kv => new RetardReportEmployee(
+                    kv.Key,
+                    kv.Value,
+                    correctionsParCle[kv.Key],
+                    ToleranceEntree(kv.Value.Id, categorieParCarte, tolerances))
+                .Retards(calendrier))
             .OrderBy(r => r.Date)
             .ThenBy(r => r.Matricule, StringComparer.OrdinalIgnoreCase)
             .ToList();
