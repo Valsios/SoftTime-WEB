@@ -14,8 +14,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("TravelExpenses")]
 public class TravelController : ControllerBase
 {
-    private readonly IExtraService _svc;
-    public TravelController(IExtraService svc) => _svc = svc;
+    private readonly ITravelExpenseService _svc;
+    public TravelController(ITravelExpenseService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] PeriodRequest request, CancellationToken ct)

@@ -92,9 +92,16 @@ public static class DependencyInjection
         services.AddScoped<IOvertimePayrollSyncService, OvertimePayrollSyncService>();
         services.AddScoped<IOvertimeWeekContext, OvertimeWeekContext>();
         services.AddScoped<IPayrollWriterResolver, PayrollWriterResolver>();
+        services.AddScoped<IPointageReportService, PointageReportService>();
+        services.AddScoped<IAbsenceReportService, AbsenceReportService>();
+        services.AddScoped<IRetardReportService, RetardReportService>();
+        services.AddScoped<IHoursReportService, HoursReportService>();
+        services.AddScoped<IReportContextLoader, ReportContextLoader>();
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<IDashboardService, DashboardService>();
-        services.AddScoped<IExtraService, ExtraService>();
+        services.AddScoped<ICanteenService, CanteenService>();
+        services.AddScoped<ITravelExpenseService, TravelExpenseService>();
+        services.AddScoped<IPayrollCumulSync, PayrollCumulSync>();
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IJournalService, JournalService>();
         services.AddScoped<IMlDatasetContextLoader, MlDatasetContextLoader>();

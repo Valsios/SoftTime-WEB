@@ -52,7 +52,7 @@ public class ClosingServiceIntegrationTests
             donnees = await service.ChargerAsync(request, CancellationToken.None);
             var chargement = chrono.ElapsedMilliseconds;
             chrono.Restart();
-            var resultat = ClosingService.Calculer(donnees, request);
+            var resultat = ClosingComputation.Calculer(donnees, request);
             var calcul = chrono.ElapsedMilliseconds;
             rapport.AppendLine(string.Join(";", passage, chargement, calcul, donnees.Cartes.Count, donnees.Plannings.Count,
                 donnees.Pointages.Count, donnees.Corrections.Count, donnees.SemainesValidees.Count,
@@ -89,7 +89,7 @@ public class ClosingServiceIntegrationTests
         // Anomalies de novembre, pour la comparaison avec la vérité terrain.
         foreach (var (suffixe, options) in ModesOptions())
         {
-            var anomalies = ClosingService.Controler(donnees!, Novembre, FinNovembre, options).Anomalies;
+            var anomalies = ClosingComputation.Controler(donnees!, Novembre, FinNovembre, options).Anomalies;
             var csv = new StringBuilder("Type;Matricule;Date;Detail\n");
             foreach (var a in anomalies)
                 csv.Append(a.Type).Append(';').Append(a.Matricule).Append(';')
@@ -125,7 +125,7 @@ public class ClosingServiceIntegrationTests
         var manquees = new List<string>();
         foreach (var (suffixe, options) in ModesOptions())
         {
-            var detectees = ClosingService.Controler(donnees, Novembre, FinNovembre, options).Anomalies
+            var detectees = ClosingComputation.Controler(donnees, Novembre, FinNovembre, options).Anomalies
                 .Select(a => (a.Type.ToString(), a.Matricule, a.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)))
                 .ToHashSet();
             var avant = LireAnomalies(Path.Combine(Dossier() ?? string.Empty, $"anomalies-{suffixe}-avant.csv"));
@@ -172,8 +172,8 @@ public class ClosingServiceIntegrationTests
         var reglages = Reglages();
         var request = new ClosingAnalysisRequest(debut, fin, Options: reglages, IncludeComparison: Comparaison(defaut: true));
         var donnees = await service.ChargerAsync(request, CancellationToken.None);
-        var resultat = ClosingService.Calculer(donnees, request);
-        var anomalies = ClosingService.Controler(donnees, debut, fin, reglages).Anomalies;
+        var resultat = ClosingComputation.Calculer(donnees, request);
+        var anomalies = ClosingComputation.Controler(donnees, debut, fin, reglages).Anomalies;
 
         static string Comptes(IEnumerable<ClosingCountDto> c) => string.Join(",", c.Select(x => $"{x.Cle}={x.Nombre}"));
         var e = new StringBuilder();
@@ -234,7 +234,7 @@ public class ClosingServiceIntegrationTests
             var chargement = chrono.ElapsedMilliseconds;
             var heapCharge = GC.GetTotalMemory(forceFullCollection: true);
             chrono.Restart();
-            var resultat = ClosingService.Calculer(donnees, request);
+            var resultat = ClosingComputation.Calculer(donnees, request);
             var calcul = chrono.ElapsedMilliseconds;
             mesures.Add($"{(passage == 1 ? "froid" : "chaud")};{chargement};{calcul};{chargement + calcul};{heapCharge / (1024 * 1024)};{resultat.NombreAnomalies};{resultat.Score?.ToString() ?? "null"};{(resultat.Comparaison is null ? "non" : "oui")}");
         }

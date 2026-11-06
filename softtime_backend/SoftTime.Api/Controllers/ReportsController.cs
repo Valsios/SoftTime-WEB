@@ -15,7 +15,24 @@ namespace SoftTime.Api.Controllers;
 public class ReportsController : ControllerBase
 {
     private readonly IReportService _svc;
-    public ReportsController(IReportService svc) => _svc = svc;
+    private readonly IPointageReportService _pointages;
+    private readonly IAbsenceReportService _absences;
+    private readonly IRetardReportService _retards;
+    private readonly IHoursReportService _heures;
+
+    public ReportsController(
+        IReportService svc,
+        IPointageReportService pointages,
+        IAbsenceReportService absences,
+        IRetardReportService retards,
+        IHoursReportService heures)
+    {
+        _svc = svc;
+        _pointages = pointages;
+        _absences = absences;
+        _retards = retards;
+        _heures = heures;
+    }
 
     /// <summary>Types exposés par l'endpoint paginé générique (liste blanche).</summary>
     private static readonly HashSet<string> PagedReportTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -25,27 +42,27 @@ public class ReportsController : ControllerBase
 
     [HttpGet("pointage")]
     public async Task<IActionResult> Pointage([FromQuery] ReportFilter filter, CancellationToken ct)
-        => Ok(await _svc.PointageAsync(filter, ct));
+        => Ok(await _pointages.PointageAsync(filter, ct));
 
     [HttpGet("absences")]
     public async Task<IActionResult> Absences([FromQuery] ReportFilter filter, CancellationToken ct)
-        => Ok(await _svc.AbsencesAsync(filter, ct));
+        => Ok(await _absences.AbsencesAsync(filter, ct));
 
     [HttpGet("retards")]
     public async Task<IActionResult> Retards([FromQuery] ReportFilter filter, CancellationToken ct)
-        => Ok(await _svc.RetardsAsync(filter, ct));
+        => Ok(await _retards.RetardsAsync(filter, ct));
 
     [HttpGet("hs-recap")]
     public async Task<IActionResult> HsRecap([FromQuery] ReportFilter filter, CancellationToken ct)
-        => Ok(await _svc.HsRecapAsync(filter, ct));
+        => Ok(await _heures.HsRecapAsync(filter, ct));
 
     [HttpGet("heures-semaine")]
     public async Task<IActionResult> HeuresSemaine([FromQuery] ReportFilter filter, CancellationToken ct)
-        => Ok(await _svc.HeuresParSemaineAsync(filter, ct));
+        => Ok(await _heures.HeuresParSemaineAsync(filter, ct));
 
     [HttpGet("heures-dimanche")]
     public async Task<IActionResult> HeuresDimanche([FromQuery] ReportFilter filter, CancellationToken ct)
-        => Ok(await _svc.HeuresDimancheAsync(filter, ct));
+        => Ok(await _heures.HeuresDimancheAsync(filter, ct));
 
     /// <summary>
     /// Version paginée des 6 états (<c>pointage</c>, <c>absences</c>, <c>retards</c>,

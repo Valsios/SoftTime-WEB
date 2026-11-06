@@ -33,7 +33,7 @@ public class ReportServiceTests
     {
         public InMemoryUnitOfWork Uow { get; } = new();
         public FakeExternalSourceService Source { get; } = new();
-        public ReportService Service { get; }
+        public ReportServices Service { get; }
 
         public List<PlanningSalarie> Planning => Uow.Get<PlanningSalarie>().Items;
         public List<HeureCorrigee> Corrections => Uow.Get<HeureCorrigee>().Items;
@@ -68,12 +68,12 @@ public class ReportServiceTests
 
             var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
             Source.Employees.Add(new ExternalEmployee("001", 1, "Dupont", "Jean", null, false));
-            Service = new ReportService(
+            Service = new ReportServices(
                 Uow,
                 tenant,
                 Source,
                 new SageLeaveCalendar(tenant, Source),
-                NullLogger<ReportService>.Instance);
+                NullLogger<ReportContextLoader>.Instance);
         }
 
         /// <summary>Journée planifiée 08:00–17:00 avec 1 h de pause (8 h attendues), ou jour OFF.</summary>

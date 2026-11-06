@@ -2,22 +2,14 @@
 
 namespace SoftTime.Application.Abstractions;
 
-/// <summary>Contrat de <c>ExtraService</c>.</summary>
-public interface IExtraService
+public interface ICanteenService
 {
     Task<IReadOnlyList<CanteenDto>> ListCanteenAsync(PeriodRequest request, CancellationToken ct = default);
 
     /// <summary>Liste paginée des cantines calculées (filtre SQL base + dates + matricule).</summary>
     Task<PagedResult<CanteenDto>> ListCanteenPagedAsync(PeriodRequest request, int? page, int? pageSize, CancellationToken ct = default);
 
-    Task<IReadOnlyList<TravelDto>> ListTravelAsync(PeriodRequest request, CancellationToken ct = default);
-
-    /// <summary>Liste paginée des frais de déplacement (filtre SQL base + dates + matricule).</summary>
-    Task<PagedResult<TravelDto>> ListTravelPagedAsync(PeriodRequest request, int? page, int? pageSize, CancellationToken ct = default);
-
     Task<IReadOnlyList<CanteenDto>> ComputeCanteenAsync(PeriodRequest request, CancellationToken ct = default);
-
-    Task<IReadOnlyList<TravelDto>> ComputeTravelAsync(PeriodRequest request, CancellationToken ct = default);
 
     /// <summary>
     /// Anomalies du calcul cantine : jour où un pointage tombe dans la fenêtre du repas alors que
@@ -53,10 +45,4 @@ public interface IExtraService
     /// </para>
     /// </summary>
     Task<ExtrasSyncResultDto> SyncCanteenAsync(PeriodRequest request, CancellationToken ct = default);
-
-    /// <summary>
-    /// Pousse les totaux de frais de déplacement de la période dans le cumul SAGE (<c>T_CUMSAL</c>)
-    /// référencé par la constante <c>HA06</c>. Portage de <c>SynchroniserAvecSageAsync</c> du desktop.
-    /// </summary>
-    Task<ExtrasSyncResultDto> SyncTravelAsync(PeriodRequest request, CancellationToken ct = default);
 }

@@ -395,7 +395,7 @@ public class ClosingServiceTests
 
         await Assert.ThrowsAsync<DomainException>(() =>
             ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(from, from.AddDays(366))));
-        ClosingService.Valider(new ClosingAnalysisRequest(from, from.AddDays(365)));
+        ClosingComputation.Valider(new ClosingAnalysisRequest(from, from.AddDays(365)));
     }
 
     [Fact]
@@ -520,7 +520,7 @@ public class ClosingServiceTests
     [InlineData(2024, 3, 10, 2024, 2, 1, 2024, 2, 29)]
     public void DefaultPeriod_IsPreviousCalendarMonth(int a, int m, int j, int a1, int m1, int j1, int a2, int m2, int j2)
     {
-        var request = ClosingService.AvecPeriodeParDefaut(new ClosingAnalysisRequest(default, default), new DateTime(a, m, j));
+        var request = ClosingComputation.AvecPeriodeParDefaut(new ClosingAnalysisRequest(default, default), new DateTime(a, m, j));
 
         Assert.Equal(new DateTime(a1, m1, j1), request.From);
         Assert.Equal(new DateTime(a2, m2, j2), request.To);

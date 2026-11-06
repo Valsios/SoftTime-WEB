@@ -14,8 +14,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("Canteen")]
 public class CanteenController : ControllerBase
 {
-    private readonly IExtraService _svc;
-    public CanteenController(IExtraService svc) => _svc = svc;
+    private readonly ICanteenService _svc;
+    public CanteenController(ICanteenService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] PeriodRequest request, CancellationToken ct)
