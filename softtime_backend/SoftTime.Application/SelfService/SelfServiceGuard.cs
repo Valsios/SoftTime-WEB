@@ -26,7 +26,8 @@ public sealed record SelfContext(decimal UserId, string SageDb, string Matricule
 /// Garde dédiée de « Mon espace ». Elle ne passe PAS par TenantConnectionService.EnsureAuthorizedAsync (qui exige la porte 1) :
 /// <list type="number">
 ///   <item>permission fine <c>SELF:READ</c> effective (aucune porte n'est requise) ;</item>
-///   <item>matricule lu UNIQUEMENT dans ICurrentUser.Matricule (claim du jeton), non vide ;</item>
+///   <item>matricule du jeton (ICurrentUser.Matricule), non vide, jamais pris dans la requête ; il doit être égal au matricule COURANT
+///   du compte, relu dans T_RESPONSABLE à chaque appel (compte supprimé, matricule retiré ou changé : refus) ;</item>
 ///   <item>le compte a exactement UNE base autorisée dans T_BDD_AUTORISE ; une base courante envoyée par le client doit être celle-là ;</item>
 ///   <item>le matricule existe dans T_CARDPAIE de cette base.</item>
 /// </list>
@@ -76,6 +77,18 @@ public class SelfServiceGuard
         var matricule = (_user.Matricule ?? string.Empty).Trim();
         if (matricule.Length == 0)
             throw new ForbiddenOperationException("Aucun matricule n'est associé à ce compte : contactez la RH.");
+
+        // Le compte est relu à CHAQUE appel (une lecture par clé primaire, sans cache) : le jeton dure 12 h et ne peut pas
+        // garder un matricule que la RH a retiré, changé ou supprimé entre-temps. Le matricule de la base fait foi.
+        var compte = (await _uow.Repository<T_RESPONSABLE>().ListAsync(r => r.IDRESPONSABLE == uid, ct)).FirstOrDefault();
+        if (compte is null)
+            throw new ForbiddenOperationException("Ce compte n'existe plus : contactez la RH.");
+        var courant = (compte.MATRICULE ?? string.Empty).Trim();
+        if (courant.Length == 0)
+            throw new ForbiddenOperationException("Aucun matricule n'est associé à ce compte : contactez la RH.");
+        if (MatriculeIdentity.Cle(courant) != MatriculeIdentity.Cle(matricule))
+            throw new ForbiddenOperationException("Le matricule de ce compte a changé depuis la connexion : reconnectez-vous.");
+        matricule = courant;
 
         var acces = await _uow.Repository<T_BDD_AUTORISE>().ListAsync(a => a.IDRESPONSABLE == uid, ct);
         var idsBases = acces.Select(a => a.IDBDD).Distinct().ToList();

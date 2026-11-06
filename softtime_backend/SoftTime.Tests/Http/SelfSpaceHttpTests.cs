@@ -310,15 +310,16 @@ public class SelfSpaceHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task The_token_matricule_wins_even_if_the_account_row_says_otherwise()
+    public async Task A_token_matricule_that_differs_from_the_account_row_is_refused()
     {
-        // Le claim du jeton est la seule source : un jeton portant le matricule de B donne les données de B (le compte A n'est qu'un porteur).
+        // Correction (revue) : le claim du jeton n est plus la seule source. Le compte A est relu à chaque appel ; un jeton qui
+        // prétend porter le matricule de B alors que la base dit A est refusé (403), sans aucune donnée de A ni de B.
         using var f = Actif();
         var (code, texte) = await Appeler(f.CreateClient(), HttpMethod.Get, Url("/api/me/space/weeks"), Jeton(AId, 92, MatB));
 
-        Assert.Equal(HttpStatusCode.OK, code);
-        using var j = JsonDocument.Parse(texte);
-        Assert.Equal(25m, j.RootElement.GetProperty("semaines")[0].GetProperty("heuresSupplementaires").GetDecimal());
+        Assert.Equal(HttpStatusCode.Forbidden, code);
+        Assert.Contains("a changé", texte);
+        Assert.DoesNotContain("semaines", texte);
     }
 
     // ---------- refus explicites ----------

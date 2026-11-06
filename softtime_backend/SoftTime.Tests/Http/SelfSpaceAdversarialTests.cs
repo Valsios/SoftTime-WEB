@@ -26,6 +26,7 @@ public class SelfSpaceAdversarialTests : IClassFixture<ApiFactory>
     private const decimal DoublonId = 10402;      // second compte, même matricule que A
     private const decimal HybrideId = 10403;      // porte 1 + SELF:READ, une base
     private const decimal HybrideDeuxBasesId = 10404;
+    private const decimal SupprimeId = 10405;         // compte supprimé en cours de test (matricule propre)
 
     private readonly ApiFactory _f;
     private readonly HttpClient _http;
@@ -56,13 +57,15 @@ public class SelfSpaceAdversarialTests : IClassFixture<ApiFactory>
         users.Add(new T_RESPONSABLE { IDRESPONSABLE = CompteId, IDROLE = 92, LOGIN = "adv-1", NOMRESPONSABLE = "x", MATRICULE = MatA });
         users.Add(new T_RESPONSABLE { IDRESPONSABLE = DoublonId, IDROLE = 92, LOGIN = "adv-doublon", NOMRESPONSABLE = "x", MATRICULE = MatA });
         users.Add(new T_RESPONSABLE { IDRESPONSABLE = HybrideId, IDROLE = 94, LOGIN = "adv-hybride", NOMRESPONSABLE = "x", MATRICULE = MatA });
+        users.Add(new T_RESPONSABLE { IDRESPONSABLE = SupprimeId, IDROLE = 92, LOGIN = "adv-supprime", NOMRESPONSABLE = "x", MATRICULE = "S500" });
         users.Add(new T_RESPONSABLE { IDRESPONSABLE = HybrideDeuxBasesId, IDROLE = 94, LOGIN = "adv-hybride2", NOMRESPONSABLE = "x", MATRICULE = MatA });
         var acces = store.GetRepo<T_BDD_AUTORISE>().Items;
-        foreach (var (id, idBase, n) in new[] { (CompteId, 3033, 1), (DoublonId, 3033, 2), (HybrideId, 3033, 3), (HybrideDeuxBasesId, 3033, 4), (HybrideDeuxBasesId, 3034, 5) })
+        foreach (var (id, idBase, n) in new[] { (CompteId, 3033, 1), (DoublonId, 3033, 2), (HybrideId, 3033, 3), (HybrideDeuxBasesId, 3033, 4), (HybrideDeuxBasesId, 3034, 5), (SupprimeId, 3033, 6) })
             acces.Add(new T_BDD_AUTORISE { IDBDDAUTORISE = 9400 + n, IDRESPONSABLE = id, IDBDD = idBase });
 
         var cartes = store.GetRepo<T_CARDPAIE>().Items;
         cartes.Add(new T_CARDPAIE { ID = 7001, SAGE_MATRICULE = MatA, SAGE_BDD = ApiFactory.SageName, POINTEUSE_BDD = "PTG" });
+        cartes.Add(new T_CARDPAIE { ID = 7003, SAGE_MATRICULE = "S500", SAGE_BDD = ApiFactory.SageName, POINTEUSE_BDD = "PTG" });
         cartes.Add(new T_CARDPAIE { ID = 7002, SAGE_MATRICULE = MatB, SAGE_BDD = ApiFactory.SageName, POINTEUSE_BDD = "PTG" });
         var hs = store.GetRepo<T_HS_VALIDER>().Items;
         hs.Add(new T_HS_VALIDER { ID = 1, BDD_SAGE = ApiFactory.SageName, MATRICULES = MatA, DATE_DEB = LundiDe(_aujourdhui.AddDays(-21)), HT = 40m, HS = 10m, VALIDATION_HS = true });
@@ -217,14 +220,15 @@ public class SelfSpaceAdversarialTests : IClassFixture<ApiFactory>
     // ---------------------------------------------------------------- limites connues démontrées
 
     [Fact]
-    public async Task Limite_connue_a_token_keeps_its_matricule_for_12_hours_after_the_account_row_changes()
+    public async Task A_token_is_refused_as_soon_as_the_account_row_no_longer_carries_its_matricule()
     {
-        // Le matricule vient du jeton (voulu), mais le jeton dure 12 h : changer ou vider MATRICULE sur le compte ne s'applique qu'à la
-        // reconnexion. Correction minimale proposée : la garde compare le claim au MATRICULE du compte (une lecture) et refuse s'ils diffèrent.
+        // Correction : la garde relit le compte à chaque appel et compare le matricule du jeton au matricule courant.
         using var f = Actif();
         var http = f.CreateClient();
         var jeton = Jeton(CompteId, 92, MatA);
-        var (_, avant) = await Lire(http, $"/api/me/space/weeks?{Periode}", jeton);
+        var url = $"/api/me/space/weeks?{Periode}";
+        Assert.Equal(HttpStatusCode.OK, (await Lire(http, url, jeton)).Reponse.StatusCode);
+
         T_RESPONSABLE compte;
         lock (_f.Store)
             compte = _f.Store.GetRepo<T_RESPONSABLE>().Items.Single(u => u.IDRESPONSABLE == CompteId);
@@ -232,15 +236,49 @@ public class SelfSpaceAdversarialTests : IClassFixture<ApiFactory>
         try
         {
             compte.MATRICULE = MatB;                                   // la RH réaffecte le compte à un autre salarié
-            var (reponse, apres) = await Lire(http, $"/api/me/space/weeks?{Periode}", jeton);
+            var (change, texte) = await Lire(http, url, jeton);
+            Assert.Equal(HttpStatusCode.Forbidden, change.StatusCode);
+            Assert.Contains("a changé", texte);
+            Assert.DoesNotContain("40", texte);                        // aucune donnée du salarié B ni de A
+            // Le jeton qui porte le NOUVEAU matricule, lui, est accepté et ne lit que les données de B.
+            var (pourB, corpsB) = await Lire(http, url, Jeton(CompteId, 92, MatB));
+            Assert.Equal(HttpStatusCode.OK, pourB.StatusCode);
+            Assert.Equal(25m, HeuresSup(corpsB));
 
-            Assert.Equal(HttpStatusCode.OK, reponse.StatusCode);
-            Assert.Equal(HeuresSup(avant), HeuresSup(apres));          // l'ancien jeton lit toujours les données de A
-            Assert.Equal(10m, HeuresSup(apres));
+            compte.MATRICULE = null;                                   // la RH retire le matricule
+            Assert.Equal(HttpStatusCode.Forbidden, (await Lire(http, url, jeton)).Reponse.StatusCode);
         }
         finally
         {
             compte.MATRICULE = ancien;
+        }
+        Assert.Equal(HttpStatusCode.OK, (await Lire(http, url, jeton)).Reponse.StatusCode);   // rétabli : le jeton refonctionne
+    }
+
+    [Fact]
+    public async Task A_token_is_refused_once_the_account_is_deleted()
+    {
+        using var f = Actif();
+        var http = f.CreateClient();
+        var jeton = Jeton(SupprimeId, 92, "S500");
+        var url = $"/api/me/space/weeks?{Periode}";
+        Assert.Equal(HttpStatusCode.OK, (await Lire(http, url, jeton)).Reponse.StatusCode);
+        T_RESPONSABLE compte;
+        lock (_f.Store)
+        {
+            compte = _f.Store.GetRepo<T_RESPONSABLE>().Items.Single(u => u.IDRESPONSABLE == SupprimeId);
+            _f.Store.GetRepo<T_RESPONSABLE>().Items.Remove(compte);
+        }
+        try
+        {
+            var (refus, texte) = await Lire(http, url, jeton);
+            Assert.Equal(HttpStatusCode.Forbidden, refus.StatusCode);
+            Assert.Contains("n'existe plus", texte);
+        }
+        finally
+        {
+            lock (_f.Store)
+                _f.Store.GetRepo<T_RESPONSABLE>().Items.Add(compte);
         }
     }
 
