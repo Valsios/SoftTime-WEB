@@ -47,79 +47,27 @@ public sealed class UserAdministrationService : IUserAdministrationService
     {
         _parametersAccessGuard.RequireAdministrator();
         ValidateUserFields(dto);
-        var repo = _uow.Repository<Responsable>();
-        var caller = await repo.GetByIdAsync(currentUserId, cancellationToken);
-        if (caller == null)
-            throw new DomainException("Utilisateur appelant introuvable.");
-
-        var callerRole = await _uow.Repository<Role>().GetByIdAsync(caller.IdRole, cancellationToken);
-        if (callerRole == null)
-            throw new DomainException("Utilisateur appelant introuvable.");
-
+        var caller = await _uow.Repository<Responsable>().GetByIdAsync(currentUserId, cancellationToken)
+            ?? throw new DomainException("Utilisateur appelant introuvable.");
+        _ = await _uow.Repository<Role>().GetByIdAsync(caller.IdRole, cancellationToken)
+            ?? throw new DomainException("Utilisateur appelant introuvable.");
         var callerIsSuperAdmin = AdminRules.IsSuperAdmin(caller.IdRole);
 
-        Responsable? entity = null;
         if (dto.Id == 0)
         {
-            if (dto.RoleId == AdminRules.AdminRoleId)
-            {
-                if (!callerIsSuperAdmin)
-                    throw new DomainException("Seul un super-administrateur peut attribuer le rôle Administrateur.");
-            }
+            EnsureCanAssignRole(dto.RoleId, callerIsSuperAdmin);
+            return await ExecuteSaveUserInternalAsync(null, dto, cancellationToken);
         }
-        else
-        {
-            entity = await repo.GetByIdAsync(dto.Id, cancellationToken) ?? throw new NotFoundException();
 
-            if (dto.Id == currentUserId && entity.IdRole != dto.RoleId)
-                throw new DomainException("Vous ne pouvez pas modifier votre propre rôle.");
-
-            if (entity.IdRole == AdminRules.AdminRoleId)
-            {
-                if (!callerIsSuperAdmin)
-                    throw new DomainException("Seul un super-administrateur peut modifier un compte administrateur.");
-            }
-
-            if (dto.RoleId == AdminRules.AdminRoleId)
-            {
-                if (!callerIsSuperAdmin)
-                    throw new DomainException("Seul un super-administrateur peut attribuer le rôle Administrateur.");
-            }
-
-            if (entity.IdRole == AdminRules.AdminRoleId && dto.RoleId != AdminRules.AdminRoleId)
-            {
-                var otherAdmins = await repo.ListAsync(u => u.IdRole == AdminRules.AdminRoleId && u.IdResponsable != entity.IdResponsable, cancellationToken);
-                if (otherAdmins.Count == 0)
-                    throw new DomainException("Impossible de rétrograder le dernier administrateur.");
-            }
-
-            if (entity.IdRole != dto.RoleId)
-            {
-                // Lectures seulement jusqu'ici : un refus de confirmation n'écrit rien.
-                var adjustments = await _effectiveRights.AdjustmentsAsync(entity.IdResponsable, cancellationToken);
-                if (adjustments.Count > 0 && !dto.ConfirmClearAdjustments)
-                    throw new RoleChangeConfirmationRequiredException(
-                        new RoleChangePreviewDto(adjustments, adjustments.Count, entity.Login ?? string.Empty));
-
-                // Les ajustements (et toute ligne personnelle) disparaissent dans la même sauvegarde que le changement de rôle.
-                var permRepo = _uow.Repository<UserPermission>();
-                var existingPerms = await permRepo.ListAsync(p => p.IdResponsable == entity.IdResponsable, cancellationToken);
-                var permsAvant = existingPerms
-                    .Where(p => p.PermissionCode != PermissionMarkers.EmptyPermissionsMarker)
-                    .Select(p => p.PermissionCode)
-                    .ToList();
-                if (existingPerms.Count > 0)
-                {
-                    permRepo.RemoveRange(existingPerms);
-                    await _rightsChangeJournal.EcrireAuditDroitAsync(
-                        currentUserId, caller.Login ?? string.Empty,
-                        "USER", entity.IdResponsable, entity.NomResponsable,
-                        "RESET_USER_PERMS",
-                        permsAvant, null,
-                        cancellationToken);
-                }
-            }
-        }
+        var entity = await _uow.Repository<Responsable>().GetByIdAsync(dto.Id, cancellationToken) ?? throw new NotFoundException();
+        if (dto.Id == currentUserId && entity.IdRole != dto.RoleId)
+            throw new DomainException("Vous ne pouvez pas modifier votre propre rôle.");
+        if (entity.IdRole == AdminRules.AdminRoleId && !callerIsSuperAdmin)
+            throw new DomainException("Seul un super-administrateur peut modifier un compte administrateur.");
+        EnsureCanAssignRole(dto.RoleId, callerIsSuperAdmin);
+        await EnsureNotLastAdminAsync(entity, dto.RoleId, cancellationToken);
+        if (entity.IdRole != dto.RoleId)
+            await ClearAdjustmentsForRoleChangeAsync(caller, entity, dto.ConfirmClearAdjustments, cancellationToken);
 
         return await ExecuteSaveUserInternalAsync(entity, dto, cancellationToken);
     }
@@ -127,17 +75,11 @@ public sealed class UserAdministrationService : IUserAdministrationService
     /// <summary>Réservé aux tests (internal, sans garde) : le code de production doit transmettre l'identité de l'appelant.</summary>
     internal async Task<UserDto> SaveUserAsync(UserDto dto, CancellationToken cancellationToken = default)
     {
-        var repo = _uow.Repository<Responsable>();
         Responsable? entity = null;
         if (dto.Id != 0)
         {
-            entity = await repo.GetByIdAsync(dto.Id, cancellationToken) ?? throw new NotFoundException();
-            if (entity.IdRole == AdminRules.AdminRoleId && dto.RoleId != AdminRules.AdminRoleId)
-            {
-                var otherAdmins = await repo.ListAsync(u => u.IdRole == AdminRules.AdminRoleId && u.IdResponsable != entity.IdResponsable, cancellationToken);
-                if (otherAdmins.Count == 0)
-                    throw new DomainException("Impossible de rétrograder le dernier administrateur.");
-            }
+            entity = await _uow.Repository<Responsable>().GetByIdAsync(dto.Id, cancellationToken) ?? throw new NotFoundException();
+            await EnsureNotLastAdminAsync(entity, dto.RoleId, cancellationToken);
         }
         return await ExecuteSaveUserInternalAsync(entity, dto, cancellationToken);
     }
@@ -157,81 +99,73 @@ public sealed class UserAdministrationService : IUserAdministrationService
         return new RoleChangePreviewDto(adjustments, adjustments.Count, login);
     }
 
+    private static void EnsureCanAssignRole(decimal roleId, bool callerIsSuperAdmin)
+    {
+        if (roleId == AdminRules.AdminRoleId && !callerIsSuperAdmin)
+            throw new DomainException("Seul un super-administrateur peut attribuer le rôle Administrateur.");
+    }
+
+    private async Task EnsureNotLastAdminAsync(Responsable entity, decimal newRoleId, CancellationToken ct)
+    {
+        if (entity.IdRole != AdminRules.AdminRoleId || newRoleId == AdminRules.AdminRoleId)
+            return;
+        var otherAdmins = await _uow.Repository<Responsable>().ListAsync(
+            u => u.IdRole == AdminRules.AdminRoleId && u.IdResponsable != entity.IdResponsable, ct);
+        if (otherAdmins.Count == 0)
+            throw new DomainException("Impossible de rétrograder le dernier administrateur.");
+    }
+
+    /// <summary>
+    /// Changement de rôle : les ajustements personnels (et toute ligne personnelle) disparaissent dans
+    /// la même sauvegarde, après confirmation explicite s'il y en a. Lectures seulement avant la
+    /// confirmation : un refus n'écrit rien.
+    /// </summary>
+    private async Task ClearAdjustmentsForRoleChangeAsync(
+        Responsable caller, Responsable entity, bool confirmed, CancellationToken ct)
+    {
+        var adjustments = await _effectiveRights.AdjustmentsAsync(entity.IdResponsable, ct);
+        if (adjustments.Count > 0 && !confirmed)
+            throw new RoleChangeConfirmationRequiredException(
+                new RoleChangePreviewDto(adjustments, adjustments.Count, entity.Login ?? string.Empty));
+
+        var permRepo = _uow.Repository<UserPermission>();
+        var existingPerms = await permRepo.ListAsync(p => p.IdResponsable == entity.IdResponsable, ct);
+        if (existingPerms.Count == 0)
+            return;
+        var permsAvant = existingPerms
+            .Where(p => p.PermissionCode != PermissionMarkers.EmptyPermissionsMarker)
+            .Select(p => p.PermissionCode)
+            .ToList();
+        permRepo.RemoveRange(existingPerms);
+        await _rightsChangeJournal.EcrireAuditDroitAsync(
+            caller.IdResponsable, caller.Login ?? string.Empty,
+            "USER", entity.IdResponsable, entity.NomResponsable,
+            "RESET_USER_PERMS",
+            permsAvant, null,
+            ct);
+    }
+
     private async Task<UserDto> ExecuteSaveUserInternalAsync(Responsable? entity, UserDto dto, CancellationToken cancellationToken)
     {
-        var repo = _uow.Repository<Responsable>();
         var (nom, login) = ValidateUserFields(dto);
         var loginModifie = false;
         var motDePasseModifie = false;
         if (dto.Id == 0)
         {
-            await EnsureLoginAvailableAsync(repo, login, dto.Id, cancellationToken);
-            if (string.IsNullOrWhiteSpace(dto.Password))
-                throw new FieldValidationException("password", "Le mot de passe est obligatoire pour un nouvel utilisateur.");
-            EnsurePasswordPolicy(dto.Password);
-
-            entity = new Responsable
-            {
-                IdRole = dto.RoleId,
-                NomResponsable = nom,
-                Login = login,
-                Password = _passwordHasher.HashPassword(null!, dto.Password),
-                Matricule = dto.Matricule,
-                Email = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim()
-            };
-            await repo.AddAsync(entity, cancellationToken);
+            entity = await CreateUserAsync(dto, nom, login, cancellationToken);
         }
         else
         {
-            entity ??= await repo.GetByIdAsync(dto.Id, cancellationToken) ?? throw new NotFoundException();
+            entity ??= await _uow.Repository<Responsable>().GetByIdAsync(dto.Id, cancellationToken) ?? throw new NotFoundException();
             loginModifie = !string.Equals((entity.Login ?? string.Empty).Trim(), login, StringComparison.Ordinal);
             // Ne pas bloquer la modification d'un compte historique dont le login serait déjà dupliqué :
             // l'unicité n'est vérifiée que lorsqu'un nouveau login est choisi.
             if (!string.Equals((entity.Login ?? string.Empty).Trim(), login, StringComparison.OrdinalIgnoreCase))
-                await EnsureLoginAvailableAsync(repo, login, dto.Id, cancellationToken);
-
+                await EnsureLoginAvailableAsync(_uow.Repository<Responsable>(), login, dto.Id, cancellationToken);
             if (!string.IsNullOrWhiteSpace(dto.Password))
-            {
-                var isSame = false;
-                var rehashNeeded = false;
-                if (!string.IsNullOrEmpty(entity.Password))
-                {
-                    try
-                    {
-                        var res = _passwordHasher.VerifyHashedPassword(entity, entity.Password, dto.Password);
-                        isSame = res != PasswordVerificationResult.Failed;
-                        rehashNeeded = res == PasswordVerificationResult.SuccessRehashNeeded;
-                    }
-                    catch (FormatException)
-                    {
-                        // Valeur historique en clair : comparaison à temps constant.
-                        isSame = CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(entity.Password), Encoding.UTF8.GetBytes(dto.Password));
-                    }
-                }
-
-                if (!isSame)
-                {
-                    EnsurePasswordPolicy(dto.Password);
-                    motDePasseModifie = true;
-                    entity.Password = _passwordHasher.HashPassword(entity, dto.Password);
-                    // Nouveau mot de passe : le compte est déverrouillé et les sessions ouvertes avec l'ancien sont fermées.
-                    entity.TentativesEchouees = 0;
-                    entity.VerrouilleJusqua = null;
-                    await _refreshTokens.RevokeAllAsync(entity.IdResponsable, cancellationToken);
-                }
-                else if (rehashNeeded || PasswordHashClassifier.IsPlainText(entity.Password))
-                {
-                    // Même mot de passe stocké en clair ou dans un ancien format : hachage au format courant.
-                    entity.Password = _passwordHasher.HashPassword(entity, dto.Password);
-                }
-            }
-
-            entity.IdRole = dto.RoleId;
-            entity.NomResponsable = nom;
-            entity.Login = login;
-            entity.Matricule = dto.Matricule;
-            entity.Email = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim();
-            repo.Update(entity);
+                motDePasseModifie = await UpdatePasswordAsync(entity, dto.Password, cancellationToken);
+            ApplyFields(entity, dto, nom, login);
+            _uow.Repository<Responsable>().Update(entity);
         }
         await _uow.SaveChangesAsync(cancellationToken);
         _effectiveRights.Invalidate(entity.IdResponsable);
@@ -243,6 +177,66 @@ public sealed class UserAdministrationService : IUserAdministrationService
             await _email.SendUserUpdateAsync(entity.Email, entity.Login, motDePasseModifie ? dto.Password : null, entity.NomResponsable, null, loginModifie, motDePasseModifie, cancellationToken);
 
         return new UserDto(entity.IdResponsable, entity.IdRole, entity.NomResponsable, entity.Login ?? string.Empty, entity.Matricule, null) { Email = entity.Email };
+    }
+
+    private async Task<Responsable> CreateUserAsync(UserDto dto, string nom, string login, CancellationToken ct)
+    {
+        await EnsureLoginAvailableAsync(_uow.Repository<Responsable>(), login, dto.Id, ct);
+        if (string.IsNullOrWhiteSpace(dto.Password))
+            throw new FieldValidationException("password", "Le mot de passe est obligatoire pour un nouvel utilisateur.");
+        EnsurePasswordPolicy(dto.Password);
+
+        var entity = new Responsable { Password = _passwordHasher.HashPassword(null!, dto.Password) };
+        ApplyFields(entity, dto, nom, login);
+        await _uow.Repository<Responsable>().AddAsync(entity, ct);
+        return entity;
+    }
+
+    private static void ApplyFields(Responsable entity, UserDto dto, string nom, string login)
+    {
+        entity.IdRole = dto.RoleId;
+        entity.NomResponsable = nom;
+        entity.Login = login;
+        entity.Matricule = dto.Matricule;
+        entity.Email = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim();
+    }
+
+    /// <summary>
+    /// Nouveau mot de passe : haché, compte déverrouillé et sessions ouvertes avec l'ancien fermées.
+    /// Même mot de passe stocké en clair ou dans un ancien format : simplement re-haché au format
+    /// courant. Retourne vrai si le mot de passe a changé.
+    /// </summary>
+    private async Task<bool> UpdatePasswordAsync(Responsable entity, string password, CancellationToken ct)
+    {
+        var (isSame, rehashNeeded) = VerifyCurrentPassword(entity, password);
+        if (!isSame)
+        {
+            EnsurePasswordPolicy(password);
+            entity.Password = _passwordHasher.HashPassword(entity, password);
+            entity.TentativesEchouees = 0;
+            entity.VerrouilleJusqua = null;
+            await _refreshTokens.RevokeAllAsync(entity.IdResponsable, ct);
+            return true;
+        }
+        if (rehashNeeded || PasswordHashClassifier.IsPlainText(entity.Password))
+            entity.Password = _passwordHasher.HashPassword(entity, password);
+        return false;
+    }
+
+    private (bool IsSame, bool RehashNeeded) VerifyCurrentPassword(Responsable entity, string password)
+    {
+        if (string.IsNullOrEmpty(entity.Password))
+            return (false, false);
+        try
+        {
+            var res = _passwordHasher.VerifyHashedPassword(entity, entity.Password, password);
+            return (res != PasswordVerificationResult.Failed, res == PasswordVerificationResult.SuccessRehashNeeded);
+        }
+        catch (FormatException)
+        {
+            // Valeur historique en clair : comparaison à temps constant.
+            return (CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(entity.Password), Encoding.UTF8.GetBytes(password)), false);
+        }
     }
 
     /// <summary>Valide le mot de passe et rattache l'erreur au champ « password » du formulaire.</summary>

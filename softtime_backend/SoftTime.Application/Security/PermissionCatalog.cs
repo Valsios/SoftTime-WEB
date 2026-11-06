@@ -13,30 +13,44 @@ public static class PermissionCatalog
     public const string EmptyUserMarker = "__SOFTTIME_EMPTY_CUSTOM_PERMISSIONS__";
     public const string EmptyRoleMarker = "__SOFTTIME_EMPTY_ROLE_PERMISSIONS__";
 
-    /// <summary>Permissions statiques connues ; les codes SAGE: et POINTEUSE: dépendent des bases et sont acceptés par préfixe.</summary>
-    public static readonly HashSet<string> KnownStatic = new(StringComparer.OrdinalIgnoreCase)
+    /// <summary>Permissions accordées par défaut avec chaque droit (porte) du rôle, dans l'ordre d'affichage.</summary>
+    private static readonly (int Droit, string[] Codes)[] PermissionsParDroit =
     {
-        "PARAMS:USERS", "PARAMS:USERS:CREATE", "PARAMS:USERS:UPDATE", "PARAMS:USERS:DELETE",
-        "PARAMS:ROLES", "PARAMS:ROLES:CREATE", "PARAMS:ROLES:UPDATE", "PARAMS:ROLES:DELETE",
-        "PARAMS:PRIVILEGES", "PARAMS:DB_ACCESS", "PARAMS:CLOCK_PARAMS", "PARAMS:CORRESPONDENCE",
-        "PARAMS:CARDPAIE", "PARAMS:CARDPAIE:CREATE", "PARAMS:CARDPAIE:UPDATE", "PARAMS:CARDPAIE:DELETE",
-        "PARAMS:CATEGORIES", "PARAMS:CATEGORIES:CREATE", "PARAMS:CATEGORIES:UPDATE", "PARAMS:CATEGORIES:DELETE",
-        "PARAMS:AFFECTATIONS", "PARAMS:AFFECTATIONS:CREATE", "PARAMS:AFFECTATIONS:UPDATE", "PARAMS:AFFECTATIONS:DELETE",
-        "PARAMS:TOLERANCES", "PARAMS:TOLERANCES:CREATE", "PARAMS:TOLERANCES:UPDATE",
-        "PARAMS:HOLIDAYS", "PARAMS:HOLIDAYS:CREATE", "PARAMS:HOLIDAYS:UPDATE", "PARAMS:HOLIDAYS:DELETE",
-        "PARAMS:MAJORATIONS", "PARAMS:MAJORATIONS:UPDATE",
-        "PARAMS:CODE_CONSTANTES",
-        "PARAMS:ABSENCE_CODES", "PARAMS:ABSENCE_CODES:CREATE", "PARAMS:ABSENCE_CODES:UPDATE",
-        "PROC:SHIFTS", "PROC:SHIFTS:CREATE", "PROC:SHIFTS:UPDATE", "PROC:SHIFTS:DELETE",
-        "PROC:EMPLOYEE_PLANNING", "PROC:EMPLOYEE_PLANNING:CREATE", "PROC:EMPLOYEE_PLANNING:UPDATE", "PROC:EMPLOYEE_PLANNING:DELETE",
-        "PROC:PUNCHES",
-        "PROC:ANOMALIES", "PROC:ANOMALIES:DELETE",
-        "PROC:CORRECTED_HOURS", "PROC:CORRECTED_HOURS:CREATE", "PROC:CORRECTED_HOURS:UPDATE", "PROC:CORRECTED_HOURS:DELETE",
-        "PROC:WEEKLY_VALIDATION", "PROC:OVERTIME",
-        "OTHER:CANTEEN", "OTHER:TRAVEL_EXPENSES",
-        "TRACE:AUDIT",
-        "REPORTS:REPORTS", "REPORTS:PREDICTIONS", "REPORTS:CLOSING"
+        (Rights.Parameters, new[]
+        {
+            "PARAMS:USERS", "PARAMS:USERS:CREATE", "PARAMS:USERS:UPDATE", "PARAMS:USERS:DELETE",
+            "PARAMS:ROLES", "PARAMS:ROLES:CREATE", "PARAMS:ROLES:UPDATE", "PARAMS:ROLES:DELETE",
+            "PARAMS:PRIVILEGES",
+            "PARAMS:DB_ACCESS",
+            "PARAMS:CLOCK_PARAMS",
+            "PARAMS:CORRESPONDENCE",
+            "PARAMS:CARDPAIE", "PARAMS:CARDPAIE:CREATE", "PARAMS:CARDPAIE:UPDATE", "PARAMS:CARDPAIE:DELETE",
+            "PARAMS:CATEGORIES", "PARAMS:CATEGORIES:CREATE", "PARAMS:CATEGORIES:UPDATE", "PARAMS:CATEGORIES:DELETE",
+            "PARAMS:AFFECTATIONS", "PARAMS:AFFECTATIONS:CREATE", "PARAMS:AFFECTATIONS:UPDATE", "PARAMS:AFFECTATIONS:DELETE",
+            "PARAMS:TOLERANCES", "PARAMS:TOLERANCES:CREATE", "PARAMS:TOLERANCES:UPDATE",
+            "PARAMS:HOLIDAYS", "PARAMS:HOLIDAYS:CREATE", "PARAMS:HOLIDAYS:UPDATE", "PARAMS:HOLIDAYS:DELETE",
+            "PARAMS:MAJORATIONS", "PARAMS:MAJORATIONS:UPDATE",
+            "PARAMS:CODE_CONSTANTES",
+            "PARAMS:ABSENCE_CODES", "PARAMS:ABSENCE_CODES:CREATE", "PARAMS:ABSENCE_CODES:UPDATE"
+        }),
+        (Rights.Processing, new[]
+        {
+            "PROC:SHIFTS", "PROC:SHIFTS:CREATE", "PROC:SHIFTS:UPDATE", "PROC:SHIFTS:DELETE",
+            "PROC:EMPLOYEE_PLANNING", "PROC:EMPLOYEE_PLANNING:CREATE", "PROC:EMPLOYEE_PLANNING:UPDATE", "PROC:EMPLOYEE_PLANNING:DELETE",
+            "PROC:PUNCHES",
+            "PROC:ANOMALIES", "PROC:ANOMALIES:DELETE",
+            "PROC:CORRECTED_HOURS", "PROC:CORRECTED_HOURS:CREATE", "PROC:CORRECTED_HOURS:UPDATE", "PROC:CORRECTED_HOURS:DELETE",
+            "PROC:WEEKLY_VALIDATION",
+            "PROC:OVERTIME"
+        }),
+        (Rights.Other, new[] { "OTHER:CANTEEN", "OTHER:TRAVEL_EXPENSES" }),
+        (Rights.Traceability, new[] { "TRACE:AUDIT" }),
+        (Rights.Reports, new[] { "REPORTS:REPORTS", "REPORTS:PREDICTIONS", "REPORTS:CLOSING" })
     };
+
+    /// <summary>Permissions statiques connues ; les codes SAGE: et POINTEUSE: dépendent des bases et sont acceptés par préfixe.</summary>
+    public static readonly HashSet<string> KnownStatic =
+        new(PermissionsParDroit.SelectMany(p => p.Codes), StringComparer.OrdinalIgnoreCase);
 
     public static bool IsKnown(string code)
     {
@@ -76,89 +90,28 @@ public static class PermissionCatalog
     {
         var defaults = new List<string>();
         var sageList = sageDbs as IReadOnlyCollection<BddSage> ?? sageDbs.ToList();
-
         if (sageList.Count > 0 || rights.Contains(Rights.Databases))
-        {
             defaults.Add("SAGE:CREATE");
-        }
-
-        foreach (var s in sageList)
-        {
-            var name = s.NomBd ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(name)) continue;
-            defaults.Add($"SAGE:{name}:READ");
-            defaults.Add($"SAGE:{name}:UPDATE");
-            defaults.Add($"SAGE:{name}:DELETE");
-        }
+        defaults.AddRange(DatabasePermissions("SAGE", sageList.Select(s => s.NomBd)));
 
         if (rights.Contains(Rights.Databases))
         {
             defaults.Add("POINTEUSE:CREATE");
-            foreach (var p in pointeuseDbs)
-            {
-                var name = p.NomBd ?? string.Empty;
-                if (string.IsNullOrWhiteSpace(name)) continue;
-                defaults.Add($"POINTEUSE:{name}:READ");
-                defaults.Add($"POINTEUSE:{name}:UPDATE");
-                defaults.Add($"POINTEUSE:{name}:DELETE");
-            }
+            defaults.AddRange(DatabasePermissions("POINTEUSE", pointeuseDbs.Select(p => p.NomBd)));
         }
 
-        if (rights.Contains(Rights.Parameters))
+        foreach (var (droit, codes) in PermissionsParDroit)
         {
-            defaults.AddRange(new[]
-            {
-                "PARAMS:USERS", "PARAMS:USERS:CREATE", "PARAMS:USERS:UPDATE", "PARAMS:USERS:DELETE",
-                "PARAMS:ROLES", "PARAMS:ROLES:CREATE", "PARAMS:ROLES:UPDATE", "PARAMS:ROLES:DELETE",
-                "PARAMS:PRIVILEGES",
-                "PARAMS:DB_ACCESS",
-                "PARAMS:CLOCK_PARAMS",
-                "PARAMS:CORRESPONDENCE",
-                "PARAMS:CARDPAIE", "PARAMS:CARDPAIE:CREATE", "PARAMS:CARDPAIE:UPDATE", "PARAMS:CARDPAIE:DELETE",
-                "PARAMS:CATEGORIES", "PARAMS:CATEGORIES:CREATE", "PARAMS:CATEGORIES:UPDATE", "PARAMS:CATEGORIES:DELETE",
-                "PARAMS:AFFECTATIONS", "PARAMS:AFFECTATIONS:CREATE", "PARAMS:AFFECTATIONS:UPDATE", "PARAMS:AFFECTATIONS:DELETE",
-                "PARAMS:TOLERANCES", "PARAMS:TOLERANCES:CREATE", "PARAMS:TOLERANCES:UPDATE",
-                "PARAMS:HOLIDAYS", "PARAMS:HOLIDAYS:CREATE", "PARAMS:HOLIDAYS:UPDATE", "PARAMS:HOLIDAYS:DELETE",
-                "PARAMS:MAJORATIONS", "PARAMS:MAJORATIONS:UPDATE",
-                "PARAMS:CODE_CONSTANTES",
-                "PARAMS:ABSENCE_CODES", "PARAMS:ABSENCE_CODES:CREATE", "PARAMS:ABSENCE_CODES:UPDATE"
-            });
+            if (rights.Contains(droit))
+                defaults.AddRange(codes);
         }
-
-        if (rights.Contains(Rights.Processing))
-        {
-            defaults.AddRange(new[]
-            {
-                "PROC:SHIFTS", "PROC:SHIFTS:CREATE", "PROC:SHIFTS:UPDATE", "PROC:SHIFTS:DELETE",
-                "PROC:EMPLOYEE_PLANNING", "PROC:EMPLOYEE_PLANNING:CREATE", "PROC:EMPLOYEE_PLANNING:UPDATE", "PROC:EMPLOYEE_PLANNING:DELETE",
-                "PROC:PUNCHES",
-                "PROC:ANOMALIES", "PROC:ANOMALIES:DELETE",
-                "PROC:CORRECTED_HOURS", "PROC:CORRECTED_HOURS:CREATE", "PROC:CORRECTED_HOURS:UPDATE", "PROC:CORRECTED_HOURS:DELETE",
-                "PROC:WEEKLY_VALIDATION",
-                "PROC:OVERTIME"
-            });
-        }
-
-        if (rights.Contains(Rights.Other))
-        {
-            defaults.AddRange(new[]
-            {
-                "OTHER:CANTEEN", "OTHER:TRAVEL_EXPENSES"
-            });
-        }
-
-        if (rights.Contains(Rights.Traceability))
-        {
-            defaults.Add("TRACE:AUDIT");
-        }
-
-        if (rights.Contains(Rights.Reports))
-        {
-            defaults.Add("REPORTS:REPORTS");
-            defaults.Add("REPORTS:PREDICTIONS");
-            defaults.Add("REPORTS:CLOSING");
-        }
-
         return defaults;
     }
+
+    /// <summary>Lecture, modification et suppression de chaque base nommée (« SAGE:NomBase:READ »…).</summary>
+    public static IEnumerable<string> DatabasePermissions(string prefix, IEnumerable<string?> noms) =>
+        noms
+            .Select(n => n ?? string.Empty)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .SelectMany(n => new[] { $"{prefix}:{n}:READ", $"{prefix}:{n}:UPDATE", $"{prefix}:{n}:DELETE" });
 }

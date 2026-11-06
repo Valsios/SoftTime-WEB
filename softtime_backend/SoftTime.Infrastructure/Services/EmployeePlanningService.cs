@@ -6,6 +6,7 @@ using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
+using SoftTime.Infrastructure.Services.PlanningImport;
 
 namespace SoftTime.Infrastructure.Services;
 
@@ -168,95 +169,82 @@ public sealed class EmployeePlanningService : IEmployeePlanningService
     public async Task SaveEmployeePlanningAsync(IReadOnlyCollection<EmployeePlanningDto> rows, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var repo = _uow.Repository<PlanningSalarie>();
         var shifts = await _uow.Repository<Planning>().ListAsync(_ => true, ct);
         var cards = (await _uow.Repository<CardPaie>().ListAsync(_ => true, ct))
             .Where(c => _planningDatabaseFilter.MatchesSage(c.SageBdd) && _planningDatabaseFilter.MatchesPointeuse(c.PointeuseBdd))
-            .GroupBy(c => c.Id)
-            .ToDictionary(g => g.Key, g => g.First());
+            .Select(c => c.Id)
+            .ToHashSet();
 
         foreach (var dto in rows)
-        {
-            if (!dto.DateP.HasValue)
-                throw new DomainException("La date du planning est requise.");
-            if (!cards.ContainsKey(dto.CardPaieId))
-                throw new DomainException($"Salarié introuvable pour la carte {dto.CardPaieId}.");
-
-            var date = dto.DateP.Value.Date;
-            var shift = dto.NoShift is int noShift
-                ? shifts.FirstOrDefault(s => s.NoShift == noShift)
-                : null;
-            if (dto.NoShift is int shiftDemande && shift is null)
-                throw new DomainException($"Shift {shiftDemande} introuvable.");
-
-            PlanningSalarie? entity = null;
-            if (dto.Id != 0)
-            {
-                entity = await repo.GetByIdAsync(dto.Id, ct)
-                    ?? throw new DomainException($"Planning {dto.Id} introuvable.");
-                if (!_planningDatabaseFilter.MatchesSage(entity.BddSage) || !_planningDatabaseFilter.MatchesPointeuse(entity.BddPointeuse))
-                    throw new DomainException("Planning hors du périmètre de la base active.");
-            }
-
-            if (entity is null)
-            {
-                var existantes = await repo.ListAsync(
-                    p => p.IdSal == dto.CardPaieId
-                         && p.DateP != null
-                         && p.DateP.Value.Date == date, ct);
-                entity = existantes
-                    .Where(p => _planningDatabaseFilter.MatchesSage(p.BddSage) && _planningDatabaseFilter.MatchesPointeuse(p.BddPointeuse))
-                    .OrderBy(p => p.Id)
-                    .FirstOrDefault();
-            }
-
-            var off = dto.Off == true;
-            DateTime? ha = null;
-            DateTime? hd = null;
-            var pause = TimeSpan.Zero;
-
-            if (!off)
-            {
-                // Une ligne héritée peut ne pas avoir de NoSHIFT : on conserve alors ses heures
-                // existantes si l'écran n'en fournit pas.
-                var debut = dto.Ha?.TimeOfDay ?? shift?.Ha ?? entity?.Ha?.TimeOfDay;
-                var fin = dto.Hd?.TimeOfDay ?? shift?.Hd ?? entity?.Hd?.TimeOfDay;
-                if (!PlanningGenerationRules.TryIntervalle(date, debut, fin, out ha, out hd))
-                    throw new DomainException(
-                        $"Heures d'entrée/sortie manquantes ou invalides pour le planning du {date:dd/MM/yyyy}.");
-                pause = dto.Pause ?? shift?.Pause ?? entity?.Pause ?? TimeSpan.Zero;
-            }
-
-            if (entity == null)
-            {
-                await repo.AddAsync(new PlanningSalarie
-                {
-                    IdSal = dto.CardPaieId,
-                    NoShift = dto.NoShift,
-                    DateP = date,
-                    Ha = ha,
-                    Pause = pause,
-                    Hd = hd,
-                    OffP = off,
-                    BddSage = _tenant.SageDb,
-                    BddPointeuse = _tenant.PointeuseDb
-                }, ct);
-            }
-            else
-            {
-                entity.IdSal = dto.CardPaieId;
-                entity.NoShift = dto.NoShift;
-                entity.DateP = date;
-                entity.Ha = ha;
-                entity.Pause = pause;
-                entity.Hd = hd;
-                entity.OffP = off;
-                entity.BddSage = _tenant.SageDb;
-                entity.BddPointeuse = _tenant.PointeuseDb;
-                repo.Update(entity);
-            }
-        }
+            await SaveRowAsync(dto, shifts, cards, ct);
         await _uow.SaveChangesAsync(ct);
+    }
+
+    private async Task SaveRowAsync(EmployeePlanningDto dto, List<Planning> shifts, HashSet<int> cards, CancellationToken ct)
+    {
+        if (!dto.DateP.HasValue)
+            throw new DomainException("La date du planning est requise.");
+        if (!cards.Contains(dto.CardPaieId))
+            throw new DomainException($"Salarié introuvable pour la carte {dto.CardPaieId}.");
+
+        var date = dto.DateP.Value.Date;
+        var shift = dto.NoShift is int noShift ? shifts.FirstOrDefault(s => s.NoShift == noShift) : null;
+        if (dto.NoShift is int shiftDemande && shift is null)
+            throw new DomainException($"Shift {shiftDemande} introuvable.");
+
+        var repo = _uow.Repository<PlanningSalarie>();
+        var entity = await FindPlanningAsync(dto, date, ct);
+        var valeurs = Valeurs(dto, date, shift, entity);
+        if (entity == null)
+        {
+            var planning = new PlanningSalarie { IdSal = dto.CardPaieId, DateP = date };
+            valeurs.Appliquer(planning, _tenant.SageDb, _tenant.PointeuseDb);
+            await repo.AddAsync(planning, ct);
+            return;
+        }
+        entity.IdSal = dto.CardPaieId;
+        entity.DateP = date;
+        valeurs.Appliquer(entity, _tenant.SageDb, _tenant.PointeuseDb);
+        repo.Update(entity);
+    }
+
+    /// <summary>Ligne désignée par son identifiant (dans le périmètre actif), sinon celle du salarié ce jour-là.</summary>
+    private async Task<PlanningSalarie?> FindPlanningAsync(EmployeePlanningDto dto, DateTime date, CancellationToken ct)
+    {
+        var repo = _uow.Repository<PlanningSalarie>();
+        if (dto.Id != 0)
+        {
+            var entity = await repo.GetByIdAsync(dto.Id, ct)
+                ?? throw new DomainException($"Planning {dto.Id} introuvable.");
+            if (!_planningDatabaseFilter.MatchesSage(entity.BddSage) || !_planningDatabaseFilter.MatchesPointeuse(entity.BddPointeuse))
+                throw new DomainException("Planning hors du périmètre de la base active.");
+            return entity;
+        }
+
+        var existantes = await repo.ListAsync(
+            p => p.IdSal == dto.CardPaieId && p.DateP != null && p.DateP.Value.Date == date, ct);
+        return existantes
+            .Where(p => _planningDatabaseFilter.MatchesSage(p.BddSage) && _planningDatabaseFilter.MatchesPointeuse(p.BddPointeuse))
+            .OrderBy(p => p.Id)
+            .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Heures saisies, sinon celles du shift, sinon celles de la ligne existante : une ligne héritée
+    /// peut ne pas avoir de NoSHIFT et conserve alors ses heures si l'écran n'en fournit pas.
+    /// </summary>
+    private static PlanningDayValues Valeurs(EmployeePlanningDto dto, DateTime date, Planning? shift, PlanningSalarie? entity)
+    {
+        if (dto.Off == true)
+            return PlanningDayValues.Repos with { NoShift = dto.NoShift };
+
+        var debut = dto.Ha?.TimeOfDay ?? shift?.Ha ?? entity?.Ha?.TimeOfDay;
+        var fin = dto.Hd?.TimeOfDay ?? shift?.Hd ?? entity?.Hd?.TimeOfDay;
+        if (!PlanningGenerationRules.TryIntervalle(date, debut, fin, out var ha, out var hd))
+            throw new DomainException(
+                $"Heures d'entrée/sortie manquantes ou invalides pour le planning du {date:dd/MM/yyyy}.");
+        var pause = dto.Pause ?? shift?.Pause ?? entity?.Pause ?? TimeSpan.Zero;
+        return new PlanningDayValues(dto.NoShift, ha, hd, pause, false);
     }
 
     public async Task DeleteEmployeePlanningAsync(int id, CancellationToken ct = default)

@@ -133,17 +133,11 @@ public sealed class UserPermissionService : IUserPermissionService
             "SAGE:CREATE", "POINTEUSE:CREATE", "PARAMS:PRIVILEGES", "PARAMS:ROLES", "PARAMS:USERS", "PARAMS:DB_ACCESS"
         };
         var sages = await _uow.Repository<BddSage>().ListAsync(_ => true, ct);
-        codes.AddRange(DatabasePermissions("SAGE", sages.Select(s => s.NomBd)));
+        codes.AddRange(PermissionCatalog.DatabasePermissions("SAGE", sages.Select(s => s.NomBd)));
         var pointeuses = await _uow.Repository<BddPointeuse>().ListAsync(_ => true, ct);
-        codes.AddRange(DatabasePermissions("POINTEUSE", pointeuses.Select(p => p.NomBd)));
+        codes.AddRange(PermissionCatalog.DatabasePermissions("POINTEUSE", pointeuses.Select(p => p.NomBd)));
         return codes;
     }
-
-    private static IEnumerable<string> DatabasePermissions(string prefix, IEnumerable<string?> noms) =>
-        noms
-            .Select(n => n ?? string.Empty)
-            .Where(n => !string.IsNullOrWhiteSpace(n))
-            .SelectMany(n => new[] { $"{prefix}:{n}:READ", $"{prefix}:{n}:UPDATE", $"{prefix}:{n}:DELETE" });
 
     /// <summary>
     /// Remplace les permissions de l'utilisateur. Une ligne sentinelle conserve l'intention « aucun
