@@ -1,8 +1,8 @@
 using System.Linq.Expressions;
 
-using Microsoft.AspNetCore.Identity;
-
 using AutoMapper;
+
+using Microsoft.AspNetCore.Identity;
 
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;

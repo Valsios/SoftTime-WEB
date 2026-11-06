@@ -99,10 +99,7 @@ public sealed class RolePermissionService : IRolePermissionService
         await ReplaceDroitsAsync(targetRoleId, normalizedPermissions, cancellationToken);
 
         await _rightsChangeJournal.EcrireAuditDroitAsync(
-            currentUserId, caller.Login ?? string.Empty,
-            "ROLE", targetRoleId, targetRole.NomRole,
-            "UPDATE_ROLE_PERMS",
-            permsAvant, normalizedPermissions,
+            new RightsChange(currentUserId, caller.Login ?? string.Empty, "ROLE", targetRoleId, targetRole.NomRole, "UPDATE_ROLE_PERMS", permsAvant, normalizedPermissions),
             cancellationToken);
 
         await _uow.SaveChangesAsync(cancellationToken);

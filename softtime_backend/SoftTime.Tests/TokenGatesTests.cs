@@ -1,8 +1,8 @@
 using System.IdentityModel.Tokens.Jwt;
 
-using Microsoft.AspNetCore.Identity;
-
 using AutoMapper;
+
+using Microsoft.AspNetCore.Identity;
 
 using SoftTime.Api.Security;
 using SoftTime.Application.Abstractions;

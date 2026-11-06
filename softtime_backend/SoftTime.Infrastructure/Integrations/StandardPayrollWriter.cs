@@ -3,7 +3,6 @@ using System.Runtime.ExceptionServices;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Services;
-using SoftTime.Domain.Entities.Sage;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
 
@@ -49,9 +48,7 @@ public class StandardPayrollWriter : IPayrollWriter
         {
             foreach (var hs in rows.Where(h => h.NumSal.HasValue))
             {
-                var updates = await _sageWriter.SyncOvertimeAsync(input.Connection, input.Constants, hs.NumSal!.Value, input.Codes,
-                    hs.Exo130 ?? 0, hs.Exo150 ?? 0, hs.I130 ?? 0, hs.I150 ?? 0,
-                    hs.Ferie ?? 0, hs.Nuit ?? 0, hs.Dim ?? 0, ct);
+                var updates = await _sageWriter.SyncOvertimeAsync(input, hs.NumSal!.Value, OvertimeAmounts.From(hs), ct);
                 foreach (var (category, count) in updates)
                     categoryCounts[category] += count;
             }
@@ -60,42 +57,33 @@ public class StandardPayrollWriter : IPayrollWriter
         {
             foreach (var (category, count) in exception.UpdatesByCategory)
                 categoryCounts[category] += count;
-            await WriteAuditAsync(database, auditContext, rows.Count(h => h.NumSal.HasValue), categoryCounts.Values.Sum(), categoryCounts, "ECHEC", CancellationToken.None);
+            await WriteAuditAsync(database, auditContext, new PayrollSyncOutcome(rows.Count(h => h.NumSal.HasValue), categoryCounts.Values.Sum(), 0, categoryCounts, "ECHEC"));
             ExceptionDispatchInfo.Capture(exception.InnerException ?? exception).Throw();
             throw;
         }
         catch
         {
-            await WriteAuditAsync(database, auditContext, rows.Count(h => h.NumSal.HasValue), categoryCounts.Values.Sum(), categoryCounts, "ECHEC", CancellationToken.None);
+            await WriteAuditAsync(database, auditContext, new PayrollSyncOutcome(rows.Count(h => h.NumSal.HasValue), categoryCounts.Values.Sum(), 0, categoryCounts, "ECHEC"));
             throw;
         }
 
         var written = rows.Count(h => h.NumSal.HasValue);
-        await WriteAuditAsync(database, auditContext, written, categoryCounts.Values.Sum(), categoryCounts, "SUCCES", CancellationToken.None);
+        await WriteAuditAsync(database, auditContext, new PayrollSyncOutcome(written, categoryCounts.Values.Sum(), 0, categoryCounts, "SUCCES"));
         return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "STANDARD", written, categoryCounts.Values.Sum(),
             "Synchronisation des heures supplémentaires vers SAGE terminée.");
     }
 
-    protected virtual async Task<StandardPayrollInput> GetInputAsync(CancellationToken ct)
+    protected virtual async Task<SagePayrollTarget> GetInputAsync(CancellationToken ct)
     {
         using var sage = _sageFactory.Create(await _tenant.GetSageConnectionAsync(ct));
-        return new StandardPayrollInput(
+        return new SagePayrollTarget(
             await _tenant.GetSageConnectionAsync(ct),
             sage.Constants.ToArray(),
             await _catalog.GetOvertimeSageCodesAsync(ct));
     }
 
-    private Task WriteAuditAsync(
-        BddSage database,
-        PayrollSyncContext context,
-        int employees,
-        int updatedRows,
-        IReadOnlyDictionary<string, int> categories,
-        string status,
-        CancellationToken ct)
+    private Task WriteAuditAsync(BddSage database, PayrollSyncContext context, PayrollSyncOutcome bilan)
         => _auditTrail.WritePayrollSyncAsync(new PayrollSyncAudit(
-            "T_CUMSAL", database.NomBd, context.PeriodFrom, context.PeriodTo, employees, updatedRows, 0,
-            categories, status, context.UserLogin, "SYNC_PAIE:STANDARD", context.Correlation), ct);
-
-    protected sealed record StandardPayrollInput(string Connection, ConstanteSage[] Constants, OvertimeSageCodes Codes);
+            "T_CUMSAL", database.NomBd, context.PeriodFrom, context.PeriodTo, bilan.Employees, bilan.UpdatedRows, 0,
+            bilan.Categories, bilan.Status, context.UserLogin, "SYNC_PAIE:STANDARD", context.Correlation), CancellationToken.None);
 }

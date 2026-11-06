@@ -1,11 +1,8 @@
-using SoftTime.Application.DTOs;
-using SoftTime.Domain.Entities.Sage;
-
 namespace SoftTime.Application.Abstractions;
 
 public interface ISagePayrollWriter
 {
-    Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(string sageConnectionString, ConstanteSage[] constants, int numSal, OvertimeSageCodes codes, decimal exo130, decimal exo150, decimal i130, decimal i150, decimal ferie, decimal nuit, decimal dim, CancellationToken cancellationToken = default);
+    Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(SagePayrollTarget target, int numSal, OvertimeAmounts amounts, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Écrit un cumul de paie dans <c>T_CUMSAL</c> pour un salarié et un code opérande donnés.

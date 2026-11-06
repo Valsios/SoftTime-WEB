@@ -138,10 +138,7 @@ public sealed class UserAdministrationService : IUserAdministrationService
             .ToList();
         permRepo.RemoveRange(existingPerms);
         await _rightsChangeJournal.EcrireAuditDroitAsync(
-            caller.IdResponsable, caller.Login ?? string.Empty,
-            "USER", entity.IdResponsable, entity.NomResponsable,
-            "RESET_USER_PERMS",
-            permsAvant, null,
+            new RightsChange(caller.IdResponsable, caller.Login ?? string.Empty, "USER", entity.IdResponsable, entity.NomResponsable, "RESET_USER_PERMS", permsAvant, null),
             ct);
     }
 

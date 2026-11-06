@@ -113,10 +113,7 @@ public sealed class UserPermissionService : IUserPermissionService
 
         var permsAvant = await ReplaceUserPermissionsAsync(targetUserId, toSaveList, cancellationToken);
         await _rightsChangeJournal.EcrireAuditDroitAsync(
-            currentUserId, caller.Login ?? string.Empty,
-            "USER", targetUserId, target.NomResponsable,
-            "UPDATE_USER_PERMS",
-            permsAvant, toSaveList,
+            new RightsChange(currentUserId, caller.Login ?? string.Empty, "USER", targetUserId, target.NomResponsable, "UPDATE_USER_PERMS", permsAvant, toSaveList),
             cancellationToken);
 
         await _uow.SaveChangesAsync(cancellationToken);
@@ -189,10 +186,7 @@ public sealed class UserPermissionService : IUserPermissionService
         repo.RemoveRange(existing);
 
         await _rightsChangeJournal.EcrireAuditDroitAsync(
-            currentUserId, caller.Login ?? string.Empty,
-            "USER", targetUserId, target.NomResponsable,
-            "RESET_USER_PERMS",
-            permsAvant, null,
+            new RightsChange(currentUserId, caller.Login ?? string.Empty, "USER", targetUserId, target.NomResponsable, "RESET_USER_PERMS", permsAvant, null),
             cancellationToken);
 
         await _uow.SaveChangesAsync(cancellationToken);

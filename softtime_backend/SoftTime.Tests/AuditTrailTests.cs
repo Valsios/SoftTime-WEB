@@ -5,7 +5,6 @@ using Microsoft.Extensions.Options;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Services;
-using SoftTime.Domain.Entities.Sage;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
 using SoftTime.Infrastructure.Integrations;
@@ -244,20 +243,20 @@ public class AuditTrailTests
         public TestStandardWriter(ISagePayrollWriter sageWriter, IAuditTrail auditTrail)
             : base(sageWriter, null!, null!, null!, auditTrail) { }
 
-        protected override Task<StandardPayrollInput> GetInputAsync(CancellationToken ct)
-            => Task.FromResult(new StandardPayrollInput("test", [], new OvertimeSageCodes()));
+        protected override Task<SagePayrollTarget> GetInputAsync(CancellationToken ct)
+            => Task.FromResult(new SagePayrollTarget("test", [], new OvertimeSageCodes()));
     }
 
     private sealed class SuccessfulSageWriter : ISagePayrollWriter
     {
-        public Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(string connection, ConstanteSage[] constants, int number, OvertimeSageCodes codes, decimal exo130, decimal exo150, decimal i130, decimal i150, decimal ferie, decimal nuit, decimal dim, CancellationToken ct = default)
+        public Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(SagePayrollTarget target, int number, OvertimeAmounts amounts, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyDictionary<string, int>>(PayrollWritingConfiguration.Categories.ToDictionary(category => category, _ => 1));
         public Task<int> UpdateCumulAsync(string connection, int number, short operand, decimal value, CancellationToken ct = default) => Task.FromResult(1);
     }
 
     private sealed class FailingSageWriter(Exception exception, int completed) : ISagePayrollWriter
     {
-        public Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(string connection, ConstanteSage[] constants, int number, OvertimeSageCodes codes, decimal exo130, decimal exo150, decimal i130, decimal i150, decimal ferie, decimal nuit, decimal dim, CancellationToken ct = default)
+        public Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(SagePayrollTarget target, int number, OvertimeAmounts amounts, CancellationToken ct = default)
         {
             var categories = PayrollWritingConfiguration.Categories.Take(completed).ToDictionary(category => category, _ => 1);
             throw new PayrollSyncWriteException(exception, completed, categories);
@@ -267,14 +266,14 @@ public class AuditTrailTests
 
     private sealed class CancelledSageWriter : ISagePayrollWriter
     {
-        public Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(string connection, ConstanteSage[] constants, int number, OvertimeSageCodes codes, decimal exo130, decimal exo150, decimal i130, decimal i150, decimal ferie, decimal nuit, decimal dim, CancellationToken ct = default)
+        public Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(SagePayrollTarget target, int number, OvertimeAmounts amounts, CancellationToken ct = default)
             => throw new OperationCanceledException(ct);
         public Task<int> UpdateCumulAsync(string connection, int number, short operand, decimal value, CancellationToken ct = default) => Task.FromResult(0);
     }
 
     private sealed class CancellingSageWriter(CancellationTokenSource cancellation) : ISagePayrollWriter
     {
-        public Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(string connection, ConstanteSage[] constants, int number, OvertimeSageCodes codes, decimal exo130, decimal exo150, decimal i130, decimal i150, decimal ferie, decimal nuit, decimal dim, CancellationToken ct = default)
+        public Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(SagePayrollTarget target, int number, OvertimeAmounts amounts, CancellationToken ct = default)
         {
             cancellation.Cancel();
             return Task.FromResult<IReadOnlyDictionary<string, int>>(PayrollWritingConfiguration.Categories.ToDictionary(category => category, _ => 1));

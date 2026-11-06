@@ -1,7 +1,7 @@
+using AutoMapper;
+
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
-
-using AutoMapper;
 
 using SoftTime.Api.Security;
 using SoftTime.Application.Abstractions;

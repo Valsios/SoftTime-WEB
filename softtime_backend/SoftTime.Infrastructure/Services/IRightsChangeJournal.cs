@@ -2,5 +2,6 @@
 
 public interface IRightsChangeJournal
 {
-    Task EcrireAuditDroitAsync(decimal idOperateur, string loginOperateur, string typeCible, decimal idCible, string? nomCible, string action, IEnumerable<string>? permsAvant, IEnumerable<string>? permsApres, CancellationToken cancellationToken);
+    /// <summary>Ajoute une ligne au journal des droits (enregistrée avec la sauvegarde de l'appelant).</summary>
+    Task EcrireAuditDroitAsync(RightsChange change, CancellationToken cancellationToken);
 }

@@ -1,17 +1,17 @@
 using System.Linq.Expressions;
 
-using Microsoft.AspNetCore.Identity;
-
 using AutoMapper;
+
+using Microsoft.AspNetCore.Identity;
 
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
 using SoftTime.Application.Services;
+using SoftTime.Domain;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
-using SoftTime.Domain;
 using SoftTime.Infrastructure.Services;
 
 namespace SoftTime.Tests;

@@ -58,7 +58,7 @@ public sealed class OtherPayrollWriter : IPayrollWriter
                 categoryCounts[category] += affected;
             }
             await transaction.CommitAsync(ct);
-            await WriteAuditAsync(database, plan, auditContext, rows.Count, categoryCounts.Values.Sum(), 0, categoryCounts, "SUCCES", CancellationToken.None);
+            await WriteAuditAsync(database, plan, auditContext, new PayrollSyncOutcome(rows.Count, categoryCounts.Values.Sum(), 0, categoryCounts, "SUCCES"));
             return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "AUTRE", rows.Count, updates,
                 "Synchronisation des heures supplémentaires terminée.");
         }
@@ -66,7 +66,7 @@ public sealed class OtherPayrollWriter : IPayrollWriter
         {
             await RollbackQuietlyAsync(transaction);
             await QuietlyAsync(
-                () => WriteAuditAsync(database, plan, auditContext, rows.Count, 0, updates, categoryCounts, "ECHEC", CancellationToken.None),
+                () => WriteAuditAsync(database, plan, auditContext, new PayrollSyncOutcome(rows.Count, 0, updates, categoryCounts, "ECHEC")),
                 "Impossible d'écrire la synthèse d'échec de synchronisation de paie AUTRE.");
             throw;
         }
@@ -88,19 +88,11 @@ public sealed class OtherPayrollWriter : IPayrollWriter
         }
     }
 
-    private Task WriteAuditAsync(
-        BddSage database,
-        WritePlan plan,
-        PayrollSyncContext context,
-        int employees,
-        int updatedRows,
-        int cancelledRows,
-        IReadOnlyDictionary<string, int> categories,
-        string status,
-        CancellationToken ct)
+    private Task WriteAuditAsync(BddSage database, WritePlan plan, PayrollSyncContext context, PayrollSyncOutcome bilan)
         => _auditTrail.WritePayrollSyncAsync(new PayrollSyncAudit(
             $"{plan.Schema}.{plan.Table}", database.NomBd, context.PeriodFrom, context.PeriodTo,
-            employees, updatedRows, cancelledRows, categories, status, context.UserLogin, "SYNC_PAIE:AUTRE", context.Correlation), ct);
+            bilan.Employees, bilan.UpdatedRows, bilan.CancelledRows, bilan.Categories, bilan.Status,
+            context.UserLogin, "SYNC_PAIE:AUTRE", context.Correlation), CancellationToken.None);
 
     private async Task<WritePlan> PreflightAsync(BddSage database, IReadOnlyList<HsExoDto> rows, CancellationToken ct)
     {

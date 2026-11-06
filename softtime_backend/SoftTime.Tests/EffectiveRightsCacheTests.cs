@@ -1,7 +1,7 @@
+using AutoMapper;
+
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
-
-using AutoMapper;
 
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Mapping;

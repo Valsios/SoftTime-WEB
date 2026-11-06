@@ -3,9 +3,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
+using SoftTime.Application;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Services;
-using SoftTime.Application;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
 using SoftTime.Domain.Services;

@@ -1,8 +1,8 @@
+using FluentValidation;
+
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-
-using FluentValidation;
 
 using SoftTime.Application.Mapping;
 using SoftTime.Application.Security;

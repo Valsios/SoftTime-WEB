@@ -6,15 +6,15 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
-using Xunit.Abstractions;
-
+using SoftTime.Application;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Application;
 using SoftTime.Domain.Models;
 using SoftTime.Domain.Services;
-using SoftTime.Infrastructure.Services;
 using SoftTime.Infrastructure;
+using SoftTime.Infrastructure.Services;
+
+using Xunit.Abstractions;
 
 namespace SoftTime.Tests;
 

@@ -1,15 +1,15 @@
 using Microsoft.Data.SqlClient;
 
 using SoftTime.Application.Abstractions;
-using SoftTime.Application.DTOs;
-using SoftTime.Domain.Entities.Sage;
 
 namespace SoftTime.Infrastructure.Integrations;
 
 public class SagePayrollWriter : ISagePayrollWriter
 {
-    public async Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(string sageConnectionString, ConstanteSage[] constants, int numSal, OvertimeSageCodes codes, decimal exo130, decimal exo150, decimal i130, decimal i150, decimal ferie, decimal nuit, decimal dim, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(SagePayrollTarget target, int numSal, OvertimeAmounts amounts, CancellationToken cancellationToken = default)
     {
+        var (sageConnectionString, constants, codes) = target;
+        var (exo130, exo150, i130, i150, ferie, nuit, dim) = amounts;
         short Op(string code) => constants.FirstOrDefault(c => string.Equals(c.CodeConstante?.Trim(), code, StringComparison.Ordinal))?.CodeOperande1
             ?? throw new DomainException($"Constante SAGE {code} introuvable.");
 

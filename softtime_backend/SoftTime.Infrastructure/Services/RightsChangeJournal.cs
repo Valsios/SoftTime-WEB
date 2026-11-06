@@ -20,12 +20,9 @@ public sealed class RightsChangeJournal : IRightsChangeJournal
     }
 
     public async Task EcrireAuditDroitAsync(
-        decimal idOperateur, string loginOperateur,
-        string typeCible, decimal idCible, string? nomCible,
-        string action,
-        IEnumerable<string>? permsAvant, IEnumerable<string>? permsApres,
-        CancellationToken cancellationToken)
+        RightsChange change, CancellationToken cancellationToken)
     {
+        var (idOperateur, loginOperateur, typeCible, idCible, nomCible, action, permsAvant, permsApres) = change;
         var avant = permsAvant == null ? null : string.Join(",", permsAvant);
         var apres = permsApres == null ? null : string.Join(",", permsApres);
         await _uow.Repository<AuditDroit>().AddAsync(new AuditDroit

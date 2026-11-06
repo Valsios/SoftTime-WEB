@@ -1,7 +1,7 @@
+using AutoMapper;
+
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
-
-using AutoMapper;
 
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
