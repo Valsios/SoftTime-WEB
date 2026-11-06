@@ -86,6 +86,8 @@ export const EMPTY_ANOMALIES = 'Aucune anomalie sur cette période.';
 export const EMPTY_ABSENCES = 'Aucune absence ni aucun congé sur cette période.';
 export const EMPTY_DELAYS = 'Aucun retard sur cette période.';
 export const LOADING = 'Chargement…';
+export const STRADDLE_NOTE =
+  'Une semaine à cheval sur deux mois apparaît dans chacun de ces mois : les totaux de mois différents ne s’additionnent donc pas.';
 export const CARD_ERROR = 'Ces données n’ont pas pu être chargées.';
 export const SCOPE_NOTE =
   'Vos données personnelles, en lecture seule. Les heures ne comptent que les semaines validées ; les congés viennent de SAGE.';
