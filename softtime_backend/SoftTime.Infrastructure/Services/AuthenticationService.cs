@@ -3,21 +3,21 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 
-using Microsoft.AspNetCore.Identity;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-
 using AutoMapper;
+
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Security;
 using SoftTime.Application.Services;
+using SoftTime.Domain;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
-using SoftTime.Domain;
 
 namespace SoftTime.Infrastructure.Services;
 

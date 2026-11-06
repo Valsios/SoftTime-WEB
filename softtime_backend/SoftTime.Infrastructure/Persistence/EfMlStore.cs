@@ -1,8 +1,8 @@
 ﻿using System.Data;
 
 using Microsoft.Data.SqlClient;
-using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 using SoftTime.Application.Abstractions;
 using SoftTime.Domain.Entities.Ml;

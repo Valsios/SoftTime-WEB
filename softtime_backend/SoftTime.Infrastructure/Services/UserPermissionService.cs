@@ -1,10 +1,10 @@
 ﻿using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Security;
+using SoftTime.Domain;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
-using SoftTime.Domain;
 
 namespace SoftTime.Infrastructure.Services;
 

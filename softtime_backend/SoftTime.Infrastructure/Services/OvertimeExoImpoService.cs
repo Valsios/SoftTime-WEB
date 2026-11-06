@@ -1,4 +1,6 @@
-﻿using SoftTime.Application.Abstractions;
+﻿using System.Linq.Expressions;
+
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
@@ -33,13 +35,7 @@ public sealed class OvertimeExoImpoService : IOvertimeExoImpoService
         var cards = await _overtimeWeekContext.TargetCardsAsync(request, ct);
         var targetMatricules = cards.Select(c => c.SageMatricule).Where(m => !string.IsNullOrEmpty(m)).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var list = await _uow.Repository<HsExoImp>().ListReadOnlyAsync(h =>
-            h.BddSage == _tenant.SageDb
-            && h.PeriodeDebut <= request.To.Date
-            && h.PeriodeFin >= request.From.Date
-            && (string.IsNullOrEmpty(request.MatriculeFrom) || string.Compare(h.Matricule, request.MatriculeFrom) >= 0)
-            && (string.IsNullOrEmpty(request.MatriculeTo) || string.Compare(h.Matricule, request.MatriculeTo) <= 0), ct);
-
+        var list = await _uow.Repository<HsExoImp>().ListReadOnlyAsync(Filtre(request, null), ct);
         if (!string.IsNullOrEmpty(request.Departement))
         {
             list = list.Where(h => h.Matricule != null && targetMatricules.Contains(h.Matricule)).ToList();
@@ -47,7 +43,7 @@ public sealed class OvertimeExoImpoService : IOvertimeExoImpoService
 
         return list
             .OrderBy(h => h.Matricule)
-            .Select(h => new HsExoDto(h.Oid, h.Matricule, h.NumSal, h.Exo130, h.Exo150, h.I130, h.I150, h.Ferie, h.Nuit, h.Dim, h.Retard, h.Absence))
+            .Select(ToDto)
             .ToList();
     }
 
@@ -61,57 +57,27 @@ public sealed class OvertimeExoImpoService : IOvertimeExoImpoService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         _overtimeWeekContext.EnsureMaxOneMonth(request);
-        var sageDb = _tenant.SageDb;
-        var from = request.From.Date;
-        var to = request.To.Date;
-        var matriculeFrom = request.MatriculeFrom;
-        var matriculeTo = request.MatriculeTo;
-        var repo = _uow.Repository<HsExoImp>();
 
-        static HsExoDto Map(HsExoImp h) => new(
-            h.Oid, h.Matricule, h.NumSal, h.Exo130, h.Exo150, h.I130, h.I150,
-            h.Ferie, h.Nuit, h.Dim, h.Retard, h.Absence);
-
-        if (string.IsNullOrEmpty(request.Departement))
+        List<string>? targetMatricules = null;
+        if (!string.IsNullOrEmpty(request.Departement))
         {
-            return await PagedLists.PageAsync(
-                repo,
-                h => h.BddSage == sageDb
-                     && h.PeriodeDebut <= to
-                     && h.PeriodeFin >= from
-                     && (string.IsNullOrEmpty(matriculeFrom) || string.Compare(h.Matricule, matriculeFrom) >= 0)
-                     && (string.IsNullOrEmpty(matriculeTo) || string.Compare(h.Matricule, matriculeTo) <= 0),
-                q => q.OrderBy(h => h.Matricule).ThenBy(h => h.Oid),
-                page,
-                pageSize,
-                Map,
-                request.Search,
-                new System.Linq.Expressions.Expression<Func<HsExoImp, string?>>[] { h => h.Matricule },
-                ct);
+            targetMatricules = (await _overtimeWeekContext.TargetCardsAsync(request, ct))
+                .Select(c => c.SageMatricule)
+                .Where(m => !string.IsNullOrEmpty(m))
+                .Select(m => m!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
-        var cards = await _overtimeWeekContext.TargetCardsAsync(request, ct);
-        var targetMatricules = cards
-            .Select(c => c.SageMatricule)
-            .Where(m => !string.IsNullOrEmpty(m))
-            .Select(m => m!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
         return await PagedLists.PageAsync(
-            repo,
-            h => h.BddSage == sageDb
-                 && h.PeriodeDebut <= to
-                 && h.PeriodeFin >= from
-                 && (string.IsNullOrEmpty(matriculeFrom) || string.Compare(h.Matricule, matriculeFrom) >= 0)
-                 && (string.IsNullOrEmpty(matriculeTo) || string.Compare(h.Matricule, matriculeTo) <= 0)
-                 && targetMatricules.Contains(h.Matricule!),
+            _uow.Repository<HsExoImp>(),
+            Filtre(request, targetMatricules),
             q => q.OrderBy(h => h.Matricule).ThenBy(h => h.Oid),
             page,
             pageSize,
-            Map,
+            ToDto,
             request.Search,
-            new System.Linq.Expressions.Expression<Func<HsExoImp, string?>>[] { h => h.Matricule },
+            new Expression<Func<HsExoImp, string?>>[] { h => h.Matricule },
             ct);
     }
 
@@ -124,9 +90,7 @@ public sealed class OvertimeExoImpoService : IOvertimeExoImpoService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         _overtimeWeekContext.EnsureMaxOneMonth(request);
-        var sageDb = _tenant.SageDb;
-        var from = request.From.Date;
-        var to = request.To.Date;
+        var periode = new ExoImpoPeriod(request.From.Date, request.To.Date, _tenant.SageDb, _tenant.PointeuseDb);
 
         var cards = (await _overtimeWeekContext.TargetCardsAsync(request, ct))
             .OrderBy(c => c.SageMatricule, StringComparer.OrdinalIgnoreCase)
@@ -135,15 +99,67 @@ public sealed class OvertimeExoImpoService : IOvertimeExoImpoService
             .Select(c => MatriculeIdentity.Cle(c.SageMatricule))
             .Where(cle => cle.Length > 0)
             .ToHashSet(StringComparer.Ordinal);
-
         var numSalByMat = await ChargerNumSalAsync(ct);
+        var validees = await ChargerSemainesValideesAsync(periode, targetCles, ct);
+        var absences = await CalculerAbsencesAsync(request, cards, ct);
 
-        // Une semaine validée appartient à UNE seule période : celle qui contient son dimanche
-        // (le desktop passait par T_SemainePeriode). Une période démarrant un mercredi inclut donc
-        // sa première semaine, mais la semaine qui déborde sur la période suivante n'est payée
-        // qu'avec celle-ci : sinon elle serait comptée dans deux T_HSExoImp consécutifs.
-        var (debutSemaineMin, debutSemaineMax) = _overtimeWeekContext.BornesSemainesDeLaPeriode(from, to);
-        var validees = (await _uow.Repository<HsValidee>().ListAsync(
+        var nouvellesSemaines = new List<HsSemaine>();
+        var nouvellesExo = new List<HsExoImp>();
+        foreach (var card in cards)
+        {
+            var cle = MatriculeIdentity.Cle(card.SageMatricule);
+            var semaines = validees.GetValueOrDefault(cle) ?? new List<HsValidee>();
+            var splits = semaines.Select(w => OvertimeRules.SplitWeekly(w.Hs ?? 0)).ToList();
+            var salarie = new ExoImpoEmployee(card.SageMatricule, numSalByMat.TryGetValue(cle, out var n) ? n : null);
+            nouvellesSemaines.AddRange(ConstruireSemaines(periode, salarie, splits));
+
+            var absence = absences.GetValueOrDefault(cle);
+            if (semaines.Count == 0 && absence == 0m)
+                continue;
+            var exo = ConstruireExo(periode, salarie, semaines, splits);
+            exo.Absence = absence;
+            nouvellesExo.Add(exo);
+        }
+
+        await RemplacerAsync(periode, targetCles, nouvellesSemaines, nouvellesExo, ct);
+        return nouvellesExo.Select(ToDto).ToList();
+    }
+
+    private Expression<Func<HsExoImp, bool>> Filtre(PeriodRequest request, List<string>? targetMatricules)
+    {
+        var sageDb = _tenant.SageDb;
+        var from = request.From.Date;
+        var to = request.To.Date;
+        var matriculeFrom = request.MatriculeFrom;
+        var matriculeTo = request.MatriculeTo;
+        if (targetMatricules is null)
+        {
+            return h => h.BddSage == sageDb
+                        && h.PeriodeDebut <= to
+                        && h.PeriodeFin >= from
+                        && (string.IsNullOrEmpty(matriculeFrom) || string.Compare(h.Matricule, matriculeFrom) >= 0)
+                        && (string.IsNullOrEmpty(matriculeTo) || string.Compare(h.Matricule, matriculeTo) <= 0);
+        }
+        return h => h.BddSage == sageDb
+                    && h.PeriodeDebut <= to
+                    && h.PeriodeFin >= from
+                    && (string.IsNullOrEmpty(matriculeFrom) || string.Compare(h.Matricule, matriculeFrom) >= 0)
+                    && (string.IsNullOrEmpty(matriculeTo) || string.Compare(h.Matricule, matriculeTo) <= 0)
+                    && targetMatricules.Contains(h.Matricule!);
+    }
+
+    /// <summary>
+    /// Une semaine validée appartient à UNE seule période : celle qui contient son dimanche
+    /// (le desktop passait par T_SemainePeriode). Une période démarrant un mercredi inclut donc
+    /// sa première semaine, mais la semaine qui déborde sur la période suivante n'est payée
+    /// qu'avec celle-ci : sinon elle serait comptée dans deux T_HSExoImp consécutifs.
+    /// </summary>
+    private async Task<Dictionary<string, List<HsValidee>>> ChargerSemainesValideesAsync(
+        ExoImpoPeriod periode, HashSet<string> targetCles, CancellationToken ct)
+    {
+        var sageDb = periode.SageDb;
+        var (debutSemaineMin, debutSemaineMax) = _overtimeWeekContext.BornesSemainesDeLaPeriode(periode.From, periode.To);
+        return (await _uow.Repository<HsValidee>().ListAsync(
                 h => h.BddSage == sageDb
                      && h.ValidationHs == true
                      && h.DateDeb != null
@@ -152,14 +168,72 @@ public sealed class OvertimeExoImpoService : IOvertimeExoImpoService
             .Where(h => !string.IsNullOrEmpty(h.Matricules) && targetCles.Contains(MatriculeIdentity.Cle(h.Matricules)))
             .GroupBy(h => MatriculeIdentity.Cle(h.Matricules), StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.OrderBy(x => x.DateDeb).ToList(), StringComparer.Ordinal);
+    }
 
-        // Absence de la période : calculée sur le planning, indépendamment de la validation.
+    /// <summary>Absence de la période : calculée sur le planning, indépendamment de la validation.</summary>
+    private async Task<Dictionary<string, decimal>> CalculerAbsencesAsync(
+        PeriodRequest request, List<CardPaie> cards, CancellationToken ct)
+    {
+        var from = request.From.Date;
+        var to = request.To.Date;
         var ctx = await _overtimeWeekContext.ChargerContexteAsync(request, avecExistantes: false, ct);
-        var absences = cards.ToDictionary(
+        return cards.ToDictionary(
             c => MatriculeIdentity.Cle(c.SageMatricule),
-            c => Arrondir(_overtimeWeekContext.ConstruireJours(ctx, c, from, to).Sum(j => OvertimeCalculator.CalculerJour(_overtimeWeekContext.Configurer(ctx, c), j).Absence)),
+            c => Arrondir(_overtimeWeekContext.ConstruireJours(ctx, c, from, to)
+                .Sum(j => OvertimeCalculator.CalculerJour(_overtimeWeekContext.Configurer(ctx, c), j).Absence)),
             StringComparer.Ordinal);
+    }
 
+    /// <summary>
+    /// PeriodeDebut/PeriodeFin portent la PÉRIODE du calcul (clé de la purge, de la liste et de la
+    /// synchro paie, et compatibilité desktop) ; les bornes lundi → dimanche de chaque semaine sont
+    /// déduites à la lecture du détail (voir ConstruireSemainesDetail).
+    /// </summary>
+    private static IEnumerable<HsSemaine> ConstruireSemaines(
+        ExoImpoPeriod periode, ExoImpoEmployee salarie, List<HsWeekSplit> splits) =>
+        splits.Select((split, index) => new HsSemaine
+        {
+            Matricule = salarie.Matricule,
+            SalNum = salarie.NumSal,
+            TotalHeure = split.Hs,
+            Hs = split.Hs,
+            Hs1 = split.Hs1,
+            Hs2 = split.Hs2,
+            PeriodeDebut = periode.From,
+            PeriodeFin = periode.To,
+            Semaine = index + 1,
+            BddSage = periode.SageDb,
+            BddPointeuse = periode.PointeuseDb
+        });
+
+    private static HsExoImp ConstruireExo(
+        ExoImpoPeriod periode, ExoImpoEmployee salarie, List<HsValidee> semaines, List<HsWeekSplit> splits)
+    {
+        var exo = OvertimeRules.AllocateExempt(splits);
+        return new HsExoImp
+        {
+            Matricule = salarie.Matricule,
+            NumSal = salarie.NumSal,
+            Exo130 = exo.Exo130,
+            Exo150 = exo.Exo150,
+            I130 = exo.Impo130,
+            I150 = exo.Impo150,
+            PeriodeDebut = periode.From,
+            PeriodeFin = periode.To,
+            Nuit = Arrondir(semaines.Sum(x => x.Nuit ?? 0m)),
+            Dim = Arrondir(semaines.Sum(x => x.Dimanche ?? 0m)),
+            Ferie = Arrondir(semaines.Sum(x => x.Feries ?? 0m)),
+            Retard = Arrondir(semaines.Sum(x => x.Retard ?? 0m)),
+            BddSage = periode.SageDb,
+            BddPointeuse = periode.PointeuseDb
+        };
+    }
+
+    /// <summary>Remplace les lignes de la période des salariés ciblés par celles recalculées.</summary>
+    private async Task RemplacerAsync(
+        ExoImpoPeriod periode, HashSet<string> targetCles, List<HsSemaine> semaines, List<HsExoImp> exo, CancellationToken ct)
+    {
+        var (sageDb, from, to) = (periode.SageDb, periode.From, periode.To);
         var semaineRepo = _uow.Repository<HsSemaine>();
         var exoRepo = _uow.Repository<HsExoImp>();
         var anciennesSemaines = (await semaineRepo.ListAsync(
@@ -171,78 +245,20 @@ public sealed class OvertimeExoImpoService : IOvertimeExoImpoService
             .Where(h => h.Matricule != null && targetCles.Contains(MatriculeIdentity.Cle(h.Matricule)))
             .ToList();
 
-        var nouvellesSemaines = new List<HsSemaine>();
-        var nouvellesExo = new List<HsExoImp>();
-
-        foreach (var card in cards)
-        {
-            var cle = MatriculeIdentity.Cle(card.SageMatricule);
-            var semaines = validees.GetValueOrDefault(cle) ?? new List<HsValidee>();
-            var splits = semaines.Select(w => OvertimeRules.SplitWeekly(w.Hs ?? 0)).ToList();
-            var numSal = numSalByMat.TryGetValue(cle, out var n) ? n : (int?)null;
-
-            // PeriodeDebut/PeriodeFin portent la PÉRIODE du calcul (clé de la purge, de la liste et de
-            // la synchro paie, et compatibilité desktop) ; les bornes lundi → dimanche de chaque semaine
-            // sont déduites à la lecture du détail (voir ConstruireSemainesDetail).
-            var rang = 1;
-            foreach (var split in splits)
-            {
-                nouvellesSemaines.Add(new HsSemaine
-                {
-                    Matricule = card.SageMatricule,
-                    SalNum = numSal,
-                    TotalHeure = split.Hs,
-                    Hs = split.Hs,
-                    Hs1 = split.Hs1,
-                    Hs2 = split.Hs2,
-                    PeriodeDebut = from,
-                    PeriodeFin = to,
-                    Semaine = rang++,
-                    BddSage = sageDb,
-                    BddPointeuse = _tenant.PointeuseDb
-                });
-            }
-
-            var exo = OvertimeRules.AllocateExempt(splits);
-            var absence = absences.GetValueOrDefault(cle);
-            if (semaines.Count == 0 && absence == 0m)
-                continue;
-
-            nouvellesExo.Add(new HsExoImp
-            {
-                Matricule = card.SageMatricule,
-                NumSal = numSal,
-                Exo130 = exo.Exo130,
-                Exo150 = exo.Exo150,
-                I130 = exo.Impo130,
-                I150 = exo.Impo150,
-                PeriodeDebut = from,
-                PeriodeFin = to,
-                Nuit = Arrondir(semaines.Sum(x => x.Nuit ?? 0m)),
-                Dim = Arrondir(semaines.Sum(x => x.Dimanche ?? 0m)),
-                Ferie = Arrondir(semaines.Sum(x => x.Feries ?? 0m)),
-                Retard = Arrondir(semaines.Sum(x => x.Retard ?? 0m)),
-                Absence = absence,
-                BddSage = sageDb,
-                BddPointeuse = _tenant.PointeuseDb
-            });
-        }
-
         if (anciennesSemaines.Count > 0)
             semaineRepo.RemoveRange(anciennesSemaines);
         if (anciennesExo.Count > 0)
             exoRepo.RemoveRange(anciennesExo);
-        if (nouvellesSemaines.Count > 0)
-            await semaineRepo.AddRangeAsync(nouvellesSemaines, ct);
-        if (nouvellesExo.Count > 0)
-            await exoRepo.AddRangeAsync(nouvellesExo, ct);
+        if (semaines.Count > 0)
+            await semaineRepo.AddRangeAsync(semaines, ct);
+        if (exo.Count > 0)
+            await exoRepo.AddRangeAsync(exo, ct);
         await _uow.SaveChangesAsync(ct);
-
-        return nouvellesExo
-            .Select(e => new HsExoDto(e.Oid, e.Matricule, e.NumSal, e.Exo130, e.Exo150, e.I130, e.I150,
-                e.Ferie, e.Nuit, e.Dim, e.Retard, e.Absence))
-            .ToList();
     }
+
+    private static HsExoDto ToDto(HsExoImp h) => new(
+        h.Oid, h.Matricule, h.NumSal, h.Exo130, h.Exo150, h.I130, h.I150,
+        h.Ferie, h.Nuit, h.Dim, h.Retard, h.Absence);
 
     private async Task<Dictionary<string, int>> ChargerNumSalAsync(CancellationToken ct)
     {

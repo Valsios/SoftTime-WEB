@@ -1,7 +1,7 @@
 ﻿using System.Globalization;
 
-using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace SoftTime.Infrastructure.Persistence;
 
