@@ -28,6 +28,10 @@ public class SelfSpaceHttpTests : IClassFixture<ApiFactory>
     private const decimal AutreBaseId = 10207;
 
     private const string MatA = "A100";
+    // Un matricule = un seul compte (garde) : les comptes de refus ont chacun leur matricule, distinct de celui de A.
+    private const string MatDeuxBases = "DB100";
+    private const string MatSansPermission = "SP100";
+    private const string MatAutreBase = "AB100";
     private const string MatB = "B200";
     private static readonly string[] Routes =
     {
@@ -78,9 +82,9 @@ public class SelfSpaceHttpTests : IClassFixture<ApiFactory>
         Compte(BId, 92, "self-b", MatB, 3033);
         Compte(SansMatriculeId, 92, "self-sans-matricule", null, 3033);
         Compte(MatriculeInconnuId, 92, "self-inconnu", "ZZZ999", 3033);
-        Compte(DeuxBasesId, 92, "self-deux-bases", MatA, 3033, 3034);
-        Compte(SansPermissionId, 91, "self-sans-permission", MatA, 3033);
-        Compte(AutreBaseId, 92, "self-autre-base", MatA, 3034);
+        Compte(DeuxBasesId, 92, "self-deux-bases", MatDeuxBases, 3033, 3034);
+        Compte(SansPermissionId, 91, "self-sans-permission", MatSansPermission, 3033);
+        Compte(AutreBaseId, 92, "self-autre-base", MatAutreBase, 3034);
 
         var cartes = store.GetRepo<T_CARDPAIE>().Items;
         cartes.Add(new T_CARDPAIE { ID = 5001, SAGE_MATRICULE = MatA, SAGE_BDD = ApiFactory.SageName, POINTEUSE_BDD = "PTG", DEPARTEMENT = "D1" });
@@ -343,9 +347,9 @@ public class SelfSpaceHttpTests : IClassFixture<ApiFactory>
             {
                 "sans-matricule" => (Jeton(SansMatriculeId, 92, string.Empty), null),
                 "matricule-inconnu" => (Jeton(MatriculeInconnuId, 92, "ZZZ999"), null),
-                "deux-bases" => (Jeton(DeuxBasesId, 92, MatA), null),
-                "sans-permission" => (Jeton(SansPermissionId, 91, MatA), null),
-                "autre-base" => (Jeton(AutreBaseId, 92, MatA), null),
+                "deux-bases" => (Jeton(DeuxBasesId, 92, MatDeuxBases), null),
+                "sans-permission" => (Jeton(SansPermissionId, 91, MatSansPermission), null),
+                "autre-base" => (Jeton(AutreBaseId, 92, MatAutreBase), null),
                 "en-tete-autre-base" => (Jeton(AId, 92, MatA), ApiFactory.OtherSageName),
                 _ => (ApiFactory.TokenFor("admin")!, (string?)null)
             };

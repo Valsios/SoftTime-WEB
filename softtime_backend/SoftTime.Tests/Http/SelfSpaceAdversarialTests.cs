@@ -55,10 +55,10 @@ public class SelfSpaceAdversarialTests : IClassFixture<ApiFactory>
             store.GetRepo<T_ROLE_PERMISSION>().Items.Add(new T_ROLE_PERMISSION { ID = id, IDROLE = 94, PERMISSION_CODE = code, IS_GRANTED = true });
 
         users.Add(new T_RESPONSABLE { IDRESPONSABLE = CompteId, IDROLE = 92, LOGIN = "adv-1", NOMRESPONSABLE = "x", MATRICULE = MatA });
-        users.Add(new T_RESPONSABLE { IDRESPONSABLE = DoublonId, IDROLE = 92, LOGIN = "adv-doublon", NOMRESPONSABLE = "x", MATRICULE = MatA });
-        users.Add(new T_RESPONSABLE { IDRESPONSABLE = HybrideId, IDROLE = 94, LOGIN = "adv-hybride", NOMRESPONSABLE = "x", MATRICULE = MatA });
+        users.Add(new T_RESPONSABLE { IDRESPONSABLE = DoublonId, IDROLE = 92, LOGIN = "adv-doublon", NOMRESPONSABLE = "x", MATRICULE = "D400" });
+        users.Add(new T_RESPONSABLE { IDRESPONSABLE = HybrideId, IDROLE = 94, LOGIN = "adv-hybride", NOMRESPONSABLE = "x", MATRICULE = MatB });
         users.Add(new T_RESPONSABLE { IDRESPONSABLE = SupprimeId, IDROLE = 92, LOGIN = "adv-supprime", NOMRESPONSABLE = "x", MATRICULE = "S500" });
-        users.Add(new T_RESPONSABLE { IDRESPONSABLE = HybrideDeuxBasesId, IDROLE = 94, LOGIN = "adv-hybride2", NOMRESPONSABLE = "x", MATRICULE = MatA });
+        users.Add(new T_RESPONSABLE { IDRESPONSABLE = HybrideDeuxBasesId, IDROLE = 94, LOGIN = "adv-hybride2", NOMRESPONSABLE = "x", MATRICULE = "HB300" });
         var acces = store.GetRepo<T_BDD_AUTORISE>().Items;
         foreach (var (id, idBase, n) in new[] { (CompteId, 3033, 1), (DoublonId, 3033, 2), (HybrideId, 3033, 3), (HybrideDeuxBasesId, 3033, 4), (HybrideDeuxBasesId, 3034, 5), (SupprimeId, 3033, 6) })
             acces.Add(new T_BDD_AUTORISE { IDBDDAUTORISE = 9400 + n, IDRESPONSABLE = id, IDBDD = idBase });
@@ -66,6 +66,7 @@ public class SelfSpaceAdversarialTests : IClassFixture<ApiFactory>
         var cartes = store.GetRepo<T_CARDPAIE>().Items;
         cartes.Add(new T_CARDPAIE { ID = 7001, SAGE_MATRICULE = MatA, SAGE_BDD = ApiFactory.SageName, POINTEUSE_BDD = "PTG" });
         cartes.Add(new T_CARDPAIE { ID = 7003, SAGE_MATRICULE = "S500", SAGE_BDD = ApiFactory.SageName, POINTEUSE_BDD = "PTG" });
+        cartes.Add(new T_CARDPAIE { ID = 7004, SAGE_MATRICULE = "N300", SAGE_BDD = ApiFactory.SageName, POINTEUSE_BDD = "PTG" });
         cartes.Add(new T_CARDPAIE { ID = 7002, SAGE_MATRICULE = MatB, SAGE_BDD = ApiFactory.SageName, POINTEUSE_BDD = "PTG" });
         var hs = store.GetRepo<T_HS_VALIDER>().Items;
         hs.Add(new T_HS_VALIDER { ID = 1, BDD_SAGE = ApiFactory.SageName, MATRICULES = MatA, DATE_DEB = LundiDe(_aujourdhui.AddDays(-21)), HT = 40m, HS = 10m, VALIDATION_HS = true });
@@ -130,13 +131,13 @@ public class SelfSpaceAdversarialTests : IClassFixture<ApiFactory>
     {
         using var f = Actif();
         var http = f.CreateClient();
-        var jeton = Jeton(HybrideId, 94, MatA, portes: 1);
+        var jeton = Jeton(HybrideId, 94, MatB, portes: 1);
 
         var (confirmee, texte) = await Lire(http, $"/api/me/space/weeks?{Periode}", jeton, ApiFactory.SageName);
         var (autre, _) = await Lire(http, $"/api/me/space/weeks?{Periode}", jeton, ApiFactory.OtherSageName);
 
         Assert.Equal(HttpStatusCode.OK, confirmee.StatusCode);       // l'en-tête ne fait que confirmer l'unique base autorisée
-        Assert.Equal(10m, HeuresSup(texte));
+        Assert.Equal(25m, HeuresSup(texte));                         // les données de B, jamais celles de A
         Assert.Equal(HttpStatusCode.Forbidden, autre.StatusCode);    // base non autorisée forgée : refusée avant la garde
     }
 
@@ -144,7 +145,7 @@ public class SelfSpaceAdversarialTests : IClassFixture<ApiFactory>
     public async Task A_gate_1_account_with_SELF_READ_and_two_authorized_bases_is_refused_with_an_explicit_message()
     {
         using var f = Actif();
-        var (reponse, texte) = await Lire(f.CreateClient(), $"/api/me/space/weeks?{Periode}", Jeton(HybrideDeuxBasesId, 94, MatA, portes: 1), ApiFactory.SageName);
+        var (reponse, texte) = await Lire(f.CreateClient(), $"/api/me/space/weeks?{Periode}", Jeton(HybrideDeuxBasesId, 94, "HB300", portes: 1), ApiFactory.SageName);
 
         Assert.Equal(HttpStatusCode.Forbidden, reponse.StatusCode);
         Assert.Contains("exactement une base", texte);
@@ -235,15 +236,16 @@ public class SelfSpaceAdversarialTests : IClassFixture<ApiFactory>
         var ancien = compte.MATRICULE;
         try
         {
-            compte.MATRICULE = MatB;                                   // la RH réaffecte le compte à un autre salarié
+            compte.MATRICULE = "N300";                                 // la RH réaffecte le compte à un autre salarié
             var (change, texte) = await Lire(http, url, jeton);
             Assert.Equal(HttpStatusCode.Forbidden, change.StatusCode);
             Assert.Contains("a changé", texte);
             Assert.DoesNotContain("40", texte);                        // aucune donnée du salarié B ni de A
-            // Le jeton qui porte le NOUVEAU matricule, lui, est accepté et ne lit que les données de B.
-            var (pourB, corpsB) = await Lire(http, url, Jeton(CompteId, 92, MatB));
-            Assert.Equal(HttpStatusCode.OK, pourB.StatusCode);
-            Assert.Equal(25m, HeuresSup(corpsB));
+            // Le jeton qui porte le NOUVEAU matricule, lui, est accepté et ne lit rien des données de A (aucune semaine pour N300).
+            var (pourN, corpsN) = await Lire(http, url, Jeton(CompteId, 92, "N300"));
+            Assert.Equal(HttpStatusCode.OK, pourN.StatusCode);
+            using (var j = JsonDocument.Parse(corpsN))
+                Assert.Equal(0, j.RootElement.GetProperty("semaines").GetArrayLength());
 
             compte.MATRICULE = null;                                   // la RH retire le matricule
             Assert.Equal(HttpStatusCode.Forbidden, (await Lire(http, url, jeton)).Reponse.StatusCode);
@@ -283,18 +285,38 @@ public class SelfSpaceAdversarialTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Limite_connue_two_accounts_with_the_same_matricule_read_the_same_data()
+    public async Task Two_accounts_sharing_a_matricule_are_both_refused_and_a_unique_matricule_works()
     {
-        // Aucune unicité du matricule sur T_RESPONSABLE : deux comptes partageant un matricule voient les mêmes données.
-        // Correction minimale proposée : refuser (403) dans la garde si plusieurs comptes portent la même clé de matricule.
+        // Correction : un matricule porté par plus d'un compte refuse TOUS les porteurs (403), sans citer l'autre compte.
         using var f = Actif();
         var http = f.CreateClient();
-
-        var (_, premier) = await Lire(http, $"/api/me/space/weeks?{Periode}", Jeton(CompteId, 92, MatA));
-        var (_, second) = await Lire(http, $"/api/me/space/weeks?{Periode}", Jeton(DoublonId, 92, MatA));
-
-        Assert.Equal(premier, second);
-        Assert.Equal(10m, HeuresSup(second));
+        var url = $"/api/me/space/weeks?{Periode}";
+        T_RESPONSABLE doublon;
+        lock (_f.Store)
+            doublon = _f.Store.GetRepo<T_RESPONSABLE>().Items.Single(u => u.IDRESPONSABLE == DoublonId);
+        var ancien = doublon.MATRICULE;
+        Assert.Equal(HttpStatusCode.OK, (await Lire(http, url, Jeton(CompteId, 92, MatA))).Reponse.StatusCode);   // matricule unique
+        try
+        {
+            foreach (var variante in new[] { MatA, " a100 " })                                   // même clé : casse et espaces ignorés
+            {
+                doublon.MATRICULE = variante;
+                foreach (var (id, matricule) in new[] { (CompteId, MatA), (DoublonId, variante.Trim().ToUpperInvariant()) })
+                {
+                    var (reponse, texte) = await Lire(http, url, Jeton(id, 92, matricule));
+                    Assert.Equal(HttpStatusCode.Forbidden, reponse.StatusCode);
+                    Assert.Contains("plusieurs comptes", texte);
+                    Assert.DoesNotContain("adv-", texte);                                       // aucun autre compte désigné
+                    Assert.DoesNotContain("1040", texte);
+                    Assert.DoesNotContain("semaines", texte);                                   // aucune donnée
+                }
+            }
+        }
+        finally
+        {
+            doublon.MATRICULE = ancien;
+        }
+        Assert.Equal(HttpStatusCode.OK, (await Lire(http, url, Jeton(CompteId, 92, MatA))).Reponse.StatusCode);   // doublon levé
     }
 
     [Fact]

@@ -27,7 +27,8 @@ public sealed record SelfContext(decimal UserId, string SageDb, string Matricule
 /// <list type="number">
 ///   <item>permission fine <c>SELF:READ</c> effective (aucune porte n'est requise) ;</item>
 ///   <item>matricule du jeton (ICurrentUser.Matricule), non vide, jamais pris dans la requête ; il doit être égal au matricule COURANT
-///   du compte, relu dans T_RESPONSABLE à chaque appel (compte supprimé, matricule retiré ou changé : refus) ;</item>
+///   du compte, relu dans T_RESPONSABLE à chaque appel (compte supprimé, matricule retiré ou changé : refus) ; si un AUTRE compte
+///   porte la même clé de matricule, aucun des porteurs n'accède à Mon espace ;</item>
 ///   <item>le compte a exactement UNE base autorisée dans T_BDD_AUTORISE ; une base courante envoyée par le client doit être celle-là ;</item>
 ///   <item>le matricule existe dans T_CARDPAIE de cette base.</item>
 /// </list>
@@ -80,7 +81,12 @@ public class SelfServiceGuard
 
         // Le compte est relu à CHAQUE appel (une lecture par clé primaire, sans cache) : le jeton dure 12 h et ne peut pas
         // garder un matricule que la RH a retiré, changé ou supprimé entre-temps. Le matricule de la base fait foi.
-        var compte = (await _uow.Repository<T_RESPONSABLE>().ListAsync(r => r.IDRESPONSABLE == uid, ct)).FirstOrDefault();
+        // La même lecture ramène les comptes dont le matricule contient celui du jeton (superset SQL), pour vérifier l'unicité
+        // ci-dessous : une seule requête sur la petite table des comptes, jamais de lecture supplémentaire.
+        var noyau = MatriculeIdentity.Cle(matricule);
+        var candidats = await _uow.Repository<T_RESPONSABLE>().ListAsync(
+            r => r.IDRESPONSABLE == uid || (r.MATRICULE != null && r.MATRICULE.ToUpper().Contains(noyau)), ct);
+        var compte = candidats.FirstOrDefault(r => r.IDRESPONSABLE == uid);
         if (compte is null)
             throw new ForbiddenOperationException("Ce compte n'existe plus : contactez la RH.");
         var courant = (compte.MATRICULE ?? string.Empty).Trim();
@@ -89,6 +95,13 @@ public class SelfServiceGuard
         if (MatriculeIdentity.Cle(courant) != MatriculeIdentity.Cle(matricule))
             throw new ForbiddenOperationException("Le matricule de ce compte a changé depuis la connexion : reconnectez-vous.");
         matricule = courant;
+
+        // Un matricule = un seul compte. T_RESPONSABLE n'a pas de colonne « actif » : tout compte existant est actif (un compte
+        // désactivé est un compte supprimé ou sans SELF:READ). Si un autre compte porte la même clé, AUCUN des porteurs ne lit :
+        // l'identité du salarié n'est plus certaine. Le message ne désigne jamais l'autre compte.
+        var cleCourante = MatriculeIdentity.Cle(courant);
+        if (candidats.Any(r => r.IDRESPONSABLE != uid && MatriculeIdentity.Cle(r.MATRICULE) == cleCourante))
+            throw new ForbiddenOperationException("Ce matricule est porté par plusieurs comptes : contactez la RH.");
 
         var acces = await _uow.Repository<T_BDD_AUTORISE>().ListAsync(a => a.IDRESPONSABLE == uid, ct);
         var idsBases = acces.Select(a => a.IDBDD).Distinct().ToList();
