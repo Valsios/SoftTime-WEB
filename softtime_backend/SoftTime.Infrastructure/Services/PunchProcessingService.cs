@@ -4,6 +4,7 @@ using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
+using SoftTime.Infrastructure.Services.PunchProcessing;
 
 namespace SoftTime.Infrastructure.Services;
 
@@ -34,9 +35,6 @@ namespace SoftTime.Infrastructure.Services;
 /// </summary>
 public class PunchProcessingService : IPunchProcessingService
 {
-    private static readonly IReadOnlyDictionary<DateTime, PunchPlanningWindow> SansPlanning =
-        new Dictionary<DateTime, PunchPlanningWindow>();
-
     private readonly IUnitOfWork _uow;
     private readonly ITenantConnectionService _tenant;
 
@@ -50,324 +48,141 @@ public class PunchProcessingService : IPunchProcessingService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         await PunchProcessingConfiguration.EnsureStorageAsync(_uow, ct);
+        ValidatePeriod(request);
 
+        var data = await LoadDataAsync(request, ct);
+        var protection = new PunchProtection(data);
+        if (protection.CorrectionsAPurger.Count > 0)
+            _uow.Repository<HeureCorrigee>().RemoveRange(protection.CorrectionsAPurger);
+
+        var run = new PunchProcessingRun(data, protection, _uow.Repository<HeureAnomalie>());
+        foreach (var card in data.Cards)
+            run.TraiterCarte(card);
+
+        await PersistAsync(run, ct);
+        return BuildResult(run);
+    }
+
+    private static void ValidatePeriod(PeriodRequest request)
+    {
         if (request.From == default || request.To == default)
             throw new DomainException("La période (from/to) est requise pour traiter les pointages.");
         if (request.To.Date < request.From.Date)
             throw new DomainException("La date de fin doit être postérieure ou égale à la date de début.");
+    }
 
+    private async Task<PunchProcessingData> LoadDataAsync(PeriodRequest request, CancellationToken ct)
+    {
         var clock = (await _uow.Repository<ParametrePointeuse>().ListAsync(_ => true, ct)).FirstOrDefault()
             ?? throw new DomainException("Paramètre pointeuse (T_CLOCK) manquant.");
-        var multiPointage = clock.MultiPoint == true;
-
         var sageDb = _tenant.SageDb;
-        var pointeuseDb = _tenant.PointeuseDb;
         var from = request.From.Date;
         var to = request.To.Date;
         var finExclusive = to.AddDays(1);
 
-        var cards = FilterCards(await _uow.Repository<CardPaie>().ListAsync(c => c.SageBdd == sageDb, ct), request)
+        return new PunchProcessingData
+        {
+            SageDb = sageDb,
+            PointeuseDb = _tenant.PointeuseDb,
+            MultiPointage = clock.MultiPoint == true,
+            From = from,
+            To = to,
+            Cards = await LoadCardsAsync(request, ct),
+            Feries = await LoadFeriesAsync(ct),
+            PlanningParCarte = await LoadPlanningParCarteAsync(from, to, ct),
+            SemainesValidees = await LoadSemainesValideesAsync(ct),
+            CorrectionsExistantes = await _uow.Repository<HeureCorrigee>().ListAsync(
+                h => h.BddSage == sageDb && h.DatePointageIn >= from && h.DatePointageIn < finExclusive, ct),
+            AnomaliesExistantes = await _uow.Repository<HeureAnomalie>().ListAsync(
+                a => a.BddSage == sageDb && a.DatePointageIn >= from && a.DatePointageIn < finExclusive, ct),
+            PointagesParCle = await LoadPointagesParCleAsync(from, finExclusive, ct)
+        };
+    }
+
+    private async Task<List<CardPaie>> LoadCardsAsync(PeriodRequest request, CancellationToken ct)
+    {
+        var sageDb = _tenant.SageDb;
+        var pointeuseDb = _tenant.PointeuseDb;
+        return FilterCards(await _uow.Repository<CardPaie>().ListAsync(c => c.SageBdd == sageDb, ct), request)
             .Where(c => MatchesPointeuse(c.PointeuseBdd, pointeuseDb))
             .Where(c => !string.IsNullOrWhiteSpace(c.SageMatricule))
             .GroupBy(c => MatriculeIdentity.Cle(c.SageMatricule))
             .Select(g => g.OrderBy(c => c.Id).First())
             .ToList();
+    }
 
-        var feries = (await _uow.Repository<JourFerie>().ListAsync(f => f.BddSage == sageDb, ct))
+    private async Task<HashSet<DateTime>> LoadFeriesAsync(CancellationToken ct)
+    {
+        var sageDb = _tenant.SageDb;
+        return (await _uow.Repository<JourFerie>().ListAsync(f => f.BddSage == sageDb, ct))
             .Where(f => f.Date.HasValue)
             .Select(f => f.Date!.Value.Date)
             .ToHashSet();
+    }
 
+    private async Task<Dictionary<int, Dictionary<DateTime, PlanningSalarie>>> LoadPlanningParCarteAsync(
+        DateTime from, DateTime to, CancellationToken ct)
+    {
+        var sageDb = _tenant.SageDb;
+        var pointeuseDb = _tenant.PointeuseDb;
         var planning = (await _uow.Repository<PlanningSalarie>().ListAsync(
                 p => p.BddSage == sageDb && p.DateP >= from.AddDays(-1) && p.DateP <= to.AddDays(1), ct))
             .Where(p => MatchesPointeuse(p.BddPointeuse, pointeuseDb))
-            .Where(p => p.DateP.HasValue)
-            .ToList();
-
-        var planningParCarte = planning
+            .Where(p => p.DateP.HasValue);
+        return planning
             .GroupBy(p => p.IdSal)
             .ToDictionary(
                 g => g.Key,
                 g => g.GroupBy(p => p.DateP!.Value.Date)
                     .ToDictionary(gg => gg.Key, gg => gg.OrderBy(p => p.Id).First()));
+    }
 
-        var semainesValidees = (await _uow.Repository<HsValidee>().ListAsync(
-                v => v.BddSage == sageDb && v.ValidationHs == true, ct))
+    private async Task<Dictionary<string, HashSet<DateTime>>> LoadSemainesValideesAsync(CancellationToken ct)
+    {
+        var sageDb = _tenant.SageDb;
+        return (await _uow.Repository<HsValidee>().ListAsync(v => v.BddSage == sageDb && v.ValidationHs == true, ct))
             .Where(v => v.DateDeb.HasValue && !string.IsNullOrWhiteSpace(v.Matricules))
-            .ToList();
+            .GroupBy(v => MatriculeIdentity.Cle(v.Matricules))
+            .ToDictionary(g => g.Key, g => g.Select(v => v.DateDeb!.Value.Date).ToHashSet());
+    }
 
-        var correctionsExistantes = await _uow.Repository<HeureCorrigee>().ListAsync(
-            h => h.BddSage == sageDb && h.DatePointageIn >= from && h.DatePointageIn < finExclusive, ct);
-        var anomaliesExistantes = await _uow.Repository<HeureAnomalie>().ListAsync(
-            a => a.BddSage == sageDb && a.DatePointageIn >= from && a.DatePointageIn < finExclusive, ct);
-        var pointages = (await _uow.Repository<Pointage>().ListAsync(
+    private async Task<Dictionary<string, List<PunchMoment>>> LoadPointagesParCleAsync(
+        DateTime from, DateTime finExclusive, CancellationToken ct)
+    {
+        var sageDb = _tenant.SageDb;
+        var pointeuseDb = _tenant.PointeuseDb;
+        return (await _uow.Repository<Pointage>().ListAsync(
                 p => p.NomBddSage == sageDb && p.DatePointage >= from && p.DatePointage < finExclusive, ct))
             .Where(p => MatchesPointeuse(p.NomBddPointeuse, pointeuseDb))
             .Where(p => p.DatePointage.HasValue && p.HeurePointage.HasValue)
             .Where(p => !string.IsNullOrWhiteSpace(p.MatriculeSage))
-            .ToList();
-
-        var corrRepo = _uow.Repository<HeureCorrigee>();
-        var anomRepo = _uow.Repository<HeureAnomalie>();
-
-        var semainesProtegees = semainesValidees
-            .GroupBy(v => MatriculeIdentity.Cle(v.Matricules))
-            .ToDictionary(g => g.Key, g => g.Select(v => v.DateDeb!.Value.Date).ToHashSet());
-        bool SemaineValidee(string cle, DateTime jour)
-        {
-            var lundi = jour.AddDays(-(((int)jour.DayOfWeek + 6) % 7));
-            return semainesProtegees.TryGetValue(cle, out var lundis) && lundis.Contains(lundi);
-        }
-
-        // Purge des lignes issues du pré-traitement, limitée à ce qui va être régénéré : salariés du
-        // périmètre demandé (département, plage de matricules, pointeuse) hors semaines validées.
-        // Les autres lignes AUTO de la période ne sont pas retraitées : les effacer les perdrait.
-        var clesPerimetre = cards
-            .Select(c => MatriculeIdentity.Cle(c.SageMatricule))
-            .ToHashSet(StringComparer.Ordinal);
-        var aPurger = correctionsExistantes
-            .Where(h => string.Equals(h.Origine, PunchProcessingConfiguration.OrigineAuto, StringComparison.OrdinalIgnoreCase))
-            .Where(h => h.DatePointageIn.HasValue && !string.IsNullOrWhiteSpace(h.MatriculeSage))
-            .Where(h => clesPerimetre.Contains(MatriculeIdentity.Cle(h.MatriculeSage)))
-            .Where(h => !SemaineValidee(MatriculeIdentity.Cle(h.MatriculeSage), h.DatePointageIn!.Value.Date))
-            .ToList();
-        if (aPurger.Count > 0)
-            corrRepo.RemoveRange(aPurger);
-
-        var joursProteges = correctionsExistantes
-            .Except(aPurger)
-            .Where(h => h.DatePointageIn.HasValue && !string.IsNullOrWhiteSpace(h.MatriculeSage))
-            .GroupBy(h => MatriculeIdentity.Cle(h.MatriculeSage))
-            .ToDictionary(g => g.Key, g => g.Select(h => h.DatePointageIn!.Value.Date).ToHashSet());
-
-        var pointagesParCle = pointages
             .GroupBy(p => MatriculeIdentity.Cle(p.MatriculeSage))
             .ToDictionary(
                 g => g.Key,
                 g => g.Select(p => new PunchMoment(p.DatePointage!.Value.Date, p.HeurePointage!.Value)).ToList());
+    }
 
-        var anomaliesParJour = anomaliesExistantes
-            .Where(a => a.DatePointageIn.HasValue && !string.IsNullOrWhiteSpace(a.MatriculeSage))
-            .GroupBy(a => (Cle: MatriculeIdentity.Cle(a.MatriculeSage), Jour: a.DatePointageIn!.Value.Date))
-            .ToDictionary(g => g.Key, g => g.OrderBy(a => a.Id).ToList());
-
-        var anomaliesASupprimer = new HashSet<decimal>();
-        var anomaliesCreeesJour = new HashSet<(string Cle, DateTime Jour)>();
-        var nouvellesCorrections = new List<HeureCorrigee>();
-        var nouvellesAnomalies = new List<HeureAnomalie>();
-        var correctionsCreees = 0;
-        var anomaliesCreees = 0;
-        var anomaliesMisesAJour = 0;
-        var joursIgnores = 0;
-
-        bool EstProtege(string cle, DateTime jour)
-        {
-            if (joursProteges.TryGetValue(cle, out var jours) && jours.Contains(jour))
-                return true;
-            return SemaineValidee(cle, jour);
-        }
-
-        void SupprimerAnomaliesDuJour(string cle, DateTime jour)
-        {
-            if (!anomaliesParJour.TryGetValue((cle, jour), out var existantes))
-                return;
-            foreach (var anomalie in existantes)
-                anomaliesASupprimer.Add(anomalie.Id);
-        }
-
-        void AjouterAnomalie(
-            string matricule,
-            string cle,
-            DateTime jour,
-            TimeSpan? h1,
-            TimeSpan? h2,
-            bool? absenceAm,
-            bool? absencePm,
-            bool estFerie)
-        {
-            if (!anomaliesCreeesJour.Add((cle, jour)))
-                return;
-
-            if (anomaliesParJour.TryGetValue((cle, jour), out var existantes))
-            {
-                var aGarder = existantes.Where(a => !anomaliesASupprimer.Contains(a.Id)).ToList();
-                if (aGarder.Count > 0)
-                {
-                    var cible = aGarder[0];
-                    cible.BddSage = sageDb;
-                    cible.BddPointeuse = pointeuseDb;
-                    cible.MatriculeSage = matricule;
-                    cible.DatePointageIn = jour;
-                    cible.DatePointageOut = jour;
-                    cible.H1 = h1;
-                    cible.H2 = h2;
-                    cible.AbsAm = absenceAm;
-                    cible.AbsPm = absencePm;
-                    cible.Feries = estFerie ? true : null;
-                    cible.FeriesAm = estFerie ? true : null;
-                    cible.FeriesPm = estFerie ? true : null;
-                    anomRepo.Update(cible);
-                    foreach (var doublon in aGarder.Skip(1))
-                        anomaliesASupprimer.Add(doublon.Id);
-                    anomaliesMisesAJour++;
-                    return;
-                }
-            }
-
-            nouvellesAnomalies.Add(new HeureAnomalie
-            {
-                BddSage = sageDb,
-                BddPointeuse = pointeuseDb,
-                MatriculeSage = matricule,
-                DatePointageIn = jour,
-                DatePointageOut = jour,
-                H1 = h1,
-                H2 = h2,
-                AbsAm = absenceAm,
-                AbsPm = absencePm,
-                Feries = estFerie ? true : null,
-                FeriesAm = estFerie ? true : null,
-                FeriesPm = estFerie ? true : null
-            });
-            anomaliesCreees++;
-        }
-
-        void AjouterCorrection(string matricule, PunchPair paire)
-        {
-            var ferieEntree = feries.Contains(paire.EntreeDate.Date);
-            var ferieSortie = feries.Contains(paire.SortieDate.Date);
-            nouvellesCorrections.Add(new HeureCorrigee
-            {
-                BddSage = sageDb,
-                BddPointeuse = pointeuseDb,
-                MatriculeSage = matricule,
-                DatePointageIn = paire.EntreeDate.Date,
-                DatePointageOut = paire.SortieDate.Date,
-                HEntree = paire.EntreeHeure,
-                HSortie = paire.SortieHeure,
-                Ferier = ferieEntree || ferieSortie ? true : null,
-                FerierAm = ferieSortie ? true : null,
-                FerierPm = ferieEntree ? true : null,
-                ValiderCorrection = true,
-                Origine = PunchProcessingConfiguration.OrigineAuto
-            });
-            correctionsCreees++;
-        }
-
-        bool EstTravaille(DateTime jour, PlanningSalarie? plan, bool estFerie)
-        {
-            if (estFerie)
-                return false;
-            if (plan is not null)
-                return plan.OffP != true;
-            // En mono, le desktop signale les jours ouvrés vides même sans planning. En multi,
-            // le planning est la référence : sans planning, aucune absence n'est attendue.
-            return !multiPointage
-                   && jour.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday);
-        }
-
-        foreach (var card in cards)
-        {
-            var matricule = (card.SageMatricule ?? string.Empty).Trim();
-            if (matricule.Length == 0)
-                continue;
-
-            var cle = MatriculeIdentity.Cle(matricule);
-            var punchs = pointagesParCle.GetValueOrDefault(cle) ?? new List<PunchMoment>();
-            var planningCarte = planningParCarte.GetValueOrDefault(card.Id)
-                                 ?? new Dictionary<DateTime, PlanningSalarie>();
-            var fenetres = planningCarte
-                .Where(kv => kv.Value.OffP != true)
-                .ToDictionary(
-                    kv => kv.Key,
-                    kv => new PunchPlanningWindow(kv.Key, kv.Value.Ha, kv.Value.Hd, kv.Value.OffP == true));
-            var momentsParJour = multiPointage
-                ? PunchDayGrouping.Build(punchs, fenetres, from, to)
-                // Le mode mono ne consulte jamais le planning pour l'appariement : chaque journée
-                // calendaire est traitée séparément (même si un poste de nuit existe au planning).
-                : PunchDayGrouping.Build(punchs, SansPlanning, from, to);
-
-            for (var jour = from; jour <= to; jour = jour.AddDays(1))
-            {
-                if (EstProtege(cle, jour))
-                {
-                    joursIgnores++;
-                    continue;
-                }
-
-                var moments = momentsParJour.TryGetValue(jour, out var liste)
-                    ? liste
-                    : Array.Empty<PunchMoment>();
-                var plan = planningCarte.GetValueOrDefault(jour);
-                var estFerie = feries.Contains(jour);
-                var estTravaille = EstTravaille(jour, plan, estFerie);
-
-                if (moments.Count == 0)
-                {
-                    if (estTravaille)
-                        AjouterAnomalie(matricule, cle, jour, null, null, true, true, false);
-                    continue;
-                }
-
-                if (!multiPointage)
-                {
-                    var resultat = PunchPairingRules.PairSimpleDay(moments);
-                    if (resultat.Unpaired.Count > 0)
-                    {
-                        var premier = resultat.Unpaired[0];
-                        AjouterAnomalie(matricule, cle, jour, premier.Heure, premier.Heure, null, null, estFerie);
-                        continue;
-                    }
-
-                    foreach (var paire in resultat.Pairs)
-                        AjouterCorrection(matricule, paire);
-                    SupprimerAnomaliesDuJour(cle, jour);
-                    continue;
-                }
-
-                var resultatMulti = PunchPairingRules.PairMultipleDay(moments);
-                if (resultatMulti.Unpaired.Count > 0)
-                {
-                    var premier = resultatMulti.Unpaired[0];
-                    var dernier = resultatMulti.Unpaired[^1];
-                    AjouterAnomalie(matricule, cle, jour, premier.Heure, dernier.Heure, null, null, estFerie);
-                    continue;
-                }
-
-                if (resultatMulti.Pairs.Count == 0)
-                {
-                    // Cas défensif : moments non vides mais aucune paire ni orphelin.
-                    AjouterAnomalie(matricule, cle, jour, moments[0].Heure, moments[^1].Heure, null, null, estFerie);
-                    continue;
-                }
-
-                foreach (var paire in resultatMulti.Pairs)
-                    AjouterCorrection(matricule, paire);
-                SupprimerAnomaliesDuJour(cle, jour);
-            }
-        }
-
-        if (anomaliesASupprimer.Count > 0)
-        {
-            var aSupprimer = anomaliesExistantes
-                .Where(a => anomaliesASupprimer.Contains(a.Id))
-                .ToList();
-            if (aSupprimer.Count > 0)
-                anomRepo.RemoveRange(aSupprimer);
-        }
-
-        if (nouvellesCorrections.Count > 0)
-            await corrRepo.AddRangeAsync(nouvellesCorrections, ct);
-        if (nouvellesAnomalies.Count > 0)
-            await anomRepo.AddRangeAsync(nouvellesAnomalies, ct);
-
+    private async Task PersistAsync(PunchProcessingRun run, CancellationToken ct)
+    {
+        var aSupprimer = run.AnomaliesASupprimer();
+        if (aSupprimer.Count > 0)
+            _uow.Repository<HeureAnomalie>().RemoveRange(aSupprimer);
+        if (run.NouvellesCorrections.Count > 0)
+            await _uow.Repository<HeureCorrigee>().AddRangeAsync(run.NouvellesCorrections, ct);
+        if (run.NouvellesAnomalies.Count > 0)
+            await _uow.Repository<HeureAnomalie>().AddRangeAsync(run.NouvellesAnomalies, ct);
         await _uow.SaveChangesAsync(ct);
+    }
 
-        var message = $"{correctionsCreees} correction(s) créée(s), {anomaliesCreees} anomalie(s) à arbitrer"
-            + (anomaliesMisesAJour > 0 ? $", {anomaliesMisesAJour} anomalie(s) mise(s) à jour" : string.Empty)
-            + (joursIgnores > 0 ? $", {joursIgnores} jour(s) protégé(s) ignoré(s)" : string.Empty)
+    private static PreprocessPunchesResultDto BuildResult(PunchProcessingRun run)
+    {
+        var corrections = run.NouvellesCorrections.Count;
+        var anomalies = run.NouvellesAnomalies.Count;
+        var message = $"{corrections} correction(s) créée(s), {anomalies} anomalie(s) à arbitrer"
+            + (run.AnomaliesMisesAJour > 0 ? $", {run.AnomaliesMisesAJour} anomalie(s) mise(s) à jour" : string.Empty)
+            + (run.JoursIgnores > 0 ? $", {run.JoursIgnores} jour(s) protégé(s) ignoré(s)" : string.Empty)
             + ".";
-        return new PreprocessPunchesResultDto(correctionsCreees, anomaliesCreees, joursIgnores, message);
+        return new PreprocessPunchesResultDto(corrections, anomalies, run.JoursIgnores, message);
     }
 
     /// <summary>Filtre de périmètre identique à <c>OvertimeService.TargetCardsAsync</c>.</summary>
