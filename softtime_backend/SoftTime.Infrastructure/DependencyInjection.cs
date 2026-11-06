@@ -1,11 +1,14 @@
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Services;
+using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
 using SoftTime.Infrastructure.Integrations;
+using SoftTime.Infrastructure.Security;
 using SoftTime.Infrastructure.MachineLearning;
 using SoftTime.Infrastructure.Persistence;
 using SoftTime.Infrastructure.Queries;
@@ -58,6 +61,8 @@ public static class DependencyInjection
         services.AddScoped<IPunchAggregate, PunchAggregate>();
         services.AddScoped<IPlanningStatisticsReader, PlanningStatisticsReader>();
         services.AddScoped<IEmailService, EmailService>();
+        // BCrypt remplace le hacheur Identity enregistré par AddApplication (les anciens hachages migrent à la connexion).
+        services.Replace(ServiceDescriptor.Scoped<IPasswordHasher<T_RESPONSABLE>, BcryptPasswordHasher>());
 
         // Base analytique « model-ready » : schéma ml dans la base SoftTime par défaut,
         // ou base dédiée via ConnectionStrings:SoftTimeMl (aucun changement de code).
