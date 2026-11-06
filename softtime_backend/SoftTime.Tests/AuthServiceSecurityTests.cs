@@ -12,7 +12,6 @@ using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
-using SoftTime.Infrastructure.Services;
 
 namespace SoftTime.Tests;
 
@@ -23,7 +22,7 @@ public class AuthServiceSecurityTests
     private readonly IMapper _mapper;
     private readonly FakeEmailService _email;
     private readonly PasswordHasher<Responsable> _hasher;
-    private readonly AuthService _auth;
+    private readonly AuthServices _auth;
 
     public AuthServiceSecurityTests()
     {
@@ -35,7 +34,7 @@ public class AuthServiceSecurityTests
 
         _email = new FakeEmailService();
         _hasher = new PasswordHasher<Responsable>();
-        _auth = new AuthService(_uow, _tokens, _mapper, _email, new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), _hasher);
+        _auth = new AuthServices(_uow, _tokens, _mapper, _email, new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), _hasher);
 
         // Seed default role
         _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });

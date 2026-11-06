@@ -82,7 +82,7 @@ public class UsersHttpSecurityTests : IClassFixture<ApiFactory>
         // ICurrentUser est obligatoire dans AuthService : si l'enregistrement de production disparaît, ce test échoue.
         using var scope = _f.Services.CreateScope();
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<SoftTime.Application.Abstractions.ICurrentUser>());
-        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IAuthService>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IUserAdministrationService>());
     }
 
     [Fact]

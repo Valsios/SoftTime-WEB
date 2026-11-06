@@ -7,7 +7,6 @@ using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
-using SoftTime.Infrastructure.Services;
 using SoftTime.Tests.Http;
 
 namespace SoftTime.Tests;
@@ -18,12 +17,12 @@ public class CreateAdminFirstRunTests
     private const string Missing = "Le rôle Administrateur (identifiant 1) est introuvable : exécutez le script de création de la base.";
 
     private readonly SnapshotInMemoryUnitOfWork _uow = new();
-    private readonly AuthService _auth;
+    private readonly AuthServices _auth;
 
     public CreateAdminFirstRunTests()
     {
         var mapper = new MapperConfiguration(c => c.AddProfile<MappingProfile>()).CreateMapper();
-        _auth = new AuthService(_uow, new Token(), mapper, new Mail(), new AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<Responsable>());
+        _auth = new AuthServices(_uow, new Token(), mapper, new Mail(), new AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<Responsable>());
     }
 
     private static AdminSetupDto Dto => new("Admin Test", "admin", "ValidP@ss123!", null);

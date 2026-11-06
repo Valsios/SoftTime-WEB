@@ -7,7 +7,6 @@ using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
-using SoftTime.Infrastructure.Services;
 using SoftTime.Tests.Http;
 
 namespace SoftTime.Tests;
@@ -28,7 +27,7 @@ public class UserAdministrationGuardTests
         _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 3, IdRole = 2, Login = "cible" });
     }
 
-    private AuthService Service(decimal userId, decimal roleId)
+    private AuthServices Service(decimal userId, decimal roleId)
         => new(_uow, new Token(), _mapper, new Mail(), new FakeUser(userId, roleId), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<Responsable>());
 
     private static readonly UserDto NewUserDto = new(0, 2, "Nouveau", "nouveau", null, "ValidP@ss123!");

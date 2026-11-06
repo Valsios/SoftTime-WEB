@@ -1,6 +1,7 @@
-using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
+
+using FluentAssertions;
 
 using SoftTime.Api.Controllers;
 

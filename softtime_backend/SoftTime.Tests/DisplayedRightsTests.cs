@@ -6,7 +6,6 @@ using SoftTime.Application.Abstractions;
 using SoftTime.Application.Mapping;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
-using SoftTime.Infrastructure.Services;
 using SoftTime.Tests.Http;
 
 namespace SoftTime.Tests;
@@ -24,12 +23,12 @@ public class DisplayedRightsTests
     };
 
     private readonly SnapshotInMemoryUnitOfWork _uow = new();
-    private readonly AuthService _auth;
+    private readonly AuthServices _auth;
 
     public DisplayedRightsTests()
     {
         var mapper = new MapperConfiguration(c => c.AddProfile<MappingProfile>()).CreateMapper();
-        _auth = new AuthService(_uow, new Token(), mapper, new Mail(), new AdminCurrentUser(), TestRights.Service(_uow), new PasswordHasher<Responsable>());
+        _auth = new AuthServices(_uow, new Token(), mapper, new Mail(), new AdminCurrentUser(), TestRights.Service(_uow), new PasswordHasher<Responsable>());
 
         _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
         _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 5, NomRole = "Sans lignes" });

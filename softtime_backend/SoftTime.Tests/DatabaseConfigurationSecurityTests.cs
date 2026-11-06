@@ -22,11 +22,11 @@ public class DatabaseConfigurationSecurityTests
 
     private readonly InMemoryUnitOfWork _uow = new();
     private readonly IMapper _mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
-    private readonly AuthService _auth;
+    private readonly AuthServices _auth;
 
     public DatabaseConfigurationSecurityTests()
     {
-        _auth = new AuthService(_uow, new FakeTokenService(), _mapper, new FakeEmailService(), new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<Responsable>());
+        _auth = new AuthServices(_uow, new FakeTokenService(), _mapper, new FakeEmailService(), new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<Responsable>());
         _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
         _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 5, NomRole = "Gestionnaire" });
         _uow.GetRepo<BddSage>().Items.Add(new BddSage { Id = 7, NomBd = Base, Serveur = "srv" });

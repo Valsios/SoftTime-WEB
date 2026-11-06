@@ -42,7 +42,17 @@ public static class DependencyInjection
     {
         services.AddScoped<ITenantConnectionService, TenantConnectionService>();
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
-        services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IAuthenticationService, AuthenticationService>();
+        services.AddScoped<IUserDirectoryService, UserDirectoryService>();
+        services.AddScoped<IUserAdministrationService, UserAdministrationService>();
+        services.AddScoped<IRoleService, RoleService>();
+        services.AddScoped<IPrivilegeService, PrivilegeService>();
+        services.AddScoped<IParametersAccessGuard, ParametersAccessGuard>();
+        services.AddScoped<IUserPermissionService, UserPermissionService>();
+        services.AddScoped<IRolePermissionService, RolePermissionService>();
+        services.AddScoped<IDatabaseAccessService, DatabaseAccessService>();
+        services.AddScoped<IRightsAuditService, RightsAuditService>();
+        services.AddScoped<IRightsChangeJournal, RightsChangeJournal>();
         services.AddScoped<IEffectiveRightsService, EffectiveRightsService>();
         services.AddScoped<IDatabaseConfigurationAuthorizer, DatabaseConfigurationAuthorizer>();
         services.AddScoped<IAbsenceCodeService, AbsenceCodeService>();

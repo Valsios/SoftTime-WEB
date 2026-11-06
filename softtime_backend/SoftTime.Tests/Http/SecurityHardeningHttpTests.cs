@@ -209,14 +209,14 @@ public class SecurityHardeningHttpTests : IClassFixture<ApiFactory>
     public void LogSafe_RemovesControlCharacters(string typed, string expected)
     {
         // Act + Assert
-        Assert.Equal(expected, AuthService.LogSafe(typed));
+        Assert.Equal(expected, AuthenticationService.LogSafe(typed));
     }
 
     [Fact]
     public void LogSafe_TruncatesLongValues()
     {
         // Act
-        var logged = AuthService.LogSafe(new string('x', 100));
+        var logged = AuthenticationService.LogSafe(new string('x', 100));
 
         // Assert
         Assert.Equal(33, logged.Length);

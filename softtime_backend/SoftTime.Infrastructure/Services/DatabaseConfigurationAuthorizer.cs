@@ -11,9 +11,9 @@ namespace SoftTime.Infrastructure.Services;
 public class DatabaseConfigurationAuthorizer : IDatabaseConfigurationAuthorizer
 {
     private readonly ICurrentUser _user;
-    private readonly IAuthService _auth;
+    private readonly IUserPermissionService _auth;
 
-    public DatabaseConfigurationAuthorizer(ICurrentUser user, IAuthService auth)
+    public DatabaseConfigurationAuthorizer(ICurrentUser user, IUserPermissionService auth)
     {
         _user = user;
         _auth = auth;

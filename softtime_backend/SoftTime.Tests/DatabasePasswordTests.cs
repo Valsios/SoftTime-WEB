@@ -26,11 +26,11 @@ public class DatabasePasswordTests
     private readonly SnapshotInMemoryUnitOfWork _uow = new();
     private readonly IMapper _mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
     private readonly RecordingDiscovery _discovery = new();
-    private readonly AuthService _auth;
+    private readonly AuthServices _auth;
 
     public DatabasePasswordTests()
     {
-        _auth = new AuthService(_uow, new FakeTokens(), _mapper, new FakeEmail(), new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<Responsable>());
+        _auth = new AuthServices(_uow, new FakeTokens(), _mapper, new FakeEmail(), new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<Responsable>());
         _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
         _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 5, NomRole = "Gestionnaire" });
         _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 1, IdRole = 1, Login = "a" });

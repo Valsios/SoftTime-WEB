@@ -22,11 +22,11 @@ public class PermissionCatalogCharacterizationTests
 
     // Anciennes entrées, toujours présentes dans AuthService (déléguées au helper) : le résultat doit rester identique.
     private static HashSet<decimal> LegacyGates(IEnumerable<string> codes)
-        => (HashSet<decimal>)typeof(AuthService).GetMethod("DeduirePortes", BindingFlags.NonPublic | BindingFlags.Static)!
+        => (HashSet<decimal>)typeof(RolePermissionService).GetMethod("DeduirePortes", BindingFlags.NonPublic | BindingFlags.Static)!
             .Invoke(null, new object[] { codes })!;
 
     private static List<string> LegacyDefaults(HashSet<int> rights, IEnumerable<BddSage> sages, IEnumerable<BddPointeuse> pointeuses)
-        => (List<string>)typeof(AuthService).GetMethod("BuildDefaultPermissionsList", BindingFlags.NonPublic | BindingFlags.Static)!
+        => (List<string>)typeof(UserPermissionService).GetMethod("BuildDefaultPermissionsList", BindingFlags.NonPublic | BindingFlags.Static)!
             .Invoke(null, new object[] { rights, sages, pointeuses })!;
 
     [Fact]
@@ -44,7 +44,7 @@ public class PermissionCatalogCharacterizationTests
     [Fact]
     public void Known_static_permissions_are_the_same_set_as_in_AuthService()
     {
-        var legacy = (HashSet<string>)typeof(AuthService).GetField("KnownStaticPermissions", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
+        var legacy = (HashSet<string>)typeof(RolePermissionService).GetField("KnownStaticPermissions", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
         Assert.True(legacy.SetEquals(PermissionCatalog.KnownStatic));
         Assert.True(PermissionCatalog.IsKnown("SAGE:X:READ"));
         Assert.True(PermissionCatalog.IsKnown("proc:shifts"));

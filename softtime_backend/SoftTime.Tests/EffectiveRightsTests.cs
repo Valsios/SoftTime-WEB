@@ -8,7 +8,6 @@ using SoftTime.Application.Security;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
-using SoftTime.Infrastructure.Services;
 using SoftTime.Tests.Http;
 
 using static SoftTime.Application.Security.EffectiveRightsCalculator;
@@ -388,12 +387,12 @@ public class EffectiveRightsTests
     private sealed class OldWorld
     {
         public readonly SnapshotInMemoryUnitOfWork Uow = new();
-        public readonly AuthService Auth;
+        public readonly AuthServices Auth;
 
         public OldWorld()
         {
             var mapper = new MapperConfiguration(c => c.AddProfile<MappingProfile>()).CreateMapper();
-            Auth = new AuthService(Uow, new Token(), mapper, new Mail(), new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), new PasswordHasher<Responsable>());
+            Auth = new AuthServices(Uow, new Token(), mapper, new Mail(), new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), new PasswordHasher<Responsable>());
             Uow.GetRepo<BddSage>().Items.AddRange(new[] { new BddSage { Id = 1, NomBd = "BASE1" }, new BddSage { Id = 2, NomBd = "BASE2" } });
             Uow.GetRepo<BddPointeuse>().Items.Add(new BddPointeuse { Id = 1, NomBd = "PTG" });
         }

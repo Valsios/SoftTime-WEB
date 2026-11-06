@@ -16,10 +16,10 @@ namespace SoftTime.Api.Controllers;
 [Tags("Auth")]
 public class AuthController : ControllerBase
 {
-    private readonly IAuthService _auth;
+    private readonly IAuthenticationService _auth;
     private readonly ICurrentUser _user;
     private readonly AccountSecurityOptions _security;
-    public AuthController(IAuthService auth, ICurrentUser user, IOptions<AccountSecurityOptions> security)
+    public AuthController(IAuthenticationService auth, ICurrentUser user, IOptions<AccountSecurityOptions> security)
     {
         _auth = auth;
         _user = user;

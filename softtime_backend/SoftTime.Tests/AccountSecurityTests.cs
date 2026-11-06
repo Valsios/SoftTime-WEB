@@ -27,7 +27,7 @@ public class AccountSecurityTests
 
     private readonly SnapshotInMemoryUnitOfWork _uow = new();
     private readonly AccountSecurityOptions _options = new() { MaxFailedLoginAttempts = 3, LockoutMinutes = 15, RefreshTokenDays = 7 };
-    private readonly AuthService _sut;
+    private readonly AuthServices _sut;
 
     public AccountSecurityTests()
     {
@@ -106,7 +106,7 @@ public class AccountSecurityTests
         var wrong = await Assert.ThrowsAsync<UnauthorizedException>(() => _sut.LoginAsync(new LoginRequest("agent", "wrong")));
 
         // Assert
-        Assert.Equal(AuthService.InvalidCredentialsMessage, unknown.Message);
+        Assert.Equal(AuthenticationService.InvalidCredentialsMessage, unknown.Message);
         Assert.Equal(unknown.Message, wrong.Message);
     }
 
@@ -341,11 +341,11 @@ public class AccountSecurityTests
         Assert.True(result.Succeeded);
     }
 
-    private AuthService CreateAuth(IPasswordHasher<Responsable> hasher)
+    private AuthServices CreateAuth(IPasswordHasher<Responsable> hasher)
     {
         var mapper = new MapperConfiguration(c => c.AddProfile<MappingProfile>()).CreateMapper();
         var options = Options.Create(_options);
-        return new AuthService(_uow, new Token(), mapper, new Mail(), new AdminCurrentUser(), TestRights.Service(_uow), hasher,
+        return new AuthServices(_uow, new Token(), mapper, new Mail(), new AdminCurrentUser(), TestRights.Service(_uow), hasher,
             new RefreshTokenService(_uow, options), options);
     }
 

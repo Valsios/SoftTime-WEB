@@ -14,24 +14,26 @@ namespace SoftTime.Api.Controllers;
 [Tags("Users")]
 public class UsersController : ControllerBase
 {
-    private readonly IAuthService _auth;
+    private readonly IUserDirectoryService _directory;
+    private readonly IUserAdministrationService _administration;
     private readonly ICurrentUser _user;
-    public UsersController(IAuthService auth, ICurrentUser user)
+    public UsersController(IUserDirectoryService directory, IUserAdministrationService administration, ICurrentUser user)
     {
-        _auth = auth;
+        _directory = directory;
+        _administration = administration;
         _user = user;
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _auth.GetUsersAsync(ct));
+    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _directory.GetUsersAsync(ct));
 
     [HttpGet("paged")]
     public async Task<IActionResult> GetPaged(
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
-        => Ok(await _auth.GetUsersPagedAsync(page, pageSize, search, ct));
+        => Ok(await _directory.GetUsersPagedAsync(page, pageSize, search, ct));
 
     [HttpGet("{id}")]
-    public async Task<IActionResult> GetById(decimal id, CancellationToken ct) => Ok(await _auth.GetUserAsync(id, ct));
+    public async Task<IActionResult> GetById(decimal id, CancellationToken ct) => Ok(await _directory.GetUserAsync(id, ct));
 
     [RequireAdmin]
     [HttpPost]
@@ -39,7 +41,7 @@ public class UsersController : ControllerBase
     {
         if (_user.UserId is not decimal currentUserId)
             return Unauthorized();
-        return Ok(await _auth.SaveUserAsync(currentUserId, dto with { Id = 0 }, ct));
+        return Ok(await _administration.SaveUserAsync(currentUserId, dto with { Id = 0 }, ct));
     }
 
     [RequireAdmin]
@@ -49,14 +51,14 @@ public class UsersController : ControllerBase
         if (_user.UserId is not decimal currentUserId)
             return Unauthorized();
         // Un changement de rôle non confirmé lève RoleChangeConfirmationRequiredException : 409 avec l'aperçu.
-        return Ok(await _auth.SaveUserAsync(currentUserId, dto with { Id = id }, ct));
+        return Ok(await _administration.SaveUserAsync(currentUserId, dto with { Id = id }, ct));
     }
 
     /// <summary>Aperçu d'un changement de rôle (lecture seule) : ajustements personnels qui seraient effacés.</summary>
     [RequireAdmin]
     [HttpPost("{id}/role-change-preview")]
     public async Task<IActionResult> RoleChangePreview(decimal id, [FromBody] RoleChangePreviewRequest request, CancellationToken ct)
-        => Ok(await _auth.PreviewRoleChangeAsync(id, request.NewRoleId, ct));
+        => Ok(await _administration.PreviewRoleChangeAsync(id, request.NewRoleId, ct));
 
     [RequireAdmin]
     [HttpDelete("{id}")]
@@ -64,7 +66,7 @@ public class UsersController : ControllerBase
     {
         if (_user.UserId is not decimal currentUserId)
             return Unauthorized();
-        await _auth.DeleteUserAsync(currentUserId, id, ct);
+        await _administration.DeleteUserAsync(currentUserId, id, ct);
         return NoContent();
     }
 }

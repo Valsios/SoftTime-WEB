@@ -14,8 +14,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("Roles")]
 public class RolesController : ControllerBase
 {
-    private readonly IAuthService _auth;
-    public RolesController(IAuthService auth) => _auth = auth;
+    private readonly IRoleService _auth;
+    public RolesController(IRoleService auth) => _auth = auth;
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _auth.GetRolesAsync(ct));

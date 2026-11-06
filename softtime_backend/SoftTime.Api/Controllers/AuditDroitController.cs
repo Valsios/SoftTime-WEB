@@ -13,8 +13,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("Privileges")]
 public class AuditDroitController : ControllerBase
 {
-    private readonly IAuthService _auth;
-    public AuditDroitController(IAuthService auth) => _auth = auth;
+    private readonly IRightsAuditService _auth;
+    public AuditDroitController(IRightsAuditService auth) => _auth = auth;
 
     [HttpGet]
     public async Task<IActionResult> Get(

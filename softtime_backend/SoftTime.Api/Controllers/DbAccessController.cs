@@ -13,8 +13,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("DbAccess")]
 public class DbAccessController : ControllerBase
 {
-    private readonly IAuthService _auth;
-    public DbAccessController(IAuthService auth) => _auth = auth;
+    private readonly IDatabaseAccessService _auth;
+    public DbAccessController(IDatabaseAccessService auth) => _auth = auth;
 
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery] decimal? userId, CancellationToken ct)

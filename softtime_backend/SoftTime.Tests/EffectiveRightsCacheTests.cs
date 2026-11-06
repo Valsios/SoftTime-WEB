@@ -22,14 +22,14 @@ public class EffectiveRightsCacheTests
     private readonly FakeTime _time = new();
     private readonly EffectiveRightsCache _cache;
     private readonly EffectiveRightsService _rights;
-    private readonly AuthService _auth;
+    private readonly AuthServices _auth;
 
     public EffectiveRightsCacheTests()
     {
         _cache = new EffectiveRightsCache(_time);
         _rights = new EffectiveRightsService(_store, _cache, Microsoft.Extensions.Logging.Abstractions.NullLogger<EffectiveRightsService>.Instance);
         var mapper = new MapperConfiguration(c => c.AddProfile<MappingProfile>()).CreateMapper();
-        _auth = new AuthService(_store, new Token(), mapper, new Mail(), new AdminCurrentUser(), _rights, new PasswordHasher<Responsable>());
+        _auth = new AuthServices(_store, new Token(), mapper, new Mail(), new AdminCurrentUser(), _rights, new PasswordHasher<Responsable>());
 
         _store.GetRepo<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
         _store.GetRepo<Role>().Items.Add(new Role { IdRole = 2, NomRole = "Utilisateur" });

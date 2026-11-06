@@ -15,26 +15,37 @@ namespace SoftTime.Api.Controllers;
 [Tags("Privileges")]
 public class PrivilegesController : ControllerBase
 {
-    private readonly IAuthService _auth;
+    private readonly IPrivilegeService _privileges;
+    private readonly IParametersAccessGuard _guard;
+    private readonly IUserPermissionService _userPermissions;
+    private readonly IRolePermissionService _rolePermissions;
     private readonly ICurrentUser _user;
-    public PrivilegesController(IAuthService auth, ICurrentUser user)
+    public PrivilegesController(
+        IPrivilegeService privileges,
+        IParametersAccessGuard guard,
+        IUserPermissionService userPermissions,
+        IRolePermissionService rolePermissions,
+        ICurrentUser user)
     {
-        _auth = auth;
+        _privileges = privileges;
+        _guard = guard;
+        _userPermissions = userPermissions;
+        _rolePermissions = rolePermissions;
         _user = user;
     }
 
     [HttpGet("droits")]
-    public async Task<IActionResult> GetDroits(CancellationToken ct) => Ok(await _auth.GetDroitsAsync(ct));
+    public async Task<IActionResult> GetDroits(CancellationToken ct) => Ok(await _privileges.GetDroitsAsync(ct));
 
     [HttpGet]
     public async Task<IActionResult> GetByRole([FromQuery] decimal? roleId, CancellationToken ct)
-        => Ok(await _auth.GetPrivilegesAsync(roleId, ct));
+        => Ok(await _privileges.GetPrivilegesAsync(roleId, ct));
 
     [RequireAdmin]
     [HttpPut("{roleId}")]
     public async Task<IActionResult> Replace(decimal roleId, [FromBody] List<decimal> droits, CancellationToken ct)
     {
-        await _auth.SetPrivilegesAsync(roleId, droits, ct);
+        await _privileges.SetPrivilegesAsync(roleId, droits, ct);
         return NoContent();
     }
 
@@ -42,8 +53,8 @@ public class PrivilegesController : ControllerBase
     public async Task<IActionResult> GetUserPermissions(decimal userId, CancellationToken ct)
     {
         // GetUserDetailedPermissionsAsync sert aussi en interne (connexion, listes de bases) : le contrôle est donc ici.
-        await _auth.EnsureCanReadAsync(ReadPermissions.Privileges, ct);
-        return Ok(await _auth.GetUserDetailedPermissionsAsync(userId, ct));
+        await _guard.EnsureCanReadAsync(ReadPermissions.Privileges, ct);
+        return Ok(await _userPermissions.GetUserDetailedPermissionsAsync(userId, ct));
     }
 
     [RequireAdmin]
@@ -52,20 +63,20 @@ public class PrivilegesController : ControllerBase
     {
         if (_user.UserId is not decimal currentUserId)
             return Unauthorized();
-        await _auth.SaveUserDetailedPermissionsAsync(currentUserId, userId, request.GrantedPermissions, ct);
+        await _userPermissions.SaveUserDetailedPermissionsAsync(currentUserId, userId, request.GrantedPermissions, ct);
         return NoContent();
     }
 
     [HttpGet("role/{roleId}")]
     public async Task<IActionResult> GetRolePermissions(decimal roleId, CancellationToken ct)
-        => Ok(await _auth.GetRoleDetailedPermissionsAsync(roleId, ct));
+        => Ok(await _rolePermissions.GetRoleDetailedPermissionsAsync(roleId, ct));
 
     [HttpPut("role/{roleId}")]
     public async Task<IActionResult> SaveRolePermissions(decimal roleId, [FromBody] SaveRoleDetailedPermissionsRequest request, CancellationToken ct)
     {
         if (_user.UserId is not decimal currentUserId)
             return Unauthorized();
-        await _auth.SaveRoleDetailedPermissionsAsync(currentUserId, roleId, request.GrantedPermissions, ct);
+        await _rolePermissions.SaveRoleDetailedPermissionsAsync(currentUserId, roleId, request.GrantedPermissions, ct);
         return NoContent();
     }
 
@@ -75,7 +86,7 @@ public class PrivilegesController : ControllerBase
     {
         if (_user.UserId is not decimal currentUserId)
             return Unauthorized();
-        await _auth.ResetUserDetailedPermissionsAsync(currentUserId, userId, ct);
+        await _userPermissions.ResetUserDetailedPermissionsAsync(currentUserId, userId, ct);
         return NoContent();
     }
 }

@@ -31,7 +31,7 @@ public class ConnectionErrorLeakTests
     private CatalogServices Catalog()
     {
         var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
-        var auth = new AuthService(_uow, new Token(), mapper, new Mail(), new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<Responsable>());
+        var auth = new AuthServices(_uow, new Token(), mapper, new Mail(), new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<Responsable>());
         return new CatalogServices(_uow, mapper, null!, null!, new ExternalDiscoveryService(),
             new DatabaseConfigurationAuthorizer(new Admin(), auth), SoftTime.Tests.Http.TestRights.Service(_uow));
     }

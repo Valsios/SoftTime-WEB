@@ -12,7 +12,6 @@ using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
-using SoftTime.Infrastructure.Services;
 
 namespace SoftTime.Tests;
 
@@ -23,7 +22,7 @@ public class AdminRulesAndSafeguardsTests
     private readonly IMapper _mapper;
     private readonly FakeEmailService _email;
     private readonly PasswordHasher<Responsable> _hasher;
-    private readonly AuthService _auth;
+    private readonly AuthServices _auth;
 
     public AdminRulesAndSafeguardsTests()
     {
@@ -35,7 +34,7 @@ public class AdminRulesAndSafeguardsTests
 
         _email = new FakeEmailService();
         _hasher = new PasswordHasher<Responsable>();
-        _auth = new AuthService(_uow, _tokens, _mapper, _email, new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), _hasher);
+        _auth = new AuthServices(_uow, _tokens, _mapper, _email, new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), _hasher);
 
         // Configuration initiale des rôles de référence
         _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
@@ -44,7 +43,7 @@ public class AdminRulesAndSafeguardsTests
     }
 
     /// <summary>Service dont l'appelant HTTP (ICurrentUser) est le compte indiqué ; _auth, lui, est toujours un administrateur.</summary>
-    private AuthService CallerAuth(decimal userId, decimal roleId)
+    private AuthServices CallerAuth(decimal userId, decimal roleId)
         => new(_uow, _tokens, _mapper, _email, new SoftTime.Tests.Http.TestCurrentUser(userId, roleId), SoftTime.Tests.Http.TestRights.Service(_uow), _hasher);
 
     #region Tests AdminRules (G5, C3)

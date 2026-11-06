@@ -16,14 +16,14 @@ public class SageDatabasesController : ControllerBase
 {
     private readonly ISageDatabaseService _svc;
     private readonly IDepartementServiceLookup _departements;
-    private readonly IAuthService _auth;
+    private readonly IUserPermissionService _auth;
     private readonly ICurrentUser _user;
     private readonly IDatabaseConfigurationAuthorizer _configAuth;
 
     public SageDatabasesController(
         ISageDatabaseService svc,
         IDepartementServiceLookup departements,
-        IAuthService auth,
+        IUserPermissionService auth,
         ICurrentUser user,
         IDatabaseConfigurationAuthorizer configAuth)
     {

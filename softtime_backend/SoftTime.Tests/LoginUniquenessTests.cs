@@ -198,11 +198,11 @@ public class LoginUniquenessTests
         }
     }
 
-    private AuthService CreateAuth()
+    private AuthServices CreateAuth()
     {
         var mapper = new MapperConfiguration(c => c.AddProfile<MappingProfile>()).CreateMapper();
         var options = Options.Create(new AccountSecurityOptions());
-        return new AuthService(_uow, new Token(), mapper, new Mail(), new AdminCurrentUser(), TestRights.Service(_uow), _hasher,
+        return new AuthServices(_uow, new Token(), mapper, new Mail(), new AdminCurrentUser(), TestRights.Service(_uow), _hasher,
             new RefreshTokenService(_uow, options), options);
     }
 
