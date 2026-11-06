@@ -73,57 +73,13 @@ public sealed class OvertimeDetailService : IOvertimeDetailService
         var ctx = await _overtimeWeekContext.ChargerContexteAsync(new PeriodRequest(null, null, debut, fin), avecExistantes: false, ct);
         var card = ctx.Cards.FirstOrDefault(c => MatriculeIdentity.Cle(c.SageMatricule) == cle);
         var matriculeCarte = card?.SageMatricule ?? matricule;
-        var config = card == null ? new OvertimeWeekConfig(ctx.MultiPointage) : _overtimeWeekContext.Configurer(ctx, card);
+        var joursDetail = card == null
+            ? new List<OvertimeDetailDayDto>()
+            : JoursDetail(ctx, card, cle, _overtimeWeekContext.ConstruireJours(ctx, card, debut, fin));
 
-        var joursDetail = new List<OvertimeDetailDayDto>();
-        if (card != null)
-        {
-            var lignesParJour = (ctx.Heures.GetValueOrDefault(cle) ?? new List<HeureCorrigee>())
-                .Where(h => h.DatePointageIn.HasValue)
-                .GroupBy(h => h.DatePointageIn!.Value.Date)
-                .ToDictionary(g => g.Key, g => g.ToList());
-
-            foreach (var jour in _overtimeWeekContext.ConstruireJours(ctx, card, debut, fin))
-            {
-                var resultat = OvertimeCalculator.CalculerJour(config, jour);
-                var lignes = lignesParJour.GetValueOrDefault(jour.Jour) ?? new List<HeureCorrigee>();
-                var heuresSupJour = Math.Round(
-                    OvertimeRules.HeuresSupJournalieres(
-                        TimeSpan.FromHours((double)resultat.HeuresRetenues),
-                        (double)config.Journee),
-                    2);
-                joursDetail.Add(new OvertimeDetailDayDto(
-                    jour.Jour,
-                    resultat.Entree,
-                    resultat.Sortie,
-                    resultat.HeuresRetenues,
-                    heuresSupJour,
-                    resultat.Nuit,
-                    jour.Jour.DayOfWeek == DayOfWeek.Sunday,
-                    jour.Ferie,
-                    resultat.Retard > 0m ? TimeSpan.FromHours((double)resultat.Retard) : null,
-                    lignes.Any(h => h.AbsenceAm == true),
-                    lignes.Any(h => h.AbsencePm == true),
-                    resultat.Conge,
-                    resultat.JourTravaille,
-                    resultat.HeuresReelles));
-            }
-        }
-
-        // T_HSSemaine.PeriodeDebut/PeriodeFin portent la PÉRIODE du calcul (clé de la purge, de la
-        // liste et de la synchro paie, et sémantique du desktop) : les bornes de chaque semaine sont
-        // déduites des semaines validées, sinon les colonnes Début/Fin afficheraient la période.
-        var lignesSemaine = (await _uow.Repository<HsSemaine>().ListAsync(h =>
-                h.BddSage == _tenant.SageDb && h.Matricule == matriculeCarte, ct))
-            .Where(h => h.PeriodeDebut.HasValue && h.PeriodeFin.HasValue
-                        && h.PeriodeDebut!.Value.Date <= fin && h.PeriodeFin!.Value.Date >= debut)
-            .OrderBy(h => h.PeriodeDebut)
-            .ThenBy(h => h.Semaine)
-            .ThenBy(h => h.Oid)
-            .ToList();
+        var lignesSemaine = await ChargerLignesSemaineAsync(matriculeCarte, debut, fin, ct);
         var semainesValidees = await ChargerSemainesValideesAsync(matriculeCarte, lignesSemaine, ct);
         var semaines = ConstruireSemainesDetail(lignesSemaine, semainesValidees);
-
         var exo = (await _uow.Repository<HsExoImp>().ListAsync(h =>
                 h.BddSage == _tenant.SageDb && h.Matricule == matriculeCarte
                 && h.PeriodeDebut == debut && h.PeriodeFin == fin, ct))
@@ -133,6 +89,58 @@ public sealed class OvertimeDetailService : IOvertimeDetailService
 
         return new OvertimeDetailDto(matriculeCarte, debut, fin, joursDetail, semaines, exo);
     }
+
+    /// <summary>Jours de la période passés par le même calculateur que la validation semaine.</summary>
+    private List<OvertimeDetailDayDto> JoursDetail(WeeklyContext ctx, CardPaie card, string cle, List<OvertimeDayInput> jours)
+    {
+        var config = _overtimeWeekContext.Configurer(ctx, card);
+        var lignesParJour = (ctx.Heures.GetValueOrDefault(cle) ?? new List<HeureCorrigee>())
+            .Where(h => h.DatePointageIn.HasValue)
+            .GroupBy(h => h.DatePointageIn!.Value.Date)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        return jours
+            .Select(jour => JourDetail(config, jour, lignesParJour.GetValueOrDefault(jour.Jour) ?? new List<HeureCorrigee>()))
+            .ToList();
+    }
+
+    private static OvertimeDetailDayDto JourDetail(OvertimeWeekConfig config, OvertimeDayInput jour, List<HeureCorrigee> lignes)
+    {
+        var resultat = OvertimeCalculator.CalculerJour(config, jour);
+        var heuresSupJour = Math.Round(
+            OvertimeRules.HeuresSupJournalieres(TimeSpan.FromHours((double)resultat.HeuresRetenues), (double)config.Journee),
+            2);
+        return new OvertimeDetailDayDto(
+            jour.Jour,
+            resultat.Entree,
+            resultat.Sortie,
+            resultat.HeuresRetenues,
+            heuresSupJour,
+            resultat.Nuit,
+            jour.Jour.DayOfWeek == DayOfWeek.Sunday,
+            jour.Ferie,
+            resultat.Retard > 0m ? TimeSpan.FromHours((double)resultat.Retard) : null,
+            lignes.Any(h => h.AbsenceAm == true),
+            lignes.Any(h => h.AbsencePm == true),
+            resultat.Conge,
+            resultat.JourTravaille,
+            resultat.HeuresReelles);
+    }
+
+    /// <summary>
+    /// T_HSSemaine.PeriodeDebut/PeriodeFin portent la PÉRIODE du calcul (clé de la purge, de la
+    /// liste et de la synchro paie, et sémantique du desktop) : les bornes de chaque semaine sont
+    /// déduites des semaines validées, sinon les colonnes Début/Fin afficheraient la période.
+    /// </summary>
+    private async Task<List<HsSemaine>> ChargerLignesSemaineAsync(
+        string matriculeCarte, DateTime debut, DateTime fin, CancellationToken ct) =>
+        (await _uow.Repository<HsSemaine>().ListAsync(h =>
+                h.BddSage == _tenant.SageDb && h.Matricule == matriculeCarte, ct))
+            .Where(h => h.PeriodeDebut.HasValue && h.PeriodeFin.HasValue
+                        && h.PeriodeDebut!.Value.Date <= fin && h.PeriodeFin!.Value.Date >= debut)
+            .OrderBy(h => h.PeriodeDebut)
+            .ThenBy(h => h.Semaine)
+            .ThenBy(h => h.Oid)
+            .ToList();
 
     /// <summary>
     /// Semaines validées du salarié nécessaires pour retrouver les bornes réelles des semaines de

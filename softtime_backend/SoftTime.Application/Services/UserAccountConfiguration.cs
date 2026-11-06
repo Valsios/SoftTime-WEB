@@ -39,75 +39,50 @@ public static class UserAccountConfiguration
         hasher ??= new PasswordHasher<Responsable>();
         var repo = uow.Repository<Responsable>();
         var users = await repo.ListAsync(_ => true, ct);
-
-        var result = new PasswordMigrationResult { TotalScanned = users.Count };
-        var migrated = 0;
-        var v3Count = 0;
-        var v2Count = 0;
-        var emptyCount = 0;
-        var ambiguousCount = 0;
-
-        foreach (var user in users)
-        {
-            ct.ThrowIfCancellationRequested();
-            var classification = PasswordHashClassifier.Classify(user.Password);
-
-            switch (classification)
+        var classes = users
+            .Select(user =>
             {
-                case PasswordClassification.NullOrEmpty:
-                    emptyCount++;
-                    break;
+                ct.ThrowIfCancellationRequested();
+                return (User: user, Classe: PasswordHashClassifier.Classify(user.Password));
+            })
+            .ToList();
 
-                case PasswordClassification.IdentityV3:
-                    v3Count++;
-                    break;
-
-                case PasswordClassification.IdentityV2:
-                    // Préservé intact : sera re-haché en V3 de façon transparente à la prochaine connexion réussie
-                    v2Count++;
-                    break;
-
-                case PasswordClassification.LegacyPlainText:
-                    // Mot de passe en clair avéré : sécurisation immédiate en PBKDF2 HMAC-SHA256 (100k itérations)
-                    user.Password = hasher.HashPassword(user, user.Password!);
-                    repo.Update(user);
-                    migrated++;
-                    break;
-
-                case PasswordClassification.UnrecognizedHash:
-                    ambiguousCount++;
-                    result.AmbiguousAccounts.Add(new AmbiguousAccountEntry(
-                        user.IdResponsable,
-                        user.Login,
-                        classification,
-                        "Format de hachage externe (MD5, SHA, BCrypt, etc.). Valeur préservée intacte. Réinitialisation administrative requise."));
-                    break;
-
-                case PasswordClassification.AmbiguousOrMalformed:
-                    ambiguousCount++;
-                    result.AmbiguousAccounts.Add(new AmbiguousAccountEntry(
-                        user.IdResponsable,
-                        user.Login,
-                        classification,
-                        "Valeur mal formée ou tronquée. Valeur préservée sans altération pour traitement contrôlé."));
-                    break;
-            }
-        }
-
-        if (migrated > 0)
+        // Seuls les mots de passe en clair avérés sont sécurisés (PBKDF2 HMAC-SHA256, 100k itérations).
+        // Les hachages V2 sont préservés intacts : re-hachés en V3 à la prochaine connexion réussie.
+        var enClair = classes.Where(c => c.Classe == PasswordClassification.LegacyPlainText).Select(c => c.User).ToList();
+        foreach (var user in enClair)
         {
-            await uow.SaveChangesAsync(ct);
+            user.Password = hasher.HashPassword(user, user.Password!);
+            repo.Update(user);
         }
+        if (enClair.Count > 0)
+            await uow.SaveChangesAsync(ct);
 
+        var ambigus = classes
+            .Where(c => AmbiguityReason(c.Classe) is not null)
+            .Select(c => new AmbiguousAccountEntry(c.User.IdResponsable, c.User.Login, c.Classe, AmbiguityReason(c.Classe)!))
+            .ToList();
+        var result = new PasswordMigrationResult { TotalScanned = users.Count };
+        result.AmbiguousAccounts.AddRange(ambigus);
         return result with
         {
-            MigratedCount = migrated,
-            AlreadyHashedV3Count = v3Count,
-            PreservedV2Count = v2Count,
-            SkippedEmptyCount = emptyCount,
-            AmbiguousCount = ambiguousCount
+            MigratedCount = enClair.Count,
+            AlreadyHashedV3Count = classes.Count(c => c.Classe == PasswordClassification.IdentityV3),
+            PreservedV2Count = classes.Count(c => c.Classe == PasswordClassification.IdentityV2),
+            SkippedEmptyCount = classes.Count(c => c.Classe == PasswordClassification.NullOrEmpty),
+            AmbiguousCount = ambigus.Count
         };
     }
+
+    /// <summary>Raison de conservation d'une valeur non migrable, ou <c>null</c> si la valeur n'est pas ambiguë.</summary>
+    private static string? AmbiguityReason(PasswordClassification classe) => classe switch
+    {
+        PasswordClassification.UnrecognizedHash =>
+            "Format de hachage externe (MD5, SHA, BCrypt, etc.). Valeur préservée intacte. Réinitialisation administrative requise.",
+        PasswordClassification.AmbiguousOrMalformed =>
+            "Valeur mal formée ou tronquée. Valeur préservée sans altération pour traitement contrôlé.",
+        _ => null
+    };
 
     /// <summary>
     /// Migration idempotente et contrôlée des mots de passe historiques stockés en clair.

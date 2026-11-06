@@ -61,81 +61,82 @@ public sealed class MlTrainingService : IMlTrainingService
     private async Task<HsOutcome> TrainHsAsync(
         string bddSage, IReadOnlySet<DateTime> joursSansPointage, DateTime from, DateTime to, CancellationToken ct)
     {
-        // Semaines terminées uniquement (la semaine en cours a un label partiel) et sans trou de
-        // pointage (des HS à 0 faute d'import ne sont pas des semaines sans HS).
-        var rows = (await _store.GetWeeklyForTrainingAsync(
-                bddSage, from, to, _options.MaxTrainingWeeks, ct))
+        var rows = await LoadHsRowsAsync(bddSage, joursSansPointage, from, to, ct);
+        var run = new MlTrainingRun(bddSage, from, to, rows.Count, null);
+        if (rows.Count < _options.MinWeeklyRows)
+            return await RejectHsAsync(run, $"HS : données insuffisantes ({rows.Count} semaines ; minimum {_options.MinWeeklyRows}).", ct);
+
+        var testStart = to.AddDays(-7 * _options.TestWindowWeeks);
+        var train = rows.Where(w => w.SemaineDebut < testStart).Select(MlSampleMapper.ToHs).ToList();
+        var test = rows.Where(w => w.SemaineDebut >= testStart).Select(MlSampleMapper.ToHs).ToList();
+        var testPositifs = test.Count(s => s.HsPositive);
+        if (train.Count == 0 || test.Count == 0 || testPositifs < _options.MinTestPositives)
+            return await RejectHsAsync(run, $"HS : jeu de test insuffisant ({test.Count} semaines, {testPositifs} positives).", ct);
+
+        var baselineAuc = Auc(
+            test.Select(s => (double)s.HsMoyenne4Semaines).ToList(),
+            test.Select(s => s.HsPositive).ToList());
+        var baselineMae = test.Average(s => Math.Abs((double)s.HsAmount - s.HsMoyenne4Semaines));
+        var probability = ProbabilityCandidate(_trainer.TrainHsProbability(train, test, _options.OvertimeAlgorithm, ct), baselineAuc);
+        var amount = AmountCandidate(_trainer.TrainHsAmount(train, test, _options.OvertimeAlgorithm, ct), baselineMae);
+
+        run = run with { Positifs = rows.Count(w => w.Hs > 0) };
+        var probModel = await PersistAsync(run, MlModelType.HsProbabilite, probability, ct);
+        var amountModel = await PersistAsync(run, MlModelType.HsMontant, amount, ct);
+
+        var (probAuc, amountMae) = (probability.Metrics.Auc ?? 0d, amount.Metrics.Mae ?? double.MaxValue);
+        _logger.LogInformation(
+            "HS {Sage} : AUC={Auc:F3} (baseline {BaselineAuc:F3}), MAE={Mae:F2} (baseline {BaselineMae:F2}).",
+            bddSage, probAuc, baselineAuc, amountMae, baselineMae);
+        var message = probability.Accepted && amount.Accepted
+            ? $"HS : modèles {probModel.Version} actifs (AUC {probAuc:F3}, MAE {amountMae:F2} vs {baselineMae:F2})."
+            : $"HS : {(probability.Accepted ? "probabilité active" : "probabilité en baseline")}, " +
+              $"{(amount.Accepted ? "montant actif" : "montant en baseline")}.";
+        return new HsOutcome(probModel, amountModel, amount.Metrics, message);
+    }
+
+    /// <summary>
+    /// Semaines terminées uniquement (la semaine en cours a un label partiel) et sans trou de
+    /// pointage (des HS à 0 faute d'import ne sont pas des semaines sans HS).
+    /// </summary>
+    private async Task<List<MlSalarieSemaine>> LoadHsRowsAsync(
+        string bddSage, IReadOnlySet<DateTime> joursSansPointage, DateTime from, DateTime to, CancellationToken ct) =>
+        (await _store.GetWeeklyForTrainingAsync(bddSage, from, to, _options.MaxTrainingWeeks, ct))
             .Where(w => w.NbJoursPlanifies > 0 || w.HeuresTravaillees > 0)
             .Where(w => w.SemaineDebut.AddDays(6) <= to)
             .Where(w => !Enumerable.Range(0, 7).Any(i => joursSansPointage.Contains(w.SemaineDebut.Date.AddDays(i))))
             .OrderBy(w => w.SemaineDebut)
             .ToList();
 
-        if (rows.Count < _options.MinWeeklyRows)
-        {
-            var reason = $"HS : données insuffisantes ({rows.Count} semaines ; minimum {_options.MinWeeklyRows}).";
-            _logger.LogInformation("{Reason}", reason);
-            await PersistRejectionAsync(bddSage, MlModelType.HsProbabilite, reason, rows.Count, null, from, to, ct);
-            await PersistRejectionAsync(bddSage, MlModelType.HsMontant, reason, rows.Count, null, from, to, ct);
-            return new HsOutcome(null, null, null, reason);
-        }
+    private async Task<HsOutcome> RejectHsAsync(MlTrainingRun run, string reason, CancellationToken ct)
+    {
+        _logger.LogInformation("{Reason}", reason);
+        await PersistRejectionAsync(run, MlModelType.HsProbabilite, reason, ct);
+        await PersistRejectionAsync(run, MlModelType.HsMontant, reason, ct);
+        return new HsOutcome(null, null, null, reason);
+    }
 
-        var testStart = to.AddDays(-7 * _options.TestWindowWeeks);
-        var train = rows.Where(w => w.SemaineDebut < testStart).Select(MlSampleMapper.ToHs).ToList();
-        var test = rows.Where(w => w.SemaineDebut >= testStart).Select(MlSampleMapper.ToHs).ToList();
-        var testPositifs = test.Count(s => s.HsPositive);
+    /// <summary>Le modèle de probabilité n'est retenu que s'il bat la baseline (moyenne 4 semaines) en AUC.</summary>
+    private MlCandidateModel ProbabilityCandidate(MlTrainingResult result, double baselineAuc)
+    {
+        var auc = result.Metrics.Auc ?? 0d;
+        var accepted = result.Accepted
+                       && result.Model is { Length: > 0 }
+                       && auc >= _options.AbsenceMinAuc
+                       && auc >= baselineAuc + _options.AbsenceAucImprovement;
+        return new MlCandidateModel(result, result.Metrics with { BaselineAuc = baselineAuc }, accepted,
+            accepted ? null : $"P(HS>0) : AUC {auc:F3}, baseline {baselineAuc:F3}.");
+    }
 
-        if (train.Count == 0 || test.Count == 0 || testPositifs < _options.MinTestPositives)
-        {
-            var reason = $"HS : jeu de test insuffisant ({test.Count} semaines, {testPositifs} positives).";
-            _logger.LogInformation("{Reason}", reason);
-            await PersistRejectionAsync(bddSage, MlModelType.HsProbabilite, reason, rows.Count, null, from, to, ct);
-            await PersistRejectionAsync(bddSage, MlModelType.HsMontant, reason, rows.Count, null, from, to, ct);
-            return new HsOutcome(null, null, null, reason);
-        }
-
-        var baselineAuc = Auc(
-            test.Select(s => (double)s.HsMoyenne4Semaines).ToList(),
-            test.Select(s => s.HsPositive).ToList());
-        var baselineMae = test.Average(s => Math.Abs((double)s.HsAmount - s.HsMoyenne4Semaines));
-
-        var probability = _trainer.TrainHsProbability(train, test, _options.OvertimeAlgorithm, ct);
-        var amount = _trainer.TrainHsAmount(train, test, _options.OvertimeAlgorithm, ct);
-
-        var probAuc = probability.Metrics.Auc ?? 0d;
-        var probAccepted = probability.Accepted
-                           && probability.Model is { Length: > 0 }
-                           && probAuc >= _options.AbsenceMinAuc
-                           && probAuc >= baselineAuc + _options.AbsenceAucImprovement;
-
-        var amountMae = amount.Metrics.Mae ?? double.MaxValue;
-        var amountAccepted = amount.Accepted
-                             && amount.Model is { Length: > 0 }
-                             && amountMae <= baselineMae * (1 - _options.OvertimeMaeImprovement);
-
-        var probMetrics = probability.Metrics with { BaselineAuc = baselineAuc };
-        var amountMetrics = amount.Metrics with { BaselineMae = baselineMae };
-
-        var probModel = await PersistAsync(
-            bddSage, MlModelType.HsProbabilite, probability, probMetrics, from, to,
-            rows.Count, rows.Count(w => w.Hs > 0), probAccepted,
-            probAccepted ? null : $"P(HS>0) : AUC {probAuc:F3}, baseline {baselineAuc:F3}.", ct);
-
-        var amountModel = await PersistAsync(
-            bddSage, MlModelType.HsMontant, amount, amountMetrics, from, to,
-            rows.Count, rows.Count(w => w.Hs > 0), amountAccepted,
-            amountAccepted ? null : $"Montant HS : MAE {amountMae:F2}, baseline {baselineMae:F2}.", ct);
-
-        _logger.LogInformation(
-            "HS {Sage} : AUC={Auc:F3} (baseline {BaselineAuc:F3}), MAE={Mae:F2} (baseline {BaselineMae:F2}).",
-            bddSage, probAuc, baselineAuc, amountMae, baselineMae);
-
-        var message = probAccepted && amountAccepted
-            ? $"HS : modèles {probModel.Version} actifs (AUC {probAuc:F3}, MAE {amountMae:F2} vs {baselineMae:F2})."
-            : $"HS : {(probAccepted ? "probabilité active" : "probabilité en baseline")}, " +
-              $"{(amountAccepted ? "montant actif" : "montant en baseline")}.";
-
-        return new HsOutcome(probModel, amountModel, amountMetrics, message);
+    /// <summary>Le modèle de montant n'est retenu que s'il réduit suffisamment la MAE de la baseline.</summary>
+    private MlCandidateModel AmountCandidate(MlTrainingResult result, double baselineMae)
+    {
+        var mae = result.Metrics.Mae ?? double.MaxValue;
+        var accepted = result.Accepted
+                       && result.Model is { Length: > 0 }
+                       && mae <= baselineMae * (1 - _options.OvertimeMaeImprovement);
+        return new MlCandidateModel(result, result.Metrics with { BaselineMae = baselineMae }, accepted,
+            accepted ? null : $"Montant HS : MAE {mae:F2}, baseline {baselineMae:F2}.");
     }
 
     // ------------------------------------------------------------------ persistance
@@ -145,81 +146,52 @@ public sealed class MlTrainingService : IMlTrainingService
     /// baseline au lieu d'afficher un simple « aucun modèle ». Les lignes rejetées sont purgées
     /// comme les anciens modèles.
     /// </summary>
-    private async Task PersistRejectionAsync(
-        string bddSage,
-        MlModelType type,
-        string reason,
-        int rows,
-        int? positifs,
-        DateTime from,
-        DateTime to,
-        CancellationToken ct)
+    private async Task PersistRejectionAsync(MlTrainingRun run, MlModelType type, string reason, CancellationToken ct)
     {
-        var model = new MlModele
-        {
-            BddSage = bddSage,
-            TypeModele = MlModelTypes.ToStorage(type),
-            Version = $"{DateTime.Now:yyyyMMdd-HHmm}-baseline",
-            Algorithme = "aucun",
-            Statut = MlModelStatus.Rejete,
-            EstActif = false,
-            EntraineLe = DateTime.Now,
-            PeriodeDebut = from,
-            PeriodeFin = to,
-            NbLignes = rows,
-            NbPositifs = positifs,
-            MetriquesJson = "{}",
-            SchemaHash = _trainer.FeatureSchemaHash,
-            ModeleBinaire = null,
-            Commentaire = reason
-        };
+        var model = NewModel(run, type);
+        model.Version = $"{DateTime.Now:yyyyMMdd-HHmm}-baseline";
+        model.Algorithme = "aucun";
+        model.Statut = MlModelStatus.Rejete;
+        model.EstActif = false;
+        model.MetriquesJson = "{}";
+        model.ModeleBinaire = null;
+        model.Commentaire = reason;
 
         await _store.SaveModelAsync(model, ct);
-        await _store.PurgeModelsAsync(bddSage, type, _options.ModelRetentionPerType, ct);
+        await _store.PurgeModelsAsync(run.BddSage, type, _options.ModelRetentionPerType, ct);
     }
 
-    private async Task<MlModele> PersistAsync(
-        string bddSage,
-        MlModelType type,
-        MlTrainingResult result,
-        MlMetrics metrics,
-        DateTime from,
-        DateTime to,
-        int rows,
-        int? positifs,
-        bool accepted,
-        string? commentaire,
-        CancellationToken ct)
+    private async Task<MlModele> PersistAsync(MlTrainingRun run, MlModelType type, MlCandidateModel candidate, CancellationToken ct)
     {
-        if (accepted)
-            await _store.ArchiveActiveModelsAsync(bddSage, type, ct);
+        if (candidate.Accepted)
+            await _store.ArchiveActiveModelsAsync(run.BddSage, type, ct);
 
-        var model = new MlModele
-        {
-            BddSage = bddSage,
-            TypeModele = MlModelTypes.ToStorage(type),
-            Version = $"{DateTime.Now:yyyyMMdd-HHmm}-{result.Algorithm}",
-            Algorithme = result.Algorithm,
-            Statut = accepted ? MlModelStatus.Active : MlModelStatus.Rejete,
-            EstActif = accepted,
-            EntraineLe = DateTime.Now,
-            PeriodeDebut = from,
-            PeriodeFin = to,
-            NbLignes = rows,
-            NbPositifs = positifs,
-            MetriquesJson = JsonSerializer.Serialize(metrics),
-            SchemaHash = _trainer.FeatureSchemaHash,
-            ModeleBinaire = accepted ? result.Model : null,
-            Commentaire = commentaire
-        };
-
+        var model = NewModel(run, type);
+        model.Version = $"{DateTime.Now:yyyyMMdd-HHmm}-{candidate.Result.Algorithm}";
+        model.Algorithme = candidate.Result.Algorithm;
+        model.Statut = candidate.Accepted ? MlModelStatus.Active : MlModelStatus.Rejete;
+        model.EstActif = candidate.Accepted;
+        model.MetriquesJson = JsonSerializer.Serialize(candidate.Metrics);
+        model.ModeleBinaire = candidate.Accepted ? candidate.Result.Model : null;
+        model.Commentaire = candidate.Commentaire;
         await _store.SaveModelAsync(model, ct);
 
-        if (accepted)
-            await _store.PurgeModelsAsync(bddSage, type, _options.ModelRetentionPerType, ct);
-
+        if (candidate.Accepted)
+            await _store.PurgeModelsAsync(run.BddSage, type, _options.ModelRetentionPerType, ct);
         return model;
     }
+
+    private MlModele NewModel(MlTrainingRun run, MlModelType type) => new()
+    {
+        BddSage = run.BddSage,
+        TypeModele = MlModelTypes.ToStorage(type),
+        EntraineLe = DateTime.Now,
+        PeriodeDebut = run.From,
+        PeriodeFin = run.To,
+        NbLignes = run.Rows,
+        NbPositifs = run.Positifs,
+        SchemaHash = _trainer.FeatureSchemaHash
+    };
 
     // ------------------------------------------------------------------ baseline
 
