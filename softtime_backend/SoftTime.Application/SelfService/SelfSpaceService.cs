@@ -112,8 +112,11 @@ public class SelfSpaceService
     private async Task<IReadOnlyList<SelfAnomalyDto>> AnomaliesListAsync(SelfContext me, DateTime debut, DateTime fin, CancellationToken ct)
     {
         var finExclusive = fin.AddDays(1);
+        var bruts = me.Cartes.Select(c => c.SAGE_MATRICULE!.Trim()).Append(me.Matricule).ToHashSet(StringComparer.Ordinal);
+        // Filtre poussé dans la requête (matricules bruts du salarié) puis recontrôlé par la clé canonique.
         return (await _uow.Repository<T_HEUREANOMALIE>().ListAsync(
-                a => a.BDD_SAGE == me.SageDb && a.DATE_POINTAGE_IN >= debut && a.DATE_POINTAGE_IN < finExclusive, ct))
+                a => a.BDD_SAGE == me.SageDb && a.DATE_POINTAGE_IN >= debut && a.DATE_POINTAGE_IN < finExclusive
+                     && a.MATRICULE_SAGE != null && bruts.Contains(a.MATRICULE_SAGE), ct))
             .Where(a => a.DATE_POINTAGE_IN.HasValue && EstMoi(a.MATRICULE_SAGE, me))
             .OrderBy(a => a.DATE_POINTAGE_IN)
             .Select(a => new SelfAnomalyDto(
@@ -160,7 +163,7 @@ public class SelfSpaceService
         var contexte = await ChargerAsync(me, debut, fin, avecConges: false, ct);
         var ids = me.Cartes.Select(c => c.ID).ToHashSet();
         // Catégorie du salarié (T_CAT_SAL référence T_CARDPAIE.ID) et tolérances : mêmes lectures que l'état des retards.
-        var categorieParCarte = (await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == me.SageDb, ct))
+        var categorieParCarte = (await _uow.Repository<T_CAT_SAL>().ListAsync(a => a.BDD_SAGE == me.SageDb && ids.Contains(a.MATRICULE_SAGE), ct))
             .Where(a => ids.Contains(a.MATRICULE_SAGE))
             .GroupBy(a => a.MATRICULE_SAGE)
             .ToDictionary(g => g.Key, g => g.First().ID_CATEG);
@@ -217,7 +220,7 @@ public class SelfSpaceService
         var bruts = me.Cartes.Select(c => c.SAGE_MATRICULE!.Trim()).Append(me.Matricule).ToHashSet(StringComparer.Ordinal);
 
         var plannings = (await _uow.Repository<T_PLANNING_SAL>().ListAsync(
-                p => p.BDD_SAGE == me.SageDb && p.DateP >= debut && p.DateP < finExclusive, ct))
+                p => p.BDD_SAGE == me.SageDb && p.DateP >= debut && p.DateP < finExclusive && ids.Contains(p.IDSAL), ct))
             .Where(p => ids.Contains(p.IDSAL))
             .ToList();
         var corrections = (await _uow.Repository<T_HEURECORRIGER>().ListAsync(
