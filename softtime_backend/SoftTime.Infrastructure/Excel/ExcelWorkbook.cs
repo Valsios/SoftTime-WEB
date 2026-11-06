@@ -73,12 +73,7 @@ public static class ExcelWorkbook
         using var wb = new XLWorkbook();
         var feuilles = (sheets ?? Enumerable.Empty<ExcelSheetContent>()).ToList();
         if (feuilles.Count == 0)
-        {
-            feuilles.Add(new ExcelSheetContent(
-                "Données",
-                Array.Empty<string>(),
-                Array.Empty<IReadOnlyList<object?>>()));
-        }
+            feuilles.Add(new ExcelSheetContent("Données", Array.Empty<string>(), Array.Empty<IReadOnlyList<object?>>()));
 
         var nomsUtilises = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var feuille in feuilles)
@@ -87,40 +82,8 @@ public static class ExcelWorkbook
             var headers = feuille.Headers ?? Array.Empty<string>();
             for (var i = 0; i < headers.Count; i++)
                 ws.Cell(1, i + 1).Value = headers[i] ?? string.Empty;
-
-            var lignes = feuille.Rows ?? Array.Empty<IReadOnlyList<object?>>();
-            var r = 2;
-            foreach (var ligne in lignes)
-            {
-                if (ligne is null)
-                {
-                    r++;
-                    continue;
-                }
-
-                var c = 1;
-                foreach (var valeur in ligne)
-                {
-                    SetCellValue(ws.Cell(r, c), valeur);
-                    c++;
-                }
-                r++;
-            }
-
-            if (headers.Count > 0)
-            {
-                ws.Row(1).Style.Font.Bold = true;
-                ws.Row(1).Style.Fill.BackgroundColor = XLColor.FromHtml("#F5F7F9");
-                ws.SheetView.FreezeRows(1);
-                ws.RangeUsed()?.SetAutoFilter();
-            }
-
-            ws.ColumnsUsed().AdjustToContents();
-            foreach (var colonne in ws.ColumnsUsed())
-            {
-                if (colonne.Width > 45)
-                    colonne.Width = 45;
-            }
+            EcrireLignes(ws, feuille.Rows ?? Array.Empty<IReadOnlyList<object?>>());
+            MettreEnForme(ws, headers.Count > 0);
         }
 
         using var ms = new MemoryStream();
@@ -128,7 +91,38 @@ public static class ExcelWorkbook
         return ms.ToArray();
     }
 
-    /// <summary>Nom de feuille Excel valide (31 caractères, caractères interdits remplacés) et unique.</summary>
+    /// <summary>Données à partir de la ligne 2 ; une ligne nulle laisse une ligne vide.</summary>
+    private static void EcrireLignes(IXLWorksheet ws, IEnumerable<IReadOnlyList<object?>> lignes)
+    {
+        var r = 2;
+        foreach (var ligne in lignes)
+        {
+            if (ligne is not null)
+            {
+                var c = 1;
+                foreach (var valeur in ligne)
+                    SetCellValue(ws.Cell(r, c++), valeur);
+            }
+            r++;
+        }
+    }
+
+    /// <summary>En-tête en gras, figé et filtrable ; colonnes ajustées au contenu, 45 de large au plus.</summary>
+    private static void MettreEnForme(IXLWorksheet ws, bool avecEntete)
+    {
+        if (avecEntete)
+        {
+            ws.Row(1).Style.Font.Bold = true;
+            ws.Row(1).Style.Fill.BackgroundColor = XLColor.FromHtml("#F5F7F9");
+            ws.SheetView.FreezeRows(1);
+            ws.RangeUsed()?.SetAutoFilter();
+        }
+
+        ws.ColumnsUsed().AdjustToContents();
+        foreach (var colonne in ws.ColumnsUsed().Where(c => c.Width > 45))
+            colonne.Width = 45;
+    }
+
     private static string NomFeuilleUnique(string? nom, HashSet<string> utilises)
     {
         var brut = string.IsNullOrWhiteSpace(nom) ? "Données" : nom!;

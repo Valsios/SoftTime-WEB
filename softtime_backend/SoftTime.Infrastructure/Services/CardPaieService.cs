@@ -143,58 +143,64 @@ public sealed class CardPaieService : ICardPaieService
     public async Task<ImportResultDto> ImportCorrespondencesCsvAsync(IReadOnlyList<string[]> lines, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var repo = _uow.Repository<CardPaie>();
-        var existing = await repo.ListAsync(c => c.SageBdd == _tenant.SageDb, ct);
+        var existing = await _uow.Repository<CardPaie>().ListAsync(c => c.SageBdd == _tenant.SageDb, ct);
         var imported = 0;
         var skipped = 0;
         foreach (var parts in lines)
         {
-            if (parts.Length < 2)
+            var ligne = LireCorrespondance(parts);
+            if (ligne is null)
+                continue;
+            if (ligne.Value.Matricule.Length == 0)
             {
                 skipped++;
                 continue;
             }
-            var badge = parts[0].Trim();
-            var matricule = parts[1].Trim();
-            var badgeFold = ExcelCells.Fold(badge);
-            if (badgeFold is "BADGE" or "POINTEUSE" or "NPOINTEUSE" or "NUMERO")
-            {
-                // En-tête structurel : ignoré, mais pas compté comme une ligne de données ignorée.
-                continue;
-            }
-            if (string.IsNullOrWhiteSpace(matricule))
-            {
-                skipped++;
-                continue;
-            }
-            if (ExcelCells.Fold(matricule) is "MATRICULE" or "MATRICULESAGE")
-            {
-                // En-tête décalé (colonne matricule) : même traitement que l'en-tête.
-                continue;
-            }
-            var card = existing.FirstOrDefault(c => string.Equals(c.SageMatricule, matricule, StringComparison.OrdinalIgnoreCase));
-            if (card == null)
-            {
-                card = new CardPaie
-                {
-                    SageMatricule = matricule,
-                    PointeuseNumero = badge,
-                    SageBdd = _tenant.SageDb,
-                    PointeuseBdd = _tenant.PointeuseDb,
-                    Date = DateTime.Now
-                };
-                await repo.AddAsync(card, ct);
-                existing.Add(card);
-            }
-            else
-            {
-                card.PointeuseNumero = badge;
-                repo.Update(card);
-            }
+            await EnregistrerCorrespondanceAsync(existing, ligne.Value.Badge, ligne.Value.Matricule, ct);
             imported++;
         }
         await _uow.SaveChangesAsync(ct);
         return new ImportResultDto(imported, skipped,
             $"{imported} correspondance(s) importée(s), {skipped} ligne(s) ignorée(s).");
+    }
+
+    /// <summary>
+    /// Ligne « badge ; matricule » : <c>null</c> pour un en-tête (ignoré sans être compté), matricule
+    /// vide pour une ligne inexploitable (comptée comme ignorée).
+    /// </summary>
+    private static (string Badge, string Matricule)? LireCorrespondance(string[] parts)
+    {
+        if (parts.Length < 2)
+            return (string.Empty, string.Empty);
+        var badge = parts[0].Trim();
+        var matricule = parts[1].Trim();
+        if (ExcelCells.Fold(badge) is "BADGE" or "POINTEUSE" or "NPOINTEUSE" or "NUMERO")
+            return null;
+        if (string.IsNullOrWhiteSpace(matricule))
+            return (badge, string.Empty);
+        // En-tête décalé (colonne matricule) : même traitement que l'en-tête.
+        return ExcelCells.Fold(matricule) is "MATRICULE" or "MATRICULESAGE" ? null : (badge, matricule);
+    }
+
+    private async Task EnregistrerCorrespondanceAsync(List<CardPaie> existing, string badge, string matricule, CancellationToken ct)
+    {
+        var repo = _uow.Repository<CardPaie>();
+        var card = existing.FirstOrDefault(c => string.Equals(c.SageMatricule, matricule, StringComparison.OrdinalIgnoreCase));
+        if (card != null)
+        {
+            card.PointeuseNumero = badge;
+            repo.Update(card);
+            return;
+        }
+        card = new CardPaie
+        {
+            SageMatricule = matricule,
+            PointeuseNumero = badge,
+            SageBdd = _tenant.SageDb,
+            PointeuseBdd = _tenant.PointeuseDb,
+            Date = DateTime.Now
+        };
+        await repo.AddAsync(card, ct);
+        existing.Add(card);
     }
 }

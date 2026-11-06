@@ -60,53 +60,18 @@ public sealed class PointeuseDatabaseService : IPointeuseDatabaseService
 
     public async Task<PointeuseDbDto> SavePointeuseAsync(PointeuseDbDto dto, CancellationToken ct = default)
     {
-        if (dto.Id == 0)
-            await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Create, dto.NomBd, ct);
-        else
-        {
-            var current = await _uow.Repository<BddPointeuse>().GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
-            await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Update, current.NomBd, ct);
-        }
-        if (dto.TypeBase != "STANDARD" && dto.TypeBase != "AUTRE")
-            throw new DomainException("TypeBase doit valoir 'STANDARD' ou 'AUTRE'.");
-        if (dto.TypeBase == "AUTRE" && (dto.Mappings is null || dto.Mappings.Count == 0))
-            throw new DomainException("Une base 'Autre' nécessite au minimum un mapping de source.");
+        await AuthorizeSaveAsync(dto, ct);
+        DatabaseTypeBase.Validate(dto.TypeBase, dto.Mappings?.Count ?? 0);
         await _sourceMappingMigrator.EnsureMappingSchemaAsync(ct);
         var repo = _uow.Repository<BddPointeuse>();
         var doublon = (await repo.ListAsync(
-            p => p.Id != dto.Id
-                 && p.Serveur == dto.Serveur
-                 && p.NomBd == dto.NomBd, ct)).Any();
+            p => p.Id != dto.Id && p.Serveur == dto.Serveur && p.NomBd == dto.NomBd, ct)).Any();
         if (doublon)
-            throw new DomainException("Cette base (serveur + nom) est déjà enregistrée.");
+            throw new DomainException(DatabaseTypeBase.DoublonMessage);
         if (dto.Active == true)
-        {
-            var all = await repo.ListAsync(_ => true, ct);
-            foreach (var p in all)
-            {
-                p.Active = p.Id == dto.Id;
-                repo.Update(p);
-            }
-        }
-        BddPointeuse entity;
-        if (dto.Id == 0)
-        {
-            entity = _mapper.Map<BddPointeuse>(dto);
-            await repo.AddAsync(entity, ct);
-        }
-        else
-        {
-            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
-            entity.Serveur = dto.Serveur;
-            entity.TLogin = dto.Login;
-            if (!string.IsNullOrEmpty(dto.Password)) entity.TMdp = dto.Password;
-            entity.TypeAuth = dto.SqlAuth;
-            entity.NomBd = dto.NomBd;
-            entity.TypePointage = dto.TypePointage;
-            entity.Active = dto.Active;
-            entity.TypeBase = dto.TypeBase;
-            repo.Update(entity);
-        }
+            await ActiverSeuleAsync(dto.Id, ct);
+
+        var entity = await UpsertAsync(dto, ct);
         await _uow.SaveChangesAsync(ct);
         _effectiveRights.InvalidateAll(); // la liste des bases a changé : les droits effectifs en cache sont périmés
         if (dto.Mappings is not null)
@@ -116,6 +81,51 @@ public sealed class PointeuseDatabaseService : IPointeuseDatabaseService
         }
         var result = _mapper.Map<PointeuseDbDto>(entity);
         return result with { Mappings = await _sourceMappingStore.LoadMappingsForAsync(false, entity.Id, ct) };
+    }
+
+    private async Task AuthorizeSaveAsync(PointeuseDbDto dto, CancellationToken ct)
+    {
+        if (dto.Id == 0)
+        {
+            await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Create, dto.NomBd, ct);
+            return;
+        }
+        var current = await _uow.Repository<BddPointeuse>().GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
+        await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Update, current.NomBd, ct);
+    }
+
+    /// <summary>Une seule pointeuse active : celle enregistrée.</summary>
+    private async Task ActiverSeuleAsync(int id, CancellationToken ct)
+    {
+        var repo = _uow.Repository<BddPointeuse>();
+        foreach (var p in await repo.ListAsync(_ => true, ct))
+        {
+            p.Active = p.Id == id;
+            repo.Update(p);
+        }
+    }
+
+    private async Task<BddPointeuse> UpsertAsync(PointeuseDbDto dto, CancellationToken ct)
+    {
+        var repo = _uow.Repository<BddPointeuse>();
+        if (dto.Id == 0)
+        {
+            var created = _mapper.Map<BddPointeuse>(dto);
+            await repo.AddAsync(created, ct);
+            return created;
+        }
+        var entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
+        entity.Serveur = dto.Serveur;
+        entity.TLogin = dto.Login;
+        if (!string.IsNullOrEmpty(dto.Password))
+            entity.TMdp = dto.Password;
+        entity.TypeAuth = dto.SqlAuth;
+        entity.NomBd = dto.NomBd;
+        entity.TypePointage = dto.TypePointage;
+        entity.Active = dto.Active;
+        entity.TypeBase = dto.TypeBase;
+        repo.Update(entity);
+        return entity;
     }
 
     private static readonly string[] PointeuseStandardTables = { "USERINFO", "CHECKINOUT" };

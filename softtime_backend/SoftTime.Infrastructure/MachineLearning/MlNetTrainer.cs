@@ -24,61 +24,11 @@ public sealed class MlNetTrainer : IMlTrainer
     {
         if (train.Count == 0 || test.Count == 0)
             return Rejected("Jeu d'entraînement ou de test vide.");
-
-        var ml = new MLContext(seed: 1);
-        var trainData = ml.Data.LoadFromEnumerable(train.Select(MlNetData.Map));
-        var testData = ml.Data.LoadFromEnumerable(test.Select(MlNetData.Map));
-
-        var prep = ml.Transforms.Categorical.OneHotEncoding("DepartementEncoded", nameof(MlAbsenceData.Departement))
-            .Append(ml.Transforms.Concatenate("Features", MlNetData.AbsenceFeatures));
-
-        ITransformer model;
-        var sdca = UseSdca(algorithm);
-        if (sdca)
-        {
-            model = prep.Append(ml.BinaryClassification.Trainers.SdcaLogisticRegression(
-                new SdcaLogisticRegressionBinaryTrainer.Options
-                {
-                    LabelColumnName = nameof(MlAbsenceData.Label),
-                    FeatureColumnName = "Features",
-                    MaximumNumberOfIterations = 100
-                })).Fit(trainData);
-        }
-        else
-        {
-            model = prep.Append(ml.BinaryClassification.Trainers.FastTree(
-                new FastTreeBinaryTrainer.Options
-                {
-                    LabelColumnName = nameof(MlAbsenceData.Label),
-                    FeatureColumnName = "Features",
-                    NumberOfLeaves = 16,
-                    NumberOfTrees = 80,
-                    MinimumExampleCountPerLeaf = 10
-                })).Fit(trainData);
-        }
-
-        var predictions = model.Transform(testData);
-        var metrics = ml.BinaryClassification.Evaluate(
-            predictions, labelColumnName: nameof(MlAbsenceData.Label));
-
-        var rows = ml.Data
-            .CreateEnumerable<MlAbsencePrediction>(predictions, reuseRowObject: false)
-            .ToList();
-        var brier = rows.Count == 0
-            ? (double?)null
-            : rows.Average(r => Math.Pow(r.Probability - (r.Label ? 1 : 0), 2));
-
-        return new MlTrainingResult(
-            Accepted: true,
-            Algorithm: sdca ? "SdcaLogisticRegression" : "FastTree",
-            Model: Save(ml, model, trainData),
-            Metrics: new MlMetrics(
-                Auc: metrics.AreaUnderRocCurve,
-                PrAuc: metrics.AreaUnderPrecisionRecallCurve,
-                Brier: brier,
-                TestRows: rows.Count,
-                TestPositives: test.Count(x => x.Label)),
-            RejectReason: null);
+        var spec = new MlNetBinarySpec(
+            nameof(MlAbsenceData.Label), nameof(MlAbsenceData.Departement), MlNetData.AbsenceFeatures, Leaves: 16, Trees: 80);
+        return TrainBinary<MlAbsencePrediction>(
+            MlNetSession.Create(train.Select(MlNetData.Map), test.Select(MlNetData.Map)), algorithm, spec,
+            r => (r.Probability, r.Label));
     }
 
     public MlTrainingResult TrainHsProbability(
@@ -89,61 +39,11 @@ public sealed class MlNetTrainer : IMlTrainer
     {
         if (train.Count == 0 || test.Count == 0)
             return Rejected("Jeu d'entraînement ou de test vide.");
-
-        var ml = new MLContext(seed: 1);
-        var trainData = ml.Data.LoadFromEnumerable(train.Select(MlNetData.Map));
-        var testData = ml.Data.LoadFromEnumerable(test.Select(MlNetData.Map));
-
-        var prep = ml.Transforms.Categorical.OneHotEncoding("DepartementEncoded", nameof(MlHsData.Departement))
-            .Append(ml.Transforms.Concatenate("Features", MlNetData.HsFeatures));
-
-        ITransformer model;
-        var sdca = UseSdca(algorithm);
-        if (sdca)
-        {
-            model = prep.Append(ml.BinaryClassification.Trainers.SdcaLogisticRegression(
-                new SdcaLogisticRegressionBinaryTrainer.Options
-                {
-                    LabelColumnName = nameof(MlHsData.HsPositive),
-                    FeatureColumnName = "Features",
-                    MaximumNumberOfIterations = 100
-                })).Fit(trainData);
-        }
-        else
-        {
-            model = prep.Append(ml.BinaryClassification.Trainers.FastTree(
-                new FastTreeBinaryTrainer.Options
-                {
-                    LabelColumnName = nameof(MlHsData.HsPositive),
-                    FeatureColumnName = "Features",
-                    NumberOfLeaves = 12,
-                    NumberOfTrees = 60,
-                    MinimumExampleCountPerLeaf = 10
-                })).Fit(trainData);
-        }
-
-        var predictions = model.Transform(testData);
-        var metrics = ml.BinaryClassification.Evaluate(
-            predictions, labelColumnName: nameof(MlHsData.HsPositive));
-
-        var rows = ml.Data
-            .CreateEnumerable<MlHsProbabilityPrediction>(predictions, reuseRowObject: false)
-            .ToList();
-        var brier = rows.Count == 0
-            ? (double?)null
-            : rows.Average(r => Math.Pow(r.Probability - (r.HsPositive ? 1 : 0), 2));
-
-        return new MlTrainingResult(
-            Accepted: true,
-            Algorithm: sdca ? "SdcaLogisticRegression" : "FastTree",
-            Model: Save(ml, model, trainData),
-            Metrics: new MlMetrics(
-                Auc: metrics.AreaUnderRocCurve,
-                PrAuc: metrics.AreaUnderPrecisionRecallCurve,
-                Brier: brier,
-                TestRows: rows.Count,
-                TestPositives: test.Count(x => x.HsPositive)),
-            RejectReason: null);
+        var spec = new MlNetBinarySpec(
+            nameof(MlHsData.HsPositive), nameof(MlHsData.Departement), MlNetData.HsFeatures, Leaves: 12, Trees: 60);
+        return TrainBinary<MlHsProbabilityPrediction>(
+            MlNetSession.Create(train.Select(MlNetData.Map), test.Select(MlNetData.Map)), algorithm, spec,
+            r => (r.Probability, r.HsPositive));
     }
 
     public MlTrainingResult TrainHsAmount(
@@ -155,41 +55,24 @@ public sealed class MlNetTrainer : IMlTrainer
         if (train.Count == 0 || test.Count == 0)
             return Rejected("Jeu d'entraînement ou de test vide.");
 
-        var ml = new MLContext(seed: 1);
-        var trainData = ml.Data.LoadFromEnumerable(train.Select(MlNetData.Map));
-        var testData = ml.Data.LoadFromEnumerable(test.Select(MlNetData.Map));
-
-        var prep = ml.Transforms.Categorical.OneHotEncoding("DepartementEncoded", nameof(MlHsData.Departement))
-            .Append(ml.Transforms.Concatenate("Features", MlNetData.HsFeatures));
-
-        ITransformer model;
+        var session = MlNetSession.Create(train.Select(MlNetData.Map), test.Select(MlNetData.Map));
+        var ml = session.Ml;
+        var prep = Prep(ml, nameof(MlHsData.Departement), MlNetData.HsFeatures);
         var sdca = UseSdca(algorithm);
-        if (sdca)
-        {
-            model = prep.Append(ml.Regression.Trainers.Sdca(
-                new SdcaRegressionTrainer.Options
-                {
-                    LabelColumnName = nameof(MlHsData.HsAmount),
-                    FeatureColumnName = "Features",
-                    MaximumNumberOfIterations = 100
-                })).Fit(trainData);
-        }
-        else
-        {
-            model = prep.Append(ml.Regression.Trainers.FastTree(
-                new FastTreeRegressionTrainer.Options
-                {
-                    LabelColumnName = nameof(MlHsData.HsAmount),
-                    FeatureColumnName = "Features",
-                    NumberOfLeaves = 12,
-                    NumberOfTrees = 60,
-                    MinimumExampleCountPerLeaf = 10
-                })).Fit(trainData);
-        }
-
-        var predictions = model.Transform(testData);
-        var metrics = ml.Regression.Evaluate(
-            predictions, labelColumnName: nameof(MlHsData.HsAmount));
+        var label = nameof(MlHsData.HsAmount);
+        IEstimator<ITransformer> trainer = sdca
+            ? ml.Regression.Trainers.Sdca(new SdcaRegressionTrainer.Options
+            {
+                LabelColumnName = label, FeatureColumnName = "Features", MaximumNumberOfIterations = 100
+            })
+            : ml.Regression.Trainers.FastTree(new FastTreeRegressionTrainer.Options
+            {
+                LabelColumnName = label, FeatureColumnName = "Features",
+                NumberOfLeaves = 12, NumberOfTrees = 60, MinimumExampleCountPerLeaf = 10
+            });
+        var model = prep.Append(trainer).Fit(session.Train);
+        var predictions = model.Transform(session.Test);
+        var metrics = ml.Regression.Evaluate(predictions, labelColumnName: label);
 
         // Erreur absolue observée sur le jeu de test (prévision bornée à 0, comme à l'affichage).
         var erreurs = ml.Data
@@ -201,7 +84,7 @@ public sealed class MlNetTrainer : IMlTrainer
         return new MlTrainingResult(
             Accepted: true,
             Algorithm: sdca ? "SdcaRegression" : "FastTree",
-            Model: Save(ml, model, trainData),
+            Model: Save(ml, model, session.Train),
             Metrics: new MlMetrics(
                 Mae: metrics.MeanAbsoluteError,
                 Rmse: metrics.RootMeanSquaredError,
@@ -210,6 +93,57 @@ public sealed class MlNetTrainer : IMlTrainer
                 TestRows: test.Count),
             RejectReason: null);
     }
+
+    /// <summary>
+    /// Classification binaire commune (absence, P(HS&gt;0)) : régression logistique SDCA ou FastTree,
+    /// évaluée par AUC, AUC précision-rappel et score de Brier sur le jeu de test.
+    /// </summary>
+    private static MlTrainingResult TrainBinary<TPrediction>(
+        MlNetSession session, string algorithm, MlNetBinarySpec spec, Func<TPrediction, (float Probability, bool Label)> issue)
+        where TPrediction : class, new()
+    {
+        var ml = session.Ml;
+        var prep = Prep(ml, spec.Departement, spec.Features);
+        var sdca = UseSdca(algorithm);
+        IEstimator<ITransformer> trainer = sdca
+            ? ml.BinaryClassification.Trainers.SdcaLogisticRegression(new SdcaLogisticRegressionBinaryTrainer.Options
+            {
+                LabelColumnName = spec.Label, FeatureColumnName = "Features", MaximumNumberOfIterations = 100
+            })
+            : ml.BinaryClassification.Trainers.FastTree(new FastTreeBinaryTrainer.Options
+            {
+                LabelColumnName = spec.Label, FeatureColumnName = "Features",
+                NumberOfLeaves = spec.Leaves, NumberOfTrees = spec.Trees, MinimumExampleCountPerLeaf = 10
+            });
+        var model = prep.Append(trainer).Fit(session.Train);
+        var predictions = model.Transform(session.Test);
+        var metrics = ml.BinaryClassification.Evaluate(predictions, labelColumnName: spec.Label);
+
+        var rows = ml.Data
+            .CreateEnumerable<TPrediction>(predictions, reuseRowObject: false)
+            .Select(issue)
+            .ToList();
+        var brier = rows.Count == 0
+            ? (double?)null
+            : rows.Average(r => Math.Pow(r.Probability - (r.Label ? 1 : 0), 2));
+
+        return new MlTrainingResult(
+            Accepted: true,
+            Algorithm: sdca ? "SdcaLogisticRegression" : "FastTree",
+            Model: Save(ml, model, session.Train),
+            Metrics: new MlMetrics(
+                Auc: metrics.AreaUnderRocCurve,
+                PrAuc: metrics.AreaUnderPrecisionRecallCurve,
+                Brier: brier,
+                TestRows: rows.Count,
+                TestPositives: rows.Count(r => r.Label)),
+            RejectReason: null);
+    }
+
+    /// <summary>Encodage du département puis concaténation des features dans la colonne « Features ».</summary>
+    private static IEstimator<ITransformer> Prep(MLContext ml, string departement, string[] features) =>
+        ml.Transforms.Categorical.OneHotEncoding("DepartementEncoded", departement)
+            .Append(ml.Transforms.Concatenate("Features", features));
 
     private static double? Centile(IReadOnlyList<float> triees, double centile)
     {

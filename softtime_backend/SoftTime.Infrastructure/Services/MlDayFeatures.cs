@@ -150,43 +150,16 @@ internal static class MlDayFeatures
     internal static void ComputeTeamFeatures(DatasetContext ctx)
     {
         var all = ctx.EmployeeDays.Values.SelectMany(d => d).ToList();
-
         foreach (var dept in all.GroupBy(d => d.Departement ?? string.Empty))
         {
             var parDate = dept.GroupBy(d => d.Date).ToDictionary(g => g.Key, g => g.ToList());
-            var dates = parDate.Keys.OrderBy(d => d).ToList();
             bool Observe(DateTime date) => date < ctx.ObservedUntil && !ctx.JoursSansPointage.Contains(date);
-            var planned = parDate.ToDictionary(kvp => kvp.Key, kvp => Observe(kvp.Key) ? kvp.Value.Count(d => d.EstJourPlanifie) : 0);
-            var absents = parDate.ToDictionary(kvp => kvp.Key, kvp => Observe(kvp.Key) ? kvp.Value.Count(d => d.AbsenceNonJustifiee) : 0);
-
-            var fenetre = new List<DateTime>();
-            var plannedSum = 0;
-            var absentsSum = 0;
-            double? tauxFige = null;
-
-            foreach (var date in dates)
-            {
-                while (fenetre.Count > 0 && fenetre[0] < date.AddDays(-30))
-                {
-                    plannedSum -= planned[fenetre[0]];
-                    absentsSum -= absents[fenetre[0]];
-                    fenetre.RemoveAt(0);
-                }
-
-                var taux = plannedSum == 0 ? 0d : (double)absentsSum / plannedSum;
-                // Jours futurs : le taux d'équipe reste celui des 30 derniers jours observés.
-                if (date >= ctx.ObservedUntil)
-                {
-                    tauxFige ??= taux;
-                    taux = tauxFige.Value;
-                }
-                foreach (var row in parDate[date])
-                    row.TauxAbsenceEquipe30j = taux;
-
-                fenetre.Add(date);
-                plannedSum += planned[date];
-                absentsSum += absents[date];
-            }
+            var comptes = parDate.ToDictionary(
+                kvp => kvp.Key,
+                kvp => Observe(kvp.Key)
+                    ? (Planned: kvp.Value.Count(d => d.EstJourPlanifie), Absents: kvp.Value.Count(d => d.AbsenceNonJustifiee))
+                    : (Planned: 0, Absents: 0));
+            ApplyTeamAbsenceRate(parDate, comptes, ctx.ObservedUntil);
         }
 
         var parJour = all
@@ -194,7 +167,6 @@ internal static class MlDayFeatures
             .ToDictionary(
                 g => g.Key,
                 g => (Planned: g.Count(d => d.EstJourPlanifie), Conges: g.Count(d => d.Conge)));
-
         foreach (var day in all)
         {
             if (parJour.TryGetValue(day.Date, out var stats))
@@ -204,4 +176,38 @@ internal static class MlDayFeatures
             }
         }
     }
+
+    /// <summary>
+    /// Taux d'absence de l'équipe sur la fenêtre glissante des 30 jours précédents ; pour les jours
+    /// futurs, le taux reste celui des 30 derniers jours observés.
+    /// </summary>
+    private static void ApplyTeamAbsenceRate(
+        Dictionary<DateTime, List<DayRow>> parDate,
+        Dictionary<DateTime, (int Planned, int Absents)> comptes,
+        DateTime observedUntil)
+    {
+        var fenetre = new Queue<DateTime>();
+        var (plannedSum, absentsSum) = (0, 0);
+        double? tauxFige = null;
+        foreach (var date in parDate.Keys.OrderBy(d => d))
+        {
+            while (fenetre.Count > 0 && fenetre.Peek() < date.AddDays(-30))
+            {
+                var sortant = comptes[fenetre.Dequeue()];
+                plannedSum -= sortant.Planned;
+                absentsSum -= sortant.Absents;
+            }
+
+            var taux = plannedSum == 0 ? 0d : (double)absentsSum / plannedSum;
+            if (date >= observedUntil)
+                taux = tauxFige ??= taux;
+            foreach (var row in parDate[date])
+                row.TauxAbsenceEquipe30j = taux;
+
+            fenetre.Enqueue(date);
+            plannedSum += comptes[date].Planned;
+            absentsSum += comptes[date].Absents;
+        }
+    }
+
 }

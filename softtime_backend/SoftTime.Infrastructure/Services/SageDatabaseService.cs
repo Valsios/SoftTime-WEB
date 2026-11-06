@@ -72,42 +72,15 @@ public sealed class SageDatabaseService : ISageDatabaseService
 
     public async Task<SageDbDto> SaveSageAsync(SageDbDto dto, CancellationToken ct = default)
     {
-        if (dto.Id == 0)
-            await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, dto.NomBd, ct);
-        else
-        {
-            var current = await _uow.Repository<BddSage>().GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
-            await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Update, current.NomBd, ct);
-        }
-        if (dto.TypeBase != "STANDARD" && dto.TypeBase != "AUTRE")
-            throw new DomainException("TypeBase doit valoir 'STANDARD' ou 'AUTRE'.");
-        if (dto.TypeBase == "AUTRE" && (dto.Mappings is null || dto.Mappings.Count == 0))
-            throw new DomainException("Une base 'Autre' nécessite au minimum un mapping de source.");
+        await AuthorizeSaveAsync(dto, ct);
+        DatabaseTypeBase.Validate(dto.TypeBase, dto.Mappings?.Count ?? 0);
         await _sourceMappingMigrator.EnsureMappingSchemaAsync(ct);
-        var repo = _uow.Repository<BddSage>();
-        var doublon = (await repo.ListAsync(
-            s => s.Id != dto.Id
-                 && s.Serveur == dto.Serveur
-                 && s.NomBd == dto.NomBd, ct)).Any();
+        var doublon = (await _uow.Repository<BddSage>().ListAsync(
+            s => s.Id != dto.Id && s.Serveur == dto.Serveur && s.NomBd == dto.NomBd, ct)).Any();
         if (doublon)
-            throw new DomainException("Cette base (serveur + nom) est déjà enregistrée.");
-        BddSage entity;
-        if (dto.Id == 0)
-        {
-            entity = _mapper.Map<BddSage>(dto);
-            await repo.AddAsync(entity, ct);
-        }
-        else
-        {
-            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
-            entity.Serveur = dto.Serveur;
-            entity.TLogin = dto.Login;
-            if (!string.IsNullOrEmpty(dto.Password)) entity.TMdp = dto.Password;
-            entity.TypeAuth = dto.SqlAuth;
-            entity.NomBd = dto.NomBd;
-            entity.TypeBase = dto.TypeBase;
-            repo.Update(entity);
-        }
+            throw new DomainException(DatabaseTypeBase.DoublonMessage);
+
+        var entity = await UpsertAsync(dto, ct);
         await _uow.SaveChangesAsync(ct);
         _effectiveRights.InvalidateAll(); // la liste des bases a changé : les droits effectifs en cache sont périmés
         if (dto.Mappings is not null)
@@ -117,6 +90,38 @@ public sealed class SageDatabaseService : ISageDatabaseService
         }
         var result = _mapper.Map<SageDbDto>(entity);
         return result with { Mappings = await _sourceMappingStore.LoadMappingsForAsync(true, entity.Id, ct) };
+    }
+
+    private async Task AuthorizeSaveAsync(SageDbDto dto, CancellationToken ct)
+    {
+        if (dto.Id == 0)
+        {
+            await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, dto.NomBd, ct);
+            return;
+        }
+        var current = await _uow.Repository<BddSage>().GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
+        await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Update, current.NomBd, ct);
+    }
+
+    private async Task<BddSage> UpsertAsync(SageDbDto dto, CancellationToken ct)
+    {
+        var repo = _uow.Repository<BddSage>();
+        if (dto.Id == 0)
+        {
+            var created = _mapper.Map<BddSage>(dto);
+            await repo.AddAsync(created, ct);
+            return created;
+        }
+        var entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
+        entity.Serveur = dto.Serveur;
+        entity.TLogin = dto.Login;
+        if (!string.IsNullOrEmpty(dto.Password))
+            entity.TMdp = dto.Password;
+        entity.TypeAuth = dto.SqlAuth;
+        entity.NomBd = dto.NomBd;
+        entity.TypeBase = dto.TypeBase;
+        repo.Update(entity);
+        return entity;
     }
 
     // Verifie la connexion et, en mode STANDARD, la presence des tables attendues par le reste de l'application.
