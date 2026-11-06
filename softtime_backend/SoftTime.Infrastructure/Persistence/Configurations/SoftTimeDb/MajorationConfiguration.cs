@@ -11,26 +11,20 @@ public sealed class MajorationConfiguration : IEntityTypeConfiguration<Majoratio
     {
         builder.ToTable("T_MAJORATION");
         builder.HasKey(x => x.Id);
+        ConfigureTextColumns(builder);
+        ConfigureValueColumns(builder);
+    }
 
-        builder.Property(x => x.Id)
-            .HasColumnName("ID")
-            .ValueGeneratedOnAdd();
+    private static void ConfigureTextColumns(EntityTypeBuilder<Majoration> builder)
+    {
+        builder.Property(x => x.BddPointeuse).HasColumnName("BDD_POINTEUSE").IsRequired(false);
+        builder.Property(x => x.BddSage).HasColumnName("BDD_SAGE").IsRequired(false);
+        builder.Property(x => x.Mojoration).HasColumnName("Mojoration").IsRequired(false);
+    }
 
-        builder.Property(x => x.BddPointeuse)
-            .HasColumnName("BDD_POINTEUSE")
-            .IsRequired(false);
-
-        builder.Property(x => x.BddSage)
-            .HasColumnName("BDD_SAGE")
-            .IsRequired(false);
-
-        builder.Property(x => x.Cotation)
-            .HasColumnName("Cotation")
-            .HasPrecision(18, 2)
-            .IsRequired(false);
-
-        builder.Property(x => x.Mojoration)
-            .HasColumnName("Mojoration")
-            .IsRequired(false);
+    private static void ConfigureValueColumns(EntityTypeBuilder<Majoration> builder)
+    {
+        builder.Property(x => x.Id).HasColumnName("ID").ValueGeneratedOnAdd();
+        builder.Property(x => x.Cotation).HasColumnName("Cotation").HasPrecision(18, 2).IsRequired(false);
     }
 }

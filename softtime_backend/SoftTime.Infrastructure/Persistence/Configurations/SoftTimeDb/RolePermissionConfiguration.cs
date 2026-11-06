@@ -11,25 +11,28 @@ public sealed class RolePermissionConfiguration : IEntityTypeConfiguration<RoleP
     {
         builder.ToTable("T_ROLE_PERMISSION");
         builder.HasKey(x => x.Id);
+        ConfigureTextColumns(builder);
+        ConfigureValueColumns(builder);
+        ConfigureIndexes(builder);
+    }
 
-        builder.Property(x => x.Id)
-            .HasColumnName("ID")
-            .ValueGeneratedOnAdd();
+    private static void ConfigureTextColumns(EntityTypeBuilder<RolePermission> builder)
+    {
+        builder.Property(x => x.PermissionCode).HasColumnName("PERMISSION_CODE").HasMaxLength(128).IsRequired(false);
+    }
 
-        builder.Property(x => x.IdRole)
-            .HasColumnName("IDROLE")
-            .HasPrecision(18, 0);
+    private static void ConfigureValueColumns(EntityTypeBuilder<RolePermission> builder)
+    {
+        builder.Property(x => x.Id).HasColumnName("ID").ValueGeneratedOnAdd();
+        builder.Property(x => x.IdRole).HasColumnName("IDROLE").HasPrecision(18, 0);
+        builder.Property(x => x.IsGranted).HasColumnName("IS_GRANTED");
+    }
 
-        builder.Property(x => x.IsGranted)
-            .HasColumnName("IS_GRANTED");
-
-        builder.Property(x => x.PermissionCode)
-            .HasColumnName("PERMISSION_CODE")
-            .HasMaxLength(128)
-            .IsRequired(false);
-
+    private static void ConfigureIndexes(EntityTypeBuilder<RolePermission> builder)
+    {
         builder.HasIndex(x => new { x.IdRole, x.PermissionCode })
             .HasDatabaseName("IX_T_ROLE_PERMISSION_IDROLE_PERMISSION_CODE")
-            .IsUnique();
+            .IsUnique()
+            .HasFilter("[PERMISSION_CODE] IS NOT NULL");
     }
 }

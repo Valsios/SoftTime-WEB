@@ -40,6 +40,19 @@ public static class DependencyInjection
     /// <summary>Services applicatifs : contrats dans Application, implémentations ici (§4.4).</summary>
     public static IServiceCollection AddInfrastructureServices(this IServiceCollection services)
     {
+        services.AddAccountServices();
+        services.AddCatalogServices();
+        services.AddTimekeepingServices();
+        services.AddPayrollServices();
+        services.AddReportingServices();
+        services.AddMachineLearningServices();
+        services.AddClosingServices();
+        return services;
+    }
+
+    /// <summary>Comptes, authentification et droits.</summary>
+    private static void AddAccountServices(this IServiceCollection services)
+    {
         services.AddScoped<ITenantConnectionService, TenantConnectionService>();
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
         services.AddScoped<IAuthenticationService, AuthenticationService>();
@@ -57,6 +70,11 @@ public static class DependencyInjection
         services.AddScoped<IRightsChangeJournal, RightsChangeJournal>();
         services.AddScoped<IEffectiveRightsService, EffectiveRightsService>();
         services.AddScoped<IDatabaseConfigurationAuthorizer, DatabaseConfigurationAuthorizer>();
+    }
+
+    /// <summary>Paramétrage : référentiels, bases externes et mappings des sources.</summary>
+    private static void AddCatalogServices(this IServiceCollection services)
+    {
         services.AddScoped<IAbsenceCodeService, AbsenceCodeService>();
         services.AddScoped<IAffectationService, AffectationService>();
         services.AddScoped<IAffectationImportService, AffectationImportService>();
@@ -79,6 +97,11 @@ public static class DependencyInjection
         services.AddScoped<ISourceMappingMigrator, SourceMappingMigrator>();
         services.AddScoped<IExternalSourceService, ExternalSourceService>();
         services.AddScoped<ISageLeaveCalendar, SageLeaveCalendar>();
+    }
+
+    /// <summary>Planning, pointages, anomalies, heures corrigées et archives.</summary>
+    private static void AddTimekeepingServices(this IServiceCollection services)
+    {
         services.AddScoped<IShiftService, ShiftService>();
         services.AddScoped<IEmployeePlanningService, EmployeePlanningService>();
         services.AddScoped<IPlanningImportService, PlanningImportService>();
@@ -92,12 +115,25 @@ public static class DependencyInjection
         services.AddScoped<IHistoryArchiveService, HistoryArchiveService>();
         services.AddScoped<IHistoryQueryService, HistoryQueryService>();
         services.AddScoped<IHistoryPurgeService, HistoryPurgeService>();
+    }
+
+    /// <summary>Heures supplémentaires, cantine, frais et écriture de la paie.</summary>
+    private static void AddPayrollServices(this IServiceCollection services)
+    {
         services.AddScoped<IWeeklyValidationService, WeeklyValidationService>();
         services.AddScoped<IOvertimeExoImpoService, OvertimeExoImpoService>();
         services.AddScoped<IOvertimeDetailService, OvertimeDetailService>();
         services.AddScoped<IOvertimePayrollSyncService, OvertimePayrollSyncService>();
         services.AddScoped<IOvertimeWeekContext, OvertimeWeekContext>();
         services.AddScoped<IPayrollWriterResolver, PayrollWriterResolver>();
+        services.AddScoped<ICanteenService, CanteenService>();
+        services.AddScoped<ITravelExpenseService, TravelExpenseService>();
+        services.AddScoped<IPayrollCumulSync, PayrollCumulSync>();
+    }
+
+    /// <summary>Rapports, tableau de bord, audit et journal.</summary>
+    private static void AddReportingServices(this IServiceCollection services)
+    {
         services.AddScoped<IPointageReportService, PointageReportService>();
         services.AddScoped<IAbsenceReportService, AbsenceReportService>();
         services.AddScoped<IRetardReportService, RetardReportService>();
@@ -105,21 +141,27 @@ public static class DependencyInjection
         services.AddScoped<IReportContextLoader, ReportContextLoader>();
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<IDashboardService, DashboardService>();
-        services.AddScoped<ICanteenService, CanteenService>();
-        services.AddScoped<ITravelExpenseService, TravelExpenseService>();
-        services.AddScoped<IPayrollCumulSync, PayrollCumulSync>();
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IJournalService, JournalService>();
+    }
+
+    /// <summary>Moteur prédictif.</summary>
+    private static void AddMachineLearningServices(this IServiceCollection services)
+    {
         services.AddScoped<IMlDatasetContextLoader, MlDatasetContextLoader>();
         services.AddScoped<IMlDatasetService, MlDatasetService>();
         services.AddScoped<IMlTrainingService, MlTrainingService>();
         services.AddScoped<IMlPredictionService, MlPredictionService>();
         services.AddScoped<IMlForecastQueryService, MlForecastQueryService>();
         services.AddScoped<IMlPipelineService, MlPipelineService>();
+    }
+
+    /// <summary>Clôture de paie assistée.</summary>
+    private static void AddClosingServices(this IServiceCollection services)
+    {
         services.AddSingleton<ClosingAnalysisCache>();
         services.AddScoped<IClosingService, ClosingService>();
         services.AddScoped<IClosingPresentationService, ClosingPresentationService>();
-        return services;
     }
 
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)

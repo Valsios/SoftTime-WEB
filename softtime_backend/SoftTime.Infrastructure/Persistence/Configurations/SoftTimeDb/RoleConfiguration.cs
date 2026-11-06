@@ -11,13 +11,17 @@ public sealed class RoleConfiguration : IEntityTypeConfiguration<Role>
     {
         builder.ToTable("T_ROLE");
         builder.HasKey(x => x.IdRole);
+        ConfigureTextColumns(builder);
+        ConfigureValueColumns(builder);
+    }
 
-        builder.Property(x => x.IdRole)
-            .HasColumnName("IDROLE")
-            .ValueGeneratedOnAdd();
+    private static void ConfigureTextColumns(EntityTypeBuilder<Role> builder)
+    {
+        builder.Property(x => x.NomRole).HasColumnName("NOMROLE").IsRequired(false);
+    }
 
-        builder.Property(x => x.NomRole)
-            .HasColumnName("NOMROLE")
-            .IsRequired(false);
+    private static void ConfigureValueColumns(EntityTypeBuilder<Role> builder)
+    {
+        builder.Property(x => x.IdRole).HasColumnName("IDROLE").ValueGeneratedOnAdd();
     }
 }

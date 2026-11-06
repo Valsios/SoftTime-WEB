@@ -11,15 +11,13 @@ public sealed class DroitRoleConfiguration : IEntityTypeConfiguration<DroitRole>
     {
         builder.ToTable("T_DROIT_ROLE");
         builder.HasKey(x => x.IdDroitRole);
+        ConfigureValueColumns(builder);
+    }
 
-        builder.Property(x => x.IdDroitRole)
-            .HasColumnName("IDDROITROLE")
-            .ValueGeneratedOnAdd();
-
-        builder.Property(x => x.IdDroit)
-            .HasColumnName("IDDROIT");
-
-        builder.Property(x => x.IdRole)
-            .HasColumnName("IDROLE");
+    private static void ConfigureValueColumns(EntityTypeBuilder<DroitRole> builder)
+    {
+        builder.Property(x => x.IdDroitRole).HasColumnName("IDDROITROLE").ValueGeneratedOnAdd();
+        builder.Property(x => x.IdDroit).HasColumnName("IDDROIT");
+        builder.Property(x => x.IdRole).HasColumnName("IDROLE");
     }
 }

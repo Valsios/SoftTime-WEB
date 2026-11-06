@@ -9,8 +9,22 @@ public class MappingProfile : Profile
 {
     public MappingProfile()
     {
+        ConfigureRightsMaps();
+        ConfigureSageDatabaseMaps();
+        ConfigurePointeuseDatabaseMaps();
+        ConfigureSourceMappingMaps();
+        ConfigureCardMaps();
+        ConfigureReferenceDataMaps();
+    }
+
+    private void ConfigureRightsMaps()
+    {
         CreateMap<Role, RoleDto>().ForMember(d => d.Id, o => o.MapFrom(s => s.IdRole)).ForMember(d => d.Nom, o => o.MapFrom(s => s.NomRole));
         CreateMap<DroitAcces, DroitDto>().ForMember(d => d.Id, o => o.MapFrom(s => s.IdDroit)).ForMember(d => d.Nom, o => o.MapFrom(s => s.Droit));
+    }
+
+    private void ConfigureSageDatabaseMaps()
+    {
         CreateMap<BddSage, SageDbDto>()
             .ForMember(d => d.Id, o => o.MapFrom(s => s.Id))
             .ForMember(d => d.SqlAuth, o => o.MapFrom(s => s.TypeAuth))
@@ -38,6 +52,10 @@ public class MappingProfile : Profile
             .ForMember(d => d.MapColCodeDepartement, o => o.Ignore())
             .ForMember(d => d.MapTableCodeConstante, o => o.Ignore())
             .ForMember(d => d.MapColCodeConstante, o => o.Ignore());
+    }
+
+    private void ConfigurePointeuseDatabaseMaps()
+    {
         CreateMap<BddPointeuse, PointeuseDbDto>()
             .ForMember(d => d.Id, o => o.MapFrom(s => s.Id))
             .ForMember(d => d.SqlAuth, o => o.MapFrom(s => s.TypeAuth))
@@ -49,13 +67,6 @@ public class MappingProfile : Profile
             .ForMember(d => d.Active, o => o.MapFrom(s => s.Active))
             .ForMember(d => d.TypeBase, o => o.MapFrom(s => s.TypeBase))
             .ForMember(d => d.Mappings, o => o.Ignore());
-        CreateMap<FieldRole, FieldRoleDto>();
-        CreateMap<SourceFieldMapping, SourceFieldMappingDto>();
-        CreateMap<SourceEntityMapping, SourceEntityMappingDto>();
-        CreateMap<SourceFieldMappingDto, SourceFieldMapping>()
-            // Clé étrangère posée par le service, pas par le DTO.
-            .ForMember(d => d.EntityMappingId, o => o.Ignore());
-        CreateMap<SourceEntityMappingDto, SourceEntityMapping>();
         CreateMap<PointeuseDbDto, BddPointeuse>()
             .ForMember(d => d.TypeAuth, o => o.MapFrom(s => s.SqlAuth))
             .ForMember(d => d.NomBd, o => o.MapFrom(s => s.NomBd))
@@ -75,6 +86,21 @@ public class MappingProfile : Profile
             .ForMember(d => d.MapPunchColUserId, o => o.Ignore())
             .ForMember(d => d.MapPunchColDatetime, o => o.Ignore())
             .ForMember(d => d.MapPunchColType, o => o.Ignore());
+    }
+
+    private void ConfigureSourceMappingMaps()
+    {
+        CreateMap<FieldRole, FieldRoleDto>();
+        CreateMap<SourceFieldMapping, SourceFieldMappingDto>();
+        CreateMap<SourceEntityMapping, SourceEntityMappingDto>();
+        CreateMap<SourceFieldMappingDto, SourceFieldMapping>()
+            // Clé étrangère posée par le service, pas par le DTO.
+            .ForMember(d => d.EntityMappingId, o => o.Ignore());
+        CreateMap<SourceEntityMappingDto, SourceEntityMapping>();
+    }
+
+    private void ConfigureCardMaps()
+    {
         CreateMap<CardPaie, CardPaieDto>()
             .ForMember(d => d.SageMatricule, o => o.MapFrom(s => s.SageMatricule))
             .ForMember(d => d.SageNom, o => o.MapFrom(s => s.SageNom))
@@ -99,6 +125,10 @@ public class MappingProfile : Profile
             .ForMember(d => d.SageBdd, o => o.MapFrom(s => s.SageBdd))
             .ForMember(d => d.PointeuseBdd, o => o.MapFrom(s => s.PointeuseBdd))
             .ForMember(d => d.Departement, o => o.MapFrom(s => s.Departement));
+    }
+
+    private void ConfigureReferenceDataMaps()
+    {
         CreateMap<Categorie, CategoryDto>()
             .ForMember(d => d.Id, o => o.MapFrom(s => s.IdCategorie))
             .ForMember(d => d.SupervisorCardId, o => o.MapFrom(s => s.IdCardPaie))

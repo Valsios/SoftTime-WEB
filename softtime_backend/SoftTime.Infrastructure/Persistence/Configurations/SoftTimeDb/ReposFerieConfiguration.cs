@@ -11,33 +11,27 @@ public sealed class ReposFerieConfiguration : IEntityTypeConfiguration<ReposFeri
     {
         builder.ToTable("T_REST_FERIE");
         builder.HasKey(x => x.Id);
+        ConfigureTextColumns(builder);
+        ConfigureDateColumns(builder);
+        ConfigureValueColumns(builder);
+    }
 
-        builder.Property(x => x.Id)
-            .HasColumnName("ID")
-            .ValueGeneratedOnAdd();
+    private static void ConfigureTextColumns(EntityTypeBuilder<ReposFerie> builder)
+    {
+        builder.Property(x => x.BddPointeuse).HasColumnName("BDD_POINTEUSE").IsRequired(false);
+        builder.Property(x => x.BddSage).HasColumnName("BDD_SAGE").IsRequired(false);
+        builder.Property(x => x.MatriculeSage).HasColumnName("MATRICULE_SAGE").IsRequired(false);
+    }
 
-        builder.Property(x => x.BddPointeuse)
-            .HasColumnName("BDD_POINTEUSE")
-            .IsRequired(false);
+    private static void ConfigureDateColumns(EntityTypeBuilder<ReposFerie> builder)
+    {
+        builder.Property(x => x.DateDebutSemaine).HasColumnName("DATE_DEBUT_SEMAINE").IsRequired(false);
+    }
 
-        builder.Property(x => x.BddSage)
-            .HasColumnName("BDD_SAGE")
-            .IsRequired(false);
-
-        builder.Property(x => x.DateDebutSemaine)
-            .HasColumnName("DATE_DEBUT_SEMAINE")
-            .IsRequired(false);
-
-        builder.Property(x => x.Etat)
-            .HasColumnName("ETAT")
-            .IsRequired(false);
-
-        builder.Property(x => x.FerieDebutSemaine)
-            .HasColumnName("FERIE_DEBUT_SEMAINE")
-            .IsRequired(false);
-
-        builder.Property(x => x.MatriculeSage)
-            .HasColumnName("MATRICULE_SAGE")
-            .IsRequired(false);
+    private static void ConfigureValueColumns(EntityTypeBuilder<ReposFerie> builder)
+    {
+        builder.Property(x => x.Id).HasColumnName("ID").ValueGeneratedOnAdd();
+        builder.Property(x => x.Etat).HasColumnName("ETAT").IsRequired(false);
+        builder.Property(x => x.FerieDebutSemaine).HasColumnName("FERIE_DEBUT_SEMAINE").IsRequired(false);
     }
 }

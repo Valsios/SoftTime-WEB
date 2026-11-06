@@ -11,14 +11,12 @@ public sealed class EvenementSageConfiguration : IEntityTypeConfiguration<Evenem
     {
         builder.ToTable("T_GHR");
         builder.HasKey(x => x.CodeNE);
+        ConfigureTextColumns(builder);
+    }
 
-        builder.Property(x => x.CodeNE)
-            .HasColumnName("CodeNE")
-            .IsRequired(true)
-            .ValueGeneratedNever();
-
-        builder.Property(x => x.Intitule)
-            .HasColumnName("Intitule")
-            .IsRequired(false);
+    private static void ConfigureTextColumns(EntityTypeBuilder<EvenementSage> builder)
+    {
+        builder.Property(x => x.CodeNE).HasColumnName("CodeNE").IsRequired(true).ValueGeneratedNever();
+        builder.Property(x => x.Intitule).HasColumnName("Intitule").IsRequired(false);
     }
 }

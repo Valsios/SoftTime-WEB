@@ -11,13 +11,12 @@ public sealed class ParametrePointeuseConfiguration : IEntityTypeConfiguration<P
     {
         builder.ToTable("T_CLOCK");
         builder.HasKey(x => x.IdPoint);
+        ConfigureValueColumns(builder);
+    }
 
-        builder.Property(x => x.IdPoint)
-            .HasColumnName("IDPOINT")
-            .ValueGeneratedOnAdd();
-
-        builder.Property(x => x.MultiPoint)
-            .HasColumnName("MULTIPOINT")
-            .IsRequired(false);
+    private static void ConfigureValueColumns(EntityTypeBuilder<ParametrePointeuse> builder)
+    {
+        builder.Property(x => x.IdPoint).HasColumnName("IDPOINT").ValueGeneratedOnAdd();
+        builder.Property(x => x.MultiPoint).HasColumnName("MULTIPOINT").IsRequired(false);
     }
 }

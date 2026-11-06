@@ -11,15 +11,13 @@ public sealed class BddAutoriseeConfiguration : IEntityTypeConfiguration<BddAuto
     {
         builder.ToTable("T_BDD_AUTORISE");
         builder.HasKey(x => x.IdBddAutorise);
+        ConfigureValueColumns(builder);
+    }
 
-        builder.Property(x => x.IdBddAutorise)
-            .HasColumnName("IDBDDAUTORISE")
-            .ValueGeneratedOnAdd();
-
-        builder.Property(x => x.IdBdd)
-            .HasColumnName("IDBDD");
-
-        builder.Property(x => x.IdResponsable)
-            .HasColumnName("IDRESPONSABLE");
+    private static void ConfigureValueColumns(EntityTypeBuilder<BddAutorisee> builder)
+    {
+        builder.Property(x => x.IdBddAutorise).HasColumnName("IDBDDAUTORISE").ValueGeneratedOnAdd();
+        builder.Property(x => x.IdBdd).HasColumnName("IDBDD");
+        builder.Property(x => x.IdResponsable).HasColumnName("IDRESPONSABLE");
     }
 }

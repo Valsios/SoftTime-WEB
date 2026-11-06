@@ -11,43 +11,29 @@ public sealed class PointageConfiguration : IEntityTypeConfiguration<Pointage>
     {
         builder.ToTable("T_POINTAGE");
         builder.HasKey(x => x.IdPointage);
+        ConfigureTextColumns(builder);
+        ConfigureDateColumns(builder);
+        ConfigureValueColumns(builder);
+    }
 
-        builder.Property(x => x.IdPointage)
-            .HasColumnName("IDPOINTAGE")
-            .ValueGeneratedOnAdd();
+    private static void ConfigureTextColumns(EntityTypeBuilder<Pointage> builder)
+    {
+        builder.Property(x => x.MatriculeSage).HasColumnName("MATRICULE_SAGE").HasMaxLength(64).IsRequired(false);
+        builder.Property(x => x.NomBddPointeuse).HasColumnName("NOM_BDD_POINTEUSE").IsRequired(false);
+        builder.Property(x => x.NomBddSage).HasColumnName("NOM_BDD_SAGE").HasMaxLength(128).IsRequired(false);
+        builder.Property(x => x.TypePointage).HasColumnName("TYPE_POINTAGE").IsRequired(false);
+    }
 
-        builder.Property(x => x.DateImportation)
-            .HasColumnName("DATE_IMPORTATION")
-            .IsRequired(false);
+    private static void ConfigureDateColumns(EntityTypeBuilder<Pointage> builder)
+    {
+        builder.Property(x => x.DateImportation).HasColumnName("DATE_IMPORTATION").IsRequired(false);
+        builder.Property(x => x.DatePointage).HasColumnName("DATE_POINTAGE").IsRequired(false);
+        builder.Property(x => x.HeurePointage).HasColumnName("HEURE_POINTAGE").IsRequired(false);
+    }
 
-        builder.Property(x => x.DatePointage)
-            .HasColumnName("DATE_POINTAGE")
-            .IsRequired(false);
-
-        builder.Property(x => x.HeurePointage)
-            .HasColumnName("HEURE_POINTAGE")
-            .IsRequired(false);
-
-        builder.Property(x => x.IdUniquePointage)
-            .HasColumnName("IDUNIQUE_POINTAGE")
-            .IsRequired(false);
-
-        builder.Property(x => x.MatriculeSage)
-            .HasColumnName("MATRICULE_SAGE")
-            .HasMaxLength(64)
-            .IsRequired(false);
-
-        builder.Property(x => x.NomBddPointeuse)
-            .HasColumnName("NOM_BDD_POINTEUSE")
-            .IsRequired(false);
-
-        builder.Property(x => x.NomBddSage)
-            .HasColumnName("NOM_BDD_SAGE")
-            .HasMaxLength(128)
-            .IsRequired(false);
-
-        builder.Property(x => x.TypePointage)
-            .HasColumnName("TYPE_POINTAGE")
-            .IsRequired(false);
+    private static void ConfigureValueColumns(EntityTypeBuilder<Pointage> builder)
+    {
+        builder.Property(x => x.IdPointage).HasColumnName("IDPOINTAGE").ValueGeneratedOnAdd();
+        builder.Property(x => x.IdUniquePointage).HasColumnName("IDUNIQUE_POINTAGE").IsRequired(false);
     }
 }

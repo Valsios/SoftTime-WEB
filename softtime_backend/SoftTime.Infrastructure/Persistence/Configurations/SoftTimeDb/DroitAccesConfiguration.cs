@@ -11,13 +11,17 @@ public sealed class DroitAccesConfiguration : IEntityTypeConfiguration<DroitAcce
     {
         builder.ToTable("T_DROIT");
         builder.HasKey(x => x.IdDroit);
+        ConfigureTextColumns(builder);
+        ConfigureValueColumns(builder);
+    }
 
-        builder.Property(x => x.IdDroit)
-            .HasColumnName("IDDROIT")
-            .ValueGeneratedOnAdd();
+    private static void ConfigureTextColumns(EntityTypeBuilder<DroitAcces> builder)
+    {
+        builder.Property(x => x.Droit).HasColumnName("DROIT").IsRequired(false);
+    }
 
-        builder.Property(x => x.Droit)
-            .HasColumnName("DROIT")
-            .IsRequired(false);
+    private static void ConfigureValueColumns(EntityTypeBuilder<DroitAcces> builder)
+    {
+        builder.Property(x => x.IdDroit).HasColumnName("IDDROIT").ValueGeneratedOnAdd();
     }
 }

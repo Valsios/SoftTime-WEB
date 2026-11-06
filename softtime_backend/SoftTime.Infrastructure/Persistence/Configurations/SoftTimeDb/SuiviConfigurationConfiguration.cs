@@ -11,29 +11,21 @@ public sealed class SuiviConfigurationConfiguration : IEntityTypeConfiguration<S
     {
         builder.ToTable("suivi_TBLCLN");
         builder.HasKey(x => x.Id);
+        ConfigureTextColumns(builder);
+        ConfigureValueColumns(builder);
+    }
 
-        builder.Property(x => x.Id)
-            .HasColumnName("Id")
-            .ValueGeneratedOnAdd();
+    private static void ConfigureTextColumns(EntityTypeBuilder<SuiviConfiguration> builder)
+    {
+        builder.Property(x => x.Bases).HasColumnName("BASES").IsRequired(false);
+        builder.Property(x => x.Colonnes).HasColumnName("COLONNES").IsRequired(false);
+        builder.Property(x => x.Tables).HasColumnName("TABLES").IsRequired(false);
+        builder.Property(x => x.Types).HasColumnName("TYPES").IsRequired(false);
+    }
 
-        builder.Property(x => x.Bases)
-            .HasColumnName("BASES")
-            .IsRequired(false);
-
-        builder.Property(x => x.Colonnes)
-            .HasColumnName("COLONNES")
-            .IsRequired(false);
-
-        builder.Property(x => x.Etats)
-            .HasColumnName("ETATS")
-            .IsRequired(false);
-
-        builder.Property(x => x.Tables)
-            .HasColumnName("TABLES")
-            .IsRequired(false);
-
-        builder.Property(x => x.Types)
-            .HasColumnName("TYPES")
-            .IsRequired(false);
+    private static void ConfigureValueColumns(EntityTypeBuilder<SuiviConfiguration> builder)
+    {
+        builder.Property(x => x.Id).HasColumnName("Id").ValueGeneratedOnAdd();
+        builder.Property(x => x.Etats).HasColumnName("ETATS").IsRequired(false);
     }
 }

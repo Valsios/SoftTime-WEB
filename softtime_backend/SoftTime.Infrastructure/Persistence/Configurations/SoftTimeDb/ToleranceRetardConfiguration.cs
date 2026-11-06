@@ -11,22 +11,15 @@ public sealed class ToleranceRetardConfiguration : IEntityTypeConfiguration<Tole
     {
         builder.ToTable("T_TOLERANCES");
         builder.HasKey(x => x.Id);
+        ConfigureValueColumns(builder);
+    }
 
-        builder.Property(x => x.Id)
-            .HasColumnName("ID")
-            .ValueGeneratedOnAdd();
-
-        builder.Property(x => x.IdCategorie)
-            .HasColumnName("IDCATEGORIE");
-
-        builder.Property(x => x.Sortie)
-            .HasColumnName("SORTIE")
-            .IsRequired(false);
-
-        builder.Property(x => x.Tolerance)
-            .HasColumnName("TOLERANCE");
-
-        builder.Property(x => x.TypesTol)
-            .HasColumnName("TYPES_TOL");
+    private static void ConfigureValueColumns(EntityTypeBuilder<ToleranceRetard> builder)
+    {
+        builder.Property(x => x.Id).HasColumnName("ID").ValueGeneratedOnAdd();
+        builder.Property(x => x.IdCategorie).HasColumnName("IDCATEGORIE");
+        builder.Property(x => x.Sortie).HasColumnName("SORTIE").IsRequired(false);
+        builder.Property(x => x.Tolerance).HasColumnName("TOLERANCE");
+        builder.Property(x => x.TypesTol).HasColumnName("TYPES_TOL");
     }
 }

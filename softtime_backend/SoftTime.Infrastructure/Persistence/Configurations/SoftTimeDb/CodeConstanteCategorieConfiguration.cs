@@ -11,21 +11,19 @@ public sealed class CodeConstanteCategorieConfiguration : IEntityTypeConfigurati
     {
         builder.ToTable("T_CODE_CONSTANTE");
         builder.HasKey(x => x.Id);
+        ConfigureTextColumns(builder);
+        ConfigureValueColumns(builder);
+    }
 
-        builder.Property(x => x.Id)
-            .HasColumnName("ID")
-            .ValueGeneratedOnAdd();
+    private static void ConfigureTextColumns(EntityTypeBuilder<CodeConstanteCategorie> builder)
+    {
+        builder.Property(x => x.Categorie).HasColumnName("CATEGORIE").IsRequired(false);
+        builder.Property(x => x.CodeConstante).HasColumnName("CODE_CONSTANTE").IsRequired(false);
+        builder.Property(x => x.Intitule).HasColumnName("INTITULE").IsRequired(false);
+    }
 
-        builder.Property(x => x.Categorie)
-            .HasColumnName("CATEGORIE")
-            .IsRequired(false);
-
-        builder.Property(x => x.CodeConstante)
-            .HasColumnName("CODE_CONSTANTE")
-            .IsRequired(false);
-
-        builder.Property(x => x.Intitule)
-            .HasColumnName("INTITULE")
-            .IsRequired(false);
+    private static void ConfigureValueColumns(EntityTypeBuilder<CodeConstanteCategorie> builder)
+    {
+        builder.Property(x => x.Id).HasColumnName("ID").ValueGeneratedOnAdd();
     }
 }

@@ -11,21 +11,19 @@ public sealed class HsSalarieConfiguration : IEntityTypeConfiguration<HsSalarie>
     {
         builder.ToTable("T_HSSAL");
         builder.HasKey(x => x.Id);
+        ConfigureDateColumns(builder);
+        ConfigureValueColumns(builder);
+    }
 
-        builder.Property(x => x.Id)
-            .HasColumnName("ID")
-            .ValueGeneratedOnAdd();
+    private static void ConfigureDateColumns(EntityTypeBuilder<HsSalarie> builder)
+    {
+        builder.Property(x => x.Date).HasColumnName("Date").IsRequired(false);
+    }
 
-        builder.Property(x => x.Date)
-            .HasColumnName("Date")
-            .IsRequired(false);
-
-        builder.Property(x => x.Ht)
-            .HasColumnName("HT")
-            .IsRequired(false);
-
-        builder.Property(x => x.IdSal)
-            .HasColumnName("IDSAL")
-            .IsRequired(false);
+    private static void ConfigureValueColumns(EntityTypeBuilder<HsSalarie> builder)
+    {
+        builder.Property(x => x.Id).HasColumnName("ID").ValueGeneratedOnAdd();
+        builder.Property(x => x.Ht).HasColumnName("HT").IsRequired(false);
+        builder.Property(x => x.IdSal).HasColumnName("IDSAL").IsRequired(false);
     }
 }

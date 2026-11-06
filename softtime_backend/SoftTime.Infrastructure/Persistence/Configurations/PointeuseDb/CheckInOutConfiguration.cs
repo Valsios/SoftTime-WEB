@@ -11,41 +11,29 @@ public sealed class CheckInOutConfiguration : IEntityTypeConfiguration<CheckInOu
     {
         builder.ToTable("CHECKINOUT");
         builder.HasKey(x => new { x.UserId, x.CheckTime });
+        ConfigureTextColumns(builder);
+        ConfigureDateColumns(builder);
+        ConfigureValueColumns(builder);
+    }
 
-        builder.Property(x => x.UserId)
-            .HasColumnName("USERID")
-            .ValueGeneratedNever();
+    private static void ConfigureTextColumns(EntityTypeBuilder<CheckInOut> builder)
+    {
+        builder.Property(x => x.CheckType).HasColumnName("CHECKTYPE").IsRequired(false);
+        builder.Property(x => x.Memoinfo).HasColumnName("Memoinfo").IsRequired(false);
+        builder.Property(x => x.SensorId).HasColumnName("SENSORID").IsRequired(false);
+        builder.Property(x => x.Sn).HasColumnName("sn").IsRequired(false);
+        builder.Property(x => x.WorkCode).HasColumnName("WorkCode").IsRequired(false);
+    }
 
-        builder.Property(x => x.CheckTime)
-            .HasColumnName("CHECKTIME")
-            .ValueGeneratedNever();
+    private static void ConfigureDateColumns(EntityTypeBuilder<CheckInOut> builder)
+    {
+        builder.Property(x => x.CheckTime).HasColumnName("CHECKTIME").ValueGeneratedNever();
+    }
 
-        builder.Property(x => x.CheckType)
-            .HasColumnName("CHECKTYPE")
-            .IsRequired(false);
-
-        builder.Property(x => x.Memoinfo)
-            .HasColumnName("Memoinfo")
-            .IsRequired(false);
-
-        builder.Property(x => x.SensorId)
-            .HasColumnName("SENSORID")
-            .IsRequired(false);
-
-        builder.Property(x => x.UserExtFmt)
-            .HasColumnName("UserExtFmt")
-            .IsRequired(false);
-
-        builder.Property(x => x.VerifyCode)
-            .HasColumnName("VERIFYCODE")
-            .IsRequired(false);
-
-        builder.Property(x => x.WorkCode)
-            .HasColumnName("WorkCode")
-            .IsRequired(false);
-
-        builder.Property(x => x.Sn)
-            .HasColumnName("sn")
-            .IsRequired(false);
+    private static void ConfigureValueColumns(EntityTypeBuilder<CheckInOut> builder)
+    {
+        builder.Property(x => x.UserId).HasColumnName("USERID").ValueGeneratedNever();
+        builder.Property(x => x.UserExtFmt).HasColumnName("UserExtFmt").IsRequired(false);
+        builder.Property(x => x.VerifyCode).HasColumnName("VERIFYCODE").IsRequired(false);
     }
 }

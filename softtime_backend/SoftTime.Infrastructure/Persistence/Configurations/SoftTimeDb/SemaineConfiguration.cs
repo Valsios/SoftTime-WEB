@@ -11,17 +11,18 @@ public sealed class SemaineConfiguration : IEntityTypeConfiguration<Semaine>
     {
         builder.ToTable("T_Semaine");
         builder.HasNoKey();
+        ConfigureTextColumns(builder);
+        ConfigureDateColumns(builder);
+    }
 
-        builder.Property(x => x.CodeSemain)
-            .HasColumnName("CodeSemain")
-            .IsRequired(false);
+    private static void ConfigureTextColumns(EntityTypeBuilder<Semaine> builder)
+    {
+        builder.Property(x => x.CodeSemain).HasColumnName("CodeSemain").IsRequired(false);
+    }
 
-        builder.Property(x => x.DateDeb)
-            .HasColumnName("DateDeb")
-            .IsRequired(false);
-
-        builder.Property(x => x.DateFin)
-            .HasColumnName("DateFin")
-            .IsRequired(false);
+    private static void ConfigureDateColumns(EntityTypeBuilder<Semaine> builder)
+    {
+        builder.Property(x => x.DateDeb).HasColumnName("DateDeb").IsRequired(false);
+        builder.Property(x => x.DateFin).HasColumnName("DateFin").IsRequired(false);
     }
 }

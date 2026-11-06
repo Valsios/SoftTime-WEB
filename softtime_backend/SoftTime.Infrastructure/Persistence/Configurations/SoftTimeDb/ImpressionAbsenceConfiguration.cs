@@ -11,37 +11,23 @@ public sealed class ImpressionAbsenceConfiguration : IEntityTypeConfiguration<Im
     {
         builder.ToTable("T_impr_ABS");
         builder.HasKey(x => x.Id);
+        ConfigureTextColumns(builder);
+        ConfigureValueColumns(builder);
+    }
 
-        builder.Property(x => x.Id)
-            .HasColumnName("ID")
-            .ValueGeneratedOnAdd();
+    private static void ConfigureTextColumns(EntityTypeBuilder<ImpressionAbsence> builder)
+    {
+        builder.Property(x => x.BddPointeuse).HasColumnName("BDD_POINTEUSE").IsRequired(false);
+        builder.Property(x => x.BddSage).HasColumnName("BDD_SAGE").IsRequired(false);
+        builder.Property(x => x.DatePointage).HasColumnName("DATE_POINTAGE").IsRequired(false);
+        builder.Property(x => x.IntituleAbs).HasColumnName("INTITULE_ABS").IsRequired(false);
+        builder.Property(x => x.Matricules).HasColumnName("MATRICULES").IsRequired(false);
+    }
 
-        builder.Property(x => x.AbsenceAm)
-            .HasColumnName("ABSENCE_AM")
-            .IsRequired(false);
-
-        builder.Property(x => x.AbsencePm)
-            .HasColumnName("ABSENCE_PM")
-            .IsRequired(false);
-
-        builder.Property(x => x.BddPointeuse)
-            .HasColumnName("BDD_POINTEUSE")
-            .IsRequired(false);
-
-        builder.Property(x => x.BddSage)
-            .HasColumnName("BDD_SAGE")
-            .IsRequired(false);
-
-        builder.Property(x => x.DatePointage)
-            .HasColumnName("DATE_POINTAGE")
-            .IsRequired(false);
-
-        builder.Property(x => x.IntituleAbs)
-            .HasColumnName("INTITULE_ABS")
-            .IsRequired(false);
-
-        builder.Property(x => x.Matricules)
-            .HasColumnName("MATRICULES")
-            .IsRequired(false);
+    private static void ConfigureValueColumns(EntityTypeBuilder<ImpressionAbsence> builder)
+    {
+        builder.Property(x => x.Id).HasColumnName("ID").ValueGeneratedOnAdd();
+        builder.Property(x => x.AbsenceAm).HasColumnName("ABSENCE_AM").IsRequired(false);
+        builder.Property(x => x.AbsencePm).HasColumnName("ABSENCE_PM").IsRequired(false);
     }
 }

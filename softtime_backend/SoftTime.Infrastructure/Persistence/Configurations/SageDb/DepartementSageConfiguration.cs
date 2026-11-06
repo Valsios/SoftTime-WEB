@@ -11,14 +11,12 @@ public sealed class DepartementSageConfiguration : IEntityTypeConfiguration<Depa
     {
         builder.ToTable("T_DEPARTEMENT");
         builder.HasKey(x => x.Code);
+        ConfigureTextColumns(builder);
+    }
 
-        builder.Property(x => x.Code)
-            .HasColumnName("Code")
-            .IsRequired(true)
-            .ValueGeneratedNever();
-
-        builder.Property(x => x.Intitule)
-            .HasColumnName("Intitule")
-            .IsRequired(false);
+    private static void ConfigureTextColumns(EntityTypeBuilder<DepartementSage> builder)
+    {
+        builder.Property(x => x.Code).HasColumnName("Code").IsRequired(true).ValueGeneratedNever();
+        builder.Property(x => x.Intitule).HasColumnName("Intitule").IsRequired(false);
     }
 }
