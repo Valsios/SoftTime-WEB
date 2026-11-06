@@ -134,68 +134,11 @@ public sealed class AnomalyService : IAnomalyService
             .ToList();
         if (anomalies.Count == 0)
             throw new DomainException("Aucune anomalie trouvée pour les identifiants fournis.");
-
-        // Une absence de la journée complète (matin et après-midi) se valide sans heures : c'est
-        // l'arbitrage « le salarié était absent ». Des heures saisies en plus seraient payées.
-        var contradictoires = anomalies
-            .Where(a => AbsenceJourneeComplete(a) && (a.HEntree.HasValue || a.HSortie.HasValue))
-            .ToList();
-        if (contradictoires.Count > 0)
-        {
-            var detail = string.Join(", ", contradictoires.Take(5)
-                .Select(a => $"{a.MatriculeSage} du {a.DatePointageIn?.ToString("dd/MM/yyyy") ?? "?"}"));
-            throw new DomainException(
-                $"Absence de la journée complète et heures saisies pour : {detail}. Retirez les heures ou l'absence avant de valider.");
-        }
-
-        var incompletes = anomalies
-            .Where(a => !AbsenceJourneeComplete(a) && (a.HEntree is null || a.HSortie is null))
-            .ToList();
-        if (incompletes.Count > 0)
-        {
-            var detail = string.Join(", ", incompletes.Take(5)
-                .Select(a => $"{a.MatriculeSage} du {a.DatePointageIn?.ToString("dd/MM/yyyy") ?? "?"}"));
-            throw new DomainException(
-                $"Heure d'entrée ou de sortie manquante pour : {detail}. Renseignez-les avant de valider.");
-        }
-
-        var semainesValidees = await _validatedWeekGuard.ChargerSemainesValideesAsync(_tenant.SageDb, ct);
-        var verrouillees = anomalies
-            .Where(a => a.DatePointageIn.HasValue
-                        && semainesValidees.Contains((MatriculeIdentity.Cle(a.MatriculeSage), ValidatedWeeks.Lundi(a.DatePointageIn.Value))))
-            .ToList();
-        if (verrouillees.Count > 0)
-        {
-            var detail = string.Join(", ", verrouillees.Take(5)
-                .Select(a => $"{a.MatriculeSage} du {a.DatePointageIn:dd/MM/yyyy}"));
-            throw new DomainException(
-                $"Semaine validée pour : {detail}. Annulez la validation avant de modifier les heures.");
-        }
+        await EnsureValidableAsync(anomalies, ct);
 
         var corrRepo = _uow.Repository<HeureCorrigee>();
         foreach (var anomalie in anomalies)
-        {
-            await corrRepo.AddAsync(new HeureCorrigee
-            {
-                BddSage = anomalie.BddSage,
-                BddPointeuse = anomalie.BddPointeuse,
-                MatriculeSage = anomalie.MatriculeSage,
-                DatePointageIn = anomalie.DatePointageIn,
-                DatePointageOut = anomalie.DatePointageOut,
-                HEntree = anomalie.HEntree,
-                Hps = anomalie.Hps,
-                Hpe = anomalie.Hpe,
-                HSortie = anomalie.HSortie,
-                AbsenceAm = anomalie.AbsAm ?? false,
-                AbsencePm = anomalie.AbsPm ?? false,
-                Ferier = anomalie.Feries,
-                FerierAm = anomalie.FeriesAm ?? false,
-                FerierPm = anomalie.FeriesPm ?? false,
-                IntituleAbsence = anomalie.IntituleAbsence,
-                ValiderCorrection = true,
-                Origine = PunchProcessingConfiguration.OrigineManuel
-            }, ct);
-        }
+            await corrRepo.AddAsync(ToCorrection(anomalie), ct);
         _uow.Repository<HeureAnomalie>().RemoveRange(anomalies);
         await _history.ArchiveAnomaliesAsync(anomalies, ct);
         await _uow.SaveChangesAsync(ct);
@@ -203,6 +146,61 @@ public sealed class AnomalyService : IAnomalyService
         return new AnomalyValidationResultDto(anomalies.Count, anomalies.Count,
             $"{anomalies.Count} anomalie(s) convertie(s) en heure(s) corrigée(s).");
     }
+
+    /// <summary>
+    /// Une absence de la journée complète (matin et après-midi) se valide sans heures : c'est
+    /// l'arbitrage « le salarié était absent » (des heures saisies en plus seraient payées). Sinon,
+    /// entrée et sortie sont obligatoires, et aucune semaine validée ne doit être touchée.
+    /// </summary>
+    private async Task EnsureValidableAsync(List<HeureAnomalie> anomalies, CancellationToken ct)
+    {
+        RefuserSi(anomalies,
+            a => AbsenceJourneeComplete(a) && (a.HEntree.HasValue || a.HSortie.HasValue),
+            detail => $"Absence de la journée complète et heures saisies pour : {detail}. Retirez les heures ou l'absence avant de valider.");
+        RefuserSi(anomalies,
+            a => !AbsenceJourneeComplete(a) && (a.HEntree is null || a.HSortie is null),
+            detail => $"Heure d'entrée ou de sortie manquante pour : {detail}. Renseignez-les avant de valider.");
+
+        var semainesValidees = await _validatedWeekGuard.ChargerSemainesValideesAsync(_tenant.SageDb, ct);
+        RefuserSi(anomalies,
+            a => a.DatePointageIn.HasValue
+                 && semainesValidees.Contains((MatriculeIdentity.Cle(a.MatriculeSage), ValidatedWeeks.Lundi(a.DatePointageIn.Value))),
+            detail => $"Semaine validée pour : {detail}. Annulez la validation avant de modifier les heures.");
+    }
+
+    /// <summary>Refuse la validation si des anomalies remplissent la condition (cinq citées au plus).</summary>
+    private static void RefuserSi(
+        List<HeureAnomalie> anomalies, Func<HeureAnomalie, bool> condition, Func<string, string> message)
+    {
+        var concernees = anomalies.Where(condition).ToList();
+        if (concernees.Count == 0)
+            return;
+        var detail = string.Join(", ", concernees.Take(5)
+            .Select(a => $"{a.MatriculeSage} du {a.DatePointageIn?.ToString("dd/MM/yyyy") ?? "?"}"));
+        throw new DomainException(message(detail));
+    }
+
+    /// <summary>Heure corrigée manuelle et validée reprenant les valeurs arbitrées de l'anomalie.</summary>
+    private static HeureCorrigee ToCorrection(HeureAnomalie anomalie) => new()
+    {
+        BddSage = anomalie.BddSage,
+        BddPointeuse = anomalie.BddPointeuse,
+        MatriculeSage = anomalie.MatriculeSage,
+        DatePointageIn = anomalie.DatePointageIn,
+        DatePointageOut = anomalie.DatePointageOut,
+        HEntree = anomalie.HEntree,
+        Hps = anomalie.Hps,
+        Hpe = anomalie.Hpe,
+        HSortie = anomalie.HSortie,
+        AbsenceAm = anomalie.AbsAm ?? false,
+        AbsencePm = anomalie.AbsPm ?? false,
+        Ferier = anomalie.Feries,
+        FerierAm = anomalie.FeriesAm ?? false,
+        FerierPm = anomalie.FeriesPm ?? false,
+        IntituleAbsence = anomalie.IntituleAbsence,
+        ValiderCorrection = true,
+        Origine = PunchProcessingConfiguration.OrigineManuel
+    };
 
     public async Task DeleteAnomalyAsync(decimal id, CancellationToken ct = default)
     {
