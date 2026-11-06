@@ -2,8 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Services;
 
 namespace SoftTime.Api.Controllers;
 
@@ -14,8 +14,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("ClockParams")]
 public class ClockParamsController : ControllerBase
 {
-    private readonly CatalogService _svc;
-    public ClockParamsController(CatalogService svc) => _svc = svc;
+    private readonly ICatalogService _svc;
+    public ClockParamsController(ICatalogService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> Get(CancellationToken ct) => Ok(await _svc.GetClockAsync(ct));

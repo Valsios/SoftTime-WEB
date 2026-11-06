@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Mvc;
 using SoftTime.Api.Authorization;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Services;
 
 namespace SoftTime.Api.Controllers;
 
@@ -15,9 +14,9 @@ namespace SoftTime.Api.Controllers;
 [Tags("Users")]
 public class UsersController : ControllerBase
 {
-    private readonly AuthService _auth;
+    private readonly IAuthService _auth;
     private readonly ICurrentUser _user;
-    public UsersController(AuthService auth, ICurrentUser user)
+    public UsersController(IAuthService auth, ICurrentUser user)
     {
         _auth = auth;
         _user = user;

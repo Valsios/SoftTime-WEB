@@ -13,7 +13,7 @@ namespace SoftTime.Api.Controllers;
 /// <summary>
 /// Clôture de paie assistée, en LECTURE SEULE : aucune route d'écriture (POST, PUT, PATCH, DELETE
 /// répondent 405). Contrôles dans le même ordre que <see cref="PredictionsController"/> : la base
-/// active (TenantMiddleware puis <see cref="TenantConnectionService.EnsureAuthorizedAsync"/>), puis
+/// active (TenantMiddleware puis <see cref="ITenantConnectionService.EnsureAuthorizedAsync"/>), puis
 /// la lecture fine : administrateur, ou porte 6 ET permission <c>REPORTS:CLOSING</c> effectives.
 /// </summary>
 [ApiController]
@@ -25,19 +25,19 @@ public class ClosingController : ControllerBase
     public const string Permission = "REPORTS:CLOSING";
     public const string Desactivee = "La clôture de paie assistée est désactivée.";
 
-    private readonly ClosingService _closing;
-    private readonly ClosingPresentationService _presentation;
+    private readonly IClosingService _closing;
+    private readonly IClosingPresentationService _presentation;
     private readonly ClosingOptions _reglages;
     private readonly ICurrentUser _user;
-    private readonly EffectiveRightsService _rights;
+    private readonly IEffectiveRightsService _rights;
     private readonly ILogger<ClosingController> _logger;
 
     public ClosingController(
-        ClosingService closing,
-        ClosingPresentationService presentation,
+        IClosingService closing,
+        IClosingPresentationService presentation,
         IOptions<ClosingOptions> reglages,
         ICurrentUser user,
-        EffectiveRightsService rights,
+        IEffectiveRightsService rights,
         ILogger<ClosingController> logger)
     {
         _closing = closing;

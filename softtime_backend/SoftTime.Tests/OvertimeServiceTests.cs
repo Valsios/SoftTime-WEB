@@ -1,8 +1,8 @@
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
+using SoftTime.Infrastructure.Services;
 
 namespace SoftTime.Tests;
 

@@ -2,8 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Services;
 
 namespace SoftTime.Api.Controllers;
 
@@ -14,8 +14,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("Anomalies")]
 public class AnomaliesController : ControllerBase
 {
-    private readonly TimekeepingService _svc;
-    public AnomaliesController(TimekeepingService svc) => _svc = svc;
+    private readonly ITimekeepingService _svc;
+    public AnomaliesController(ITimekeepingService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery] PeriodRequest filter, CancellationToken ct)

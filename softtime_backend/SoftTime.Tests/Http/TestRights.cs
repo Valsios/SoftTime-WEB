@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 using SoftTime.Application.Security;
 using SoftTime.Domain.Repositories;
+using SoftTime.Infrastructure.Services;
 
 namespace SoftTime.Tests.Http;
 

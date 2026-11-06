@@ -2,8 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Services;
 using SoftTime.Infrastructure.Excel;
 
 namespace SoftTime.Api.Controllers;
@@ -15,8 +15,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("Shifts")]
 public class ShiftsController : ControllerBase
 {
-    private readonly PlanningService _svc;
-    public ShiftsController(PlanningService svc) => _svc = svc;
+    private readonly IPlanningService _svc;
+    public ShiftsController(IPlanningService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListShiftsAsync(ct));

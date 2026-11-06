@@ -2,8 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Services;
 
 namespace SoftTime.Api.Controllers;
 
@@ -14,8 +14,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("Overtime")]
 public class OvertimeController : ControllerBase
 {
-    private readonly OvertimeService _svc;
-    public OvertimeController(OvertimeService svc) => _svc = svc;
+    private readonly IOvertimeService _svc;
+    public OvertimeController(IOvertimeService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> List(

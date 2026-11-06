@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.DependencyInjection;
 
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Services;
@@ -15,6 +15,7 @@ using SoftTime.Infrastructure.Queries;
 using SoftTime.Infrastructure.Repositories;
 using SoftTime.Infrastructure.SchemaMigrations;
 using SoftTime.Infrastructure.Security;
+using SoftTime.Infrastructure.Services;
 
 namespace SoftTime.Infrastructure;
 
@@ -36,8 +37,41 @@ public static class DependencyInjection
         return services;
     }
 
+    /// <summary>Services applicatifs : contrats dans Application, implémentations ici (§4.4).</summary>
+    public static IServiceCollection AddInfrastructureServices(this IServiceCollection services)
+    {
+        services.AddScoped<ITenantConnectionService, TenantConnectionService>();
+        services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+        services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IEffectiveRightsService, EffectiveRightsService>();
+        services.AddScoped<IDatabaseConfigurationAuthorizer, DatabaseConfigurationAuthorizer>();
+        services.AddScoped<ICatalogService, CatalogService>();
+        services.AddScoped<IExternalSourceService, ExternalSourceService>();
+        services.AddScoped<ISageLeaveCalendar, SageLeaveCalendar>();
+        services.AddScoped<IPlanningService, PlanningService>();
+        services.AddScoped<ITimekeepingService, TimekeepingService>();
+        services.AddScoped<IPunchProcessingService, PunchProcessingService>();
+        services.AddScoped<IHistoryArchiveService, HistoryArchiveService>();
+        services.AddScoped<IOvertimeService, OvertimeService>();
+        services.AddScoped<IPayrollWriterResolver, PayrollWriterResolver>();
+        services.AddScoped<IReportService, ReportService>();
+        services.AddScoped<IDashboardService, DashboardService>();
+        services.AddScoped<IExtraService, ExtraService>();
+        services.AddScoped<IAuditService, AuditService>();
+        services.AddScoped<IJournalService, JournalService>();
+        services.AddScoped<IMlDatasetService, MlDatasetService>();
+        services.AddScoped<IMlTrainingService, MlTrainingService>();
+        services.AddScoped<IMlPredictionService, MlPredictionService>();
+        services.AddScoped<IMlPipelineService, MlPipelineService>();
+        services.AddSingleton<ClosingAnalysisCache>();
+        services.AddScoped<IClosingService, ClosingService>();
+        services.AddScoped<IClosingPresentationService, ClosingPresentationService>();
+        return services;
+    }
+
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
+        services.AddInfrastructureServices();
         // L'API remplace ces contextes par les valeurs extraites du JWT et du tenant.
         // Les valeurs neutres permettent aussi de construire l'infrastructure seule
         // (outils et tests) sans attribuer une identité applicative fictive.

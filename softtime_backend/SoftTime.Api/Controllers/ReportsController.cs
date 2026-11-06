@@ -2,8 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Services;
 
 namespace SoftTime.Api.Controllers;
 
@@ -14,8 +14,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("Reports")]
 public class ReportsController : ControllerBase
 {
-    private readonly ReportService _svc;
-    public ReportsController(ReportService svc) => _svc = svc;
+    private readonly IReportService _svc;
+    public ReportsController(IReportService svc) => _svc = svc;
 
     /// <summary>Types exposés par l'endpoint paginé générique (liste blanche).</summary>
     private static readonly HashSet<string> PagedReportTypes = new(StringComparer.OrdinalIgnoreCase)

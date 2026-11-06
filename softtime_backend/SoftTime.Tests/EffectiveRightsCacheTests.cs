@@ -1,7 +1,7 @@
-using AutoMapper;
-
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
+
+using AutoMapper;
 
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Mapping;
@@ -10,6 +10,7 @@ using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
+using SoftTime.Infrastructure.Services;
 using SoftTime.Tests.Http;
 
 namespace SoftTime.Tests;

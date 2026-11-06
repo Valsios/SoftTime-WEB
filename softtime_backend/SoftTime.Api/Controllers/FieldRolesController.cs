@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-using SoftTime.Application.Services;
+using SoftTime.Application.Abstractions;
 
 namespace SoftTime.Api.Controllers;
 
@@ -11,8 +11,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("FieldRoles")]
 public class FieldRolesController : ControllerBase
 {
-    private readonly CatalogService _svc;
-    public FieldRolesController(CatalogService svc) => _svc = svc;
+    private readonly ICatalogService _svc;
+    public FieldRolesController(ICatalogService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] string? systemType, CancellationToken ct)

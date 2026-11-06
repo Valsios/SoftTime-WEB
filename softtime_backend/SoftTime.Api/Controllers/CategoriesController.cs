@@ -2,8 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Services;
 
 namespace SoftTime.Api.Controllers;
 
@@ -14,8 +14,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("Categories")]
 public class CategoriesController : ControllerBase
 {
-    private readonly CatalogService _svc;
-    public CategoriesController(CatalogService svc) => _svc = svc;
+    private readonly ICatalogService _svc;
+    public CategoriesController(ICatalogService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListCategoriesAsync(ct));

@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using SoftTime.Api.Authorization;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Services;
+using SoftTime.Application.Security;
 
 namespace SoftTime.Api.Controllers;
 
@@ -15,9 +15,9 @@ namespace SoftTime.Api.Controllers;
 [Tags("Privileges")]
 public class PrivilegesController : ControllerBase
 {
-    private readonly AuthService _auth;
+    private readonly IAuthService _auth;
     private readonly ICurrentUser _user;
-    public PrivilegesController(AuthService auth, ICurrentUser user)
+    public PrivilegesController(IAuthService auth, ICurrentUser user)
     {
         _auth = auth;
         _user = user;
@@ -42,7 +42,7 @@ public class PrivilegesController : ControllerBase
     public async Task<IActionResult> GetUserPermissions(decimal userId, CancellationToken ct)
     {
         // GetUserDetailedPermissionsAsync sert aussi en interne (connexion, listes de bases) : le contrôle est donc ici.
-        await _auth.EnsureCanReadAsync(AuthService.ReadPrivileges, ct);
+        await _auth.EnsureCanReadAsync(ReadPermissions.Privileges, ct);
         return Ok(await _auth.GetUserDetailedPermissionsAsync(userId, ct));
     }
 

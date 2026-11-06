@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Services;
 
 namespace SoftTime.Api.Controllers;
 
@@ -16,9 +16,9 @@ namespace SoftTime.Api.Controllers;
 [Tags("Dashboard")]
 public class DashboardController : ControllerBase
 {
-    private readonly DashboardService _svc;
+    private readonly IDashboardService _svc;
 
-    public DashboardController(DashboardService svc) => _svc = svc;
+    public DashboardController(IDashboardService svc) => _svc = svc;
 
     [HttpGet("stats")]
     public async Task<IActionResult> Stats(

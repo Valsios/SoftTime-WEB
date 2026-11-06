@@ -2,8 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Services;
 
 namespace SoftTime.Api.Controllers;
 
@@ -14,8 +14,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("AbsenceCodes")]
 public class AbsenceCodesController : ControllerBase
 {
-    private readonly CatalogService _svc;
-    public AbsenceCodesController(CatalogService svc) => _svc = svc;
+    private readonly ICatalogService _svc;
+    public AbsenceCodesController(ICatalogService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListAbsenceCodesAsync(ct));

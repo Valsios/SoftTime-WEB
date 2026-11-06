@@ -1,5 +1,3 @@
-using SoftTime.Domain.Models;
-
 namespace SoftTime.Infrastructure.Integrations;
 
 /// <summary>Section « Email » de la configuration : serveur SMTP et expéditeur des e-mails aux utilisateurs.</summary>

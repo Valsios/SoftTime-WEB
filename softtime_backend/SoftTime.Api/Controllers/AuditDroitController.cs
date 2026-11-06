@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
-using SoftTime.Application.Services;
+using SoftTime.Application.Abstractions;
 
 namespace SoftTime.Api.Controllers;
 
@@ -13,8 +13,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("Privileges")]
 public class AuditDroitController : ControllerBase
 {
-    private readonly AuthService _auth;
-    public AuditDroitController(AuthService auth) => _auth = auth;
+    private readonly IAuthService _auth;
+    public AuditDroitController(IAuthService auth) => _auth = auth;
 
     [HttpGet]
     public async Task<IActionResult> Get(

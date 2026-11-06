@@ -61,9 +61,6 @@ public sealed class ClosingOptions
     /// <summary>Durée de réutilisation de l'analyse pour les changements de page (0 : aucun cache). Non lue en configuration.</summary>
     public int CacheSeconds { get; set; } = 60;
 
-    /// <summary>Cache mémoire de l'analyse : porté par l'instance unique des réglages (une par processus).</summary>
-    internal ClosingAnalysisCache Cache { get; } = new();
-
     /// <summary>Clés illisibles rencontrées à la lecture de la section (signalées par le validateur).</summary>
     internal List<string> ErreursLecture { get; } = new();
 

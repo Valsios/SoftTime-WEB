@@ -2,8 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Services;
 using SoftTime.Infrastructure.Excel;
 
 namespace SoftTime.Api.Controllers;
@@ -15,8 +15,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("CorrectedHours")]
 public class CorrectedHoursController : ControllerBase
 {
-    private readonly TimekeepingService _svc;
-    public CorrectedHoursController(TimekeepingService svc) => _svc = svc;
+    private readonly ITimekeepingService _svc;
+    public CorrectedHoursController(ITimekeepingService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery] PeriodRequest filter, CancellationToken ct)

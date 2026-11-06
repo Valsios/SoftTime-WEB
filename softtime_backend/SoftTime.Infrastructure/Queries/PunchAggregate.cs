@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Domain.Models;
 using SoftTime.Domain.Services;
 using SoftTime.Infrastructure.Persistence;
 

@@ -2,8 +2,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
+using SoftTime.Infrastructure.Services;
 
 namespace SoftTime.Tests;
 

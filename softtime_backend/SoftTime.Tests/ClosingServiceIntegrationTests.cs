@@ -6,15 +6,15 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
-using SoftTime.Application;
+using Xunit.Abstractions;
+
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Services;
+using SoftTime.Application;
 using SoftTime.Domain.Models;
 using SoftTime.Domain.Services;
+using SoftTime.Infrastructure.Services;
 using SoftTime.Infrastructure;
-
-using Xunit.Abstractions;
 
 namespace SoftTime.Tests;
 
@@ -78,7 +78,7 @@ public class ClosingServiceIntegrationTests
         Mesurer("QuasiDoublons", () => PayrollClosingRules.QuasiDoublons(d.Pointages, debut, fin));
         Mesurer("FeriesNonAppliques", () => PayrollClosingRules.FeriesNonAppliques(d.Cartes, d.Plannings, d.Corrections, d.Feries, debut, fin, d.DateDuJour));
         Mesurer("AbsenceReportRules.Calculer", () => AbsenceReportRules.Calculer(d.Plannings, d.Cartes, d.Corrections, d.Conges, d.Feries, debut, fin, d.DateDuJour));
-        Mesurer("chargement_conges_SAGE", () => scope.ServiceProvider.GetRequiredService<SageLeaveCalendar>().LoadAsync().GetAwaiter().GetResult());
+        Mesurer("chargement_conges_SAGE", () => scope.ServiceProvider.GetRequiredService<ISageLeaveCalendar>().LoadAsync().GetAwaiter().GetResult());
 
         var process = Process.GetCurrentProcess();
         process.Refresh();

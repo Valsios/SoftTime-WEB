@@ -2,8 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Services;
 
 namespace SoftTime.Api.Controllers;
 
@@ -14,8 +14,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("TravelExpenses")]
 public class TravelController : ControllerBase
 {
-    private readonly ExtraService _svc;
-    public TravelController(ExtraService svc) => _svc = svc;
+    private readonly IExtraService _svc;
+    public TravelController(IExtraService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] PeriodRequest request, CancellationToken ct)

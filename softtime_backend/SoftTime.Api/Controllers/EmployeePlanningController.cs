@@ -2,8 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Services;
 using SoftTime.Infrastructure.Excel;
 
 namespace SoftTime.Api.Controllers;
@@ -15,8 +15,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("EmployeePlanning")]
 public class EmployeePlanningController : ControllerBase
 {
-    private readonly PlanningService _svc;
-    public EmployeePlanningController(PlanningService svc) => _svc = svc;
+    private readonly IPlanningService _svc;
+    public EmployeePlanningController(IPlanningService svc) => _svc = svc;
 
     [HttpGet("employees")]
     public async Task<IActionResult> Employees(CancellationToken ct)

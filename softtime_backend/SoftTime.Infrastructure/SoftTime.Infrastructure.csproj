@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\SoftTime.Application\SoftTime.Application.csproj" />
@@ -17,9 +17,13 @@
     <PackageReference Include="Microsoft.ML.FastTree" Version="5.0.1" />
   </ItemGroup>
 
-  <!-- Scripts versionnés appliqués par SchemaMigrator (voir migrations/versions/README.md). -->
+  <!-- Scripts versionnÃ©s appliquÃ©s par SchemaMigrator (voir migrations/versions/README.md). -->
   <ItemGroup>
     <EmbeddedResource Include="..\migrations\versions\*.sql" LogicalName="SoftTime.Migrations.Versions.%(Filename)%(Extension)" Link="SchemaMigrations\Scripts\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SoftTime.Tests" />
   </ItemGroup>
 
 </Project>

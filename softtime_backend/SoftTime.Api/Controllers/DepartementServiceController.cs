@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
-using SoftTime.Application.Services;
+using SoftTime.Application.Abstractions;
 
 namespace SoftTime.Api.Controllers;
 
@@ -13,8 +13,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("DepartementService")]
 public class DepartementServiceController : ControllerBase
 {
-    private readonly CatalogService _svc;
-    public DepartementServiceController(CatalogService svc) => _svc = svc;
+    private readonly ICatalogService _svc;
+    public DepartementServiceController(ICatalogService svc) => _svc = svc;
 
     [HttpGet("lookup/{matricule}")]
     public async Task<IActionResult> Lookup(string matricule, CancellationToken ct)

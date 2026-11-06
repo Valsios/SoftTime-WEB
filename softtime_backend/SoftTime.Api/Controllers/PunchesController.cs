@@ -2,8 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Services;
 using SoftTime.Infrastructure.Excel;
 
 namespace SoftTime.Api.Controllers;
@@ -15,9 +15,9 @@ namespace SoftTime.Api.Controllers;
 [Tags("Punches")]
 public class PunchesController : ControllerBase
 {
-    private readonly TimekeepingService _svc;
-    private readonly PunchProcessingService _processing;
-    public PunchesController(TimekeepingService svc, PunchProcessingService processing)
+    private readonly ITimekeepingService _svc;
+    private readonly IPunchProcessingService _processing;
+    public PunchesController(ITimekeepingService svc, IPunchProcessingService processing)
     {
         _svc = svc;
         _processing = processing;

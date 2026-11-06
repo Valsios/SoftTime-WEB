@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 
 using SoftTime.Application.Abstractions;
-using SoftTime.Application.Services;
 using SoftTime.Domain.Services;
 
 namespace SoftTime.Tests.Http;
@@ -27,7 +26,7 @@ public class SystemExecutionTests : IClassFixture<ApiFactory>
         Assert.Equal(AdminRules.AdminRoleId, user.RoleId);
         Assert.Equal(SystemExecution.Login, user.Login);
 
-        await scope.ServiceProvider.GetRequiredService<TenantConnectionService>().EnsureAuthorizedAsync();
+        await scope.ServiceProvider.GetRequiredService<ITenantConnectionService>().EnsureAuthorizedAsync();
     }
 
     [Fact]
@@ -41,6 +40,6 @@ public class SystemExecutionTests : IClassFixture<ApiFactory>
         Assert.Null(user.RoleId);
 
         await Assert.ThrowsAsync<ForbiddenException>(
-            () => scope.ServiceProvider.GetRequiredService<TenantConnectionService>().EnsureAuthorizedAsync());
+            () => scope.ServiceProvider.GetRequiredService<ITenantConnectionService>().EnsureAuthorizedAsync());
     }
 }

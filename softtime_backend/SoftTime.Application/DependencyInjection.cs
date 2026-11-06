@@ -1,10 +1,9 @@
-using FluentValidation;
-
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
-using SoftTime.Application.Abstractions;
+using FluentValidation;
+
 using SoftTime.Application.Mapping;
 using SoftTime.Application.Security;
 using SoftTime.Application.Services;
@@ -19,33 +18,10 @@ public static class DependencyInjection
         services.AddAutoMapper(typeof(MappingProfile).Assembly);
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
         services.AddScoped<IPasswordHasher<T_RESPONSABLE>, PasswordHasher<T_RESPONSABLE>>();
-        services.AddScoped<TenantConnectionService>();
-        services.AddScoped<RefreshTokenService>();
-        services.AddScoped<AuthService>();
         services.AddSingleton<EffectiveRightsCache>();
-        services.AddScoped<EffectiveRightsService>();
-        services.AddScoped<DatabaseConfigurationAuthorizer>();
-        services.AddScoped<CatalogService>();
-        services.AddScoped<IExternalSourceService, ExternalSourceService>();
-        services.AddScoped<SageLeaveCalendar>();
-        services.AddScoped<PlanningService>();
-        services.AddScoped<TimekeepingService>();
-        services.AddScoped<PunchProcessingService>();
-        services.AddScoped<HistoryArchiveService>();
-        services.AddScoped<OvertimeService>();
-        services.AddScoped<PayrollWriterResolver>();
-        services.AddScoped<ReportService>();
-        services.AddScoped<DashboardService>();
-        services.AddScoped<ExtraService>();
-        services.AddScoped<AuditService>();
-        services.AddScoped<JournalService>();
 
         // Moteur prédictif : options liées à la section « Ml », services de la base analytique.
         services.AddOptions();
-        services.AddScoped<MlDatasetService>();
-        services.AddScoped<MlTrainingService>();
-        services.AddScoped<MlPredictionService>();
-        services.AddScoped<MlPipelineService>();
         services.AddSingleton<MlJobCoordinator>();
 
         // Clôture de paie assistée : réglages de la section « Closing » (valeurs par défaut en code),
@@ -53,8 +29,6 @@ public static class DependencyInjection
         services.AddOptions<ClosingOptions>().ValidateOnStart();
         services.AddSingleton<IConfigureOptions<ClosingOptions>, ClosingOptionsSetup>();
         services.AddSingleton<IValidateOptions<ClosingOptions>, ClosingOptionsValidator>();
-        services.AddScoped<ClosingService>();
-        services.AddScoped<ClosingPresentationService>();
         return services;
     }
 }

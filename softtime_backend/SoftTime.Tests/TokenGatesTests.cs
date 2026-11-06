@@ -1,16 +1,16 @@
 using System.IdentityModel.Tokens.Jwt;
 
-using AutoMapper;
-
 using Microsoft.AspNetCore.Identity;
+
+using AutoMapper;
 
 using SoftTime.Api.Security;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
-using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
+using SoftTime.Infrastructure.Services;
 using SoftTime.Tests.Http;
 
 namespace SoftTime.Tests;

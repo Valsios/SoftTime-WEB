@@ -20,18 +20,18 @@ namespace SoftTime.Api.Controllers;
 [Tags("Prévisions")]
 public class PredictionsController : ControllerBase
 {
-    private readonly MlPredictionService _predictions;
+    private readonly IMlPredictionService _predictions;
     private readonly MlJobCoordinator _jobs;
     private readonly ICurrentUser _user;
     private readonly ICompanyContext _company;
-    private readonly EffectiveRightsService _rights;
+    private readonly IEffectiveRightsService _rights;
 
     public PredictionsController(
-        MlPredictionService predictions,
+        IMlPredictionService predictions,
         MlJobCoordinator jobs,
         ICurrentUser user,
         ICompanyContext company,
-        EffectiveRightsService rights)
+        IEffectiveRightsService rights)
     {
         _predictions = predictions;
         _jobs = jobs;

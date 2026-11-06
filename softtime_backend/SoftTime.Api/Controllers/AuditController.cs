@@ -15,10 +15,10 @@ namespace SoftTime.Api.Controllers;
 [Tags("Audit")]
 public class AuditController : ControllerBase
 {
-    private readonly AuditService _svc;
+    private readonly IAuditService _svc;
     private readonly ICurrentUser _user;
 
-    public AuditController(AuditService svc, ICurrentUser user)
+    public AuditController(IAuditService svc, ICurrentUser user)
     {
         _svc = svc;
         _user = user;

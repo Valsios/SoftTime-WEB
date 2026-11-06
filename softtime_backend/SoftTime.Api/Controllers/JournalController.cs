@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Services;
 
 namespace SoftTime.Api.Controllers;
 
@@ -10,7 +10,7 @@ namespace SoftTime.Api.Controllers;
 /// Consultation du journal central des modifications (<c>suivi_JOURNAL</c>), en lecture seule : aucune route
 /// d'écriture, de modification ni de suppression. Le journal est dans la base de l'application : l'en-tête
 /// X-Sage-Database n'est pas requis et le filtre sur la base SAGE reste facultatif. Accès contrôlé par
-/// <see cref="JournalService"/> : administrateur, ou porte 5 ET permission TRACE:AUDIT effectives.
+/// <see cref="IJournalService"/> : administrateur, ou porte 5 ET permission TRACE:AUDIT effectives.
 /// </summary>
 [ApiController]
 [Authorize]
@@ -18,9 +18,9 @@ namespace SoftTime.Api.Controllers;
 [Tags("Audit")]
 public class JournalController : ControllerBase
 {
-    private readonly JournalService _journal;
+    private readonly IJournalService _journal;
 
-    public JournalController(JournalService journal) => _journal = journal;
+    public JournalController(IJournalService journal) => _journal = journal;
 
     /// <summary>Lignes du journal, les plus récentes d'abord (pagination SQL, 50 par défaut, 200 au plus).</summary>
     [HttpGet]

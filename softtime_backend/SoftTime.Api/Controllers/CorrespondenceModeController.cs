@@ -2,8 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Services;
 
 namespace SoftTime.Api.Controllers;
 
@@ -14,8 +14,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("CorrespondenceMode")]
 public class CorrespondenceModeController : ControllerBase
 {
-    private readonly CatalogService _svc;
-    public CorrespondenceModeController(CatalogService svc) => _svc = svc;
+    private readonly ICatalogService _svc;
+    public CorrespondenceModeController(ICatalogService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> Get(CancellationToken ct) => Ok(await _svc.GetCorrespondenceAsync(ct));

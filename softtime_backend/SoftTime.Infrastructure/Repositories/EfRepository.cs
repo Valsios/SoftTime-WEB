@@ -2,7 +2,6 @@ using System.Linq.Expressions;
 
 using Microsoft.EntityFrameworkCore;
 
-using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
 using SoftTime.Infrastructure.Persistence;

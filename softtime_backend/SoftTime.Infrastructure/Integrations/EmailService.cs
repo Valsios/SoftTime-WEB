@@ -1,12 +1,11 @@
-using System.Net;
 using System.Net.Mail;
+using System.Net;
 
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Services;
-using SoftTime.Domain.Models;
 
 namespace SoftTime.Infrastructure.Integrations;
 

@@ -1,6 +1,6 @@
 using System.Net;
-using System.Text;
 using System.Text.Json;
+using System.Text;
 
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -9,7 +9,7 @@ using SoftTime.Api.Middleware;
 using SoftTime.Api.Security;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Security;
-using SoftTime.Application.Services;
+using SoftTime.Infrastructure.Services;
 
 namespace SoftTime.Tests.Http;
 

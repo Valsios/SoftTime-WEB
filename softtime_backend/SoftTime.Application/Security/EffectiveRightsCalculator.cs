@@ -1,5 +1,5 @@
-using SoftTime.Domain;
 using SoftTime.Domain.Entities.SoftTime;
+using SoftTime.Domain;
 
 namespace SoftTime.Application.Security;
 

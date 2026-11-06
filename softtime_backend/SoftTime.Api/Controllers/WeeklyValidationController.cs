@@ -2,8 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Services;
 
 namespace SoftTime.Api.Controllers;
 
@@ -14,8 +14,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("WeeklyValidation")]
 public class WeeklyValidationController : ControllerBase
 {
-    private readonly OvertimeService _svc;
-    public WeeklyValidationController(OvertimeService svc) => _svc = svc;
+    private readonly IOvertimeService _svc;
+    public WeeklyValidationController(IOvertimeService svc) => _svc = svc;
 
     [HttpPost("preview")]
     public async Task<IActionResult> Preview([FromBody] PeriodRequest request, CancellationToken ct)

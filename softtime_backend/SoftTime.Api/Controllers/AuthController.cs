@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 
@@ -8,7 +8,6 @@ using SoftTime.Api.Security;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Security;
-using SoftTime.Application.Services;
 
 namespace SoftTime.Api.Controllers;
 
@@ -17,10 +16,10 @@ namespace SoftTime.Api.Controllers;
 [Tags("Auth")]
 public class AuthController : ControllerBase
 {
-    private readonly AuthService _auth;
+    private readonly IAuthService _auth;
     private readonly ICurrentUser _user;
     private readonly AccountSecurityOptions _security;
-    public AuthController(AuthService auth, ICurrentUser user, IOptions<AccountSecurityOptions> security)
+    public AuthController(IAuthService auth, ICurrentUser user, IOptions<AccountSecurityOptions> security)
     {
         _auth = auth;
         _user = user;

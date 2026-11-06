@@ -2,8 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Services;
 using SoftTime.Infrastructure.Excel;
 
 namespace SoftTime.Api.Controllers;
@@ -15,8 +15,8 @@ namespace SoftTime.Api.Controllers;
 [Tags("Affectations")]
 public class AffectationsController : ControllerBase
 {
-    private readonly CatalogService _svc;
-    public AffectationsController(CatalogService svc) => _svc = svc;
+    private readonly ICatalogService _svc;
+    public AffectationsController(ICatalogService svc) => _svc = svc;
 
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] int? categoryId, CancellationToken ct)

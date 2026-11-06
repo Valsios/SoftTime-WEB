@@ -8,6 +8,7 @@ using SoftTime.Application.Security;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
+using SoftTime.Infrastructure.Services;
 using SoftTime.Tests.Http;
 
 using static SoftTime.Application.Security.EffectiveRightsCalculator;
