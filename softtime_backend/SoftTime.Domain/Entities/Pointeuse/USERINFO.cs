@@ -10,7 +10,7 @@ public class USERINFO
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int USERID { get; set; }
 
-    public string BADGENUMBER { get; set; }
+    public string BADGENUMBER { get; set; } = string.Empty;
 
     public string? SSN { get; set; }
 

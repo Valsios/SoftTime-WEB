@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Security;
 using SoftTime.Domain.Entities.SoftTime;
@@ -33,14 +34,14 @@ public class TenantConnectionService
 
     private bool IsAdministrator => _user.RoleId == AdminRules.AdminRoleId;
 
-    public string SageDb => _company.SageDatabase ?? throw new InvalidOperationException("En-tête X-Sage-Database requis.");
+    public string SageDb => _company.SageDatabase ?? throw new DomainException("En-tête X-Sage-Database requis.");
 
     /// <summary>Nom de la base pointeuse de la requête ; refusé (403) si le compte ne peut pas l'utiliser.</summary>
     public string PointeuseDb
     {
         get
         {
-            var name = _company.PointeuseDatabase ?? throw new InvalidOperationException("Aucune base pointeuse configurée.");
+            var name = _company.PointeuseDatabase ?? throw new DomainException("Aucune base pointeuse configurée.");
             EnsurePointeuseUsable(name);
             return name;
         }
@@ -48,19 +49,19 @@ public class TenantConnectionService
 
     /// <summary>
     /// Utiliser une base SAGE : administrateur, ou porte 1 effective ET base cochée dans « Accès bases » ET lecture effective.
-    /// Refus : ForbiddenOperationException (403), jamais 401. Échec fermé si les droits ne peuvent pas être lus.
+    /// Refus : ForbiddenException (403), jamais 401. Échec fermé si les droits ne peuvent pas être lus.
     /// </summary>
     public async Task EnsureAuthorizedAsync(CancellationToken cancellationToken = default)
     {
         var sageName = SageDb;
         var sage = (await _uow.Repository<T_BDD_SAGE>().ListAsync(s => s.NOM_BD == sageName, cancellationToken)).FirstOrDefault()
-            ?? throw new InvalidOperationException("Base SAGE inconnue.");
+            ?? throw new DomainException("Base SAGE inconnue.");
 
         if (!IsAdministrator)
         {
             _effective = await LoadRightsOrDenyAsync(cancellationToken);
             if (!_effective.CanUseDatabase(DatabaseKind.Sage, sage.NOM_BD))
-                throw new ForbiddenOperationException(AccessDenied);
+                throw new ForbiddenException(AccessDenied);
         }
         await ResolvePointeuseAsync(cancellationToken);
     }
@@ -68,7 +69,7 @@ public class TenantConnectionService
     private async Task<EffectiveRights> LoadRightsOrDenyAsync(CancellationToken cancellationToken)
     {
         if (_user.UserId is not decimal uid)
-            throw new ForbiddenOperationException(AccessDenied);
+            throw new ForbiddenException(AccessDenied);
         try
         {
             return await _rights.GetAsync(uid, ct: cancellationToken);
@@ -76,7 +77,7 @@ public class TenantConnectionService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _rights.LogReadFailure(uid, ex);
-            throw new ForbiddenOperationException(AccessDenied);
+            throw new ForbiddenException(AccessDenied);
         }
     }
 
@@ -86,7 +87,7 @@ public class TenantConnectionService
     {
         if (IsAdministrator) return;
         if (_effective is null || !_effective.CanUseDatabase(DatabaseKind.Pointeuse, name))
-            throw new ForbiddenOperationException(AccessDenied);
+            throw new ForbiddenException(AccessDenied);
     }
 
     /// <summary>
@@ -108,7 +109,7 @@ public class TenantConnectionService
     {
         var name = SageDb;
         return (await _uow.Repository<T_BDD_SAGE>().ListAsync(s => s.NOM_BD == name, cancellationToken)).FirstOrDefault()
-            ?? throw new InvalidOperationException("Base SAGE inconnue.");
+            ?? throw new DomainException("Base SAGE inconnue.");
     }
 
     public async Task<T_BDD_POINTEUSE> GetPointeuseRowAsync(CancellationToken cancellationToken = default)
@@ -119,7 +120,7 @@ public class TenantConnectionService
             row = (await _uow.Repository<T_BDD_POINTEUSE>().ListAsync(p => p.NOM_BD == name, cancellationToken)).FirstOrDefault();
         row ??= (await _uow.Repository<T_BDD_POINTEUSE>().ListAsync(p => p.ACTIVE == true, cancellationToken)).FirstOrDefault();
         row ??= (await _uow.Repository<T_BDD_POINTEUSE>().ListAsync(_ => true, cancellationToken)).FirstOrDefault();
-        if (row is null) throw new InvalidOperationException("Aucune base pointeuse configurée.");
+        if (row is null) throw new DomainException("Aucune base pointeuse configurée.");
         EnsurePointeuseUsable(row.NOM_BD ?? string.Empty);
         return row;
     }

@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Logging;
+
 using SoftTime.Application.Abstractions;
 using SoftTime.Domain.Entities.Ml;
 using SoftTime.Domain.Entities.SoftTime;
-using SoftTime.Domain.Models;
 using SoftTime.Domain.Models.Ml;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
@@ -57,7 +57,7 @@ public sealed class MlDatasetService
         from = from.Date;
         to = to.Date;
         if (to < from)
-            throw new InvalidOperationException("La date de fin doit suivre la date de début.");
+            throw new DomainException("La date de fin doit suivre la date de début.");
 
         var ctx = await LoadContextAsync(from, to, ct);
         Prepare(ctx);

@@ -2,19 +2,21 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+
 using AutoMapper;
+
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Security;
+using SoftTime.Domain;
 using SoftTime.Domain.Entities.SoftTime;
-using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
-using SoftTime.Domain;
 
 namespace SoftTime.Application.Services;
 
@@ -113,7 +115,7 @@ public class AuthService
         "Compte temporairement verrouillé après plusieurs tentatives échouées. Réessayez dans {0} minute(s).";
 
     // Empreinte factice vérifiée quand le login est inconnu : même coût de calcul qu'un compte existant (pas d'énumération par la durée).
-    private static readonly ConcurrentDictionary<Type, string> s_dummyHashes = new();
+    private static readonly ConcurrentDictionary<Type, string> DummyHashes = new();
 
     public const string ReadDenied = "Vous n'avez pas la permission requise pour cette consultation.";
 
@@ -134,7 +136,7 @@ public class AuthService
     {
         if (AdminAccess.IsAdmin(_currentUser)) return;
         if (_currentUser.UserId is not decimal uid)
-            throw new ForbiddenOperationException(ReadDenied);
+            throw new ForbiddenException(ReadDenied);
         EffectiveRights rights;
         try
         {
@@ -143,10 +145,10 @@ public class AuthService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _effectiveRights.LogReadFailure(uid, ex);
-            throw new ForbiddenOperationException(ReadDenied);
+            throw new ForbiddenException(ReadDenied);
         }
         if (!rights.HasGate(Rights.Parameters) || !anyOf.Any(rights.Has))
-            throw new ForbiddenOperationException(ReadDenied);
+            throw new ForbiddenException(ReadDenied);
     }
 
     /// <summary>Opérations sur les autres comptes : réservées aux administrateurs (rôle 1) (rôle 1 uniquement).</summary>
@@ -185,14 +187,14 @@ public class AuthService
         var password = request.Password ?? string.Empty;
 
         if (string.IsNullOrWhiteSpace(login) || string.IsNullOrEmpty(password))
-            throw new UnauthorizedAccessException(InvalidCredentialsMessage);
+            throw new UnauthorizedException(InvalidCredentialsMessage);
 
         var user = await FindByLoginAsync(login, cancellationToken);
         if (user is null)
         {
             _passwordHasher.VerifyHashedPassword(new T_RESPONSABLE(), DummyHash(), password);
             _logger.LogWarning("Connexion refusée : login inconnu ou ambigu « {Login} ».", LogSafe(login));
-            throw new UnauthorizedAccessException(InvalidCredentialsMessage);
+            throw new UnauthorizedException(InvalidCredentialsMessage);
         }
         if (IsLocked(user))
             _logger.LogWarning("Connexion refusée : compte {UserId} verrouillé jusqu'à {LockedUntil:o}.", user.IDRESPONSABLE, user.VERROUILLE_JUSQUA);
@@ -203,7 +205,7 @@ public class AuthService
         {
             _logger.LogWarning("Connexion refusée : mot de passe incorrect pour le compte {UserId}.", user.IDRESPONSABLE);
             await RegisterFailedLoginAsync(user, cancellationToken);
-            throw new UnauthorizedAccessException(InvalidCredentialsMessage);
+            throw new UnauthorizedException(InvalidCredentialsMessage);
         }
 
         if (needsUpgrade)
@@ -229,7 +231,7 @@ public class AuthService
         var rotation = await _refreshTokens.RotateAsync(refreshToken, cancellationToken);
         var user = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(rotation.UserId, cancellationToken);
         if (user is null || IsLocked(user))
-            throw new UnauthorizedAccessException(RefreshTokenService.InvalidTokenMessage);
+            throw new UnauthorizedException(RefreshTokenService.InvalidTokenMessage);
         await _uow.SaveChangesAsync(cancellationToken);
         return await BuildSessionAsync(user, rotation.RefreshToken, cancellationToken);
     }
@@ -296,7 +298,7 @@ public class AuthService
         if (!IsLocked(user))
             return;
         var minutes = Math.Max(1, (int)Math.Ceiling((user.VERROUILLE_JUSQUA!.Value - DateTime.UtcNow).TotalMinutes));
-        throw new ForbiddenOperationException(string.Format(CultureInfo.InvariantCulture, LockedAccountMessage, minutes));
+        throw new ForbiddenException(string.Format(CultureInfo.InvariantCulture, LockedAccountMessage, minutes));
     }
 
     /// <summary>Compte un échec ; au seuil, verrouille le compte et remet le compteur à zéro pour la période suivante.</summary>
@@ -325,7 +327,7 @@ public class AuthService
     }
 
     private string DummyHash()
-        => s_dummyHashes.GetOrAdd(_passwordHasher.GetType(), _ => _passwordHasher.HashPassword(new T_RESPONSABLE(), Guid.NewGuid().ToString("N")));
+        => DummyHashes.GetOrAdd(_passwordHasher.GetType(), _ => _passwordHasher.HashPassword(new T_RESPONSABLE(), Guid.NewGuid().ToString("N")));
 
     /// <summary>
     /// Portes du claim « rights » : celles des droits effectifs du compte (rôle + ajouts − retraits), lues à la connexion.
@@ -351,7 +353,7 @@ public class AuthService
     public async Task<LoginResponse> GetMeAsync(decimal userId, CancellationToken cancellationToken = default)
     {
         var user = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(userId, cancellationToken)
-            ?? throw new KeyNotFoundException("Utilisateur introuvable.");
+            ?? throw new NotFoundException("Utilisateur introuvable.");
         var (rights, effective) = await TokenGatesAsync(user, cancellationToken);
         var detailed = await GetUserDetailedPermissionsAsync(user.IDRESPONSABLE, cancellationToken);
         var authorizedSages = await UsableSageDatabasesAsync(user, effective, cancellationToken);
@@ -361,7 +363,7 @@ public class AuthService
     public async Task<UserDto> GetUserAsync(decimal id, CancellationToken cancellationToken = default)
     {
         await EnsureCanReadAsync(ReadUsers, cancellationToken);
-        var u = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(id, cancellationToken) ?? throw new KeyNotFoundException();
+        var u = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(id, cancellationToken) ?? throw new NotFoundException();
         return new UserDto(u.IDRESPONSABLE, u.IDROLE, u.NOMRESPONSABLE ?? string.Empty, u.LOGIN ?? string.Empty, u.MATRICULE, null) { Email = u.EMAIL };
     }
 
@@ -439,16 +441,16 @@ public class AuthService
     public async Task<AdminSetupResultDto> CreateAdminAsync(AdminSetupDto dto, CancellationToken cancellationToken = default)
     {
         if (!await IsFirstRunAsync(cancellationToken))
-            throw new InvalidOperationException(
+            throw new DomainException(
                 "Des comptes existent déjà : la création initiale n'est plus possible. Utilisez l'écran Utilisateurs.");
         var login = (dto.Login ?? string.Empty).Trim();
         var motDePasse = dto.Password ?? string.Empty;
         if (string.IsNullOrWhiteSpace(dto.Nom))
-            throw new InvalidOperationException("Le nom est requis.");
+            throw new DomainException("Le nom est requis.");
         if (string.IsNullOrWhiteSpace(login))
-            throw new InvalidOperationException("L'identifiant est requis.");
+            throw new DomainException("L'identifiant est requis.");
         if (string.IsNullOrWhiteSpace(motDePasse))
-            throw new InvalidOperationException("Le mot de passe est requis.");
+            throw new DomainException("Le mot de passe est requis.");
         PasswordPolicy.EnsureValid(motDePasse);
         var passwordHash = _passwordHasher.HashPassword(null!, motDePasse);
 
@@ -457,12 +459,12 @@ public class AuthService
         var entity = await _uow.RunExclusiveAsync(CreateAdminLockResource, async ct =>
         {
             if (!await IsFirstRunAsync(ct))
-                throw new InvalidOperationException(
+                throw new DomainException(
                     "Des comptes existent déjà : la création initiale n'est plus possible. Utilisez l'écran Utilisateurs.");
 
             // Le premier compte reçoit toujours le rôle d'identifiant 1 : seul ce rôle est administrateur.
             var role = await _uow.Repository<T_ROLE>().GetByIdAsync(AdminRules.AdminRoleId, ct)
-                ?? throw new InvalidOperationException(
+                ?? throw new DomainException(
                     "Le rôle Administrateur (identifiant 1) est introuvable : exécutez le script de création de la base.");
 
             var created = new T_RESPONSABLE
@@ -508,11 +510,11 @@ public class AuthService
         var repo = _uow.Repository<T_RESPONSABLE>();
         var caller = await repo.GetByIdAsync(currentUserId, cancellationToken);
         if (caller == null)
-            throw new InvalidOperationException("Utilisateur appelant introuvable.");
+            throw new DomainException("Utilisateur appelant introuvable.");
 
         var callerRole = await _uow.Repository<T_ROLE>().GetByIdAsync(caller.IDROLE, cancellationToken);
         if (callerRole == null)
-            throw new InvalidOperationException("Utilisateur appelant introuvable.");
+            throw new DomainException("Utilisateur appelant introuvable.");
 
         var callerIsSuperAdmin = AdminRules.IsSuperAdmin(caller.IDROLE);
 
@@ -523,34 +525,34 @@ public class AuthService
             if (dto.RoleId == AdminRules.AdminRoleId)
             {
                 if (!callerIsSuperAdmin)
-                    throw new InvalidOperationException("Seul un super-administrateur peut attribuer le rôle Administrateur.");
+                    throw new DomainException("Seul un super-administrateur peut attribuer le rôle Administrateur.");
             }
         }
         else
         {
-            entity = await repo.GetByIdAsync(dto.Id, cancellationToken) ?? throw new KeyNotFoundException();
+            entity = await repo.GetByIdAsync(dto.Id, cancellationToken) ?? throw new NotFoundException();
 
             if (dto.Id == currentUserId && entity.IDROLE != dto.RoleId)
-                throw new InvalidOperationException("Vous ne pouvez pas modifier votre propre rôle.");
+                throw new DomainException("Vous ne pouvez pas modifier votre propre rôle.");
 
 
             if (entity.IDROLE == AdminRules.AdminRoleId)
             {
                 if (!callerIsSuperAdmin)
-                    throw new InvalidOperationException("Seul un super-administrateur peut modifier un compte administrateur.");
+                    throw new DomainException("Seul un super-administrateur peut modifier un compte administrateur.");
             }
 
             if (dto.RoleId == AdminRules.AdminRoleId)
             {
                 if (!callerIsSuperAdmin)
-                    throw new InvalidOperationException("Seul un super-administrateur peut attribuer le rôle Administrateur.");
+                    throw new DomainException("Seul un super-administrateur peut attribuer le rôle Administrateur.");
             }
 
             if (entity.IDROLE == AdminRules.AdminRoleId && dto.RoleId != AdminRules.AdminRoleId)
             {
                 var otherAdmins = await repo.ListAsync(u => u.IDROLE == AdminRules.AdminRoleId && u.IDRESPONSABLE != entity.IDRESPONSABLE, cancellationToken);
                 if (otherAdmins.Count == 0)
-                    throw new InvalidOperationException("Impossible de rétrograder le dernier administrateur.");
+                    throw new DomainException("Impossible de rétrograder le dernier administrateur.");
             }
 
             if (entity.IDROLE != dto.RoleId)
@@ -591,7 +593,7 @@ public class AuthService
     public async Task<RoleChangePreviewDto> PreviewRoleChangeAsync(decimal userId, decimal newRoleId, CancellationToken cancellationToken = default)
     {
         RequireAdministrator();
-        var user = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(userId, cancellationToken) ?? throw new KeyNotFoundException();
+        var user = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(userId, cancellationToken) ?? throw new NotFoundException();
         var login = user.LOGIN ?? string.Empty;
         if (user.IDROLE == newRoleId)
             return new RoleChangePreviewDto(Array.Empty<string>(), 0, login);
@@ -606,12 +608,12 @@ public class AuthService
         T_RESPONSABLE? entity = null;
         if (dto.Id != 0)
         {
-            entity = await repo.GetByIdAsync(dto.Id, cancellationToken) ?? throw new KeyNotFoundException();
+            entity = await repo.GetByIdAsync(dto.Id, cancellationToken) ?? throw new NotFoundException();
             if (entity.IDROLE == AdminRules.AdminRoleId && dto.RoleId != AdminRules.AdminRoleId)
             {
                 var otherAdmins = await repo.ListAsync(u => u.IDROLE == AdminRules.AdminRoleId && u.IDRESPONSABLE != entity.IDRESPONSABLE, cancellationToken);
                 if (otherAdmins.Count == 0)
-                    throw new InvalidOperationException("Impossible de rétrograder le dernier administrateur.");
+                    throw new DomainException("Impossible de rétrograder le dernier administrateur.");
             }
         }
         return await ExecuteSaveUserInternalAsync(entity, dto, cancellationToken);
@@ -643,7 +645,7 @@ public class AuthService
         }
         else
         {
-            entity ??= await repo.GetByIdAsync(dto.Id, cancellationToken) ?? throw new KeyNotFoundException();
+            entity ??= await repo.GetByIdAsync(dto.Id, cancellationToken) ?? throw new NotFoundException();
             loginModifie = !string.Equals((entity.LOGIN ?? string.Empty).Trim(), login, StringComparison.Ordinal);
             // Ne pas bloquer la modification d'un compte historique dont le login serait déjà dupliqué :
             // l'unicité n'est vérifiée que lorsqu'un nouveau login est choisi.
@@ -711,30 +713,30 @@ public class AuthService
         var repo = _uow.Repository<T_RESPONSABLE>();
         var caller = await repo.GetByIdAsync(currentUserId, cancellationToken);
         if (caller == null)
-            throw new InvalidOperationException("Utilisateur appelant introuvable.");
+            throw new DomainException("Utilisateur appelant introuvable.");
 
         var callerRole = await _uow.Repository<T_ROLE>().GetByIdAsync(caller.IDROLE, cancellationToken);
         if (callerRole == null)
-            throw new InvalidOperationException("Utilisateur appelant introuvable.");
+            throw new DomainException("Utilisateur appelant introuvable.");
 
         var callerIsSuperAdmin = AdminRules.IsSuperAdmin(caller.IDROLE);
 
         if (currentUserId == id)
-            throw new InvalidOperationException("Vous ne pouvez pas supprimer votre propre compte.");
+            throw new DomainException("Vous ne pouvez pas supprimer votre propre compte.");
 
-        var entity = await repo.GetByIdAsync(id, cancellationToken) ?? throw new KeyNotFoundException();
+        var entity = await repo.GetByIdAsync(id, cancellationToken) ?? throw new NotFoundException();
 
         if (entity.IDROLE == AdminRules.AdminRoleId)
         {
             if (!callerIsSuperAdmin)
-                throw new InvalidOperationException("Seul un super-administrateur peut supprimer un compte administrateur.");
+                throw new DomainException("Seul un super-administrateur peut supprimer un compte administrateur.");
         }
 
         if (entity.IDROLE == AdminRules.AdminRoleId)
         {
             var otherAdmins = await repo.ListAsync(u => u.IDROLE == AdminRules.AdminRoleId && u.IDRESPONSABLE != entity.IDRESPONSABLE, cancellationToken);
             if (otherAdmins.Count == 0)
-                throw new InvalidOperationException("Impossible de supprimer le dernier administrateur.");
+                throw new DomainException("Impossible de supprimer le dernier administrateur.");
         }
 
         await RemoveAccountRightsAsync(entity.IDRESPONSABLE, cancellationToken);
@@ -797,12 +799,12 @@ public class AuthService
     internal async Task DeleteUserAsync(decimal id, CancellationToken cancellationToken = default)
     {
         var repo = _uow.Repository<T_RESPONSABLE>();
-        var entity = await repo.GetByIdAsync(id, cancellationToken) ?? throw new KeyNotFoundException();
+        var entity = await repo.GetByIdAsync(id, cancellationToken) ?? throw new NotFoundException();
         if (entity.IDROLE == AdminRules.AdminRoleId)
         {
             var otherAdmins = await repo.ListAsync(u => u.IDROLE == AdminRules.AdminRoleId && u.IDRESPONSABLE != entity.IDRESPONSABLE, cancellationToken);
             if (otherAdmins.Count == 0)
-                throw new InvalidOperationException("Impossible de supprimer le dernier administrateur.");
+                throw new DomainException("Impossible de supprimer le dernier administrateur.");
         }
         await RemoveAccountRightsAsync(entity.IDRESPONSABLE, cancellationToken);
         repo.Remove(entity);
@@ -836,7 +838,7 @@ public class AuthService
     public async Task<RoleDto> SaveRoleAsync(RoleDto dto, CancellationToken cancellationToken = default)
     {
         if (dto.Id == AdminRules.AdminRoleId)
-            throw new InvalidOperationException("Le rôle Administrateur ne peut pas être modifié ni renommé.");
+            throw new DomainException("Le rôle Administrateur ne peut pas être modifié ni renommé.");
         var repo = _uow.Repository<T_ROLE>();
         T_ROLE entity;
         if (dto.Id == 0)
@@ -846,7 +848,7 @@ public class AuthService
         }
         else
         {
-            entity = await repo.GetByIdAsync(dto.Id, cancellationToken) ?? throw new KeyNotFoundException();
+            entity = await repo.GetByIdAsync(dto.Id, cancellationToken) ?? throw new NotFoundException();
             entity.NOMROLE = dto.Nom;
             repo.Update(entity);
         }
@@ -858,9 +860,9 @@ public class AuthService
     public async Task DeleteRoleAsync(decimal id, CancellationToken cancellationToken = default)
     {
         if (id == AdminRules.AdminRoleId)
-            throw new InvalidOperationException("Le rôle Administrateur ne peut pas être supprimé.");
+            throw new DomainException("Le rôle Administrateur ne peut pas être supprimé.");
         var repo = _uow.Repository<T_ROLE>();
-        var entity = await repo.GetByIdAsync(id, cancellationToken) ?? throw new KeyNotFoundException();
+        var entity = await repo.GetByIdAsync(id, cancellationToken) ?? throw new NotFoundException();
 
         // C5 — Nettoyage à la suppression d'un rôle
         var rpRepo = _uow.Repository<T_ROLE_PERMISSION>();
@@ -894,11 +896,11 @@ public class AuthService
     public async Task SetPrivilegesAsync(decimal roleId, IReadOnlyCollection<decimal> droitIds, CancellationToken cancellationToken = default)
     {
         if (roleId == AdminRules.AdminRoleId)
-            throw new InvalidOperationException("Les privilèges du rôle Administrateur ne sont pas modifiables.");
+            throw new DomainException("Les privilèges du rôle Administrateur ne sont pas modifiables.");
         // Les portes d'un rôle ayant des droits détaillés se déduisent de ces droits (SaveRoleDetailedPermissionsAsync) : écrire
         // T_DROIT_ROLE à la main n'aurait aucun effet sur le jeton et le contredirait.
         if ((await _uow.Repository<T_ROLE_PERMISSION>().ListAsync(p => p.IDROLE == roleId, cancellationToken)).Count > 0)
-            throw new InvalidOperationException("Ce rôle a des droits détaillés : modifiez-les depuis la page Privilèges, les portes en sont déduites.");
+            throw new DomainException("Ce rôle a des droits détaillés : modifiez-les depuis la page Privilèges, les portes en sont déduites.");
         var repo = _uow.Repository<T_DROIT_ROLE>();
         var existing = await repo.ListAsync(p => p.IDROLE == roleId, cancellationToken);
         repo.RemoveRange(existing);
@@ -931,7 +933,7 @@ public class AuthService
     public async Task<UserDetailedPermissionsDto> GetUserDetailedPermissionsAsync(decimal userId, CancellationToken cancellationToken = default)
     {
         var user = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(userId, cancellationToken)
-            ?? throw new KeyNotFoundException("Utilisateur introuvable.");
+            ?? throw new NotFoundException("Utilisateur introuvable.");
 
         var customList = await _uow.Repository<T_USER_PERMISSION>().ListAsync(
             p => p.IDRESPONSABLE == userId && p.IS_GRANTED, cancellationToken);
@@ -999,16 +1001,16 @@ public class AuthService
     {
         RequireAdministrator();
         var caller = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(currentUserId, cancellationToken)
-            ?? throw new UnauthorizedAccessException("Utilisateur connecté introuvable.");
+            ?? throw new UnauthorizedException("Utilisateur connecté introuvable.");
 
         var target = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(targetUserId, cancellationToken)
-            ?? throw new KeyNotFoundException("Utilisateur cible introuvable.");
+            ?? throw new NotFoundException("Utilisateur cible introuvable.");
 
         var callerIsAdmin = AdminRules.IsSuperAdmin(caller.IDROLE);
 
         if (currentUserId == targetUserId && !callerIsAdmin)
         {
-            throw new InvalidOperationException("Un utilisateur ne peut pas modifier ses propres privilèges sans droit d'administration.");
+            throw new DomainException("Un utilisateur ne peut pas modifier ses propres privilèges sans droit d'administration.");
         }
 
         var targetIsAdmin = target.IDROLE == 1;
@@ -1113,22 +1115,22 @@ public class AuthService
     public async Task SaveRoleDetailedPermissionsAsync(decimal currentUserId, decimal targetRoleId, IReadOnlyCollection<string> permissions, CancellationToken cancellationToken = default)
     {
         if (permissions == null)
-            throw new InvalidOperationException("La liste des permissions ne peut pas être nulle.");
+            throw new DomainException("La liste des permissions ne peut pas être nulle.");
 
         var caller = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(currentUserId, cancellationToken)
-            ?? throw new InvalidOperationException("Utilisateur appelant introuvable.");
+            ?? throw new DomainException("Utilisateur appelant introuvable.");
 
         var callerRole = await _uow.Repository<T_ROLE>().GetByIdAsync(caller.IDROLE, cancellationToken)
-            ?? throw new InvalidOperationException("Utilisateur appelant introuvable.");
+            ?? throw new DomainException("Utilisateur appelant introuvable.");
 
         if (!AdminRules.IsSuperAdmin(caller.IDROLE))
-            throw new InvalidOperationException("Seul un administrateur peut modifier les permissions d'un rôle.");
+            throw new DomainException("Seul un administrateur peut modifier les permissions d'un rôle.");
 
         if (targetRoleId == AdminRules.AdminRoleId)
-            throw new InvalidOperationException("Les privilèges du rôle Administrateur ne sont pas modifiables.");
+            throw new DomainException("Les privilèges du rôle Administrateur ne sont pas modifiables.");
 
         var targetRole = await _uow.Repository<T_ROLE>().GetByIdAsync(targetRoleId, cancellationToken)
-            ?? throw new KeyNotFoundException("Rôle cible introuvable.");
+            ?? throw new NotFoundException("Rôle cible introuvable.");
 
         var normalizedPermissions = permissions
             .Where(p => !string.IsNullOrWhiteSpace(p))
@@ -1148,13 +1150,13 @@ public class AuthService
             .Where(p => p.Length > 128)
             .ToList();
         if (tooLongCodes.Count > 0)
-            throw new InvalidOperationException($"Code de permission trop long (128 caractères maximum) : {string.Join(", ", tooLongCodes)}.");
+            throw new DomainException($"Code de permission trop long (128 caractères maximum) : {string.Join(", ", tooLongCodes)}.");
 
         var invalidCodes = normalizedPermissions
             .Where(p => !IsKnownPermissionCode(p))
             .ToList();
         if (invalidCodes.Count > 0)
-            throw new InvalidOperationException($"Codes de permission inconnus : {string.Join(", ", invalidCodes)}.");
+            throw new DomainException($"Codes de permission inconnus : {string.Join(", ", invalidCodes)}.");
 
         var rpRepo = _uow.Repository<T_ROLE_PERMISSION>();
         var existing = await rpRepo.ListAsync(p => p.IDROLE == targetRoleId, cancellationToken);
@@ -1210,16 +1212,16 @@ public class AuthService
     {
         RequireAdministrator();
         var caller = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(currentUserId, cancellationToken)
-            ?? throw new UnauthorizedAccessException("Utilisateur connecté introuvable.");
+            ?? throw new UnauthorizedException("Utilisateur connecté introuvable.");
 
         var target = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(targetUserId, cancellationToken)
-            ?? throw new KeyNotFoundException("Utilisateur cible introuvable.");
+            ?? throw new NotFoundException("Utilisateur cible introuvable.");
 
         var callerIsAdmin = AdminRules.IsSuperAdmin(caller.IDROLE);
 
         if (currentUserId == targetUserId && !callerIsAdmin)
         {
-            throw new InvalidOperationException("Un utilisateur ne peut pas modifier ses propres privilèges sans droit d'administration.");
+            throw new DomainException("Un utilisateur ne peut pas modifier ses propres privilèges sans droit d'administration.");
         }
 
         var repo = _uow.Repository<T_USER_PERMISSION>();

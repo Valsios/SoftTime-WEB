@@ -3,17 +3,18 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
 using SoftTime.Infrastructure.Integrations;
-using SoftTime.Infrastructure.Security;
 using SoftTime.Infrastructure.MachineLearning;
 using SoftTime.Infrastructure.Persistence;
 using SoftTime.Infrastructure.Queries;
 using SoftTime.Infrastructure.Repositories;
 using SoftTime.Infrastructure.SchemaMigrations;
+using SoftTime.Infrastructure.Security;
 
 namespace SoftTime.Infrastructure;
 

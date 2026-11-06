@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+
 using SoftTime.Application.Abstractions;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;

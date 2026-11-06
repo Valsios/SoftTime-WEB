@@ -1,4 +1,5 @@
 using System.Globalization;
+
 using SoftTime.Application.Abstractions;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
@@ -61,7 +62,7 @@ public sealed class ExternalSourceService : IExternalSourceService
             ? await _uow.Repository<T_SOURCE_ENTITY_MAPPING>().ListAsync(m => m.SageDbId == connectionId && m.EntityKind == entityKind, ct)
             : await _uow.Repository<T_SOURCE_ENTITY_MAPPING>().ListAsync(m => m.PointeuseDbId == connectionId && m.EntityKind == entityKind, ct);
         var entity = entities.FirstOrDefault()
-            ?? throw new InvalidOperationException($"Aucun mapping '{entityKind}' configuré pour cette base.");
+            ?? throw new DomainException($"Aucun mapping '{entityKind}' configuré pour cette base.");
         var fields = await _uow.Repository<T_SOURCE_FIELD_MAPPING>().ListAsync(f => f.EntityMappingId == entity.Id, ct);
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var f in fields)
@@ -260,7 +261,7 @@ public sealed class ExternalSourceService : IExternalSourceService
         }
         var (table, map) = await LoadRoleMapAsync(false, row.ID, "PUNCH", ct);
         if (string.IsNullOrWhiteSpace(table))
-            throw new InvalidOperationException("Table source non définie pour l'entité 'PUNCH'.");
+            throw new DomainException("Table source non définie pour l'entité 'PUNCH'.");
         var dateColumn = map.TryGetValue("PTE_PUNCH_DATETIME", out var dc) ? dc : null;
         var query = dateColumn is null
             ? null

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+
 using SoftTime.Application.Services;
 
 namespace SoftTime.Api.Controllers;

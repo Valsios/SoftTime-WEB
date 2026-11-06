@@ -24,7 +24,7 @@ public static class SchemaPresenceGuard
         }
         catch (Exception ex) when (ex.Message.Contains(Marker, StringComparison.Ordinal))
         {
-            throw new InvalidOperationException(MissingSchemaMessage);
+            throw new DomainException(MissingSchemaMessage);
         }
     }
 
@@ -43,7 +43,7 @@ public static class SchemaPresenceGuard
         }
         catch (Exception ex) when (ex.Message.Contains(Marker, StringComparison.Ordinal))
         {
-            throw new InvalidOperationException(MissingAuditJournalMessage);
+            throw new DomainException(MissingAuditJournalMessage);
         }
     }
 
@@ -63,7 +63,7 @@ public static class SchemaPresenceGuard
         }
         catch (Exception ex) when (ex.Message.Contains(Marker, StringComparison.Ordinal))
         {
-            throw new InvalidOperationException(MissingAccountSecurityMessage);
+            throw new DomainException(MissingAccountSecurityMessage);
         }
     }
 

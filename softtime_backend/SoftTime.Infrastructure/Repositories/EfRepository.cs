@@ -1,11 +1,8 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Linq.Expressions;
-using System.Threading;
-using System.Threading.Tasks;
+
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+
 using SoftTime.Application.Security;
 using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
@@ -213,7 +210,7 @@ public class UnitOfWork : IUnitOfWork
             cancellationToken);
         // 0 ou 1 : verrou obtenu ; valeur négative : délai dépassé, annulation ou interblocage.
         if (status.Value is not int code || code < 0)
-            throw new InvalidOperationException("Une opération identique est déjà en cours. Réessayez dans quelques secondes.");
+            throw new DomainException("Une opération identique est déjà en cours. Réessayez dans quelques secondes.");
     }
 
     private static bool IsLoginUniqueViolation(DbUpdateException ex)

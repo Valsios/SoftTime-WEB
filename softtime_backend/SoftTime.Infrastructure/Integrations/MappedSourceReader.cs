@@ -1,6 +1,8 @@
 using System.Text;
 using System.Text.RegularExpressions;
+
 using Microsoft.Data.SqlClient;
+
 using SoftTime.Application.Abstractions;
 
 namespace SoftTime.Infrastructure.Integrations;
@@ -17,9 +19,9 @@ public sealed class MappedSourceReader : IMappedSourceReader
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(sourceTable) || !SafeIdentifier.IsMatch(sourceTable))
-            throw new InvalidOperationException($"Nom de table source invalide : {sourceTable}");
+            throw new DomainException($"Nom de table source invalide : {sourceTable}");
         if (roleToColumn is null || roleToColumn.Count == 0)
-            throw new InvalidOperationException("Aucun mapping de colonne fourni.");
+            throw new DomainException("Aucun mapping de colonne fourni.");
 
         var select = new StringBuilder("SELECT ");
         if (query?.Top is int top and > 0)
@@ -30,13 +32,13 @@ public sealed class MappedSourceReader : IMappedSourceReader
         {
             if (string.IsNullOrWhiteSpace(kv.Value)) continue;
             if (!SafeIdentifier.IsMatch(kv.Value))
-                throw new InvalidOperationException($"Nom de colonne source invalide : {kv.Value}");
+                throw new DomainException($"Nom de colonne source invalide : {kv.Value}");
             if (hasColumn) select.Append(", ");
             select.Append($"[{kv.Value}] AS [{kv.Key}]");
             hasColumn = true;
         }
         if (!hasColumn)
-            throw new InvalidOperationException("Aucune colonne source valide dans le mapping.");
+            throw new DomainException("Aucune colonne source valide dans le mapping.");
 
         select.Append($" FROM [{sourceTable}]");
 
@@ -45,7 +47,7 @@ public sealed class MappedSourceReader : IMappedSourceReader
         {
             filterColumn = query!.FilterColumn!;
             if (!SafeIdentifier.IsMatch(filterColumn))
-                throw new InvalidOperationException($"Nom de colonne de filtre invalide : {filterColumn}");
+                throw new DomainException($"Nom de colonne de filtre invalide : {filterColumn}");
         }
 
         await using var con = new SqlConnection(connectionString);

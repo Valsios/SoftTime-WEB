@@ -1,7 +1,9 @@
 using System.Security.Cryptography;
+
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+
 using SoftTime.Application.Security;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
@@ -56,7 +58,7 @@ public class RefreshTokenService
     public async Task<RefreshTokenRotation> RotateAsync(string? refreshToken, CancellationToken cancellationToken = default)
     {
         var current = await FindAsync(refreshToken, cancellationToken)
-            ?? throw new UnauthorizedAccessException(InvalidTokenMessage);
+            ?? throw new UnauthorizedException(InvalidTokenMessage);
 
         if (current.DATE_REVOCATION is DateTime revokedAt)
         {
@@ -64,16 +66,16 @@ public class RefreshTokenService
             // quelques secondes après la rotation, révocation de toutes les sessions au-delà (vol probable).
             var justRotated = current.REMPLACE_PAR is not null && DateTime.UtcNow - revokedAt < ConcurrentRotationGrace;
             if (justRotated)
-                throw new UnauthorizedAccessException(InvalidTokenMessage);
+                throw new UnauthorizedException(InvalidTokenMessage);
             _logger.LogWarning(
                 "Réutilisation d'un jeton de rafraîchissement déjà remplacé (compte {UserId}, famille {Family}) : vol probable, toutes les sessions du compte sont fermées.",
                 current.IDRESPONSABLE, current.FAMILLE);
             await RevokeAllAsync(current.IDRESPONSABLE, cancellationToken);
             await _uow.SaveChangesAsync(cancellationToken);
-            throw new UnauthorizedAccessException(InvalidTokenMessage);
+            throw new UnauthorizedException(InvalidTokenMessage);
         }
         if (current.DATE_EXPIRATION <= DateTime.UtcNow)
-            throw new UnauthorizedAccessException(InvalidTokenMessage);
+            throw new UnauthorizedException(InvalidTokenMessage);
 
         var next = await IssueAsync(current.IDRESPONSABLE, current.FAMILLE, cancellationToken);
         current.DATE_REVOCATION = DateTime.UtcNow;

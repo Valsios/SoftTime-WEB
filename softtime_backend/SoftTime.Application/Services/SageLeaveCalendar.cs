@@ -1,5 +1,4 @@
 using SoftTime.Application.Abstractions;
-using SoftTime.Domain.Models;
 using SoftTime.Domain.Services;
 
 namespace SoftTime.Application.Services;

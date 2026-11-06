@@ -1,9 +1,10 @@
 using System.Linq.Expressions;
+
 using Microsoft.Extensions.Logging;
+
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
-using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
 
@@ -266,7 +267,7 @@ public class ReportService
                 if (d.DayOfWeek == DayOfWeek.Sunday) continue;
                 if (d != date.Date) continue;
                 var valeur = (ghrs.Matin == true || ghrs.ApresMidi == true) && days == 0 ? 0.5 : 1;
-                return new AbsenceInfo { Date = d, Evenement = ghrs.Code, Matricule = matricule, Valeur = valeur };
+                return new AbsenceInfo { Date = d, Evenement = ghrs.Code ?? string.Empty, Matricule = matricule, Valeur = valeur };
             }
         }
         return null;
@@ -277,7 +278,7 @@ public class ReportService
     private static void EnsureMondayToSunday(ReportFilter filter)
     {
         if (!OvertimeRules.IsMondayToSundayWeek(filter.From, filter.To))
-            throw new InvalidOperationException("La semaine doit aller du lundi au dimanche.");
+            throw new DomainException("La semaine doit aller du lundi au dimanche.");
     }
 
     private static Expression<Func<T_HEURECORRIGER, bool>> PointagePredicate(ReportFilter filter, string sageDb)

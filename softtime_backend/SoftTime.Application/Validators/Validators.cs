@@ -1,4 +1,5 @@
 using FluentValidation;
+
 using SoftTime.Application.DTOs;
 
 namespace SoftTime.Application.Validators;

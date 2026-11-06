@@ -13,6 +13,6 @@ public static class OvertimePayrollCategoryMapper
         "Ferie" => row.Ferie ?? 0,
         "Dimanche" => row.Dim ?? 0,
         "Nuit" => row.Nuit ?? 0,
-        _ => throw new InvalidOperationException("Catégorie inconnue.")
+        _ => throw new DomainException("Catégorie inconnue.")
     };
 }

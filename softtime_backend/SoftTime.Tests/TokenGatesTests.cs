@@ -1,11 +1,14 @@
 using System.IdentityModel.Tokens.Jwt;
+
 using AutoMapper;
+
 using Microsoft.AspNetCore.Identity;
+
+using SoftTime.Api.Security;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
 using SoftTime.Application.Services;
-using SoftTime.Api.Security;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
 using SoftTime.Tests.Http;
@@ -146,7 +149,7 @@ public class TokenGatesTests
     [Fact]
     public async Task SetPrivileges_is_refused_for_a_role_with_detailed_rights_and_still_works_without()
     {
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SetPrivilegesAsync(10034, new List<decimal> { 6 }));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.SetPrivilegesAsync(10034, new List<decimal> { 6 }));
         Assert.Contains("droits détaillés", ex.Message);
         Assert.Equal(new[] { 1m, 3m }, _uow.GetRepo<T_DROIT_ROLE>().Items.Where(d => d.IDROLE == 10034).Select(d => d.IDDROIT).OrderBy(x => x));
 

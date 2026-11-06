@@ -1,6 +1,8 @@
 using AutoMapper;
+
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
+
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
@@ -90,7 +92,7 @@ public class LoginUniquenessTests
         var sut = CreateAuth();
 
         // Act
-        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.LoginAsync(new LoginRequest("agent", Password)));
+        var ex = await Assert.ThrowsAsync<UnauthorizedException>(() => sut.LoginAsync(new LoginRequest("agent", Password)));
 
         // Assert
         Assert.Equal("Identifiants invalides.", ex.Message);
@@ -156,7 +158,7 @@ public class LoginUniquenessTests
         var sut = CreateAuth();
 
         // Act
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
             sut.CreateAdminAsync(new AdminSetupDto("Admin", "admin", AdminPassword, null)));
 
         // Assert
@@ -180,7 +182,7 @@ public class LoginUniquenessTests
         // Assert
         Assert.Single(_uow.Inner.GetRepo<T_RESPONSABLE>().Items);
         Assert.Single(results, r => r is null);
-        Assert.Single(results, r => r is InvalidOperationException);
+        Assert.Single(results, r => r is DomainException);
     }
 
     private static async Task<Exception?> Capture(Func<Task> action)

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Services;
@@ -39,7 +40,7 @@ public class SystemExecutionTests : IClassFixture<ApiFactory>
         Assert.Null(user.UserId);
         Assert.Null(user.RoleId);
 
-        await Assert.ThrowsAsync<ForbiddenOperationException>(
+        await Assert.ThrowsAsync<ForbiddenException>(
             () => scope.ServiceProvider.GetRequiredService<TenantConnectionService>().EnsureAuthorizedAsync());
     }
 }

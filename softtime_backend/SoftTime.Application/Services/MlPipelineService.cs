@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
+
 using SoftTime.Application.DTOs;
-using SoftTime.Domain.Models.Ml;
 
 namespace SoftTime.Application.Services;
 

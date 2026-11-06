@@ -1,4 +1,5 @@
 using System.Globalization;
+
 using Microsoft.Data.SqlClient;
 
 namespace SoftTime.Infrastructure.Readers;

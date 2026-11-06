@@ -21,11 +21,11 @@ public class PayrollCategoryMappingTests
 
     [Fact]
     public void UnknownCategoryIsRejected()
-        => Assert.Throws<InvalidOperationException>(() => OvertimePayrollCategoryMapper.ValueFor("Other", Row));
+        => Assert.Throws<DomainException>(() => OvertimePayrollCategoryMapper.ValueFor("Other", Row));
 
     [Fact]
     public void SqlIdentifiersRejectDangerousCharacters()
-        => Assert.Throws<InvalidOperationException>(() => PayrollWritingConfiguration.ValidateIdentifier("PAIE;DROP TABLE", "table"));
+        => Assert.Throws<DomainException>(() => PayrollWritingConfiguration.ValidateIdentifier("PAIE;DROP TABLE", "table"));
 
     [Fact]
     public void CompleteConfigurationIsAccepted()
@@ -36,7 +36,7 @@ public class PayrollCategoryMappingTests
     {
         var configuration = Configuration();
         configuration.RemoveAt(6);
-        Assert.Throws<InvalidOperationException>(() => PayrollWritingConfiguration.ValidateConfigurationRows(configuration));
+        Assert.Throws<DomainException>(() => PayrollWritingConfiguration.ValidateConfigurationRows(configuration));
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public class PayrollCategoryMappingTests
             BDD_SAGE = "TEST_AUTRE_RH", TABLE_CIBLE = "PAIE_CUMULS", COL_MATRICULE = "MatriculeEmploye",
             CATEGORIE = "Exo130", COL_VALEUR = "HeuresExo130Bis"
         });
-        Assert.Throws<InvalidOperationException>(() => PayrollWritingConfiguration.ValidateConfigurationRows(configuration));
+        Assert.Throws<DomainException>(() => PayrollWritingConfiguration.ValidateConfigurationRows(configuration));
     }
 
     private static List<T_PAIE_ECRITURE> Configuration() => PayrollWritingConfiguration.Categories

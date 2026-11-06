@@ -1,7 +1,4 @@
-using System;
-using System.Linq;
 using SoftTime.Domain.Services;
-using Xunit;
 
 namespace SoftTime.Tests;
 
@@ -72,19 +69,19 @@ public class AuditConfigurationRulesTests
     }
 
     [Fact]
-    public void Normalize_WithNullOrInvalid_ThrowsInvalidOperationException()
+    public void Normalize_WithNullOrInvalid_ThrowsDomainException()
     {
-        Assert.Throws<InvalidOperationException>(() => AuditConfigurationRules.Normalize(null!));
-        Assert.Throws<InvalidOperationException>(() => AuditConfigurationRules.Normalize("not_a_type"));
+        Assert.Throws<DomainException>(() => AuditConfigurationRules.Normalize(null!));
+        Assert.Throws<DomainException>(() => AuditConfigurationRules.Normalize("not_a_type"));
     }
 
     [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public void Valider_WithEmptyOrNull_ThrowsInvalidOperationException(string? type)
+    public void Valider_WithEmptyOrNull_ThrowsDomainException(string? type)
     {
-        var ex = Assert.Throws<InvalidOperationException>(() => AuditConfigurationRules.Valider(type));
+        var ex = Assert.Throws<DomainException>(() => AuditConfigurationRules.Valider(type));
         Assert.Contains("obligatoire", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -92,18 +89,18 @@ public class AuditConfigurationRulesTests
     [InlineData("text")]
     [InlineData("ntext")]
     [InlineData("image")]
-    public void Valider_WithExcludedType_ThrowsInvalidOperationException(string type)
+    public void Valider_WithExcludedType_ThrowsDomainException(string type)
     {
-        var ex = Assert.Throws<InvalidOperationException>(() => AuditConfigurationRules.Valider(type));
+        var ex = Assert.Throws<DomainException>(() => AuditConfigurationRules.Valider(type));
         Assert.Contains("exclu", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
     [InlineData("inconnu")]
     [InlineData("custom_sql_type")]
-    public void Valider_WithUnknownType_ThrowsInvalidOperationException(string type)
+    public void Valider_WithUnknownType_ThrowsDomainException(string type)
     {
-        var ex = Assert.Throws<InvalidOperationException>(() => AuditConfigurationRules.Valider(type));
+        var ex = Assert.Throws<DomainException>(() => AuditConfigurationRules.Valider(type));
         Assert.Contains("pas autorisé", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 

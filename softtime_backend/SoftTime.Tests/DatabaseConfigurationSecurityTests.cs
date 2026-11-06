@@ -1,10 +1,12 @@
 using System.Linq.Expressions;
+
 using AutoMapper;
+
 using Microsoft.AspNetCore.Identity;
+
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
-using SoftTime.Application.Security;
 using SoftTime.Application.Services;
 using SoftTime.Domain;
 using SoftTime.Domain.Entities.SoftTime;
@@ -49,7 +51,7 @@ public class DatabaseConfigurationSecurityTests
             _uow.GetRepo<T_ROLE_PERMISSION>().Items.Add(new T_ROLE_PERMISSION { IDROLE = roleId, PERMISSION_CODE = c, IS_GRANTED = true });
     }
 
-    private static Task<ForbiddenOperationException> Refused(Func<Task> act) => Assert.ThrowsAsync<ForbiddenOperationException>(act);
+    private static Task<ForbiddenException> Refused(Func<Task> act) => Assert.ThrowsAsync<ForbiddenException>(act);
 
     #region AdminAccess
 
@@ -58,7 +60,7 @@ public class DatabaseConfigurationSecurityTests
     {
         Assert.True(AdminAccess.IsAdmin(new FakeCurrentUser(1, 1)));
         Assert.False(AdminAccess.IsAdmin(new FakeCurrentUser(2, 5, Rights.Parameters)));
-        Assert.Throws<ForbiddenOperationException>(() => AdminAccess.Require(new FakeCurrentUser(2, 5, Rights.Parameters)));
+        Assert.Throws<ForbiddenException>(() => AdminAccess.Require(new FakeCurrentUser(2, 5, Rights.Parameters)));
         AdminAccess.Require(new FakeCurrentUser(1, 1));
     }
 
@@ -205,9 +207,9 @@ public class DatabaseConfigurationSecurityTests
     [Fact]
     public async Task AdminRole_CannotBeRenamedDeletedOrHaveItsPrivilegesReplaced()
     {
-        await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveRoleAsync(new RoleDto(1, "Autre")));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.DeleteRoleAsync(1));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SetPrivilegesAsync(1, new List<decimal> { Rights.Reports }));
+        await Assert.ThrowsAsync<DomainException>(() => _auth.SaveRoleAsync(new RoleDto(1, "Autre")));
+        await Assert.ThrowsAsync<DomainException>(() => _auth.DeleteRoleAsync(1));
+        await Assert.ThrowsAsync<DomainException>(() => _auth.SetPrivilegesAsync(1, new List<decimal> { Rights.Reports }));
         Assert.Equal("Administrateur", _uow.GetRepo<T_ROLE>().Items.First(r => r.IDROLE == 1).NOMROLE);
     }
 

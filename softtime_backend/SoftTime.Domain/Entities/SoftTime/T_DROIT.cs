@@ -10,6 +10,6 @@ public class T_DROIT
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public decimal IDDROIT { get; set; }
 
-    public string DROIT { get; set; }
+    public string DROIT { get; set; } = string.Empty;
 
 }

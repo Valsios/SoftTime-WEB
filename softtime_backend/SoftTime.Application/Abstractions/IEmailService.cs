@@ -1,5 +1,3 @@
-using SoftTime.Domain.Models;
-
 namespace SoftTime.Application.Abstractions;
 
 /// <summary>

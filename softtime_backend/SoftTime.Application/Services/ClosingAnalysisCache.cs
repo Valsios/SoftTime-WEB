@@ -1,8 +1,8 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
+
 using SoftTime.Application.DTOs;
-using SoftTime.Domain.Models;
 
 namespace SoftTime.Application.Services;
 

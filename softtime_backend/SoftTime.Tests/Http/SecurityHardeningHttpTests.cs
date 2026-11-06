@@ -1,8 +1,10 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
+
 using SoftTime.Api.Middleware;
 using SoftTime.Api.Security;
 using SoftTime.Application.DTOs;
@@ -21,46 +23,49 @@ public class SecurityHardeningHttpTests : IClassFixture<ApiFactory>
 
     public SecurityHardeningHttpTests(ApiFactory factory) => _http = factory.CreateClient();
 
-    // ---------- Origine des exceptions ----------
-
-    [Fact]
-    public void IsApplication_ExceptionThrownBySoftTimeCode_IsTrue()
-    {
-        // Arrange
-        var ex = Catch(() => throw new InvalidOperationException("Règle métier."));
-
-        // Act
-        var result = ExceptionOrigin.IsApplication(ex);
-
-        // Assert
-        Assert.True(result);
-    }
-
-    [Fact]
-    public void IsApplication_ExceptionThrownByTheFramework_IsFalse()
-    {
-        // Arrange : levées par System.Linq et System.Collections.Generic, pas par SoftTime.
-        var linq = Catch(() => Enumerable.Empty<int>().First());
-        var dictionary = Catch(() => _ = new Dictionary<string, int>()["Password=secret"]);
-
-        // Act + Assert
-        Assert.IsType<InvalidOperationException>(linq);
-        Assert.False(ExceptionOrigin.IsApplication(linq));
-        Assert.IsType<KeyNotFoundException>(dictionary);
-        Assert.False(ExceptionOrigin.IsApplication(dictionary));
-    }
-
     // ---------- Middleware d'exceptions ----------
 
     [Fact]
     public async Task Middleware_BusinessError_ReturnsItsMessageAs400()
     {
         // Act
-        var (status, body) = await RunMiddleware(_ => throw new InvalidOperationException("Période déjà validée."));
+        var (status, body) = await RunMiddleware(_ => throw new DomainException("Période déjà validée."));
 
         // Assert
         Assert.Equal(StatusCodes.Status400BadRequest, status);
         Assert.Contains("Période déjà validée.", body);
+    }
+
+    public static TheoryData<DomainException, int> TypedExceptions => new()
+    {
+        { new NotFoundException("Salarié introuvable."), StatusCodes.Status404NotFound },
+        { new UnauthorizedException("Session expirée."), StatusCodes.Status401Unauthorized },
+        { new ForbiddenException("Droit « Bases » requis."), StatusCodes.Status403Forbidden },
+        { new ConflictException("Login déjà utilisé."), StatusCodes.Status409Conflict }
+    };
+
+    [Theory]
+    [MemberData(nameof(TypedExceptions))]
+    public async Task Middleware_TypedException_ReturnsItsStatusAndMessage(DomainException exception, int expectedStatus)
+    {
+        // Act
+        var (status, body) = await RunMiddleware(_ => throw exception);
+
+        // Assert
+        Assert.Equal(expectedStatus, status);
+        Assert.Contains(exception.Message, body);
+    }
+
+    [Fact]
+    public async Task Middleware_FieldValidationException_Returns400WithTheField()
+    {
+        // Act
+        var (status, body) = await RunMiddleware(_ => throw new FieldValidationException("login", "Login obligatoire."));
+
+        // Assert
+        Assert.Equal(StatusCodes.Status400BadRequest, status);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal("login", json.RootElement.GetProperty("field").GetString());
     }
 
     [Fact]
@@ -216,19 +221,6 @@ public class SecurityHardeningHttpTests : IClassFixture<ApiFactory>
         // Assert
         Assert.Equal(33, logged.Length);
         Assert.EndsWith("…", logged);
-    }
-
-    private static Exception Catch(Action action)
-    {
-        try
-        {
-            action();
-        }
-        catch (Exception ex)
-        {
-            return ex;
-        }
-        throw new InvalidOperationException("Aucune exception levée.");
     }
 
     private static async Task<(int Status, string Body)> RunMiddleware(RequestDelegate next)

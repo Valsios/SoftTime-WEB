@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+
 using SoftTime.Application.Services;
 using SoftTime.Domain.Repositories;
 using SoftTime.Infrastructure.SchemaMigrations;
@@ -209,7 +210,7 @@ public class SchemaMigratorTests
     {
         var uow = new MissingSchemaUnitOfWork();
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
             PunchProcessingConfiguration.EnsureStorageAsync(uow, CancellationToken.None));
 
         Assert.Equal(SchemaPresenceGuard.MissingSchemaMessage, ex.Message);
@@ -221,7 +222,7 @@ public class SchemaMigratorTests
     {
         var uow = new MissingSchemaUnitOfWork();
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
             SchemaPresenceGuard.EnsureAuditJournalAsync(uow, CancellationToken.None));
 
         Assert.Equal(

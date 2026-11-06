@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+
 using SoftTime.Api.Authorization;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Security;
 using SoftTime.Application.Services;
 using SoftTime.Infrastructure.Excel;
 
@@ -113,21 +113,13 @@ public class EmployeePlanningController : ControllerBase
         => SavePlanningAsync(rows, ct);
 
     /// <summary>
-    /// Une ligne incohérente (date manquante, shift inconnu, heures absentes) est une erreur de
-    /// saisie : elle doit remonter en 400, pas en 500.
+    /// Une ligne incohérente (date manquante, shift inconnu, heures absentes) lève une
+    /// <see cref="DomainException"/> que le middleware traduit en 400.
     /// </summary>
     private async Task<IActionResult> SavePlanningAsync(List<EmployeePlanningDto> rows, CancellationToken ct)
     {
-        try
-        {
-            await _svc.SaveEmployeePlanningAsync(rows, ct);
-            return NoContent();
-        }
-        catch (InvalidOperationException ex) when (ExceptionOrigin.IsApplication(ex))
-        {
-            // Règle métier : message lisible. Une erreur technique (EF, SqlClient) remonte au middleware (500 journalisé).
-            return BadRequest(ex.Message);
-        }
+        await _svc.SaveEmployeePlanningAsync(rows, ct);
+        return NoContent();
     }
 
     [HttpDelete("{id:int}")]

@@ -1,4 +1,5 @@
 using System.Text;
+
 using Microsoft.Extensions.Options;
 
 namespace SoftTime.Api.Security;

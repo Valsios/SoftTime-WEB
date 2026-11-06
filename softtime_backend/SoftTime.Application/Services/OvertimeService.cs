@@ -1,8 +1,6 @@
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Domain.Entities.Sage;
 using SoftTime.Domain.Entities.SoftTime;
-using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
 
@@ -143,7 +141,7 @@ public class OvertimeService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         EnsureMaxOneMonth(request);
-        var cards = await TargetCards(request, ct);
+        var cards = await TargetCardsAsync(request, ct);
         var targetMatricules = cards.Select(c => c.SAGE_MATRICULE).Where(m => !string.IsNullOrEmpty(m)).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var list = await _uow.Repository<T_HSExoImp>().ListAsync(h =>
@@ -203,7 +201,7 @@ public class OvertimeService
                 ct);
         }
 
-        var cards = await TargetCards(request, ct);
+        var cards = await TargetCardsAsync(request, ct);
         var targetMatricules = cards
             .Select(c => c.SAGE_MATRICULE)
             .Where(m => !string.IsNullOrEmpty(m))
@@ -241,7 +239,7 @@ public class OvertimeService
         var from = request.From.Date;
         var to = request.To.Date;
 
-        var cards = (await TargetCards(request, ct))
+        var cards = (await TargetCardsAsync(request, ct))
             .OrderBy(c => c.SAGE_MATRICULE, StringComparer.OrdinalIgnoreCase)
             .ToList();
         var targetCles = cards
@@ -372,7 +370,7 @@ public class OvertimeService
 
         if (!string.IsNullOrEmpty(request.Departement))
         {
-            var cards = await TargetCards(request, ct);
+            var cards = await TargetCardsAsync(request, ct);
             var targetMatricules = cards.Select(c => c.SAGE_MATRICULE).Where(m => !string.IsNullOrEmpty(m)).ToHashSet(StringComparer.OrdinalIgnoreCase);
             sem = sem.Where(h => h.Matricule != null && targetMatricules.Contains(h.Matricule)).ToList();
             exo = exo.Where(h => h.Matricule != null && targetMatricules.Contains(h.Matricule)).ToList();
@@ -446,7 +444,7 @@ public class OvertimeService
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageRow = await _tenant.GetSageRowAsync(ct);
         if (!string.Equals(sageRow.TYPE_BASE, "STANDARD", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException(
+            throw new DomainException(
                 "La synchronisation SAGE est disponible uniquement pour une base STANDARD. Utilisez la synchronisation de paie pour une base AUTRE.");
         await SyncPayrollAsync(request, ct);
     }
@@ -462,7 +460,7 @@ public class OvertimeService
 
         if (!string.IsNullOrEmpty(request.Departement))
         {
-            var cards = await TargetCards(request, ct);
+            var cards = await TargetCardsAsync(request, ct);
             var targetMatricules = cards.Select(c => c.SAGE_MATRICULE).Where(m => !string.IsNullOrEmpty(m)).ToHashSet(StringComparer.OrdinalIgnoreCase);
             rows = rows.Where(h => h.Matricule != null && targetMatricules.Contains(h.Matricule)).ToList();
         }
@@ -574,13 +572,13 @@ public class OvertimeService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         if (string.IsNullOrWhiteSpace(matricule))
-            throw new InvalidOperationException("Matricule requis.");
+            throw new DomainException("Matricule requis.");
         if (from == default || to == default)
-            throw new InvalidOperationException("Période requise (du … au …).");
+            throw new DomainException("Période requise (du … au …).");
         var debut = from.Date;
         var fin = to.Date;
         if (fin < debut)
-            throw new InvalidOperationException("La date de fin doit suivre la date de début.");
+            throw new DomainException("La date de fin doit suivre la date de début.");
 
         var cle = MatriculeIdentity.Cle(matricule);
         var ctx = await ChargerContexteAsync(new PeriodRequest(null, null, debut, fin), avecExistantes: false, ct);
@@ -760,7 +758,7 @@ public class OvertimeService
         var sageDb = _tenant.SageDb;
         var pointeuseDb = _tenant.PointeuseDb;
 
-        var cards = (await TargetCards(request, ct))
+        var cards = (await TargetCardsAsync(request, ct))
             .OrderBy(c => c.SAGE_MATRICULE, StringComparer.OrdinalIgnoreCase)
             .ToList();
         var clock = (await _uow.Repository<T_CLOCK>().ListAsync(_ => true, ct)).FirstOrDefault();
@@ -921,7 +919,7 @@ public class OvertimeService
         var periode = calcules[0];
         var matricules = string.Join(", ", calcules.Select(h => h.Matricule).Distinct().Take(5))
                          + (calcules.Count > 5 ? "…" : string.Empty);
-        throw new InvalidOperationException(
+        throw new DomainException(
             $"La semaine du {lundi:dd/MM/yyyy} est incluse dans le calcul EXO/IMPO du "
             + $"{periode.PeriodeDebut:dd/MM/yyyy} au {periode.PeriodeFin:dd/MM/yyyy} ({matricules}) : "
             + "purgez d'abord les heures supplémentaires de cette période.");
@@ -939,22 +937,22 @@ public class OvertimeService
     private static void EnsureMondayToSunday(PeriodRequest request)
     {
         if (!OvertimeRules.IsMondayToSundayWeek(request.From, request.To))
-            throw new InvalidOperationException("La période doit être un lundi–dimanche (7 jours).");
+            throw new DomainException("La période doit être un lundi–dimanche (7 jours).");
     }
 
     private static void EnsureMaxOneMonth(PeriodRequest request)
     {
         if (request.To.Date < request.From.Date)
-            throw new InvalidOperationException("La date de début doit être antérieure ou égale à la date de fin.");
+            throw new DomainException("La date de début doit être antérieure ou égale à la date de fin.");
         if (!OvertimeRules.IsMaxOneMonth(request.From, request.To))
-            throw new InvalidOperationException("La période sélectionnée ne doit pas dépasser un mois.");
+            throw new DomainException("La période sélectionnée ne doit pas dépasser un mois.");
     }
 
     /// <summary>
     /// Cartes du périmètre. Le filtre pointeuse est tolérant (lignes héritées sans base renseignée)
     /// et identique à celui du pré-traitement des pointages.
     /// </summary>
-    private async Task<List<T_CARDPAIE>> TargetCards(PeriodRequest request, CancellationToken ct)
+    private async Task<List<T_CARDPAIE>> TargetCardsAsync(PeriodRequest request, CancellationToken ct)
     {
         var sageDb = _tenant.SageDb;
         var pointeuseDb = _tenant.PointeuseDb;

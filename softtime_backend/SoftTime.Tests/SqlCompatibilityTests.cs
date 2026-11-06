@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+
 using SoftTime.Infrastructure;
 using SoftTime.Infrastructure.Persistence;
 

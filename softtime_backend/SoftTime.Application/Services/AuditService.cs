@@ -38,7 +38,7 @@ public class AuditService
         }
         else
         {
-            var e = await repo.GetByIdAsync(dto.Id, ct) ?? throw new KeyNotFoundException();
+            var e = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
             e.TABLES = dto.Table;
             e.COLONNES = dto.Column;
 

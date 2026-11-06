@@ -1,9 +1,10 @@
 using System.Net;
+
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.Controllers;
-using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 

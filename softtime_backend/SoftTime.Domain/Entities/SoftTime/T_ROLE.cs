@@ -10,6 +10,6 @@ public class T_ROLE
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public decimal IDROLE { get; set; }
 
-    public string NOMROLE { get; set; }
+    public string NOMROLE { get; set; } = string.Empty;
 
 }

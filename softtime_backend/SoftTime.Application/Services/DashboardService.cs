@@ -1,7 +1,7 @@
 using System.Globalization;
+
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
-using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
 

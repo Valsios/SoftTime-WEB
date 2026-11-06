@@ -1,10 +1,12 @@
 using System.Linq.Expressions;
+
 using AutoMapper;
+
 using Microsoft.AspNetCore.Identity;
+
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
-using SoftTime.Application.Security;
 using SoftTime.Application.Services;
 using SoftTime.Domain;
 using SoftTime.Domain.Entities.SoftTime;
@@ -48,50 +50,50 @@ public class RolePermissionsTests
     #region C1, C3 — Contrôles d'accès et validation
 
     [Fact]
-    public async Task SaveRoleDetailedPermissionsAsync_NonAdmin_ThrowsInvalidOperationException()
+    public async Task SaveRoleDetailedPermissionsAsync_NonAdmin_ThrowsDomainException()
     {
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
             _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 2, targetRoleId: 3, new[] { "PARAMS:USERS" }));
         Assert.Equal("Seul un administrateur peut modifier les permissions d'un rôle.", ex.Message);
     }
 
     [Fact]
-    public async Task SaveRoleDetailedPermissionsAsync_UnknownCaller_ThrowsInvalidOperationException()
+    public async Task SaveRoleDetailedPermissionsAsync_UnknownCaller_ThrowsDomainException()
     {
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
             _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 999, targetRoleId: 3, new[] { "PARAMS:USERS" }));
         Assert.Equal("Utilisateur appelant introuvable.", ex.Message);
     }
 
     [Fact]
-    public async Task SaveRoleDetailedPermissionsAsync_CallerWithMissingRole_ThrowsInvalidOperationException()
+    public async Task SaveRoleDetailedPermissionsAsync_CallerWithMissingRole_ThrowsDomainException()
     {
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 10, IDROLE = 999, LOGIN = "orphan", NOMRESPONSABLE = "Orphan" });
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
             _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 10, targetRoleId: 3, new[] { "PARAMS:USERS" }));
         Assert.Equal("Utilisateur appelant introuvable.", ex.Message);
     }
 
     [Fact]
-    public async Task SaveRoleDetailedPermissionsAsync_TargetRole1_ThrowsInvalidOperationException()
+    public async Task SaveRoleDetailedPermissionsAsync_TargetRole1_ThrowsDomainException()
     {
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
             _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 1, new[] { "PARAMS:USERS" }));
         Assert.Equal("Les privilèges du rôle Administrateur ne sont pas modifiables.", ex.Message);
     }
 
     [Fact]
-    public async Task SaveRoleDetailedPermissionsAsync_TargetRoleNotFound_ThrowsKeyNotFoundException()
+    public async Task SaveRoleDetailedPermissionsAsync_TargetRoleNotFound_ThrowsNotFoundException()
     {
-        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+        await Assert.ThrowsAsync<NotFoundException>(() =>
             _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 888, new[] { "PARAMS:USERS" }));
     }
 
     [Fact]
-    public async Task SaveRoleDetailedPermissionsAsync_UnknownCode_ThrowsInvalidOperationException()
+    public async Task SaveRoleDetailedPermissionsAsync_UnknownCode_ThrowsDomainException()
     {
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
             _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { "INVALID:HACK:CODE" }));
         Assert.Contains("Codes de permission inconnus", ex.Message);
     }
@@ -107,21 +109,21 @@ public class RolePermissionsTests
     }
 
     [Fact]
-    public async Task SaveRoleDetailedPermissionsAsync_AdminPaieRole_ThrowsInvalidOperationException()
+    public async Task SaveRoleDetailedPermissionsAsync_AdminPaieRole_ThrowsDomainException()
     {
         // Rôle "Admin Paie" (IDROLE = 4 != 1)
         _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 4, NOMROLE = "Admin Paie" });
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 30, IDROLE = 4, LOGIN = "adminpaie", NOMRESPONSABLE = "Admin Paie User" });
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
             _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 30, targetRoleId: 3, new[] { "PARAMS:USERS" }));
         Assert.Equal("Seul un administrateur peut modifier les permissions d'un rôle.", ex.Message);
     }
 
     [Fact]
-    public async Task SaveRoleDetailedPermissionsAsync_NullList_ThrowsInvalidOperationException()
+    public async Task SaveRoleDetailedPermissionsAsync_NullList_ThrowsDomainException()
     {
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
             _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, null!));
         Assert.Equal("La liste des permissions ne peut pas être nulle.", ex.Message);
     }
@@ -147,12 +149,12 @@ public class RolePermissionsTests
     }
 
     [Fact]
-    public async Task SaveRoleDetailedPermissionsAsync_CodeLongerThan128Chars_ThrowsInvalidOperationException()
+    public async Task SaveRoleDetailedPermissionsAsync_CodeLongerThan128Chars_ThrowsDomainException()
     {
         var longCode = "SAGE:" + new string('A', 124);
         Assert.Equal(129, longCode.Length);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
             _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { longCode }));
 
         Assert.Contains("128", ex.Message);
@@ -454,9 +456,9 @@ public class RolePermissionsTests
     }
 
     [Fact]
-    public async Task ResetUserPermissions_NonAdminSelf_ThrowsInvalidOperationException()
+    public async Task ResetUserPermissions_NonAdminSelf_ThrowsDomainException()
     {
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = await Assert.ThrowsAsync<DomainException>(() =>
             _auth.ResetUserDetailedPermissionsAsync(currentUserId: 2, targetUserId: 2));
         Assert.Equal("Un utilisateur ne peut pas modifier ses propres privilèges sans droit d'administration.", ex.Message);
     }

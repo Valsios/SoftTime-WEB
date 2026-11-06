@@ -1,10 +1,11 @@
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+
 using SoftTime.Application.Abstractions;
-using SoftTime.Application.Services;
 using SoftTime.Application.DTOs;
-using SoftTime.Domain.Entities.SoftTime;
+using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.Sage;
+using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
 using SoftTime.Infrastructure.Integrations;
 using SoftTime.Infrastructure.Persistence;
@@ -158,7 +159,7 @@ public class AuditTrailTests
         var audit = new CapturingAuditTrail();
         var writer = new TestStandardWriter(new SagePayrollWriter(), audit);
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => writer.WriteAsync(Database(), Rows(), Context()));
+        var exception = await Assert.ThrowsAsync<DomainException>(() => writer.WriteAsync(Database(), Rows(), Context()));
 
         Assert.Contains("Constante SAGE HS01 introuvable", exception.Message);
         var summary = Assert.Single(audit.Entries);

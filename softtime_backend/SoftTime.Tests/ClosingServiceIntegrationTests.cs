@@ -1,9 +1,11 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+
 using SoftTime.Application;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
@@ -11,6 +13,7 @@ using SoftTime.Application.Services;
 using SoftTime.Domain.Models;
 using SoftTime.Domain.Services;
 using SoftTime.Infrastructure;
+
 using Xunit.Abstractions;
 
 namespace SoftTime.Tests;

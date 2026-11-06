@@ -1,4 +1,5 @@
 using Microsoft.Data.SqlClient;
+
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.Sage;
@@ -10,7 +11,7 @@ public class SagePayrollWriter : ISagePayrollWriter
     public async Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(string sageConnectionString, T_CST[] constants, int numSal, OvertimeSageCodes codes, decimal exo130, decimal exo150, decimal i130, decimal i150, decimal ferie, decimal nuit, decimal dim, CancellationToken cancellationToken = default)
     {
         short Op(string code) => constants.FirstOrDefault(c => string.Equals(c.CodeConstante?.Trim(), code, StringComparison.Ordinal))?.CodeOperande1
-            ?? throw new InvalidOperationException($"Constante SAGE {code} introuvable.");
+            ?? throw new DomainException($"Constante SAGE {code} introuvable.");
 
         var updates = new Dictionary<string, int>(StringComparer.Ordinal);
         try

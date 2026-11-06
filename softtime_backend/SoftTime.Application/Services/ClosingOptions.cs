@@ -1,7 +1,8 @@
 using System.Globalization;
+
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
-using SoftTime.Domain.Models;
+
 using SoftTime.Domain.Services;
 
 namespace SoftTime.Application.Services;

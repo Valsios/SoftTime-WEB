@@ -1,8 +1,10 @@
 using System.Security;
+using System.Text.RegularExpressions;
+
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using System.Text.RegularExpressions;
+
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Services;
 
@@ -69,7 +71,7 @@ public class ExternalDiscoveryService : IExternalDiscoveryService
         string serveur, string baseDb, string table, string column, bool sqlAuth, string? login, string? password, CancellationToken ct = default)
     {
         if (!Identifier.IsMatch(table) || !Identifier.IsMatch(column))
-            throw new InvalidOperationException("La table ou la colonne contient un identifiant SQL invalide.");
+            throw new DomainException("La table ou la colonne contient un identifiant SQL invalide.");
 
         var value = $"LTRIM(RTRIM(CONVERT(nvarchar(4000), [{column}])))";
         return QueryStringsAsync(

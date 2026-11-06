@@ -1,9 +1,10 @@
 using System.Net;
 using System.Text.Json;
-using Microsoft.AspNetCore.Hosting;
+
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
+
 using SoftTime.Domain.Entities.SoftTime;
 
 namespace SoftTime.Tests.Http;

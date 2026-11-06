@@ -31,17 +31,17 @@ public class DatabaseConfigurationAuthorizer
         if (action == DatabaseConfigAction.Create)
         {
             if (!HasCreate(perms, prefix))
-                throw new ForbiddenOperationException($"Vous n'avez pas la permission d'ajouter une base {Label(kind)}.");
+                throw new ForbiddenException($"Vous n'avez pas la permission d'ajouter une base {Label(kind)}.");
             return;
         }
 
         if (string.IsNullOrWhiteSpace(dbName))
-            throw new ForbiddenOperationException($"Base {Label(kind)} introuvable : opération refusée.");
+            throw new ForbiddenException($"Base {Label(kind)} introuvable : opération refusée.");
         var code = $"{prefix}:{dbName}:{(action == DatabaseConfigAction.Update ? "UPDATE" : "DELETE")}";
         if (!perms.Contains(code))
         {
             var verbe = action == DatabaseConfigAction.Update ? "modifier" : "supprimer";
-            throw new ForbiddenOperationException($"Vous n'avez pas la permission de {verbe} la base {Label(kind)} '{dbName}'.");
+            throw new ForbiddenException($"Vous n'avez pas la permission de {verbe} la base {Label(kind)} '{dbName}'.");
         }
     }
 
@@ -59,23 +59,23 @@ public class DatabaseConfigurationAuthorizer
                                      && p.EndsWith(":UPDATE", StringComparison.OrdinalIgnoreCase));
         });
         if (!allowed)
-            throw new ForbiddenOperationException("Vous n'avez pas la permission de configurer les bases.");
+            throw new ForbiddenException("Vous n'avez pas la permission de configurer les bases.");
     }
 
     private async Task<HashSet<string>> LoadPermissionsAsync(CancellationToken ct)
     {
         if (_user.UserId is not decimal uid)
-            throw new ForbiddenOperationException("Utilisateur non identifié.");
+            throw new ForbiddenException("Utilisateur non identifié.");
         if (!_user.HasRight(Rights.Databases))
-            throw new ForbiddenOperationException("La configuration des bases exige le droit « Bases ».");
+            throw new ForbiddenException("La configuration des bases exige le droit « Bases ».");
         try
         {
             var detailed = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
             return new HashSet<string>(detailed.GrantedPermissions, StringComparer.OrdinalIgnoreCase);
         }
-        catch (KeyNotFoundException)
+        catch (NotFoundException)
         {
-            throw new ForbiddenOperationException("Utilisateur introuvable.");
+            throw new ForbiddenException("Utilisateur introuvable.");
         }
     }
 

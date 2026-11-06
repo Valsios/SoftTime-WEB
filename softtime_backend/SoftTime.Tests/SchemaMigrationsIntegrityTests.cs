@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+
 using SoftTime.Application.Security;
 using SoftTime.Infrastructure.SchemaMigrations;
 

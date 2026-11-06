@@ -14,7 +14,7 @@ public static class FineReadAccess
     {
         if (AdminAccess.IsAdmin(user)) return;
         if (user.UserId is not decimal uid)
-            throw new ForbiddenOperationException(AuthService.ReadDenied);
+            throw new ForbiddenException(AuthService.ReadDenied);
         EffectiveRights effective;
         try
         {
@@ -23,9 +23,9 @@ public static class FineReadAccess
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             rights.LogReadFailure(uid, ex);
-            throw new ForbiddenOperationException(AuthService.ReadDenied);
+            throw new ForbiddenException(AuthService.ReadDenied);
         }
         if (!effective.HasGate(gate) || !effective.Has(permission))
-            throw new ForbiddenOperationException(AuthService.ReadDenied);
+            throw new ForbiddenException(AuthService.ReadDenied);
     }
 }

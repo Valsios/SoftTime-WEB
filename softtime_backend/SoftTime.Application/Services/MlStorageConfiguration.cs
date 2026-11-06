@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+
 using SoftTime.Application.Abstractions;
 
 namespace SoftTime.Application.Services;

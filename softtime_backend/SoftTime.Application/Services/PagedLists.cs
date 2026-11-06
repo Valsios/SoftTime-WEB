@@ -1,5 +1,5 @@
 using System.Linq.Expressions;
-using SoftTime.Domain.Models;
+
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
 

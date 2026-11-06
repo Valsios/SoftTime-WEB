@@ -1,5 +1,7 @@
 using AutoMapper;
+
 using Microsoft.AspNetCore.Identity;
+
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Mapping;
 using SoftTime.Application.Security;
@@ -7,6 +9,7 @@ using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
 using SoftTime.Tests.Http;
+
 using static SoftTime.Application.Security.EffectiveRightsCalculator;
 
 namespace SoftTime.Tests;

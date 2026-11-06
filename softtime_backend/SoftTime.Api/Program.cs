@@ -3,10 +3,13 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
+
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+
 using SoftTime.Api.HostedServices;
 using SoftTime.Api.Middleware;
 using SoftTime.Api.Security;
@@ -15,11 +18,10 @@ using SoftTime.Application.Abstractions;
 using SoftTime.Application.Security;
 using SoftTime.Application.Serialization;
 using SoftTime.Application.Services;
+using SoftTime.Domain.Entities.SoftTime;
+using SoftTime.Domain.Repositories;
 using SoftTime.Infrastructure;
 using SoftTime.Infrastructure.SchemaMigrations;
-using SoftTime.Domain.Repositories;
-using Microsoft.AspNetCore.Identity;
-using SoftTime.Domain.Entities.SoftTime;
 
 var builder = WebApplication.CreateBuilder(args);
 

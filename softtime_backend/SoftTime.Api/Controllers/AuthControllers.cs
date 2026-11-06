@@ -1,8 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
-using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
+
 using SoftTime.Api.Authorization;
 using SoftTime.Api.Security;
 using SoftTime.Application.Abstractions;
@@ -150,15 +151,8 @@ public class UsersController : ControllerBase
     {
         if (_user.UserId is not decimal currentUserId)
             return Unauthorized();
-        try
-        {
-            return Ok(await _auth.SaveUserAsync(currentUserId, dto with { Id = id }, ct));
-        }
-        catch (RoleChangeConfirmationRequiredException ex)
-        {
-            // Même corps que l'aperçu : le client demande confirmation puis renvoie confirmClearAdjustments = true.
-            return StatusCode(StatusCodes.Status409Conflict, ex.Preview);
-        }
+        // Un changement de rôle non confirmé lève RoleChangeConfirmationRequiredException : 409 avec l'aperçu.
+        return Ok(await _auth.SaveUserAsync(currentUserId, dto with { Id = id }, ct));
     }
 
     /// <summary>Aperçu d'un changement de rôle (lecture seule) : ajustements personnels qui seraient effacés.</summary>

@@ -1,7 +1,9 @@
 using System.Globalization;
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Security;
 using SoftTime.Application.Services;

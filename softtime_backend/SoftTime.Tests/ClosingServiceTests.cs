@@ -1,6 +1,8 @@
 using System.Linq.Expressions;
 using System.Text.Json;
+
 using Microsoft.Extensions.Logging.Abstractions;
+
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Services;
@@ -381,7 +383,7 @@ public class ClosingServiceTests
     {
         var ctx = new Contexte();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<DomainException>(() =>
             ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(Vendredi, Lundi)));
     }
 
@@ -391,7 +393,7 @@ public class ClosingServiceTests
         var ctx = new Contexte();
         var from = new DateTime(2024, 1, 1);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<DomainException>(() =>
             ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(from, from.AddDays(366))));
         ClosingService.Valider(new ClosingAnalysisRequest(from, from.AddDays(365)));
     }
@@ -529,9 +531,9 @@ public class ClosingServiceTests
     {
         var ctx = new Contexte();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<DomainException>(() =>
             ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(Lundi, default)));
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<DomainException>(() =>
             ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(default, Vendredi)));
     }
 

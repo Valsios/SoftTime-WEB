@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-
 namespace SoftTime.Domain.Services;
 
 public record AuditTypeOption(string Value, string Label);
@@ -74,23 +70,23 @@ public static class AuditConfigurationRules
     public static string Normalize(string type)
     {
         if (string.IsNullOrWhiteSpace(type))
-            throw new InvalidOperationException("Le type de données est obligatoire.");
+            throw new DomainException("Le type de données est obligatoire.");
         var trimmed = type.Trim();
         if (!IsValid(trimmed))
-            throw new InvalidOperationException($"Le type de données '{type}' n'est pas autorisé.");
+            throw new DomainException($"Le type de données '{type}' n'est pas autorisé.");
         return trimmed.ToLowerInvariant();
     }
 
     public static void Valider(string? type)
     {
         if (string.IsNullOrWhiteSpace(type))
-            throw new InvalidOperationException("Le type de données est obligatoire.");
+            throw new DomainException("Le type de données est obligatoire.");
 
         var trimmed = type.Trim();
         if (ExcludedTypes.Contains(trimmed))
-            throw new InvalidOperationException($"Le type de données '{type}' est obsolète ou incompatible avec l'audit (exclu : text, ntext, image).");
+            throw new DomainException($"Le type de données '{type}' est obsolète ou incompatible avec l'audit (exclu : text, ntext, image).");
 
         if (!AllowedSet.Contains(trimmed))
-            throw new InvalidOperationException($"Le type de données '{type}' n'est pas autorisé.");
+            throw new DomainException($"Le type de données '{type}' n'est pas autorisé.");
     }
 }

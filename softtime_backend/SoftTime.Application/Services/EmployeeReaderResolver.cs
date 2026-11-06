@@ -10,5 +10,5 @@ public class EmployeeReaderResolver
 
     public IEmployeeReader Resolve(T_BDD_SAGE sageRow)
         => _readers.FirstOrDefault(r => r.CanHandle(sageRow))
-           ?? throw new InvalidOperationException($"Aucun lecteur employé ne gère le type de base '{sageRow.TYPE_BASE}'.");
+           ?? throw new DomainException($"Aucun lecteur employé ne gère le type de base '{sageRow.TYPE_BASE}'.");
 }

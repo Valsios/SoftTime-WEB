@@ -1,4 +1,5 @@
 using Microsoft.Data.SqlClient;
+
 using SoftTime.Infrastructure.SchemaMigrations;
 
 namespace SoftTime.Tests;

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+
 using SoftTime.Domain.Entities.SoftTime;
 
 namespace SoftTime.Infrastructure.Persistence;

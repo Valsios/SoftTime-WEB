@@ -1,5 +1,7 @@
 using System.Text.RegularExpressions;
+
 using Microsoft.Data.SqlClient;
+
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
@@ -15,11 +17,11 @@ public class OtherEmployeeReader : IEmployeeReader
     public async Task<IReadOnlyList<NormalizedEmployee>> ListActiveEmployeesAsync(T_BDD_SAGE sageRow, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(sageRow.MAP_TABLE) || string.IsNullOrWhiteSpace(sageRow.MAP_COL_MATRICULE))
-            throw new InvalidOperationException("Mapping incomplet pour la base SAGE 'Autre' : table et colonne matricule requises.");
+            throw new DomainException("Mapping incomplet pour la base SAGE 'Autre' : table et colonne matricule requises.");
 
         foreach (var id in new[] { sageRow.MAP_TABLE, sageRow.MAP_COL_MATRICULE, sageRow.MAP_COL_NOM, sageRow.MAP_COL_PRENOM, sageRow.MAP_COL_BADGE })
             if (!string.IsNullOrWhiteSpace(id) && !SafeIdentifier.IsMatch(id))
-                throw new InvalidOperationException($"Nom de table/colonne invalide dans le mapping SAGE 'Autre' : {id}");
+                throw new DomainException($"Nom de table/colonne invalide dans le mapping SAGE 'Autre' : {id}");
 
         var selMatricule = $"[{sageRow.MAP_COL_MATRICULE}]";
         var selNom = sageRow.MAP_COL_NOM is { Length: > 0 } n ? $"[{n}]" : "NULL";

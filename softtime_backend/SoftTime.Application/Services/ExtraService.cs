@@ -1,7 +1,6 @@
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
-using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
 
@@ -302,7 +301,7 @@ public class ExtraService
         EnsurePeriode(request);
         var sageRow = await _tenant.GetSageRowAsync(ct);
         if (!string.Equals(sageRow.TYPE_BASE, "STANDARD", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException(
+            throw new DomainException(
                 "La synchronisation des cumuls cantine / frais n'est possible que pour une base SAGE de type STANDARD.");
 
         var sageDb = _tenant.SageDb;
@@ -320,7 +319,7 @@ public class ExtraService
                 .Select(c => new ChargeCumul(c.MATRICULE_SAGE, c.TOTAL_POINT ?? 0))
                 .ToList();
         if (charges.Count == 0)
-            throw new InvalidOperationException(cantine
+            throw new DomainException(cantine
                 ? "Aucune cantine calculée sur la période : lancez d'abord le calcul."
                 : "Aucun frais de déplacement calculé sur la période : lancez d'abord le calcul.");
 
@@ -363,7 +362,7 @@ public class ExtraService
         var constants = await _externalSource.GetConstantsAsync(sageRow, ct);
         var match = constants.FirstOrDefault(c => string.Equals(c.Code?.Trim(), code, StringComparison.OrdinalIgnoreCase));
         if (match?.Operande is not short operande)
-            throw new InvalidOperationException(
+            throw new DomainException(
                 $"Constante SAGE {code} absente ou sans CodeOperande1 : la synchronisation est impossible.");
         return operande;
     }
@@ -388,8 +387,8 @@ public class ExtraService
     private static void EnsurePeriode(PeriodRequest request)
     {
         if (request.From == default || request.To == default)
-            throw new InvalidOperationException("Période requise (du … au …).");
+            throw new DomainException("Période requise (du … au …).");
         if (request.To.Date < request.From.Date)
-            throw new InvalidOperationException("La date de fin doit suivre la date de début.");
+            throw new DomainException("La date de fin doit suivre la date de début.");
     }
 }

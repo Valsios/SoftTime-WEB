@@ -21,10 +21,4 @@
     <EmbeddedResource Include="..\migrations\versions\*.sql" LogicalName="SoftTime.Migrations.Versions.%(Filename)%(Extension)" Link="SchemaMigrations\Scripts\%(Filename)%(Extension)" />
   </ItemGroup>
 
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
-
 </Project>

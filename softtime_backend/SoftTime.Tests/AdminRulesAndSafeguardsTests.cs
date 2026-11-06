@@ -1,10 +1,12 @@
 using System.Linq.Expressions;
+
 using AutoMapper;
+
 using Microsoft.AspNetCore.Identity;
+
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
-using SoftTime.Application.Security;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
@@ -94,28 +96,28 @@ public class AdminRulesAndSafeguardsTests
     #region Tests C2 — Appelant Inconnu
 
     [Fact]
-    public async Task SaveUserAsync_UnknownCaller_ThrowsInvalidOperationException()
+    public async Task SaveUserAsync_UnknownCaller_ThrowsDomainException()
     {
         var dto = new UserDto(0, 2, "Nouveau", "nouveau", null, "ValidP@ss123!");
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(currentUserId: 999, dto));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.SaveUserAsync(currentUserId: 999, dto));
         Assert.Equal("Utilisateur appelant introuvable.", ex.Message);
     }
 
     [Fact]
-    public async Task SaveUserAsync_CallerWithMissingRole_ThrowsInvalidOperationException()
+    public async Task SaveUserAsync_CallerWithMissingRole_ThrowsDomainException()
     {
         var caller = new T_RESPONSABLE { IDRESPONSABLE = 10, IDROLE = 999, LOGIN = "callerOrphan", NOMRESPONSABLE = "Orphan" };
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(caller);
 
         var dto = new UserDto(0, 2, "Nouveau", "nouveau", null, "ValidP@ss123!");
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(currentUserId: 10, dto));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.SaveUserAsync(currentUserId: 10, dto));
         Assert.Equal("Utilisateur appelant introuvable.", ex.Message);
     }
 
     [Fact]
-    public async Task DeleteUserAsync_UnknownCaller_ThrowsInvalidOperationException()
+    public async Task DeleteUserAsync_UnknownCaller_ThrowsDomainException()
     {
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.DeleteUserAsync(currentUserId: 999, id: 2));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.DeleteUserAsync(currentUserId: 999, id: 2));
         Assert.Equal("Utilisateur appelant introuvable.", ex.Message);
     }
 
@@ -124,7 +126,7 @@ public class AdminRulesAndSafeguardsTests
     #region Tests G1 — Auto-modification de rôle
 
     [Fact]
-    public async Task SaveUserAsync_SelfRoleModification_ThrowsInvalidOperationException()
+    public async Task SaveUserAsync_SelfRoleModification_ThrowsDomainException()
     {
         var admin = new T_RESPONSABLE { IDRESPONSABLE = 1, IDROLE = 1, LOGIN = "admin", NOMRESPONSABLE = "Admin" };
         var admin2 = new T_RESPONSABLE { IDRESPONSABLE = 2, IDROLE = 1, LOGIN = "admin2", NOMRESPONSABLE = "Admin 2" };
@@ -133,7 +135,7 @@ public class AdminRulesAndSafeguardsTests
 
         // L'admin 1 tente de changer son propre rôle vers le rôle 2
         var updateDto = new UserDto(1, 2, "Admin Modifié", "admin", null, null);
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(currentUserId: 1, updateDto));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.SaveUserAsync(currentUserId: 1, updateDto));
         Assert.Equal("Vous ne pouvez pas modifier votre propre rôle.", ex.Message);
     }
 
@@ -156,19 +158,19 @@ public class AdminRulesAndSafeguardsTests
     #region Tests G2 — Attribution rôle admin et modification compte admin
 
     [Fact]
-    public async Task SaveUserAsync_NonAdmin_AssigningAdminRole_ThrowsInvalidOperationException()
+    public async Task SaveUserAsync_NonAdmin_AssigningAdminRole_ThrowsDomainException()
     {
         var user = new T_RESPONSABLE { IDRESPONSABLE = 2, IDROLE = 2, LOGIN = "user", NOMRESPONSABLE = "User" };
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
 
         // Un utilisateur non-admin tente de créer un super-admin (rôle 1)
         var createDto = new UserDto(0, 1, "Nouvel Admin", "newadmin", null, "ValidP@ss123!");
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(currentUserId: 2, createDto));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.SaveUserAsync(currentUserId: 2, createDto));
         Assert.Equal("Seul un super-administrateur peut attribuer le rôle Administrateur.", ex.Message);
     }
 
     [Fact]
-    public async Task SaveUserAsync_NonAdmin_ModifyingAdminAccount_ThrowsInvalidOperationException()
+    public async Task SaveUserAsync_NonAdmin_ModifyingAdminAccount_ThrowsDomainException()
     {
         var admin = new T_RESPONSABLE { IDRESPONSABLE = 1, IDROLE = 1, LOGIN = "admin", NOMRESPONSABLE = "Admin" };
         var user = new T_RESPONSABLE { IDRESPONSABLE = 2, IDROLE = 2, LOGIN = "user", NOMRESPONSABLE = "User" };
@@ -177,19 +179,19 @@ public class AdminRulesAndSafeguardsTests
 
         // L'utilisateur tente de modifier le mot de passe du super-admin (rôle 1)
         var updateDto = new UserDto(1, 1, "Admin Hacké", "admin", null, "NewPass123!@");
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(currentUserId: 2, updateDto));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.SaveUserAsync(currentUserId: 2, updateDto));
         Assert.Equal("Seul un super-administrateur peut modifier un compte administrateur.", ex.Message);
     }
 
     [Fact]
-    public async Task DeleteUserAsync_NonAdmin_DeletingAdminAccount_ThrowsInvalidOperationException()
+    public async Task DeleteUserAsync_NonAdmin_DeletingAdminAccount_ThrowsDomainException()
     {
         var admin = new T_RESPONSABLE { IDRESPONSABLE = 1, IDROLE = 1, LOGIN = "admin", NOMRESPONSABLE = "Admin" };
         var user = new T_RESPONSABLE { IDRESPONSABLE = 2, IDROLE = 2, LOGIN = "user", NOMRESPONSABLE = "User" };
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(admin);
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.DeleteUserAsync(currentUserId: 2, id: 1));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.DeleteUserAsync(currentUserId: 2, id: 1));
         Assert.Equal("Seul un super-administrateur peut supprimer un compte administrateur.", ex.Message);
     }
 
@@ -205,14 +207,14 @@ public class AdminRulesAndSafeguardsTests
         var asUser = CallerAuth(2, 2);
 
         var createDto = new UserDto(0, 3, "New Custom Admin", "newcustom", null, "ValidP@ss123!");
-        var exCreate = await Assert.ThrowsAsync<ForbiddenOperationException>(() => asUser.SaveUserAsync(currentUserId: 2, createDto));
+        var exCreate = await Assert.ThrowsAsync<ForbiddenException>(() => asUser.SaveUserAsync(currentUserId: 2, createDto));
         Assert.Equal(AdminAccess.ReservedMessage, exCreate.Message);
 
         var updateDto = new UserDto(3, 3, "Custom Admin Modifié", "customadmin", null, null);
-        var exMod = await Assert.ThrowsAsync<ForbiddenOperationException>(() => asUser.SaveUserAsync(currentUserId: 2, updateDto));
+        var exMod = await Assert.ThrowsAsync<ForbiddenException>(() => asUser.SaveUserAsync(currentUserId: 2, updateDto));
         Assert.Equal(AdminAccess.ReservedMessage, exMod.Message);
 
-        var exDel = await Assert.ThrowsAsync<ForbiddenOperationException>(() => asUser.DeleteUserAsync(currentUserId: 2, id: 3));
+        var exDel = await Assert.ThrowsAsync<ForbiddenException>(() => asUser.DeleteUserAsync(currentUserId: 2, id: 3));
         Assert.Equal(AdminAccess.ReservedMessage, exDel.Message);
         Assert.Equal("Custom Admin", _uow.GetRepo<T_RESPONSABLE>().Items.Single(u => u.IDRESPONSABLE == 3).NOMRESPONSABLE);
     }
@@ -227,12 +229,12 @@ public class AdminRulesAndSafeguardsTests
 
         // Création avec rôle 1 par un admin personnalisé
         var createDto = new UserDto(0, 1, "New SuperAdmin", "newsuper", null, "ValidP@ss123!");
-        var exCreate = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(currentUserId: 3, createDto));
+        var exCreate = await Assert.ThrowsAsync<DomainException>(() => _auth.SaveUserAsync(currentUserId: 3, createDto));
         Assert.Equal("Seul un super-administrateur peut attribuer le rôle Administrateur.", exCreate.Message);
 
         // Modification avec rôle 1 par un admin personnalisé
         var updateDto = new UserDto(4, 1, "User 4 Promu", "user4", null, null);
-        var exUpdate = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(currentUserId: 3, updateDto));
+        var exUpdate = await Assert.ThrowsAsync<DomainException>(() => _auth.SaveUserAsync(currentUserId: 3, updateDto));
         Assert.Equal("Seul un super-administrateur peut attribuer le rôle Administrateur.", exUpdate.Message);
     }
 
@@ -248,11 +250,11 @@ public class AdminRulesAndSafeguardsTests
 
         // Tentative de modification du compte rôle 1
         var updateDto = new UserDto(1, 1, "Admin 1 Renommé", "admin1", null, null);
-        var exMod = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(currentUserId: 3, updateDto));
+        var exMod = await Assert.ThrowsAsync<DomainException>(() => _auth.SaveUserAsync(currentUserId: 3, updateDto));
         Assert.Equal("Seul un super-administrateur peut modifier un compte administrateur.", exMod.Message);
 
         // Tentative de suppression du compte rôle 1
-        var exDel = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.DeleteUserAsync(currentUserId: 3, id: 1));
+        var exDel = await Assert.ThrowsAsync<DomainException>(() => _auth.DeleteUserAsync(currentUserId: 3, id: 1));
         Assert.Equal("Seul un super-administrateur peut supprimer un compte administrateur.", exDel.Message);
     }
 
@@ -266,9 +268,9 @@ public class AdminRulesAndSafeguardsTests
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(ordinary);
         var asCustom = CallerAuth(3, 3);
 
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => asCustom.SaveUserAsync(currentUserId: 3, new UserDto(0, 2, "Employé 2", "employe2", null, "ValidP@ss123!")));
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => asCustom.SaveUserAsync(currentUserId: 3, new UserDto(5, 2, "Employé 1 Modifié", "employe1_mod", null, null)));
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => asCustom.DeleteUserAsync(currentUserId: 3, id: 5));
+        await Assert.ThrowsAsync<ForbiddenException>(() => asCustom.SaveUserAsync(currentUserId: 3, new UserDto(0, 2, "Employé 2", "employe2", null, "ValidP@ss123!")));
+        await Assert.ThrowsAsync<ForbiddenException>(() => asCustom.SaveUserAsync(currentUserId: 3, new UserDto(5, 2, "Employé 1 Modifié", "employe1_mod", null, null)));
+        await Assert.ThrowsAsync<ForbiddenException>(() => asCustom.DeleteUserAsync(currentUserId: 3, id: 5));
         Assert.Equal("employe1", _uow.GetRepo<T_RESPONSABLE>().Items.Single(u => u.IDRESPONSABLE == 5).LOGIN);
     }
 
@@ -282,9 +284,9 @@ public class AdminRulesAndSafeguardsTests
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(other);
         var asOrdinary = CallerAuth(2, 2);
 
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => asOrdinary.SaveUserAsync(currentUserId: 2, new UserDto(0, 2, "Employé 2", "employe2", null, "ValidP@ss123!")));
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => asOrdinary.SaveUserAsync(currentUserId: 2, new UserDto(6, 2, "Employé 3 Modifié", "employe3_mod", null, null)));
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => asOrdinary.DeleteUserAsync(currentUserId: 2, id: 6));
+        await Assert.ThrowsAsync<ForbiddenException>(() => asOrdinary.SaveUserAsync(currentUserId: 2, new UserDto(0, 2, "Employé 2", "employe2", null, "ValidP@ss123!")));
+        await Assert.ThrowsAsync<ForbiddenException>(() => asOrdinary.SaveUserAsync(currentUserId: 2, new UserDto(6, 2, "Employé 3 Modifié", "employe3_mod", null, null)));
+        await Assert.ThrowsAsync<ForbiddenException>(() => asOrdinary.DeleteUserAsync(currentUserId: 2, id: 6));
         Assert.Equal("employe3", _uow.GetRepo<T_RESPONSABLE>().Items.Single(u => u.IDRESPONSABLE == 6).LOGIN);
     }
 
@@ -313,7 +315,7 @@ public class AdminRulesAndSafeguardsTests
     #region Tests G3 — Dernier Administrateur
 
     [Fact]
-    public async Task SaveUserAsync_DemotingOnlyAdmin_ThrowsInvalidOperationException()
+    public async Task SaveUserAsync_DemotingOnlyAdmin_ThrowsDomainException()
     {
         var admin1 = new T_RESPONSABLE { IDRESPONSABLE = 1, IDROLE = 1, LOGIN = "admin1", NOMRESPONSABLE = "Admin 1" };
         var admin2 = new T_RESPONSABLE { IDRESPONSABLE = 2, IDROLE = 1, LOGIN = "admin2", NOMRESPONSABLE = "Admin 2" };
@@ -329,7 +331,7 @@ public class AdminRulesAndSafeguardsTests
         // Note: Admin 2 ne peut pas rétrograder son propre rôle (G1), mais créons un test où l'appelant tente de rétrograder le dernier admin restant
         // Simulons un troisième compte avec un rôle de délégation ou appel direct
         var updateLastAdmin = new UserDto(2, 2, "Admin 2", "admin2", null, null);
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(updateLastAdmin));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.SaveUserAsync(updateLastAdmin));
         Assert.Equal("Impossible de rétrograder le dernier administrateur.", ex.Message);
     }
 
@@ -344,18 +346,18 @@ public class AdminRulesAndSafeguardsTests
 
         // Tenter de rétrograder le seul superAdmin (IDROLE = 1) vers rôle 2 via la surcharge sans appelant
         var updateDto = new UserDto(1, 2, "Super Admin", "superadmin", null, null);
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveUserAsync(updateDto));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.SaveUserAsync(updateDto));
         Assert.Equal("Impossible de rétrograder le dernier administrateur.", ex.Message);
     }
 
     [Fact]
-    public async Task DeleteUserAsync_DeletingOnlyAdmin_ThrowsInvalidOperationException()
+    public async Task DeleteUserAsync_DeletingOnlyAdmin_ThrowsDomainException()
     {
         var admin = new T_RESPONSABLE { IDRESPONSABLE = 1, IDROLE = 1, LOGIN = "admin", NOMRESPONSABLE = "Admin" };
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(admin);
 
         // Surcharge de test sans appelant
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.DeleteUserAsync(1));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.DeleteUserAsync(1));
         Assert.Equal("Impossible de supprimer le dernier administrateur.", ex.Message);
     }
 
@@ -379,14 +381,14 @@ public class AdminRulesAndSafeguardsTests
     #region Tests G4 — Auto-suppression
 
     [Fact]
-    public async Task DeleteUserAsync_SelfDelete_ThrowsInvalidOperationException()
+    public async Task DeleteUserAsync_SelfDelete_ThrowsDomainException()
     {
         var admin1 = new T_RESPONSABLE { IDRESPONSABLE = 1, IDROLE = 1, LOGIN = "admin1", NOMRESPONSABLE = "Admin 1" };
         var admin2 = new T_RESPONSABLE { IDRESPONSABLE = 2, IDROLE = 1, LOGIN = "admin2", NOMRESPONSABLE = "Admin 2" };
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(admin1);
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(admin2);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.DeleteUserAsync(currentUserId: 1, id: 1));
+        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.DeleteUserAsync(currentUserId: 1, id: 1));
         Assert.Equal("Vous ne pouvez pas supprimer votre propre compte.", ex.Message);
     }
 

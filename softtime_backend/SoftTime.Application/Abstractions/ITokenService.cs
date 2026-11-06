@@ -1,5 +1,3 @@
-using SoftTime.Application.DTOs;
-
 namespace SoftTime.Application.Abstractions;
 
 public interface ITokenService
