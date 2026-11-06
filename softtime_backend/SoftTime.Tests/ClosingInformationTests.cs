@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Services;
@@ -45,7 +46,7 @@ public class ClosingInformationTests
             Tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(),
                 SoftTime.Tests.Http.TestRights.Service(Uow), NullLogger<TenantConnectionService>.Instance);
             Service = new ClosingService(Uow, Tenant, new SageLeaveCalendar(Tenant, new FakeExternalSourceService()),
-                new HorlogeFixe(), reglages ?? new ClosingOptions());
+                new HorlogeFixe(), Options.Create(reglages ?? new ClosingOptions()));
         }
 
         public void Carte(int id, string matricule) =>
@@ -117,7 +118,7 @@ public class ClosingInformationTests
             .AddInMemoryCollection(valeurs.Select(v => new KeyValuePair<string, string?>(v.Cle, v.Valeur)))
             .Build();
         var options = new ClosingOptions();
-        options.Lire(configuration.GetSection(ClosingOptions.Section));
+        new ClosingOptionsSetup(configuration).Configure(options);
         return options;
     }
 
@@ -486,7 +487,7 @@ public class ClosingInformationTests
         var reglages = Lus(("Closing:ShowNames", "false"));
         var ctx = new Contexte(multiPointage: false, reglages);
         ctx.Semaine();
-        var presentation = new ClosingPresentationService(ctx.Uow, ctx.Tenant, reglages);
+        var presentation = new ClosingPresentationService(ctx.Uow, ctx.Tenant, Options.Create(reglages));
 
         var analyse = await ctx.Service.AnalyserAsync(Periode(information: true));
         var rapport = await presentation.PresenterAsync(analyse);

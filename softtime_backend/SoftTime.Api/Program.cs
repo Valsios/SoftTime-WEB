@@ -178,7 +178,7 @@ using (var scope = app.Services.CreateScope())
     await PunchProcessingConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
     await HistoryArchiveConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
     // Le journal central est créé par la migration 003 ; sans elle, le démarrage s'arrête avec un message clair.
-    if (scope.ServiceProvider.GetRequiredService<AuditJournalOptions>().Enabled)
+    if (scope.ServiceProvider.GetRequiredService<IOptions<AuditJournalOptions>>().Value.Enabled)
         await SchemaPresenceGuard.EnsureAuditJournalAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
     await UserAccountConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
     // Jetons de rafraîchissement et verrouillage des comptes : migration 004, sinon arrêt avec un message clair.
@@ -199,8 +199,8 @@ using (var scope = app.Services.CreateScope())
     // Migration globale contrôlée des mots de passe en clair :
     // Par défaut, la migration est assurée de manière fluide et isolée à la connexion de chaque utilisateur (AuthService.LoginAsync),
     // éliminant tout risque de verrou concurrent (multi-instances / conteneurs) ou de dépassement de délai au démarrage.
-    // L'exécution batch au démarrage reste activable explicitement via la configuration "Security:MigrateLegacyPasswordsOnStartup" :
-    if (app.Configuration.GetValue<bool>("Security:MigrateLegacyPasswordsOnStartup", false))
+    // L'exécution batch au démarrage reste activable explicitement via « Security:MigrateLegacyPasswordsOnStartup » (AccountSecurityOptions) :
+    if (app.Services.GetRequiredService<IOptions<AccountSecurityOptions>>().Value.MigrateLegacyPasswordsOnStartup)
     {
         await UserAccountConfiguration.MigrateLegacyPasswordsAsync(
             scope.ServiceProvider.GetRequiredService<IUnitOfWork>(),

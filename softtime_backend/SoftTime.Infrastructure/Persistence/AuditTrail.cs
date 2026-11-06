@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Services;
@@ -19,12 +20,12 @@ public sealed class AuditTrail : IAuditTrail
     public AuditTrail(
         IServiceScopeFactory scopeFactory,
         ICompanyContext company,
-        AuditJournalOptions options,
+        IOptions<AuditJournalOptions> options,
         ILogger<AuditTrail> logger)
     {
         _scopeFactory = scopeFactory;
         _company = company;
-        _options = options;
+        _options = options.Value;
         _logger = logger;
     }
 

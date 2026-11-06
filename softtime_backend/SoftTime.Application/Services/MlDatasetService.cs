@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 using SoftTime.Application.Abstractions;
 using SoftTime.Domain.Entities.Ml;
@@ -33,7 +34,7 @@ public sealed class MlDatasetService
         SageLeaveCalendar leaves,
         IExternalSourceService externalSource,
         IMlStore store,
-        MlOptions options,
+        IOptions<MlOptions> options,
         ILogger<MlDatasetService> logger)
     {
         _uow = uow;
@@ -41,7 +42,7 @@ public sealed class MlDatasetService
         _leaves = leaves;
         _externalSource = externalSource;
         _store = store;
-        _options = options;
+        _options = options.Value;
         _logger = logger;
     }
 

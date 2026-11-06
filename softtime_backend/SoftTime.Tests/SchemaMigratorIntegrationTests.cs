@@ -1,4 +1,5 @@
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Options;
 
 using SoftTime.Infrastructure.SchemaMigrations;
 
@@ -109,7 +110,7 @@ public class SchemaMigratorIntegrationTests
     private static SchemaMigrator Migrator(string connectionString, int lockTimeoutSeconds)
         => new(new SqlSchemaMigrationConnectionFactory(connectionString),
             new EmbeddedMigrationScriptSource(),
-            new SchemaMigrationOptions { AutoMigrate = true, LockTimeoutSeconds = lockTimeoutSeconds });
+            Options.Create(new SchemaMigrationOptions { AutoMigrate = true, LockTimeoutSeconds = lockTimeoutSeconds }));
 
     private static string DisposableConnectionString()
     {

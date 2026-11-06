@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 using SoftTime.Application.Security;
 using SoftTime.Infrastructure.SchemaMigrations;
@@ -109,14 +110,14 @@ public class SchemaMigrationsIntegrityTests
         var second = Script(2, "002_b.sql");
 
         var fresh = new FakeConnection();
-        await new SchemaMigrator(new FakeFactory(fresh), new ListSource(first, second), new SchemaMigrationOptions { AutoMigrate = true }, logger)
+        await new SchemaMigrator(new FakeFactory(fresh), new ListSource(first, second), Options.Create(new SchemaMigrationOptions { AutoMigrate = true }), logger)
             .RunIfEnabledAsync();
         Assert.Contains("Migrations de schéma : 2 script(s) appliqué(s), 0 déjà à jour.", logger.Messages);
 
         var upToDate = new FakeConnection();
         upToDate.Applied.Add(new AppliedMigration(1, first.Name, first.Checksum));
         upToDate.Applied.Add(new AppliedMigration(2, second.Name, second.Checksum));
-        await new SchemaMigrator(new FakeFactory(upToDate), new ListSource(first, second), new SchemaMigrationOptions { AutoMigrate = true }, logger)
+        await new SchemaMigrator(new FakeFactory(upToDate), new ListSource(first, second), Options.Create(new SchemaMigrationOptions { AutoMigrate = true }), logger)
             .RunIfEnabledAsync();
         Assert.Contains("Migrations de schéma : 0 script(s) appliqué(s), 2 déjà à jour.", logger.Messages);
     }
@@ -127,7 +128,7 @@ public class SchemaMigrationsIntegrityTests
         var logger = new ListLogger();
         var factory = new FakeFactory(new FakeConnection());
 
-        await new SchemaMigrator(factory, new ListSource(Script(1, "001_a.sql")), new SchemaMigrationOptions(), logger).RunIfEnabledAsync();
+        await new SchemaMigrator(factory, new ListSource(Script(1, "001_a.sql")), Options.Create(new SchemaMigrationOptions()), logger).RunIfEnabledAsync();
 
         Assert.Equal(0, factory.Opened);
         Assert.Contains("Migrations de schéma désactivées (Database:AutoMigrate = false).", logger.Messages);

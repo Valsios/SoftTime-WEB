@@ -1,8 +1,8 @@
 using System.Net;
 using System.Net.Mail;
 
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Services;
@@ -25,12 +25,12 @@ namespace SoftTime.Infrastructure.Integrations;
 /// </summary>
 public class EmailService : IEmailService
 {
-    private readonly IConfiguration _configuration;
+    private readonly IOptionsMonitor<EmailOptions> _options;
     private readonly ILogger<EmailService> _logger;
 
-    public EmailService(IConfiguration configuration, ILogger<EmailService> logger)
+    public EmailService(IOptionsMonitor<EmailOptions> options, ILogger<EmailService> logger)
     {
-        _configuration = configuration;
+        _options = options;
         _logger = logger;
     }
 
@@ -96,12 +96,6 @@ public class EmailService : IEmailService
                 EmailTemplates.MiseAJour(nom, prenom, pseudo, newPassword, pseudoChanged, passwordChanged)),
             cancellationToken);
 
-    private EmailSettings Reglages() => new(
-        _configuration["Email:Host"],
-        int.TryParse(_configuration["Email:Port"], out var port) ? port : EmailSettings.PortDefaut,
-        !bool.TryParse(_configuration["Email:EnableSsl"], out var ssl) || ssl,
-        _configuration["Email:User"],
-        _configuration["Email:Password"],
-        _configuration["Email:FromAddress"],
-        _configuration["Email:FromName"]);
+    /// <summary>Relu à chaque envoi : une modification de la configuration est prise en compte sans redémarrage.</summary>
+    private EmailSettings Reglages() => _options.CurrentValue.ToSettings();
 }

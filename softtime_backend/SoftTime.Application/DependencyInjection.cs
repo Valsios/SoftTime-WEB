@@ -42,7 +42,6 @@ public static class DependencyInjection
 
         // Moteur prédictif : options liées à la section « Ml », services de la base analytique.
         services.AddOptions();
-        services.AddSingleton(sp => sp.GetRequiredService<IOptions<MlOptions>>().Value);
         services.AddScoped<MlDatasetService>();
         services.AddScoped<MlTrainingService>();
         services.AddScoped<MlPredictionService>();
@@ -51,11 +50,9 @@ public static class DependencyInjection
 
         // Clôture de paie assistée : réglages de la section « Closing » (valeurs par défaut en code),
         // refus du démarrage si un réglage est invalide ; analyse et présentation en lecture seule.
-        services.AddOptions<ClosingOptions>()
-            .Configure<Microsoft.Extensions.Configuration.IConfiguration>((o, configuration) => o.Lire(configuration.GetSection(ClosingOptions.Section)))
-            .ValidateOnStart();
+        services.AddOptions<ClosingOptions>().ValidateOnStart();
+        services.AddSingleton<IConfigureOptions<ClosingOptions>, ClosingOptionsSetup>();
         services.AddSingleton<IValidateOptions<ClosingOptions>, ClosingOptionsValidator>();
-        services.AddSingleton(sp => sp.GetRequiredService<IOptions<ClosingOptions>>().Value);
         services.AddScoped<ClosingService>();
         services.AddScoped<ClosingPresentationService>();
         return services;

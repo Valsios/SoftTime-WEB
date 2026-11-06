@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Services;
@@ -84,10 +85,10 @@ public class MlPredictionServiceTests
         var options = new MlOptions();
         var dataset = new MlDatasetService(
             uow, tenant, new SageLeaveCalendar(tenant, source), source, store,
-            options, NullLogger<MlDatasetService>.Instance);
+            Options.Create(options), NullLogger<MlDatasetService>.Instance);
 
         return new MlPredictionService(
-            dataset, store, new FakeMlPredictor(), uow, tenant, options,
+            dataset, store, new FakeMlPredictor(), uow, tenant, Options.Create(options),
             NullLogger<MlPredictionService>.Instance);
     }
 

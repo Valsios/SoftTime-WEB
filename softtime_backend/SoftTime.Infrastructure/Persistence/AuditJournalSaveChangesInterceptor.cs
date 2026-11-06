@@ -3,6 +3,7 @@ using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Options;
 
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Security;
@@ -34,11 +35,11 @@ public sealed class AuditJournalSaveChangesInterceptor : SaveChangesInterceptor
     private readonly AuditJournalOptions _options;
     private readonly HashSet<object> _capturedEntities = new(ReferenceEqualityComparer.Instance);
 
-    public AuditJournalSaveChangesInterceptor(ICurrentUser user, ICompanyContext company, AuditJournalOptions options)
+    public AuditJournalSaveChangesInterceptor(ICurrentUser user, ICompanyContext company, IOptions<AuditJournalOptions> options)
     {
         _user = user;
         _company = company;
-        _options = options;
+        _options = options.Value;
     }
 
     /// <summary>

@@ -1,6 +1,7 @@
 using System.Globalization;
 
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.Ml;
@@ -20,7 +21,7 @@ public class MlTrainingServiceTests
     public async Task Donnees_insuffisantes_restent_en_baseline()
     {
         var store = new FakeMlStore();
-        var service = new MlTrainingService(store, new FakeMlTrainer(), Options(), NullLogger<MlTrainingService>.Instance);
+        var service = new MlTrainingService(store, new FakeMlTrainer(), Options.Create(TrainingOptions()), NullLogger<MlTrainingService>.Instance);
 
         var outcome = await service.TrainAsync(Sage);
 
@@ -41,7 +42,7 @@ public class MlTrainingServiceTests
             AmountResult = new MlTrainingResult(true, "Fake", new byte[] { 1, 2, 3 },
                 new MlMetrics(Mae: 0.5, TestRows: 50, TestPositives: 10), null)
         };
-        var service = new MlTrainingService(store, trainer, Options(), NullLogger<MlTrainingService>.Instance);
+        var service = new MlTrainingService(store, trainer, Options.Create(TrainingOptions()), NullLogger<MlTrainingService>.Instance);
 
         var outcome = await service.TrainAsync(Sage);
 
@@ -80,7 +81,7 @@ public class MlTrainingServiceTests
             AmountResult = new MlTrainingResult(true, "Fake", new byte[] { 1, 2, 3 },
                 new MlMetrics(Mae: 2.0, TestRows: 50, TestPositives: 10), null)
         };
-        var service = new MlTrainingService(store, trainer, Options(), NullLogger<MlTrainingService>.Instance);
+        var service = new MlTrainingService(store, trainer, Options.Create(TrainingOptions()), NullLogger<MlTrainingService>.Instance);
 
         var outcome = await service.TrainAsync(Sage);
 
@@ -91,7 +92,7 @@ public class MlTrainingServiceTests
         Assert.Contains(store.Models, m => m.TypeModele == MlModelTypes.HsMontant && m.Statut == MlModelStatus.Rejete);
     }
 
-    private static MlOptions Options() => new()
+    private static MlOptions TrainingOptions() => new()
     {
         HistoryMonths = 18,
         TestWindowWeeks = 8,

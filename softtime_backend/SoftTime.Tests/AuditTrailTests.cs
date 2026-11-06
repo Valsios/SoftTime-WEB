@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
@@ -18,7 +19,7 @@ public class AuditTrailTests
     public async Task Writes_a_non_sensitive_payroll_summary_with_counts()
     {
         var uow = new InMemoryUnitOfWork();
-        var trail = new AuditTrail(new ScopeFactory(uow), new TestCompanyContext(), new AuditJournalOptions(), new RecordingLogger<AuditTrail>());
+        var trail = new AuditTrail(new ScopeFactory(uow), new TestCompanyContext(), Options.Create(new AuditJournalOptions()), new RecordingLogger<AuditTrail>());
 
         await trail.WritePayrollSyncAsync(Audit("SUCCES", new Dictionary<string, int>
         {
@@ -43,7 +44,7 @@ public class AuditTrailTests
     public async Task Writes_failure_summary_without_individual_data()
     {
         var uow = new InMemoryUnitOfWork();
-        var trail = new AuditTrail(new ScopeFactory(uow), new TestCompanyContext(), new AuditJournalOptions(), new RecordingLogger<AuditTrail>());
+        var trail = new AuditTrail(new ScopeFactory(uow), new TestCompanyContext(), Options.Create(new AuditJournalOptions()), new RecordingLogger<AuditTrail>());
 
         await trail.WritePayrollSyncAsync(Audit("ECHEC", new Dictionary<string, int> { ["Exo130"] = 3 }));
 
@@ -57,7 +58,7 @@ public class AuditTrailTests
     public async Task Disabled_audit_writes_nothing()
     {
         var uow = new InMemoryUnitOfWork();
-        var trail = new AuditTrail(new ScopeFactory(uow), new TestCompanyContext(), new AuditJournalOptions { Enabled = false }, new RecordingLogger<AuditTrail>());
+        var trail = new AuditTrail(new ScopeFactory(uow), new TestCompanyContext(), Options.Create(new AuditJournalOptions { Enabled = false }), new RecordingLogger<AuditTrail>());
 
         await trail.WritePayrollSyncAsync(Audit("SUCCES", new Dictionary<string, int>()));
 
@@ -68,7 +69,7 @@ public class AuditTrailTests
     public async Task Journal_failure_is_logged_and_does_not_throw()
     {
         var logger = new RecordingLogger<AuditTrail>();
-        var trail = new AuditTrail(new ScopeFactory(new FailingUnitOfWork()), new TestCompanyContext(), new AuditJournalOptions(), logger);
+        var trail = new AuditTrail(new ScopeFactory(new FailingUnitOfWork()), new TestCompanyContext(), Options.Create(new AuditJournalOptions()), logger);
 
         var exception = await Record.ExceptionAsync(() => trail.WritePayrollSyncAsync(Audit("SUCCES", new Dictionary<string, int>())));
 
@@ -85,7 +86,7 @@ public class AuditTrailTests
     {
         var uow = new InMemoryUnitOfWork();
         var company = new TestCompanyContext("SAGE_COURANTE", "POINTEUSE_COURANTE");
-        var trail = new AuditTrail(new ScopeFactory(uow), company, new AuditJournalOptions(), new RecordingLogger<AuditTrail>());
+        var trail = new AuditTrail(new ScopeFactory(uow), company, Options.Create(new AuditJournalOptions()), new RecordingLogger<AuditTrail>());
         var audit = Audit("SUCCES", new Dictionary<string, int>()) with { SageDatabase = null };
 
         await trail.WritePayrollSyncAsync(audit);
@@ -143,7 +144,7 @@ public class AuditTrailTests
     public async Task Standard_writer_is_not_masked_when_the_journal_write_fails()
     {
         var logger = new RecordingLogger<AuditTrail>();
-        var audit = new AuditTrail(new ScopeFactory(new FailingUnitOfWork()), new TestCompanyContext(), new AuditJournalOptions(), logger);
+        var audit = new AuditTrail(new ScopeFactory(new FailingUnitOfWork()), new TestCompanyContext(), Options.Create(new AuditJournalOptions()), logger);
         var writer = new TestStandardWriter(new SuccessfulSageWriter(), audit);
 
         var result = await writer.WriteAsync(Database(), Rows(), Context());

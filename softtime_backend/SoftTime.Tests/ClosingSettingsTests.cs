@@ -21,7 +21,7 @@ public class ClosingSettingsTests
             .AddInMemoryCollection(valeurs.Select(v => new KeyValuePair<string, string?>(v.Cle, v.Valeur)))
             .Build();
         var options = new ClosingOptions();
-        options.Lire(configuration.GetSection(ClosingOptions.Section));
+        new ClosingOptionsSetup(configuration).Configure(options);
         return options;
     }
 
@@ -118,7 +118,7 @@ public class ClosingSettingsTests
         services.AddApplication();
         using var provider = services.BuildServiceProvider();
 
-        var erreur = Assert.Throws<OptionsValidationException>(() => provider.GetRequiredService<ClosingOptions>());
+        var erreur = Assert.Throws<OptionsValidationException>(() => provider.GetRequiredService<IOptions<ClosingOptions>>().Value);
         Assert.Contains("CriticalRatioBlocking", erreur.Message);
     }
 
@@ -175,7 +175,7 @@ public class ClosingSettingsTests
         });
         var tenant = new TenantConnectionService(uow, new FakeCompanyContext(), new FakeCurrentUser(),
             SoftTime.Tests.Http.TestRights.Service(uow), NullLogger<TenantConnectionService>.Instance);
-        return new ClosingService(uow, tenant, new SageLeaveCalendar(tenant, new FakeExternalSourceService()), new HorlogeFixe(), reglages);
+        return new ClosingService(uow, tenant, new SageLeaveCalendar(tenant, new FakeExternalSourceService()), new HorlogeFixe(), Options.Create(reglages));
     }
 
     [Fact]

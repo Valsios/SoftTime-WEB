@@ -3,6 +3,7 @@ using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Options;
 
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Services;
@@ -119,7 +120,7 @@ public class AuditJournalTransactionalTests
             builder.AddInterceptors(commandInterceptor);
         return new AuditTestDbContext(
             builder.Options,
-            new AuditJournalSaveChangesInterceptor(new TestCurrentUser(), new TestCompanyContext(), options ?? new AuditJournalOptions()));
+            new AuditJournalSaveChangesInterceptor(new TestCurrentUser(), new TestCompanyContext(), Options.Create(options ?? new AuditJournalOptions())));
     }
 
     private static DbContextOptionsBuilder<SoftTimeDbContext> CreateOptions()

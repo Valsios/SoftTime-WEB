@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace SoftTime.Infrastructure.SchemaMigrations;
 
@@ -21,12 +22,12 @@ public sealed class SchemaMigrator
     public SchemaMigrator(
         ISchemaMigrationConnectionFactory connections,
         IMigrationScriptSource scripts,
-        SchemaMigrationOptions options,
+        IOptions<SchemaMigrationOptions> options,
         ILogger<SchemaMigrator>? logger = null)
     {
         _connections = connections;
         _scripts = scripts;
-        _options = options;
+        _options = options.Value;
         _logger = logger ?? NullLogger<SchemaMigrator>.Instance;
     }
 

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Services;
@@ -217,7 +218,7 @@ public class AuditJournalSaveChangesInterceptorTests
     private static AuditJournalSaveChangesInterceptor CreateInterceptor(
         string? login = "agent",
         AuditJournalOptions? options = null)
-        => new(new TestCurrentUser(login), new TestCompanyContext(), options ?? new AuditJournalOptions());
+        => new(new TestCurrentUser(login), new TestCompanyContext(), Options.Create(options ?? new AuditJournalOptions()));
 
     private static List<suivi_JOURNAL> AuditEntries(SoftTimeDbContext db)
         => db.ChangeTracker.Entries<suivi_JOURNAL>()

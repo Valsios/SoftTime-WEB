@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Options;
+
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
@@ -47,13 +49,13 @@ public class ClosingService
         TenantConnectionService tenant,
         SageLeaveCalendar leaves,
         TimeProvider? horloge = null,
-        ClosingOptions? reglages = null)
+        IOptions<ClosingOptions>? reglages = null)
     {
         _uow = uow;
         _tenant = tenant;
         _leaves = leaves;
         _horloge = horloge ?? TimeProvider.System;
-        _reglages = reglages ?? new ClosingOptions();
+        _reglages = reglages?.Value ?? new ClosingOptions();
     }
 
     /// <summary>

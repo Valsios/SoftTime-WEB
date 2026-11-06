@@ -1,6 +1,7 @@
 using System.Text.Json;
 
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 using SoftTime.Application.Abstractions;
 using SoftTime.Domain.Entities.Ml;
@@ -25,12 +26,12 @@ public sealed class MlTrainingService
     public MlTrainingService(
         IMlStore store,
         IMlTrainer trainer,
-        MlOptions options,
+        IOptions<MlOptions> options,
         ILogger<MlTrainingService> logger)
     {
         _store = store;
         _trainer = trainer;
-        _options = options;
+        _options = options.Value;
         _logger = logger;
     }
 

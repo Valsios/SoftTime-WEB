@@ -1,5 +1,3 @@
-using System.Globalization;
-
 using Microsoft.Extensions.Configuration;
 
 namespace SoftTime.Infrastructure.SchemaMigrations;
@@ -7,20 +5,21 @@ namespace SoftTime.Infrastructure.SchemaMigrations;
 /// <summary>Options « Database:AutoMigrate » et « Database:AutoMigrateLockTimeoutSeconds ».</summary>
 public sealed record SchemaMigrationOptions
 {
+    public const string Section = "Database";
+
     public const int DefaultLockTimeoutSeconds = 60;
 
     /// <summary>Exécute les scripts versionnés au démarrage. Désactivé par défaut.</summary>
-    public bool AutoMigrate { get; init; }
+    public bool AutoMigrate { get; set; }
 
-    /// <summary>Attente maximale du verrou applicatif (deux démarrages simultanés).</summary>
-    public int LockTimeoutSeconds { get; init; } = DefaultLockTimeoutSeconds;
+    /// <summary>Attente maximale du verrou applicatif (deux démarrages simultanés). Une valeur négative vaut le défaut.</summary>
+    [ConfigurationKeyName("AutoMigrateLockTimeoutSeconds")]
+    public int LockTimeoutSeconds { get; set; } = DefaultLockTimeoutSeconds;
 
-    public static SchemaMigrationOptions FromConfiguration(IConfiguration configuration)
+    /// <summary>Remplace un délai invalide par la valeur par défaut, comme le faisait la lecture historique.</summary>
+    public void Normalize()
     {
-        var autoMigrate = bool.TryParse(configuration["Database:AutoMigrate"], out var enabled) && enabled;
-        var timeout = int.TryParse(configuration["Database:AutoMigrateLockTimeoutSeconds"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var seconds) && seconds >= 0
-            ? seconds
-            : DefaultLockTimeoutSeconds;
-        return new SchemaMigrationOptions { AutoMigrate = autoMigrate, LockTimeoutSeconds = timeout };
+        if (LockTimeoutSeconds < 0)
+            LockTimeoutSeconds = DefaultLockTimeoutSeconds;
     }
 }

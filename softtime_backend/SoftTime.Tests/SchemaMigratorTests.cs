@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 
 using SoftTime.Application.Services;
 using SoftTime.Domain.Repositories;
@@ -169,38 +169,12 @@ public class SchemaMigratorTests
     public async Task RunIfEnabled_WhenDisabled_OpensNoConnection()
     {
         var factory = new FakeFactory(new FakeConnection());
-        var migrator = new SchemaMigrator(factory, new ListSource(Script(1, "001_a.sql")), new SchemaMigrationOptions());
+        var migrator = new SchemaMigrator(factory, new ListSource(Script(1, "001_a.sql")), Options.Create(new SchemaMigrationOptions()));
 
         var result = await migrator.RunIfEnabledAsync();
 
         Assert.Null(result);
         Assert.Equal(0, factory.Opened);
-    }
-
-    [Fact]
-    public void Options_DefaultToDisabledWithSixtySecondLock()
-    {
-        var options = SchemaMigrationOptions.FromConfiguration(new ConfigurationBuilder().Build());
-
-        Assert.False(options.AutoMigrate);
-        Assert.Equal(60, options.LockTimeoutSeconds);
-    }
-
-    [Fact]
-    public void Options_AreReadFromDatabaseSection()
-    {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Database:AutoMigrate"] = "true",
-                ["Database:AutoMigrateLockTimeoutSeconds"] = "15",
-            })
-            .Build();
-
-        var options = SchemaMigrationOptions.FromConfiguration(configuration);
-
-        Assert.True(options.AutoMigrate);
-        Assert.Equal(15, options.LockTimeoutSeconds);
     }
 
     // ---------- Garde des méthodes Ensure* ----------
@@ -247,7 +221,7 @@ public class SchemaMigratorTests
         => Migrator(connection, new SchemaMigrationOptions { AutoMigrate = true }, scripts);
 
     private static SchemaMigrator Migrator(FakeConnection connection, SchemaMigrationOptions options, params MigrationScript[] scripts)
-        => new(new FakeFactory(connection), new ListSource(scripts), options);
+        => new(new FakeFactory(connection), new ListSource(scripts), Options.Create(options));
 
     private sealed class ListSource(params MigrationScript[] scripts) : IMigrationScriptSource
     {

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
@@ -80,7 +81,7 @@ public class MlDatasetParityTests
 
         public MlDatasetService Dataset() => new(
             Uow, Tenant, new SageLeaveCalendar(Tenant, Source), Source, Store,
-            new MlOptions { WarmupDays = 0 }, NullLogger<MlDatasetService>.Instance);
+            Options.Create(new MlOptions { WarmupDays = 0 }), NullLogger<MlDatasetService>.Instance);
 
         public OvertimeService Overtime() => new(
             Uow, Tenant, Source,

@@ -1,6 +1,7 @@
 using System.Text.Json;
 
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
@@ -33,7 +34,7 @@ public sealed class MlPredictionService
         IMlPredictor predictor,
         IUnitOfWork uow,
         TenantConnectionService tenant,
-        MlOptions options,
+        IOptions<MlOptions> options,
         ILogger<MlPredictionService> logger)
     {
         _dataset = dataset;
@@ -41,7 +42,7 @@ public sealed class MlPredictionService
         _predictor = predictor;
         _uow = uow;
         _tenant = tenant;
-        _options = options;
+        _options = options.Value;
         _logger = logger;
     }
 

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Security;
@@ -138,7 +139,7 @@ public class AuditMaskingPolicyTests
             .Options);
 
     private static void Capture(SoftTimeDbContext db)
-        => new AuditJournalSaveChangesInterceptor(new TestUser(), new TestCompany(), new AuditJournalOptions()).CaptureChanges(db);
+        => new AuditJournalSaveChangesInterceptor(new TestUser(), new TestCompany(), Options.Create(new AuditJournalOptions())).CaptureChanges(db);
 
     private static List<suivi_JOURNAL> AuditEntries(SoftTimeDbContext db)
         => db.ChangeTracker.Entries<suivi_JOURNAL>().Select(entry => entry.Entity).ToList();

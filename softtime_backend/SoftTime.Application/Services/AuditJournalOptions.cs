@@ -1,23 +1,21 @@
-using Microsoft.Extensions.Configuration;
-
 namespace SoftTime.Application.Services;
 
+/// <summary>Section « AuditJournal » : journal des modifications faites par SoftTimeDbContext.</summary>
 public sealed class AuditJournalOptions
 {
+    public const string Section = "AuditJournal";
+
     public const int DefaultDetailThreshold = 200;
 
-    public bool Enabled { get; init; } = true;
+    public bool Enabled { get; set; } = true;
 
-    public int DetailThreshold { get; init; } = DefaultDetailThreshold;
+    /// <summary>Au-delà de ce nombre de lignes modifiées, le journal ne garde qu'un résumé. Une valeur ≤ 0 vaut le défaut.</summary>
+    public int DetailThreshold { get; set; } = DefaultDetailThreshold;
 
-    public static AuditJournalOptions From(IConfiguration configuration)
+    /// <summary>Remplace un seuil invalide par la valeur par défaut, comme le faisait la lecture historique.</summary>
+    public void Normalize()
     {
-        var rawThreshold = configuration["AuditJournal:DetailThreshold"];
-        var threshold = int.TryParse(rawThreshold, out var configuredThreshold) && configuredThreshold > 0
-            ? configuredThreshold
-            : DefaultDetailThreshold;
-        var enabled = !bool.TryParse(configuration["AuditJournal:Enabled"], out var configuredEnabled)
-            || configuredEnabled;
-        return new AuditJournalOptions { Enabled = enabled, DetailThreshold = threshold };
+        if (DetailThreshold <= 0)
+            DetailThreshold = DefaultDetailThreshold;
     }
 }

@@ -20,6 +20,22 @@ namespace SoftTime.Infrastructure;
 
 public static class DependencyInjection
 {
+    /// <summary>
+    /// Options liées à la configuration (§5.6) : sections « AuditJournal », « Database » et « Email ».
+    /// Les valeurs absentes gardent leur défaut ; une valeur hors bornes est ramenée au défaut.
+    /// </summary>
+    public static IServiceCollection AddInfrastructureOptions(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<AuditJournalOptions>()
+            .Bind(configuration.GetSection(AuditJournalOptions.Section))
+            .PostConfigure(options => options.Normalize());
+        services.AddOptions<SchemaMigrationOptions>()
+            .Bind(configuration.GetSection(SchemaMigrationOptions.Section))
+            .PostConfigure(options => options.Normalize());
+        services.AddOptions<EmailOptions>().Bind(configuration.GetSection(EmailOptions.Section));
+        return services;
+    }
+
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         // L'API remplace ces contextes par les valeurs extraites du JWT et du tenant.
@@ -27,7 +43,7 @@ public static class DependencyInjection
         // (outils et tests) sans attribuer une identité applicative fictive.
         services.TryAddScoped<ICompanyContext, EmptyCompanyContext>();
         services.TryAddScoped<ICurrentUser, EmptyCurrentUser>();
-        services.AddSingleton(AuditJournalOptions.From(configuration));
+        services.AddInfrastructureOptions(configuration);
         services.AddScoped<AuditJournalSaveChangesInterceptor>();
         services.AddScoped<IAuditTrail, AuditTrail>();
         services.AddDbContext<SoftTimeDbContext>((serviceProvider, options) =>
@@ -47,7 +63,6 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         // Migrations SQL versionnées (migrations/versions), exécutées au démarrage si Database:AutoMigrate.
-        services.AddSingleton(SchemaMigrationOptions.FromConfiguration(configuration));
         services.AddSingleton<IMigrationScriptSource>(_ => new EmbeddedMigrationScriptSource());
         services.AddSingleton<ISchemaMigrationConnectionFactory>(_ =>
             new SqlSchemaMigrationConnectionFactory(configuration.GetConnectionString("SoftTime") ?? string.Empty));

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
@@ -34,14 +35,14 @@ public class ClosingController : ControllerBase
     public ClosingController(
         ClosingService closing,
         ClosingPresentationService presentation,
-        ClosingOptions reglages,
+        IOptions<ClosingOptions> reglages,
         ICurrentUser user,
         EffectiveRightsService rights,
         ILogger<ClosingController> logger)
     {
         _closing = closing;
         _presentation = presentation;
-        _reglages = reglages;
+        _reglages = reglages.Value;
         _user = user;
         _rights = rights;
         _logger = logger;

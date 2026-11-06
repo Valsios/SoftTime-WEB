@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Options;
+
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
@@ -17,11 +19,11 @@ public class ClosingPresentationService
     private readonly TenantConnectionService _tenant;
     private readonly ClosingOptions _reglages;
 
-    public ClosingPresentationService(IUnitOfWork uow, TenantConnectionService tenant, ClosingOptions? reglages = null)
+    public ClosingPresentationService(IUnitOfWork uow, TenantConnectionService tenant, IOptions<ClosingOptions>? reglages = null)
     {
         _uow = uow;
         _tenant = tenant;
-        _reglages = reglages ?? new ClosingOptions();
+        _reglages = reglages?.Value ?? new ClosingOptions();
     }
 
     public async Task<ClosingReportDto> PresenterAsync(ClosingAnalysisDto analyse, CancellationToken ct = default)

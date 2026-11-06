@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 using SoftTime.Application.DTOs;
 
@@ -22,14 +23,14 @@ public sealed class MlPipelineService
         MlTrainingService training,
         MlPredictionService prediction,
         TenantConnectionService tenant,
-        MlOptions options,
+        IOptions<MlOptions> options,
         ILogger<MlPipelineService> logger)
     {
         _dataset = dataset;
         _training = training;
         _prediction = prediction;
         _tenant = tenant;
-        _options = options;
+        _options = options.Value;
         _logger = logger;
     }
 
