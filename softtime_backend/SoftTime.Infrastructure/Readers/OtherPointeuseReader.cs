@@ -49,9 +49,9 @@ public class OtherPointeuseReader : IPointeuseReader
                 continue;
                 result.Add(new NormalizedPointeuseUser(
                     Id: id.Trim(),
-                    Badge: SqlReaderHelper.ReadText(reader, "Badge"),
-                    Ssn: SqlReaderHelper.ReadText(reader, "Ssn"),
-                    Nom: SqlReaderHelper.ReadText(reader, "Nom")));
+                    Badge: SqlColumnReader.ReadText(reader, "Badge"),
+                    Ssn: SqlColumnReader.ReadText(reader, "Ssn"),
+                    Nom: SqlColumnReader.ReadText(reader, "Nom")));
         }
         return result;
     }
@@ -86,7 +86,7 @@ public class OtherPointeuseReader : IPointeuseReader
             var userId = reader["UserId"]?.ToString();
             if (string.IsNullOrWhiteSpace(userId) || reader["DateHeure"] is not DateTime dh)
                 continue;
-                        result.Add(new NormalizedPunch(UserId: userId.Trim(), DateHeure: dh, Type: SqlReaderHelper.ReadText(reader, "Type")));
+                        result.Add(new NormalizedPunch(UserId: userId.Trim(), DateHeure: dh, Type: SqlColumnReader.ReadText(reader, "Type")));
         }
         return result;
     }

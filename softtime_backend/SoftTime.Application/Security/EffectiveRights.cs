@@ -2,28 +2,6 @@ using SoftTime.Application.Services;
 
 namespace SoftTime.Application.Security;
 
-/// <summary>Ligne de permission lue en base. Rôle : IsGranted = droit accordé. Utilisateur : true = ajout, false = retrait.</summary>
-public sealed record PermissionRow(string Code, bool IsGranted = true);
-
-/// <summary>Rôle tel que lu en base : lignes détaillées (T_ROLE_PERMISSION) et portes (T_DROIT_ROLE).</summary>
-public sealed record RoleDefinition(
-    decimal? Id,
-    bool Exists,
-    IReadOnlyCollection<PermissionRow> Rows,
-    IReadOnlyCollection<int> Gates);
-
-/// <summary>Bases connues (noms) et bases cochées dans « Accès bases » (T_BDD_AUTORISE) pour l'utilisateur.</summary>
-public sealed record DatabaseCatalog(
-    IReadOnlyCollection<string> Sage,
-    IReadOnlyCollection<string> Pointeuse,
-    IReadOnlyCollection<string> AuthorizedSage)
-{
-    public static DatabaseCatalog Empty { get; } = new(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
-}
-
-/// <summary>Incohérence signalée sans blocage (par exemple une porte de travail sans accès à une base).</summary>
-public sealed record RightsInconsistency(string Code, int Gate, string Message);
-
 /// <summary>
 /// Droits effectifs d'un utilisateur : droits du rôle, plus ses ajouts, moins ses retraits.
 /// Objet immuable ; de nouvelles propriétés peuvent être ajoutées sans casser les appelants.
@@ -90,18 +68,5 @@ public sealed class EffectiveRights
                                            && p.EndsWith(":CREATE", StringComparison.OrdinalIgnoreCase));
         if (string.IsNullOrWhiteSpace(name)) return false;
         return Has($"{prefix}:{name}:{(action == DatabaseConfigAction.Update ? "UPDATE" : "DELETE")}");
-    }
-}
-
-/// <summary>Résultat de <see cref="EffectiveRightsCalculator.ConvertLegacyList"/> (simulation, rien n'est appliqué).</summary>
-public sealed record LegacyConversion(
-    IReadOnlyList<string> Additions,
-    IReadOnlyList<string> Removals,
-    IReadOnlyList<string> IgnoredUnknown)
-{
-    public void Deconstruct(out IReadOnlyList<string> additions, out IReadOnlyList<string> removals)
-    {
-        additions = Additions;
-        removals = Removals;
     }
 }

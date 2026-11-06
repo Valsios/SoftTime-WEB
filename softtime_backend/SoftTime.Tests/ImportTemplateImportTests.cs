@@ -90,7 +90,7 @@ public class ImportTemplateImportTests
     private static List<Dictionary<string, string>> LireXlsx(string key, out List<string> headers)
     {
         using var flux = new MemoryStream(ImportTemplateFile.Build(Modele(key)));
-        var rows = ExcelHelper.ReadFirstSheet(flux);
+        var rows = ExcelWorkbook.ReadFirstSheet(flux);
         headers = rows.Count > 0 ? rows[0].Keys.ToList() : new List<string>();
         return rows;
     }

@@ -3,10 +3,6 @@ using SoftTime.Domain;
 
 namespace SoftTime.Application.Services;
 
-public enum DatabaseKind { Sage, Pointeuse }
-
-public enum DatabaseConfigAction { Create, Update, Delete }
-
 /// <summary>
 /// Autorise la configuration (ajout, modification, suppression, test, découverte) des bases SAGE et pointeuse.
 /// Hors administrateur, exige la porte Bases ET la permission fine, que le compte soit personnalisé ou non.

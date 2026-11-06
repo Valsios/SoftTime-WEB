@@ -1,67 +1,7 @@
-using System.Globalization;
-
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace SoftTime.Infrastructure.SchemaMigrations;
-
-/// <summary>Options « Database:AutoMigrate » et « Database:AutoMigrateLockTimeoutSeconds ».</summary>
-public sealed record SchemaMigrationOptions
-{
-    public const int DefaultLockTimeoutSeconds = 60;
-
-    /// <summary>Exécute les scripts versionnés au démarrage. Désactivé par défaut.</summary>
-    public bool AutoMigrate { get; init; }
-
-    /// <summary>Attente maximale du verrou applicatif (deux démarrages simultanés).</summary>
-    public int LockTimeoutSeconds { get; init; } = DefaultLockTimeoutSeconds;
-
-    public static SchemaMigrationOptions FromConfiguration(IConfiguration configuration)
-    {
-        var autoMigrate = bool.TryParse(configuration["Database:AutoMigrate"], out var enabled) && enabled;
-        var timeout = int.TryParse(configuration["Database:AutoMigrateLockTimeoutSeconds"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var seconds) && seconds >= 0
-            ? seconds
-            : DefaultLockTimeoutSeconds;
-        return new SchemaMigrationOptions { AutoMigrate = autoMigrate, LockTimeoutSeconds = timeout };
-    }
-}
-
-/// <summary>Échec d'une migration. Le message est en français et ne contient ni secret ni chaîne de connexion.</summary>
-public sealed class SchemaMigrationException : Exception
-{
-    public SchemaMigrationException(string message, Exception? inner = null) : base(message, inner) { }
-}
-
-/// <summary>Version déjà appliquée, lue dans dbo.T_SCHEMA_VERSION.</summary>
-public sealed record AppliedMigration(int Version, string Name, string Checksum);
-
-/// <summary>Accès à la base pendant une migration (une connexion, abstraite pour les tests).</summary>
-public interface ISchemaMigrationConnection : IAsyncDisposable
-{
-    /// <summary>sp_getapplock exclusif ; faux si le verrou n'a pas été obtenu dans le délai.</summary>
-    Task<bool> TryAcquireLockAsync(int timeoutSeconds, CancellationToken ct);
-    Task ReleaseLockAsync(CancellationToken ct);
-    /// <summary>Crée dbo.T_SCHEMA_VERSION si elle n'existe pas.</summary>
-    Task EnsureVersionTableAsync(CancellationToken ct);
-    Task<IReadOnlyList<AppliedMigration>> GetAppliedAsync(CancellationToken ct);
-    Task BeginTransactionAsync(CancellationToken ct);
-    Task ExecuteBatchAsync(string sql, CancellationToken ct);
-    Task RecordAppliedAsync(MigrationScript script, string appliedBy, CancellationToken ct);
-    Task CommitAsync(CancellationToken ct);
-    Task RollbackAsync(CancellationToken ct);
-}
-
-public interface ISchemaMigrationConnectionFactory
-{
-    Task<ISchemaMigrationConnection> OpenAsync(CancellationToken ct);
-}
-
-public sealed record SchemaMigrationResult(IReadOnlyList<string> Applied, IReadOnlyList<string> ChecksumMismatches)
-{
-    /// <summary>Scripts déjà enregistrés dans T_SCHEMA_VERSION (non rejoués).</summary>
-    public int AlreadyUpToDate { get; init; }
-}
 
 /// <summary>
 /// Applique, dans l'ordre numérique, les scripts versionnés pas encore enregistrés dans

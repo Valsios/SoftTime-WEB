@@ -40,14 +40,14 @@ public class OtherEmployeeReader : IEmployeeReader
         var result = new List<NormalizedEmployee>();
         while (await reader.ReadAsync(ct))
         {
-            var matricule = SqlReaderHelper.ReadText(reader, "Matricule");
+            var matricule = SqlColumnReader.ReadText(reader, "Matricule");
             if (string.IsNullOrWhiteSpace(matricule))
                 continue;
             result.Add(new NormalizedEmployee(
                 Matricule: matricule,
-                Nom: SqlReaderHelper.ReadText(reader, "Nom"),
-                Prenom: SqlReaderHelper.ReadText(reader, "Prenom"),
-                NumeroBadge: SqlReaderHelper.ReadText(reader, "Badge"),
+                Nom: SqlColumnReader.ReadText(reader, "Nom"),
+                Prenom: SqlColumnReader.ReadText(reader, "Prenom"),
+                NumeroBadge: SqlColumnReader.ReadText(reader, "Badge"),
                 Desactive: false,
                 CleInterne: null));
         }

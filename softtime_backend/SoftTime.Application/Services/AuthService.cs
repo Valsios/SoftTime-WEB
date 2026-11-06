@@ -285,7 +285,7 @@ public class AuthService
             // Valeur stockée qui n'est pas un hachage connu : seul le cas « mot de passe historique en clair » reste possible.
         }
         // Mot de passe historique en clair : comparaison à temps constant, puis hachage immédiat.
-        var legacyMatch = PasswordSecurityHelper.IsPlainText(user.PASSWORD)
+        var legacyMatch = PasswordHashClassifier.IsPlainText(user.PASSWORD)
             && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(user.PASSWORD), Encoding.UTF8.GetBytes(password));
         return (legacyMatch, legacyMatch);
     }
@@ -681,7 +681,7 @@ public class AuthService
                     entity.VERROUILLE_JUSQUA = null;
                     await _refreshTokens.RevokeAllAsync(entity.IDRESPONSABLE, cancellationToken);
                 }
-                else if (rehashNeeded || PasswordSecurityHelper.IsPlainText(entity.PASSWORD))
+                else if (rehashNeeded || PasswordHashClassifier.IsPlainText(entity.PASSWORD))
                 {
                     // Même mot de passe stocké en clair ou dans un ancien format : hachage au format courant.
                     entity.PASSWORD = _passwordHasher.HashPassword(entity, dto.Password);

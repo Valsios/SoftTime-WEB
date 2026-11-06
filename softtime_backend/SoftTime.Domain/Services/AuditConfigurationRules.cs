@@ -1,7 +1,5 @@
 namespace SoftTime.Domain.Services;
 
-public record AuditTypeOption(string Value, string Label);
-
 public static class AuditConfigurationRules
 {
     private static readonly HashSet<string> ExcludedTypes = new(StringComparer.OrdinalIgnoreCase)

@@ -9,8 +9,6 @@ using SoftTime.Domain.Services;
 
 namespace SoftTime.Application.Services;
 
-public sealed record MlDatasetBuildResult(int DailyRows, int WeeklyRows, DateTime From, DateTime To);
-
 /// <summary>
 /// Construction de la base analytique « model-ready » à partir des tables fonctionnelles.
 ///

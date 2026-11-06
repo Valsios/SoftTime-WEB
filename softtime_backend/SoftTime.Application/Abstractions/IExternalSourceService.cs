@@ -2,31 +2,6 @@ using SoftTime.Domain.Entities.SoftTime;
 
 namespace SoftTime.Application.Abstractions;
 
-public sealed record ExternalEmployee(
-    string Matricule,
-    long EmployeeId,
-    string? Nom,
-    string? Prenom,
-    string? Badge,
-    bool Inactive,
-    byte? Civilite = null);
-
-public sealed record ExternalAffectation(long EmployeeId, string? Departement, string? Service, DateTime? DateDebut, DateTime? DateSortie);
-
-public sealed record ExternalDepartment(string Code, string? Label);
-
-public sealed record ExternalHoliday(DateTime Date);
-
-public sealed record ExternalConstant(string? Code, short? Operande, string? Label);
-
-public sealed record ExternalEvent(string? Code, string? Label);
-
-public sealed record ExternalEmployeeEvent(long EmployeeId, string? Code, DateTime? Start, DateTime? End, bool? Matin, bool? ApresMidi);
-
-public sealed record ExternalPunchUser(long UserId, string? Badge, string? Ssn, string? Name);
-
-public sealed record ExternalPunch(long UserId, DateTime CheckTime, string? CheckType);
-
 /// <summary>
 /// Accès unifié aux sources externes : chemin EF historique pour les bases STANDARD,
 /// chemin piloté par le mapping (T_SOURCE_ENTITY_MAPPING / T_SOURCE_FIELD_MAPPING) pour les bases AUTRE.

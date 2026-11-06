@@ -15,7 +15,7 @@ public class ExcelWorkbookTests
     [Fact]
     public void WriteWorkbook_EcritPlusieursFeuillesEtConserveLesTypes()
     {
-        var bytes = ExcelHelper.WriteWorkbook(new[]
+        var bytes = ExcelWorkbook.WriteWorkbook(new[]
         {
             new ExcelSheetContent(
                 "Synthèse",
@@ -53,7 +53,7 @@ public class ExcelWorkbookTests
     [Fact]
     public void WriteWorkbook_NettoieEtDedupliqueLesNomsDeFeuilles()
     {
-        var bytes = ExcelHelper.WriteWorkbook(new[]
+        var bytes = ExcelWorkbook.WriteWorkbook(new[]
         {
             new ExcelSheetContent("Répartition/Catégorie", new[] { "A" }, Array.Empty<IReadOnlyList<object?>>()),
             new ExcelSheetContent("Répartition/Catégorie", new[] { "B" }, Array.Empty<IReadOnlyList<object?>>()),
@@ -78,7 +78,7 @@ public class ExcelWorkbookTests
             """{"entier":7,"decimal":2.5,"texte":"ok","booleen":true,"vide":null}""");
         var json = doc.RootElement;
 
-        var bytes = ExcelHelper.WriteWorkbook(new[]
+        var bytes = ExcelWorkbook.WriteWorkbook(new[]
         {
             new ExcelSheetContent(
                 "JSON",
@@ -110,7 +110,7 @@ public class ExcelWorkbookTests
     [Fact]
     public void WriteWorkbook_SansFeuille_ProduitUneFeuilleParDefaut()
     {
-        var bytes = ExcelHelper.WriteWorkbook(Array.Empty<ExcelSheetContent>());
+        var bytes = ExcelWorkbook.WriteWorkbook(Array.Empty<ExcelSheetContent>());
 
         using var stream = new MemoryStream(bytes);
         using var wb = new XLWorkbook(stream);

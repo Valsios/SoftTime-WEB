@@ -3,18 +3,6 @@ using SoftTime.Domain.Models;
 
 namespace SoftTime.Domain.Services;
 
-public sealed record AbsenceReportRow(
-    string Matricule,
-    string? Nom,
-    string? Prenom,
-    string? Departement,
-    DateTime Date,
-    string Periode,
-    decimal? DureeHeures,
-    string Type,
-    string? Motif
-);
-
 /// <summary>
 /// Règles pures de calcul du rapport des absences.
 /// Détermine les absences constatées (Congé SAGE, Arbitrée GTA, Non justifiée)

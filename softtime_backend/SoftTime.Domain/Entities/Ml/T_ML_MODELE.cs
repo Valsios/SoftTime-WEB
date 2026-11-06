@@ -42,11 +42,3 @@ public class T_ML_MODELE
     public byte[]? ModeleBinaire { get; set; }
     public string? Commentaire { get; set; }
 }
-
-public static class MlModelStatus
-{
-    public const string Active = "Active";
-    public const string Archive = "Archive";
-    public const string Rejete = "Rejete";
-    public const string Echec = "Echec";
-}

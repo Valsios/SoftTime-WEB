@@ -31,7 +31,7 @@ public interface IRepository<T> where T : class
 
         var list = query.ToList();
         var total = list.Count;
-        var (pageNorm, taille) = PaginationHelper.CalculerPagination(page, pageSize);
+        var (pageNorm, taille) = PaginationRules.Normaliser(page, pageSize);
 
         if (total == 0)
         {

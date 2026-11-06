@@ -19,22 +19,6 @@ using Xunit.Abstractions;
 namespace SoftTime.Tests;
 
 /// <summary>
-/// Test ignoré si la variable d'environnement SOFTTIME_CLOTURE_CONN n'existe pas. Sa valeur
-/// (authentification Windows, jamais écrite dans le dépôt) doit viser la copie jetable
-/// <c>SOFTTIME_DEMO_CLOTURE</c> ; toute autre base est refusée. Lecture seule.
-/// </summary>
-public sealed class ClosingIntegrationFactAttribute : FactAttribute
-{
-    public const string Variable = "SOFTTIME_CLOTURE_CONN";
-
-    public ClosingIntegrationFactAttribute()
-    {
-        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(Variable)))
-            Skip = $"Variable d'environnement {Variable} absente : test d'intégration de la clôture ignoré.";
-    }
-}
-
-/// <summary>
 /// Mesure de performance et contrôle « vérité terrain » de <see cref="ClosingService"/> sur une copie
 /// de base. Variables facultatives : SOFTTIME_CLOTURE_SAGE / SOFTTIME_CLOTURE_POINTEUSE (bases
 /// actives), SOFTTIME_CLOTURE_SORTIE (dossier des fichiers produits), SOFTTIME_CLOTURE_ETIQUETTE

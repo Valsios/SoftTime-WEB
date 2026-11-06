@@ -20,7 +20,7 @@ public class ExcelExportController : ControllerBase
         var sheet = string.IsNullOrWhiteSpace(request.SheetName) ? "Données" : request.SheetName;
         var headers = request.Headers ?? new List<string>();
         var rows = request.Rows ?? new List<List<string?>>();
-        var bytes = ExcelHelper.WriteSheet(sheet, headers, rows.Select(r => (r ?? new List<string?>()).Cast<object?>()));
+        var bytes = ExcelWorkbook.WriteSheet(sheet, headers, rows.Select(r => (r ?? new List<string?>()).Cast<object?>()));
         return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", name);
     }
 
@@ -41,7 +41,7 @@ public class ExcelExportController : ControllerBase
                     .Select(r => (IReadOnlyList<object?>)(r ?? new List<object?>()))
                     .ToList()))
             .ToList();
-        var bytes = ExcelHelper.WriteWorkbook(sheets);
+        var bytes = ExcelWorkbook.WriteWorkbook(sheets);
         return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", name);
     }
 

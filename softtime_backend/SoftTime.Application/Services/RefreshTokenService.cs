@@ -10,9 +10,6 @@ using SoftTime.Domain.Repositories;
 
 namespace SoftTime.Application.Services;
 
-/// <summary>Résultat d'une rotation : compte concerné et nouveau jeton (valeur en clair, jamais stockée).</summary>
-public sealed record RefreshTokenRotation(decimal UserId, string RefreshToken);
-
 /// <summary>
 /// Jetons de rafraîchissement : émission, rotation à chaque usage, révocation, et détection de réutilisation
 /// (un jeton déjà remplacé qui revient révoque toutes les sessions du compte). Seule l'empreinte SHA-256 est stockée.

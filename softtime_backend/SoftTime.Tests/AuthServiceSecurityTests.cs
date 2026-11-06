@@ -50,7 +50,7 @@ public class AuthServiceSecurityTests
 
         Assert.NotNull(adminUser.PASSWORD);
         Assert.NotEqual("AdminSecret123!", adminUser.PASSWORD);
-        Assert.True(PasswordSecurityHelper.IsHashedPassword(adminUser.PASSWORD));
+        Assert.True(PasswordHashClassifier.IsHashedPassword(adminUser.PASSWORD));
 
         var verifyResult = _hasher.VerifyHashedPassword(adminUser, adminUser.PASSWORD, "AdminSecret123!");
         Assert.Equal(PasswordVerificationResult.Success, verifyResult);
@@ -69,7 +69,7 @@ public class AuthServiceSecurityTests
         var savedEntity = _uow.GetRepo<T_RESPONSABLE>().Items.Single(u => u.LOGIN == "testuser");
         Assert.NotNull(savedEntity.PASSWORD);
         Assert.NotEqual("UserPassword456!", savedEntity.PASSWORD);
-        Assert.True(PasswordSecurityHelper.IsHashedPassword(savedEntity.PASSWORD));
+        Assert.True(PasswordHashClassifier.IsHashedPassword(savedEntity.PASSWORD));
 
         // Returned DTO must NEVER contain password or hash
         Assert.Null(createdDto.Password);
@@ -245,7 +245,7 @@ public class AuthServiceSecurityTests
 
         var updatedEntity = _uow.GetRepo<T_RESPONSABLE>().Items.Single(u => u.IDRESPONSABLE == 11);
         Assert.NotEqual(initialHash, updatedEntity.PASSWORD);
-        Assert.True(PasswordSecurityHelper.IsHashedPassword(updatedEntity.PASSWORD));
+        Assert.True(PasswordHashClassifier.IsHashedPassword(updatedEntity.PASSWORD));
 
         var verify = _hasher.VerifyHashedPassword(updatedEntity, updatedEntity.PASSWORD!, "BrandNewSecret789!");
         Assert.Equal(PasswordVerificationResult.Success, verify);
@@ -342,7 +342,7 @@ public class AuthServiceSecurityTests
         };
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(legacyUser);
 
-        Assert.False(PasswordSecurityHelper.IsHashedPassword(legacyUser.PASSWORD));
+        Assert.False(PasswordHashClassifier.IsHashedPassword(legacyUser.PASSWORD));
 
         // Attempt login with the legacy plain text password
         var response = await _auth.LoginAsync(new LoginRequest("legacy_admin", "plain_text_password"));
@@ -351,7 +351,7 @@ public class AuthServiceSecurityTests
         Assert.Equal("legacy_admin", response.Login);
 
         // Stored password must now be upgraded to a secure PBKDF2 hash!
-        Assert.True(PasswordSecurityHelper.IsHashedPassword(legacyUser.PASSWORD));
+        Assert.True(PasswordHashClassifier.IsHashedPassword(legacyUser.PASSWORD));
         Assert.NotEqual("plain_text_password", legacyUser.PASSWORD);
 
         // Next login must succeed verifying against the upgraded hash
@@ -362,7 +362,7 @@ public class AuthServiceSecurityTests
     [Fact]
     public async Task LoginAsync_WithValidIdentityV2Hash_SucceedsAndTransparentlyUpgradesToV3()
     {
-        var v2Hash = PasswordSecurityHelperTests.CreateLegacyIdentityV2Hash("v2_secret_password");
+        var v2Hash = PasswordHashClassifierTests.CreateLegacyIdentityV2Hash("v2_secret_password");
         var user = new T_RESPONSABLE
         {
             IDRESPONSABLE = 77,
@@ -373,8 +373,8 @@ public class AuthServiceSecurityTests
         };
         _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
 
-        Assert.True(PasswordSecurityHelper.IsIdentityV2(user.PASSWORD));
-        Assert.False(PasswordSecurityHelper.IsIdentityV3(user.PASSWORD));
+        Assert.True(PasswordHashClassifier.IsIdentityV2(user.PASSWORD));
+        Assert.False(PasswordHashClassifier.IsIdentityV3(user.PASSWORD));
 
         // First login with V2 password
         var response = await _auth.LoginAsync(new LoginRequest("v2user", "v2_secret_password"));
@@ -382,7 +382,7 @@ public class AuthServiceSecurityTests
         Assert.Equal("v2user", response.Login);
 
         // Password in DB must now be transparently upgraded to Identity V3!
-        Assert.True(PasswordSecurityHelper.IsIdentityV3(user.PASSWORD));
+        Assert.True(PasswordHashClassifier.IsIdentityV3(user.PASSWORD));
         Assert.NotEqual(v2Hash, user.PASSWORD);
 
         // Subsequent login verifies via the upgraded V3 hash
@@ -393,7 +393,7 @@ public class AuthServiceSecurityTests
     [Fact]
     public async Task LoginAsync_WithValidIdentityV2Hash_WrongPassword_ThrowsUnauthorizedAndPreservesHash()
     {
-        var v2Hash = PasswordSecurityHelperTests.CreateLegacyIdentityV2Hash("v2_secret_password");
+        var v2Hash = PasswordHashClassifierTests.CreateLegacyIdentityV2Hash("v2_secret_password");
         var user = new T_RESPONSABLE
         {
             IDRESPONSABLE = 78,
@@ -409,7 +409,7 @@ public class AuthServiceSecurityTests
 
         // V2 hash must remain intact in DB
         Assert.Equal(v2Hash, user.PASSWORD);
-        Assert.True(PasswordSecurityHelper.IsIdentityV2(user.PASSWORD));
+        Assert.True(PasswordHashClassifier.IsIdentityV2(user.PASSWORD));
     }
 
     [Fact]
@@ -457,7 +457,7 @@ public class AuthServiceSecurityTests
     [Fact]
     public async Task MigrateLegacyPasswordsAsync_WithMixOfPlainText_V2_V3_PreservesV2AndV3WithoutDoubleHashing()
     {
-        var v2Hash = PasswordSecurityHelperTests.CreateLegacyIdentityV2Hash("v2_pass");
+        var v2Hash = PasswordHashClassifierTests.CreateLegacyIdentityV2Hash("v2_pass");
         var v3Hash = _hasher.HashPassword(new T_RESPONSABLE(), "v3_pass");
 
         var userPlain1 = new T_RESPONSABLE { IDRESPONSABLE = 101, LOGIN = "plain1", PASSWORD = "clear_password_1" };
@@ -473,15 +473,15 @@ public class AuthServiceSecurityTests
         Assert.Equal(2, migratedCount);
 
         // Plain text users must now be hashed with Identity V3
-        Assert.True(PasswordSecurityHelper.IsIdentityV3(userPlain1.PASSWORD));
-        Assert.True(PasswordSecurityHelper.IsIdentityV3(userPlain2.PASSWORD));
+        Assert.True(PasswordHashClassifier.IsIdentityV3(userPlain1.PASSWORD));
+        Assert.True(PasswordHashClassifier.IsIdentityV3(userPlain2.PASSWORD));
 
         // CRITICAL: V2 and V3 users MUST NOT be double-hashed!
         Assert.Equal(v2Hash, userV2.PASSWORD);
-        Assert.True(PasswordSecurityHelper.IsIdentityV2(userV2.PASSWORD));
+        Assert.True(PasswordHashClassifier.IsIdentityV2(userV2.PASSWORD));
 
         Assert.Equal(v3Hash, userV3.PASSWORD);
-        Assert.True(PasswordSecurityHelper.IsIdentityV3(userV3.PASSWORD));
+        Assert.True(PasswordHashClassifier.IsIdentityV3(userV3.PASSWORD));
 
         // Second run: completely idempotent (0 migrated)
         var secondRun = await UserAccountConfiguration.MigrateLegacyPasswordsAsync(_uow, _hasher);
@@ -530,10 +530,10 @@ public class AuthServiceSecurityTests
     [Fact]
     public async Task MigrateLegacyPasswordsDetailedAsync_WithAmbiguousAndUnrecognizedHashes_PreservesValuesWithoutCorruption()
     {
-        var v2Hash = PasswordSecurityHelperTests.CreateLegacyIdentityV2Hash("v2_pass");
+        var v2Hash = PasswordHashClassifierTests.CreateLegacyIdentityV2Hash("v2_pass");
         var v3StdHash = _hasher.HashPassword(new T_RESPONSABLE(), "v3_pass");
-        var v3Sha512Hash = PasswordSecurityHelperTests.CreateIdentityV3CustomHash("sha512_pass", prf: 2, subkeySize: 64);
-        var v3Sha512_32bHash = PasswordSecurityHelperTests.CreateIdentityV3CustomHash("sha512_32b_pass", prf: 2, subkeySize: 32);
+        var v3Sha512Hash = PasswordHashClassifierTests.CreateIdentityV3CustomHash("sha512_pass", prf: 2, subkeySize: 64);
+        var v3Sha512_32bHash = PasswordHashClassifierTests.CreateIdentityV3CustomHash("sha512_32b_pass", prf: 2, subkeySize: 32);
         const string md5Hash = "5ebe2294ecd0e0f08eab7690d2a6ee69";
         const string bcryptHash = "$2a$12$e8N4Yy9w/1z3o8hN7a5HXe8.J4vW8/x1t3y2w1z3o8hN7a5HXe8.J";
         const string corruptedV3 = "AQAAAA_corrupted_truncated";
@@ -565,7 +565,7 @@ public class AuthServiceSecurityTests
         Assert.Equal(3, report.AmbiguousAccounts.Count);
 
         // Plain text user must now be hashed with Identity V3
-        Assert.True(PasswordSecurityHelper.IsIdentityV3(userPlain.PASSWORD));
+        Assert.True(PasswordHashClassifier.IsIdentityV3(userPlain.PASSWORD));
 
         // Ambiguous, unknown and existing hashes MUST be preserved without double-hashing
         Assert.Equal(md5Hash, userMd5.PASSWORD);
@@ -592,7 +592,7 @@ public class AuthServiceSecurityTests
     [Fact]
     public async Task LoginAsync_WithLegacyIdentityV2Hash_AuthenticatesAndUpgradesToV3()
     {
-        var v2Hash = PasswordSecurityHelperTests.CreateLegacyIdentityV2Hash("v2_secret_password");
+        var v2Hash = PasswordHashClassifierTests.CreateLegacyIdentityV2Hash("v2_secret_password");
         var user = new T_RESPONSABLE
         {
             IDRESPONSABLE = 501,
@@ -607,14 +607,14 @@ public class AuthServiceSecurityTests
         Assert.Equal("v2_login_user", loginResult.Login);
 
         // User must now be automatically upgraded to Identity V3 in storage
-        Assert.True(PasswordSecurityHelper.IsIdentityV3(user.PASSWORD));
+        Assert.True(PasswordHashClassifier.IsIdentityV3(user.PASSWORD));
         Assert.NotEqual(v2Hash, user.PASSWORD);
     }
 
     [Fact]
     public async Task LoginAsync_WithIdentityV3HmacSha512_AuthenticatesSuccessfully()
     {
-        var hash512 = PasswordSecurityHelperTests.CreateIdentityV3CustomHash("sha512_secret_pwd", prf: 2, subkeySize: 64);
+        var hash512 = PasswordHashClassifierTests.CreateIdentityV3CustomHash("sha512_secret_pwd", prf: 2, subkeySize: 64);
         var user = new T_RESPONSABLE
         {
             IDRESPONSABLE = 502,

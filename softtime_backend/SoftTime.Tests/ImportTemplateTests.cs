@@ -8,7 +8,7 @@ namespace SoftTime.Tests;
 
 /// <summary>
 /// Catalogue des modèles d'import : cohérence des matrices/exemples et aller-retour des fichiers
-/// générés (.xlsx relu par <see cref="ExcelHelper"/>, .csv découpé). L'import réel de chaque
+/// générés (.xlsx relu par <see cref="ExcelWorkbook"/>, .csv découpé). L'import réel de chaque
 /// modèle est couvert par <see cref="ImportTemplateImportTests"/>.
 /// </summary>
 public class ImportTemplateTests
@@ -76,7 +76,7 @@ public class ImportTemplateTests
         foreach (var modele in Modeles().Where(m => m.Format == ImportTemplateCatalog.FormatXlsx))
         {
             using var flux = new MemoryStream(ImportTemplateFile.Build(modele));
-            var lignes = ExcelHelper.ReadFirstSheet(flux);
+            var lignes = ExcelWorkbook.ReadFirstSheet(flux);
 
             Assert.Equal(modele.ExampleRows.Count, lignes.Count);
             Assert.Equal(modele.Headers.ToList(), lignes[0].Keys.ToList());

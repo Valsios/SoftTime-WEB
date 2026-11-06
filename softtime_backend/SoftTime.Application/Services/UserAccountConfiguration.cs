@@ -7,31 +7,6 @@ using SoftTime.Domain.Repositories;
 namespace SoftTime.Application.Services;
 
 /// <summary>
-/// Résultat détaillé d'une opération de migration des mots de passe.
-/// Trace les comptes migrés, déjà sécurisés, vides ou nécessitant une attention administrative.
-/// </summary>
-public sealed record PasswordMigrationResult
-{
-    public int TotalScanned { get; init; }
-    public int MigratedCount { get; init; }
-    public int AlreadyHashedV3Count { get; init; }
-    public int PreservedV2Count { get; init; }
-    public int SkippedEmptyCount { get; init; }
-    public int AmbiguousCount { get; init; }
-    public List<AmbiguousAccountEntry> AmbiguousAccounts { get; init; } = new();
-}
-
-/// <summary>
-/// Information sur un compte dont la valeur de mot de passe est ambiguë, de format externe ou mal formée.
-/// Ces comptes sont scrupuleusement préservés sans modification pour empêcher toute corruption irréversible.
-/// </summary>
-public sealed record AmbiguousAccountEntry(
-    decimal UserId,
-    string? Login,
-    PasswordClassification Classification,
-    string Diagnostic);
-
-/// <summary>
 /// Stockage requis par les comptes utilisateurs et migration de sécurité.
 /// Les modifications DDL de schéma structurelles (ex: élargissement de colonne) sont isolées
 /// dans des scripts DBA explicites (voir migrations/upgrade_password_column_schema.sql)
@@ -75,7 +50,7 @@ public static class UserAccountConfiguration
         foreach (var user in users)
         {
             ct.ThrowIfCancellationRequested();
-            var classification = PasswordSecurityHelper.Classify(user.PASSWORD);
+            var classification = PasswordHashClassifier.Classify(user.PASSWORD);
 
             switch (classification)
             {
