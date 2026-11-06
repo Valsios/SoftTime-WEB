@@ -290,6 +290,59 @@ cours et futurs ne sont jamais contrôlés (la période est plafonnée à la vei
 
 ---
 
+## 5 quinquies. Mon espace salarié (`/mon-espace`) — branche `feature/mon-espace`, désactivée par défaut
+
+Écran **en lecture seule** où un salarié voit uniquement ses propres données : heures par semaine (semaines **validées**) avec
+heures supplémentaires à 130 % / 150 % et cumuls EXO / IMPO, anomalies, absences et congés (lus dans SAGE), retards. Textes seuls, sans
+export ni lien vers un autre écran. Fonction **non validée** : tout est additif et désactivable.
+
+- **Activation** : variable d'environnement `SelfService__Enabled=true` (jamais dans `appsettings.json`). Par défaut la fonction est
+  coupée : toutes les routes `api/me/space/*` répondent 404.
+- **Compte Salarié** : créé à la main par la RH dans l'écran Utilisateurs, avec le rôle « Salarié », le **matricule SAGE**, l'e-mail et **une
+  seule base** cochée dans « Accès bases ». Le rôle se crée avec `migrations/mon_espace_role_salarie.sql` (fourni, jamais exécuté
+  automatiquement, volontairement hors de `migrations/versions`, appliqué seul en développement) : une permission, `SELF:READ`, et
+  aucune porte. Ne jamais ajouter de permission `SAGE:` ni `POINTEUSE:` à ce compte : elles donneraient la porte 1.
+- **Garde** (`SelfServiceGuard`), appliquée à chaque requête et sans passer par la porte 1 : option activée ; permission `SELF:READ` effective ;
+  matricule lu **uniquement** dans le jeton (aucun paramètre de requête, de route ni d'en-tête ne désigne un salarié) ; exactement
+  **une** base autorisée dans `T_BDD_AUTORISE` ; matricule présent dans `T_CARDPAIE` de cette base. Sinon 403 avec un message explicite.
+  Le client d'un salarié n'envoie **pas** `X-Sage-Database` : `TenantMiddleware` refuse tout en-tête de base à un compte sans porte 1.
+- **Routes** (GET seulement, période `from`/`to` limitée à 4 mois dans les 4 derniers mois, sans jour futur) : `summary`, `weeks`, `anomalies`,
+  `absences`, `delays`. Réponses sans identifiant de ligne, sans matricule ni nom.
+- **Sources** : `T_HS_VALIDER`, `T_HSExoImp`, `T_HEUREANOMALIE` (lecture directe filtrée sur le matricule) ; règles pures `AbsenceReportRules`,
+  `RetardReportRules`, `OvertimeRules.SplitWeekly`. Les congés SAGE se lisent pour tout le tenant (environ 3 à 5 s sur la démo, 13 s
+  au plus mesuré) : seule la part du salarié est conservée, en cache à son nom (5 min). Aucun service de traitement, aucun état des retards
+  (qui écrit `T_impr_RET`), aucun contrôle avant paie n'est utilisé.
+- **Après la connexion** : un compte avec `SELF:READ` et aucune porte arrive sur `/mon-espace` ; tous les autres comptes sur `/dashboard`
+  comme avant. L'entrée de menu « Mon espace » n'apparaît qu'avec `SELF:READ`.
+- **Hors périmètre** : changement de mot de passe (aucun écran ni route « changer mon mot de passe » n'existe, ni changement obligatoire à la
+  première connexion), création de comptes en lot, invitation, périmètre par département, solde de congés (absent de SoftTime).
+- **Retrait** : mettre `SelfService__Enabled` à faux (ou le retirer) ; supprimer `SoftTime.Application/SelfService/`, `SelfSpaceController.cs`,
+  `features/self-space/` et les ajouts à `app.routes.ts`, `login.ts`, `shell.ts`, `DependencyInjection.cs` et `PermissionCatalog.cs`. Reste en
+  base : le rôle « Salarié », ses lignes `T_ROLE_PERMISSION`, les comptes créés et leurs accès bases ; `migrations/mon_espace_retrait.sql`
+  les liste, puis les supprime après relecture.
+
+**Corrections de revue (complètent et, en cas de désaccord, remplacent les points ci-dessus)** :
+
+- **Garde — le compte est relu à chaque appel.** Le matricule du jeton n'est plus la seule source : la garde relit le compte dans
+  `T_RESPONSABLE` (une requête, sans cache). Compte supprimé, matricule retiré ou différent de celui du jeton (réaffectation par la RH,
+  jeton de 12 h encore valide) : 403 explicite « reconnectez-vous ». `T_RESPONSABLE` n'a pas de colonne « actif » : un compte désactivé est un
+  compte supprimé ou sans `SELF:READ`. Seules les routes `api/me/space/*` font cette lecture ; aucune autre route n'est touchée.
+- **Matricule partagé = refus.** Si un autre compte porte la même clé de matricule (casse, espaces et zéros de tête ignorés), **aucun** des
+  porteurs ne lit Mon espace (403 « matricule porté par plusieurs comptes : contactez la RH »), sans citer l'autre compte. À la création des
+  comptes Salarié, donner un matricule unique.
+- **Aucune conservation par le navigateur.** Toutes les réponses de `api/me/space/*` (succès, 400, 403, 404 de la fonction désactivée)
+  portent `Cache-Control: no-store` et `Pragma: no-cache`. Seuls les 401 (jeton absent, rendus avant le contrôleur) et les 405 n'en portent pas :
+  ils ne contiennent aucune donnée.
+- **Congés SAGE : une seule lecture partagée.** La lecture du tenant (qui prend plusieurs secondes) n'est lancée qu'une fois à la fois par
+  base, quel que soit le nombre de salariés qui la demandent ; les autres attendent la même lecture. Elle est conservée **5 minutes** en
+  mémoire, dans le cache seulement : aucune route ne la rend, chaque salarié n'en reçoit qu'une copie de sa propre part (clé utilisateur |
+  base | matricule, jamais plus vieille que la lecture). Un échec n'est jamais conservé. Plafond mémoire : 8 bases et 512 parts de salarié ;
+  mesuré environ 1,3 Mo pour la démo (3 008 cartes).
+- **Lectures filtrées dans la requête.** Plannings, anomalies et catégories du salarié sont filtrés dans la requête SQL (et recontrôlés par la
+  clé canonique) au lieu d'être lus pour tout le tenant puis filtrés.
+
+---
+
 ## 6. Divers
 
 - **Cantine** : jours avec pointage 11h–14h30 ; recherche sur `T_CANTINE`, **Calculer** pour régénérer.

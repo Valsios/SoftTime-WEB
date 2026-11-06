@@ -13,6 +13,7 @@ import { ToastService } from '../core/toast.service';
 import { ConfirmService } from '../core/confirm.service';
 import { closingBadgeView } from '../features/closing/closing.logic';
 import { ClosingSessionState } from '../features/closing/closing.state';
+import { hasSelfPermission, isSelfServiceProfile } from '../features/self-space/self-space.logic';
 
 @Component({
   selector: 'app-shell',
@@ -42,6 +43,19 @@ import { ClosingSessionState } from '../features/closing/closing.state';
         </div>
 
         <nav class="sidebar__nav">
+          @if (selfSpaceLink()) {
+            <a
+              routerLink="/mon-espace"
+              routerLinkActive="is-active"
+              class="sidebar__item"
+              [title]="'Mon espace'"
+              (click)="closeMobileNavigation()"
+            >
+              <app-icon name="user-check"></app-icon>
+              @if (!collapsed()) {<span>Mon espace</span>}
+            </a>
+          }
+          @if (!selfOnlyProfile()) {
           <a
             routerLink="/dashboard"
             routerLinkActive="is-active"
@@ -52,6 +66,7 @@ import { ClosingSessionState } from '../features/closing/closing.state';
             <app-icon name="home"></app-icon>
             @if (!collapsed()) {<span>Tableau de bord</span>}
           </a>
+          }
 
           @for (section of visibleSections(); track section.title; let sectionIndex = $index) {
             <div class="sidebar__section">
@@ -563,6 +578,11 @@ export class Shell implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly closingState = inject(ClosingSessionState);
+
+  /** Entrée « Mon espace » : seulement avec la permission SELF:READ (un administrateur ne l'a pas implicitement). */
+  readonly selfSpaceLink = computed(() => hasSelfPermission(this.session.permissions()));
+  /** Profil Salarié (SELF:READ et aucune porte) : le tableau de bord, inutilisable sans base, n'est pas proposé. */
+  readonly selfOnlyProfile = computed(() => isSelfServiceProfile(this.session.permissions(), this.session.gates()));
 
   /**
    * Badge du Contrôle avant paie : nombre d'anomalies critiques du DERNIER résultat conservé en session. Aucune requête,
