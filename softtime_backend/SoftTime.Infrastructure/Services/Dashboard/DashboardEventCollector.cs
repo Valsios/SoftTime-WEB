@@ -125,18 +125,6 @@ internal sealed class DashboardEventCollector
         }
     }
 
-    private static int MinutesRetard(IEnumerable<HeureCorrigee> lignesDuJour, PlanningSalarie? plan, int tolerance)
-    {
-        var lignes = lignesDuJour.ToList();
-        var entrees = lignes
-            .Where(h => h.HEntree.HasValue)
-            .Select(h => h.HEntree!.Value)
-            .ToList();
-        return RetardReportRules.MinutesRetardJour(
-            absenceMatin: lignes.Any(h => h.AbsenceAm == true),
-            retardsSaisis: lignes.Select(h => h.Retard),
-            premiereEntree: entrees.Count > 0 ? entrees.Min() : null,
-            heurePrevue: RetardReportRules.HeurePrevue(plan),
-            toleranceMinutes: tolerance);
-    }
+    private static int MinutesRetard(IEnumerable<HeureCorrigee> lignesDuJour, PlanningSalarie? plan, int tolerance) =>
+        RetardReportRules.MinutesRetardJour(lignesDuJour.ToList(), plan, tolerance);
 }

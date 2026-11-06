@@ -39,14 +39,9 @@ public class AbsenceReportRulesTests
     public void Calculer_ListeVide_RetourneVideSansException()
     {
         var result = AbsenceReportRules.Calculer(
-            Array.Empty<PlanningSalarie>(),
-            Array.Empty<CardPaie>(),
-            Array.Empty<HeureCorrigee>(),
-            new Dictionary<string, List<LeaveDay>>(),
-            new HashSet<DateTime>(),
-            new DateTime(2025, 11, 1),
-            new DateTime(2025, 11, 15),
-            Today);
+            new EmployeeSources(Array.Empty<CardPaie>(), Array.Empty<PlanningSalarie>(), Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
+            new ReportPeriod(new DateTime(2025, 11, 1), new DateTime(2025, 11, 15), Today));
 
         Assert.Empty(result);
     }
@@ -59,14 +54,9 @@ public class AbsenceReportRulesTests
         var plannings = new[] { Plan(1, 1, new DateTime(2025, 11, 25), TimeSpan.FromHours(8), TimeSpan.FromHours(17)) };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            new Dictionary<string, List<LeaveDay>>(),
-            new HashSet<DateTime>(),
-            new DateTime(2025, 11, 22),
-            new DateTime(2025, 11, 30),
-            Today); // hier = 2025-11-19
+            new EmployeeSources(cartes, plannings, Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
+            new ReportPeriod(new DateTime(2025, 11, 22), new DateTime(2025, 11, 30), Today)); // hier = 2025-11-19
 
         Assert.Empty(result);
     }
@@ -80,14 +70,9 @@ public class AbsenceReportRulesTests
         var plannings = new[] { Plan(10, 1, date, TimeSpan.FromHours(8), TimeSpan.FromHours(17), TimeSpan.FromHours(1)) };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            new[] { Corr(1, "001", date.AddDays(-1)) }, // Autre jour pointé : ne masque plus l'absence
-            new Dictionary<string, List<LeaveDay>>(),
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, plannings, new[] { Corr(1, "001", date.AddDays(-1)) }),
+            new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         var row = Assert.Single(result);
         Assert.Equal("001", row.Matricule);
@@ -109,14 +94,9 @@ public class AbsenceReportRulesTests
         var plannings = new[] { Plan(10, 1, date, TimeSpan.FromHours(8), TimeSpan.FromHours(17), offP: true) };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            new Dictionary<string, List<LeaveDay>>(),
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, plannings, Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         Assert.Empty(result);
     }
@@ -148,14 +128,9 @@ public class AbsenceReportRulesTests
         };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            corrections,
-            conges,
-            new HashSet<DateTime> { ferie },
-            new DateTime(2025, 11, 8),
-            new DateTime(2025, 11, 12),
-            Today);
+            new EmployeeSources(cartes, plannings, corrections),
+            new AbsenceCalendar(conges, new HashSet<DateTime> { ferie }),
+            new ReportPeriod(new DateTime(2025, 11, 8), new DateTime(2025, 11, 12), Today));
 
         Assert.Empty(result);
     }
@@ -172,14 +147,9 @@ public class AbsenceReportRulesTests
         };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            new Dictionary<string, List<LeaveDay>>(),
-            new HashSet<DateTime>(),
-            Today,
-            Today.AddDays(5),
-            Today);
+            new EmployeeSources(cartes, plannings, Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
+            new ReportPeriod(Today, Today.AddDays(5), Today));
 
         Assert.Empty(result);
     }
@@ -199,14 +169,9 @@ public class AbsenceReportRulesTests
         };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            new[] { Corr(1, "001", j1) }, // Traité le 12/11
-            new Dictionary<string, List<LeaveDay>>(),
-            new HashSet<DateTime>(),
-            j1,
-            j2,
-            Today);
+            new EmployeeSources(cartes, plannings, new[] { Corr(1, "001", j1) }),
+            new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
+            new ReportPeriod(j1, j2, Today));
 
         // j1 a une correction donc pas non justifiée ; j2 n'a aucun pointage -> non justifiée.
         var row = Assert.Single(result);
@@ -227,14 +192,9 @@ public class AbsenceReportRulesTests
         };
 
         var result = AbsenceReportRules.Calculer(
-            Array.Empty<PlanningSalarie>(),
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            conges,
-            new HashSet<DateTime>(),
-            new DateTime(2025, 11, 10),
-            new DateTime(2025, 11, 18),
-            Today);
+            new EmployeeSources(cartes, Array.Empty<PlanningSalarie>(), Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(conges, new HashSet<DateTime>()),
+            new ReportPeriod(new DateTime(2025, 11, 10), new DateTime(2025, 11, 18), Today));
 
         var row = Assert.Single(result);
         Assert.Equal("Congé SAGE", row.Type);
@@ -255,14 +215,9 @@ public class AbsenceReportRulesTests
         };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            conges,
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, plannings, Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(conges, new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         var row = Assert.Single(result);
         Assert.Equal("Congé SAGE", row.Type);
@@ -283,14 +238,9 @@ public class AbsenceReportRulesTests
         };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            conges,
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, plannings, Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(conges, new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         var row = Assert.Single(result);
         Assert.Equal("Congé SAGE", row.Type);
@@ -312,14 +262,9 @@ public class AbsenceReportRulesTests
         };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            conges,
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, plannings, Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(conges, new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         var row = Assert.Single(result);
         Assert.Equal("Congé SAGE", row.Type);
@@ -340,14 +285,9 @@ public class AbsenceReportRulesTests
         };
 
         var result = AbsenceReportRules.Calculer(
-            Array.Empty<PlanningSalarie>(),
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            conges,
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, Array.Empty<PlanningSalarie>(), Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(conges, new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         var row = Assert.Single(result);
         Assert.Equal("Congé SAGE", row.Type);
@@ -369,14 +309,9 @@ public class AbsenceReportRulesTests
         var corrections = new[] { Corr(1, "001", date, am: am, pm: pm, intitule: "Autorisation absence") };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            corrections,
-            new Dictionary<string, List<LeaveDay>>(),
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, plannings, corrections),
+            new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         var row = Assert.Single(result);
         Assert.Equal("Arbitrée GTA", row.Type);
@@ -399,14 +334,9 @@ public class AbsenceReportRulesTests
         var corrections = new[] { Corr(1, "001", date, am: true, pm: true, intitule: "Absence saisie") };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            corrections,
-            conges,
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, plannings, corrections),
+            new AbsenceCalendar(conges, new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         var row = Assert.Single(result);
         Assert.Equal("Congé SAGE", row.Type);
@@ -434,14 +364,9 @@ public class AbsenceReportRulesTests
         };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            new Dictionary<string, List<LeaveDay>>(),
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, plannings, Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         var row = Assert.Single(result);
         Assert.Equal(9m, row.DureeHeures); // issu du planning ID=50
@@ -459,14 +384,9 @@ public class AbsenceReportRulesTests
         };
 
         var result = AbsenceReportRules.Calculer(
-            Array.Empty<PlanningSalarie>(),
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            conges,
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, Array.Empty<PlanningSalarie>(), Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(conges, new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         var row = Assert.Single(result);
         Assert.Equal("00369", row.Matricule);
@@ -485,14 +405,9 @@ public class AbsenceReportRulesTests
         };
 
         var result = AbsenceReportRules.Calculer(
-            Array.Empty<PlanningSalarie>(),
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            conges,
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, Array.Empty<PlanningSalarie>(), Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(conges, new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         var row = Assert.Single(result);
         Assert.Equal("03919", row.Matricule);
@@ -510,14 +425,9 @@ public class AbsenceReportRulesTests
         var plannings = new[] { Plan(1, 1, date, TimeSpan.Zero, TimeSpan.Zero) };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            new Dictionary<string, List<LeaveDay>>(),
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, plannings, Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         Assert.Empty(result);
     }
@@ -531,14 +441,9 @@ public class AbsenceReportRulesTests
         var plannings = new[] { Plan(1, 1, date, TimeSpan.FromHours(22), TimeSpan.FromHours(6), TimeSpan.FromMinutes(30)) };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            new Dictionary<string, List<LeaveDay>>(),
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, plannings, Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         var row = Assert.Single(result);
         Assert.Equal(7.5m, row.DureeHeures);
@@ -554,14 +459,9 @@ public class AbsenceReportRulesTests
         var plannings = new[] { Plan(1, 1, date, TimeSpan.FromHours(8), TimeSpan.FromHours(17)) };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            new Dictionary<string, List<LeaveDay>>(),
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, plannings, Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         var row = Assert.Single(result);
         Assert.Equal("Non justifiée", row.Type);
@@ -581,14 +481,9 @@ public class AbsenceReportRulesTests
         };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            conges,
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, plannings, Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(conges, new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         Assert.Empty(result);
     }
@@ -609,14 +504,9 @@ public class AbsenceReportRulesTests
         };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            new Dictionary<string, List<LeaveDay>>(),
-            new HashSet<DateTime>(),
-            j1,
-            j3,
-            Today);
+            new EmployeeSources(cartes, plannings, Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
+            new ReportPeriod(j1, j3, Today));
 
         Assert.Equal(3, result.Count);
         Assert.Equal(j1, result[0].Date);
@@ -636,14 +526,9 @@ public class AbsenceReportRulesTests
         };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            new Dictionary<string, List<LeaveDay>>(),
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, plannings, Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         var row = Assert.Single(result);
         Assert.Equal("001", row.Matricule);
@@ -671,14 +556,9 @@ public class AbsenceReportRulesTests
         var plannings = new[] { PlanWithShift(1, 1, date, 17, TimeSpan.Zero, TimeSpan.Zero) };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            new Dictionary<string, List<LeaveDay>>(),
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, plannings, Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         Assert.Empty(result);
     }
@@ -696,14 +576,9 @@ public class AbsenceReportRulesTests
         };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            conges,
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, plannings, Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(conges, new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         var row = Assert.Single(result);
         Assert.Equal("Congé SAGE", row.Type);
@@ -720,14 +595,9 @@ public class AbsenceReportRulesTests
         var plannings = new[] { PlanWithShift(1, 1, date, 13, TimeSpan.FromHours(6), TimeSpan.FromHours(18)) };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            new Dictionary<string, List<LeaveDay>>(),
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, plannings, Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         var row = Assert.Single(result);
         Assert.Equal("Non justifiée", row.Type);
@@ -744,14 +614,9 @@ public class AbsenceReportRulesTests
         var plannings = new[] { PlanWithShift(1, 1, date, 999) };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            new Dictionary<string, List<LeaveDay>>(),
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, plannings, Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         Assert.Empty(result);
     }
@@ -766,14 +631,9 @@ public class AbsenceReportRulesTests
         var corrections = new[] { Corr(1, "001", date) };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            corrections,
-            new Dictionary<string, List<LeaveDay>>(),
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, plannings, corrections),
+            new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         Assert.Empty(result);
     }
@@ -793,14 +653,9 @@ public class AbsenceReportRulesTests
         };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            new Dictionary<string, List<LeaveDay>>(),
-            new HashSet<DateTime>(),
-            jTravail,
-            jPause,
-            Today);
+            new EmployeeSources(cartes, plannings, Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
+            new ReportPeriod(jTravail, jPause, Today));
 
         var row = Assert.Single(result);
         Assert.Equal(jTravail, row.Date);
@@ -821,14 +676,9 @@ public class AbsenceReportRulesTests
         };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            conges,
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, plannings, Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(conges, new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         Assert.Empty(result);
     }
@@ -843,14 +693,9 @@ public class AbsenceReportRulesTests
         var corrections = new[] { Corr(1, "001", date, am: true, pm: true, intitule: "Repos décalé") };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            corrections,
-            new Dictionary<string, List<LeaveDay>>(),
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, plannings, corrections),
+            new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         Assert.Empty(result);
     }
@@ -864,14 +709,9 @@ public class AbsenceReportRulesTests
         var plannings = new[] { Plan(1, 1, date, TimeSpan.FromHours(8), TimeSpan.FromHours(16), offP: true) };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            new Dictionary<string, List<LeaveDay>>(),
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, plannings, Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         Assert.Empty(result);
     }
@@ -889,14 +729,9 @@ public class AbsenceReportRulesTests
         };
 
         var result = AbsenceReportRules.Calculer(
-            plannings,
-            cartes,
-            Array.Empty<HeureCorrigee>(),
-            new Dictionary<string, List<LeaveDay>>(),
-            new HashSet<DateTime>(),
-            date,
-            date,
-            Today);
+            new EmployeeSources(cartes, plannings, Array.Empty<HeureCorrigee>()),
+            new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
+            new ReportPeriod(date, date, Today));
 
         var row = Assert.Single(result);
         Assert.Equal("Non justifiée", row.Type);

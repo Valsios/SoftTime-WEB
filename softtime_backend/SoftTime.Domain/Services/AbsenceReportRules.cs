@@ -20,15 +20,11 @@ public static class AbsenceReportRules
     public const string TypeNonJustifiee = "Non justifiée";
 
     public static IReadOnlyList<AbsenceReportRow> Calculer(
-        IReadOnlyList<PlanningSalarie> plannings,
-        IReadOnlyList<CardPaie> cartes,
-        IReadOnlyList<HeureCorrigee> corrections,
-        IReadOnlyDictionary<string, List<LeaveDay>> congesParCle,
-        IReadOnlySet<DateTime> feries,
-        DateTime from,
-        DateTime to,
-        DateTime dateDuJour)
+        EmployeeSources sources, AbsenceCalendar joursNonTravailles, ReportPeriod periode)
     {
+        var (cartes, plannings, corrections) = sources;
+        var (congesParCle, feries) = joursNonTravailles;
+        var (from, to, dateDuJour) = periode;
         var debut = from.Date;
         var hier = dateDuJour.Date.AddDays(-1);
 

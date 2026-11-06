@@ -5,6 +5,7 @@ using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
+using SoftTime.Domain.Models;
 using SoftTime.Domain.Services;
 using SoftTime.Infrastructure.Services;
 
@@ -120,14 +121,9 @@ public class MlDatasetParityTests
 
         // ParitÃ© avec l'Ã©tat des absences, sur la mÃªme population et la mÃªme rÃ¨gle.
         var absences = AbsenceReportRules.Calculer(
-            ctx.Plannings,
-            new[] { ctx.Carte },
-            ctx.Corrections,
-            new Dictionary<string, List<SoftTime.Domain.Models.LeaveDay>>(),
-            new HashSet<DateTime>(),
-            Lundi,
-            Dimanche,
-            Dimanche.AddDays(1));
+            new EmployeeSources(new[] { ctx.Carte }, ctx.Plannings, ctx.Corrections),
+            new AbsenceCalendar(new Dictionary<string, List<SoftTime.Domain.Models.LeaveDay>>(), new HashSet<DateTime>()),
+            new ReportPeriod(Lundi, Dimanche, Dimanche.AddDays(1)));
 
         var datesEtat = absences
             .Where(a => a.Type == AbsenceReportRules.TypeNonJustifiee)
@@ -161,15 +157,10 @@ public class MlDatasetParityTests
         await ctx.Dataset().BuildAsync(Lundi, Dimanche, persist: true);
 
         var etat = RetardReportRules.Calculer(
-                new[] { ctx.Carte },
-                ctx.Corrections,
-                ctx.Plannings,
-                new Dictionary<int, int> { [1] = 10 },
-                ctx.Uow.Get<ToleranceRetard>().Items,
+                new EmployeeSources(new[] { ctx.Carte }, ctx.Plannings, ctx.Corrections),
+                new RetardTolerances(new Dictionary<int, int> { [1] = 10 }, ctx.Uow.Get<ToleranceRetard>().Items),
                 new HashSet<DateTime>(),
-                Lundi,
-                Dimanche,
-                Dimanche.AddDays(1))
+                new ReportPeriod(Lundi, Dimanche, Dimanche.AddDays(1)))
             .Where(r => r.MinutesRetard > 0)
             .ToDictionary(r => r.Date.Date, r => r.MinutesRetard);
         var ml = ctx.Store.Daily

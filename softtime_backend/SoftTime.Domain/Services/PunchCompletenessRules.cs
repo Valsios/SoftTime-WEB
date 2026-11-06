@@ -15,35 +15,20 @@ public static class PunchCompletenessRules
     /// dans le pré-traitement.
     /// </summary>
     public static IReadOnlyList<ClosingAnomaly> PointagesIncomplets(
-        IReadOnlyList<CardPaie> cartes,
-        IReadOnlyList<PlanningSalarie> plannings,
-        IReadOnlyList<Pointage> pointages,
-        IReadOnlyList<HeureCorrigee> corrections,
-        IReadOnlyList<HsValidee> semainesValidees,
-        DateTime from,
-        DateTime to,
-        bool multiPointage,
-        ClosingRulesOptions? options = null)
-        => PointagesIncomplets(cartes, plannings, ClosingPunchIndex.Build(pointages), corrections, semainesValidees,
-            from, to, multiPointage, options);
+        EmployeeSources sources, IReadOnlyList<Pointage> pointages, IReadOnlyList<HsValidee> semainesValidees, ClosingScope scope)
+        => PointagesIncomplets(sources, ClosingPunchIndex.Build(pointages), semainesValidees, scope);
 
     /// <summary>3.1 sur un index de pointages déjà construit (même résultat que la surcharge par liste).</summary>
     public static IReadOnlyList<ClosingAnomaly> PointagesIncomplets(
-        IReadOnlyList<CardPaie> cartes,
-        IReadOnlyList<PlanningSalarie> plannings,
-        ClosingPunchIndex pointages,
-        IReadOnlyList<HeureCorrigee> corrections,
-        IReadOnlyList<HsValidee> semainesValidees,
-        DateTime from,
-        DateTime to,
-        bool multiPointage,
-        ClosingRulesOptions? options = null)
+        EmployeeSources sources, ClosingPunchIndex pointages, IReadOnlyList<HsValidee> semainesValidees, ClosingScope scope)
     {
+        var (cartes, plannings, corrections) = sources;
+        var (from, to, multiPointage, options) = scope;
         options ??= ClosingRulesOptions.Default;
         if (from.Date > to.Date)
             return Array.Empty<ClosingAnomaly>();
 
-        var scope = new PunchCompletenessScope(
+        var perimetre = new PunchCompletenessScope(
             pointages,
             PlanningParCarte(plannings),
             JoursIgnores(corrections, semainesValidees, options),
@@ -51,7 +36,7 @@ public static class PunchCompletenessRules
             to.Date,
             multiPointage);
         var resultats = ClosingAnomalyFactory.CartesParCle(cartes)
-            .SelectMany(c => AnomaliesDeLaCarte(scope, c.Cle, c.Carte))
+            .SelectMany(c => AnomaliesDeLaCarte(perimetre, c.Cle, c.Carte))
             .ToList();
         return PayrollClosingRules.Trier(resultats);
     }
@@ -122,18 +107,8 @@ public static class PunchCompletenessRules
     /// futurs déjà exclus), dont le jour ne porte de surcroît aucun pointage brut.
     /// </summary>
     public static IReadOnlyList<ClosingAnomaly> PointagesManquants(
-        IReadOnlyList<CardPaie> cartes,
-        IReadOnlyList<PlanningSalarie> plannings,
-        IReadOnlyList<Pointage> pointages,
-        IReadOnlyList<HeureCorrigee> corrections,
-        IReadOnlyDictionary<string, List<LeaveDay>> congesParCle,
-        IReadOnlySet<DateTime> feries,
-        DateTime from,
-        DateTime to,
-        DateTime dateDuJour)
-        => PointagesManquants(
-            AbsenceReportRules.Calculer(plannings, cartes, corrections, congesParCle, feries, from, to, dateDuJour),
-            ClosingPunchIndex.Build(pointages));
+        EmployeeSources sources, IReadOnlyList<Pointage> pointages, AbsenceCalendar joursNonTravailles, ReportPeriod periode)
+        => PointagesManquants(AbsenceReportRules.Calculer(sources, joursNonTravailles, periode), ClosingPunchIndex.Build(pointages));
 
     /// <summary>
     /// 3.2 sur les lignes déjà calculées par <see cref="AbsenceReportRules.Calculer"/> (partagées avec

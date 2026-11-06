@@ -1,5 +1,4 @@
-﻿using SoftTime.Domain.Entities.SoftTime;
-using SoftTime.Domain.Models;
+﻿using SoftTime.Domain.Models;
 
 namespace SoftTime.Domain.Services;
 
@@ -13,15 +12,10 @@ public static class HolidayPunchRules
     /// ligne de travail prime sur une ligne OFF, puis le plus petit ID. Aucun jour futur.
     /// </summary>
     public static IReadOnlyList<ClosingAnomaly> FeriesNonAppliques(
-        IReadOnlyList<CardPaie> cartes,
-        IReadOnlyList<PlanningSalarie> plannings,
-        IReadOnlyList<HeureCorrigee> corrections,
-        IReadOnlySet<DateTime> feries,
-        DateTime from,
-        DateTime to,
-        DateTime dateDuJour,
-        ClosingPunchIndex? pointages = null)
+        EmployeeSources sources, IReadOnlySet<DateTime> feries, ReportPeriod periode, ClosingPunchIndex? pointages = null)
     {
+        var (cartes, plannings, corrections) = sources;
+        var (from, to, dateDuJour) = periode;
         var debut = from.Date;
         var hier = dateDuJour.Date.AddDays(-1);
         var fin = to.Date < hier ? to.Date : hier;

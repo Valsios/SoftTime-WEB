@@ -16,19 +16,8 @@ internal sealed record RetardReportEmployee(string Cle, CardPaie Carte, List<Heu
     private RetardReportRow? RetardDuJour(DateTime jour, List<HeureCorrigee> lignes, PlanningSalarie? plan)
     {
         var heurePrevue = RetardReportRules.HeurePrevue(plan);
-        var entrees = lignes
-            .Where(h => h.HEntree.HasValue)
-            .Select(h => h.HEntree!.Value)
-            .ToList();
-        TimeSpan? premiereEntree = entrees.Count > 0 ? entrees.Min() : null;
-        var retardsSaisis = lignes.Select(h => h.Retard).ToList();
-
-        var minutes = RetardReportRules.MinutesRetardJour(
-            absenceMatin: lignes.Any(h => h.AbsenceAm == true),
-            retardsSaisis: retardsSaisis,
-            premiereEntree: premiereEntree,
-            heurePrevue: heurePrevue,
-            toleranceMinutes: Tolerance);
+        var premiereEntree = RetardReportRules.PremiereEntree(lignes);
+        var minutes = RetardReportRules.MinutesRetardJour(lignes, plan, Tolerance);
         if (minutes <= 0)
             return null;
 
@@ -42,6 +31,6 @@ internal sealed record RetardReportEmployee(string Cle, CardPaie Carte, List<Heu
             HeurePrevue: heurePrevue,
             ToleranceMinutes: Tolerance,
             MinutesRetard: minutes,
-            RetardSaisi: retardsSaisis.Any(r => r.HasValue));
+            RetardSaisi: lignes.Any(h => h.Retard.HasValue));
     }
 }

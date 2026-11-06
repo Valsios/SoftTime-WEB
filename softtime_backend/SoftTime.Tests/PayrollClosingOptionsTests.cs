@@ -19,12 +19,10 @@ public class PayrollClosingOptionsTests
         ClosingRulesOptions? options,
         IReadOnlyList<HeureCorrigee>? corrections = null)
         => PunchCompletenessRules.PointagesIncomplets(
-            new[] { new CardPaie { Id = 1, SageMatricule = "00369" } },
-            Array.Empty<PlanningSalarie>(),
+            new EmployeeSources(new[] { new CardPaie { Id = 1, SageMatricule = "00369" } }, Array.Empty<PlanningSalarie>(), corrections ?? Array.Empty<HeureCorrigee>()),
             new[] { new Pointage { MatriculeSage = "369", DatePointage = Mercredi, HeurePointage = TimeSpan.FromHours(8) } },
-            corrections ?? Array.Empty<HeureCorrigee>(),
             new[] { SemaineValidee },
-            From, To, multiPointage: false, options);
+            new ClosingScope(From, To, false, options));
 
     [Fact]
     public void IgnoreValidatedWeeks_DefaultIsTrue()

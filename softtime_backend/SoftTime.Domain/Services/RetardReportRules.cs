@@ -1,4 +1,5 @@
 using SoftTime.Domain.Entities.SoftTime;
+using SoftTime.Domain.Models;
 
 namespace SoftTime.Domain.Services;
 
@@ -41,27 +42,30 @@ public static class RetardReportRules
     /// matin annule le retard, une valeur saisie est prioritaire, sinon on compare la première
     /// entrée du jour à l'heure planifiée.
     /// </summary>
-    public static int MinutesRetardJour(
-        bool absenceMatin,
-        IEnumerable<TimeSpan?> retardsSaisis,
-        TimeSpan? premiereEntree,
-        TimeSpan? heurePrevue,
-        int toleranceMinutes)
+    public static int MinutesRetardJour(IReadOnlyCollection<HeureCorrigee> lignes, PlanningSalarie? plan, int toleranceMinutes)
     {
-        if (absenceMatin)
+        if (lignes.Any(h => h.AbsenceAm == true))
             return 0;
 
-        var saisis = retardsSaisis
-            .Where(r => r.HasValue)
-            .Select(r => (int)Math.Max(0m, (decimal)r!.Value.TotalMinutes))
+        var saisis = lignes
+            .Where(h => h.Retard.HasValue)
+            .Select(h => (int)Math.Max(0m, (decimal)h.Retard!.Value.TotalMinutes))
             .ToList();
         if (saisis.Count > 0)
             return saisis.Max();
 
+        var premiereEntree = PremiereEntree(lignes);
+        var heurePrevue = HeurePrevue(plan);
         if (!premiereEntree.HasValue || !heurePrevue.HasValue)
             return 0;
-
         return MinutesRetard(premiereEntree.Value, heurePrevue.Value, toleranceMinutes);
+    }
+
+    /// <summary>Première heure d'entrée saisie parmi les heures corrigées du jour.</summary>
+    public static TimeSpan? PremiereEntree(IEnumerable<HeureCorrigee> lignes)
+    {
+        var entrees = lignes.Where(h => h.HEntree.HasValue).Select(h => h.HEntree!.Value).ToList();
+        return entrees.Count > 0 ? entrees.Min() : null;
     }
 
     /// <summary>
@@ -96,16 +100,11 @@ public static class RetardReportRules
     }
 
     public static IReadOnlyList<RetardReportRow> Calculer(
-        IReadOnlyList<CardPaie> cartes,
-        IReadOnlyList<HeureCorrigee> corrections,
-        IReadOnlyList<PlanningSalarie> plannings,
-        IReadOnlyDictionary<int, int> categorieParCarte,
-        IReadOnlyList<ToleranceRetard> tolerances,
-        IReadOnlySet<DateTime> feries,
-        DateTime from,
-        DateTime to,
-        DateTime dateDuJour)
+        EmployeeSources sources, RetardTolerances tolerancesRetard, IReadOnlySet<DateTime> feries, ReportPeriod periode)
     {
+        var (cartes, plannings, corrections) = sources;
+        var (categorieParCarte, tolerances) = tolerancesRetard;
+        var (from, to, dateDuJour) = periode;
         var debut = from.Date;
         var hier = dateDuJour.Date.AddDays(-1);
 

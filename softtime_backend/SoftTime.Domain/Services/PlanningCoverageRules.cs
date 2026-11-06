@@ -14,19 +14,9 @@ public static class PlanningCoverageRules
     /// qu'un <see cref="ClosingAnomalyType.PointageManquant"/> (populations disjointes).
     /// </summary>
     public static IReadOnlyList<ClosingAnomaly> PlanningsSansPointage(
-        IReadOnlyList<CardPaie> cartes,
-        IReadOnlyList<PlanningSalarie> plannings,
-        IReadOnlyList<Pointage> pointages,
-        IReadOnlyList<HeureCorrigee> corrections,
-        IReadOnlyDictionary<string, List<LeaveDay>> congesParCle,
-        IReadOnlySet<DateTime> feries,
-        DateTime from,
-        DateTime to,
-        DateTime dateDuJour)
+        EmployeeSources sources, IReadOnlyList<Pointage> pointages, AbsenceCalendar joursNonTravailles, ReportPeriod periode)
         => PlanningsSansPointage(
-            AbsenceReportRules.Calculer(plannings, cartes, corrections, congesParCle, feries, from, to, dateDuJour),
-            ClosingPunchIndex.Build(pointages),
-            corrections);
+            AbsenceReportRules.Calculer(sources, joursNonTravailles, periode), ClosingPunchIndex.Build(pointages), sources.Corrections);
 
     /// <summary>3.3 sur les lignes déjà calculées par <see cref="AbsenceReportRules.Calculer"/> et un index de pointages.</summary>
     public static IReadOnlyList<ClosingAnomaly> PlanningsSansPointage(
@@ -84,29 +74,22 @@ public static class PlanningCoverageRules
     /// sont contrôlés.
     /// </summary>
     public static IReadOnlyList<ClosingAnomaly> PointagesSansPlanning(
-        IReadOnlyList<CardPaie> cartes,
-        IReadOnlyList<PlanningSalarie> plannings,
-        IReadOnlyList<Pointage> pointages,
-        DateTime from,
-        DateTime to,
-        ClosingRulesOptions? options = null)
-        => PointagesSansPlanning(cartes, plannings, ClosingPunchIndex.Build(pointages), from, to, options);
+        IReadOnlyList<CardPaie> cartes, IReadOnlyList<PlanningSalarie> plannings, IReadOnlyList<Pointage> pointages, ClosingScope scope)
+    {
+        return PointagesSansPlanning(cartes, plannings, ClosingPunchIndex.Build(pointages), scope);
+    }
 
     /// <summary>3.4 sur un index de pointages déjà construit.</summary>
     public static IReadOnlyList<ClosingAnomaly> PointagesSansPlanning(
-        IReadOnlyList<CardPaie> cartes,
-        IReadOnlyList<PlanningSalarie> plannings,
-        ClosingPunchIndex pointages,
-        DateTime from,
-        DateTime to,
-        ClosingRulesOptions? options = null)
+        IReadOnlyList<CardPaie> cartes, IReadOnlyList<PlanningSalarie> plannings, ClosingPunchIndex pointages, ClosingScope scope)
     {
+        var (from, to, _, options) = scope;
         options ??= ClosingRulesOptions.Default;
         var debut = from.Date;
         var fin = to.Date;
         var cleParIdSal = ClosingAnomalyFactory.CleParIdSal(cartes);
         var exclus = options.ExclureSansPlanningSurPeriode
-            ? SalariesSansPlanningSurPeriode(cartes, plannings, pointages, from, to)
+            ? SalariesSansPlanningSurPeriode(cartes, plannings, pointages, new ClosingScope(from, to))
             : new HashSet<string>(StringComparer.Ordinal);
 
         var joursPlanifies = plannings
@@ -134,12 +117,9 @@ public static class PlanningCoverageRules
     /// est vrai. Un salarié partiellement planifié n'en fait pas partie.
     /// </summary>
     public static IReadOnlySet<string> SalariesSansPlanningSurPeriode(
-        IReadOnlyList<CardPaie> cartes,
-        IReadOnlyList<PlanningSalarie> plannings,
-        ClosingPunchIndex pointages,
-        DateTime from,
-        DateTime to)
+        IReadOnlyList<CardPaie> cartes, IReadOnlyList<PlanningSalarie> plannings, ClosingPunchIndex pointages, ClosingScope scope)
     {
+        var (from, to, _, _) = scope;
         var debut = from.Date;
         var fin = to.Date;
         var cleParIdSal = ClosingAnomalyFactory.CleParIdSal(cartes);

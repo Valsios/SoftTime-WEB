@@ -52,15 +52,10 @@ public sealed class RetardReportService : IRetardReportService
             return Array.Empty<RetardReportRow>();
 
         return RetardReportRules.Calculer(
-            ctx.Cartes,
-            ctx.Corrections,
-            ctx.Plannings,
-            ctx.CategorieParCarte,
-            ctx.Tolerances,
+            new EmployeeSources(ctx.Cartes, ctx.Plannings, ctx.Corrections),
+            new RetardTolerances(ctx.CategorieParCarte, ctx.Tolerances),
             ctx.Feries,
-            filter.From.Date,
-            filter.To.Date,
-            DateTime.Today);
+            new ReportPeriod(filter.From.Date, filter.To.Date, DateTime.Today));
     }
 
     /// <summary>

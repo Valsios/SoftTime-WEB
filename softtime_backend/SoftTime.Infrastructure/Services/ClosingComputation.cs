@@ -186,21 +186,22 @@ internal static class ClosingComputation
         // Index des pointages construit une fois au chargement ; lignes d'absence calculées une fois
         // et partagées entre pointages manquants et plannings sans pointage.
         var index = d.IndexPointages;
-        var lignesAbsence = AbsenceReportRules.Calculer(d.Plannings, d.Cartes, d.Corrections, d.Conges, d.Feries, from, fin, d.DateDuJour);
+        var sources = new EmployeeSources(d.Cartes, d.Plannings, d.Corrections);
+        var periode = new ReportPeriod(from, fin, d.DateDuJour);
+        var scope = new ClosingScope(from, fin, d.MultiPointage, options);
+        var lignesAbsence = AbsenceReportRules.Calculer(sources, new AbsenceCalendar(d.Conges, d.Feries), periode);
 
         var anomalies = new List<ClosingAnomaly>();
-        anomalies.AddRange(PunchCompletenessRules.PointagesIncomplets(
-            d.Cartes, d.Plannings, index, d.Corrections, d.SemainesValidees, from, fin, d.MultiPointage, options));
+        anomalies.AddRange(PunchCompletenessRules.PointagesIncomplets(sources, index, d.SemainesValidees, scope));
         anomalies.AddRange(PunchCompletenessRules.PointagesManquants(lignesAbsence, index));
         anomalies.AddRange(PlanningCoverageRules.PlanningsSansPointage(lignesAbsence, index, d.Corrections));
-        anomalies.AddRange(PlanningCoverageRules.PointagesSansPlanning(d.Cartes, d.Plannings, index, from, fin, options));
-        anomalies.AddRange(DuplicatePunchRules.DoublonsExacts(index, from, fin, options, d.MultiPointage));
-        anomalies.AddRange(DuplicatePunchRules.QuasiDoublons(index, from, fin, options, d.MultiPointage));
-        anomalies.AddRange(HolidayPunchRules.FeriesNonAppliques(
-            d.Cartes, d.Plannings, d.Corrections, d.Feries, from, fin, d.DateDuJour, index));
+        anomalies.AddRange(PlanningCoverageRules.PointagesSansPlanning(d.Cartes, d.Plannings, index, scope));
+        anomalies.AddRange(DuplicatePunchRules.DoublonsExacts(index, scope));
+        anomalies.AddRange(DuplicatePunchRules.QuasiDoublons(index, scope));
+        anomalies.AddRange(HolidayPunchRules.FeriesNonAppliques(sources, d.Feries, periode, index));
 
         var exclus = options.ExclureSansPlanningSurPeriode
-            ? PlanningCoverageRules.SalariesSansPlanningSurPeriode(d.Cartes, d.Plannings, index, from, fin).Count
+            ? PlanningCoverageRules.SalariesSansPlanningSurPeriode(d.Cartes, d.Plannings, index, scope).Count
             : 0;
         return new ResultatPeriode(
             PayrollClosingRules.AppliquerGravites(PayrollClosingRules.Trier(anomalies), options),

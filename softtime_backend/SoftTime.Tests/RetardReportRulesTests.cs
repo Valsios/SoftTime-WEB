@@ -1,4 +1,5 @@
 using SoftTime.Domain.Entities.SoftTime;
+using SoftTime.Domain.Models;
 using SoftTime.Domain.Services;
 
 namespace SoftTime.Tests;
@@ -62,17 +63,12 @@ public class RetardReportRulesTests
         DateTime? from = null,
         DateTime? to = null)
         => RetardReportRules.Calculer(
-            cartes,
-            corrections,
-            plannings ?? Array.Empty<PlanningSalarie>(),
-            (affectations ?? Array.Empty<CategorieSalarie>())
+            new EmployeeSources(cartes, plannings ?? Array.Empty<PlanningSalarie>(), corrections),
+            new RetardTolerances((affectations ?? Array.Empty<CategorieSalarie>())
                 .GroupBy(a => a.MatriculeSage)
-                .ToDictionary(g => g.Key, g => g.First().IdCateg),
-            tolerances ?? Array.Empty<ToleranceRetard>(),
+                .ToDictionary(g => g.Key, g => g.First().IdCateg), tolerances ?? Array.Empty<ToleranceRetard>()),
             feries ?? new HashSet<DateTime>(),
-            from ?? Mardi,
-            to ?? Mardi,
-            Today);
+            new ReportPeriod(from ?? Mardi, to ?? Mardi, Today));
 
     [Fact]
     public void Calculer_EntreeApresTolerance_RetourneLeRetardEnMinutes()

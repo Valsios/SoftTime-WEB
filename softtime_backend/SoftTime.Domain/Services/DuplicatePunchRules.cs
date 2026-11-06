@@ -8,21 +8,16 @@ public static class DuplicatePunchRules
 
     /// <summary>3.5 — Plusieurs pointages du même matricule à la même date et à la même heure exacte.</summary>
     public static IReadOnlyList<ClosingAnomaly> DoublonsExacts(
-        IReadOnlyList<Pointage> pointages,
-        DateTime from,
-        DateTime to,
-        ClosingRulesOptions? options = null,
-        bool multiPointage = false)
-        => DoublonsExacts(ClosingPunchIndex.Build(pointages), from, to, options, multiPointage);
+        IReadOnlyList<Pointage> pointages, ClosingScope scope)
+    {
+        return DoublonsExacts(ClosingPunchIndex.Build(pointages), scope);
+    }
 
     /// <summary>3.5 sur un index de pointages déjà construit (pointages triés : les doublons sont contigus).</summary>
     public static IReadOnlyList<ClosingAnomaly> DoublonsExacts(
-        ClosingPunchIndex pointages,
-        DateTime from,
-        DateTime to,
-        ClosingRulesOptions? options = null,
-        bool multiPointage = false)
+        ClosingPunchIndex pointages, ClosingScope scope)
     {
+        var (from, to, multiPointage, options) = scope;
         options ??= ClosingRulesOptions.Default;
         var gravite = options.Gravite(ClosingAnomalyType.DoublonExact, multiPointage);
         var debut = from.Date;
@@ -58,21 +53,16 @@ public static class DuplicatePunchRules
     /// L'anomalie est datée du premier pointage de la paire.
     /// </summary>
     public static IReadOnlyList<ClosingAnomaly> QuasiDoublons(
-        IReadOnlyList<Pointage> pointages,
-        DateTime from,
-        DateTime to,
-        ClosingRulesOptions? options = null,
-        bool multiPointage = false)
-        => QuasiDoublons(ClosingPunchIndex.Build(pointages), from, to, options, multiPointage);
+        IReadOnlyList<Pointage> pointages, ClosingScope scope)
+    {
+        return QuasiDoublons(ClosingPunchIndex.Build(pointages), scope);
+    }
 
     /// <summary>3.6 sur un index de pointages déjà construit.</summary>
     public static IReadOnlyList<ClosingAnomaly> QuasiDoublons(
-        ClosingPunchIndex pointages,
-        DateTime from,
-        DateTime to,
-        ClosingRulesOptions? options = null,
-        bool multiPointage = false)
+        ClosingPunchIndex pointages, ClosingScope scope)
     {
+        var (from, to, multiPointage, options) = scope;
         options ??= ClosingRulesOptions.Default;
         var gravite = options.Gravite(ClosingAnomalyType.QuasiDoublon, multiPointage);
         var tolerance = TimeSpan.FromSeconds(Math.Max(0, options.DuplicateToleranceSeconds));

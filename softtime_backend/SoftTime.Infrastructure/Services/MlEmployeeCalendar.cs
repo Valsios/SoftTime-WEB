@@ -87,14 +87,6 @@ internal sealed class MlEmployeeCalendar
     /// Même règle que l'état des retards et le tableau de bord : valeur saisie prioritaire, sinon
     /// première entrée du jour vs heure planifiée + tolérance de la catégorie.
     /// </summary>
-    private int RetardMinutes(List<HeureCorrigee> lignes, PlanningSalarie? plan)
-    {
-        var entrees = lignes.Where(h => h.HEntree.HasValue).Select(h => h.HEntree!.Value).ToList();
-        return RetardReportRules.MinutesRetardJour(
-            absenceMatin: lignes.Any(h => h.AbsenceAm == true),
-            retardsSaisis: lignes.Select(h => h.Retard),
-            premiereEntree: entrees.Count > 0 ? entrees.Min() : null,
-            heurePrevue: RetardReportRules.HeurePrevue(plan),
-            toleranceMinutes: _toleranceEntree);
-    }
+    private int RetardMinutes(List<HeureCorrigee> lignes, PlanningSalarie? plan) =>
+        RetardReportRules.MinutesRetardJour(lignes, plan, _toleranceEntree);
 }

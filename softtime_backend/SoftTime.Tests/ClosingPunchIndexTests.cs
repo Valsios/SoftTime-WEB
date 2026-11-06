@@ -67,20 +67,20 @@ public class ClosingPunchIndexTests
     {
         var options = new ClosingRulesOptions { IgnorerSemainesValidees = false };
         Assert.Equal(
-            PunchCompletenessRules.PointagesIncomplets(Cartes, Plannings, Pointages, Corrections, Array.Empty<HsValidee>(), From, To, multi, options),
-            PunchCompletenessRules.PointagesIncomplets(Cartes, Plannings, Index, Corrections, Array.Empty<HsValidee>(), From, To, multi, options));
+            PunchCompletenessRules.PointagesIncomplets(new EmployeeSources(Cartes, Plannings, Corrections), Pointages, Array.Empty<HsValidee>(), new ClosingScope(From, To, multi, options)),
+            PunchCompletenessRules.PointagesIncomplets(new EmployeeSources(Cartes, Plannings, Corrections), Index, Array.Empty<HsValidee>(), new ClosingScope(From, To, multi, options)));
     }
 
     [Fact]
     public void MissingAndPlannedWithoutPunch_SharedAbsenceLines_SameAsListOverloads()
     {
-        var lignes = AbsenceReportRules.Calculer(Plannings, Cartes, Corrections, Conges, Feries, From, To, Today);
+        var lignes = AbsenceReportRules.Calculer(new EmployeeSources(Cartes, Plannings, Corrections), new AbsenceCalendar(Conges, Feries), new ReportPeriod(From, To, Today));
 
         Assert.Equal(
-            PunchCompletenessRules.PointagesManquants(Cartes, Plannings, Pointages, Corrections, Conges, Feries, From, To, Today),
+            PunchCompletenessRules.PointagesManquants(new EmployeeSources(Cartes, Plannings, Corrections), Pointages, new AbsenceCalendar(Conges, Feries), new ReportPeriod(From, To, Today)),
             PunchCompletenessRules.PointagesManquants(lignes, Index));
         Assert.Equal(
-            PlanningCoverageRules.PlanningsSansPointage(Cartes, Plannings, Pointages, Corrections, Conges, Feries, From, To, Today),
+            PlanningCoverageRules.PlanningsSansPointage(new EmployeeSources(Cartes, Plannings, Corrections), Pointages, new AbsenceCalendar(Conges, Feries), new ReportPeriod(From, To, Today)),
             PlanningCoverageRules.PlanningsSansPointage(lignes, Index, Corrections));
     }
 
@@ -88,17 +88,17 @@ public class ClosingPunchIndexTests
     public void PunchRules_IndexOverloads_SameAsListOverloads()
     {
         Assert.Equal(
-            PlanningCoverageRules.PointagesSansPlanning(Cartes, Plannings, Pointages, From, To),
-            PlanningCoverageRules.PointagesSansPlanning(Cartes, Plannings, Index, From, To));
-        Assert.Equal(DuplicatePunchRules.DoublonsExacts(Pointages, From, To), DuplicatePunchRules.DoublonsExacts(Index, From, To));
-        Assert.Equal(DuplicatePunchRules.QuasiDoublons(Pointages, From, To), DuplicatePunchRules.QuasiDoublons(Index, From, To));
+            PlanningCoverageRules.PointagesSansPlanning(Cartes, Plannings, Pointages, new ClosingScope(From, To)),
+            PlanningCoverageRules.PointagesSansPlanning(Cartes, Plannings, Index, new ClosingScope(From, To)));
+        Assert.Equal(DuplicatePunchRules.DoublonsExacts(Pointages, new ClosingScope(From, To)), DuplicatePunchRules.DoublonsExacts(Index, new ClosingScope(From, To)));
+        Assert.Equal(DuplicatePunchRules.QuasiDoublons(Pointages, new ClosingScope(From, To)), DuplicatePunchRules.QuasiDoublons(Index, new ClosingScope(From, To)));
     }
 
     [Fact]
     public void Rules_ProduceExpectedAnomaliesOnMixedSet()
     {
-        var exacts = DuplicatePunchRules.DoublonsExacts(Index, From, To);
-        var quasi = DuplicatePunchRules.QuasiDoublons(Index, From, To);
+        var exacts = DuplicatePunchRules.DoublonsExacts(Index, new ClosingScope(From, To));
+        var quasi = DuplicatePunchRules.QuasiDoublons(Index, new ClosingScope(From, To));
 
         // 369 lundi 08:00 ×2, A12 mardi 17:00 ×2, 999 lundi 08:00 ×2 ; 369 du 20/11 hors période.
         Assert.Equal(new[] { ("369", Lundi), ("999", Lundi), ("A12", Lundi.AddDays(1)) }, exacts.Select(a => (a.Matricule, a.Date)));

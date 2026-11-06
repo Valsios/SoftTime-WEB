@@ -33,14 +33,9 @@ public sealed class AbsenceReportService : IAbsenceReportService
             return Array.Empty<AbsenceReportRow>();
 
         return AbsenceReportRules.Calculer(
-                ctx.Plannings,
-                ctx.Cartes,
-                ctx.Corrections,
-                ctx.Conges,
-                ctx.Feries,
-                filter.From.Date,
-                filter.To.Date,
-                DateTime.Today)
+                new EmployeeSources(ctx.Cartes, ctx.Plannings, ctx.Corrections),
+                new AbsenceCalendar(ctx.Conges, ctx.Feries),
+                new ReportPeriod(filter.From.Date, filter.To.Date, DateTime.Today))
             .Where(r => r.Type == AbsenceReportRules.TypeNonJustifiee)
             .ToList();
     }
