@@ -1,10 +1,11 @@
 import { HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
+import { isAnonymousAuthRequest } from '../session-refresh.logic';
 import { SessionStore } from '../session.store';
 
-/** Adds the JWT bearer token and tenant headers to every API request except login. */
+/** Adds the JWT bearer token and tenant headers to every API request except the anonymous auth routes. */
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
-  if (req.url.includes('/api/auth/login')) {
+  if (isAnonymousAuthRequest(req.url)) {
     return next(req);
   }
 

@@ -44,7 +44,7 @@ public class PermissionCatalogCharacterizationTests
     public void Known_static_permissions_are_the_same_set_as_in_AuthService()
     {
         var legacy = (HashSet<string>)typeof(AuthService).GetField("KnownStaticPermissions", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
-        Assert.True(legacy.SetEquals(PermissionCatalog.KnownStatic));
+        Assert.True(legacy.SetEquals(PermissionCatalog.KnownStatic.Where(c => c != "SELF:READ")));   // SELF:READ : permission de Mon espace, hors catalogue historique d'AuthService
         Assert.True(PermissionCatalog.IsKnown("SAGE:X:READ"));
         Assert.True(PermissionCatalog.IsKnown("proc:shifts"));
         Assert.False(PermissionCatalog.IsKnown("N'IMPORTE:QUOI"));

@@ -16,3 +16,12 @@ public interface IExternalDiscoveryService
     Task<IReadOnlyList<string>> ListDistinctValuesAsync(
         string serveur, string baseDb, string table, string column, bool sqlAuth, string? login, string? password, CancellationToken ct = default);
 }
+
+/// <summary>
+/// Échec d'accès à une base externe (SAGE, pointeuse) : le message est une cause lisible et sans détail technique
+/// (serveur injoignable, identifiants refusés…) ; l'erreur SQL d'origine reste dans InnerException pour le journal.
+/// </summary>
+public sealed class ExternalConnectionException : InvalidOperationException
+{
+    public ExternalConnectionException(string message, Exception innerException) : base(message, innerException) { }
+}

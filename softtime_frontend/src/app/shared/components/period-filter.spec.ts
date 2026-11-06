@@ -81,3 +81,40 @@ describe('PeriodFilter : lien profond', () => {
     expect(emissions[1].matriculeFrom).toBe('02417');
   });
 });
+
+describe('PeriodFilter : busy et changed (ajouts optionnels)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const bouton = (fixture: { nativeElement: HTMLElement }) => fixture.nativeElement.querySelector('button.soft-btn') as HTMLButtonElement;
+
+  it('par défaut : bouton actif, sans état occupé, comme avant', () => {
+    const { fixture, filtre } = creer();
+    expect(filtre.busy()).toBe(false);
+    expect(bouton(fixture).disabled).toBe(false);
+    expect(fixture.nativeElement.querySelector('soft-button')?.hasAttribute('aria-busy')).toBe(false);
+  });
+
+  it('busy = true : bouton désactivé avec son indicateur, aucune émission au clic', () => {
+    const { fixture, emissions } = creer({ busy: true });
+    expect(bouton(fixture).disabled).toBe(true);
+    expect(bouton(fixture).querySelector('.soft-btn__spinner')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('soft-button')?.getAttribute('aria-busy')).toBe('true');
+    bouton(fixture).click();
+    expect(emissions).toHaveLength(0);
+  });
+
+  it('changed : émise quand l’utilisateur modifie un champ, jamais à l’affichage ni au remplissage par lien profond', async () => {
+    const { fixture, filtre } = creer({ initial: { from: '2025-11-12', to: '2025-11-13', matricule: null } });
+    let n = 0;
+    filtre.changed.subscribe(() => n++);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(n).toBe(0);
+
+    const debut = fixture.nativeElement.querySelector('input[name="from"]') as HTMLInputElement;
+    debut.value = '2025-11-01';
+    debut.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(n).toBe(1);
+    expect(filtre.from).toBe('2025-11-01');
+  });
+});

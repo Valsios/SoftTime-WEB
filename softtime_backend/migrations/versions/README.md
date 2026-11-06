@@ -25,7 +25,10 @@ et n'est pas concerné.
 
 1. Lancer l'API comme d'habitude (`dotnet run` dans `SoftTime.Api`, ou depuis Visual Studio) : le profil `http`
    utilise `ASPNETCORE_ENVIRONMENT=Development`, donc `appsettings.Development.json` s'applique et
-   `Database:AutoMigrate` vaut `true`. Votre `appsettings.json` local (chaîne de connexion) n'est pas modifié.
+   `Database:AutoMigrate` vaut `true`. La chaîne de connexion et la clé JWT ne sont **plus** dans `appsettings.json` :
+   définissez-les une fois par poste dans les secrets utilisateur (dans `SoftTime.Api`) :
+   `dotnet user-secrets set "ConnectionStrings:SoftTime" "<chaîne>"` et
+   `dotnet user-secrets set "Jwt:Key" "<au moins 32 caractères aléatoires>"`. Sans eux, l'API refuse de démarrer.
 2. Regarder la ligne du journal au démarrage :
    - `Migrations de schéma : N script(s) appliqué(s), M déjà à jour.` : tout est en ordre ;
    - `Migrations de schéma désactivées (Database:AutoMigrate = false).` : l'activation est coupée (autre
@@ -39,8 +42,9 @@ destructifs, mais seule la sauvegarde permet un retour arrière fiable.
 ## Première installation (base vide)
 
 1. Créer une base vide (`CREATE DATABASE <nom>`) et la renseigner dans la chaîne de connexion locale
-   (`ConnectionStrings:SoftTime` de votre `appsettings.json`, jamais dans le dépôt).
-2. Lancer l'API avec `Database:AutoMigrate = true` : elle crée tout le schéma (001, 002, 003), le schéma `ml` du moteur
+   (`ConnectionStrings:SoftTime` en secret utilisateur ou variable d'environnement `ConnectionStrings__SoftTime`,
+   jamais dans le dépôt), avec la clé `Jwt:Key`.
+2. Lancer l'API avec `Database:AutoMigrate = true` : elle crée tout le schéma (001 à 005), le schéma `ml` du moteur
    prédictif, le rôle 1 « Administrateur », les six droits et les données de départ. Aucun compte n'est créé.
 3. Créer le premier administrateur : `GET /api/auth/is-first-run` répond `true`, puis
    `POST /api/auth/create-admin` (nom, login, mot de passe conforme à la politique). Ensuite `is-first-run` répond `false`.
@@ -120,9 +124,28 @@ démarrer avec le message « Le journal d'audit est absent : activez Database:Au
 migrations/versions/003_journal_central.sql. » (au lieu d'une erreur SQL à chaque écriture ; désactivable par
 `AuditJournal:Enabled = false`).
 
+## 005_unicite_login.sql
+
+Empêche deux comptes de partager un login, même s'ils ne diffèrent que par la casse ou par des espaces.
+
+- Ajoute à `T_RESPONSABLE` la colonne calculée persistée `LOGIN_CLE` : `UPPER(LTRIM(RTRIM(LOGIN)))`, bornée à
+  256 caractères. C'est la même clé que `LoginKey` côté application. Un login vide ou NULL reçoit une clé propre à son
+  compte, il ne bloque donc pas les autres.
+- Pose l'index unique `UX_T_RESPONSABLE_LOGIN_CLE` sur cette colonne.
+- **Si la base contient déjà des doublons**, l'index n'est pas créé et le démarrage continue. Le journal affiche
+  la liste des logins en double. Renommez ces comptes dans l'écran Utilisateurs, puis exécutez à la main :
+  `CREATE UNIQUE INDEX UX_T_RESPONSABLE_LOGIN_CLE ON dbo.T_RESPONSABLE (LOGIN_CLE);`
+  En attendant, l'application refuse la connexion à un login ambigu, sauf si l'un des comptes porte exactement
+  le login saisi.
+- **Applications qui écrivent aussi dans `T_RESPONSABLE`** (ancienne application de bureau, scripts) : un index sur
+  une colonne calculée exige que leurs sessions aient `ANSI_NULLS`, `ANSI_PADDING`, `ANSI_WARNINGS`, `ARITHABORT`,
+  `CONCAT_NULL_YIELDS_NULL` et `QUOTED_IDENTIFIER` à `ON`. C'est le cas par défaut avec SqlClient et ODBC récents (`ARITHABORT` est alors implicite, car
+  `ANSI_WARNINGS` vaut `ON`).
+  Sinon, leurs écritures dans cette table échouent avec l'erreur 1934.
+
 ## Ajouter un script
 
-1. Prendre le **numéro suivant** : `004_ma_modification.sql` (jamais réutiliser ni renuméroter).
+1. Prendre le **numéro suivant** : `006_ma_modification.sql` (jamais réutiliser ni renuméroter).
 2. Le rendre **rejouable** : chaque objet créé seulement s'il n'existe pas
    (`IF OBJECT_ID(...) IS NULL`, `IF COL_LENGTH(...) IS NULL`, `IF NOT EXISTS (SELECT 1 FROM sys.indexes ...)`).
 3. **Jamais destructif** : pas de `DROP`, `DELETE`, `TRUNCATE`, ni `ALTER COLUMN` qui réduit ou

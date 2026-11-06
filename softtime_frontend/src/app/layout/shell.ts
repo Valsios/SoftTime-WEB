@@ -11,6 +11,9 @@ import { Icon } from '../shared/components/icon';
 import { PointeuseDb } from '../shared/models';
 import { ToastService } from '../core/toast.service';
 import { ConfirmService } from '../core/confirm.service';
+import { closingBadgeView } from '../features/closing/closing.logic';
+import { ClosingSessionState } from '../features/closing/closing.state';
+import { hasSelfPermission, isSelfServiceProfile } from '../features/self-space/self-space.logic';
 
 @Component({
   selector: 'app-shell',
@@ -40,6 +43,19 @@ import { ConfirmService } from '../core/confirm.service';
         </div>
 
         <nav class="sidebar__nav">
+          @if (selfSpaceLink()) {
+            <a
+              routerLink="/mon-espace"
+              routerLinkActive="is-active"
+              class="sidebar__item"
+              [title]="'Mon espace'"
+              (click)="closeMobileNavigation()"
+            >
+              <app-icon name="user-check"></app-icon>
+              @if (!collapsed()) {<span>Mon espace</span>}
+            </a>
+          }
+          @if (!selfOnlyProfile()) {
           <a
             routerLink="/dashboard"
             routerLinkActive="is-active"
@@ -50,6 +66,7 @@ import { ConfirmService } from '../core/confirm.service';
             <app-icon name="home"></app-icon>
             @if (!collapsed()) {<span>Tableau de bord</span>}
           </a>
+          }
 
           @for (section of visibleSections(); track section.title; let sectionIndex = $index) {
             <div class="sidebar__section">
@@ -136,6 +153,19 @@ import { ConfirmService } from '../core/confirm.service';
               }
             </select>
           </div>
+
+          @if (closingBadge(); as badge) {
+            <a
+              class="topbar__icon-btn topbar__closing"
+              [class.topbar__closing--alert]="badge.count > 0"
+              routerLink="/closing"
+              [attr.aria-label]="badge.label"
+              [title]="badge.label"
+            >
+              <app-icon name="alert" [size]="18"></app-icon>
+              <span class="topbar__closing-count" aria-hidden="true">{{ badge.count }}</span>
+            </a>
+          }
 
           <button
             class="topbar__icon-btn"
@@ -355,6 +385,28 @@ import { ConfirmService } from '../core/confirm.service';
         outline: 2px solid var(--focus-ring);
         outline-offset: 2px;
       }
+      .topbar__closing {
+        position: relative;
+        text-decoration: none;
+      }
+      .topbar__closing-count {
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        min-width: 18px;
+        height: 18px;
+        padding: 0 4px;
+        border-radius: 9px;
+        display: grid;
+        place-items: center;
+        font-size: 11px;
+        font-weight: 700;
+        background: var(--text-muted);
+        color: var(--app-surface);
+      }
+      .topbar__closing--alert .topbar__closing-count {
+        background: var(--danger);
+      }
       .topbar__company {
         display: flex;
         align-items: center;
@@ -503,6 +555,9 @@ import { ConfirmService } from '../core/confirm.service';
         .topbar__user {
           display: none;
         }
+        .topbar__icon-btn.topbar__closing:not(:last-child) {
+          display: grid;
+        }
         .content {
           padding: 12px;
         }
@@ -522,6 +577,23 @@ export class Shell implements OnInit {
   private readonly sageApi = inject(SageDatabasesService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
+  private readonly closingState = inject(ClosingSessionState);
+
+  /** Entrée « Mon espace » : seulement avec la permission SELF:READ (un administrateur ne l'a pas implicitement). */
+  readonly selfSpaceLink = computed(() => hasSelfPermission(this.session.permissions()));
+  /** Profil Salarié (SELF:READ et aucune porte) : le tableau de bord, inutilisable sans base, n'est pas proposé. */
+  readonly selfOnlyProfile = computed(() => isSelfServiceProfile(this.session.permissions(), this.session.gates()));
+
+  /**
+   * Badge du Contrôle avant paie : nombre d'anomalies critiques du DERNIER résultat conservé en session. Aucune requête,
+   * aucun rafraîchissement : visible seulement avec la permission REPORTS:CLOSING et une analyse existante ; il disparaît
+   * avec l'état de session (déconnexion, autre compte ou autre base).
+   */
+  readonly closingBadge = computed(() => {
+    if (!this.session.hasPermission('REPORTS:CLOSING', Droit.Reports)) return null;
+    const resultat = this.closingState.result();
+    return resultat ? closingBadgeView(resultat.report) : null;
+  });
 
   readonly collapsed = signal(false);
   readonly mobileMenuOpen = signal(false);

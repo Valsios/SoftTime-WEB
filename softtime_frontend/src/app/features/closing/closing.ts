@@ -11,13 +11,24 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { Subscription } from 'rxjs';
+import { EMPTY, expand, Subscription, toArray } from 'rxjs';
 import { errorMessage } from '../../core/error.logic';
 import { SessionStore } from '../../core/session.store';
-import { Column, DataTable, DataTableCell, PageHeader, PeriodFilter, SoftBadge, SoftCard, SoftTabs, SoftToggle, TabItem } from '../../shared/components';
-import { ClosingAnomalyView, ClosingReport, PageChangeEvent, PeriodRequest } from '../../shared/models';
+import { Column, DataTable, DataTableCell, PageHeader, PeriodFilter, SoftBadge, SoftButton, SoftCard, SoftTabs, SoftToggle, TabItem } from '../../shared/components';
+import { ClosingAnomalyView, ClosingChecklist, ClosingChecklistLine, ClosingReport, PageChangeEvent, PeriodRequest } from '../../shared/models';
 import { ClosingService } from '../../shared/services/closing.service';
+import { ExcelExportService } from '../../shared/services/excel-export.service';
+import { ClosingSessionState } from './closing.state';
 import {
+  ANALYSING_TEXT,
+  analysisAgeText,
+  CHECKLIST_ERROR,
+  CHECKLIST_LOADING,
+  CHECKLIST_NOTE,
+  CHECKLIST_TITLE,
+  checklistLink,
+  checklistStateView,
+  ClosingFilter,
   correctionLink,
   CorrectionLink,
   countOf,
@@ -25,15 +36,27 @@ import {
   defaultPeriod,
   DISABLED_MESSAGE,
   excludedEmployeesText,
+  EXPORT_PAGE_SIZE,
+  EXPORT_STALE_MESSAGE,
+  exportFileName,
+  exportSheets,
+  ClosingSort,
+  NO_ANOMALY_FOR_FILTER,
+  severityFilterText,
+  toggleSeverity,
+  FILTER_CHANGED_TEXT,
   formatDay,
   INFORMATION_RULE,
   isDisabledError,
   NO_ANOMALY,
   NO_CONTROLLED_DAY,
+  NOT_ANALYSED_TEXT,
   NOTHING_TO_FIX,
   nothingToFix,
   personLabel,
   PURPOSE_NOTE,
+  resultBannerText,
+  sameFilter,
   SEVERITIES,
   severityLabel,
   severitySentence,
@@ -53,9 +76,16 @@ import {
 @Component({
   selector: 'app-closing',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, PageHeader, PeriodFilter, SoftCard, SoftBadge, SoftTabs, SoftToggle, RouterLink, DataTable, DataTableCell],
+  imports: [FormsModule, PageHeader, PeriodFilter, SoftButton, SoftCard, SoftBadge, SoftTabs, SoftToggle, RouterLink, DataTable, DataTableCell],
   template: `
     <page-header title="Contrôle avant paie" subtitle="Contrôle des données de la période avant la clôture">
+      <soft-button
+        variant="secondary"
+        [loading]="exporting()"
+        [disabled]="!report() || analysing()"
+        [attr.aria-busy]="exporting() || null"
+        (click)="exportExcel()"
+      >Exporter</soft-button>
       <label class="closing-switch">
         <span>Comparer avec la période précédente</span>
         <soft-toggle [ngModel]="includeComparison()" (ngModelChange)="onComparison($event)" name="comparaison"></soft-toggle>
@@ -69,19 +99,64 @@ import {
       [showMatricule]="false"
       [showDepartement]="true"
       searchLabel="Analyser"
+      [busy]="analysing()"
+      (changed)="refreshDraft()"
       (search)="onSearch($event)"
     ></period-filter>
 
-    @if (loading() && !report()) {
-      <div class="soft-empty" role="status">
-        <div class="soft-spinner-lg"></div>
-        Analyse de la période en cours…
-      </div>
-    } @else if (disabled()) {
+    <div class="closing-status-line" role="status" aria-live="polite">
+      @if (analysing()) {
+        <span class="closing-busy"><span class="closing-busy__dot" aria-hidden="true"></span>{{ analysingText }}</span>
+      } @else if (stale()) {
+        <span class="closing-stale">{{ staleText }}</span>
+      } @else if (banner(); as texte) {
+        <span class="closing-muted">{{ texte }} <span class="closing-age">{{ ageText() }}</span></span>
+      }
+    </div>
+
+    @if (checklistLoading()) {
+      <p class="closing-muted" role="status">{{ checklistLoadingText }}</p>
+    }
+    @if (checklistFailed()) {
+      <p class="closing-muted" role="status">{{ checklistErrorText }}</p>
+    }
+    @if (checklist(); as c) {
+      <soft-card variant="bordered" padding="sm">
+        <div class="closing-section-head">
+          <h2>{{ checklistTitle }}</h2>
+          <span>{{ checklistNote }}</span>
+        </div>
+        <ul class="closing-checklist" [attr.aria-label]="checklistTitle">
+          @for (l of c.lignes; track l.code) {
+            <li>
+              <soft-badge [variant]="stateView(l.etat).tone">{{ stateView(l.etat).label }}</soft-badge>
+              <span class="closing-checklist__text">
+                <strong>{{ l.libelle }}</strong>
+                <span class="closing-muted">{{ l.detail }}</span>
+              </span>
+              @if (stepLink(l, c); as k) {
+                @if (canOpen(k)) {
+                  <a class="soft-btn soft-btn--ghost soft-btn--sm" [routerLink]="k.path" [queryParams]="k.queryParams"
+                     [attr.aria-label]="'Ouvrir ' + k.label + ' : ' + l.libelle">{{ k.label }}</a>
+                }
+              }
+            </li>
+          }
+        </ul>
+      </soft-card>
+    }
+    @if (disabled()) {
       <soft-card variant="bordered"><div class="soft-empty" role="status">{{ disabledMessage }}</div></soft-card>
-    } @else if (error()) {
+    }
+    @if (error()) {
       <div class="closing-alert closing-alert--error" role="alert">{{ error() }}</div>
-    } @else if (report(); as r) {
+    }
+    @if (!report() && !analysing() && !disabled() && !error()) {
+      <soft-card variant="bordered"><div class="soft-empty" role="status">{{ notAnalysedText }}</div></soft-card>
+    }
+    @if (report(); as r) {
+     <div class="closing-results" [attr.aria-busy]="analysing()">
+
       <section class="closing-overview" aria-label="Synthèse de la période">
         <soft-card variant="bordered">
           <div class="closing-status">
@@ -112,11 +187,17 @@ import {
         <div class="closing-kpis">
           @for (s of severities; track s) {
             <soft-card variant="bordered">
-              <div class="closing-count">
+              <button
+                type="button"
+                class="closing-count closing-count--toggle"
+                [attr.aria-pressed]="isSelected(s)"
+                [attr.aria-label]="'Filtrer la liste : ' + severityText(s) + ', ' + count(r, s)"
+                (click)="toggleGravite(s)"
+              >
                 <span class="closing-kpi__label"><soft-badge [variant]="tone(s)">{{ severityText(s) }}</soft-badge></span>
                 <strong>{{ count(r, s) }}</strong>
                 <span class="closing-count__text">{{ sentence(s, count(r, s)) }}</span>
-              </div>
+              </button>
             </soft-card>
           }
         </div>
@@ -168,9 +249,25 @@ import {
           <div class="closing-section-head">
             <h2>Anomalies à corriger</h2>
           </div>
-          <soft-tabs [tabs]="tabs()" [activeTab]="tab()" (activeTabChange)="onTab($event)"></soft-tabs>
+          @if (gravites().length === 0) {
+            <soft-tabs [tabs]="tabs()" [activeTab]="tab()" (activeTabChange)="onTab($event)"></soft-tabs>
+          } @else {
+            <p class="closing-filter-line" role="status">
+              {{ filterText() }} · {{ r.anomalies.total }} ligne(s)
+              <button type="button" class="soft-btn soft-btn--ghost soft-btn--sm" (click)="clearGravites()">Tout afficher</button>
+            </p>
+          }
+          <label class="closing-sort">
+            <span>Trier par</span>
+            <select class="soft-input" name="tri" (change)="onTri($event)">
+              <option value="date" [selected]="tri() === 'date'">Date, matricule, type</option>
+              <option value="gravite" [selected]="tri() === 'gravite'">Gravité (la plus grave d’abord)</option>
+            </select>
+          </label>
           @if (r.anomalies.total === 0 && r.nombreAnomalies === 0) {
             <div class="closing-state closing-state--success" role="status">{{ noAnomaly }}</div>
+          } @else if (r.anomalies.total === 0 && gravites().length > 0) {
+            <div class="closing-state closing-state--success" role="status">{{ noAnomalyForFilter }}</div>
           } @else if (r.anomalies.total === 0) {
             <div class="closing-state closing-state--success" role="status">{{ hiddenInformationText() }}</div>
           } @else {
@@ -186,7 +283,7 @@ import {
               [total]="r.anomalies.total"
               [serverPage]="page()"
               [serverPageSize]="pageSize()"
-              [loading]="loading()"
+              [loading]="paging()"
               (pageChange)="onPageChange($event)"
             >
               <ng-template dataTableCell="gravite" let-row>
@@ -211,6 +308,7 @@ import {
       } @else {
         <soft-card variant="bordered"><div class="soft-empty" role="status">{{ noControlledDay }}.</div></soft-card>
       }
+     </div>
     }
   `,
   styles: [
@@ -225,6 +323,18 @@ import {
         border-radius: var(--radius-md); border: 1px solid var(--info-border);
         background: var(--info-bg); color: var(--info);
       }
+      .closing-results { display: flex; flex-direction: column; gap: 16px; }
+      .closing-results[aria-busy='true'] { opacity: 0.6; transition: opacity 0.15s; }
+      .closing-status-line { min-height: 20px; font-size: 13px; }
+      .closing-stale { color: var(--warning, var(--text-secondary)); font-weight: 600; }
+      .closing-busy { display: inline-flex; align-items: center; gap: 8px; color: var(--text-secondary); font-weight: 600; }
+      .closing-busy__dot {
+        width: 12px; height: 12px; border-radius: 50%;
+        border: 2px solid var(--border-color, var(--text-muted)); border-top-color: var(--accent);
+        animation: closing-spin 0.8s linear infinite;
+      }
+      @keyframes closing-spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .closing-busy__dot { animation: none; } }
       .closing-alert { padding: 10px 14px; font-size: 13px; border-radius: var(--radius-md); border: 1px solid; }
       .closing-alert--error { color: var(--danger); background: var(--danger-bg); border-color: var(--danger-border); }
       .closing-switch { display: inline-flex; align-items: center; gap: 10px; font-size: 14px; color: var(--app-text); cursor: pointer; }
@@ -244,6 +354,17 @@ import {
       .closing-explain p { margin: 8px 0 0; font-size: 13px; color: var(--app-text); }
       .closing-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
       .closing-count { display: flex; flex-direction: column; gap: 6px; }
+      .closing-count--toggle {
+        width: 100%; padding: 0; text-align: left; font: inherit; color: inherit;
+        background: none; border: 0; border-radius: var(--radius-md); cursor: pointer;
+      }
+      .closing-count--toggle[aria-pressed='true'] { outline: 2px solid var(--accent); outline-offset: 4px; }
+      .closing-count--toggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 4px; }
+      .closing-checklist { list-style: none; margin: 0; padding: 0 8px 8px; display: grid; gap: 8px; }
+      .closing-checklist li { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 13.5px; }
+      .closing-checklist__text { display: inline-flex; flex-direction: column; gap: 2px; flex: 1 1 220px; min-width: 0; }
+      .closing-filter-line { margin: 0 8px 8px; font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+      .closing-sort { display: inline-flex; align-items: center; gap: 8px; margin: 0 8px 8px; font-size: 13px; color: var(--text-secondary); }
       .closing-count strong { font-size: 22px; font-family: var(--font-heading); color: var(--app-text-strong); }
       .closing-count__text { color: var(--text-secondary); font-size: 12.5px; }
       .closing-section-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 8px 8px 12px; }
@@ -261,6 +382,8 @@ import {
 export class ClosingPage implements OnInit, OnDestroy {
   private readonly closing = inject(ClosingService);
   private readonly session = inject(SessionStore);
+  private readonly state = inject(ClosingSessionState);
+  private readonly excel = inject(ExcelExportService);
 
   /** Filtre partagé, positionné sur le mois précédent avant son premier rendu. */
   @ViewChild(PeriodFilter, { static: true }) private filter?: PeriodFilter;
@@ -283,21 +406,67 @@ export class ClosingPage implements OnInit, OnDestroy {
   readonly informationRule = INFORMATION_RULE;
   readonly nothingToFixText = NOTHING_TO_FIX;
   readonly noControlledDay = NO_CONTROLLED_DAY;
+  readonly analysingText = ANALYSING_TEXT;
+  readonly staleText = FILTER_CHANGED_TEXT;
+  readonly notAnalysedText = NOT_ANALYSED_TEXT;
+  readonly noAnomalyForFilter = NO_ANOMALY_FOR_FILTER;
+  readonly checklistTitle = CHECKLIST_TITLE;
+  readonly checklistNote = CHECKLIST_NOTE;
+  readonly checklistLoadingText = CHECKLIST_LOADING;
+  readonly checklistErrorText = CHECKLIST_ERROR;
+
+  /** Avancement de la paie : chargé avec l'analyse, en parallèle ; son échec n'empêche ni ne modifie l'analyse. */
+  readonly checklist = signal<ClosingChecklist | null>(null);
+  readonly checklistLoading = signal(false);
+  readonly checklistFailed = signal(false);
+  private checklistRequest?: Subscription;
+
+  /** Heure courante, rafraîchie localement toutes les 30 s pour l'âge de l'analyse : aucune requête. */
+  private readonly maintenant = signal(new Date());
+  private horloge?: ReturnType<typeof setInterval>;
 
   readonly report = signal<ClosingReport | null>(null);
-  readonly loading = signal(false);
+  /** Analyse complète en cours (bouton Analyser, onglet) : indicateur près du filtre, résultat atténué. */
+  readonly analysing = signal(false);
+  /** Changement de page ou de taille seulement : seul le tableau affiche un chargement. */
+  readonly paging = signal(false);
+  /** Rassemblement de la liste complète pour l'export en cours : clics répétés ignorés. */
+  readonly exporting = signal(false);
+  private exportRequest?: Subscription;
   readonly error = signal<string | null>(null);
   readonly disabled = signal(false);
   readonly includeComparison = signal(false);
   /** Onglet de la liste : « afix » (par défaut) ou « all » (avec les informations, includeInformation = true). */
   readonly tab = signal<'afix' | 'all'>('afix');
   readonly includeInformation = computed(() => this.tab() === 'all');
+  /** Niveaux retenus dans la liste (vide : aucun filtre) et tri : ne touchent ni l'analyse, ni le score, ni le statut. */
+  readonly gravites = signal<string[]>([]);
+  readonly tri = signal<ClosingSort>('date');
+  readonly filterText = computed(() => severityFilterText(this.gravites()));
   readonly page = signal(1);
   readonly pageSize = signal<number>(DEFAULT_PAGE_SIZE);
 
-  private period = defaultPeriod();
-  private departement: string | null = null;
+  /** Filtre qui a produit le résultat affiché (null : aucune analyse faite). */
+  private readonly applied = signal<ClosingFilter | null>(null);
+  private readonly analysedAt = signal<Date | null>(null);
+  /** Filtre actuellement saisi dans le formulaire partagé. */
+  private readonly draft = signal<ClosingFilter>({ ...defaultPeriod(), departement: null, includeComparison: false });
+  /** Filtre de la requête en vol, pour ignorer un second clic identique. */
+  private inflight: ClosingFilter | null = null;
   private request?: Subscription;
+
+  /** La saisie diffère du résultat affiché : rien n'est relancé, l'utilisateur doit cliquer sur Analyser. */
+  readonly stale = computed(() => this.applied() !== null && !sameFilter(this.draft(), this.applied()));
+  /** Âge de l'analyse affichée, à partir de l'heure conservée en session (donc cohérent avec le filtre figé). */
+  readonly ageText = computed(() => {
+    const at = this.analysedAt();
+    return at ? analysisAgeText(at, this.maintenant()) : '';
+  });
+  readonly banner = computed(() => {
+    const at = this.analysedAt();
+    const filter = this.applied();
+    return at && filter ? resultBannerText(at, filter) : null;
+  });
 
   readonly status = computed(() => statusView(this.report()?.statut));
   readonly score = computed(() => scoreText(this.report()?.score));
@@ -333,86 +502,281 @@ export class ClosingPage implements OnInit, OnDestroy {
   });
 
   ngOnInit(): void {
+    this.maintenant.set(new Date());
+    this.horloge = setInterval(() => this.maintenant.set(new Date()), 30_000);
+    // Retour sur la page : on réaffiche l'état conservé (filtre saisi, dernier résultat), sans rien relancer.
+    this.state.syncContext();
+    const draft = this.state.draft() ?? { ...defaultPeriod(), departement: null, includeComparison: false };
     if (this.filter) {
-      this.filter.from = this.period.from;
-      this.filter.to = this.period.to;
+      this.filter.from = draft.from;
+      this.filter.to = draft.to;
+      this.filter.departement = draft.departement;
     }
-    this.load();
+    this.includeComparison.set(draft.includeComparison);
+    this.draft.set(draft);
+    const kept = this.state.result();
+    this.checklist.set(this.state.checklist());
+    if (kept) {
+      this.report.set(kept.report);
+      this.applied.set(kept.filter);
+      this.analysedAt.set(kept.analysedAt);
+      this.tab.set(this.state.tab());
+      this.gravites.set(this.state.gravites());
+      this.tri.set(this.state.tri());
+      this.page.set(kept.report.anomalies.page);
+      this.pageSize.set(this.state.pageSize() ?? DEFAULT_PAGE_SIZE);
+    }
   }
 
   ngOnDestroy(): void {
-    this.request?.unsubscribe();
+    if (this.horloge !== undefined) clearInterval(this.horloge);
+    // Le filtre saisi est conservé ; une requête en cours n'est pas annulée : son résultat sera gardé en mémoire.
+    this.state.draft.set(this.readFilter());
+    this.exportRequest?.unsubscribe();
   }
 
+  /**
+   * Export Excel de TOUTE la liste affichée (toutes les pages), avec le même filtre de période et de
+   * département, le même onglet, le même filtre de gravité et le même tri que l'écran, par le classeur
+   * multi-feuilles existant (synthèse + anomalies). Les pages sont relues avec `reuseCache` : tant que
+   * l'analyse est dans le cache du serveur (délai glissant), rien n'est recalculé. Si le nombre de lignes diffère du
+   * total (filtré) de la liste affichée, l'export est refusé (données modifiées depuis l'analyse).
+   */
+  exportExcel(): void {
+    const filter = this.applied();
+    const report = this.report();
+    const at = this.analysedAt();
+    if (!filter || !report || !at || this.analysing() || this.exporting()) return;
+    this.exporting.set(true);
+    this.error.set(null);
+    const vue = { gravites: this.gravites(), tri: this.tri(), includeInformation: this.includeInformation() };
+    const attendu = report.anomalies.total;
+    const fetchPage = (page: number) =>
+      this.closing.analysis({
+        from: filter.from,
+        to: filter.to,
+        departement: filter.departement,
+        includeComparison: filter.includeComparison,
+        includeInformation: vue.includeInformation,
+        page,
+        pageSize: EXPORT_PAGE_SIZE,
+        reuseCache: true,
+        gravites: vue.gravites,
+        tri: vue.tri === 'gravite' ? 'gravite' : undefined,
+      });
+    this.exportRequest = fetchPage(1)
+      .pipe(
+        expand((r) => (r.anomalies.page < r.anomalies.totalPages ? fetchPage(r.anomalies.page + 1) : EMPTY)),
+        toArray(),
+      )
+      .subscribe({
+        next: (pages) => {
+          const items = pages.flatMap((r) => r.anomalies.items);
+          this.exporting.set(false);
+          if (items.length !== attendu) {
+            this.error.set(EXPORT_STALE_MESSAGE);
+            return;
+          }
+          this.excel.downloadWorkbook(exportFileName(filter), exportSheets(report, items, filter, at, vue));
+        },
+        error: () => this.exporting.set(false),
+      });
+  }
+
+  /** Le filtre a été modifié par l'utilisateur : relit ses champs pour savoir si la saisie diffère du résultat affiché. */
+  refreshDraft(): void {
+    this.draft.set(this.readFilter());
+  }
+
+  private readFilter(): ClosingFilter {
+    return {
+      from: this.filter?.from ?? this.draft().from,
+      to: this.filter?.to ?? this.draft().to,
+      departement: this.filter?.departement || null,
+      includeComparison: this.includeComparison(),
+    };
+  }
+
+  /** Bouton « Analyser » : clics répétés sur le même filtre ignorés ; un autre filtre annule la requête précédente. */
   onSearch(req: PeriodRequest): void {
-    this.period = { from: req.from, to: req.to };
-    this.departement = req.departement || null;
+    const next: ClosingFilter = {
+      from: req.from,
+      to: req.to,
+      departement: req.departement || null,
+      includeComparison: this.includeComparison(),
+    };
+    if (this.analysing() && sameFilter(next, this.inflight)) return;
     this.page.set(1);
-    this.load();
+    this.load(next, false);
+    this.loadChecklist(next);
   }
 
+  /**
+   * Avancement de la paie pour le filtre analysé : lancé avec l'analyse, sans la bloquer. Une nouvelle recherche annule la
+   * précédente ; une erreur n'affiche qu'une note (jamais d'effet sur la liste, le score ni le statut).
+   */
+  private loadChecklist(filter: ClosingFilter): void {
+    this.checklistRequest?.unsubscribe();
+    this.checklist.set(null);
+    this.checklistFailed.set(false);
+    this.checklistLoading.set(true);
+    const context = this.state.currentContext();
+    this.state.storeChecklist(null, context);
+    this.checklistRequest = this.closing
+      .checklist({ from: filter.from, to: filter.to, departement: filter.departement })
+      .subscribe({
+        next: (c) => {
+          this.checklist.set(c);
+          this.state.storeChecklist(c, context);
+          this.checklistLoading.set(false);
+        },
+        error: () => {
+          this.checklistFailed.set(true);
+          this.checklistLoading.set(false);
+        },
+      });
+  }
+
+  /** Libellé et teinte de l'état d'une étape. */
+  stateView(etat: string) {
+    return checklistStateView(etat);
+  }
+
+  /** Écran existant de l'étape, avec la période quand l'écran la lit. */
+  stepLink(line: ClosingChecklistLine, c: ClosingChecklist) {
+    return checklistLink(line, { from: c.from.slice(0, 10), to: c.to.slice(0, 10) });
+  }
+
+  /** L'option est mémorisée avec le filtre : rien n'est relancé avant le clic sur Analyser. */
   onComparison(active: boolean): void {
     this.includeComparison.set(!!active);
-    this.load();
+    this.draft.set(this.readFilter());
   }
 
-  /** Changer d'onglet relance l'analyse à la page 1 en conservant période, département et comparaison. */
+  /**
+   * Changer d'onglet ne change que la LISTE (présence des « Information ») : page 1 du filtre déjà analysé, relue dans
+   * l'analyse en cache du serveur (`reuseCache`), sans nouveau calcul complet ni checklist. Le filtre saisi n'est pas pris en compte.
+   */
   onTab(id: string): void {
     const next = id === 'all' ? 'all' : 'afix';
-    if (next === this.tab()) return;
+    const applied = this.applied();
+    if (next === this.tab() || !applied) return;
     this.tab.set(next);
+    this.state.tab.set(next);
+    this.reloadList();
+  }
+
+  /**
+   * Carte de gravité = bascule de filtre de la liste. Le serveur relit la page 1 dans l'analyse en cache
+   * (`reuseCache`) : aucune nouvelle analyse complète, le score et les comptages restent ceux de l'analyse.
+   */
+  toggleGravite(severity: string): void {
+    this.gravites.set(toggleSeverity(this.gravites(), severity));
+    this.state.gravites.set(this.gravites());
+    this.reloadList();
+  }
+
+  clearGravites(): void {
+    if (!this.gravites().length) return;
+    this.gravites.set([]);
+    this.state.gravites.set([]);
+    this.reloadList();
+  }
+
+  isSelected(severity: string): boolean {
+    return this.gravites().includes(severity);
+  }
+
+  onTri(event: Event): void {
+    const next: ClosingSort = (event.target as HTMLSelectElement).value === 'gravite' ? 'gravite' : 'date';
+    if (next === this.tri()) return;
+    this.tri.set(next);
+    this.state.tri.set(next);
+    this.reloadList();
+  }
+
+  /** Liste seulement : page 1 du filtre déjà analysé, avec le cache du serveur. */
+  private reloadList(): void {
+    const applied = this.applied();
+    if (!applied) return;
     this.page.set(1);
-    this.load();
+    this.load(applied, true);
   }
 
   /** Navigation du tableau partagé : un changement de taille revient à la page 1. */
   onPageChange(e: PageChangeEvent): void {
+    const applied = this.applied();
+    if (!applied) return;
     if (e.pageSize !== this.pageSize()) {
       this.pageSize.set(e.pageSize || DEFAULT_PAGE_SIZE);
       this.page.set(1);
-      this.load(true);
+      this.load(applied, true);
       return;
     }
     this.goTo(e.page);
   }
 
   goTo(page: number): void {
-    if (page < 1 || page === this.page()) return;
+    const applied = this.applied();
+    if (!applied || page < 1 || page === this.page()) return;
     this.page.set(page);
-    this.load(true);
+    this.load(applied, true);
   }
 
-  /** L'intercepteur affiche déjà l'erreur en notification : la page ne montre qu'un état, sans second message. */
-  /** `reuseCache` : seulement pour un changement de page ou de taille ; toute nouvelle analyse recalcule. */
-  private load(reuseCache = false): void {
+  /**
+   * Lance la requête pour un filtre donné. `pageOnly` : changement de page ou de taille seulement, le
+   * serveur peut alors réutiliser l'analyse déjà calculée (cache glissant) et seul le tableau montre un chargement ;
+   * toute nouvelle analyse recalcule et montre l'indicateur « Analyse en cours… ».
+   * L'intercepteur affiche déjà l'erreur en notification : la page ne montre qu'un état, sans second message,
+   * et garde le dernier bon résultat.
+   */
+  private load(filter: ClosingFilter, pageOnly: boolean): void {
     this.request?.unsubscribe();
-    this.loading.set(true);
+    this.inflight = filter;
+    this.analysing.set(!pageOnly);
+    this.paging.set(pageOnly);
     this.error.set(null);
     this.disabled.set(false);
+    const context = this.state.currentContext();
     this.request = this.closing
       .analysis({
-        from: this.period.from,
-        to: this.period.to,
-        departement: this.departement,
-        includeComparison: this.includeComparison(),
+        from: filter.from,
+        to: filter.to,
+        departement: filter.departement,
+        includeComparison: filter.includeComparison,
         includeInformation: this.includeInformation(),
         page: this.page(),
         pageSize: this.pageSize(),
-        reuseCache,
+        reuseCache: pageOnly,
+        gravites: this.gravites(),
+        tri: this.tri() === 'gravite' ? 'gravite' : undefined,
       })
       .subscribe({
         next: (r) => {
+          const at = pageOnly ? (this.analysedAt() ?? new Date()) : new Date();
           this.report.set(r);
           this.page.set(r.anomalies.page);
-          this.loading.set(false);
+          this.applied.set(filter);
+          this.analysedAt.set(at);
+          this.state.tab.set(this.tab());
+          this.state.page.set(r.anomalies.page);
+          this.state.pageSize.set(this.pageSize());
+          this.state.storeResult({ filter, report: r, analysedAt: at }, context);
+          this.endRequest();
         },
         error: (err: HttpErrorResponse) => {
-          this.report.set(null);
-          this.loading.set(false);
+          this.endRequest();
+          this.page.set(this.report()?.anomalies.page ?? 1);
           if (isDisabledError(err)) this.disabled.set(true);
           else this.error.set(errorMessage(err));
         },
       });
+  }
+
+  private endRequest(): void {
+    this.inflight = null;
+    this.analysing.set(false);
+    this.paging.set(false);
   }
 
   count(r: ClosingReport, severity: string): number {
@@ -457,7 +821,7 @@ export class ClosingPage implements OnInit, OnDestroy {
   }
 
   /** Lien actif seulement si la page cible est accessible (même règle que le menu). */
-  canOpen(l: CorrectionLink): boolean {
+  canOpen(l: { permission: string; droit: number }): boolean {
     return this.session.hasPermission(l.permission, l.droit);
   }
 }
