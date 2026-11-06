@@ -30,33 +30,20 @@ public sealed class CategoryService : ICategoryService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sage = _tenant.SageDb;
-        int[] supervisorIds = Array.Empty<int>();
-        if (SearchText.Terms(search).Count > 0)
-        {
-            var sageKey = (sage ?? string.Empty).Trim().ToLowerInvariant();
-            var cards = await _uow.Repository<CardPaie>().ListReadOnlyAsync(
-                c => c.SageBdd == null
-                     || c.SageBdd.Trim() == ""
-                     || c.SageBdd.Trim().ToLower() == sageKey,
-                ct);
-            supervisorIds = cards
-                .Where(c => SearchText.Matches(search, c.SageMatricule, c.SageNom, c.SagePrenom))
-                .Select(c => c.Id)
-                .ToArray();
-        }
+        var supervisorIds = SearchText.Terms(search).Count > 0
+            ? await SupervisorIdsAsync(search, ct)
+            : Array.Empty<int>();
 
+        // Recherche sur l'intitulé OU sur le superviseur (matricule, nom, prénom).
         var searchPredicate = SearchExpression.For<Categorie>(search, c => c.Intitule);
-        System.Linq.Expressions.Expression<Func<Categorie, bool>> predicate =
-            c => c.BddSage == sage;
+        System.Linq.Expressions.Expression<Func<Categorie, bool>> predicate = c => c.BddSage == sage;
         if (supervisorIds.Length > 0)
         {
             System.Linq.Expressions.Expression<Func<Categorie, bool>> supervisorPredicate =
                 c => supervisorIds.Contains(c.IdCardPaie);
             predicate = SearchExpression.AndAlso(
                 predicate,
-                searchPredicate is null
-                    ? supervisorPredicate
-                    : SearchExpression.OrElse(searchPredicate, supervisorPredicate));
+                searchPredicate is null ? supervisorPredicate : SearchExpression.OrElse(searchPredicate, supervisorPredicate));
         }
         else if (searchPredicate is not null)
         {
@@ -64,13 +51,21 @@ public sealed class CategoryService : ICategoryService
         }
 
         return await PagedLists.PageAsync(
-            _uow.Repository<Categorie>(),
-            predicate,
-            q => q.OrderBy(c => c.IdCategorie),
-            page,
-            pageSize,
-            c => _mapper.Map<CategoryDto>(c),
+            _uow.Repository<Categorie>(), predicate, q => q.OrderBy(c => c.IdCategorie),
+            page, pageSize, c => _mapper.Map<CategoryDto>(c), ct);
+    }
+
+    /// <summary>Cartes de la base active (ou sans base) dont le matricule, le nom ou le prénom correspond.</summary>
+    private async Task<int[]> SupervisorIdsAsync(string? search, CancellationToken ct)
+    {
+        var sageKey = (_tenant.SageDb ?? string.Empty).Trim().ToLowerInvariant();
+        var cards = await _uow.Repository<CardPaie>().ListReadOnlyAsync(
+            c => c.SageBdd == null || c.SageBdd.Trim() == "" || c.SageBdd.Trim().ToLower() == sageKey,
             ct);
+        return cards
+            .Where(c => SearchText.Matches(search, c.SageMatricule, c.SageNom, c.SagePrenom))
+            .Select(c => c.Id)
+            .ToArray();
     }
 
     public async Task<Dictionary<int, string>> LoadCategoryLabelsAsync(CancellationToken ct)
@@ -93,15 +88,10 @@ public sealed class CategoryService : ICategoryService
     public async Task<CategoryDto> SaveCategoryAsync(CategoryDto dto, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-
-        var cardRepo = _uow.Repository<CardPaie>();
-        var supervisorCard = await cardRepo.GetByIdAsync(dto.SupervisorCardId, ct);
-        if (supervisorCard == null)
-            throw new NotFoundException($"Carte superviseur introuvable (ID={dto.SupervisorCardId}).");
-
+        _ = await _uow.Repository<CardPaie>().GetByIdAsync(dto.SupervisorCardId, ct)
+            ?? throw new NotFoundException($"Carte superviseur introuvable (ID={dto.SupervisorCardId}).");
         if (string.IsNullOrWhiteSpace(dto.Intitule))
             throw new DomainException("L'intitulé de la catégorie est obligatoire.");
-
         if (dto.HeuresSemaine <= 0)
             throw new DomainException("Le nombre d'heures par semaine doit être supérieur à 0.");
 
@@ -109,28 +99,26 @@ public sealed class CategoryService : ICategoryService
         Categorie entity;
         if (dto.Id == 0)
         {
-            entity = new Categorie
-            {
-                Intitule = dto.Intitule,
-                IdCardPaie = dto.SupervisorCardId,
-                Pause = dto.Pause,
-                HeureSemaine = dto.HeuresSemaine,
-                BddSage = _tenant.SageDb,
-                BddPointeuse = _tenant.PointeuseDb
-            };
+            entity = new Categorie { BddSage = _tenant.SageDb, BddPointeuse = _tenant.PointeuseDb };
+            ApplyCategory(dto, entity);
             await repo.AddAsync(entity, ct);
         }
         else
         {
             entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
-            entity.Intitule = dto.Intitule;
-            entity.IdCardPaie = dto.SupervisorCardId;
-            entity.Pause = dto.Pause;
-            entity.HeureSemaine = dto.HeuresSemaine;
+            ApplyCategory(dto, entity);
             repo.Update(entity);
         }
         await _uow.SaveChangesAsync(ct);
         return _mapper.Map<CategoryDto>(entity);
+    }
+
+    private static void ApplyCategory(CategoryDto dto, Categorie entity)
+    {
+        entity.Intitule = dto.Intitule;
+        entity.IdCardPaie = dto.SupervisorCardId;
+        entity.Pause = dto.Pause;
+        entity.HeureSemaine = dto.HeuresSemaine;
     }
 
     public async Task DeleteCategoryAsync(int id, CancellationToken ct = default)

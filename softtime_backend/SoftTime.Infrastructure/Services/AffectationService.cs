@@ -36,40 +36,42 @@ public sealed class AffectationService : IAffectationService
         string? search = null, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-
+        // Département, service et recherche ne sont connus qu'après lecture SAGE : filtrage en mémoire.
         if (!string.IsNullOrWhiteSpace(departement)
             || !string.IsNullOrWhiteSpace(service)
             || SearchText.Terms(search).Count > 0)
         {
-            var rows = await LoadAffectationRowsAsync(categoryId, ct);
-            var filtered = ApplyAffectationFilters(rows, departement, service).ToList();
+            var filtered = ApplyAffectationFilters(await LoadAffectationRowsAsync(categoryId, ct), departement, service).ToList();
             if (SearchText.Terms(search).Count > 0)
-            {
-                var labels = await _categoryService.LoadCategoryLabelsAsync(ct);
-                filtered = filtered
-                    .Where(row => SearchText.Matches(
-                        search,
-                        row.Matricule,
-                        row.Nom,
-                        row.Prenom,
-                        row.Departement,
-                        row.Service,
-                        labels.GetValueOrDefault(row.CategoryId)))
-                    .ToList();
-            }
+                filtered = await FilterBySearchAsync(filtered, search, ct);
             return PagedLists.Page(filtered, page, pageSize);
         }
+        return await ListSqlPagedAsync(categoryId, page, pageSize, ct);
+    }
 
+    private async Task<List<AffectationRowDto>> FilterBySearchAsync(List<AffectationRowDto> rows, string? search, CancellationToken ct)
+    {
+        var labels = await _categoryService.LoadCategoryLabelsAsync(ct);
+        return rows
+            .Where(row => SearchText.Matches(
+                search, row.Matricule, row.Nom, row.Prenom, row.Departement, row.Service,
+                labels.GetValueOrDefault(row.CategoryId)))
+            .ToList();
+    }
+
+    /// <summary>Pagination SQL des affectations, enrichies ensuite des cartes et départements SAGE de la page.</summary>
+    private async Task<PagedResult<AffectationRowDto>> ListSqlPagedAsync(int? categoryId, int? page, int? pageSize, CancellationToken ct)
+    {
         var sage = _tenant.SageDb;
         System.Linq.Expressions.Expression<Func<CategorieSalarie, bool>> predicate =
             a => a.BddSage == sage && (!categoryId.HasValue || a.IdCateg == categoryId);
         Func<IQueryable<CategorieSalarie>, IOrderedQueryable<CategorieSalarie>> order =
             q => q.OrderBy(a => a.MatriculeSage).ThenBy(a => a.Id);
-        var result = await _uow.Repository<CategorieSalarie>().ToPagedAsync(
-            predicate, order, page, pageSize, ct);
+        var result = await _uow.Repository<CategorieSalarie>().ToPagedAsync(predicate, order, page, pageSize, ct);
         if (result.Total > 0 && result.Items.Count == 0 && result.Page > result.TotalPages)
             result = await _uow.Repository<CategorieSalarie>().ToPagedAsync(
                 predicate, order, result.TotalPages, result.PageSize, ct);
+
         var cards = await LoadCardsAsync(result.Items.Select(a => a.MatriculeSage).ToList(), ct);
         var matricules = cards.Values
             .Select(c => c.SageMatricule?.Trim())
@@ -211,48 +213,46 @@ public sealed class AffectationService : IAffectationService
     public async Task<AffectationDto> SaveAffectationAsync(AffectationDto dto, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
+        _ = await _uow.Repository<CardPaie>().GetByIdAsync(dto.CardPaieId, ct)
+            ?? throw new NotFoundException($"Carte salarié introuvable (ID={dto.CardPaieId}).");
+        _ = await _uow.Repository<Categorie>().GetByIdAsync(dto.CategoryId, ct)
+            ?? throw new NotFoundException($"Catégorie introuvable (ID={dto.CategoryId}).");
 
-        var cardExists = await _uow.Repository<CardPaie>().GetByIdAsync(dto.CardPaieId, ct);
-        if (cardExists == null)
-            throw new NotFoundException($"Carte salarié introuvable (ID={dto.CardPaieId}).");
-
-        var categoryExists = await _uow.Repository<Categorie>().GetByIdAsync(dto.CategoryId, ct);
-        if (categoryExists == null)
-            throw new NotFoundException($"Catégorie introuvable (ID={dto.CategoryId}).");
-
-        var repo = _uow.Repository<CategorieSalarie>();
-        CategorieSalarie entity;
-
-        if (dto.Id == 0)
-        {
-            var existingForCard = (await repo.ListAsync(a => a.MatriculeSage == dto.CardPaieId, ct)).FirstOrDefault();
-            if (existingForCard != null)
-            {
-                existingForCard.IdCateg = dto.CategoryId;
-                repo.Update(existingForCard);
-                entity = existingForCard;
-            }
-            else
-            {
-                entity = new CategorieSalarie
-                {
-                    MatriculeSage = dto.CardPaieId,
-                    IdCateg = dto.CategoryId,
-                    BddSage = _tenant.SageDb,
-                    BddPointeuse = _tenant.PointeuseDb
-                };
-                await repo.AddAsync(entity, ct);
-            }
-        }
-        else
-        {
-            entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
-            entity.MatriculeSage = dto.CardPaieId;
-            entity.IdCateg = dto.CategoryId;
-            repo.Update(entity);
-        }
+        var entity = dto.Id == 0 ? await AffecterCarteAsync(dto, ct) : await ModifierAffectationAsync(dto, ct);
         await _uow.SaveChangesAsync(ct);
         return new AffectationDto(entity.Id, entity.MatriculeSage, entity.IdCateg);
+    }
+
+    /// <summary>Nouvelle affectation : une carte n'a qu'une catégorie, l'affectation existante est réutilisée.</summary>
+    private async Task<CategorieSalarie> AffecterCarteAsync(AffectationDto dto, CancellationToken ct)
+    {
+        var repo = _uow.Repository<CategorieSalarie>();
+        var existingForCard = (await repo.ListAsync(a => a.MatriculeSage == dto.CardPaieId, ct)).FirstOrDefault();
+        if (existingForCard != null)
+        {
+            existingForCard.IdCateg = dto.CategoryId;
+            repo.Update(existingForCard);
+            return existingForCard;
+        }
+        var entity = new CategorieSalarie
+        {
+            MatriculeSage = dto.CardPaieId,
+            IdCateg = dto.CategoryId,
+            BddSage = _tenant.SageDb,
+            BddPointeuse = _tenant.PointeuseDb
+        };
+        await repo.AddAsync(entity, ct);
+        return entity;
+    }
+
+    private async Task<CategorieSalarie> ModifierAffectationAsync(AffectationDto dto, CancellationToken ct)
+    {
+        var repo = _uow.Repository<CategorieSalarie>();
+        var entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
+        entity.MatriculeSage = dto.CardPaieId;
+        entity.IdCateg = dto.CategoryId;
+        repo.Update(entity);
+        return entity;
     }
 
     public async Task DeleteAffectationAsync(int id, CancellationToken ct = default)

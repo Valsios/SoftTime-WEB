@@ -26,7 +26,7 @@ internal static class DashboardStatsBuilder
             BuildRetards(data, events, periodes, periode),
             BuildSeries(data.Semaines, periodes, periode),
             repartition,
-            DashboardIndicators.Assiduite(data.Cles, data.CategorieParCle, events.Presences, events.Absences, events.Retards));
+            DashboardIndicators.Assiduite(data, events));
     }
 
     private static DashboardAbsencesDto BuildAbsences(

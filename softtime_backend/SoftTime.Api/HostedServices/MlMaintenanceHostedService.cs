@@ -18,6 +18,7 @@ public sealed class MlMaintenanceHostedService : BackgroundService
     private readonly MlJobCoordinator _jobs;
     private readonly MlOptions _options;
     private readonly ILogger<MlMaintenanceHostedService> _logger;
+    private DateTime _dernierQuotidien = DateTime.MinValue;
 
     public MlMaintenanceHostedService(
         IServiceScopeFactory scopeFactory,
@@ -45,26 +46,11 @@ public sealed class MlMaintenanceHostedService : BackgroundService
 
         // Laisser l'application démarrer et appliquer les migrations avant le premier cycle.
         await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
-
-        var dernierQuotidien = DateTime.MinValue;
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                while (_jobs.Reader.TryRead(out var job))
-                {
-                    _logger.LogInformation(
-                        "Job ML reçu (société={Tenant}, full={Full}, train={Train}).",
-                        job.BddSage ?? "toutes", job.FullRefresh, job.Train);
-                    await ExecuterAsync(job, stoppingToken);
-                }
-
-                var maintenant = DateTime.Now;
-                if (maintenant.Hour == _options.RefreshHourLocal && dernierQuotidien.Date < maintenant.Date)
-                {
-                    dernierQuotidien = maintenant;
-                    await ExecuterAsync(new MlJobRequest(null, FullRefresh: false, Train: false), stoppingToken);
-                }
+                await CycleAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -79,38 +65,38 @@ public sealed class MlMaintenanceHostedService : BackgroundService
         }
     }
 
+    /// <summary>Traite les demandes en attente puis, une fois par jour à l'heure prévue, le rafraîchissement.</summary>
+    private async Task CycleAsync(CancellationToken ct)
+    {
+        while (_jobs.Reader.TryRead(out var job))
+        {
+            _logger.LogInformation(
+                "Job ML reçu (société={Tenant}, full={Full}, train={Train}).",
+                job.BddSage ?? "toutes", job.FullRefresh, job.Train);
+            await ExecuterAsync(job, ct);
+        }
+
+        var maintenant = DateTime.Now;
+        if (maintenant.Hour == _options.RefreshHourLocal && _dernierQuotidien.Date < maintenant.Date)
+        {
+            _dernierQuotidien = maintenant;
+            await ExecuterAsync(new MlJobRequest(null, FullRefresh: false, Train: false), ct);
+        }
+    }
+
     private async Task ExecuterAsync(MlJobRequest job, CancellationToken ct)
     {
         _jobs.SetRunning("Traitement ML en cours…");
         try
         {
-            var tenants = await ChargerTenantsAsync(ct);
-            if (!string.IsNullOrWhiteSpace(job.BddSage))
-            {
-                tenants = tenants
-                    .Where(t => string.Equals(t, job.BddSage, StringComparison.OrdinalIgnoreCase))
-                    .ToList();
-            }
-
+            var tenants = (await ChargerTenantsAsync(ct))
+                .Where(t => string.IsNullOrWhiteSpace(job.BddSage) || string.Equals(t, job.BddSage, StringComparison.OrdinalIgnoreCase))
+                .ToList();
             var erreurs = 0;
             foreach (var tenant in tenants)
             {
-                try
-                {
-                    using var scope = _scopeFactory.CreateScope();
-                    // Avant toute résolution d'ICurrentUser : le scope n'a pas d'utilisateur HTTP.
-                    scope.ServiceProvider.GetRequiredService<SystemExecution>().Enable();
-                    scope.ServiceProvider.GetRequiredService<ICompanyContext>().Set(tenant, null);
-                    var pipeline = scope.ServiceProvider.GetRequiredService<IMlPipelineService>();
-                    var result = await pipeline.RunAsync(job.FullRefresh, job.Train, ct);
-                    _logger.LogInformation(
-                        "ML {Tenant} : {Etat} — {Message}", tenant, result.Etat, result.Message);
-                }
-                catch (Exception ex)
-                {
+                if (!await ExecuterPourAsync(job, tenant, ct))
                     erreurs++;
-                    _logger.LogError(ex, "Échec du traitement ML pour {Tenant}.", tenant);
-                }
             }
 
             if (erreurs == 0)
@@ -122,6 +108,27 @@ public sealed class MlMaintenanceHostedService : BackgroundService
         {
             _logger.LogError(ex, "Échec du traitement ML.");
             _jobs.SetIdle("Échec du traitement ML.", ex.Message);
+        }
+    }
+
+    /// <summary>Pipeline ML d'une société, dans un scope système dédié ; faux en cas d'échec (journalisé).</summary>
+    private async Task<bool> ExecuterPourAsync(MlJobRequest job, string tenant, CancellationToken ct)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            // Avant toute résolution d'ICurrentUser : le scope n'a pas d'utilisateur HTTP.
+            scope.ServiceProvider.GetRequiredService<SystemExecution>().Enable();
+            scope.ServiceProvider.GetRequiredService<ICompanyContext>().Set(tenant, null);
+            var pipeline = scope.ServiceProvider.GetRequiredService<IMlPipelineService>();
+            var result = await pipeline.RunAsync(job.FullRefresh, job.Train, ct);
+            _logger.LogInformation("ML {Tenant} : {Etat} — {Message}", tenant, result.Etat, result.Message);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Échec du traitement ML pour {Tenant}.", tenant);
+            return false;
         }
     }
 

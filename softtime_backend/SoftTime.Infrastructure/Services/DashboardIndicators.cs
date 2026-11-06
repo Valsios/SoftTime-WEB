@@ -3,6 +3,7 @@
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Services;
+using SoftTime.Infrastructure.Services.Dashboard;
 
 namespace SoftTime.Infrastructure.Services;
 
@@ -48,42 +49,9 @@ internal static class DashboardIndicators
     /// Classement d'assiduité : seuls les salariés ayant réellement pointé sont classés (sinon tout
     /// salarié sans pointage apparaîtrait « le plus ponctuel » à 0 jour travaillé).
     /// </summary>
-    internal static DashboardAssiduiteDto Assiduite(
-        IReadOnlyDictionary<string, CardPaie> cles,
-        IReadOnlyDictionary<string, string?> categorieParCle,
-        IReadOnlyList<(string Cle, DateTime Date)> presences,
-        IReadOnlyList<(string Cle, DateTime Date)> absences,
-        IReadOnlyList<(string Cle, DateTime Date, int Minutes)> retards)
+    internal static DashboardAssiduiteDto Assiduite(DashboardData data, DashboardEvents events)
     {
-        var travail = presences.GroupBy(p => p.Cle, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
-        var manques = absences.GroupBy(a => a.Cle, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
-        var retardsParCle = retards.GroupBy(r => r.Cle, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => (Count: g.Count(), Minutes: g.Sum(r => r.Minutes)), StringComparer.OrdinalIgnoreCase);
-
-        var lignes = cles
-            .Where(kv => travail.ContainsKey(kv.Key))
-            .Select(kv =>
-            {
-                var joursTravailles = travail[kv.Key];
-                manques.TryGetValue(kv.Key, out var joursAbsence);
-                retardsParCle.TryGetValue(kv.Key, out var retard);
-                categorieParCle.TryGetValue(kv.Key, out var categorie);
-                return new DashboardAssiduiteRowDto(
-                    kv.Key,
-                    kv.Value.SageNom,
-                    kv.Value.SagePrenom,
-                    kv.Value.Departement,
-                    categorie,
-                    joursTravailles,
-                    joursAbsence,
-                    retard.Count,
-                    retard.Minutes,
-                    DashboardRules.TauxPonctualite(joursTravailles, retard.Count));
-            })
-            .ToList();
-
+        var lignes = LignesAssiduite(data, events);
         var plusPonctuels = lignes
             .OrderByDescending(l => l.TauxPonctualite)
             .ThenBy(l => l.JoursRetard)
@@ -99,8 +67,37 @@ internal static class DashboardIndicators
             .ThenBy(l => l.Matricule, StringComparer.OrdinalIgnoreCase)
             .Take(5)
             .ToList();
-
         return new DashboardAssiduiteDto(plusPonctuels, moinsPonctuels);
+    }
+
+    /// <summary>Une ligne par salarié ayant pointé au moins une fois sur la période.</summary>
+    private static List<DashboardAssiduiteRowDto> LignesAssiduite(DashboardData data, DashboardEvents events)
+    {
+        var comparer = StringComparer.OrdinalIgnoreCase;
+        var travail = events.Presences.GroupBy(p => p.Cle, comparer).ToDictionary(g => g.Key, g => g.Count(), comparer);
+        var manques = events.Absences.GroupBy(a => a.Cle, comparer).ToDictionary(g => g.Key, g => g.Count(), comparer);
+        var retardsParCle = events.Retards.GroupBy(r => r.Cle, comparer)
+            .ToDictionary(g => g.Key, g => (Count: g.Count(), Minutes: g.Sum(r => r.Minutes)), comparer);
+
+        return data.Cles
+            .Where(kv => travail.ContainsKey(kv.Key))
+            .Select(kv =>
+            {
+                var joursTravailles = travail[kv.Key];
+                var retard = retardsParCle.GetValueOrDefault(kv.Key);
+                return new DashboardAssiduiteRowDto(
+                    kv.Key,
+                    kv.Value.SageNom,
+                    kv.Value.SagePrenom,
+                    kv.Value.Departement,
+                    data.CategorieParCle.GetValueOrDefault(kv.Key),
+                    joursTravailles,
+                    manques.GetValueOrDefault(kv.Key),
+                    retard.Count,
+                    retard.Minutes,
+                    DashboardRules.TauxPonctualite(joursTravailles, retard.Count));
+            })
+            .ToList();
     }
 
     internal static string? LibelleCategorie(

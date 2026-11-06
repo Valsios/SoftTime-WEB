@@ -41,50 +41,40 @@ public sealed class MlPipelineService : IMlPipelineService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sage = _tenant.SageDb;
-        var to = DateTime.Today.AddDays(-1);
-        var dailyRows = 0;
-        var weeklyRows = 0;
-
-        if (fullRefresh)
-        {
-            var from = to.AddMonths(-_options.HistoryMonths);
-            foreach (var (start, end) in Chunks(from, to, Math.Max(1, _options.QuarterChunkMonths)))
-            {
-                var result = await _dataset.BuildAsync(start, end, persist: true, ct);
-                dailyRows += result.DailyRows;
-                weeklyRows += result.WeeklyRows;
-            }
-        }
-        else
-        {
-            var from = MondayOf(to.AddDays(-7 * Math.Max(1, _options.RefreshWindowWeeks)));
-            var result = await _dataset.BuildAsync(from, to, persist: true, ct);
-            dailyRows = result.DailyRows;
-            weeklyRows = result.WeeklyRows;
-        }
-
-        string? trainingMessage = null;
-        if (train)
-        {
-            var outcome = await _training.TrainAsync(sage, ct);
-            trainingMessage = outcome.Message;
-        }
-
+        var (dailyRows, weeklyRows) = await RefreshDatasetAsync(fullRefresh, DateTime.Today.AddDays(-1), ct);
+        var trainingMessage = train ? (await _training.TrainAsync(sage, ct)).Message : null;
         var predictions = await _prediction.GenerateAsync(ct);
 
         _logger.LogInformation(
             "Pipeline ML {Sage} : {Daily} jours, {Weekly} semaines, {Hs} prédictions HS.",
             sage, dailyRows, weeklyRows, predictions.HsPredictions);
-
         var message = string.Join(" ", new[] { trainingMessage, predictions.Message }
             .Where(m => !string.IsNullOrWhiteSpace(m)));
+        return new MlPipelineResultDto(predictions.Etat, message, dailyRows, weeklyRows, predictions.HsPredictions);
+    }
 
-        return new MlPipelineResultDto(
-            predictions.Etat,
-            message,
-            dailyRows,
-            weeklyRows,
-            predictions.HsPredictions);
+    /// <summary>
+    /// Reconstruction complète de l'historique (par tranches) ou seulement des dernières semaines ;
+    /// retourne le nombre de lignes journalières et hebdomadaires écrites.
+    /// </summary>
+    private async Task<(int Daily, int Weekly)> RefreshDatasetAsync(bool fullRefresh, DateTime to, CancellationToken ct)
+    {
+        if (!fullRefresh)
+        {
+            var depuis = MondayOf(to.AddDays(-7 * Math.Max(1, _options.RefreshWindowWeeks)));
+            var result = await _dataset.BuildAsync(depuis, to, persist: true, ct);
+            return (result.DailyRows, result.WeeklyRows);
+        }
+
+        var (dailyRows, weeklyRows) = (0, 0);
+        var from = to.AddMonths(-_options.HistoryMonths);
+        foreach (var (start, end) in Chunks(from, to, Math.Max(1, _options.QuarterChunkMonths)))
+        {
+            var result = await _dataset.BuildAsync(start, end, persist: true, ct);
+            dailyRows += result.DailyRows;
+            weeklyRows += result.WeeklyRows;
+        }
+        return (dailyRows, weeklyRows);
     }
 
     /// <summary>
