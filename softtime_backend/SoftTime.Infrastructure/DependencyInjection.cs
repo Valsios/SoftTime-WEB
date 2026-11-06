@@ -173,6 +173,16 @@ public static class DependencyInjection
         services.TryAddScoped<ICompanyContext, EmptyCompanyContext>();
         services.TryAddScoped<ICurrentUser, EmptyCurrentUser>();
         services.AddInfrastructureOptions(configuration);
+        services.AddPersistence(configuration);
+        services.AddSchemaMigrations(configuration);
+        services.AddIntegrations();
+        services.AddMachineLearningStorage(configuration);
+        return services;
+    }
+
+    /// <summary>Contexte SoftTime (journal d'audit intercepté) et unité de travail.</summary>
+    private static void AddPersistence(this IServiceCollection services, IConfiguration configuration)
+    {
         services.AddScoped<AuditJournalSaveChangesInterceptor>();
         services.AddScoped<IAuditTrail, AuditTrail>();
         services.AddDbContext<SoftTimeDbContext>((serviceProvider, options) =>
@@ -190,12 +200,20 @@ public static class DependencyInjection
                     .CommandTimeout(120))
             .AddInterceptors(serviceProvider.GetRequiredService<AuditJournalSaveChangesInterceptor>()));
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+    }
 
-        // Migrations SQL versionnées (migrations/versions), exécutées au démarrage si Database:AutoMigrate.
+    /// <summary>Migrations SQL versionnées (migrations/versions), exécutées au démarrage si Database:AutoMigrate.</summary>
+    private static void AddSchemaMigrations(this IServiceCollection services, IConfiguration configuration)
+    {
         services.AddSingleton<IMigrationScriptSource>(_ => new EmbeddedMigrationScriptSource());
         services.AddSingleton<ISchemaMigrationConnectionFactory>(_ =>
             new SqlSchemaMigrationConnectionFactory(configuration.GetConnectionString("SoftTime") ?? string.Empty));
         services.AddSingleton<SchemaMigrator>();
+    }
+
+    /// <summary>Sources externes (SAGE, pointeuse), écritures de paie, courriel et hachage des mots de passe.</summary>
+    private static void AddIntegrations(this IServiceCollection services)
+    {
         services.AddSingleton<ISageContextFactory, SageContextFactory>();
         services.AddSingleton<IPointeuseContextFactory, PointeuseContextFactory>();
         services.AddScoped<ISagePayrollWriter, SagePayrollWriter>();
@@ -208,7 +226,11 @@ public static class DependencyInjection
         services.AddScoped<IEmailService, EmailService>();
         // BCrypt remplace le hacheur Identity enregistré par AddApplication (les anciens hachages migrent à la connexion).
         services.Replace(ServiceDescriptor.Scoped<IPasswordHasher<Responsable>, BcryptPasswordHasher>());
+    }
 
+    /// <summary>Base analytique ML et moteur d'entraînement / prédiction.</summary>
+    private static void AddMachineLearningStorage(this IServiceCollection services, IConfiguration configuration)
+    {
         // Base analytique « model-ready » : schéma ml dans la base SoftTime par défaut,
         // ou base dédiée via ConnectionStrings:SoftTimeMl (aucun changement de code).
         var mlConnection = configuration.GetConnectionString("SoftTimeMl");
@@ -225,7 +247,6 @@ public static class DependencyInjection
         services.AddScoped<IMlStore, EfMlStore>();
         services.AddSingleton<IMlTrainer, MlNetTrainer>();
         services.AddSingleton<IMlPredictor, MlNetPredictor>();
-        return services;
     }
 
     private sealed class EmptyCompanyContext : ICompanyContext

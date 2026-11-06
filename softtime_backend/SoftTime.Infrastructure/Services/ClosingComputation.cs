@@ -63,8 +63,7 @@ internal static class ClosingComputation
         var options = request.Options ?? ClosingRulesOptions.Default;
         var from = request.From.Date;
         var to = request.To.Date;
-        var (debutPrecedent, finPrecedente) = PeriodePrecedente(from, to);
-
+        (DateTime Debut, DateTime Fin) periodePrecedente = PeriodePrecedente(from, to);
         var departementParCle = donnees.Cartes
             .GroupBy(c => MatriculeIdentity.Cle(c.SageMatricule), StringComparer.Ordinal)
             .ToDictionary(
@@ -74,33 +73,44 @@ internal static class ClosingComputation
 
         var actuel = Controler(donnees, from, to, options);
         // Période précédente : calculée seulement si la comparaison est demandée (elle n'est alors chargée qu'à ce moment).
-        var precedent = request.IncludeComparison ? Controler(donnees, debutPrecedent, finPrecedente, options) : null;
-
+        var precedent = request.IncludeComparison
+            ? Controler(donnees, periodePrecedente.Debut, periodePrecedente.Fin, options)
+            : null;
         var score = PayrollClosingRules.Score(actuel.Anomalies, actuel.JoursControles.Count, options);
+        var comparaison = precedent is not null && precedent.JoursControles.Count > 0
+            ? Comparer(actuel, precedent, periodePrecedente, options)
+            : null;
+
+        return new AnalysePreparee(
+            options, from, to, departementParCle, actuel, score, comparaison,
+            ParDepartement(actuel, departementParCle, options));
+    }
+
+    private static ClosingComparisonDto Comparer(
+        ResultatPeriode actuel, ResultatPeriode precedent, (DateTime Debut, DateTime Fin) periode, ClosingRulesOptions options)
+    {
+        var score = PayrollClosingRules.Score(actuel.Anomalies, actuel.JoursControles.Count, options);
+        var scorePrecedent = PayrollClosingRules.Score(precedent.Anomalies, precedent.JoursControles.Count, options);
         var parType = CompterTypes(actuel.Anomalies);
+        var parTypePrecedent = CompterTypes(precedent.Anomalies);
+        return new ClosingComparisonDto(
+            periode.Debut,
+            periode.Fin,
+            scorePrecedent,
+            precedent.JoursControles.Count,
+            score is int s && scorePrecedent is int sp ? s - sp : null,
+            Types.Select(t => new ClosingTypeDeltaDto(
+                    t.ToString(), parTypePrecedent[t], parType[t], parType[t] - parTypePrecedent[t]))
+                .ToList());
+    }
 
-        ClosingComparisonDto? comparaison = null;
-        if (precedent is not null && precedent.JoursControles.Count > 0)
-        {
-            var scorePrecedent = PayrollClosingRules.Score(precedent.Anomalies, precedent.JoursControles.Count, options);
-            var parTypePrecedent = CompterTypes(precedent.Anomalies);
-            comparaison = new ClosingComparisonDto(
-                debutPrecedent,
-                finPrecedente,
-                scorePrecedent,
-                precedent.JoursControles.Count,
-                score is int s && scorePrecedent is int sp ? s - sp : null,
-                Types.Select(t => new ClosingTypeDeltaDto(
-                        t.ToString(), parTypePrecedent[t], parType[t], parType[t] - parTypePrecedent[t]))
-                    .ToList());
-        }
-
-        var departements = departementParCle.Values
+    /// <summary>Score et comptages par département (département non renseigné en dernier).</summary>
+    private static List<ClosingDepartmentDto> ParDepartement(
+        ResultatPeriode actuel, Dictionary<string, string?> departementParCle, ClosingRulesOptions options) =>
+        departementParCle.Values
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(d => d is null ? 1 : 0)
             .ThenBy(d => d, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        var parDepartement = departements
             .Select(dep =>
             {
                 bool DuDepartement(string cle) =>
@@ -116,10 +126,6 @@ internal static class ClosingComputation
                     ComptagesType(anomalies));
             })
             .ToList();
-
-        return new AnalysePreparee(
-            options, from, to, departementParCle, actuel, score, comparaison, parDepartement);
-    }
 
     /// <summary>Découpe la page demandée dans l'analyse préparée et assemble le résultat (rapide).</summary>
     internal static ClosingAnalysisDto Assembler(AnalysePreparee prep, ClosingAnalysisRequest request)

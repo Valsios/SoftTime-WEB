@@ -120,12 +120,36 @@ public sealed class PunchService : IPunchService
             throw new DomainException("La période (from/to) est requise pour purger.");
         if (request.To.Date < request.From.Date)
             throw new DomainException("La date de fin doit être postérieure ou égale à la date de début.");
+        await EnsurePurgeableAsync(request.From.Date, request.To.Date, ct);
 
+        var purge = await LoadPurgeAsync(request, ct);
+        if (purge.EstVide)
+            return new PurgePunchesResultDto(0, 0, 0, purge.ManuellesConservees,
+                purge.ManuellesConservees > 0
+                    ? $"Aucune donnée à purger. {purge.ManuellesConservees} correction(s) manuelle(s) conservée(s)."
+                    : "Aucune donnée à purger sur la période.");
+
+        await _history.ArchivePunchesAsync(purge.Pointages, ct);
+        await _history.ArchiveAnomaliesAsync(purge.Anomalies, ct);
+        if (purge.Pointages.Count > 0)
+            _uow.Repository<Pointage>().RemoveRange(purge.Pointages);
+        if (purge.Corrections.Count > 0)
+            _uow.Repository<HeureCorrigee>().RemoveRange(purge.Corrections);
+        if (purge.Anomalies.Count > 0)
+            _uow.Repository<HeureAnomalie>().RemoveRange(purge.Anomalies);
+        await _uow.SaveChangesAsync(ct);
+
+        var message = $"{purge.Pointages.Count} pointage(s), {purge.Corrections.Count} correction(s) automatique(s) "
+            + $"et {purge.Anomalies.Count} anomalie(s) purgés.";
+        if (purge.ManuellesConservees > 0)
+            message += $" {purge.ManuellesConservees} correction(s) manuelle(s) conservée(s).";
+        return new PurgePunchesResultDto(purge.Pointages.Count, purge.Corrections.Count, purge.Anomalies.Count, purge.ManuellesConservees, message);
+    }
+
+    /// <summary>La période ne doit être ni validée ni déjà calculée en HS.</summary>
+    private async Task EnsurePurgeableAsync(DateTime from, DateTime to, CancellationToken ct)
+    {
         var sageDb = _tenant.SageDb;
-        var from = request.From.Date;
-        var to = request.To.Date;
-        var finExclusive = to.AddDays(1);
-
         var validees = (await _uow.Repository<HsValidee>().ListAsync(
             v => v.BddSage == sageDb && v.ValidationHs == true && v.DateDeb >= from && v.DateDeb <= to, ct)).Count;
         if (validees > 0)
@@ -137,49 +161,26 @@ public sealed class PunchService : IPunchService
         if (hsExistants > 0)
             throw new DomainException(
                 "Des calculs EXO/IMPO existent sur la période : purgez les heures supplémentaires avant de purger les pointages.");
+    }
 
+    /// <summary>Lignes de la période et de la plage de matricules ; les corrections manuelles sont conservées.</summary>
+    private async Task<PunchPurge> LoadPurgeAsync(PeriodRequest request, CancellationToken ct)
+    {
+        var sageDb = _tenant.SageDb;
+        var from = request.From.Date;
+        var finExclusive = request.To.Date.AddDays(1);
         var pointages = (await _uow.Repository<Pointage>().ListAsync(
                 p => p.NomBddSage == sageDb && p.DatePointage >= from && p.DatePointage <= finExclusive, ct))
             .Where(p => MatriculeRange.Contains(p.MatriculeSage, request))
             .ToList();
-
-        var corrRepo = _uow.Repository<HeureCorrigee>();
-        var corrections = await corrRepo.ListAsync(
-            h => h.BddSage == sageDb && h.DatePointageIn >= from && h.DatePointageIn <= finExclusive, ct);
-        var correctionsCibles = corrections
-            .Where(h => MatriculeRange.Contains(h.MatriculeSage, request)
-                        && !string.Equals(h.Origine, PunchProcessingConfiguration.OrigineManuel, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-        var manuellesConservees = corrections.Count(h =>
-            MatriculeRange.Contains(h.MatriculeSage, request)
-            && string.Equals(h.Origine, PunchProcessingConfiguration.OrigineManuel, StringComparison.OrdinalIgnoreCase));
-
-        var anomRepo = _uow.Repository<HeureAnomalie>();
-        var anomalies = (await anomRepo.ListAsync(
+        var corrections = (await _uow.Repository<HeureCorrigee>().ListAsync(
+                h => h.BddSage == sageDb && h.DatePointageIn >= from && h.DatePointageIn <= finExclusive, ct))
+            .Where(h => MatriculeRange.Contains(h.MatriculeSage, request))
+            .ToLookup(h => string.Equals(h.Origine, PunchProcessingConfiguration.OrigineManuel, StringComparison.OrdinalIgnoreCase));
+        var anomalies = (await _uow.Repository<HeureAnomalie>().ListAsync(
                 a => a.BddSage == sageDb && a.DatePointageIn >= from && a.DatePointageIn <= finExclusive, ct))
             .Where(a => MatriculeRange.Contains(a.MatriculeSage, request))
             .ToList();
-
-        if (pointages.Count == 0 && correctionsCibles.Count == 0 && anomalies.Count == 0)
-            return new PurgePunchesResultDto(0, 0, 0, manuellesConservees,
-                manuellesConservees > 0
-                    ? $"Aucune donnée à purger. {manuellesConservees} correction(s) manuelle(s) conservée(s)."
-                    : "Aucune donnée à purger sur la période.");
-
-        await _history.ArchivePunchesAsync(pointages, ct);
-        await _history.ArchiveAnomaliesAsync(anomalies, ct);
-        if (pointages.Count > 0)
-            _uow.Repository<Pointage>().RemoveRange(pointages);
-        if (correctionsCibles.Count > 0)
-            corrRepo.RemoveRange(correctionsCibles);
-        if (anomalies.Count > 0)
-            anomRepo.RemoveRange(anomalies);
-        await _uow.SaveChangesAsync(ct);
-
-        var message = $"{pointages.Count} pointage(s), {correctionsCibles.Count} correction(s) automatique(s) "
-            + $"et {anomalies.Count} anomalie(s) purgés.";
-        if (manuellesConservees > 0)
-            message += $" {manuellesConservees} correction(s) manuelle(s) conservée(s).";
-        return new PurgePunchesResultDto(pointages.Count, correctionsCibles.Count, anomalies.Count, manuellesConservees, message);
+        return new PunchPurge(pointages, corrections[false].ToList(), anomalies, corrections[true].Count());
     }
 }

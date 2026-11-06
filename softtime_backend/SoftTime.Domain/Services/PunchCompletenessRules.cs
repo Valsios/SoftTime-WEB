@@ -40,33 +40,52 @@ public static class PunchCompletenessRules
         ClosingRulesOptions? options = null)
     {
         options ??= ClosingRulesOptions.Default;
-        var debut = from.Date;
-        var fin = to.Date;
-        if (debut > fin)
+        if (from.Date > to.Date)
             return Array.Empty<ClosingAnomaly>();
 
+        var scope = new PunchCompletenessScope(
+            pointages,
+            PlanningParCarte(plannings),
+            JoursIgnores(corrections, semainesValidees, options),
+            from.Date,
+            to.Date,
+            multiPointage);
+        var resultats = ClosingAnomalyFactory.CartesParCle(cartes)
+            .SelectMany(c => AnomaliesDeLaCarte(scope, c.Cle, c.Carte))
+            .ToList();
+        return PayrollClosingRules.Trier(resultats);
+    }
+
+    /// <summary>
+    /// Jours ignorés : jours portant une correction non AUTO (MANUEL ou héritée) et, selon l'option,
+    /// jours des semaines validées.
+    /// </summary>
+    private static Func<string, DateTime, bool> JoursIgnores(
+        IReadOnlyList<HeureCorrigee> corrections, IReadOnlyList<HsValidee> semainesValidees, ClosingRulesOptions options)
+    {
         var lundisValides = semainesValidees
             .Where(_ => options.IgnorerSemainesValidees)
             .Where(v => v.ValidationHs == true && v.DateDeb.HasValue && !string.IsNullOrWhiteSpace(v.Matricules))
             .GroupBy(v => MatriculeIdentity.Cle(v.Matricules))
             .ToDictionary(g => g.Key, g => g.Select(v => v.DateDeb!.Value.Date).ToHashSet());
-
         var joursManuels = corrections
             .Where(h => h.DatePointageIn.HasValue && !string.IsNullOrWhiteSpace(h.MatriculeSage))
             .Where(h => !string.Equals(h.Origine, ClosingAnomalyFactory.OrigineAuto, StringComparison.OrdinalIgnoreCase))
             .Select(h => (Cle: MatriculeIdentity.Cle(h.MatriculeSage), Jour: h.DatePointageIn!.Value.Date))
             .ToHashSet();
 
-        bool EstIgnore(string cle, DateTime jour)
+        return (cle, jour) =>
         {
             if (joursManuels.Contains((cle, jour)))
                 return true;
             var lundi = jour.AddDays(-(((int)jour.DayOfWeek + 6) % 7));
             return lundisValides.TryGetValue(cle, out var lundis) && lundis.Contains(lundi);
-        }
+        };
+    }
 
-        // Même planning que le pré-traitement : par carte et par jour, la ligne de plus petit ID.
-        var planningParCarte = plannings
+    /// <summary>Même planning que le pré-traitement : par carte et par jour, la ligne de plus petit ID.</summary>
+    private static Dictionary<int, Dictionary<DateTime, PlanningSalarie>> PlanningParCarte(IReadOnlyList<PlanningSalarie> plannings) =>
+        plannings
             .Where(p => p.DateP.HasValue)
             .GroupBy(p => p.IdSal)
             .ToDictionary(
@@ -74,42 +93,27 @@ public static class PunchCompletenessRules
                 g => g.GroupBy(p => p.DateP!.Value.Date)
                     .ToDictionary(gg => gg.Key, gg => gg.OrderBy(p => p.Id).First()));
 
-        var resultats = new List<ClosingAnomaly>();
-        foreach (var (cle, carte) in ClosingAnomalyFactory.CartesParCle(cartes))
+    private static IEnumerable<ClosingAnomaly> AnomaliesDeLaCarte(PunchCompletenessScope scope, string cle, CardPaie carte)
+    {
+        var punchs = scope.Pointages.Moments(cle);
+        if (punchs.Count == 0)
+            yield break;
+
+        var fenetres = scope.MultiPointage
+            ? PunchDayGrouping.Fenetres(scope.PlanningParCarte.GetValueOrDefault(carte.Id) ?? new Dictionary<DateTime, PlanningSalarie>())
+            : new Dictionary<DateTime, PunchPlanningWindow>();
+        foreach (var (jour, moments) in PunchDayGrouping.Build(punchs, fenetres, scope.Debut, scope.Fin))
         {
-            var punchs = pointages.Moments(cle);
-            if (punchs.Count == 0)
+            if (moments.Count == 0 || scope.EstIgnore(cle, jour))
                 continue;
-
-            var planningCarte = planningParCarte.GetValueOrDefault(carte.Id)
-                                ?? new Dictionary<DateTime, PlanningSalarie>();
-            var fenetres = multiPointage
-                ? planningCarte
-                    .Where(kv => kv.Value.OffP != true)
-                    .ToDictionary(
-                        kv => kv.Key,
-                        kv => new PunchPlanningWindow(kv.Key, kv.Value.Ha, kv.Value.Hd, kv.Value.OffP == true))
-                : new Dictionary<DateTime, PunchPlanningWindow>();
-            var momentsParJour = PunchDayGrouping.Build(punchs, fenetres, debut, fin);
-
-            foreach (var (jour, moments) in momentsParJour)
-            {
-                if (moments.Count == 0 || EstIgnore(cle, jour))
-                    continue;
-
-                var resultat = multiPointage
-                    ? PunchPairingRules.PairMultipleDay(moments)
-                    : PunchPairingRules.PairSimpleDay(moments);
-                if (resultat.Unpaired.Count == 0 && resultat.Pairs.Count > 0)
-                    continue;
-
-                resultats.Add(ClosingAnomalyFactory.Anomalie(
+            var resultat = scope.MultiPointage
+                ? PunchPairingRules.PairMultipleDay(moments)
+                : PunchPairingRules.PairSimpleDay(moments);
+            if (resultat.Unpaired.Count > 0 || resultat.Pairs.Count == 0)
+                yield return ClosingAnomalyFactory.Anomalie(
                     ClosingAnomalyType.PointageIncomplet, cle, jour,
-                    $"{moments.Count} pointage(s), appariement entrée/sortie impossible"));
-            }
+                    $"{moments.Count} pointage(s), appariement entrée/sortie impossible");
         }
-
-        return PayrollClosingRules.Trier(resultats);
     }
 
     /// <summary>

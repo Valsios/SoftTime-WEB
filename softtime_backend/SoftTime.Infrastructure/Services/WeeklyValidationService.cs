@@ -65,53 +65,50 @@ public sealed class WeeklyValidationService : IWeeklyValidationService
         if (selected.Count == 0)
             return;
 
-        var sageDb = _tenant.SageDb;
-        var from = request.From.Date;
-        var to = request.To.Date;
-        var hsRepo = _uow.Repository<HsValidee>();
-        var corrRepo = _uow.Repository<HeureCorrigee>();
-
         // Un recalcul est nécessaire pour obtenir les valeurs à valider (les semaines déjà validées
         // sont exclues du calcul et donc absentes de `rows`).
         if (validate)
             await ComputeWeekAsync(request, persistNonValidated: true, ct);
         else
-            await RefuserSiSemaineCalculeeAsync(sageDb, from, selected, ct);
+            await RefuserSiSemaineCalculeeAsync(_tenant.SageDb, request.From.Date, selected, ct);
 
-        var lignes = (await hsRepo.ListAsync(x => x.BddSage == sageDb && x.DateDeb == from, ct))
-            .Where(x => !string.IsNullOrEmpty(x.Matricules) && selected.Contains(MatriculeIdentity.Cle(x.Matricules)))
-            .GroupBy(x => MatriculeIdentity.Cle(x.Matricules))
-            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Id).First(), StringComparer.Ordinal);
-
-        var corrections = await corrRepo.ListAsync(h => h.BddSage == sageDb
-            && h.DatePointageIn >= from && h.DatePointageIn <= to, ct);
-        var correctionsParCle = corrections
-            .Where(h => !string.IsNullOrEmpty(h.MatriculeSage))
-            .GroupBy(h => MatriculeIdentity.Cle(h.MatriculeSage))
-            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
-
-        foreach (var (cle, ligne) in lignes)
+        var lignes = await ChargerLignesSelectionneesAsync(request.From.Date, selected, ct);
+        var correctionsParCle = await ChargerCorrectionsParCleAsync(request.From.Date, request.To.Date, ct);
+        foreach (var (cle, ligne) in lignes.Where(kv => (kv.Value.ValidationHs == true) != validate))
         {
-            if (validate && ligne.ValidationHs == true)
-                continue;
-            if (!validate && ligne.ValidationHs != true)
-                continue;
-
             ligne.ValidationHs = validate;
-            ligne.DateFin = to;
-            hsRepo.Update(ligne);
-
-            if (correctionsParCle.TryGetValue(cle, out var heures))
+            ligne.DateFin = request.To.Date;
+            _uow.Repository<HsValidee>().Update(ligne);
+            foreach (var heure in correctionsParCle.GetValueOrDefault(cle) ?? new List<HeureCorrigee>())
             {
-                foreach (var heure in heures)
-                {
-                    heure.ValiderHs = validate;
-                    corrRepo.Update(heure);
-                }
+                heure.ValiderHs = validate;
+                _uow.Repository<HeureCorrigee>().Update(heure);
             }
         }
 
         await _uow.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Ligne de semaine (la plus ancienne) de chaque salarié sélectionné.</summary>
+    private async Task<Dictionary<string, HsValidee>> ChargerLignesSelectionneesAsync(
+        DateTime lundi, HashSet<string> selected, CancellationToken ct)
+    {
+        var sageDb = _tenant.SageDb;
+        return (await _uow.Repository<HsValidee>().ListAsync(x => x.BddSage == sageDb && x.DateDeb == lundi, ct))
+            .Where(x => !string.IsNullOrEmpty(x.Matricules) && selected.Contains(MatriculeIdentity.Cle(x.Matricules)))
+            .GroupBy(x => MatriculeIdentity.Cle(x.Matricules))
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Id).First(), StringComparer.Ordinal);
+    }
+
+    private async Task<Dictionary<string, List<HeureCorrigee>>> ChargerCorrectionsParCleAsync(
+        DateTime from, DateTime to, CancellationToken ct)
+    {
+        var sageDb = _tenant.SageDb;
+        return (await _uow.Repository<HeureCorrigee>().ListAsync(h => h.BddSage == sageDb
+                && h.DatePointageIn >= from && h.DatePointageIn <= to, ct))
+            .Where(h => !string.IsNullOrEmpty(h.MatriculeSage))
+            .GroupBy(h => MatriculeIdentity.Cle(h.MatriculeSage))
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
     }
 
     /// <summary>

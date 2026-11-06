@@ -9,8 +9,8 @@ namespace SoftTime.Application.Services;
 /// </summary>
 public static class HistoryArchiveConfiguration
 {
-    // Table cible : T_POINTAGE, dont les suppressions alimentent les archives.
-    public static Task EnsureStorageAsync(IUnitOfWork uow, CancellationToken ct = default) => SchemaPresenceGuard.ExecuteAsync(uow, "T_POINTAGE", """
+    /// <summary>Schéma créé s'il est absent (scripts idempotents).</summary>
+    private const string StorageSql = """
         IF OBJECT_ID(N'dbo.T_HISTORIQUE_POINTAGE', N'U') IS NULL
         BEGIN
             CREATE TABLE dbo.T_HISTORIQUE_POINTAGE (
@@ -80,5 +80,9 @@ public static class HistoryArchiveConfiguration
             );
             CREATE INDEX IX_HIST_HS_Pagination ON dbo.T_HISTORIQUE_HS (BDD_SAGE, DATE_SUPPRESSION);
         END;
-        """, ct);
+        """;
+
+    // Table cible : T_POINTAGE, dont les suppressions alimentent les archives.
+    public static Task EnsureStorageAsync(IUnitOfWork uow, CancellationToken ct = default)
+        => SchemaPresenceGuard.ExecuteAsync(uow, "T_POINTAGE", StorageSql, ct);
 }

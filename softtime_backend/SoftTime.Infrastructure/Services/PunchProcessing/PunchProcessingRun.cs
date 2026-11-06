@@ -79,12 +79,7 @@ internal sealed class PunchProcessingRun
             return PunchDayGrouping.Build(punchs, SansPlanning, _data.From, _data.To);
         }
 
-        var fenetres = planningCarte
-            .Where(kv => kv.Value.OffP != true)
-            .ToDictionary(
-                kv => kv.Key,
-                kv => new PunchPlanningWindow(kv.Key, kv.Value.Ha, kv.Value.Hd, kv.Value.OffP == true));
-        return PunchDayGrouping.Build(punchs, fenetres, _data.From, _data.To);
+        return PunchDayGrouping.Build(punchs, PunchDayGrouping.Fenetres(planningCarte), _data.From, _data.To);
     }
 
     private void TraiterJour(PunchDay day, IReadOnlyList<PunchMoment> moments, PlanningSalarie? plan)

@@ -12,8 +12,12 @@ public static class PunchProcessingConfiguration
     public const string OrigineAuto = "AUTO";
     public const string OrigineManuel = "MANUEL";
 
-    public static Task EnsureStorageAsync(IUnitOfWork uow, CancellationToken ct = default) => SchemaPresenceGuard.ExecuteAsync(uow, "T_HEURECORRIGER", """
+    /// <summary>Schéma créé s'il est absent (scripts idempotents).</summary>
+    private const string StorageSql = """
         IF COL_LENGTH(N'dbo.T_HEURECORRIGER', N'ORIGINE') IS NULL
             ALTER TABLE dbo.T_HEURECORRIGER ADD ORIGINE nvarchar(10) NULL;
-        """, ct);
+        """;
+
+    public static Task EnsureStorageAsync(IUnitOfWork uow, CancellationToken ct = default)
+        => SchemaPresenceGuard.ExecuteAsync(uow, "T_HEURECORRIGER", StorageSql, ct);
 }

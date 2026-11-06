@@ -4,8 +4,8 @@ namespace SoftTime.Application.Services;
 
 public static class RolePermissionConfiguration
 {
-    // Table cible : T_ROLE, à laquelle se rattachent les droits par rôle.
-    public static Task EnsureStorageAsync(IUnitOfWork uow, CancellationToken ct = default) => SchemaPresenceGuard.ExecuteAsync(uow, "T_ROLE", """
+    /// <summary>Schéma créé s'il est absent (scripts idempotents).</summary>
+    private const string StorageSql = """
         IF OBJECT_ID(N'dbo.T_ROLE_PERMISSION', N'U') IS NULL
         BEGIN
             CREATE TABLE dbo.T_ROLE_PERMISSION (
@@ -36,5 +36,9 @@ public static class RolePermissionConfiguration
             CREATE INDEX IX_T_AUDIT_DROIT_DATE   ON dbo.T_AUDIT_DROIT (DATE_ACTION DESC);
             CREATE INDEX IX_T_AUDIT_DROIT_CIBLE  ON dbo.T_AUDIT_DROIT (TYPE_CIBLE, ID_CIBLE);
         END;
-        """, ct);
+        """;
+
+    // Table cible : T_ROLE, à laquelle se rattachent les droits par rôle.
+    public static Task EnsureStorageAsync(IUnitOfWork uow, CancellationToken ct = default)
+        => SchemaPresenceGuard.ExecuteAsync(uow, "T_ROLE", StorageSql, ct);
 }

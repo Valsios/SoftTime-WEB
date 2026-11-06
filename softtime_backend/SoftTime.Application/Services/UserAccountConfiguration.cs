@@ -15,14 +15,18 @@ namespace SoftTime.Application.Services;
 /// </summary>
 public static class UserAccountConfiguration
 {
+    /// <summary>Schéma créé s'il est absent (scripts idempotents).</summary>
+    private const string StorageSql = """
+        IF COL_LENGTH(N'dbo.T_RESPONSABLE', N'EMAIL') IS NULL
+            ALTER TABLE dbo.T_RESPONSABLE ADD EMAIL nvarchar(200) NULL;
+        """;
+
     /// <summary>
     /// Initialisation minimale du stockage au démarrage de l'API :
     /// ajoute la colonne EMAIL si absente (requis pour l'envoi d'identifiants).
     /// </summary>
-    public static Task EnsureStorageAsync(IUnitOfWork uow, CancellationToken ct = default) => SchemaPresenceGuard.ExecuteAsync(uow, "T_RESPONSABLE", """
-        IF COL_LENGTH(N'dbo.T_RESPONSABLE', N'EMAIL') IS NULL
-            ALTER TABLE dbo.T_RESPONSABLE ADD EMAIL nvarchar(200) NULL;
-        """, ct);
+    public static Task EnsureStorageAsync(IUnitOfWork uow, CancellationToken ct = default)
+        => SchemaPresenceGuard.ExecuteAsync(uow, "T_RESPONSABLE", StorageSql, ct);
 
     /// <summary>
     /// Migration fine et idempotente des mots de passe historiques avec rapport détaillé.
