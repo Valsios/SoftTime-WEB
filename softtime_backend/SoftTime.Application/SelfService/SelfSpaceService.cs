@@ -235,14 +235,11 @@ public class SelfSpaceService
         {
             try
             {
-                // Le calendrier SAGE lit les congés de tout le tenant (aucune requête filtrée n'existe dans la source) :
-                // seule la clé du salarié connecté est conservée, le reste n'est jamais exposé.
-                // Mesuré sur la démo : environ 5 s pour tout le tenant. On ne conserve donc que la part du salarié, en cache à son nom.
-                var siens = await _cacheConges.ObtenirAsync(SelfLeaveCache.Cle(me.UserId, me.SageDb, me.Cle), _horloge, async () =>
-                {
-                    var tous = await _leaves.LoadAsync(ct);
-                    return tous.TryGetValue(me.Cle, out var s) ? s : new List<LeaveDay>();
-                });
+                // Le calendrier SAGE lit les congés de tout le tenant (aucune requête filtrée n'existe dans la source) : une seule
+                // lecture est partagée entre tous les salariés de la base (SelfLeaveCache), qui n'en rend que la part du salarié
+                // connecté. La lecture ne dépend pas de l'annulation d'une requête particulière.
+                var siens = await _cacheConges.ObtenirAsync(me.UserId, me.SageDb, me.Cle, _horloge,
+                    () => _leaves.LoadAsync(CancellationToken.None), ct);
                 conges = new Dictionary<string, List<LeaveDay>>(StringComparer.Ordinal) { [me.Cle] = siens };
             }
             catch (Exception ex) when (ex is not OperationCanceledException)

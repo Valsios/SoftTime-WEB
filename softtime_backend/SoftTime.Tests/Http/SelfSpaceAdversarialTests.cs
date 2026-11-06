@@ -319,28 +319,129 @@ public class SelfSpaceAdversarialTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.OK, (await Lire(http, url, Jeton(CompteId, 92, MatA))).Reponse.StatusCode);   // doublon levé
     }
 
+    // ---------------------------------------------------------------- chargement partagé des congés SAGE
+
+    private static Dictionary<string, List<LeaveDay>> Tenant(params (string Cle, int Jour)[] gens)
+        => gens.ToDictionary(g => g.Cle, g => new List<LeaveDay> { new(new DateTime(2026, 11, g.Jour), 1m, "CP") });
+
     [Fact]
-    public async Task Limite_connue_cold_leave_loads_are_not_shared_between_users()
+    public async Task Cold_leave_loads_of_different_users_share_one_tenant_read()
     {
-        // Charger les congés SAGE lit tout le tenant (plusieurs secondes sur la démo). Le cache est à la clé de chaque salarié : N salariés
-        // qui se connectent ensemble déclenchent N lectures complètes. Correction minimale proposée : partager la LECTURE EN COURS entre
-        // utilisateurs (une seule lecture du tenant, chacun n'y prenant que sa clé) sans conserver le dictionnaire du tenant.
+        // Correction : 20 salariés différents qui arrivent ensemble à froid ne déclenchent qu'UNE lecture du tenant.
         var cache = new SelfLeaveCache();
         var horloge = TimeProvider.System;
         var lectures = 0;
-        Func<Task<List<LeaveDay>>> lecture = async () =>
+        Func<Task<Dictionary<string, List<LeaveDay>>>> lecture = async () =>
         {
             Interlocked.Increment(ref lectures);
-            await Task.Delay(50);
-            return new List<LeaveDay>();
+            await Task.Delay(150);
+            return Tenant(("K1", 3), ("K2", 4));
         };
 
-        await Task.WhenAll(Enumerable.Range(1, 20).Select(i => cache.ObtenirAsync(SelfLeaveCache.Cle(i, "SAGE", "K" + i), horloge, lecture)));
-        Assert.Equal(20, lectures);                                    // 20 salariés différents : 20 lectures du tenant
+        var parts = await Task.WhenAll(Enumerable.Range(1, 20).Select(i =>
+            cache.ObtenirAsync(i, "SAGE", i == 2 ? "K2" : "K" + i, horloge, lecture)));
+        Assert.Equal(1, lectures);                                     // une seule lecture du tenant, partagée par les 20 salariés
+        Assert.Equal(1, cache.LecturesTenant);
+        Assert.Equal(3, parts[0].Single().Date.Day);                   // K1 : sa part
+        Assert.Equal(4, parts[1].Single().Date.Day);                   // K2 : sa part
+        Assert.All(parts.Skip(2), p => Assert.Empty(p));               // les autres : rien, jamais la part d'un autre
 
-        lectures = 0;
-        await Task.WhenAll(Enumerable.Range(1, 20).Select(_ => cache.ObtenirAsync(SelfLeaveCache.Cle(1, "SAGE", "K1"), horloge, lecture)));
-        Assert.Equal(0, lectures);                                     // le même salarié : servi par le cache (déjà chargé)
+        await Task.WhenAll(Enumerable.Range(1, 20).Select(i => cache.ObtenirAsync(i, "SAGE", "K" + i, horloge, lecture)));
+        Assert.Equal(1, lectures);                                     // tous servis par le cache : aucune lecture de plus
+    }
+
+    [Fact]
+    public async Task The_shared_tenant_read_expires_and_is_reloaded_for_the_next_user()
+    {
+        var cache = new SelfLeaveCache();
+        var horloge = new HorlogeFixe(new DateTimeOffset(2026, 11, 3, 8, 0, 0, TimeSpan.Zero));
+        var lectures = 0;
+        Func<Task<Dictionary<string, List<LeaveDay>>>> lecture = () =>
+        {
+            Interlocked.Increment(ref lectures);
+            return Task.FromResult(Tenant(("K1", 3), ("K2", 4)));
+        };
+
+        await cache.ObtenirAsync(1, "SAGE", "K1", horloge, lecture);
+        horloge.Avancer(SelfLeaveCache.Duree - TimeSpan.FromSeconds(1));
+        await cache.ObtenirAsync(2, "SAGE", "K2", horloge, lecture);
+        Assert.Equal(1, lectures);                                     // encore dans le délai : réutilisé
+        horloge.Avancer(TimeSpan.FromSeconds(2));
+        var apres = await cache.ObtenirAsync(3, "SAGE", "K2", horloge, lecture);
+        Assert.Equal(2, lectures);                                     // délai dépassé : une nouvelle lecture
+        Assert.Equal(4, apres.Single().Date.Day);
+    }
+
+    [Fact]
+    public async Task A_failed_tenant_read_is_shared_by_the_waiting_users_and_never_kept()
+    {
+        var cache = new SelfLeaveCache();
+        var horloge = TimeProvider.System;
+        var lectures = 0;
+        Func<Task<Dictionary<string, List<LeaveDay>>>> echec = async () =>
+        {
+            Interlocked.Increment(ref lectures);
+            await Task.Delay(100);
+            throw new InvalidOperationException("source SAGE indisponible");
+        };
+
+        var essais = await Task.WhenAll(Enumerable.Range(1, 5).Select(i =>
+            Record.ExceptionAsync(() => cache.ObtenirAsync(i, "SAGE", "K" + i, horloge, echec))));
+        Assert.All(essais, e => Assert.IsType<InvalidOperationException>(e));
+        Assert.Equal(1, lectures);                                     // les 5 utilisateurs en attente partagent le même échec
+
+        var reussi = await cache.ObtenirAsync(1, "SAGE", "K1", horloge, () => Task.FromResult(Tenant(("K1", 3))));
+        Assert.Single(reussi);                                         // l'échec n'a pas été conservé : la lecture suivante réessaie
+    }
+
+    [Fact]
+    public async Task A_waiting_user_that_cancels_does_not_cancel_the_shared_read()
+    {
+        var cache = new SelfLeaveCache();
+        var horloge = TimeProvider.System;
+        var liberer = new TaskCompletionSource<Dictionary<string, List<LeaveDay>>>();
+        var premier = cache.ObtenirAsync(1, "SAGE", "K1", horloge, () => liberer.Task);
+        using var annulation = new CancellationTokenSource();
+        var suivant = cache.ObtenirAsync(2, "SAGE", "K2", horloge, () => liberer.Task, annulation.Token);
+        annulation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => suivant);
+
+        liberer.SetResult(Tenant(("K1", 3)));
+        Assert.Single(await premier);                                  // la lecture partagée a abouti pour le premier
+        Assert.Equal(1, cache.LecturesTenant);
+    }
+
+    [Fact]
+    public async Task Different_bases_never_share_a_read_or_a_result()
+    {
+        var cache = new SelfLeaveCache();
+        var horloge = TimeProvider.System;
+        var a = await cache.ObtenirAsync(1, "SAGE_A", "K1", horloge, () => Task.FromResult(Tenant(("K1", 3))));
+        var b = await cache.ObtenirAsync(1, "SAGE_B", "K1", horloge, () => Task.FromResult(new Dictionary<string, List<LeaveDay>>()));
+        Assert.Single(a);
+        Assert.Empty(b);
+        Assert.Equal(2, cache.LecturesTenant);
+    }
+
+    [Fact]
+    public void The_cache_exposes_no_member_that_returns_the_shared_tenant_result()
+    {
+        // Le résultat partagé (tous les salariés) reste privé : les seuls membres publics qui rendent des congés sont ObtenirAsync
+        // (la part d'UNE clé, copiée) ; aucun ne rend le dictionnaire du tenant.
+        const System.Reflection.BindingFlags tous = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.DeclaredOnly;
+        var membres = typeof(SelfLeaveCache).GetMembers(tous);
+        var typesRendus = membres.OfType<System.Reflection.MethodInfo>().Select(m => m.ReturnType.ToString())
+            .Concat(membres.OfType<System.Reflection.PropertyInfo>().Select(m => m.PropertyType.ToString()))
+            .Concat(membres.OfType<System.Reflection.FieldInfo>().Select(m => m.FieldType.ToString()));
+        Assert.DoesNotContain(typesRendus, t => t.Contains("Dictionary"));
+    }
+
+    [Fact]
+    public void The_memory_ceiling_is_bounded()
+    {
+        Assert.Equal(512, SelfLeaveCache.MaxEntrees);
+        Assert.Equal(8, SelfLeaveCache.MaxBases);
+        Assert.Equal(TimeSpan.FromMinutes(5), SelfLeaveCache.Duree);
     }
 
     [Fact]
@@ -349,15 +450,29 @@ public class SelfSpaceAdversarialTests : IClassFixture<ApiFactory>
         var cache = new SelfLeaveCache();
         var horloge = TimeProvider.System;
         var jour = new LeaveDay(new DateTime(2026, 11, 3), 1m, "CP");
+        var tenant = new Dictionary<string, List<LeaveDay>> { ["A100"] = new() { jour } };
 
-        var pourA = await cache.ObtenirAsync(SelfLeaveCache.Cle(1, "SAGE", "A100"), horloge, () => Task.FromResult(new List<LeaveDay> { jour }));
-        var pourB = await cache.ObtenirAsync(SelfLeaveCache.Cle(2, "SAGE", "B200"), horloge, () => Task.FromResult(new List<LeaveDay>()));
-        var memeUtilisateurAutreMatricule = await cache.ObtenirAsync(SelfLeaveCache.Cle(1, "SAGE", "B200"), horloge, () => Task.FromResult(new List<LeaveDay>()));
-        var autreBase = await cache.ObtenirAsync(SelfLeaveCache.Cle(1, "AUTRE", "A100"), horloge, () => Task.FromResult(new List<LeaveDay>()));
+        var pourA = await cache.ObtenirAsync(1, "SAGE", "A100", horloge, () => Task.FromResult(tenant));
+        var pourB = await cache.ObtenirAsync(2, "SAGE", "B200", horloge, () => Task.FromResult(tenant));
+        var memeUtilisateurAutreMatricule = await cache.ObtenirAsync(1, "SAGE", "B200", horloge, () => Task.FromResult(tenant));
+        var autreBase = await cache.ObtenirAsync(1, "AUTRE", "A100", horloge, () => Task.FromResult(new Dictionary<string, List<LeaveDay>>()));
 
         Assert.Single(pourA);
         Assert.Empty(pourB);
         Assert.Empty(memeUtilisateurAutreMatricule);
         Assert.Empty(autreBase);
+
+        // La liste rendue est une copie : la modifier ne change ni le résultat partagé ni les lectures suivantes.
+        pourA.Clear();
+        var encore = await cache.ObtenirAsync(3, "SAGE", "A100", horloge, () => Task.FromResult(tenant));
+        Assert.Single(encore);
+    }
+
+    private sealed class HorlogeFixe : TimeProvider
+    {
+        private DateTimeOffset _maintenant;
+        public HorlogeFixe(DateTimeOffset depart) => _maintenant = depart;
+        public void Avancer(TimeSpan duree) => _maintenant += duree;
+        public override DateTimeOffset GetUtcNow() => _maintenant;
     }
 }
