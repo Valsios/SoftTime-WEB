@@ -44,113 +44,36 @@ internal static class MlDayFeatures
         foreach (var card in ctx.Cards)
         {
             var cle = MlDatasetProjection.MlKey(card.SageMatricule);
-            var config = ctx.Configs[cle];
-            var conges = ctx.Conges.GetValueOrDefault(cle) ?? new List<LeaveDay>();
-            var corrections = ctx.Corrections.GetValueOrDefault(cle) ?? new List<HeureCorrigee>();
-            var correctionsParJour = corrections
-                .Where(h => h.DatePointageIn.HasValue)
-                .GroupBy(h => h.DatePointageIn!.Value.Date)
-                .ToDictionary(g => g.Key, g => g.ToList());
-            // Deux vues du planning, chacune alignée sur l'écran qui l'utilise :
-            // états absences/retards (toutes cartes de la clé, travail prioritaire sur OFF) et
-            // écran HS (carte et pointeuse actives, plus petit ID).
-            var plansParJour = (ctx.PlanningEtats.GetValueOrDefault(cle) ?? new List<PlanningSalarie>())
-                .GroupBy(p => p.DateP!.Value.Date)
-                .ToDictionary(g => g.Key, g => SelectPlan(g));
-            var plansHsParJour = (ctx.PlanningHs.GetValueOrDefault(card.Id) ?? new List<PlanningSalarie>())
-                .GroupBy(p => p.DateP!.Value.Date)
-                .ToDictionary(g => g.Key, g => OvertimeDayRules.PlanDuJour(g));
-            var toleranceEntree = RetardReportRules.ToleranceEntree(card.Id, ctx.CategorieParCarte, ctx.Tolerances);
-
-            var days = new List<DayRow>();
-            for (var date = ctx.WarmupFrom; date <= ctx.To; date = date.AddDays(1))
-            {
-                plansParJour.TryGetValue(date, out var plan);
-                plansHsParJour.TryGetValue(date, out var planHs);
-                correctionsParJour.TryGetValue(date, out var lignes);
-                lignes ??= new List<HeureCorrigee>();
-
-                var off = AbsenceReportRules.EstJourOff(plan);
-                var ferie = ctx.Feries.Contains(date);
-                var weekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
-                var congeValeur = LeaveRules.Valeur(conges, date);
-                var conge = congeValeur > 0m;
-                var dureePlanifiee = off ? null : AbsenceReportRules.CalculerDureeHeures(plan);
-
-                var overtimeDay = OvertimeDayRules.Construire(date, lignes, planHs, ferie, congeValeur);
-
-                var aPointage = lignes.Count > 0;
-                var absenceNonJustifiee = date < ctx.ObservedUntil
-                    && AbsenceReportRules.EstNonJustifiee(
-                        estNonTravaille: weekend || ferie,
-                        estConge: conge,
-                        plan,
-                        aPointage);
-                var absenceDeclaree = lignes.Any(h => h.AbsenceAm == true || h.AbsencePm == true);
-
-                // Même règle que l'état des retards et le tableau de bord : valeur saisie prioritaire,
-                // sinon première entrée du jour vs heure planifiée + tolérance de la catégorie.
-                var entrees = lignes.Where(h => h.HEntree.HasValue).Select(h => h.HEntree!.Value).ToList();
-                var retardMinutes = weekend || ferie || lignes.Count == 0
-                    ? 0
-                    : RetardReportRules.MinutesRetardJour(
-                        absenceMatin: lignes.Any(h => h.AbsenceAm == true),
-                        retardsSaisis: lignes.Select(h => h.Retard),
-                        premiereEntree: entrees.Count > 0 ? entrees.Min() : null,
-                        heurePrevue: RetardReportRules.HeurePrevue(plan),
-                        toleranceMinutes: toleranceEntree);
-
-                var day = new DayRow
-                {
-                    Matricule = cle,
-                    Date = date,
-                    Departement = card.Departement,
-                    Off = off,
-                    Ferie = ferie,
-                    Weekend = weekend,
-                    Conge = conge,
-                    CongeValeur = congeValeur,
-                    PlanningConnu = plan != null,
-                    EstJourPlanifie = !off && !weekend && !ferie && !conge && dureePlanifiee.HasValue,
-                    HeuresPlanifiees = dureePlanifiee,
-                    HeuresTravaillees = HeuresTravaillees(overtimeDay.Paires),
-                    RetardMinutes = retardMinutes,
-                    AbsenceNonJustifiee = absenceNonJustifiee,
-                    AbsenceDeclaree = absenceDeclaree,
-                    AbsenceHeures = absenceNonJustifiee ? dureePlanifiee : null,
-                    OvertimeDay = overtimeDay
-                };
-
-                days.Add(day);
-            }
-
+            var days = new MlEmployeeCalendar(ctx, card, cle).Days();
             ctx.EmployeeDays[cle] = days;
+            ComputeWeekResults(ctx, cle, ctx.Configs[cle], days);
+        }
+    }
 
-            // Résultats hebdomadaires : base des features HS et des labels.
-            foreach (var groupe in days.GroupBy(d => MlDatasetProjection.MondayOf(d.Date)))
-            {
-                var result = OvertimeCalculator.CalculerSemaine(
-                    config.Week,
-                    groupe.OrderBy(d => d.Date).Select(d => d.OvertimeDay));
+    /// <summary>
+    /// Résultats hebdomadaires, base des features HS et des labels : la semaine validée prime sur
+    /// le recalcul.
+    /// </summary>
+    private static void ComputeWeekResults(DatasetContext ctx, string cle, EmployeeConfig config, List<DayRow> days)
+    {
+        foreach (var groupe in days.GroupBy(d => MlDatasetProjection.MondayOf(d.Date)))
+        {
+            var result = OvertimeCalculator.CalculerSemaine(
+                config.Week,
+                groupe.OrderBy(d => d.Date).Select(d => d.OvertimeDay));
 
-                if (ctx.HsValidees.TryGetValue((cle, groupe.Key), out var validee))
-                {
-                    ctx.WeekResults[(cle, groupe.Key)] = new WeekComputation(
-                        validee.Hs ?? 0m,
-                        validee.Nuit ?? 0m,
-                        validee.Dimanche ?? 0m,
-                        validee.Feries ?? 0m,
-                        validee.Retard ?? 0m,
-                        validee.Absence ?? 0m,
-                        Validee: true);
-                }
-                else
-                {
-                    ctx.WeekResults[(cle, groupe.Key)] = new WeekComputation(
-                        result.Hs, result.Nuit, result.Dimanche, result.Ferie,
-                        result.Retard, result.Absence, Validee: false);
-                }
-            }
+            ctx.WeekResults[(cle, groupe.Key)] = ctx.HsValidees.TryGetValue((cle, groupe.Key), out var validee)
+                ? new WeekComputation(
+                    validee.Hs ?? 0m,
+                    validee.Nuit ?? 0m,
+                    validee.Dimanche ?? 0m,
+                    validee.Feries ?? 0m,
+                    validee.Retard ?? 0m,
+                    validee.Absence ?? 0m,
+                    Validee: true)
+                : new WeekComputation(
+                    result.Hs, result.Nuit, result.Dimanche, result.Ferie,
+                    result.Retard, result.Absence, Validee: false);
         }
     }
 

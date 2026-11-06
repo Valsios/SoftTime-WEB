@@ -46,107 +46,128 @@ public sealed class MlPredictionService : IMlPredictionService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var sage = _tenant.SageDb;
-        var today = DateTime.Today;
-        var now = DateTime.Now;
-        var absenceTo = today.AddDays(Math.Max(1, _options.ForecastHorizonDays));
-        var weekStart = MlWeeks.MondayOf(today);
-        var weekEnd = weekStart.AddDays(7 * Math.Max(1, _options.ForecastHorizonWeeks) - 1);
+        var window = ForecastWindow(DateTime.Today);
 
         // Sans pointage récent, les features décrivent un passé lointain : on ne prédit pas, et
         // les anciennes prévisions de l'horizon sont retirées pour ne pas rester affichées.
-        var depuis = today.AddDays(-Math.Max(1, _options.RecentDataDays));
-        var pointagesRecents = (await _uow.Repository<HeureCorrigee>().ListReadOnlyAsync(
-                h => h.BddSage == sage && h.DatePointageIn >= depuis && h.DatePointageIn < today, ct))
-            .Count;
-        if (pointagesRecents == 0)
+        if (!await HasRecentPunchesAsync(sage, window.Today, ct))
         {
-            await _store.ReplacePredictionsAsync(sage, MlModelType.Absence, today, absenceTo, Array.Empty<MlPrediction>(), ct);
-            await _store.ReplacePredictionsAsync(sage, MlModelType.HsProbabilite, weekStart, weekEnd, Array.Empty<MlPrediction>(), ct);
-            await _store.ReplacePredictionsAsync(sage, MlModelType.HsMontant, weekStart, weekEnd, Array.Empty<MlPrediction>(), ct);
+            await ClearAsync(sage, MlModelType.Absence, window.Today, window.AbsenceTo, ct);
+            await ClearHsAsync(sage, window.WeekStart, window.WeekEnd, ct);
             var raison = $"Aucun pointage depuis {_options.RecentDataDays} jours : prévisions suspendues.";
             _logger.LogWarning("Prévisions {Sage} : {Raison}", sage, raison);
             return new MlPipelineResultDto("Baseline", raison, 0, 0, 0);
         }
 
-        // La prévision d'absence n'est plus produite : on retire toutes les lignes héritées.
-        await _store.ReplacePredictionsAsync(sage, MlModelType.Absence, DebutRetention, absenceTo, Array.Empty<MlPrediction>(), ct);
-
-        // Les semaines passées restent pour le suivi prévu / réel, dans la limite de l'historique.
-        var finRetention = MlWeeks.MondayOf(today.AddMonths(-Math.Max(1, _options.HistoryMonths))).AddDays(-1);
-        await _store.ReplacePredictionsAsync(sage, MlModelType.HsProbabilite, DebutRetention, finRetention, Array.Empty<MlPrediction>(), ct);
-        await _store.ReplacePredictionsAsync(sage, MlModelType.HsMontant, DebutRetention, finRetention, Array.Empty<MlPrediction>(), ct);
-
-        var hsCount = 0;
-        var weeklyRows = 0;
-        var hsProbability = Utilisable(await _store.GetActiveModelAsync(sage, MlModelType.HsProbabilite, ct));
-        var hsAmount = Utilisable(await _store.GetActiveModelAsync(sage, MlModelType.HsMontant, ct));
-
-        if (hsProbability?.ModeleBinaire is { Length: > 0 } probabilityBinary
-            && hsAmount?.ModeleBinaire is { Length: > 0 } amountBinary)
-        {
-            // Demi-largeur de l'intervalle : erreur observée sur le jeu de test (80e centile, sinon MAE).
-            var metriques = LireMetriques(hsAmount);
-            var erreur = (decimal)(metriques?.ErreurP80 ?? metriques?.Mae ?? 0d);
-            var weeks = (await _dataset.BuildInferenceWeeklyAsync(weekStart, weekEnd, ct))
-                .Where(w => w.NbJoursPlanifies > 0 || w.HeuresTravaillees > 0m)
-                .ToList();
-            weeklyRows = weeks.Count;
-
-            if (weeks.Count > 0)
-            {
-                var samples = weeks.Select(MlSampleMapper.ToHs).ToList();
-                var probabilities = _predictor.PredictHsProbability(probabilityBinary, samples);
-                var amounts = _predictor.PredictHsAmount(amountBinary, samples);
-
-                var probabilityPredictions = weeks.Select((week, index) => new MlPrediction
-                {
-                    BddSage = sage,
-                    Matricule = week.Matricule,
-                    TypeModele = MlModelTypes.HsProbabilite,
-                    Cible = week.SemaineDebut,
-                    Probabilite = probabilities[index],
-                    NiveauRisque = Niveau(probabilities[index]),
-                    ModeleId = hsProbability.Id,
-                    GenereLe = now
-                }).ToList();
-
-                var amountPredictions = weeks.Select((week, index) =>
-                {
-                    var valeur = Math.Max(0m, Math.Round((decimal)amounts[index], 2));
-                    return new MlPrediction
-                    {
-                        BddSage = sage,
-                        Matricule = week.Matricule,
-                        TypeModele = MlModelTypes.HsMontant,
-                        Cible = week.SemaineDebut,
-                        ValeurPrevue = valeur,
-                        BorneBasse = Math.Round(Math.Max(0m, valeur - erreur), 2),
-                        BorneHaute = Math.Round(valeur + erreur, 2),
-                        NiveauRisque = Niveau(probabilities[index]),
-                        ModeleId = hsAmount.Id,
-                        GenereLe = now
-                    };
-                }).ToList();
-
-                await _store.ReplacePredictionsAsync(sage, MlModelType.HsProbabilite, weekStart, weekEnd, probabilityPredictions, ct);
-                await _store.ReplacePredictionsAsync(sage, MlModelType.HsMontant, weekStart, weekEnd, amountPredictions, ct);
-                hsCount = amountPredictions.Count;
-            }
-        }
+        await PurgeRetentionAsync(sage, window, ct);
+        var (weeklyRows, hsCount) = await PredictHsAsync(sage, window, ct);
         if (hsCount == 0)
-        {
-            await _store.ReplacePredictionsAsync(sage, MlModelType.HsProbabilite, weekStart, weekEnd, Array.Empty<MlPrediction>(), ct);
-            await _store.ReplacePredictionsAsync(sage, MlModelType.HsMontant, weekStart, weekEnd, Array.Empty<MlPrediction>(), ct);
-        }
+            await ClearHsAsync(sage, window.WeekStart, window.WeekEnd, ct);
 
         _logger.LogInformation("Prévisions {Sage} : {Hs} ligne(s) HS.", sage, hsCount);
+        return hsCount > 0
+            ? new MlPipelineResultDto("Pret", "Prévisions générées.", 0, weeklyRows, hsCount)
+            : new MlPipelineResultDto("Baseline", "Aucun modèle actif : le moteur reste en mode baseline.", 0, weeklyRows, hsCount);
+    }
 
-        var etat = hsCount > 0 ? "Pret" : "Baseline";
-        var message = etat == "Pret"
-            ? "Prévisions générées."
-            : "Aucun modèle actif : le moteur reste en mode baseline.";
+    private MlForecastWindow ForecastWindow(DateTime today)
+    {
+        var weekStart = MlWeeks.MondayOf(today);
+        return new MlForecastWindow(
+            today,
+            today.AddDays(Math.Max(1, _options.ForecastHorizonDays)),
+            weekStart,
+            weekStart.AddDays(7 * Math.Max(1, _options.ForecastHorizonWeeks) - 1));
+    }
 
-        return new MlPipelineResultDto(etat, message, 0, weeklyRows, hsCount);
+    private async Task<bool> HasRecentPunchesAsync(string sage, DateTime today, CancellationToken ct)
+    {
+        var depuis = today.AddDays(-Math.Max(1, _options.RecentDataDays));
+        var pointagesRecents = await _uow.Repository<HeureCorrigee>().ListReadOnlyAsync(
+            h => h.BddSage == sage && h.DatePointageIn >= depuis && h.DatePointageIn < today, ct);
+        return pointagesRecents.Count > 0;
+    }
+
+    /// <summary>
+    /// La prévision d'absence n'est plus produite : toutes ses lignes héritées sont retirées. Les
+    /// semaines HS passées restent pour le suivi prévu / réel, dans la limite de l'historique.
+    /// </summary>
+    private async Task PurgeRetentionAsync(string sage, MlForecastWindow window, CancellationToken ct)
+    {
+        await ClearAsync(sage, MlModelType.Absence, DebutRetention, window.AbsenceTo, ct);
+        var finRetention = MlWeeks.MondayOf(window.Today.AddMonths(-Math.Max(1, _options.HistoryMonths))).AddDays(-1);
+        await ClearHsAsync(sage, DebutRetention, finRetention, ct);
+    }
+
+    private Task ClearAsync(string sage, MlModelType type, DateTime from, DateTime to, CancellationToken ct) =>
+        _store.ReplacePredictionsAsync(sage, type, from, to, Array.Empty<MlPrediction>(), ct);
+
+    private async Task ClearHsAsync(string sage, DateTime from, DateTime to, CancellationToken ct)
+    {
+        await ClearAsync(sage, MlModelType.HsProbabilite, from, to, ct);
+        await ClearAsync(sage, MlModelType.HsMontant, from, to, ct);
+    }
+
+    /// <summary>Prédit probabilité et montant HS de chaque semaine de l'horizon ayant de l'activité.</summary>
+    private async Task<(int WeeklyRows, int HsCount)> PredictHsAsync(string sage, MlForecastWindow window, CancellationToken ct)
+    {
+        var hsProbability = Utilisable(await _store.GetActiveModelAsync(sage, MlModelType.HsProbabilite, ct));
+        var hsAmount = Utilisable(await _store.GetActiveModelAsync(sage, MlModelType.HsMontant, ct));
+        if (hsProbability?.ModeleBinaire is not { Length: > 0 } probabilityBinary
+            || hsAmount?.ModeleBinaire is not { Length: > 0 } amountBinary)
+            return (0, 0);
+
+        var weeks = (await _dataset.BuildInferenceWeeklyAsync(window.WeekStart, window.WeekEnd, ct))
+            .Where(w => w.NbJoursPlanifies > 0 || w.HeuresTravaillees > 0m)
+            .ToList();
+        if (weeks.Count == 0)
+            return (0, 0);
+
+        var samples = weeks.Select(MlSampleMapper.ToHs).ToList();
+        var batch = new MlPredictionBatch(sage, DateTime.Now, weeks, _predictor.PredictHsProbability(probabilityBinary, samples));
+        var probabilityPredictions = ProbabilityPredictions(batch, hsProbability.Id);
+        var amountPredictions = AmountPredictions(batch, hsAmount, _predictor.PredictHsAmount(amountBinary, samples));
+
+        await _store.ReplacePredictionsAsync(sage, MlModelType.HsProbabilite, window.WeekStart, window.WeekEnd, probabilityPredictions, ct);
+        await _store.ReplacePredictionsAsync(sage, MlModelType.HsMontant, window.WeekStart, window.WeekEnd, amountPredictions, ct);
+        return (weeks.Count, amountPredictions.Count);
+    }
+
+    private List<MlPrediction> ProbabilityPredictions(MlPredictionBatch batch, int modelId) =>
+        batch.Weeks.Select((week, index) => new MlPrediction
+        {
+            BddSage = batch.Sage,
+            Matricule = week.Matricule,
+            TypeModele = MlModelTypes.HsProbabilite,
+            Cible = week.SemaineDebut,
+            Probabilite = batch.Probabilities[index],
+            NiveauRisque = Niveau(batch.Probabilities[index]),
+            ModeleId = modelId,
+            GenereLe = batch.GenereLe
+        }).ToList();
+
+    /// <summary>Demi-largeur de l'intervalle : erreur observée sur le jeu de test (80e centile, sinon MAE).</summary>
+    private List<MlPrediction> AmountPredictions(MlPredictionBatch batch, MlModele model, IReadOnlyList<float> amounts)
+    {
+        var metriques = LireMetriques(model);
+        var erreur = (decimal)(metriques?.ErreurP80 ?? metriques?.Mae ?? 0d);
+        return batch.Weeks.Select((week, index) =>
+        {
+            var valeur = Math.Max(0m, Math.Round((decimal)amounts[index], 2));
+            return new MlPrediction
+            {
+                BddSage = batch.Sage,
+                Matricule = week.Matricule,
+                TypeModele = MlModelTypes.HsMontant,
+                Cible = week.SemaineDebut,
+                ValeurPrevue = valeur,
+                BorneBasse = Math.Round(Math.Max(0m, valeur - erreur), 2),
+                BorneHaute = Math.Round(valeur + erreur, 2),
+                NiveauRisque = Niveau(batch.Probabilities[index]),
+                ModeleId = model.Id,
+                GenereLe = batch.GenereLe
+            };
+        }).ToList();
     }
 
     // ------------------------------------------------------------------ utilitaires

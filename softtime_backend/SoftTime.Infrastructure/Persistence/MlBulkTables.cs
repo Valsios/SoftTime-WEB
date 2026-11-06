@@ -4,174 +4,101 @@ using SoftTime.Domain.Entities.Ml;
 
 namespace SoftTime.Infrastructure.Persistence;
 
+/// <summary>Tables en mémoire pour l'insertion en masse (SqlBulkCopy) des jeux de données ML.</summary>
 internal static class MlBulkTables
 {
+    private static readonly (string Name, Type Type, Func<MlSalarieJour, object?> Value)[] DailyColumns =
+    {
+        ("BddSage", typeof(string), e => e.BddSage),
+        ("Matricule", typeof(string), e => e.Matricule),
+        ("Date", typeof(DateTime), e => e.Date),
+        ("EstJourPlanifie", typeof(bool), e => e.EstJourPlanifie),
+        ("EstOff", typeof(bool), e => e.EstOff),
+        ("EstFerie", typeof(bool), e => e.EstFerie),
+        ("EstWeekend", typeof(bool), e => e.EstWeekend),
+        ("EstConge", typeof(bool), e => e.EstConge),
+        ("PlanningConnu", typeof(bool), e => e.PlanningConnu),
+        ("HeuresPlanifiees", typeof(decimal), e => e.HeuresPlanifiees),
+        ("HeuresTravaillees", typeof(decimal), e => e.HeuresTravaillees),
+        ("RetardMinutes", typeof(int), e => e.RetardMinutes),
+        ("AbsenceNonJustifiee", typeof(bool), e => e.AbsenceNonJustifiee),
+        ("AbsenceDeclaree", typeof(bool), e => e.AbsenceDeclaree),
+        ("AbsenceHeures", typeof(decimal), e => e.AbsenceHeures),
+        ("JourSemaine", typeof(byte), e => e.JourSemaine),
+        ("SemaineIso", typeof(byte), e => e.SemaineIso),
+        ("AnneeIso", typeof(short), e => e.AnneeIso),
+        ("Mois", typeof(byte), e => e.Mois),
+        ("JourDuMois", typeof(byte), e => e.JourDuMois),
+        ("VeilleFerie", typeof(bool), e => e.VeilleFerie),
+        ("LendemainFerie", typeof(bool), e => e.LendemainFerie),
+        ("DebutMois", typeof(bool), e => e.DebutMois),
+        ("FinMois", typeof(bool), e => e.FinMois),
+        ("CategorieId", typeof(int), e => e.CategorieId),
+        ("Departement", typeof(string), e => e.Departement),
+        ("HeuresSemaineContrat", typeof(decimal), e => e.HeuresSemaineContrat),
+        ("MultiPointage", typeof(bool), e => e.MultiPointage),
+        ("AncienneteJours", typeof(int), e => e.AncienneteJours),
+        ("Absences7j", typeof(int), e => e.Absences7j),
+        ("Absences30j", typeof(int), e => e.Absences30j),
+        ("Absences90j", typeof(int), e => e.Absences90j),
+        ("TauxAbsence30j", typeof(double), e => e.TauxAbsence30j),
+        ("Retards30j", typeof(int), e => e.Retards30j),
+        ("JoursTravailles7j", typeof(int), e => e.JoursTravailles7j),
+        ("JoursDepuisDerniereAbsence", typeof(int), e => e.JoursDepuisDerniereAbsence),
+        ("HeuresSupp4Semaines", typeof(decimal), e => e.HeuresSupp4Semaines),
+        ("TauxAbsenceEquipe30j", typeof(double), e => e.TauxAbsenceEquipe30j),
+        ("EffectifPrevuJour", typeof(int), e => e.EffectifPrevuJour),
+        ("CongesPrevusJour", typeof(int), e => e.CongesPrevusJour),
+        ("SourceGenereeLe", typeof(DateTime), e => e.SourceGenereeLe),
+        ("VersionSchema", typeof(string), e => e.VersionSchema)
+    };
 
-    internal static DataTable BuildDailyTable(IReadOnlyCollection<MlSalarieJour> rows)
+    private static readonly (string Name, Type Type, Func<MlSalarieSemaine, object?> Value)[] WeeklyColumns =
+    {
+        ("BddSage", typeof(string), e => e.BddSage),
+        ("Matricule", typeof(string), e => e.Matricule),
+        ("SemaineDebut", typeof(DateTime), e => e.SemaineDebut),
+        ("SemaineIso", typeof(byte), e => e.SemaineIso),
+        ("AnneeIso", typeof(short), e => e.AnneeIso),
+        ("HeuresPlanifiees", typeof(decimal), e => e.HeuresPlanifiees),
+        ("HeuresTravaillees", typeof(decimal), e => e.HeuresTravaillees),
+        ("NbJoursPlanifies", typeof(int), e => e.NbJoursPlanifies),
+        ("NbJoursTravailles", typeof(int), e => e.NbJoursTravailles),
+        ("CongeJours", typeof(decimal), e => e.CongeJours),
+        ("HS", typeof(decimal), e => e.Hs),
+        ("HSValidee", typeof(bool), e => e.HsValidee),
+        ("Nuit", typeof(decimal), e => e.Nuit),
+        ("Dimanche", typeof(decimal), e => e.Dimanche),
+        ("Ferie", typeof(decimal), e => e.Ferie),
+        ("RetardMinutes", typeof(int), e => e.RetardMinutes),
+        ("AbsenceHeures", typeof(decimal), e => e.AbsenceHeures),
+        ("HsMoyenne4Semaines", typeof(decimal), e => e.HsMoyenne4Semaines),
+        ("HsMoyenne8Semaines", typeof(decimal), e => e.HsMoyenne8Semaines),
+        ("Absences4Semaines", typeof(int), e => e.Absences4Semaines),
+        ("Retards4Semaines", typeof(int), e => e.Retards4Semaines),
+        ("HeuresTravaillees4Semaines", typeof(decimal), e => e.HeuresTravaillees4Semaines),
+        ("CategorieId", typeof(int), e => e.CategorieId),
+        ("Departement", typeof(string), e => e.Departement),
+        ("HeuresSemaineContrat", typeof(decimal), e => e.HeuresSemaineContrat),
+        ("MultiPointage", typeof(bool), e => e.MultiPointage),
+        ("SourceGenereeLe", typeof(DateTime), e => e.SourceGenereeLe),
+        ("VersionSchema", typeof(string), e => e.VersionSchema)
+    };
+
+    internal static DataTable BuildDailyTable(IReadOnlyCollection<MlSalarieJour> rows) => Build(DailyColumns, rows);
+
+    internal static DataTable BuildWeeklyTable(IReadOnlyCollection<MlSalarieSemaine> rows) => Build(WeeklyColumns, rows);
+
+    private static object Value(object? value) => value ?? DBNull.Value;
+
+    /// <summary>Une colonne par descripteur, dans l'ordre ; les valeurs nulles deviennent <see cref="DBNull"/>.</summary>
+    private static DataTable Build<T>((string Name, Type Type, Func<T, object?> Value)[] columns, IEnumerable<T> rows)
     {
         var table = new DataTable();
-        table.Columns.Add("BddSage", typeof(string));
-        table.Columns.Add("Matricule", typeof(string));
-        table.Columns.Add("Date", typeof(DateTime));
-        table.Columns.Add("EstJourPlanifie", typeof(bool));
-        table.Columns.Add("EstOff", typeof(bool));
-        table.Columns.Add("EstFerie", typeof(bool));
-        table.Columns.Add("EstWeekend", typeof(bool));
-        table.Columns.Add("EstConge", typeof(bool));
-        table.Columns.Add("PlanningConnu", typeof(bool));
-        table.Columns.Add("HeuresPlanifiees", typeof(decimal));
-        table.Columns.Add("HeuresTravaillees", typeof(decimal));
-        table.Columns.Add("RetardMinutes", typeof(int));
-        table.Columns.Add("AbsenceNonJustifiee", typeof(bool));
-        table.Columns.Add("AbsenceDeclaree", typeof(bool));
-        table.Columns.Add("AbsenceHeures", typeof(decimal));
-        table.Columns.Add("JourSemaine", typeof(byte));
-        table.Columns.Add("SemaineIso", typeof(byte));
-        table.Columns.Add("AnneeIso", typeof(short));
-        table.Columns.Add("Mois", typeof(byte));
-        table.Columns.Add("JourDuMois", typeof(byte));
-        table.Columns.Add("VeilleFerie", typeof(bool));
-        table.Columns.Add("LendemainFerie", typeof(bool));
-        table.Columns.Add("DebutMois", typeof(bool));
-        table.Columns.Add("FinMois", typeof(bool));
-        table.Columns.Add("CategorieId", typeof(int));
-        table.Columns.Add("Departement", typeof(string));
-        table.Columns.Add("HeuresSemaineContrat", typeof(decimal));
-        table.Columns.Add("MultiPointage", typeof(bool));
-        table.Columns.Add("AncienneteJours", typeof(int));
-        table.Columns.Add("Absences7j", typeof(int));
-        table.Columns.Add("Absences30j", typeof(int));
-        table.Columns.Add("Absences90j", typeof(int));
-        table.Columns.Add("TauxAbsence30j", typeof(double));
-        table.Columns.Add("Retards30j", typeof(int));
-        table.Columns.Add("JoursTravailles7j", typeof(int));
-        table.Columns.Add("JoursDepuisDerniereAbsence", typeof(int));
-        table.Columns.Add("HeuresSupp4Semaines", typeof(decimal));
-        table.Columns.Add("TauxAbsenceEquipe30j", typeof(double));
-        table.Columns.Add("EffectifPrevuJour", typeof(int));
-        table.Columns.Add("CongesPrevusJour", typeof(int));
-        table.Columns.Add("SourceGenereeLe", typeof(DateTime));
-        table.Columns.Add("VersionSchema", typeof(string));
-
+        foreach (var column in columns)
+            table.Columns.Add(column.Name, column.Type);
         foreach (var entity in rows)
-        {
-            var row = table.NewRow();
-            row["BddSage"] = entity.BddSage;
-            row["Matricule"] = entity.Matricule;
-            row["Date"] = entity.Date;
-            row["EstJourPlanifie"] = entity.EstJourPlanifie;
-            row["EstOff"] = entity.EstOff;
-            row["EstFerie"] = entity.EstFerie;
-            row["EstWeekend"] = entity.EstWeekend;
-            row["EstConge"] = entity.EstConge;
-            row["PlanningConnu"] = entity.PlanningConnu;
-            row["HeuresPlanifiees"] = Value(entity.HeuresPlanifiees);
-            row["HeuresTravaillees"] = Value(entity.HeuresTravaillees);
-            row["RetardMinutes"] = Value(entity.RetardMinutes);
-            row["AbsenceNonJustifiee"] = entity.AbsenceNonJustifiee;
-            row["AbsenceDeclaree"] = entity.AbsenceDeclaree;
-            row["AbsenceHeures"] = Value(entity.AbsenceHeures);
-            row["JourSemaine"] = entity.JourSemaine;
-            row["SemaineIso"] = entity.SemaineIso;
-            row["AnneeIso"] = entity.AnneeIso;
-            row["Mois"] = entity.Mois;
-            row["JourDuMois"] = entity.JourDuMois;
-            row["VeilleFerie"] = entity.VeilleFerie;
-            row["LendemainFerie"] = entity.LendemainFerie;
-            row["DebutMois"] = entity.DebutMois;
-            row["FinMois"] = entity.FinMois;
-            row["CategorieId"] = Value(entity.CategorieId);
-            row["Departement"] = Value(entity.Departement);
-            row["HeuresSemaineContrat"] = Value(entity.HeuresSemaineContrat);
-            row["MultiPointage"] = entity.MultiPointage;
-            row["AncienneteJours"] = Value(entity.AncienneteJours);
-            row["Absences7j"] = entity.Absences7j;
-            row["Absences30j"] = entity.Absences30j;
-            row["Absences90j"] = entity.Absences90j;
-            row["TauxAbsence30j"] = entity.TauxAbsence30j;
-            row["Retards30j"] = entity.Retards30j;
-            row["JoursTravailles7j"] = entity.JoursTravailles7j;
-            row["JoursDepuisDerniereAbsence"] = Value(entity.JoursDepuisDerniereAbsence);
-            row["HeuresSupp4Semaines"] = entity.HeuresSupp4Semaines;
-            row["TauxAbsenceEquipe30j"] = entity.TauxAbsenceEquipe30j;
-            row["EffectifPrevuJour"] = entity.EffectifPrevuJour;
-            row["CongesPrevusJour"] = entity.CongesPrevusJour;
-            row["SourceGenereeLe"] = entity.SourceGenereeLe;
-            row["VersionSchema"] = entity.VersionSchema;
-            table.Rows.Add(row);
-        }
-
+            table.Rows.Add(columns.Select(c => Value(c.Value(entity))).ToArray());
         return table;
     }
-
-    internal static DataTable BuildWeeklyTable(IReadOnlyCollection<MlSalarieSemaine> rows)
-    {
-        var table = new DataTable();
-        table.Columns.Add("BddSage", typeof(string));
-        table.Columns.Add("Matricule", typeof(string));
-        table.Columns.Add("SemaineDebut", typeof(DateTime));
-        table.Columns.Add("SemaineIso", typeof(byte));
-        table.Columns.Add("AnneeIso", typeof(short));
-        table.Columns.Add("HeuresPlanifiees", typeof(decimal));
-        table.Columns.Add("HeuresTravaillees", typeof(decimal));
-        table.Columns.Add("NbJoursPlanifies", typeof(int));
-        table.Columns.Add("NbJoursTravailles", typeof(int));
-        table.Columns.Add("CongeJours", typeof(decimal));
-        table.Columns.Add("HS", typeof(decimal));
-        table.Columns.Add("HSValidee", typeof(bool));
-        table.Columns.Add("Nuit", typeof(decimal));
-        table.Columns.Add("Dimanche", typeof(decimal));
-        table.Columns.Add("Ferie", typeof(decimal));
-        table.Columns.Add("RetardMinutes", typeof(int));
-        table.Columns.Add("AbsenceHeures", typeof(decimal));
-        table.Columns.Add("HsMoyenne4Semaines", typeof(decimal));
-        table.Columns.Add("HsMoyenne8Semaines", typeof(decimal));
-        table.Columns.Add("Absences4Semaines", typeof(int));
-        table.Columns.Add("Retards4Semaines", typeof(int));
-        table.Columns.Add("HeuresTravaillees4Semaines", typeof(decimal));
-        table.Columns.Add("CategorieId", typeof(int));
-        table.Columns.Add("Departement", typeof(string));
-        table.Columns.Add("HeuresSemaineContrat", typeof(decimal));
-        table.Columns.Add("MultiPointage", typeof(bool));
-        table.Columns.Add("SourceGenereeLe", typeof(DateTime));
-        table.Columns.Add("VersionSchema", typeof(string));
-
-        foreach (var entity in rows)
-        {
-            var row = table.NewRow();
-            row["BddSage"] = entity.BddSage;
-            row["Matricule"] = entity.Matricule;
-            row["SemaineDebut"] = entity.SemaineDebut;
-            row["SemaineIso"] = entity.SemaineIso;
-            row["AnneeIso"] = entity.AnneeIso;
-            row["HeuresPlanifiees"] = entity.HeuresPlanifiees;
-            row["HeuresTravaillees"] = entity.HeuresTravaillees;
-            row["NbJoursPlanifies"] = entity.NbJoursPlanifies;
-            row["NbJoursTravailles"] = entity.NbJoursTravailles;
-            row["CongeJours"] = entity.CongeJours;
-            row["HS"] = entity.Hs;
-            row["HSValidee"] = entity.HsValidee;
-            row["Nuit"] = entity.Nuit;
-            row["Dimanche"] = entity.Dimanche;
-            row["Ferie"] = entity.Ferie;
-            row["RetardMinutes"] = entity.RetardMinutes;
-            row["AbsenceHeures"] = entity.AbsenceHeures;
-            row["HsMoyenne4Semaines"] = entity.HsMoyenne4Semaines;
-            row["HsMoyenne8Semaines"] = entity.HsMoyenne8Semaines;
-            row["Absences4Semaines"] = entity.Absences4Semaines;
-            row["Retards4Semaines"] = entity.Retards4Semaines;
-            row["HeuresTravaillees4Semaines"] = entity.HeuresTravaillees4Semaines;
-            row["CategorieId"] = Value(entity.CategorieId);
-            row["Departement"] = Value(entity.Departement);
-            row["HeuresSemaineContrat"] = Value(entity.HeuresSemaineContrat);
-            row["MultiPointage"] = entity.MultiPointage;
-            row["SourceGenereeLe"] = entity.SourceGenereeLe;
-            row["VersionSchema"] = entity.VersionSchema;
-            table.Rows.Add(row);
-        }
-
-        return table;
-    }
-
-    internal static object Value(object? value) => value ?? DBNull.Value;
 }
