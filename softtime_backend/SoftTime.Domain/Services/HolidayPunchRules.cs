@@ -28,43 +28,25 @@ public static class HolidayPunchRules
         if (debut > fin)
             return Array.Empty<ClosingAnomaly>();
 
-        var cleParIdSal = ClosingAnomalyFactory.CleParIdSal(cartes);
-
-        var planningRetenu = new Dictionary<(string Cle, DateTime Jour), PlanningSalarie>();
-        foreach (var plan in plannings)
-        {
-            if (plan.DateP is not DateTime dateP || !cleParIdSal.TryGetValue(plan.IdSal, out var cle))
-                continue;
-            var jour = dateP.Date;
-            if (jour < debut || jour > fin || !feries.Contains(jour))
-                continue;
-
-            var cleJour = (cle, jour);
-            if (!planningRetenu.TryGetValue(cleJour, out var existant) || ClosingAnomalyFactory.PrimeSur(plan, existant))
-                planningRetenu[cleJour] = plan;
-        }
-
+        // Même planning retenu que l'état des absences (travail prioritaire sur OFF), jours fériés seulement.
+        var planningsFeries = plannings.Where(p => p.DateP is DateTime d && feries.Contains(d.Date)).ToList();
+        var planningRetenu = AbsenceReportRules.IndexerPlannings(
+            planningsFeries, ClosingAnomalyFactory.CleParIdSal(cartes), debut, fin);
         var joursFeriesAppliques = corrections
             .Where(h => h.DatePointageIn.HasValue && !string.IsNullOrWhiteSpace(h.MatriculeSage))
             .Where(h => h.Ferier == true || h.FerierAm == true || h.FerierPm == true || h.MFeries > 0)
             .Select(h => (Cle: MatriculeIdentity.Cle(h.MatriculeSage), Jour: h.DatePointageIn!.Value.Date))
             .ToHashSet();
 
-        var resultats = new List<ClosingAnomaly>();
-        foreach (var (cleJour, plan) in planningRetenu)
-        {
-            if (AbsenceReportRules.EstJourOff(plan))
-                continue;
-            var duree = AbsenceReportRules.CalculerDureeHeures(plan);
-            if (duree is null || joursFeriesAppliques.Contains(cleJour))
-                continue;
-
-            resultats.Add(ClosingAnomalyFactory.Anomalie(
-                ClosingAnomalyType.FerieNonApplique, cleJour.Cle, cleJour.Jour,
-                "drapeau férié absent (sans effet sur le calcul de la paie)", duree,
-                pointageExiste: pointages?.APointage(cleJour.Cle, cleJour.Jour)));
-        }
-
+        var resultats = planningRetenu
+            .Where(kv => !AbsenceReportRules.EstJourOff(kv.Value) && !joursFeriesAppliques.Contains(kv.Key))
+            .Select(kv => (kv.Key, Duree: AbsenceReportRules.CalculerDureeHeures(kv.Value)))
+            .Where(x => x.Duree is not null)
+            .Select(x => ClosingAnomalyFactory.Anomalie(
+                ClosingAnomalyType.FerieNonApplique, x.Key.Cle, x.Key.Date,
+                "drapeau férié absent (sans effet sur le calcul de la paie)", x.Duree,
+                pointageExiste: pointages?.APointage(x.Key.Cle, x.Key.Date)))
+            .ToList();
         return PayrollClosingRules.Trier(resultats);
     }
 }

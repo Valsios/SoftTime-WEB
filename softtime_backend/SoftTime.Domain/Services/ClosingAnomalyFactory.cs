@@ -42,15 +42,5 @@ public static class ClosingAnomalyFactory
             .OrderBy(g => g.Key, StringComparer.Ordinal)
             .Select(g => (g.Key, g.OrderBy(x => x.Carte.Id).First().Carte));
 
-    /// <summary>Même départage que <see cref="AbsenceReportRules"/> : travail avant OFF, puis plus petit ID.</summary>
-    internal static bool PrimeSur(PlanningSalarie candidat, PlanningSalarie existant)
-    {
-        var candidatOff = AbsenceReportRules.EstJourOff(candidat);
-        var existantOff = AbsenceReportRules.EstJourOff(existant);
-        if (candidatOff != existantOff)
-            return !candidatOff;
-        return candidat.Id < existant.Id;
-    }
-
     internal static string FormatHeure(TimeSpan heure) => heure.ToString(@"hh\:mm\:ss");
 }

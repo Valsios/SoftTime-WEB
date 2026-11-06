@@ -126,6 +126,10 @@ public static class EffectiveRightsCalculator
             .Concat(removals.Where(r => !start.Contains(r) && !additions.Contains(r)).Select(r => $"-{r}"))
             .ToList();
 
+    /// <summary>
+    /// Migration future (simulation) : écarts entre les droits effectifs du rôle et la liste complète actuelle de l'utilisateur.
+    /// Une liste vide, ou réduite au marqueur « aucun droit », retire tous les droits du rôle.
+    /// </summary>
     public static LegacyConversion ConvertLegacyList(IReadOnlyCollection<string> roleEffective, IReadOnlyCollection<string> legacyList)
     {
         var comparer = StringComparer.OrdinalIgnoreCase;

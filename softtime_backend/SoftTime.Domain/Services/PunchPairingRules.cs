@@ -46,40 +46,13 @@ public static class PunchPairingRules
     /// </summary>
     public static PunchPairingResult PairMultipleDay(IReadOnlyList<PunchMoment> points, TimeSpan? gap = null)
     {
-        var seuil = gap ?? MultiPunchGap;
         var ordered = Order(points);
         if (ordered.Count == 0)
             return PunchPairingResult.Empty;
         if (ordered.Count == 1)
             return new PunchPairingResult { Unpaired = ordered };
 
-        // Pointages retenus après application du seuil (portage de « pointTraite »).
-        var retenus = new List<PunchMoment> { ordered[0] };
-        var dateEntree = ordered[0].Date.Date;
-        var heureEntree = ordered[0].Heure;
-        var finJournee = ordered[^1].Date.Date.Add(ordered[^1].Heure);
-
-        for (var i = 1; i < ordered.Count; i++)
-        {
-            var point = ordered[i];
-            var depuisEntree = point.Date.Date.Add(point.Heure) - dateEntree.Add(heureEntree);
-            if (depuisEntree <= seuil)
-                continue;
-            var avantFin = finJournee - point.Date.Date.Add(point.Heure);
-            if (avantFin > seuil)
-            {
-                retenus.Add(point);
-                heureEntree = point.Heure;
-                dateEntree = point.Date.Date;
-            }
-            else
-            {
-                // Dernier pointage de la journée : il ferme la paire courante.
-                retenus.Add(new PunchMoment(point.Date.Date, finJournee.TimeOfDay));
-                break;
-            }
-        }
-
+        var retenus = Retenir(ordered, gap ?? MultiPunchGap);
         if (retenus.Count % 2 == 1)
             return new PunchPairingResult { Unpaired = retenus };
 
@@ -87,6 +60,32 @@ public static class PunchPairingRules
         for (var n = 0; n + 1 < retenus.Count; n += 2)
             paires.Add(new PunchPair(retenus[n].Date, retenus[n].Heure, retenus[n + 1].Date, retenus[n + 1].Heure));
         return new PunchPairingResult { Pairs = paires };
+    }
+
+    /// <summary>
+    /// Pointages retenus après application du seuil (portage de « pointTraite ») : un pointage trop
+    /// proche du précédent retenu est ignoré ; le premier pointage proche de la fin de journée ferme
+    /// la paire courante à l'heure du dernier pointage.
+    /// </summary>
+    private static List<PunchMoment> Retenir(List<PunchMoment> ordered, TimeSpan seuil)
+    {
+        var retenus = new List<PunchMoment> { ordered[0] };
+        var entree = ordered[0].Date.Date.Add(ordered[0].Heure);
+        var finJournee = ordered[^1].Date.Date.Add(ordered[^1].Heure);
+        foreach (var point in ordered.Skip(1))
+        {
+            var instant = point.Date.Date.Add(point.Heure);
+            if (instant - entree <= seuil)
+                continue;
+            if (finJournee - instant <= seuil)
+            {
+                retenus.Add(new PunchMoment(point.Date.Date, finJournee.TimeOfDay));
+                break;
+            }
+            retenus.Add(point);
+            entree = instant;
+        }
+        return retenus;
     }
 
     /// <summary>

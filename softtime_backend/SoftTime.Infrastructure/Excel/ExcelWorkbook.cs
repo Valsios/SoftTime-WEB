@@ -123,6 +123,7 @@ public static class ExcelWorkbook
             colonne.Width = 45;
     }
 
+    /// <summary>Nom de feuille Excel valide (31 caractères, caractères interdits remplacés) et unique.</summary>
     private static string NomFeuilleUnique(string? nom, HashSet<string> utilises)
     {
         var brut = string.IsNullOrWhiteSpace(nom) ? "Données" : nom!;

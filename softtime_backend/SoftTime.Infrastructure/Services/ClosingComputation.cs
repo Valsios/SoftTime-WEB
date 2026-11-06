@@ -130,14 +130,32 @@ internal static class ClosingComputation
     /// <summary>Découpe la page demandée dans l'analyse préparée et assemble le résultat (rapide).</summary>
     internal static ClosingAnalysisDto Assembler(AnalysePreparee prep, ClosingAnalysisRequest request)
     {
-        var (options, from, to, departementParCle, actuel, score, comparaison, parDepartement) =
-            (prep.Options, prep.From, prep.To, prep.DepartementParCle, prep.Actuel, prep.Score, prep.Comparaison, prep.ParDepartement);
+        var actuel = prep.Actuel;
+        return new ClosingAnalysisDto(
+            prep.From,
+            prep.To,
+            string.IsNullOrWhiteSpace(request.Departement) ? null : request.Departement.Trim(),
+            prep.Score,
+            PayrollClosingRules.FormuleScore,
+            actuel.JoursControles.Count,
+            actuel.Anomalies.Count,
+            ComptagesGravite(actuel.Anomalies),
+            ComptagesType(actuel.Anomalies),
+            PageAnomalies(prep, request),
+            prep.ParDepartement,
+            prep.Comparaison,
+            ClosingStatusRules.Statut(actuel.Anomalies, actuel.JoursControles.Count, prep.Options.CriticalRatioBlocking)?.ToString(),
+            actuel.SalariesSansPlanningExclus);
+    }
+
+    /// <summary>Page d'anomalies demandée ; les « Information » sont comptées mais omises de la liste sauf demande.</summary>
+    private static PagedResult<ClosingAnomalyDto> PageAnomalies(AnalysePreparee prep, ClosingAnalysisRequest request)
+    {
         var page = Math.Max(1, request.Page ?? 1);
         var taille = Math.Clamp(request.PageSize ?? DefaultPageSize, 1, MaxPageSize);
-        // Les comptages incluent toujours les « Information » ; la liste les omet sauf demande.
         var affichees = request.IncludeInformation
-            ? actuel.Anomalies
-            : actuel.Anomalies.Where(a => a.Severity != ClosingSeverity.Information).ToList();
+            ? prep.Actuel.Anomalies
+            : prep.Actuel.Anomalies.Where(a => a.Severity != ClosingSeverity.Information).ToList();
         var total = affichees.Count;
         var items = affichees
             .Skip(PaginationRules.Decalage(page, taille))
@@ -145,32 +163,16 @@ internal static class ClosingComputation
             .Select(a => new ClosingAnomalyDto(
                 a.Type.ToString(),
                 a.Severity.ToString(),
-                options.Poids(a.Severity),
+                prep.Options.Poids(a.Severity),
                 a.Matricule,
-                departementParCle.GetValueOrDefault(a.Matricule),
+                prep.DepartementParCle.GetValueOrDefault(a.Matricule),
                 a.Date,
                 a.Detail,
                 a.Heures,
                 a.PointageExiste))
             .ToList();
-        var anomaliesPage = new PagedResult<ClosingAnomalyDto>(
+        return new PagedResult<ClosingAnomalyDto>(
             items, total, PaginationRules.PageEffective(total, page), taille, PaginationRules.NombreDePages(total, taille));
-
-        return new ClosingAnalysisDto(
-            from,
-            to,
-            string.IsNullOrWhiteSpace(request.Departement) ? null : request.Departement.Trim(),
-            score,
-            PayrollClosingRules.FormuleScore,
-            actuel.JoursControles.Count,
-            actuel.Anomalies.Count,
-            ComptagesGravite(actuel.Anomalies),
-            ComptagesType(actuel.Anomalies),
-            anomaliesPage,
-            parDepartement,
-            comparaison,
-            ClosingStatusRules.Statut(actuel.Anomalies, actuel.JoursControles.Count, options.CriticalRatioBlocking)?.ToString(),
-            actuel.SalariesSansPlanningExclus);
     }
 
     /// <summary>Toutes les règles de clôture sur une période plafonnée à la veille.</summary>

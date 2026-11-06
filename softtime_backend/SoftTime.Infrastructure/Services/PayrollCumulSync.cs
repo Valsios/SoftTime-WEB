@@ -96,6 +96,7 @@ public sealed class PayrollCumulSync : IPayrollCumulSync
         return (employes, cumuls, sansSalarie, sansCumul);
     }
 
+    /// <summary>Résout la constante SAGE qui porte un cumul, en refusant une constante absente ou incomplète.</summary>
     private async Task<short> ResolveConstantAsync(BddSage sageRow, string code, CancellationToken ct)
     {
         var constants = await _externalSource.GetConstantsAsync(sageRow, ct);

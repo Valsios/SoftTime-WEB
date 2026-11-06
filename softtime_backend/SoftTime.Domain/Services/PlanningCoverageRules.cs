@@ -38,42 +38,44 @@ public static class PlanningCoverageRules
             .Where(h => h.DatePointageIn.HasValue && !string.IsNullOrWhiteSpace(h.MatriculeSage))
             .GroupBy(h => (Cle: MatriculeIdentity.Cle(h.MatriculeSage), Jour: h.DatePointageIn!.Value.Date))
             .ToDictionary(g => g.Key, g => g.ToList());
-
-        var resultats = new List<ClosingAnomaly>();
-        foreach (var ligne in lignesAbsence)
-        {
-            if (ligne.DureeHeures is null)
-                continue;
-
-            var demiConge = ligne.Type == AbsenceReportRules.TypeCongeSage && ligne.Periode == "Demi-journée";
-            var demiArbitrage = ligne.Type == AbsenceReportRules.TypeArbitreeGta
-                                && ligne.Periode is "Matin" or "Après-midi";
-            if (!demiConge && !demiArbitrage)
-                continue;
-
-            var cle = MatriculeIdentity.Cle(ligne.Matricule);
-            var jour = ligne.Date.Date;
-            if (pointages.APointage(cle, jour))
-                continue;
-
-            var corrsDuJour = correctionsParJour.GetValueOrDefault((cle, jour)) ?? new List<HeureCorrigee>();
-            if (corrsDuJour.Any(ClosingAnomalyFactory.AHeuresCorrigees))
-                continue;
-
-            // Congé d'une demi-journée : la moitié du congé n'est pas connue (matin ou après-midi),
-            // une absence arbitrée le même jour peut donc couvrir l'autre moitié. Prudence : rien.
-            if (demiConge && corrsDuJour.Any(h => h.AbsenceAm == true || h.AbsencePm == true))
-                continue;
-
-            resultats.Add(ClosingAnomalyFactory.Anomalie(
-                ClosingAnomalyType.PlanningSansPointage, cle, jour,
-                demiConge
-                    ? "Demi-journée de congé, autre moitié sans pointage"
-                    : "Demi-journée d'absence arbitrée, autre moitié sans pointage",
-                ligne.DureeHeures));
-        }
-
+        var resultats = lignesAbsence
+            .Select(ligne => DemiJourneeSansPointage(ligne, pointages, correctionsParJour))
+            .OfType<ClosingAnomaly>()
+            .ToList();
         return PayrollClosingRules.Trier(resultats);
+    }
+
+    /// <summary>
+    /// Demi-journée de congé ou d'absence arbitrée dont l'autre moitié n'a ni pointage ni heure
+    /// corrigée ; <c>null</c> sinon.
+    /// </summary>
+    private static ClosingAnomaly? DemiJourneeSansPointage(
+        AbsenceReportRow ligne,
+        ClosingPunchIndex pointages,
+        Dictionary<(string Cle, DateTime Jour), List<HeureCorrigee>> correctionsParJour)
+    {
+        if (ligne.DureeHeures is null)
+            return null;
+        var demiConge = ligne.Type == AbsenceReportRules.TypeCongeSage && ligne.Periode == "Demi-journée";
+        var demiArbitrage = ligne.Type == AbsenceReportRules.TypeArbitreeGta && ligne.Periode is "Matin" or "Après-midi";
+        var cle = MatriculeIdentity.Cle(ligne.Matricule);
+        var jour = ligne.Date.Date;
+        if ((!demiConge && !demiArbitrage) || pointages.APointage(cle, jour))
+            return null;
+
+        var corrsDuJour = correctionsParJour.GetValueOrDefault((cle, jour)) ?? new List<HeureCorrigee>();
+        // Congé d'une demi-journée : la moitié du congé n'est pas connue (matin ou après-midi),
+        // une absence arbitrée le même jour peut donc couvrir l'autre moitié. Prudence : rien.
+        if (corrsDuJour.Any(ClosingAnomalyFactory.AHeuresCorrigees)
+            || (demiConge && corrsDuJour.Any(h => h.AbsenceAm == true || h.AbsencePm == true)))
+            return null;
+
+        return ClosingAnomalyFactory.Anomalie(
+            ClosingAnomalyType.PlanningSansPointage, cle, jour,
+            demiConge
+                ? "Demi-journée de congé, autre moitié sans pointage"
+                : "Demi-journée d'absence arbitrée, autre moitié sans pointage",
+            ligne.DureeHeures);
     }
 
     /// <summary>
