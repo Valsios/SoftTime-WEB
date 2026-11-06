@@ -103,40 +103,13 @@ internal static class MlDayFeatures
     {
         foreach (var (cle, days) in ctx.EmployeeDays)
         {
-            var ordered = days.OrderBy(d => d.Date).ToList();
             var history = new List<DayRow>();
-
-            foreach (var day in ordered)
+            foreach (var day in days.OrderBy(d => d.Date))
             {
-                var debut7 = day.Date.AddDays(-7);
-                var debut30 = day.Date.AddDays(-30);
-                var debut90 = day.Date.AddDays(-90);
-
-                var fenetre7 = history.Where(h => h.Date > debut7).ToList();
-                var fenetre30 = history.Where(h => h.Date > debut30).ToList();
-                var fenetre90 = history.Where(h => h.Date > debut90).ToList();
-
-                day.Absences7j = fenetre7.Count(h => h.AbsenceNonJustifiee);
-                day.Absences30j = fenetre30.Count(h => h.AbsenceNonJustifiee);
-                day.Absences90j = fenetre90.Count(h => h.AbsenceNonJustifiee);
-                var planifies30 = fenetre30.Count(h => h.EstJourPlanifie);
-                day.TauxAbsence30j = planifies30 == 0 ? 0d : (double)day.Absences30j / planifies30;
-                day.Retards30j = fenetre30.Count(h => h.RetardMinutes > 0);
-                day.JoursTravailles7j = fenetre7.Count(h => h.HeuresTravaillees > 0m);
-
-                var derniereAbsence = history
-                    .Where(h => h.AbsenceNonJustifiee)
-                    .OrderByDescending(h => h.Date)
-                    .FirstOrDefault();
-                day.JoursDepuisDerniereAbsence = derniereAbsence == null
-                    ? null
-                    : (day.Date - derniereAbsence.Date).Days;
-
+                ApplyRollingWindows(day, history);
                 var lundi = MlDatasetProjection.DerniereSemaineConnue(ctx, day.Date);
                 day.HeuresSupp4Semaines = Math.Round(
-                    Enumerable.Range(1, 4)
-                        .Sum(i => ctx.WeekResults
-                            .GetValueOrDefault((cle, lundi.AddDays(-7 * i)))?.Hs ?? 0m),
+                    Enumerable.Range(1, 4).Sum(i => ctx.WeekResults.GetValueOrDefault((cle, lundi.AddDays(-7 * i)))?.Hs ?? 0m),
                     2);
 
                 // Seuls les jours réellement observés alimentent l'historique : les jours futurs
@@ -145,6 +118,23 @@ internal static class MlDayFeatures
                     history.Add(day);
             }
         }
+    }
+
+    /// <summary>Absences, retards et jours travaillés observés sur les 7, 30 et 90 jours précédents.</summary>
+    private static void ApplyRollingWindows(DayRow day, List<DayRow> history)
+    {
+        var fenetre7 = history.Where(h => h.Date > day.Date.AddDays(-7)).ToList();
+        var fenetre30 = history.Where(h => h.Date > day.Date.AddDays(-30)).ToList();
+        day.Absences7j = fenetre7.Count(h => h.AbsenceNonJustifiee);
+        day.Absences30j = fenetre30.Count(h => h.AbsenceNonJustifiee);
+        day.Absences90j = history.Count(h => h.Date > day.Date.AddDays(-90) && h.AbsenceNonJustifiee);
+        var planifies30 = fenetre30.Count(h => h.EstJourPlanifie);
+        day.TauxAbsence30j = planifies30 == 0 ? 0d : (double)day.Absences30j / planifies30;
+        day.Retards30j = fenetre30.Count(h => h.RetardMinutes > 0);
+        day.JoursTravailles7j = fenetre7.Count(h => h.HeuresTravaillees > 0m);
+
+        var derniereAbsence = history.Where(h => h.AbsenceNonJustifiee).OrderByDescending(h => h.Date).FirstOrDefault();
+        day.JoursDepuisDerniereAbsence = derniereAbsence == null ? null : (day.Date - derniereAbsence.Date).Days;
     }
 
     internal static void ComputeTeamFeatures(DatasetContext ctx)

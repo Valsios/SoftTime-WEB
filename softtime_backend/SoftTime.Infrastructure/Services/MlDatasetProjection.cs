@@ -87,8 +87,7 @@ internal static class MlDatasetProjection
     {
         var config = ctx.Configs[day.Matricule];
         var card = ctx.CardByKey[day.Matricule];
-
-        return new MlSalarieJour
+        var entity = new MlSalarieJour
         {
             BddSage = ctx.SageDb,
             Matricule = day.Matricule,
@@ -105,34 +104,47 @@ internal static class MlDatasetProjection
             AbsenceNonJustifiee = day.AbsenceNonJustifiee,
             AbsenceDeclaree = day.AbsenceDeclaree,
             AbsenceHeures = day.AbsenceHeures,
-            JourSemaine = (byte)day.Date.DayOfWeek,
-            SemaineIso = (byte)System.Globalization.ISOWeek.GetWeekOfYear(day.Date),
-            AnneeIso = (short)System.Globalization.ISOWeek.GetYear(day.Date),
-            Mois = (byte)day.Date.Month,
-            JourDuMois = (byte)day.Date.Day,
-            VeilleFerie = ctx.Feries.Contains(day.Date.AddDays(1)),
-            LendemainFerie = ctx.Feries.Contains(day.Date.AddDays(-1)),
-            DebutMois = day.Date.Day <= 3,
-            FinMois = day.Date.Day >= DateTime.DaysInMonth(day.Date.Year, day.Date.Month) - 2,
             CategorieId = config.CategorieId,
             Departement = card.Departement,
             HeuresSemaineContrat = config.HeuresSemaine,
             MultiPointage = ctx.MultiPointage,
             AncienneteJours = card.Date.HasValue ? (day.Date - card.Date.Value.Date).Days : null,
-            Absences7j = day.Absences7j,
-            Absences30j = day.Absences30j,
-            Absences90j = day.Absences90j,
-            TauxAbsence30j = day.TauxAbsence30j,
-            Retards30j = day.Retards30j,
-            JoursTravailles7j = day.JoursTravailles7j,
-            JoursDepuisDerniereAbsence = day.JoursDepuisDerniereAbsence,
-            HeuresSupp4Semaines = day.HeuresSupp4Semaines,
-            TauxAbsenceEquipe30j = day.TauxAbsenceEquipe30j,
-            EffectifPrevuJour = day.EffectifPrevuJour,
-            CongesPrevusJour = day.CongesPrevusJour,
             SourceGenereeLe = DateTime.Now,
             VersionSchema = MlSchema.Version
         };
+        RenseignerCalendrier(entity, ctx.Feries, day.Date);
+        RenseignerHistorique(entity, day);
+        return entity;
+    }
+
+    /// <summary>Position du jour dans la semaine, le mois et l'année ISO, et proximité d'un férié.</summary>
+    private static void RenseignerCalendrier(MlSalarieJour entity, IReadOnlySet<DateTime> feries, DateTime date)
+    {
+        entity.JourSemaine = (byte)date.DayOfWeek;
+        entity.SemaineIso = (byte)System.Globalization.ISOWeek.GetWeekOfYear(date);
+        entity.AnneeIso = (short)System.Globalization.ISOWeek.GetYear(date);
+        entity.Mois = (byte)date.Month;
+        entity.JourDuMois = (byte)date.Day;
+        entity.VeilleFerie = feries.Contains(date.AddDays(1));
+        entity.LendemainFerie = feries.Contains(date.AddDays(-1));
+        entity.DebutMois = date.Day <= 3;
+        entity.FinMois = date.Day >= DateTime.DaysInMonth(date.Year, date.Month) - 2;
+    }
+
+    /// <summary>Features glissantes du salarié et de son équipe, déjà calculées sur la journée.</summary>
+    private static void RenseignerHistorique(MlSalarieJour entity, DayRow day)
+    {
+        entity.Absences7j = day.Absences7j;
+        entity.Absences30j = day.Absences30j;
+        entity.Absences90j = day.Absences90j;
+        entity.TauxAbsence30j = day.TauxAbsence30j;
+        entity.Retards30j = day.Retards30j;
+        entity.JoursTravailles7j = day.JoursTravailles7j;
+        entity.JoursDepuisDerniereAbsence = day.JoursDepuisDerniereAbsence;
+        entity.HeuresSupp4Semaines = day.HeuresSupp4Semaines;
+        entity.TauxAbsenceEquipe30j = day.TauxAbsenceEquipe30j;
+        entity.EffectifPrevuJour = day.EffectifPrevuJour;
+        entity.CongesPrevusJour = day.CongesPrevusJour;
     }
 
     // ------------------------------------------------------------------ utilitaires
