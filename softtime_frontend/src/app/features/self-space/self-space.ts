@@ -50,7 +50,7 @@ const loading = <T>(): CardState<T> => ({ status: 'loading', data: null });
     @if (notice(); as n) {
       <div class="self-notice" role="status" [attr.data-kind]="n.kind">
         <p class="self-notice__message">{{ n.message }}</p>
-        <p class="self-notice__hint">{{ n.hint }}</p>
+        @if (n.hint) { <p class="self-notice__hint">{{ n.hint }}</p> }
       </div>
     }
 
@@ -216,6 +216,7 @@ const loading = <T>(): CardState<T> => ({ status: 'loading', data: null });
       :host { display: flex; flex-direction: column; gap: 16px; }
       :host ::ng-deep .soft-page-header { margin-bottom: 0; }
       .self-notice { padding: 14px 16px; border: 1px solid var(--danger-border); border-radius: var(--radius-md); background: var(--danger-bg); color: var(--danger); }
+      .self-notice[data-kind='disabled'] { border-color: var(--info-border); background: var(--info-bg); color: var(--info); }
       .self-notice[data-kind='server'], .self-notice[data-kind='network'] { border-color: var(--warning-border); background: var(--warning-bg); color: var(--warning); }
       .self-notice__message { margin: 0; font-size: 14.5px; font-weight: 600; }
       .self-notice__hint { margin: 4px 0 0; font-size: 13.5px; }

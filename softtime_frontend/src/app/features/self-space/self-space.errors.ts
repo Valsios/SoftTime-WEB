@@ -3,13 +3,13 @@
  * Logique pure, testée par self-space.errors.spec.ts. Aucune donnée de salarié n'y passe : seulement un statut et le message du serveur.
  */
 
-export type SelfErrorKind = 'account' | 'reconnect' | 'period' | 'server' | 'network';
+export type SelfErrorKind = 'disabled' | 'account' | 'reconnect' | 'period' | 'server' | 'network';
 
 export interface SelfErrorNotice {
   kind: SelfErrorKind;
   /** Message du serveur (texte seul) ou, à défaut, un message neutre. */
   message: string;
-  /** Consigne à l'utilisateur. */
+  /** Consigne à l'utilisateur (vide quand le message la contient déjà). */
   hint: string;
   /** Vrai quand les quatre cartes ne doivent pas s'afficher (une carte vide serait trompeuse). */
   masksCards: boolean;
@@ -22,6 +22,7 @@ export const HINT_PERIOD = 'Choisissez un autre mois.';
 export const MSG_PERIOD = 'La période demandée n’est pas valide.';
 export const MSG_SERVER = 'Mon espace est momentanément indisponible.';
 export const MSG_NETWORK = 'Le serveur est injoignable.';
+export const MSG_DISABLED = 'Mon espace n\'est pas encore activé : contactez la RH.';
 export const MSG_ACCOUNT = 'L’accès à Mon espace est refusé pour ce compte.';
 
 const MAX_LENGTH = 300;
@@ -54,6 +55,10 @@ export function describeSelfError(err: unknown): SelfErrorNotice {
   if (status === undefined || status === null || status === 0) {
     return { kind: 'network', message: MSG_NETWORK, hint: HINT_RETRY, masksCards: false };
   }
+  // Fonction coupée côté serveur (SelfService:Enabled = false) : 404 « Mon espace n'est pas activé sur ce serveur. »
+  if (status === 404 && message !== null && /Mon espace n.est pas activ/i.test(message)) {
+    return { kind: 'disabled', message: MSG_DISABLED, hint: '', masksCards: true };
+  }
   if (status === 401 || (status === 403 && message !== null && /reconnect/i.test(message))) {
     return { kind: 'reconnect', message: message ?? 'Votre session n’est plus valide.', hint: HINT_RECONNECT, masksCards: true };
   }
@@ -66,7 +71,7 @@ export function describeSelfError(err: unknown): SelfErrorNotice {
   return { kind: 'server', message: message ?? MSG_SERVER, hint: HINT_RETRY, masksCards: false };
 }
 
-const RANK: Record<SelfErrorKind, number> = { reconnect: 5, account: 4, period: 3, server: 2, network: 1 };
+const RANK: Record<SelfErrorKind, number> = { disabled: 6, reconnect: 5, account: 4, period: 3, server: 2, network: 1 };
 
 /** Quatre lectures peuvent échouer en même temps : on garde l'erreur la plus significative pour l'utilisateur. */
 export function strongestNotice(current: SelfErrorNotice | null, next: SelfErrorNotice): SelfErrorNotice {
