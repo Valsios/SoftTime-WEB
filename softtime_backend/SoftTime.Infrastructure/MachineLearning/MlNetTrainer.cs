@@ -60,26 +60,13 @@ public sealed class MlNetTrainer : IMlTrainer
         var prep = Prep(ml, nameof(MlHsData.Departement), MlNetData.HsFeatures);
         var sdca = UseSdca(algorithm);
         var label = nameof(MlHsData.HsAmount);
-        IEstimator<ITransformer> trainer = sdca
-            ? ml.Regression.Trainers.Sdca(new SdcaRegressionTrainer.Options
-            {
-                LabelColumnName = label, FeatureColumnName = "Features", MaximumNumberOfIterations = 100
-            })
-            : ml.Regression.Trainers.FastTree(new FastTreeRegressionTrainer.Options
-            {
-                LabelColumnName = label, FeatureColumnName = "Features",
-                NumberOfLeaves = 12, NumberOfTrees = 60, MinimumExampleCountPerLeaf = 10
-            });
+        var trainer = RegressionTrainer(ml, sdca, label);
         var model = prep.Append(trainer).Fit(session.Train);
         var predictions = model.Transform(session.Test);
         var metrics = ml.Regression.Evaluate(predictions, labelColumnName: label);
 
         // Erreur absolue observée sur le jeu de test (prévision bornée à 0, comme à l'affichage).
-        var erreurs = ml.Data
-            .CreateEnumerable<MlHsAmountPrediction>(predictions, reuseRowObject: false)
-            .Select(r => Math.Abs(r.HsAmount - Math.Max(0f, r.Score)))
-            .OrderBy(e => e)
-            .ToList();
+        var erreurs = ErreursAbsolues(ml, predictions);
 
         return new MlTrainingResult(
             Accepted: true,
@@ -94,6 +81,33 @@ public sealed class MlNetTrainer : IMlTrainer
             RejectReason: null);
     }
 
+    /// <summary>Régression SDCA ou FastTree sur la colonne « Features ».</summary>
+    private static IEstimator<ITransformer> RegressionTrainer(MLContext ml, bool sdca, string label)
+    {
+        IEstimator<ITransformer> trainer = sdca
+            ? ml.Regression.Trainers.Sdca(new SdcaRegressionTrainer.Options
+            {
+                LabelColumnName = label, FeatureColumnName = "Features", MaximumNumberOfIterations = 100
+            })
+            : ml.Regression.Trainers.FastTree(new FastTreeRegressionTrainer.Options
+            {
+                LabelColumnName = label, FeatureColumnName = "Features",
+                NumberOfLeaves = 12, NumberOfTrees = 60, MinimumExampleCountPerLeaf = 10
+            });
+        return trainer;
+    }
+
+    /// <summary>Erreur absolue observée sur le jeu de test (prévision bornée à 0, comme à l'affichage), triée.</summary>
+    private static List<float> ErreursAbsolues(MLContext ml, IDataView predictions)
+    {
+        var erreurs = ml.Data
+            .CreateEnumerable<MlHsAmountPrediction>(predictions, reuseRowObject: false)
+            .Select(r => Math.Abs(r.HsAmount - Math.Max(0f, r.Score)))
+            .OrderBy(e => e)
+            .ToList();
+        return erreurs;
+    }
+
     /// <summary>
     /// Classification binaire commune (absence, P(HS&gt;0)) : régression logistique SDCA ou FastTree,
     /// évaluée par AUC, AUC précision-rappel et score de Brier sur le jeu de test.
@@ -105,16 +119,7 @@ public sealed class MlNetTrainer : IMlTrainer
         var ml = session.Ml;
         var prep = Prep(ml, spec.Departement, spec.Features);
         var sdca = UseSdca(algorithm);
-        IEstimator<ITransformer> trainer = sdca
-            ? ml.BinaryClassification.Trainers.SdcaLogisticRegression(new SdcaLogisticRegressionBinaryTrainer.Options
-            {
-                LabelColumnName = spec.Label, FeatureColumnName = "Features", MaximumNumberOfIterations = 100
-            })
-            : ml.BinaryClassification.Trainers.FastTree(new FastTreeBinaryTrainer.Options
-            {
-                LabelColumnName = spec.Label, FeatureColumnName = "Features",
-                NumberOfLeaves = spec.Leaves, NumberOfTrees = spec.Trees, MinimumExampleCountPerLeaf = 10
-            });
+        var trainer = BinaryTrainer(ml, sdca, spec);
         var model = prep.Append(trainer).Fit(session.Train);
         var predictions = model.Transform(session.Test);
         var metrics = ml.BinaryClassification.Evaluate(predictions, labelColumnName: spec.Label);
@@ -139,6 +144,18 @@ public sealed class MlNetTrainer : IMlTrainer
                 TestPositives: rows.Count(r => r.Label)),
             RejectReason: null);
     }
+
+    /// <summary>Classification binaire : régression logistique SDCA ou FastTree sur la colonne « Features ».</summary>
+    private static IEstimator<ITransformer> BinaryTrainer(MLContext ml, bool sdca, MlNetBinarySpec spec) => sdca
+        ? ml.BinaryClassification.Trainers.SdcaLogisticRegression(new SdcaLogisticRegressionBinaryTrainer.Options
+        {
+            LabelColumnName = spec.Label, FeatureColumnName = "Features", MaximumNumberOfIterations = 100
+        })
+        : ml.BinaryClassification.Trainers.FastTree(new FastTreeBinaryTrainer.Options
+        {
+            LabelColumnName = spec.Label, FeatureColumnName = "Features",
+            NumberOfLeaves = spec.Leaves, NumberOfTrees = spec.Trees, MinimumExampleCountPerLeaf = 10
+        });
 
     /// <summary>Encodage du département puis concaténation des features dans la colonne « Features ».</summary>
     private static IEstimator<ITransformer> Prep(MLContext ml, string departement, string[] features) =>

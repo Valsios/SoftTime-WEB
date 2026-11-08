@@ -23,17 +23,7 @@ public class OtherPointeuseReader : IPointeuseReader
 
     public async Task<IReadOnlyList<NormalizedPointeuseUser>> ListUsersAsync(BddPointeuse pteRow, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(pteRow.MapUserTable) || string.IsNullOrWhiteSpace(pteRow.MapUserColId))
-            throw new DomainException("Mapping incomplet pour la base pointeuse 'Autre' : table et colonne ID utilisateur requises.");
-
-        ValidateIdentifiers(pteRow.MapUserTable, pteRow.MapUserColId, pteRow.MapUserColBadge, pteRow.MapUserColSsn, pteRow.MapUserColNom);
-
-        var selId = $"[{pteRow.MapUserColId}]";
-        var selBadge = pteRow.MapUserColBadge is { Length: > 0 } b ? $"[{b}]" : "NULL";
-        var selSsn = pteRow.MapUserColSsn is { Length: > 0 } s ? $"[{s}]" : "NULL";
-        var selNom = pteRow.MapUserColNom is { Length: > 0 } n ? $"[{n}]" : "NULL";
-
-        var sql = $"SELECT {selId} AS Id, {selBadge} AS Badge, {selSsn} AS Ssn, {selNom} AS Nom FROM [{pteRow.MapUserTable}]";
+        var sql = RequeteUtilisateurs(pteRow);
 
         var connStr = ExternalConnectionFactory.Build(SqlServerCredentials.Of(pteRow), pteRow.NomBd);
         await using var con = new SqlConnection(connStr);
@@ -54,6 +44,23 @@ public class OtherPointeuseReader : IPointeuseReader
                     Nom: SqlColumnReader.ReadText(reader, "Nom")));
         }
         return result;
+    }
+
+    /// <summary>Requête de lecture des utilisateurs d'après le mapping de la pointeuse, identifiants SQL contrôlés.</summary>
+    private static string RequeteUtilisateurs(BddPointeuse pteRow)
+    {
+        if (string.IsNullOrWhiteSpace(pteRow.MapUserTable) || string.IsNullOrWhiteSpace(pteRow.MapUserColId))
+            throw new DomainException("Mapping incomplet pour la base pointeuse 'Autre' : table et colonne ID utilisateur requises.");
+
+        ValidateIdentifiers(pteRow.MapUserTable, pteRow.MapUserColId, pteRow.MapUserColBadge, pteRow.MapUserColSsn, pteRow.MapUserColNom);
+
+        var selId = $"[{pteRow.MapUserColId}]";
+        var selBadge = pteRow.MapUserColBadge is { Length: > 0 } b ? $"[{b}]" : "NULL";
+        var selSsn = pteRow.MapUserColSsn is { Length: > 0 } s ? $"[{s}]" : "NULL";
+        var selNom = pteRow.MapUserColNom is { Length: > 0 } n ? $"[{n}]" : "NULL";
+
+        var sql = $"SELECT {selId} AS Id, {selBadge} AS Badge, {selSsn} AS Ssn, {selNom} AS Nom FROM [{pteRow.MapUserTable}]";
+        return sql;
     }
 
     public async Task<IReadOnlyList<NormalizedPunch>> ListPunchesAsync(

@@ -56,12 +56,7 @@ public sealed class DepartementServiceLookup : IDepartementServiceLookup
     public async Task<IReadOnlyList<DepartementServiceDto>> GetDepartementServiceBatchAsync(
     IEnumerable<string> matricules, CancellationToken ct = default)
     {
-        var list = matricules
-            .Where(m => !string.IsNullOrWhiteSpace(m))
-            .Select(m => m.Trim())
-            .Distinct()
-            .Take(2000)
-            .ToList();
+        var list = Normaliser(matricules);
         if (list.Count == 0)
             return Array.Empty<DepartementServiceDto>();
 
@@ -78,14 +73,33 @@ public sealed class DepartementServiceLookup : IDepartementServiceLookup
 
         // La source externe peut contenir des matricules en double : on conserve le premier
         // au lieu de lever une exception de cle dupliquee.
-        var numByMat = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
-        foreach (var e in emps)
-            numByMat.TryAdd(e.Matricule, e.EmployeeId);
+        var numByMat = NumerosParMatricule(emps);
         return list.Select(m =>
         {
             var cur = numByMat.TryGetValue(m, out var num) && byNum.TryGetValue(num, out var rows)
                 ? PickCurrentAffectation(rows) : null;
             return new DepartementServiceDto(m, cur?.Departement?.Trim(), cur?.Service?.Trim());
         }).ToList();
+    }
+
+    /// <summary>Matricules renseignés, nettoyés et dédoublonnés (2 000 au plus).</summary>
+    private static List<string> Normaliser(IEnumerable<string> matricules)
+    {
+        var list = matricules
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .Select(m => m.Trim())
+            .Distinct()
+            .Take(2000)
+            .ToList();
+        return list;
+    }
+
+    /// <summary>La source externe peut contenir des matricules en double : le premier est conservé.</summary>
+    private static Dictionary<string, long> NumerosParMatricule(List<ExternalEmployee> emps)
+    {
+        var numByMat = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        foreach (var e in emps)
+            numByMat.TryAdd(e.Matricule, e.EmployeeId);
+        return numByMat;
     }
 }

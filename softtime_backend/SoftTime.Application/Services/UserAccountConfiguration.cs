@@ -43,24 +43,11 @@ public static class UserAccountConfiguration
         hasher ??= new PasswordHasher<Responsable>();
         var repo = uow.Repository<Responsable>();
         var users = await repo.ListAsync(_ => true, ct);
-        var classes = users
-            .Select(user =>
-            {
-                ct.ThrowIfCancellationRequested();
-                return (User: user, Classe: PasswordHashClassifier.Classify(user.Password));
-            })
-            .ToList();
+        var classes = Classer(users, ct);
 
         // Seuls les mots de passe en clair avérés sont sécurisés (PBKDF2 HMAC-SHA256, 100k itérations).
         // Les hachages V2 sont préservés intacts : re-hachés en V3 à la prochaine connexion réussie.
-        var enClair = classes.Where(c => c.Classe == PasswordClassification.LegacyPlainText).Select(c => c.User).ToList();
-        foreach (var user in enClair)
-        {
-            user.Password = hasher.HashPassword(user, user.Password!);
-            repo.Update(user);
-        }
-        if (enClair.Count > 0)
-            await uow.SaveChangesAsync(ct);
+        var enClair = await SecuriserAsync(uow, hasher, repo, classes, ct);
 
         var ambigus = classes
             .Where(c => AmbiguityReason(c.Classe) is not null)
@@ -76,6 +63,35 @@ public static class UserAccountConfiguration
             SkippedEmptyCount = classes.Count(c => c.Classe == PasswordClassification.NullOrEmpty),
             AmbiguousCount = ambigus.Count
         };
+    }
+
+    /// <summary>Classification du mot de passe stocké de chaque compte.</summary>
+    private static List<(Responsable User, PasswordClassification Classe)> Classer(
+        List<Responsable> users, CancellationToken ct)
+    {
+        var classes = users
+            .Select(user =>
+            {
+                ct.ThrowIfCancellationRequested();
+                return (User: user, Classe: PasswordHashClassifier.Classify(user.Password));
+            })
+            .ToList();
+        return classes;
+    }
+
+    /// <summary>Hache les mots de passe en clair avérés et retourne les comptes sécurisés.</summary>
+    private static async Task<List<Responsable>> SecuriserAsync(
+        IUnitOfWork uow, IPasswordHasher<Responsable> hasher, IRepository<Responsable> repo, List<(Responsable User, PasswordClassification Classe)> classes, CancellationToken ct)
+    {
+        var enClair = classes.Where(c => c.Classe == PasswordClassification.LegacyPlainText).Select(c => c.User).ToList();
+        foreach (var user in enClair)
+        {
+            user.Password = hasher.HashPassword(user, user.Password!);
+            repo.Update(user);
+        }
+        if (enClair.Count > 0)
+            await uow.SaveChangesAsync(ct);
+        return enClair;
     }
 
     /// <summary>Raison de conservation d'une valeur non migrable, ou <c>null</c> si la valeur n'est pas ambiguë.</summary>
