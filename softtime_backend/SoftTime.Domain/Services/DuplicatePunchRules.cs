@@ -73,15 +73,7 @@ public static class DuplicatePunchRules
         foreach (var cle in pointages.Cles)
         {
             // Pointages déjà triés : instants distincts de la période, dans l'ordre.
-            var instants = new List<DateTime>();
-            foreach (var m in pointages.Moments(cle))
-            {
-                if (m.Date < debut || m.Date > fin)
-                    continue;
-                var instant = m.Date + m.Heure;
-                if (instants.Count == 0 || instants[^1] != instant)
-                    instants.Add(instant);
-            }
+            var instants = Instants(pointages, debut, fin, cle);
 
             for (var i = 1; i < instants.Count; i++)
             {
@@ -97,5 +89,20 @@ public static class DuplicatePunchRules
         }
 
         return PayrollClosingRules.Trier(resultats);
+    }
+
+    /// <summary>Pointages déjà triés : instants distincts de la période, dans l'ordre.</summary>
+    private static List<DateTime> Instants(ClosingPunchIndex pointages, DateTime debut, DateTime fin, string cle)
+    {
+        var instants = new List<DateTime>();
+        foreach (var m in pointages.Moments(cle))
+        {
+            if (m.Date < debut || m.Date > fin)
+                continue;
+            var instant = m.Date + m.Heure;
+            if (instants.Count == 0 || instants[^1] != instant)
+                instants.Add(instant);
+        }
+        return instants;
     }
 }

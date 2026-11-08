@@ -125,6 +125,13 @@ public static class OvertimeRules
             return totExo + reste;
         }
 
+        return AllocateAboveEight(result, pla, totExo);
+    }
+
+    /// <summary>Reliquat supérieur à 8 h : toutes les heures à 130 % sont exonérées, puis celles à 150 % jusqu'au plafond.</summary>
+    private static decimal AllocateAboveEight(HsExoSplit result, HsWeekSplit pla, decimal totExo)
+    {
+        decimal reste;
         result.Exo130 += pla.Hs1;
         totExo += pla.Hs1;
         reste = ExemptCeilingHours - totExo;

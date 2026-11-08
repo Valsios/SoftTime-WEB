@@ -57,12 +57,7 @@ public sealed class MlForecastQueryService : IMlForecastQueryService
             _ => $"{active.Count} modèle(s) actif(s)."
         };
 
-        DateTime? derniereGeneration = null;
-        var weekStart = MlWeeks.MondayOf(DateTime.Today);
-        var predictions = await _store.GetPredictionsAsync(
-            sage, MlModelType.HsMontant, weekStart, weekStart.AddDays(7 * Math.Max(1, _options.ForecastHorizonWeeks) - 1), ct);
-        if (predictions.Count > 0)
-            derniereGeneration = predictions.Max(p => p.GenereLe);
+        var derniereGeneration = await DerniereGenerationAsync(sage, ct);
 
         return new MlStatusDto(
             _options.Enabled,
@@ -71,6 +66,18 @@ public sealed class MlForecastQueryService : IMlForecastQueryService
             derniereGeneration,
             OvertimeRules.ExemptCeilingHours,
             models.Select(ToDto).ToList());
+    }
+
+    /// <summary>Date de la dernière génération des prévisions de l'horizon, si elles existent.</summary>
+    private async Task<DateTime?> DerniereGenerationAsync(string sage, CancellationToken ct)
+    {
+        DateTime? derniereGeneration = null;
+        var weekStart = MlWeeks.MondayOf(DateTime.Today);
+        var predictions = await _store.GetPredictionsAsync(
+            sage, MlModelType.HsMontant, weekStart, weekStart.AddDays(7 * Math.Max(1, _options.ForecastHorizonWeeks) - 1), ct);
+        if (predictions.Count > 0)
+            derniereGeneration = predictions.Max(p => p.GenereLe);
+        return derniereGeneration;
     }
 
     public async Task<IReadOnlyList<MlHsForecastDto>> GetHsForecastsAsync(
@@ -92,6 +99,15 @@ public sealed class MlForecastQueryService : IMlForecastQueryService
             return Array.Empty<MlHsForecastDto>();
 
         var cards = await LoadCardsAsync(sage, ct);
+        var resultat = Previsions(debut, probabilites, montants, cards);
+
+        return resultat.OrderByDescending(r => r.HeuresPrevues).ToList();
+    }
+
+    /// <summary>Une ligne par salarié prévu : montant, intervalle et probabilité HS, avec l'identité de la carte.</summary>
+    private static List<MlHsForecastDto> Previsions(
+        DateTime debut, Dictionary<string, MlPrediction> probabilites, Dictionary<string, MlPrediction> montants, Dictionary<string, CardPaie> cards)
+    {
         var resultat = new List<MlHsForecastDto>();
 
         foreach (var (matricule, montant) in montants)
@@ -110,8 +126,7 @@ public sealed class MlForecastQueryService : IMlForecastQueryService
                 probabilite?.Probabilite ?? 0d,
                 probabilite?.NiveauRisque ?? 1));
         }
-
-        return resultat.OrderByDescending(r => r.HeuresPrevues).ToList();
+        return resultat;
     }
 
     /// <summary>
@@ -173,22 +188,29 @@ public sealed class MlForecastQueryService : IMlForecastQueryService
             if (paires.Count == 0)
                 continue;
 
-            var prevu = paires.Sum(x => x.Prevision.ValeurPrevue ?? 0m);
-            var reel = paires.Sum(x => x.Reel);
-            var ecartMoyen = paires.Average(x => Math.Abs((x.Prevision.ValeurPrevue ?? 0m) - x.Reel));
-            var dansFourchette = paires.Count(x =>
-                x.Reel >= (x.Prevision.BorneBasse ?? 0m) && x.Reel <= (x.Prevision.BorneHaute ?? 0m));
-
-            resultat.Add(new MlHsAccuracyDto(
-                semaine.Key,
-                paires.Count,
-                Math.Round(prevu, 2),
-                Math.Round(reel, 2),
-                Math.Round(ecartMoyen, 2),
-                Math.Round((double)dansFourchette / paires.Count, 4)));
+            AjouterPrecision(resultat, semaine, paires);
         }
 
         return resultat;
+    }
+
+    /// <summary>Écart prévu / réel d'une semaine : totaux, écart moyen et part des salariés dans la fourchette.</summary>
+    private static void AjouterPrecision(
+        List<MlHsAccuracyDto> resultat, IGrouping<DateTime, MlPrediction> semaine, List<(MlPrediction Prevision, decimal Reel)> paires)
+    {
+        var prevu = paires.Sum(x => x.Prevision.ValeurPrevue ?? 0m);
+        var reel = paires.Sum(x => x.Reel);
+        var ecartMoyen = paires.Average(x => Math.Abs((x.Prevision.ValeurPrevue ?? 0m) - x.Reel));
+        var dansFourchette = paires.Count(x =>
+            x.Reel >= (x.Prevision.BorneBasse ?? 0m) && x.Reel <= (x.Prevision.BorneHaute ?? 0m));
+
+        resultat.Add(new MlHsAccuracyDto(
+            semaine.Key,
+            paires.Count,
+            Math.Round(prevu, 2),
+            Math.Round(reel, 2),
+            Math.Round(ecartMoyen, 2),
+            Math.Round((double)dansFourchette / paires.Count, 4)));
     }
 
     private async Task<Dictionary<string, CardPaie>> LoadCardsAsync(string sage, CancellationToken ct)

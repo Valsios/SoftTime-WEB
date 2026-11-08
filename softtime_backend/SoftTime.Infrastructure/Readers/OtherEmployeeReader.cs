@@ -16,20 +16,7 @@ public class OtherEmployeeReader : IEmployeeReader
 
     public async Task<IReadOnlyList<NormalizedEmployee>> ListActiveEmployeesAsync(BddSage sageRow, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(sageRow.MapTable) || string.IsNullOrWhiteSpace(sageRow.MapColMatricule))
-            throw new DomainException("Mapping incomplet pour la base SAGE 'Autre' : table et colonne matricule requises.");
-
-        foreach (var id in new[] { sageRow.MapTable, sageRow.MapColMatricule, sageRow.MapColNom, sageRow.MapColPrenom, sageRow.MapColBadge })
-            if (!string.IsNullOrWhiteSpace(id) && !SafeIdentifier.IsMatch(id))
-                throw new DomainException($"Nom de table/colonne invalide dans le mapping SAGE 'Autre' : {id}");
-
-        var selMatricule = $"[{sageRow.MapColMatricule}]";
-        var selNom = sageRow.MapColNom is { Length: > 0 } n ? $"[{n}]" : "NULL";
-        var selPrenom = sageRow.MapColPrenom is { Length: > 0 } p ? $"[{p}]" : "NULL";
-        var selBadge = sageRow.MapColBadge is { Length: > 0 } b ? $"[{b}]" : "NULL";
-
-        var sql = $"SELECT {selMatricule} AS Matricule, {selNom} AS Nom, {selPrenom} AS Prenom, {selBadge} AS Badge " +
-                  $"FROM [{sageRow.MapTable}]";
+        var sql = Requete(sageRow);
 
         var connStr = ExternalConnectionFactory.Build(SqlServerCredentials.Of(sageRow), sageRow.NomBd);
         await using var con = new SqlConnection(connStr);
@@ -52,5 +39,25 @@ public class OtherEmployeeReader : IEmployeeReader
                 CleInterne: null));
         }
         return result;
+    }
+
+    /// <summary>Requête de lecture des salariés d'après le mapping de la base, identifiants SQL contrôlés.</summary>
+    private static string Requete(BddSage sageRow)
+    {
+        if (string.IsNullOrWhiteSpace(sageRow.MapTable) || string.IsNullOrWhiteSpace(sageRow.MapColMatricule))
+            throw new DomainException("Mapping incomplet pour la base SAGE 'Autre' : table et colonne matricule requises.");
+
+        foreach (var id in new[] { sageRow.MapTable, sageRow.MapColMatricule, sageRow.MapColNom, sageRow.MapColPrenom, sageRow.MapColBadge })
+            if (!string.IsNullOrWhiteSpace(id) && !SafeIdentifier.IsMatch(id))
+                throw new DomainException($"Nom de table/colonne invalide dans le mapping SAGE 'Autre' : {id}");
+
+        var selMatricule = $"[{sageRow.MapColMatricule}]";
+        var selNom = sageRow.MapColNom is { Length: > 0 } n ? $"[{n}]" : "NULL";
+        var selPrenom = sageRow.MapColPrenom is { Length: > 0 } p ? $"[{p}]" : "NULL";
+        var selBadge = sageRow.MapColBadge is { Length: > 0 } b ? $"[{b}]" : "NULL";
+
+        var sql = $"SELECT {selMatricule} AS Matricule, {selNom} AS Nom, {selPrenom} AS Prenom, {selBadge} AS Badge " +
+                  $"FROM [{sageRow.MapTable}]";
+        return sql;
     }
 }

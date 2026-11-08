@@ -53,6 +53,26 @@ public static class OvertimeDayRules
         var lignes = lignesDuJour
             .OrderBy(h => h.HEntree ?? TimeSpan.Zero)
             .ToList();
+        var paires = Paires(lignes);
+
+        var (off, ha, hd) = HeuresPlanifiees(plan, paires);
+
+        return new OvertimeDayInput(
+            jour.Date,
+            paires,
+            ha,
+            hd,
+            off ? null : plan?.Pause,
+            off,
+            ferie,
+            lignes.Any(EstPresence),
+            congeValeur,
+            lignes.FirstOrDefault(h => h.Retard.HasValue)?.Retard);
+    }
+
+    /// <summary>Paires entrée / sortie complètes des heures corrigées du jour.</summary>
+    private static List<PunchPair> Paires(List<HeureCorrigee> lignes)
+    {
         var paires = lignes
             .Where(h => h.HEntree.HasValue && h.HSortie.HasValue)
             .Select(h => new PunchPair(
@@ -61,7 +81,12 @@ public static class OvertimeDayRules
                 (h.DatePointageOut ?? h.DatePointageIn)!.Value.Date,
                 h.HSortie!.Value))
             .ToList();
+        return paires;
+    }
 
+    /// <summary>Heures planifiées du jour (aucune un jour OFF), reconstruites depuis les pointages si le planning manque.</summary>
+    private static (bool Off, TimeSpan? Ha, TimeSpan? Hd) HeuresPlanifiees(PlanningSalarie? plan, List<PunchPair> paires)
+    {
         var off = plan?.OffP == true;
         // Les heures de planning « vides » du desktop portent une date sentinelle : elles valent NULL.
         var haPlanifiee = plan?.Ha is DateTime haBrute && haBrute.Date > SentinelleHeure ? haBrute.TimeOfDay : (TimeSpan?)null;
@@ -76,17 +101,6 @@ public static class OvertimeDayRules
             ha ??= paires[0].EntreeHeure;
             hd ??= paires[^1].SortieHeure;
         }
-
-        return new OvertimeDayInput(
-            jour.Date,
-            paires,
-            ha,
-            hd,
-            off ? null : plan?.Pause,
-            off,
-            ferie,
-            lignes.Any(EstPresence),
-            congeValeur,
-            lignes.FirstOrDefault(h => h.Retard.HasValue)?.Retard);
+        return (off, ha, hd);
     }
 }

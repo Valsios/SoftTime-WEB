@@ -32,38 +32,44 @@ public static class LeaveRules
         var jours = new List<LeaveDay>();
         foreach (var periode in periodes)
         {
-            var debut = periode.Start.Date;
-            var fin = periode.End.Date;
-            var nbJours = (int)(fin - debut).TotalDays;
-            if (nbJours >= 1)
+            AjouterPeriode(jours, periode);
+        }
+        return jours;
+    }
+
+    /// <summary>Jours (entiers ou demi-journées) couverts par une période de congé.</summary>
+    private static void AjouterPeriode(List<LeaveDay> jours, LeavePeriod periode)
+    {
+        var debut = periode.Start.Date;
+        var fin = periode.End.Date;
+        var nbJours = (int)(fin - debut).TotalDays;
+        if (nbJours >= 1)
+        {
+            if (periode.ApresMidi)
             {
-                if (periode.ApresMidi)
-                {
-                    // Le congé commence l'après-midi du premier jour.
-                    jours.Add(new LeaveDay(debut, 0.5m, periode.Code));
-                    for (var i = 1; i <= nbJours; i++)
-                        Ajouter(jours, debut.AddDays(i), periode.Code);
-                }
-                else if (periode.Matin)
-                {
-                    // Le congé se termine le matin du dernier jour.
-                    for (var i = 0; i < nbJours; i++)
-                        Ajouter(jours, debut.AddDays(i), periode.Code);
-                    jours.Add(new LeaveDay(fin, 0.5m, periode.Code));
-                }
-                else
-                {
-                    for (var i = 0; i <= nbJours; i++)
-                        Ajouter(jours, debut.AddDays(i), periode.Code);
-                }
+                // Le congé commence l'après-midi du premier jour.
+                jours.Add(new LeaveDay(debut, 0.5m, periode.Code));
+                for (var i = 1; i <= nbJours; i++)
+                    Ajouter(jours, debut.AddDays(i), periode.Code);
+            }
+            else if (periode.Matin)
+            {
+                // Le congé se termine le matin du dernier jour.
+                for (var i = 0; i < nbJours; i++)
+                    Ajouter(jours, debut.AddDays(i), periode.Code);
+                jours.Add(new LeaveDay(fin, 0.5m, periode.Code));
             }
             else
             {
-                var valeur = periode.Matin || periode.ApresMidi ? 0.5m : 1m;
-                jours.Add(new LeaveDay(debut, valeur, periode.Code));
+                for (var i = 0; i <= nbJours; i++)
+                    Ajouter(jours, debut.AddDays(i), periode.Code);
             }
         }
-        return jours;
+        else
+        {
+            var valeur = periode.Matin || periode.ApresMidi ? 0.5m : 1m;
+            jours.Add(new LeaveDay(debut, valeur, periode.Code));
+        }
     }
 
     /// <summary>L'employé est-il en congé ce jour-là ?</summary>

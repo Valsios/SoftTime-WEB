@@ -106,24 +106,30 @@ public static class WorkIntervals
             if (fin <= debut)
                 continue;
 
-            var curseur = debut;
-            while (true)
-            {
-                if (fin <= curseur)
-                    break;
-                var minuit = curseur.Date.AddDays(1);
-                if (fin < minuit)
-                {
-                    resultats.Add(new Intervalle(curseur, fin));
-                    break;
-                }
-                resultats.Add(new Intervalle(curseur, minuit));
-                curseur = minuit;
-                if (curseur == fin)
-                    break;
-            }
+            AjouterParJour(resultats, debut, fin);
         }
         return resultats;
+    }
+
+    /// <summary>Découpe l'intervalle travaillé à chaque minuit.</summary>
+    private static void AjouterParJour(List<Intervalle> resultats, DateTime debut, DateTime fin)
+    {
+        var curseur = debut;
+        while (true)
+        {
+            if (fin <= curseur)
+                break;
+            var minuit = curseur.Date.AddDays(1);
+            if (fin < minuit)
+            {
+                resultats.Add(new Intervalle(curseur, fin));
+                break;
+            }
+            resultats.Add(new Intervalle(curseur, minuit));
+            curseur = minuit;
+            if (curseur == fin)
+                break;
+        }
     }
 
     /// <summary>Part d'un intervalle tombant dans la plage de nuit 22:00 → 05:00 (synthèse §4.3 d).</summary>

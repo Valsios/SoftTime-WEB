@@ -83,30 +83,37 @@ public sealed class ShiftService : IShiftService
                 skipped++;
                 continue;
             }
-            ExcelCells.TryTime(ExcelCells.Get(row, "ENTREE", "HA", "Heure arrivée", "Arrivee"), out var ha);
-            ExcelCells.TryTime(ExcelCells.Get(row, "PAUSE", "Pause"), out var pause);
-            ExcelCells.TryTime(ExcelCells.Get(row, "SORTIE", "HD", "Heure départ", "Depart"), out var hd);
-            var intitule = ExcelCells.Get(row, "INTITULE", "Intitulé", "Libelle");
-            var entity = existing.FirstOrDefault(s => s.NoShift == noShift);
-            if (entity == null)
-            {
-                entity = new Planning { NoShift = noShift, Ha = ha == default ? null : ha, Pause = pause == default ? null : pause, Hd = hd == default ? null : hd, Intitule = intitule };
-                await repo.AddAsync(entity, ct);
-                existing.Add(entity);
-            }
-            else
-            {
-                entity.Ha = ha == default ? entity.Ha : ha;
-                entity.Pause = pause == default ? entity.Pause : pause;
-                entity.Hd = hd == default ? entity.Hd : hd;
-                if (!string.IsNullOrWhiteSpace(intitule))
-                    entity.Intitule = intitule;
-                repo.Update(entity);
-            }
+            await EnregistrerShiftAsync(repo, existing, row, noShift, ct);
             imported++;
         }
         await _uow.SaveChangesAsync(ct);
         return new ImportResultDto(imported, skipped,
             $"{imported} shift(s) importé(s), {skipped} ligne(s) ignorée(s).");
+    }
+
+    /// <summary>Crée le shift ou complète l'existant avec les heures et l'intitulé renseignés dans la ligne.</summary>
+    private static async Task EnregistrerShiftAsync(
+        IRepository<Planning> repo, List<Planning> existing, Dictionary<string, string> row, int noShift, CancellationToken ct)
+    {
+        ExcelCells.TryTime(ExcelCells.Get(row, "ENTREE", "HA", "Heure arrivée", "Arrivee"), out var ha);
+        ExcelCells.TryTime(ExcelCells.Get(row, "PAUSE", "Pause"), out var pause);
+        ExcelCells.TryTime(ExcelCells.Get(row, "SORTIE", "HD", "Heure départ", "Depart"), out var hd);
+        var intitule = ExcelCells.Get(row, "INTITULE", "Intitulé", "Libelle");
+        var entity = existing.FirstOrDefault(s => s.NoShift == noShift);
+        if (entity == null)
+        {
+            entity = new Planning { NoShift = noShift, Ha = ha == default ? null : ha, Pause = pause == default ? null : pause, Hd = hd == default ? null : hd, Intitule = intitule };
+            await repo.AddAsync(entity, ct);
+            existing.Add(entity);
+        }
+        else
+        {
+            entity.Ha = ha == default ? entity.Ha : ha;
+            entity.Pause = pause == default ? entity.Pause : pause;
+            entity.Hd = hd == default ? entity.Hd : hd;
+            if (!string.IsNullOrWhiteSpace(intitule))
+                entity.Intitule = intitule;
+            repo.Update(entity);
+        }
     }
 }

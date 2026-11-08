@@ -15,11 +15,7 @@ public static class MonoPunchDayCalculator
         var samedi = jour.Jour.DayOfWeek == DayOfWeek.Saturday;
         var prevu = WorkIntervals.PrevuJournalier(jour, paires[0], paires[^1], pause);
         var entreePlanifiee = jour.PlanningHa ?? paires[0].EntreeHeure;
-        var segments = paires
-            .Select(p => Segment(p, entreePlanifiee))
-            .Where(s => s.HasValue)
-            .Select(s => s!.Value)
-            .ToList();
+        var segments = Segments(paires, entreePlanifiee);
         var bruts = segments.Select(s => WorkIntervals.Heures(s.Fin - s.Debut)).ToList();
         var retenus = bruts.Select(b => Math.Max(0m, b - WorkIntervals.Heures(pause))).ToList();
         var retenuTotal = retenus.Sum();
@@ -42,6 +38,17 @@ public static class MonoPunchDayCalculator
             Conge: false,
             JourTravaille: true,
             NombrePaires: paires.Count);
+    }
+
+    /// <summary>Intervalles retenus des paires du jour (paires vides écartées).</summary>
+    private static List<WorkIntervals.Intervalle> Segments(List<PunchPair> paires, TimeSpan entreePlanifiee)
+    {
+        var segments = paires
+            .Select(p => Segment(p, entreePlanifiee))
+            .Where(s => s.HasValue)
+            .Select(s => s!.Value)
+            .ToList();
+        return segments;
     }
 
     /// <summary>Journée sans pointage : congé SAGE, férié ou 8 mars crédités, sinon absence.</summary>

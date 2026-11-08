@@ -78,9 +78,7 @@ public sealed class AuthenticationService : IAuthenticationService
             _logger.LogWarning("Connexion refusée : login inconnu ou ambigu « {Login} ».", LogSafe(login));
             throw new UnauthorizedException(InvalidCredentialsMessage);
         }
-        if (IsLocked(user))
-            _logger.LogWarning("Connexion refusée : compte {UserId} verrouillé jusqu'à {LockedUntil:o}.", user.IdResponsable, user.VerrouilleJusqua);
-        EnsureNotLocked(user);
+        RefuserSiVerrouille(user);
 
         var (passwordVerified, needsUpgrade) = VerifyPassword(user, password);
         if (!passwordVerified)
@@ -90,6 +88,24 @@ public sealed class AuthenticationService : IAuthenticationService
             throw new UnauthorizedException(InvalidCredentialsMessage);
         }
 
+        ReinitialiserApresConnexion(password, user, needsUpgrade);
+
+        var refreshToken = await _refreshTokens.IssueAsync(user.IdResponsable, cancellationToken: cancellationToken);
+        await _uow.SaveChangesAsync(cancellationToken);
+        return await BuildSessionAsync(user, refreshToken, cancellationToken);
+    }
+
+    /// <summary>Refuse un compte verrouillé, en journalisant l'échéance du verrou.</summary>
+    private void RefuserSiVerrouille(Responsable user)
+    {
+        if (IsLocked(user))
+            _logger.LogWarning("Connexion refusée : compte {UserId} verrouillé jusqu'à {LockedUntil:o}.", user.IdResponsable, user.VerrouilleJusqua);
+        EnsureNotLocked(user);
+    }
+
+    /// <summary>Connexion réussie : re-hachage au format courant si besoin et remise à zéro des échecs.</summary>
+    private void ReinitialiserApresConnexion(string password, Responsable user, bool needsUpgrade)
+    {
         if (needsUpgrade)
             user.Password = _passwordHasher.HashPassword(user, password);
         if (needsUpgrade || user.TentativesEchouees != 0 || user.VerrouilleJusqua is not null)
@@ -98,10 +114,6 @@ public sealed class AuthenticationService : IAuthenticationService
             user.VerrouilleJusqua = null;
             _uow.Repository<Responsable>().Update(user);
         }
-
-        var refreshToken = await _refreshTokens.IssueAsync(user.IdResponsable, cancellationToken: cancellationToken);
-        await _uow.SaveChangesAsync(cancellationToken);
-        return await BuildSessionAsync(user, refreshToken, cancellationToken);
     }
 
     /// <summary>
