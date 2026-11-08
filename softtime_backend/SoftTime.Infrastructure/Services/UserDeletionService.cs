@@ -69,7 +69,7 @@ public sealed class UserDeletionService : IUserDeletionService
         {
             var otherAdmins = await repo.ListAsync(u => u.IdRole == AdminRules.AdminRoleId && u.IdResponsable != entity.IdResponsable, cancellationToken);
             if (otherAdmins.Count == 0)
-                throw new DomainException("Impossible de supprimer le dernier administrateur.");
+                throw new ConflictException("Impossible de supprimer le dernier administrateur.");
         }
     }
 
@@ -82,7 +82,7 @@ public sealed class UserDeletionService : IUserDeletionService
         {
             var otherAdmins = await repo.ListAsync(u => u.IdRole == AdminRules.AdminRoleId && u.IdResponsable != entity.IdResponsable, cancellationToken);
             if (otherAdmins.Count == 0)
-                throw new DomainException("Impossible de supprimer le dernier administrateur.");
+                throw new ConflictException("Impossible de supprimer le dernier administrateur.");
         }
         await RemoveAccountRightsAsync(entity.IdResponsable, cancellationToken);
         repo.Remove(entity);

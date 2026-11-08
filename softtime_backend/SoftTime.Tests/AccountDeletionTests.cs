@@ -86,7 +86,7 @@ public class AccountDeletionTests
     {
         _store.GetRepo<UserPermission>().Items.Add(new UserPermission { IdResponsable = 1, PermissionCode = "PROC:SHIFTS", IsGranted = true });
         var before = _store.Snapshot();
-        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.DeleteUserAsync(1));   // surcharge sans appelant
+        var ex = await Assert.ThrowsAsync<ConflictException>(() => _auth.DeleteUserAsync(1));   // surcharge sans appelant
         Assert.Equal("Impossible de supprimer le dernier administrateur.", ex.Message);
         Assert.Equal(before, _store.Snapshot());
     }

@@ -141,9 +141,9 @@ public class TimekeepingImportTests
         };
         contexte.Uow.Get<HeureCorrigee>().Items.Add(existante);
 
-        await Assert.ThrowsAsync<DomainException>(() => contexte.Service.SaveCorrectionAsync(
+        await Assert.ThrowsAsync<ConflictException>(() => contexte.Service.SaveCorrectionAsync(
             new CorrectedHourDto { Matricule = "001", DateIn = Lundi.AddDays(1), HEntree = new TimeSpan(8, 0, 0), HSortie = new TimeSpan(20, 0, 0) }));
-        await Assert.ThrowsAsync<DomainException>(() => contexte.Service.DeleteCorrectionAsync(5));
+        await Assert.ThrowsAsync<ConflictException>(() => contexte.Service.DeleteCorrectionAsync(5));
 
         var import = await contexte.Service.ImportCorrectionsExcelAsync(new List<Dictionary<string, string>>
         {
@@ -178,7 +178,7 @@ public class TimekeepingImportTests
         ValiderSemaine(contexte, Lundi);
         var anomalie = AnomalieAbsence(contexte, Lundi.AddDays(2));
 
-        await Assert.ThrowsAsync<DomainException>(
+        await Assert.ThrowsAsync<ConflictException>(
             () => contexte.Service.ValidateAnomaliesAsync(new[] { anomalie.Id }));
 
         Assert.Empty(contexte.Uow.Get<HeureCorrigee>().Items);

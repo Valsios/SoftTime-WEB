@@ -47,7 +47,7 @@ public sealed class PayrollWriteConfigurationService : IPayrollWriteConfiguratio
         var repo = _uow.Repository<PaieEcriture>();
         var current = await repo.ListAsync(c => c.BddSage == _tenant.SageDb, ct);
         if (current.Any(c => c.Id != dto.Id && string.Equals(c.Categorie, category, StringComparison.OrdinalIgnoreCase)))
-            throw new DomainException($"La catégorie {category} est déjà configurée pour cette base.");
+            throw new ConflictException($"La catégorie {category} est déjà configurée pour cette base.");
         PaieEcriture entity;
         entity = await ChargerOuCreerAsync(dto, repo, ct);
         entity.TableCible = dto.TableCible!.Trim();

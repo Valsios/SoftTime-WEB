@@ -112,7 +112,7 @@ public sealed class UserAdministrationService : IUserAdministrationService
         var otherAdmins = await _uow.Repository<Responsable>().ListAsync(
             u => u.IdRole == AdminRules.AdminRoleId && u.IdResponsable != entity.IdResponsable, ct);
         if (otherAdmins.Count == 0)
-            throw new DomainException("Impossible de rétrograder le dernier administrateur.");
+            throw new ConflictException("Impossible de rétrograder le dernier administrateur.");
     }
 
     /// <summary>

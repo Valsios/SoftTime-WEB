@@ -136,9 +136,9 @@ public class UserAdministrationGuardTests
         Assert.Equal("Vous ne pouvez pas supprimer votre propre compte.", own.Message);
 
         // Dernier administrateur : suppression et rétrogradation refusées (surcharges sans appelant, utilisées par les tests historiques).
-        var delete = await Assert.ThrowsAsync<DomainException>(() => svc.DeleteUserAsync(1));
+        var delete = await Assert.ThrowsAsync<ConflictException>(() => svc.DeleteUserAsync(1));
         Assert.Equal("Impossible de supprimer le dernier administrateur.", delete.Message);
-        var demote = await Assert.ThrowsAsync<DomainException>(() => svc.SaveUserAsync(new UserDto(1, 2, "Admin", "admin", null, null)));
+        var demote = await Assert.ThrowsAsync<ConflictException>(() => svc.SaveUserAsync(new UserDto(1, 2, "Admin", "admin", null, null)));
         Assert.Equal("Impossible de rétrograder le dernier administrateur.", demote.Message);
         Assert.Contains(_uow.GetRepo<Responsable>().Items, u => u.IdResponsable == 1 && u.IdRole == 1);
     }

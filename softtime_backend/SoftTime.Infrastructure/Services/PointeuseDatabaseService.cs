@@ -67,7 +67,7 @@ public sealed class PointeuseDatabaseService : IPointeuseDatabaseService
         var doublon = (await repo.ListAsync(
             p => p.Id != dto.Id && p.Serveur == dto.Serveur && p.NomBd == dto.NomBd, ct)).Any();
         if (doublon)
-            throw new DomainException(DatabaseTypeBase.DoublonMessage);
+            throw new ConflictException(DatabaseTypeBase.DoublonMessage);
         if (dto.Active == true)
             await ActiverSeuleAsync(dto.Id, ct);
 

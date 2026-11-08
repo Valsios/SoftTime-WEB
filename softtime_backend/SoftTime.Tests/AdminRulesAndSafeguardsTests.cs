@@ -315,7 +315,7 @@ public class AdminRulesAndSafeguardsTests
     #region Tests G3 — Dernier Administrateur
 
     [Fact]
-    public async Task SaveUserAsync_DemotingOnlyAdmin_ThrowsDomainException()
+    public async Task SaveUserAsync_DemotingOnlyAdmin_ThrowsConflictException()
     {
         var admin1 = new Responsable { IdResponsable = 1, IdRole = 1, Login = "admin1", NomResponsable = "Admin 1" };
         var admin2 = new Responsable { IdResponsable = 2, IdRole = 1, Login = "admin2", NomResponsable = "Admin 2" };
@@ -331,7 +331,7 @@ public class AdminRulesAndSafeguardsTests
         // Note: Admin 2 ne peut pas rétrograder son propre rôle (G1), mais créons un test où l'appelant tente de rétrograder le dernier admin restant
         // Simulons un troisième compte avec un rôle de délégation ou appel direct
         var updateLastAdmin = new UserDto(2, 2, "Admin 2", "admin2", null, null);
-        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.SaveUserAsync(updateLastAdmin));
+        var ex = await Assert.ThrowsAsync<ConflictException>(() => _auth.SaveUserAsync(updateLastAdmin));
         Assert.Equal("Impossible de rétrograder le dernier administrateur.", ex.Message);
     }
 
@@ -346,18 +346,18 @@ public class AdminRulesAndSafeguardsTests
 
         // Tenter de rétrograder le seul superAdmin (IDROLE = 1) vers rôle 2 via la surcharge sans appelant
         var updateDto = new UserDto(1, 2, "Super Admin", "superadmin", null, null);
-        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.SaveUserAsync(updateDto));
+        var ex = await Assert.ThrowsAsync<ConflictException>(() => _auth.SaveUserAsync(updateDto));
         Assert.Equal("Impossible de rétrograder le dernier administrateur.", ex.Message);
     }
 
     [Fact]
-    public async Task DeleteUserAsync_DeletingOnlyAdmin_ThrowsDomainException()
+    public async Task DeleteUserAsync_DeletingOnlyAdmin_ThrowsConflictException()
     {
         var admin = new Responsable { IdResponsable = 1, IdRole = 1, Login = "admin", NomResponsable = "Admin" };
         _uow.GetRepo<Responsable>().Items.Add(admin);
 
         // Surcharge de test sans appelant
-        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.DeleteUserAsync(1));
+        var ex = await Assert.ThrowsAsync<ConflictException>(() => _auth.DeleteUserAsync(1));
         Assert.Equal("Impossible de supprimer le dernier administrateur.", ex.Message);
     }
 

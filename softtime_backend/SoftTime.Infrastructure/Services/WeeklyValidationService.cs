@@ -268,7 +268,7 @@ public sealed class WeeklyValidationService : IWeeklyValidationService
         var periode = calcules[0];
         var matricules = string.Join(", ", calcules.Select(h => h.Matricule).Distinct().Take(5))
                          + (calcules.Count > 5 ? "…" : string.Empty);
-        throw new DomainException(
+        throw new ConflictException(
             $"La semaine du {lundi:dd/MM/yyyy} est incluse dans le calcul EXO/IMPO du "
             + $"{periode.PeriodeDebut:dd/MM/yyyy} au {periode.PeriodeFin:dd/MM/yyyy} ({matricules}) : "
             + "purgez d'abord les heures supplémentaires de cette période.");

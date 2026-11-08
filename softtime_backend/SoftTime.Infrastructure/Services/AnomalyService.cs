@@ -148,28 +148,28 @@ public sealed class AnomalyService : IAnomalyService
     {
         RefuserSi(anomalies,
             a => AbsenceJourneeComplete(a) && (a.HEntree.HasValue || a.HSortie.HasValue),
-            detail => $"Absence de la journée complète et heures saisies pour : {detail}. Retirez les heures ou l'absence avant de valider.");
+            detail => new DomainException($"Absence de la journée complète et heures saisies pour : {detail}. Retirez les heures ou l'absence avant de valider."));
         RefuserSi(anomalies,
             a => !AbsenceJourneeComplete(a) && (a.HEntree is null || a.HSortie is null),
-            detail => $"Heure d'entrée ou de sortie manquante pour : {detail}. Renseignez-les avant de valider.");
+            detail => new DomainException($"Heure d'entrée ou de sortie manquante pour : {detail}. Renseignez-les avant de valider."));
 
         var semainesValidees = await _validatedWeekGuard.ChargerSemainesValideesAsync(_tenant.SageDb, ct);
         RefuserSi(anomalies,
             a => a.DatePointageIn.HasValue
                  && semainesValidees.Contains((MatriculeIdentity.Cle(a.MatriculeSage), ValidatedWeeks.Lundi(a.DatePointageIn.Value))),
-            detail => $"Semaine validée pour : {detail}. Annulez la validation avant de modifier les heures.");
+            detail => new ConflictException($"Semaine validée pour : {detail}. Annulez la validation avant de modifier les heures."));
     }
 
-    /// <summary>Refuse la validation si des anomalies remplissent la condition (cinq citées au plus).</summary>
+    /// <summary>Refuse la validation si des anomalies remplissent la condition (cinq citées au plus), avec l'erreur adaptée (400 saisie, 409 semaine verrouillée).</summary>
     private static void RefuserSi(
-        List<HeureAnomalie> anomalies, Func<HeureAnomalie, bool> condition, Func<string, string> message)
+        List<HeureAnomalie> anomalies, Func<HeureAnomalie, bool> condition, Func<string, DomainException> erreur)
     {
         var concernees = anomalies.Where(condition).ToList();
         if (concernees.Count == 0)
             return;
         var detail = string.Join(", ", concernees.Take(5)
             .Select(a => $"{a.MatriculeSage} du {a.DatePointageIn?.ToString("dd/MM/yyyy") ?? "?"}"));
-        throw new DomainException(message(detail));
+        throw erreur(detail);
     }
 
     /// <summary>Heure corrigée manuelle et validée reprenant les valeurs arbitrées de l'anomalie.</summary>

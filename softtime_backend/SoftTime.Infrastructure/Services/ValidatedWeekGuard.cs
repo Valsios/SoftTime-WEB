@@ -23,7 +23,7 @@ public sealed class ValidatedWeekGuard : IValidatedWeekGuard
         var semaines = await _uow.Repository<HsValidee>().ListAsync(
             v => v.BddSage == sageDb && v.DateDeb == lundi && v.ValidationHs == true, ct);
         if (semaines.Any(v => MatriculeIdentity.MemeIdentifiant(v.Matricules, matricule)))
-            throw new DomainException(
+            throw new ConflictException(
                 $"La semaine du {lundi:dd/MM/yyyy} est validée : annulez la validation avant de modifier les pointages.");
     }
 

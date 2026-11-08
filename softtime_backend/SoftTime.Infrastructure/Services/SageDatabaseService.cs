@@ -78,7 +78,7 @@ public sealed class SageDatabaseService : ISageDatabaseService
         var doublon = (await _uow.Repository<BddSage>().ListAsync(
             s => s.Id != dto.Id && s.Serveur == dto.Serveur && s.NomBd == dto.NomBd, ct)).Any();
         if (doublon)
-            throw new DomainException(DatabaseTypeBase.DoublonMessage);
+            throw new ConflictException(DatabaseTypeBase.DoublonMessage);
 
         var entity = await UpsertAsync(dto, ct);
         await _uow.SaveChangesAsync(ct);

@@ -144,13 +144,13 @@ public sealed class PunchService : IPunchService
         var validees = (await _uow.Repository<HsValidee>().ListAsync(
             v => v.BddSage == sageDb && v.ValidationHs == true && v.DateDeb >= from && v.DateDeb <= to, ct)).Count;
         if (validees > 0)
-            throw new DomainException(
+            throw new ConflictException(
                 $"La période contient {validees} semaine(s) validée(s) : annulez la validation avant de purger.");
 
         var hsExistants = (await _uow.Repository<HsExoImp>().ListAsync(
             h => h.BddSage == sageDb && h.PeriodeDebut >= from && h.PeriodeFin <= to, ct)).Count;
         if (hsExistants > 0)
-            throw new DomainException(
+            throw new ConflictException(
                 "Des calculs EXO/IMPO existent sur la période : purgez les heures supplémentaires avant de purger les pointages.");
     }
 
