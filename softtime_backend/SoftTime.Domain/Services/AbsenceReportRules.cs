@@ -24,13 +24,8 @@ public static class AbsenceReportRules
     {
         var (cartes, plannings, corrections) = sources;
         var (congesParCle, feries) = joursNonTravailles;
-        var (from, to, dateDuJour) = periode;
-        var debut = from.Date;
-        var hier = dateDuJour.Date.AddDays(-1);
-
-        // Aucun jour futur : la période demandée est plafonnée à la veille.
-        var fin = to.Date < hier ? to.Date : hier;
-        if (debut > fin)
+        var (debut, fin) = (periode.Debut, periode.Fin);
+        if (periode.EstVide)
             return Array.Empty<AbsenceReportRow>();
 
         var (cleParIdSal, cartesParCle) = IndexerCartes(cartes);
@@ -39,10 +34,7 @@ public static class AbsenceReportRules
 
         var calendrier = new ReportCalendar(debut, fin, feries, IndexerPlannings(plannings, cleParIdSal, debut, fin));
         var datesPlanifieesParCle = DatesPlanifieesParCle(calendrier.Plannings);
-        var correctionsParCle = corrections
-            .Where(h => h.DatePointageIn.HasValue)
-            .GroupBy(h => MatriculeIdentity.Cle(h.MatriculeSage), StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+        var correctionsParCle = AbsenceReportRules.CorrectionsParCle(corrections);
 
         return cartesParCle
             .SelectMany(kvp => new AbsenceReportEmployee(
@@ -55,6 +47,13 @@ public static class AbsenceReportRules
             .ThenBy(r => r.Matricule, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
+
+    /// <summary>Heures corrigées datées, regroupées par clé matricule.</summary>
+    internal static Dictionary<string, List<HeureCorrigee>> CorrectionsParCle(IEnumerable<HeureCorrigee> corrections) =>
+        corrections
+            .Where(h => h.DatePointageIn.HasValue)
+            .GroupBy(h => MatriculeIdentity.Cle(h.MatriculeSage), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// C11 : toutes les cartes de même clé matricule sont mappées par leur IDSAL ; la carte de

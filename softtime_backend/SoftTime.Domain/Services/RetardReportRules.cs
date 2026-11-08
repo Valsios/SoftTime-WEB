@@ -104,13 +104,8 @@ public static class RetardReportRules
     {
         var (cartes, plannings, corrections) = sources;
         var (categorieParCarte, tolerances) = tolerancesRetard;
-        var (from, to, dateDuJour) = periode;
-        var debut = from.Date;
-        var hier = dateDuJour.Date.AddDays(-1);
-
-        // Aucun jour futur : la période demandée est plafonnée à la veille.
-        var fin = to.Date < hier ? to.Date : hier;
-        if (debut > fin)
+        var (debut, fin) = (periode.Debut, periode.Fin);
+        if (periode.EstVide)
             return Array.Empty<RetardReportRow>();
 
         var (cleParIdSal, cartesParCle) = AbsenceReportRules.IndexerCartes(cartes);
@@ -121,10 +116,7 @@ public static class RetardReportRules
         var planningsTravailles = plannings.Where(p => p.OffP != true).ToList();
         var calendrier = new ReportCalendar(
             debut, fin, feries, AbsenceReportRules.IndexerPlannings(planningsTravailles, cleParIdSal, debut, fin));
-        var correctionsParCle = corrections
-            .Where(h => h.DatePointageIn.HasValue)
-            .GroupBy(h => MatriculeIdentity.Cle(h.MatriculeSage), StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+        var correctionsParCle = AbsenceReportRules.CorrectionsParCle(corrections);
 
         return cartesParCle
             .Where(kv => correctionsParCle.TryGetValue(kv.Key, out var lignes) && lignes.Count > 0)

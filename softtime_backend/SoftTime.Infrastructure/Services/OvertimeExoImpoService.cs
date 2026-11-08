@@ -86,10 +86,7 @@ public sealed class OvertimeExoImpoService : IOvertimeExoImpoService
         var cards = (await _overtimeWeekContext.TargetCardsAsync(request, ct))
             .OrderBy(c => c.SageMatricule, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        var targetCles = cards
-            .Select(c => MatriculeIdentity.Cle(c.SageMatricule))
-            .Where(cle => cle.Length > 0)
-            .ToHashSet(StringComparer.Ordinal);
+        var targetCles = ClesCibles(cards);
         var numSalByMat = await ChargerNumSalAsync(ct);
         var validees = await ChargerSemainesValideesAsync(periode, targetCles, ct);
         var absences = await CalculerAbsencesAsync(request, cards, ct);
@@ -114,6 +111,16 @@ public sealed class OvertimeExoImpoService : IOvertimeExoImpoService
 
         await RemplacerAsync(periode, targetCles, nouvellesSemaines, nouvellesExo, ct);
         return nouvellesExo.Select(ToDto).ToList();
+    }
+
+    /// <summary>Clés matricule non vides des cartes ciblées.</summary>
+    private static HashSet<string> ClesCibles(List<CardPaie> cards)
+    {
+        var targetCles = cards
+            .Select(c => MatriculeIdentity.Cle(c.SageMatricule))
+            .Where(cle => cle.Length > 0)
+            .ToHashSet(StringComparer.Ordinal);
+        return targetCles;
     }
 
     private Expression<Func<HsExoImp, bool>> Filtre(PeriodRequest request, List<string>? targetMatricules)

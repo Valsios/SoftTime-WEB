@@ -15,11 +15,8 @@ public static class HolidayPunchRules
         EmployeeSources sources, IReadOnlySet<DateTime> feries, ReportPeriod periode, ClosingPunchIndex? pointages = null)
     {
         var (cartes, plannings, corrections) = sources;
-        var (from, to, dateDuJour) = periode;
-        var debut = from.Date;
-        var hier = dateDuJour.Date.AddDays(-1);
-        var fin = to.Date < hier ? to.Date : hier;
-        if (debut > fin)
+        var (debut, fin) = (periode.Debut, periode.Fin);
+        if (periode.EstVide)
             return Array.Empty<ClosingAnomaly>();
 
         // Même planning retenu que l'état des absences (travail prioritaire sur OFF), jours fériés seulement.

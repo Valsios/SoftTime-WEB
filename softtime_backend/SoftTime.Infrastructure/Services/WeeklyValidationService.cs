@@ -57,11 +57,7 @@ public sealed class WeeklyValidationService : IWeeklyValidationService
         await _tenant.EnsureAuthorizedAsync(ct);
         EnsureMondayToSunday(request);
 
-        var selected = new HashSet<string>(
-            (request.SelectedMatricules ?? Array.Empty<string>())
-                .Select(MatriculeIdentity.Cle)
-                .Where(cle => cle.Length > 0),
-            StringComparer.Ordinal);
+        var selected = Selection(request);
         if (selected.Count == 0)
             return;
 
@@ -74,6 +70,26 @@ public sealed class WeeklyValidationService : IWeeklyValidationService
 
         var lignes = await ChargerLignesSelectionneesAsync(request.From.Date, selected, ct);
         var correctionsParCle = await ChargerCorrectionsParCleAsync(request.From.Date, request.To.Date, ct);
+        Basculer(request, validate, lignes, correctionsParCle);
+
+        await _uow.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Clés matricule des salariés sélectionnés.</summary>
+    private static HashSet<string> Selection(WeeklyValidationRequest request)
+    {
+        var selected = new HashSet<string>(
+            (request.SelectedMatricules ?? Array.Empty<string>())
+                .Select(MatriculeIdentity.Cle)
+                .Where(cle => cle.Length > 0),
+            StringComparer.Ordinal);
+        return selected;
+    }
+
+    /// <summary>Valide ou rouvre chaque semaine sélectionnée et les heures corrigées du salarié.</summary>
+    private void Basculer(
+        WeeklyValidationRequest request, bool validate, Dictionary<string, HsValidee> lignes, Dictionary<string, List<HeureCorrigee>> correctionsParCle)
+    {
         foreach (var (cle, ligne) in lignes.Where(kv => (kv.Value.ValidationHs == true) != validate))
         {
             ligne.ValidationHs = validate;
@@ -85,8 +101,6 @@ public sealed class WeeklyValidationService : IWeeklyValidationService
                 _uow.Repository<HeureCorrigee>().Update(heure);
             }
         }
-
-        await _uow.SaveChangesAsync(ct);
     }
 
     /// <summary>Ligne de semaine (la plus ancienne) de chaque salarié sélectionné.</summary>

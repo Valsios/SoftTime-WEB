@@ -28,9 +28,7 @@ public static class EffectiveRightsCalculator
         DatabaseCatalog databases)
     {
         var comparer = StringComparer.OrdinalIgnoreCase;
-        var knownSage = new HashSet<string>(Clean(databases.Sage), comparer);
-        var knownPointeuse = new HashSet<string>(Clean(databases.Pointeuse), comparer);
-        var authorized = new HashSet<string>(Clean(databases.AuthorizedSage), comparer);
+        var (knownSage, knownPointeuse, authorized) = Bases(databases);
 
         if (role.Id == AdminRoleId && role.Exists)
             return Administrator(knownSage, knownPointeuse, authorized);
@@ -42,10 +40,7 @@ public static class EffectiveRightsCalculator
         var (roleBase, hasDetail) = RoleBase(role, knownSage, knownPointeuse, ignored);
         var (additions, removals, userMarker) = UserDeviations(userRows, ignored);
 
-        var start = userMarker ? new HashSet<string>(comparer) : new HashSet<string>(roleBase, comparer);
-        var effective = new HashSet<string>(start, comparer);
-        effective.UnionWith(additions);
-        effective.ExceptWith(removals);
+        var (start, effective) = Appliquer(roleBase, additions, removals, userMarker);
 
         // 3. Portes déduites des droits effectifs. Un rôle sans lignes détaillées conserve ses portes tant que
         //    l'utilisateur n'en retire pas les droits (cas d'une porte Bases sans aucune base déclarée).
@@ -65,6 +60,28 @@ public static class EffectiveRightsCalculator
             KnownSageDatabases = knownSage,
             AuthorizedSageDatabases = authorized,
         };
+    }
+
+    /// <summary>Bases SAGE et pointeuse connues, et bases SAGE autorisées (noms nettoyés, sans casse).</summary>
+    private static (HashSet<string> KnownSage, HashSet<string> KnownPointeuse, HashSet<string> Authorized) Bases(DatabaseCatalog databases)
+    {
+        var comparer = StringComparer.OrdinalIgnoreCase;
+        var knownSage = new HashSet<string>(Clean(databases.Sage), comparer);
+        var knownPointeuse = new HashSet<string>(Clean(databases.Pointeuse), comparer);
+        var authorized = new HashSet<string>(Clean(databases.AuthorizedSage), comparer);
+        return (knownSage, knownPointeuse, authorized);
+    }
+
+    /// <summary>Droits de départ (aucun si l'utilisateur a posé le marqueur « aucun droit ») puis ajouts et retraits.</summary>
+    private static (HashSet<string> Start, HashSet<string> Effective) Appliquer(
+        HashSet<string> roleBase, HashSet<string> additions, HashSet<string> removals, bool userMarker)
+    {
+        var comparer = StringComparer.OrdinalIgnoreCase;
+        var start = userMarker ? new HashSet<string>(comparer) : new HashSet<string>(roleBase, comparer);
+        var effective = new HashSet<string>(start, comparer);
+        effective.UnionWith(additions);
+        effective.ExceptWith(removals);
+        return (start, effective);
     }
 
     /// <summary>Sans rôle valide, aucun droit : les lignes de l'utilisateur seules ne suffisent pas.</summary>
