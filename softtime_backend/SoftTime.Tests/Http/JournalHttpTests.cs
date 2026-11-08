@@ -93,10 +93,14 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     [MemberData(nameof(Reads))]
     public async Task Journal_read_needs_admin_or_gate_5_with_trace_audit(string url, string profile)
     {
+        // Arrange
         var before = _f.Snapshot();
         var (status, text) = await Send(profile, HttpMethod.Get, url);
+
+        // Act
         ApiFactory.Report($"JOURNAL|{url}|{profile}|{(int)status}");
 
+        // Assert
         if (profile == "anonyme")
             status.Should().Be(HttpStatusCode.Unauthorized);
         else if (profile is "admin" or "tracereader")
@@ -106,7 +110,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
             status.Should().Be(HttpStatusCode.Forbidden);
             text.Should().Contain(Denied);
         }
-        _f.Snapshot().Should().Be(before);   // une lecture n'écrit rien, pas même dans le journal
+        _f.Snapshot().Should().Be(before);
     }
 
     [Fact]
@@ -131,20 +135,26 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Email_stays_visible()
     {
+        // Act
         var (_, text) = await Send("admin", HttpMethod.Get, "/api/v1/journal/3");
+
+        // Assert
         text.Should().Contain("a@exemple.test");
     }
 
     [Fact]
     public async Task Filters_on_period_user_action_and_table_apply()
     {
+        // Arrange
         var from = Base.ToString("O");
         var to = Base.AddDays(5).ToString("O");
 
+        // Act
         var period = await Page($"/api/v1/journal?from={from}&to={to}");
-        period.Total.Should().Be(5);
-        period.Ids.Should().Equal(new long[] { ClearRowId, 4, 3, 2, 1 });   // DATE_UTC décroissante
 
+        // Assert
+        period.Total.Should().Be(5);
+        period.Ids.Should().Equal(new long[] { ClearRowId, 4, 3, 2, 1 });
         (await Page($"/api/v1/journal?from={from}&to={to}&user=agent1")).Ids.Should().Equal(new long[] { ClearRowId, 3, 1 });
         (await Page($"/api/v1/journal?from={from}&action=SYNC_PAIE")).Ids.Should().Equal(new long[] { 4 });
         (await Page($"/api/v1/journal?from={from}&table=T_FERIE")).Ids.Should().Equal(new long[] { 2, 1 });
@@ -157,28 +167,31 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Pagination_defaults_to_50_and_caps_the_page_size_at_200()
     {
+        // Act
         var first = await Page("/api/v1/journal?table=T_VOLUME");
+
+        // Assert
         first.Total.Should().Be(230);
         first.PageSize.Should().Be(50);
         first.Ids.Length.Should().Be(50);
         first.Ids[0].Should().Be(1229);
-
         var capped = await Page("/api/v1/journal?table=T_VOLUME&pageSize=5000");
         capped.PageSize.Should().Be(200);
         capped.Ids.Length.Should().Be(200);
-
         var last = await Page("/api/v1/journal?table=T_VOLUME&page=2&pageSize=200");
         last.Ids.Length.Should().Be(30);
         last.Ids[^1].Should().Be(1000);
-
         (await Page("/api/v1/journal?table=T_VOLUME&page=99&pageSize=200")).Ids.Should().BeEmpty();
     }
 
     [Fact]
     public async Task Facets_list_distinct_values_of_the_period()
     {
+        // Act
         var (status, text) = await Send("tracereader", HttpMethod.Get,
             $"/api/v1/journal/facets?from={Base:O}&to={Base.AddDays(5):O}");
+
+        // Assert
         status.Should().Be(HttpStatusCode.OK);
         using var doc = JsonDocument.Parse(text);
         // L'ordre suit la collation de la source : on compare les ensembles.
@@ -192,7 +205,10 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Unknown_journal_line_is_404_for_an_authorized_reader()
     {
+        // Act
         var (status, _) = await Send("admin", HttpMethod.Get, "/api/v1/journal/424242");
+
+        // Assert
         status.Should().Be(HttpStatusCode.NotFound);
     }
 
@@ -207,9 +223,14 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     [InlineData("POST", "/api/v1/journal/facets")]
     public async Task Journal_has_no_write_route(string method, string url)
     {
+        // Arrange
         var before = _f.Snapshot();
         var (status, _) = await Send("admin", new HttpMethod(method), url, "{}");
+
+        // Act
         ApiFactory.Report($"JOURNAL-WRITE|{method} {url}|admin|{(int)status}");
+
+        // Assert
         new[] { HttpStatusCode.NotFound, HttpStatusCode.MethodNotAllowed }.Should().Contain(status);
         _f.Snapshot().Should().Be(before);
     }
@@ -225,10 +246,14 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     [MemberData(nameof(ConfigWrites))]
     public async Task Audit_configuration_writes_are_refused_to_non_administrators(string method, string url, string profile)
     {
+        // Arrange
         var before = _f.Snapshot();
         var (status, text) = await Send(profile, new HttpMethod(method), url, ConfigBody);
+
+        // Act
         ApiFactory.Report($"AUDIT-CONFIG|{method} {url}|{profile}|{(int)status}");
 
+        // Assert
         if (profile == "anonyme")
             status.Should().Be(HttpStatusCode.Unauthorized);
         else
@@ -243,7 +268,10 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Administrator_can_create_audit_configuration()
     {
+        // Act
         var (status, _) = await Send("admin", HttpMethod.Post, "/api/v1/audit/config", ConfigBody);
+
+        // Assert
         status.Should().Be(HttpStatusCode.NoContent);
         _f.Store.Get<SuiviConfiguration>().Items.Should().Contain(c => c.Tables == "T_JOURNAL_TEST");
     }
@@ -251,9 +279,14 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Administrator_update_of_audit_configuration_passes_authorization()
     {
+        // Arrange
         // Le double en mémoire ne retrouve pas suivi_TBLCLN par identifiant : 404 attendu, jamais 401 ni 403.
         var (status, text) = await Send("admin", HttpMethod.Put, "/api/v1/audit/config/1", ConfigBody);
+
+        // Act
         ApiFactory.Report($"AUDIT-CONFIG|PUT /api/v1/audit/config/1|admin|{(int)status}");
+
+        // Assert
         status.Should().NotBe(HttpStatusCode.Unauthorized);
         status.Should().NotBe(HttpStatusCode.Forbidden);
         text.Should().NotContain(AdminOnly);

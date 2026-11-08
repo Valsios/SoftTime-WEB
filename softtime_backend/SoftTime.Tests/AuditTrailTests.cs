@@ -17,15 +17,18 @@ public class AuditTrailTests
     [Fact]
     public async Task Writes_a_non_sensitive_payroll_summary_with_counts()
     {
+        // Arrange
         var uow = new InMemoryUnitOfWork();
-        var trail = new AuditTrail(new ScopeFactory(uow), new TestCompanyContext(), Options.Create(new AuditJournalOptions()), new RecordingLogger<AuditTrail>());
+        var sut = new AuditTrail(new ScopeFactory(uow), new TestCompanyContext(), Options.Create(new AuditJournalOptions()), new RecordingLogger<AuditTrail>());
 
-        await trail.WritePayrollSyncAsync(Audit("SUCCES", new Dictionary<string, int>
+        // Act
+        await sut.WritePayrollSyncAsync(Audit("SUCCES", new Dictionary<string, int>
         {
             ["Exo130"] = 2,
             ["Nuit"] = 2
         }));
 
+        // Assert
         var entry = uow.Get<JournalAudit>().Items.Should().ContainSingle().Which;
         entry.Tables.Should().Be("T_CUMSAL");
         entry.Actions.Should().Be("SYNC_PAIE");
@@ -42,11 +45,14 @@ public class AuditTrailTests
     [Fact]
     public async Task Writes_failure_summary_without_individual_data()
     {
+        // Arrange
         var uow = new InMemoryUnitOfWork();
-        var trail = new AuditTrail(new ScopeFactory(uow), new TestCompanyContext(), Options.Create(new AuditJournalOptions()), new RecordingLogger<AuditTrail>());
+        var sut = new AuditTrail(new ScopeFactory(uow), new TestCompanyContext(), Options.Create(new AuditJournalOptions()), new RecordingLogger<AuditTrail>());
 
-        await trail.WritePayrollSyncAsync(Audit("ECHEC", new Dictionary<string, int> { ["Exo130"] = 3 }));
+        // Act
+        await sut.WritePayrollSyncAsync(Audit("ECHEC", new Dictionary<string, int> { ["Exo130"] = 3 }));
 
+        // Assert
         var entry = uow.Get<JournalAudit>().Items.Should().ContainSingle().Which;
         entry.Nouveaux.Should().Contain("Statut=ECHEC");
         entry.Nouveaux.Should().Contain("LignesMisesÀJour=3");
@@ -56,22 +62,28 @@ public class AuditTrailTests
     [Fact]
     public async Task Disabled_audit_writes_nothing()
     {
+        // Arrange
         var uow = new InMemoryUnitOfWork();
-        var trail = new AuditTrail(new ScopeFactory(uow), new TestCompanyContext(), Options.Create(new AuditJournalOptions { Enabled = false }), new RecordingLogger<AuditTrail>());
+        var sut = new AuditTrail(new ScopeFactory(uow), new TestCompanyContext(), Options.Create(new AuditJournalOptions { Enabled = false }), new RecordingLogger<AuditTrail>());
 
-        await trail.WritePayrollSyncAsync(Audit("SUCCES", new Dictionary<string, int>()));
+        // Act
+        await sut.WritePayrollSyncAsync(Audit("SUCCES", new Dictionary<string, int>()));
 
+        // Assert
         uow.Get<JournalAudit>().Items.Should().BeEmpty();
     }
 
     [Fact]
     public async Task Journal_failure_is_logged_and_does_not_throw()
     {
+        // Arrange
         var logger = new RecordingLogger<AuditTrail>();
         var trail = new AuditTrail(new ScopeFactory(new FailingUnitOfWork()), new TestCompanyContext(), Options.Create(new AuditJournalOptions()), logger);
 
+        // Act
         var exception = await Record.ExceptionAsync(() => trail.WritePayrollSyncAsync(Audit("SUCCES", new Dictionary<string, int>())));
 
+        // Assert
         exception.Should().BeNull();
         logger.Messages.Should().Contain(message => message.Contains("Impossible d'écrire la synthèse", StringComparison.Ordinal));
     }
@@ -83,13 +95,16 @@ public class AuditTrailTests
     [Fact]
     public async Task Writes_company_databases_when_the_audit_has_no_sage_database()
     {
+        // Arrange
         var uow = new InMemoryUnitOfWork();
         var company = new TestCompanyContext("SAGE_COURANTE", "POINTEUSE_COURANTE");
-        var trail = new AuditTrail(new ScopeFactory(uow), company, Options.Create(new AuditJournalOptions()), new RecordingLogger<AuditTrail>());
+        var sut = new AuditTrail(new ScopeFactory(uow), company, Options.Create(new AuditJournalOptions()), new RecordingLogger<AuditTrail>());
         var audit = Audit("SUCCES", new Dictionary<string, int>()) with { SageDatabase = null };
 
-        await trail.WritePayrollSyncAsync(audit);
+        // Act
+        await sut.WritePayrollSyncAsync(audit);
 
+        // Assert
         var entry = uow.Get<JournalAudit>().Items.Should().ContainSingle().Which;
         entry.BaseSage.Should().Be("SAGE_COURANTE");
         entry.BasePointeuse.Should().Be("POINTEUSE_COURANTE");
@@ -98,11 +113,14 @@ public class AuditTrailTests
     [Fact]
     public async Task Standard_writer_writes_success_summary_with_exact_counts()
     {
+        // Arrange
         var audit = new CapturingAuditTrail();
-        var writer = new TestStandardWriter(new SuccessfulSageWriter(), audit);
+        var sut = new TestStandardWriter(new SuccessfulSageWriter(), audit);
 
-        await writer.WriteAsync(Database(), Rows(), Context());
+        // Act
+        await sut.WriteAsync(Database(), Rows(), Context());
 
+        // Assert
         var summary = audit.Entries.Should().ContainSingle().Which;
         summary.Status.Should().Be("SUCCES");
         summary.UpdatedRows.Should().Be(7);
@@ -113,12 +131,16 @@ public class AuditTrailTests
     [Fact]
     public async Task Standard_writer_writes_exact_partial_failure_and_rethrows_original_exception()
     {
+        // Arrange
         var original = new InvalidOperationException("missing operand");
         var audit = new CapturingAuditTrail();
-        var writer = new TestStandardWriter(new FailingSageWriter(original, 3), audit);
+        var sut = new TestStandardWriter(new FailingSageWriter(original, 3), audit);
 
-        var thrown = (await FluentActions.Awaiting(() => writer.WriteAsync(Database(), Rows(), Context())).Should().ThrowExactlyAsync<InvalidOperationException>()).Which;
+        // Act
+        Func<Task> act = () => sut.WriteAsync(Database(), Rows(), Context());
 
+        // Assert
+        var thrown = (await act.Should().ThrowExactlyAsync<InvalidOperationException>()).Which;
         thrown.Should().BeSameAs(original);
         var summary = audit.Entries.Should().ContainSingle().Which;
         summary.Status.Should().Be("ECHEC");
@@ -128,13 +150,17 @@ public class AuditTrailTests
     [Fact]
     public async Task Standard_writer_writes_failure_even_when_request_is_cancelled()
     {
+        // Arrange
         var audit = new CapturingAuditTrail();
-        var writer = new TestStandardWriter(new CancelledSageWriter(), audit);
+        var sut = new TestStandardWriter(new CancelledSageWriter(), audit);
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
 
-        await FluentActions.Awaiting(() => writer.WriteAsync(Database(), Rows(), Context(), cancellation.Token)).Should().ThrowAsync<OperationCanceledException>();
+        // Act
+        Func<Task> act = () => sut.WriteAsync(Database(), Rows(), Context(), cancellation.Token);
 
+        // Assert
+        await act.Should().ThrowAsync<OperationCanceledException>();
         audit.Entries.Should().ContainSingle().Which.Status.Should().Be("ECHEC");
         audit.Tokens.Single().Should().Be(CancellationToken.None);
     }
@@ -142,12 +168,15 @@ public class AuditTrailTests
     [Fact]
     public async Task Standard_writer_is_not_masked_when_the_journal_write_fails()
     {
+        // Arrange
         var logger = new RecordingLogger<AuditTrail>();
         var audit = new AuditTrail(new ScopeFactory(new FailingUnitOfWork()), new TestCompanyContext(), Options.Create(new AuditJournalOptions()), logger);
-        var writer = new TestStandardWriter(new SuccessfulSageWriter(), audit);
+        var sut = new TestStandardWriter(new SuccessfulSageWriter(), audit);
 
-        var result = await writer.WriteAsync(Database(), Rows(), Context());
+        // Act
+        var result = await sut.WriteAsync(Database(), Rows(), Context());
 
+        // Assert
         result.EmployeesUpdated.Should().Be(1);
         result.CategoriesUpdated.Should().Be(7);
         logger.Messages.Should().NotBeEmpty();
@@ -156,11 +185,15 @@ public class AuditTrailTests
     [Fact]
     public async Task Standard_writer_records_zero_updates_when_a_sage_constant_is_missing()
     {
+        // Arrange
         var audit = new CapturingAuditTrail();
-        var writer = new TestStandardWriter(new SagePayrollWriter(), audit);
+        var sut = new TestStandardWriter(new SagePayrollWriter(), audit);
 
-        var exception = (await FluentActions.Awaiting(() => writer.WriteAsync(Database(), Rows(), Context())).Should().ThrowExactlyAsync<DomainException>()).Which;
+        // Act
+        Func<Task> act = () => sut.WriteAsync(Database(), Rows(), Context());
 
+        // Assert
+        var exception = (await act.Should().ThrowExactlyAsync<DomainException>()).Which;
         exception.Message.Should().Contain("Constante SAGE HS01 introuvable");
         var summary = audit.Entries.Should().ContainSingle().Which;
         summary.Status.Should().Be("ECHEC");
@@ -170,12 +203,15 @@ public class AuditTrailTests
     [Fact]
     public async Task Standard_writer_writes_success_even_if_the_request_is_cancelled_after_payroll()
     {
+        // Arrange
         using var cancellation = new CancellationTokenSource();
         var audit = new CapturingAuditTrail();
-        var writer = new TestStandardWriter(new CancellingSageWriter(cancellation), audit);
+        var sut = new TestStandardWriter(new CancellingSageWriter(cancellation), audit);
 
-        await writer.WriteAsync(Database(), Rows(), Context(), cancellation.Token);
+        // Act
+        await sut.WriteAsync(Database(), Rows(), Context(), cancellation.Token);
 
+        // Assert
         audit.Entries.Should().ContainSingle().Which.Status.Should().Be("SUCCES");
         audit.Tokens.Single().Should().Be(CancellationToken.None);
     }

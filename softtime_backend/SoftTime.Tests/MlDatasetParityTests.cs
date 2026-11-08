@@ -95,8 +95,8 @@ public class MlDatasetParityTests
     [Fact]
     public async Task Les_absences_non_justifiees_sont_identiques_a_l_etat_des_absences()
     {
+        // Arrange
         var ctx = new Contexte();
-
         // Lundi et mercredi pointÃ©s ; mardi et jeudi absents ; vendredi absence dÃ©clarÃ©e.
         ctx.Corrections.Add(Pointage(Lundi, Huit, DixSept));
         ctx.Corrections.Add(Pointage(Lundi.AddDays(2), Huit, DixSept));
@@ -110,21 +110,21 @@ public class MlDatasetParityTests
             AbsencePm = true,
             Origine = "MANUEL"
         });
-
         var result = await ctx.Dataset().BuildAsync(Lundi, Dimanche, persist: true);
 
+        // Act
         var planned = ctx.Store.Daily.Where(d => d.EstJourPlanifie).ToList();
+
+        // Assert
         planned.Count.Should().Be(5);
         ctx.Store.Daily.Count(d => d.AbsenceNonJustifiee).Should().Be(2);
         ctx.Store.Daily.Single(d => d.Date == Vendredi).AbsenceDeclaree.Should().BeTrue();
         ctx.Store.Daily.Single(d => d.Date == Vendredi).AbsenceNonJustifiee.Should().BeFalse();
-
         // ParitÃ© avec l'Ã©tat des absences, sur la mÃªme population et la mÃªme rÃ¨gle.
         var absences = AbsenceReportRules.Calculer(
             new EmployeeSources(new[] { ctx.Carte }, ctx.Plannings, ctx.Corrections),
             new AbsenceCalendar(new Dictionary<string, List<SoftTime.Domain.Models.LeaveDay>>(), new HashSet<DateTime>()),
             new ReportPeriod(Lundi, Dimanche, Dimanche.AddDays(1)));
-
         var datesEtat = absences
             .Where(a => a.Type == AbsenceReportRules.TypeNonJustifiee)
             .Select(a => a.Date.Date)
@@ -136,7 +136,6 @@ public class MlDatasetParityTests
             .OrderBy(d => d)
             .ToList();
         datesMl.Should().Equal(datesEtat);
-
         ctx.Store.Weekly.Should().ContainSingle();
         ctx.Store.Weekly[0].HsValidee.Should().BeFalse();
         result.WeeklyRows.Should().Be(1);
@@ -145,17 +144,15 @@ public class MlDatasetParityTests
     [Fact]
     public async Task Les_retards_sont_identiques_a_l_etat_des_retards_sans_valeur_saisie()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.Uow.Get<ToleranceRetard>().Items.Add(new ToleranceRetard { Id = 1, IdCategorie = 10, Tolerance = 5, TypesTol = false });
-
         // Aucune valeur RETARD saisie : le retard vient de la premiÃ¨re entrÃ©e vs 8 h + 5 min.
         ctx.Corrections.Add(Pointage(Lundi, new TimeSpan(8, 20, 0), DixSept));
         ctx.Corrections.Add(Pointage(Lundi.AddDays(1), new TimeSpan(7, 55, 0), DixSept));
         ctx.Corrections.Add(Pointage(Lundi.AddDays(2), new TimeSpan(8, 4, 0), DixSept));
         ctx.Corrections.Add(Pointage(Lundi.AddDays(3), new TimeSpan(9, 0, 0), DixSept));
-
         await ctx.Dataset().BuildAsync(Lundi, Dimanche, persist: true);
-
         var etat = RetardReportRules.Calculer(
                 new EmployeeSources(new[] { ctx.Carte }, ctx.Plannings, ctx.Corrections),
                 new RetardTolerances(new Dictionary<int, int> { [1] = 10 }, ctx.Uow.Get<ToleranceRetard>().Items),
@@ -163,10 +160,13 @@ public class MlDatasetParityTests
                 new ReportPeriod(Lundi, Dimanche, Dimanche.AddDays(1)))
             .Where(r => r.MinutesRetard > 0)
             .ToDictionary(r => r.Date.Date, r => r.MinutesRetard);
+
+        // Act
         var ml = ctx.Store.Daily
             .Where(d => (d.RetardMinutes ?? 0) > 0)
             .ToDictionary(d => d.Date.Date, d => d.RetardMinutes ?? 0);
 
+        // Assert
         etat.Count.Should().Be(2);
         ml.OrderBy(kv => kv.Key).Should().Equal(etat.OrderBy(kv => kv.Key));
         ml[Lundi].Should().Be(15);
@@ -176,15 +176,14 @@ public class MlDatasetParityTests
     [Fact]
     public async Task Les_heures_sup_sont_identiques_a_l_ecran_HS()
     {
-        var ctx = new Contexte();
-
+        // Arrange
+        var sut = new Contexte();
         // Planning d'une autre pointeuse, d'ID plus petit : ignorÃ© par l'Ã©cran HS.
-        ctx.Plannings.Add(Plan(id: 1, Lundi, new TimeSpan(20, 0, 0), "AUTRE_PTE"));
-
+        sut.Plannings.Add(Plan(id: 1, Lundi, new TimeSpan(20, 0, 0), "AUTRE_PTE"));
         // 8 h â€“ 19 h chaque jour, et une ligne d'absence dÃ©clarÃ©e seule le samedi.
         for (var jour = Lundi; jour <= Vendredi; jour = jour.AddDays(1))
-            ctx.Corrections.Add(Pointage(jour, Huit, new TimeSpan(19, 0, 0)));
-        ctx.Corrections.Add(new HeureCorrigee
+            sut.Corrections.Add(Pointage(jour, Huit, new TimeSpan(19, 0, 0)));
+        sut.Corrections.Add(new HeureCorrigee
         {
             BddSage = "SAGE_TEST",
             BddPointeuse = "PTE_TEST",
@@ -193,12 +192,14 @@ public class MlDatasetParityTests
             AbsenceAm = true,
             Origine = "MANUEL"
         });
+        await sut.Dataset().BuildAsync(Lundi, Dimanche, persist: true);
 
-        await ctx.Dataset().BuildAsync(Lundi, Dimanche, persist: true);
-        var ecran = (await ctx.Overtime().PreviewWeekPagedAsync(new PeriodRequest(null, null, Lundi, Dimanche), 1, 50))
+        // Act
+        var ecran = (await sut.Overtime().PreviewWeekPagedAsync(new PeriodRequest(null, null, Lundi, Dimanche), 1, 50))
             .Items.Single();
 
-        var semaine = ctx.Store.Weekly.Should().ContainSingle().Which;
+        // Assert
+        var semaine = sut.Store.Weekly.Should().ContainSingle().Which;
         (ecran.Hs > 0m).Should().BeTrue();
         semaine.Hs.Should().Be(Math.Round(ecran.Hs ?? 0m, 2));
         semaine.AbsenceHeures.Should().Be(Math.Round(ecran.Absence ?? 0m, 2));
@@ -207,17 +208,19 @@ public class MlDatasetParityTests
     [Fact]
     public async Task Les_jours_futurs_ne_sont_ni_des_absences_ni_de_l_historique()
     {
-        var ctx = new Contexte();
+        // Arrange
+        var sut = new Contexte();
         var aujourdHui = DateTime.Today;
-
         // Hier pointÃ©, puis 7 jours planifiÃ©s Ã  venir (donc sans pointage par construction).
-        ctx.Plannings.Add(Plan(id: 500, aujourdHui.AddDays(-1), DixSept, "PTE_TEST"));
-        ctx.Corrections.Add(Pointage(aujourdHui.AddDays(-1), Huit, DixSept));
+        sut.Plannings.Add(Plan(id: 500, aujourdHui.AddDays(-1), DixSept, "PTE_TEST"));
+        sut.Corrections.Add(Pointage(aujourdHui.AddDays(-1), Huit, DixSept));
         for (var i = 0; i < 7; i++)
-            ctx.Plannings.Add(Plan(id: 501 + i, aujourdHui.AddDays(i), DixSept, "PTE_TEST"));
+            sut.Plannings.Add(Plan(id: 501 + i, aujourdHui.AddDays(i), DixSept, "PTE_TEST"));
 
-        var lignes = await ctx.Dataset().BuildInferenceDailyAsync(aujourdHui, aujourdHui.AddDays(6));
+        // Act
+        var lignes = await sut.Dataset().BuildInferenceDailyAsync(aujourdHui, aujourdHui.AddDays(6));
 
+        // Assert
         lignes.Should().NotBeEmpty();
         lignes.Should().AllSatisfy(l =>
         {
@@ -230,28 +233,33 @@ public class MlDatasetParityTests
     [Fact]
     public void Un_jour_ou_la_majorite_n_a_pas_pointe_est_un_trou_de_donnees()
     {
+        // Arrange
         var options = new MlOptions { MissingPunchDayAbsenceRate = 0.5, MissingPunchDayMinPlanned = 5 };
         var trou = new DateTime(2025, 6, 2);
         var normal = trou.AddDays(1);
         var petit = trou.AddDays(2);
-
         var jours = Enumerable.Range(0, 10).Select(i => (trou, true, i < 8))         // 80 % : trou
             .Concat(Enumerable.Range(0, 10).Select(i => (normal, true, i < 1)))       // 10 % : normal
-            .Concat(Enumerable.Range(0, 3).Select(i => (petit, true, true)));         // trop peu planifiÃ©s
+            .Concat(Enumerable.Range(0, 3).Select(i => (petit, true, true)));
 
+        // Act
         var resultat = MlDataQuality.JoursSansPointage(jours, options);
 
+        // Assert
         resultat.ToArray().Should().Equal(new[] { trou });
     }
 
     [Fact]
     public void Les_tranches_du_backfill_couvrent_des_semaines_completes()
     {
-        var from = new DateTime(2025, 7, 30);   // mercredi
-        var to = new DateTime(2025, 12, 17);    // mercredi
+        // Arrange
+        var from = new DateTime(2025, 7, 30);
+        var to = new DateTime(2025, 12, 17);
 
+        // Act
         var tranches = MlPipelineService.Chunks(from, to, 3).ToList();
 
+        // Assert
         tranches[0].Start.DayOfWeek.Should().Be(DayOfWeek.Monday);
         (tranches[0].Start <= from).Should().BeTrue();
         tranches[^1].End.Should().Be(to);

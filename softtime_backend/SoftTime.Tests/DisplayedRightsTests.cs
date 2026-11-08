@@ -54,7 +54,10 @@ public class DisplayedRightsTests
     [Fact]
     public async Task Role_without_rows_shows_database_read_but_no_configuration()
     {
+        // Act
         var role = await _auth.GetRoleDetailedPermissionsAsync(5);
+
+        // Assert
         role.IsConfigured.Should().BeFalse();
         role.GrantedPermissions.Should().Contain("SAGE:BASE1:READ");
         role.GrantedPermissions.Should().Contain("POINTEUSE:PTG:READ");
@@ -65,8 +68,13 @@ public class DisplayedRightsTests
     [Fact]
     public async Task Account_of_that_role_without_adjustment_shows_the_same_rights()
     {
+        // Arrange
         var role = await _auth.GetRoleDetailedPermissionsAsync(5);
+
+        // Act
         var user = await _auth.GetUserDetailedPermissionsAsync(15);
+
+        // Assert
         user.IsCustomized.Should().BeFalse();
         role.GrantedPermissions.ToHashSet().SetEquals(user.GrantedPermissions).Should().BeTrue();
         Configuration.Should().AllSatisfy(c => user.GrantedPermissions.Should().NotContain(c));
@@ -75,7 +83,10 @@ public class DisplayedRightsTests
     [Fact]
     public async Task Role_with_rows_is_unchanged()
     {
+        // Act
         var role = await _auth.GetRoleDetailedPermissionsAsync(6);
+
+        // Assert
         role.IsConfigured.Should().BeTrue();
         role.GrantedPermissions.ToHashSet().SetEquals(new[] { "SAGE:CREATE", "PROC:SHIFTS" }).Should().BeTrue();
         var user = await _auth.GetUserDetailedPermissionsAsync(16);
@@ -85,7 +96,10 @@ public class DisplayedRightsTests
     [Fact]
     public async Task Account_with_personal_rows_keeps_its_list()
     {
+        // Act
         var user = await _auth.GetUserDetailedPermissionsAsync(17);
+
+        // Assert
         user.IsCustomized.Should().BeTrue();
         user.GrantedPermissions.ToHashSet().SetEquals(new[] { "SAGE:CREATE", "SAGE:BASE1:READ" }).Should().BeTrue();
     }
@@ -93,8 +107,13 @@ public class DisplayedRightsTests
     [Fact]
     public async Task Administrator_keeps_every_right_including_configuration()
     {
+        // Arrange
         var user = await _auth.GetUserDetailedPermissionsAsync(1);
+
+        // Act
         var role = await _auth.GetRoleDetailedPermissionsAsync(1);
+
+        // Assert
         Configuration.Should().AllSatisfy(c => user.GrantedPermissions.Should().Contain(c));
         Configuration.Should().AllSatisfy(c => role.GrantedPermissions.Should().Contain(c));
     }
@@ -102,7 +121,10 @@ public class DisplayedRightsTests
     [Fact]
     public async Task Unknown_role_shows_no_right()
     {
+        // Act
         var role = await _auth.GetRoleDetailedPermissionsAsync(999);
+
+        // Assert
         role.IsConfigured.Should().BeFalse();
         role.GrantedPermissions.Should().BeEmpty();
     }
@@ -110,13 +132,18 @@ public class DisplayedRightsTests
     [Fact]
     public async Task Database_gate_without_any_database_is_not_carried_by_the_displayed_rights()
     {
+        // Arrange
         // Cas limite documenté : sans base, aucun droit SAGE/POINTEUSE n'est affiché, donc réenregistrer ces droits
         // ne conserve pas la porte Bases (elle ne donnerait de toute façon accès à rien).
         _uow.Get<BddSage>().Items.Clear();
         _uow.Get<BddPointeuse>().Items.Clear();
         var role = await _auth.GetRoleDetailedPermissionsAsync(5);
         await _auth.SaveRoleDetailedPermissionsAsync(1, 5, role.GrantedPermissions);
+
+        // Act
         var gates = _uow.Get<DroitRole>().Items.Where(d => d.IdRole == 5).Select(d => (int)d.IdDroit).OrderBy(x => x);
+
+        // Assert
         gates.Should().Equal(new[] { 3 });
     }
 

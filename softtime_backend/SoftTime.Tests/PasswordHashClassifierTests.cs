@@ -77,6 +77,7 @@ public class PasswordHashClassifierTests
     [Fact]
     public void IsHashedPassword_WithNullOrEmptyOrWhitespace_ReturnsFalse()
     {
+        // Act & Assert
         PasswordHashClassifier.IsHashedPassword(null).Should().BeFalse();
         PasswordHashClassifier.IsHashedPassword("").Should().BeFalse();
         PasswordHashClassifier.IsHashedPassword("   ").Should().BeFalse();
@@ -98,7 +99,11 @@ public class PasswordHashClassifierTests
     [InlineData("123456")]
     public void IsHashedPassword_WithPlainTextPasswords_ReturnsFalse(string plainText)
     {
-        PasswordHashClassifier.IsHashedPassword(plainText).Should().BeFalse();
+        // Act
+        var result = PasswordHashClassifier.IsHashedPassword(plainText);
+
+        // Assert
+        result.Should().BeFalse();
         PasswordHashClassifier.IsIdentityV2(plainText).Should().BeFalse();
         PasswordHashClassifier.IsIdentityV3(plainText).Should().BeFalse();
         PasswordHashClassifier.GetHashVersion(plainText).Should().Be(PasswordHashVersion.None);
@@ -109,9 +114,13 @@ public class PasswordHashClassifierTests
     [Fact]
     public void IsHashedPassword_WithIdentityV3StandardHash_ReturnsTrueAndIdentifiesV3()
     {
+        // Arrange
         var user = new Responsable { IdResponsable = 1, Login = "admin" };
+
+        // Act
         var hash = _hasher.HashPassword(user, "admin");
 
+        // Assert
         hash.Should().NotBeNull();
         hash.Length.Should().Be(84);
         PasswordHashClassifier.IsHashedPassword(hash).Should().BeTrue();
@@ -125,36 +134,33 @@ public class PasswordHashClassifierTests
     [Fact]
     public void PasswordHasher_RealProjectConfiguration_GeneratesV3Hash_ValidatesBinaryStructureAndClassification()
     {
+        // Arrange
         // 1. Instanciation réelle du hasher tel que configuré dans DependencyInjection.cs
         var user = new Responsable { IdResponsable = 10, Login = "audit_user" };
+
+        // Act
         var rawHash = _hasher.HashPassword(user, "SuperAuditSecret!2026");
 
+        // Assert
         rawHash.Should().NotBeNull();
         rawHash.Length.Should().Be(84);
-
         // 2. Décodage binaire et inspection exhaustive des métadonnées
         var bytes = Convert.FromBase64String(rawHash);
         bytes.Length.Should().Be(61);
-
         // Octet 0 : Marqueur Identity V3 = 0x01
         bytes[0].Should().Be(0x01);
-
         // Octets 1..4 : PRF = 2 (KeyDerivationPrf.HMACSHA512, standard .NET 8 par défaut)
         var prf = ((uint)bytes[1] << 24) | ((uint)bytes[2] << 16) | ((uint)bytes[3] << 8) | bytes[4];
         prf.Should().Be(2u);
-
         // Octets 5..8 : Nombre d'itérations = 100 000 en standard .NET 8
         var iterCount = ((uint)bytes[5] << 24) | ((uint)bytes[6] << 16) | ((uint)bytes[7] << 8) | bytes[8];
         iterCount.Should().Be(100000u);
-
         // Octets 9..12 : Longueur du sel cryptographique = 16 octets (128 bits)
         var saltLength = ((uint)bytes[9] << 24) | ((uint)bytes[10] << 16) | ((uint)bytes[11] << 8) | bytes[12];
         saltLength.Should().Be(16u);
-
         // Longueur de la sous-clé dérivée (reste du buffer) = 32 octets (256 bits)
         var subkeyLength = bytes.Length - 13 - (int)saltLength;
         subkeyLength.Should().Be(32);
-
         // 3. Compatibilité avec PasswordHashClassifier.Classify
         PasswordHashClassifier.Classify(rawHash).Should().Be(PasswordClassification.IdentityV3);
         PasswordHashClassifier.GetHashVersion(rawHash).Should().Be(PasswordHashVersion.IdentityV3);
@@ -162,7 +168,6 @@ public class PasswordHashClassifierTests
         PasswordHashClassifier.IsIdentityV3(rawHash).Should().BeTrue();
         PasswordHashClassifier.IsIdentityV2(rawHash).Should().BeFalse();
         PasswordHashClassifier.IsPlainText(rawHash).Should().BeFalse();
-
         // 4. Vérification du mot de passe
         var verifyResult = _hasher.VerifyHashedPassword(user, rawHash, "SuperAuditSecret!2026");
         verifyResult.Should().Be(PasswordVerificationResult.Success);
@@ -171,9 +176,11 @@ public class PasswordHashClassifierTests
     [Fact]
     public void IsHashedPassword_WithIdentityV3HmacSha512_32ByteSubkey_ReturnsTrueAndIdentifiesV3()
     {
+        // Act
         // V3 avec HMAC-SHA512 (prf = 2) et sous-clé de 32 octets -> 61 octets binaires = 84 caractères Base64
         var hashSha512With32BSubkey = CreateIdentityV3CustomHash("sha512_32b_secret", prf: 2, subkeySize: 32);
 
+        // Assert
         hashSha512With32BSubkey.Should().NotBeNull();
         hashSha512With32BSubkey.Length.Should().Be(84);
         PasswordHashClassifier.IsHashedPassword(hashSha512With32BSubkey).Should().BeTrue();
@@ -182,7 +189,6 @@ public class PasswordHashClassifierTests
         PasswordHashClassifier.IsPlainText(hashSha512With32BSubkey).Should().BeFalse();
         PasswordHashClassifier.GetHashVersion(hashSha512With32BSubkey).Should().Be(PasswordHashVersion.IdentityV3);
         PasswordHashClassifier.Classify(hashSha512With32BSubkey).Should().Be(PasswordClassification.IdentityV3);
-
         // Vérification avec PasswordHasher standard
         var user = new Responsable { IdResponsable = 4, Login = "sha512_32b_user" };
         var verifyResult = _hasher.VerifyHashedPassword(user, hashSha512With32BSubkey, "sha512_32b_secret");
@@ -192,9 +198,11 @@ public class PasswordHashClassifierTests
     [Fact]
     public void IsHashedPassword_WithIdentityV3HmacSha512_ReturnsTrueAndIdentifiesV3()
     {
+        // Act
         // V3 with HMAC-SHA512 (prf = 2, subkey = 64 bytes) -> 93 binary bytes = 124 Base64 chars
         var hash512 = CreateIdentityV3CustomHash("sha512_secret", prf: 2, subkeySize: 64);
 
+        // Assert
         hash512.Should().NotBeNull();
         hash512.Length.Should().Be(124);
         PasswordHashClassifier.IsHashedPassword(hash512).Should().BeTrue();
@@ -203,7 +211,6 @@ public class PasswordHashClassifierTests
         PasswordHashClassifier.IsPlainText(hash512).Should().BeFalse();
         PasswordHashClassifier.GetHashVersion(hash512).Should().Be(PasswordHashVersion.IdentityV3);
         PasswordHashClassifier.Classify(hash512).Should().Be(PasswordClassification.IdentityV3);
-
         // Must also verify with ASP.NET Core PasswordHasher
         var user = new Responsable { IdResponsable = 2, Login = "sha512_user" };
         var verifyResult = _hasher.VerifyHashedPassword(user, hash512, "sha512_secret");
@@ -213,8 +220,10 @@ public class PasswordHashClassifierTests
     [Fact]
     public void IsHashedPassword_WithIdentityV2Hash_ReturnsTrueAndIdentifiesV2()
     {
+        // Act
         var v2Hash = CreateLegacyIdentityV2Hash("legacy_password");
 
+        // Assert
         v2Hash.Should().NotBeNull();
         v2Hash.Length.Should().Be(68);
         PasswordHashClassifier.IsHashedPassword(v2Hash).Should().BeTrue();
@@ -223,7 +232,6 @@ public class PasswordHashClassifierTests
         PasswordHashClassifier.IsPlainText(v2Hash).Should().BeFalse();
         PasswordHashClassifier.GetHashVersion(v2Hash).Should().Be(PasswordHashVersion.IdentityV2);
         PasswordHashClassifier.Classify(v2Hash).Should().Be(PasswordClassification.IdentityV2);
-
         // Must verify with ASP.NET Core PasswordHasher (returns SuccessRehashNeeded)
         var user = new Responsable { IdResponsable = 3, Login = "v2_user" };
         var verifyResult = _hasher.VerifyHashedPassword(user, v2Hash, "legacy_password");
@@ -238,7 +246,10 @@ public class PasswordHashClassifierTests
     [InlineData("$argon2id$v=19$m=65536,t=3,p=4$c29tZXNhbHQ$RdescudvJCsgqlrcrcnhbvMmOzdealYnk5GmvnOpqh")] // Argon2
     public void Classify_WithUnrecognizedExternalHashes_ReturnsUnrecognizedHashAndNeverPlainText(string externalHash)
     {
+        // Act
         var classification = PasswordHashClassifier.Classify(externalHash);
+
+        // Assert
         classification.Should().Be(PasswordClassification.UnrecognizedHash);
         PasswordHashClassifier.IsHashedPassword(externalHash).Should().BeFalse();
         PasswordHashClassifier.IsPlainText(externalHash).Should().BeFalse();
@@ -248,20 +259,21 @@ public class PasswordHashClassifierTests
     [Fact]
     public void Classify_WithCorruptedOrTruncatedV3Hash_ReturnsAmbiguousOrMalformed()
     {
+        // Arrange
         // Truncated V3 hash
         var truncated = "AQAAAA" + new string('A', 20);
+
+        // Act & Assert
         PasswordHashClassifier.Classify(truncated).Should().Be(PasswordClassification.AmbiguousOrMalformed);
         PasswordHashClassifier.IsHashedPassword(truncated).Should().BeFalse();
         PasswordHashClassifier.IsPlainText(truncated).Should().BeFalse();
-
         // 84 chars of Base64, but invalid PRF = 99
         var invalidPrfBytes = new byte[61];
         invalidPrfBytes[0] = 0x01;
-        WriteNetworkByteOrder(invalidPrfBytes, 1, 99); // invalid PRF
+        WriteNetworkByteOrder(invalidPrfBytes, 1, 99);
         WriteNetworkByteOrder(invalidPrfBytes, 5, 100000);
         WriteNetworkByteOrder(invalidPrfBytes, 9, 16);
         var invalidPrfHash = Convert.ToBase64String(invalidPrfBytes);
-
         PasswordHashClassifier.Classify(invalidPrfHash).Should().Be(PasswordClassification.AmbiguousOrMalformed);
         PasswordHashClassifier.IsHashedPassword(invalidPrfHash).Should().BeFalse();
         PasswordHashClassifier.IsPlainText(invalidPrfHash).Should().BeFalse();
@@ -270,11 +282,15 @@ public class PasswordHashClassifierTests
     [Fact]
     public void Classify_WithCorruptedV2Marker_ReturnsAmbiguousOrMalformed()
     {
+        // Arrange
         // 49 bytes of Base64, but invalid marker 0x05 instead of 0x00
         var invalidBytes = new byte[49];
         invalidBytes[0] = 0x05;
+
+        // Act
         var fakeHash = Convert.ToBase64String(invalidBytes);
 
+        // Assert
         PasswordHashClassifier.Classify(fakeHash).Should().Be(PasswordClassification.AmbiguousOrMalformed);
         PasswordHashClassifier.IsHashedPassword(fakeHash).Should().BeFalse();
         PasswordHashClassifier.IsPlainText(fakeHash).Should().BeFalse();

@@ -14,9 +14,11 @@ public class SchemaMigrationsIntegrityTests
     [Fact]
     public void Script002_IsEmbeddedAfter001_AndIsReplayableAndNonDestructive()
     {
+        // Act
         var scripts = new EmbeddedMigrationScriptSource().Load();
-        var integrity = scripts.Should().ContainSingle(s => s.Version == 2).Which;
 
+        // Assert
+        var integrity = scripts.Should().ContainSingle(s => s.Version == 2).Which;
         integrity.Name.Should().Be("002_integrite_base_neuve.sql");
         foreach (var forbidden in new[] { "DROP ", "DELETE", "TRUNCATE", "ALTER COLUMN", "ALTER TABLE", "USE [", "CREATE DATABASE", "UPDATE " })
             integrity.Content.Should().NotContainEquivalentOf(forbidden);
@@ -35,10 +37,12 @@ public class SchemaMigrationsIntegrityTests
     [Fact]
     public void Script003_IsEmbeddedAfter002_AndIsReplayableAndNonDestructive()
     {
+        // Act
         var scripts = new EmbeddedMigrationScriptSource().Load();
+
+        // Assert
         scripts.Select(s => s.Version).ToArray().Should().Equal(new[] { 1, 2, 3, 4, 5 });
         var journal = scripts.Should().ContainSingle(s => s.Version == 3).Which;
-
         journal.Name.Should().Be("003_journal_central.sql");
         foreach (var forbidden in new[] { "DROP ", "DELETE", "TRUNCATE", "ALTER COLUMN", "ALTER TABLE", "USE [", "CREATE DATABASE", "UPDATE ", "INSERT " })
             journal.Content.Should().NotContainEquivalentOf(forbidden);
@@ -61,9 +65,11 @@ public class SchemaMigrationsIntegrityTests
     [Fact]
     public void Script004_AddsAccountSecurityStorage_OnlyByAdditions()
     {
+        // Act
         var scripts = new EmbeddedMigrationScriptSource().Load();
-        var security = scripts.Should().ContainSingle(s => s.Version == 4).Which;
 
+        // Assert
+        var security = scripts.Should().ContainSingle(s => s.Version == 4).Which;
         security.Name.Should().Be("004_securite_comptes.sql");
         foreach (var forbidden in new[] { "DROP ", "DELETE", "TRUNCATE", "ALTER COLUMN", "USE [", "CREATE DATABASE", "UPDATE ", "INSERT " })
             security.Content.Should().NotContainEquivalentOf(forbidden);
@@ -82,9 +88,11 @@ public class SchemaMigrationsIntegrityTests
     [Fact]
     public void Script005_LoginUniqueness_OnlyByAdditions_AndSkipsIndexWhenDuplicatesExist()
     {
+        // Act
         var scripts = new EmbeddedMigrationScriptSource().Load();
-        var unicity = scripts.Should().ContainSingle(s => s.Version == 5).Which;
 
+        // Assert
+        var unicity = scripts.Should().ContainSingle(s => s.Version == 5).Which;
         unicity.Name.Should().Be("005_unicite_login.sql");
         foreach (var forbidden in new[] { "DROP ", "DELETE", "TRUNCATE", "ALTER COLUMN", "USE [", "CREATE DATABASE", "UPDATE ", "INSERT ", "STRING_AGG" })
             unicity.Content.Should().NotContainEquivalentOf(forbidden);
@@ -103,15 +111,18 @@ public class SchemaMigrationsIntegrityTests
     [Fact]
     public async Task RunIfEnabled_LogsHowManyScriptsWereAppliedAndHowManyWereUpToDate()
     {
+        // Arrange
         var logger = new ListLogger();
         var first = Script(1, "001_a.sql");
         var second = Script(2, "002_b.sql");
-
         var fresh = new FakeConnection();
+
+        // Act
         await new SchemaMigrator(new FakeFactory(fresh), new ListSource(first, second), Options.Create(new SchemaMigrationOptions { AutoMigrate = true }), logger)
             .RunIfEnabledAsync();
-        logger.Messages.Should().Contain("Migrations de schéma : 2 script(s) appliqué(s), 0 déjà à jour.");
 
+        // Assert
+        logger.Messages.Should().Contain("Migrations de schéma : 2 script(s) appliqué(s), 0 déjà à jour.");
         var upToDate = new FakeConnection();
         upToDate.Applied.Add(new AppliedMigration(1, first.Name, first.Checksum));
         upToDate.Applied.Add(new AppliedMigration(2, second.Name, second.Checksum));
@@ -123,11 +134,14 @@ public class SchemaMigrationsIntegrityTests
     [Fact]
     public async Task RunIfEnabled_WhenDisabled_LogsTheDisabledMessageWithoutOpeningAConnection()
     {
+        // Arrange
         var logger = new ListLogger();
         var factory = new FakeFactory(new FakeConnection());
 
+        // Act
         await new SchemaMigrator(factory, new ListSource(Script(1, "001_a.sql")), Options.Create(new SchemaMigrationOptions()), logger).RunIfEnabledAsync();
 
+        // Assert
         factory.Opened.Should().Be(0);
         logger.Messages.Should().Contain("Migrations de schéma désactivées (Database:AutoMigrate = false).");
         logger.Messages.Should().AllSatisfy(m => m.Should().NotContainEquivalentOf("Data Source"));

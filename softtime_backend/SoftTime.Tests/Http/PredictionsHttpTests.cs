@@ -31,11 +31,15 @@ public class PredictionsHttpTests : IClassFixture<ApiFactory>
     [MemberData(nameof(Reads))]
     public async Task Prediction_read_needs_gate_6_and_the_fine_permission(string url, string profile)
     {
+        // Arrange
         var sage = url.EndsWith("/job", StringComparison.Ordinal) ? null : ApiFactory.SageName;
         var resp = await _http.SendAsync(_f.Request(profile, HttpMethod.Get, url, sageHeader: sage));
         var text = await resp.Content.ReadAsStringAsync();
+
+        // Act
         ApiFactory.Report($"PRED|{url}|{profile}|{(int)resp.StatusCode}|{(text.Length == 0 ? "corps vide" : text.Length > 90 ? text[..90] : text)}");
 
+        // Assert
         if (profile == "anonyme")
         {
             resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -59,15 +63,23 @@ public class PredictionsHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Gate_6_alone_without_the_prediction_permission_is_refused_even_on_the_job_state()
     {
+        // Act
         var resp = await _http.SendAsync(_f.Request("gate6only", HttpMethod.Get, "/api/v1/predictions/job"));
+
+        // Assert
         resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
     public async Task A_refused_read_writes_nothing()
     {
+        // Arrange
         var before = _f.Snapshot();
+
+        // Act
         await _http.SendAsync(_f.Request("gate6only", HttpMethod.Get, "/api/v1/predictions/overtime", sageHeader: ApiFactory.SageName));
+
+        // Assert
         _f.Snapshot().Should().Be(before);
     }
 
@@ -83,11 +95,15 @@ public class PredictionsHttpTests : IClassFixture<ApiFactory>
     [MemberData(nameof(Triggers))]
     public async Task Training_actions_are_reserved_to_administrators(string url, string profile)
     {
+        // Arrange
         var before = _f.Snapshot();
         var resp = await _http.SendAsync(_f.Request(profile, HttpMethod.Post, url));
         var text = await resp.Content.ReadAsStringAsync();
+
+        // Act
         ApiFactory.Report($"4B11|{url}|{profile}|{(int)resp.StatusCode}|{(text.Length == 0 ? "corps vide" : text.Length > 90 ? text[..90] : text)}");
 
+        // Assert
         if (profile == "anonyme")
         {
             resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -102,6 +118,6 @@ public class PredictionsHttpTests : IClassFixture<ApiFactory>
             resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
             text.Should().Contain("Cette opération est réservée aux administrateurs.");
         }
-        _f.Snapshot().Should().Be(before);   // aucune donnée applicative n'est écrite
+        _f.Snapshot().Should().Be(before);
     }
 }

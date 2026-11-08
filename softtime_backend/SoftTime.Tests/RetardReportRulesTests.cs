@@ -73,6 +73,7 @@ public class RetardReportRulesTests
     [Fact]
     public void Calculer_EntreeApresTolerance_RetourneLeRetardEnMinutes()
     {
+        // Act
         var result = Calculer(
             new[] { Carte(1, "001") },
             new[] { Corr(1, "001", Mardi, entree: "08:45") },
@@ -80,6 +81,7 @@ public class RetardReportRulesTests
             new[] { Affectation(1, 10) },
             new[] { Tolerance(10, 10) });
 
+        // Assert
         var row = result.Should().ContainSingle().Which;
         row.Matricule.Should().Be("001");
         row.Nom.Should().Be("Dupont");
@@ -96,6 +98,7 @@ public class RetardReportRulesTests
     [Fact]
     public void Calculer_EntreeDansLaTolerance_AucuneLigne()
     {
+        // Act
         var result = Calculer(
             new[] { Carte(1, "001") },
             new[] { Corr(1, "001", Mardi, entree: "08:05") },
@@ -103,17 +106,20 @@ public class RetardReportRulesTests
             new[] { Affectation(1, 10) },
             new[] { Tolerance(10, 10) });
 
+        // Assert
         result.Should().BeEmpty();
     }
 
     [Fact]
     public void Calculer_SansPlanning_AucuneLigne()
     {
+        // Act
         // Le desktop retombait sur 00:00 : la référence est désormais le planning, comme le dashboard.
         var result = Calculer(
             new[] { Carte(1, "001") },
             new[] { Corr(1, "001", Mardi, entree: "08:45") });
 
+        // Assert
         result.Should().BeEmpty();
     }
 
@@ -122,29 +128,36 @@ public class RetardReportRulesTests
     [InlineData("00:00", "00:00")]
     public void Calculer_HeuresDuPlanningNonExploitables_AucuneLigne(string? ha, string? hd)
     {
+        // Act
         var result = Calculer(
             new[] { Carte(1, "001") },
             new[] { Corr(1, "001", Mardi, entree: "08:45") },
             new[] { Plan(1, 1, Mardi, ha, hd) });
 
+        // Assert
         result.Should().BeEmpty();
     }
 
     [Fact]
     public void Calculer_JourOff_AucunRetard()
     {
+        // Act
         var result = Calculer(
             new[] { Carte(1, "001") },
             new[] { Corr(1, "001", Mardi, entree: "08:45") },
             new[] { Plan(1, 1, Mardi, offP: true) });
 
+        // Assert
         result.Should().BeEmpty();
     }
 
     [Fact]
     public void Calculer_WeekEndEtFerie_Exclus()
     {
+        // Arrange
         var ferie = new DateTime(2025, 11, 5);
+
+        // Act
         var result = Calculer(
             new[] { Carte(1, "001") },
             new[]
@@ -157,12 +170,14 @@ public class RetardReportRulesTests
             from: Samedi,
             to: ferie);
 
+        // Assert
         result.Should().BeEmpty();
     }
 
     [Fact]
     public void Calculer_AbsenceMatin_ArriveeApresMidi_NEstPasUnRetard()
     {
+        // Act
         // Pas de retard « de midi » : la journée est couverte par une absence du matin.
         var result = Calculer(
             new[] { Carte(1, "001") },
@@ -171,12 +186,14 @@ public class RetardReportRulesTests
             new[] { Affectation(1, 10) },
             new[] { Tolerance(10, 10) });
 
+        // Assert
         result.Should().BeEmpty();
     }
 
     [Fact]
     public void Calculer_DeuxPairesMemeJour_SeuleLaPremiereEntreeCompte()
     {
+        // Act
         // Multi-pointage : 08:30 (entrée) et 13:05 (2e paire) -> une seule ligne de 20 minutes.
         var result = Calculer(
             new[] { Carte(1, "001") },
@@ -189,6 +206,7 @@ public class RetardReportRulesTests
             new[] { Affectation(1, 10) },
             new[] { Tolerance(10, 10) });
 
+        // Assert
         var row = result.Should().ContainSingle().Which;
         row.HeureEntree.Should().Be(TimeSpan.Parse("08:30"));
         row.MinutesRetard.Should().Be(20);
@@ -197,6 +215,7 @@ public class RetardReportRulesTests
     [Fact]
     public void Calculer_MonoUneSeulePaire_MemeResultat()
     {
+        // Act
         // Mono-pointage : une paire par jour, entrée 08:30 -> 20 minutes.
         var result = Calculer(
             new[] { Carte(1, "001") },
@@ -205,6 +224,7 @@ public class RetardReportRulesTests
             new[] { Affectation(1, 10) },
             new[] { Tolerance(10, 10) });
 
+        // Assert
         var row = result.Should().ContainSingle().Which;
         row.MinutesRetard.Should().Be(20);
     }
@@ -212,6 +232,7 @@ public class RetardReportRulesTests
     [Fact]
     public void Calculer_RetardSaisi_PrioritaireSurLeCalcul()
     {
+        // Act
         var result = Calculer(
             new[] { Carte(1, "001") },
             new[] { Corr(1, "001", Mardi, entree: "08:00", retard: "00:42:00") },
@@ -219,6 +240,7 @@ public class RetardReportRulesTests
             new[] { Affectation(1, 10) },
             new[] { Tolerance(10, 10) });
 
+        // Assert
         var row = result.Should().ContainSingle().Which;
         row.MinutesRetard.Should().Be(42);
         row.RetardSaisi.Should().BeTrue();
@@ -227,6 +249,7 @@ public class RetardReportRulesTests
     [Fact]
     public void Calculer_RetardSaisiAZero_AucuneLigne()
     {
+        // Act
         var result = Calculer(
             new[] { Carte(1, "001") },
             new[] { Corr(1, "001", Mardi, entree: "09:30", retard: "00:00:00") },
@@ -234,23 +257,27 @@ public class RetardReportRulesTests
             new[] { Affectation(1, 10) },
             new[] { Tolerance(10, 10) });
 
+        // Assert
         result.Should().BeEmpty();
     }
 
     [Fact]
     public void Calculer_CorrectionSansEntreeNiRetard_AucuneLigne()
     {
+        // Act
         var result = Calculer(
             new[] { Carte(1, "001") },
             new[] { Corr(1, "001", Mardi, entree: null) },
             new[] { Plan(1, 1, Mardi) });
 
+        // Assert
         result.Should().BeEmpty();
     }
 
     [Fact]
     public void Calculer_JourFutur_EstExclu()
     {
+        // Act
         // Today = 20/11 : le 20 et le 21 ne sont jamais contrôlés.
         var result = Calculer(
             new[] { Carte(1, "001") },
@@ -259,18 +286,21 @@ public class RetardReportRulesTests
             from: Today,
             to: Today.AddDays(5));
 
+        // Assert
         result.Should().BeEmpty();
     }
 
     [Fact]
     public void Calculer_ToleranceParCategorie()
     {
+        // Arrange
         // Sans tolérance : 08:05 -> 5 minutes. Avec 10 minutes : aucune ligne.
         var sansTolerance = Calculer(
             new[] { Carte(1, "001") },
             new[] { Corr(1, "001", Mardi, entree: "08:05") },
             new[] { Plan(1, 1, Mardi) });
 
+        // Act
         var avecTolerance = Calculer(
             new[] { Carte(1, "001") },
             new[] { Corr(1, "001", Mardi, entree: "08:05") },
@@ -278,6 +308,7 @@ public class RetardReportRulesTests
             new[] { Affectation(1, 10) },
             new[] { Tolerance(10, 10) });
 
+        // Assert
         sansTolerance.Should().ContainSingle().Which.MinutesRetard.Should().Be(5);
         avecTolerance.Should().BeEmpty();
     }
@@ -285,8 +316,11 @@ public class RetardReportRulesTests
     [Fact]
     public void Calculer_DeuxSalaries_TriParDatePuisMatricule()
     {
+        // Arrange
         var j1 = new DateTime(2025, 11, 4);
         var j2 = new DateTime(2025, 11, 5);
+
+        // Act
         var result = Calculer(
             new[] { Carte(1, "002"), Carte(2, "001") },
             new[]
@@ -299,6 +333,7 @@ public class RetardReportRulesTests
             from: j1,
             to: j2);
 
+        // Assert
         result.Count.Should().Be(3);
         result[0].Date.Should().Be(j1);
         result[0].Matricule.Should().Be("002");
@@ -311,6 +346,7 @@ public class RetardReportRulesTests
     [Fact]
     public void MinutesRetard_JamaisNegatif()
     {
+        // Act & Assert
         RetardReportRules.MinutesRetard(TimeSpan.Parse("07:55"), TimeSpan.Parse("08:00"), 10).Should().Be(0);
         RetardReportRules.MinutesRetard(TimeSpan.Parse("08:05"), TimeSpan.Parse("08:00"), 10).Should().Be(0);
         RetardReportRules.MinutesRetard(TimeSpan.Parse("08:45"), TimeSpan.Parse("08:00"), 10).Should().Be(35);
@@ -319,6 +355,7 @@ public class RetardReportRulesTests
     [Fact]
     public void HeurePrevue_PlanningOffOuSentinelle_EstNulle()
     {
+        // Act & Assert
         RetardReportRules.HeurePrevue(null).Should().BeNull();
         RetardReportRules.HeurePrevue(Plan(1, 1, Mardi, offP: true)).Should().BeNull();
         RetardReportRules.HeurePrevue(Plan(1, 1, Mardi, ha: null)).Should().BeNull();

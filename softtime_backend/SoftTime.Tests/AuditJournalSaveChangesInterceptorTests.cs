@@ -13,17 +13,21 @@ public class AuditJournalSaveChangesInterceptorTests
     [Fact]
     public void Insertion_creates_detail_entries()
     {
+        // Arrange
         using var db = CreateContext();
         db.Add(new CodeAbsence { IntituleAbsence = "Congé", NotPay = false });
 
+        // Act
         Capture(db);
 
+        // Assert
         AuditEntries(db).Should().Contain(e => e.Actions == "Insertion" && e.Colonnes == "INTITULE_ABSENCE");
     }
 
     [Fact]
     public void Modification_of_two_columns_creates_two_entries_with_one_correlation()
     {
+        // Arrange
         using var db = CreateContext();
         var entity = new CodeAbsence { IdAbsence = 10, IntituleAbsence = "Avant", NotPay = false };
         db.Attach(entity);
@@ -31,10 +35,12 @@ public class AuditJournalSaveChangesInterceptorTests
         entity.NotPay = true;
         db.Entry(entity).Property(e => e.IntituleAbsence).IsModified = true;
         db.Entry(entity).Property(e => e.NotPay).IsModified = true;
-
         Capture(db);
 
+        // Act
         var entries = AuditEntries(db).Where(e => e.Tables == "T_CODEABSENCE").ToList();
+
+        // Assert
         entries.Count.Should().Be(2);
         entries.Select(e => e.Correlations).Distinct().Should().ContainSingle();
         var title = entries.Where(entry => entry.Colonnes == "INTITULE_ABSENCE").Should().ContainSingle().Which;
@@ -48,14 +54,17 @@ public class AuditJournalSaveChangesInterceptorTests
     [Fact]
     public void Modification_of_one_column_creates_one_entry()
     {
+        // Arrange
         using var db = CreateContext();
         var entity = new JourFerie { Id = 1, Intitule = "Avant", BddSage = "SFOI_PAIE2025" };
         db.Attach(entity);
         entity.Intitule = "Après";
         db.Entry(entity).State = EntityState.Modified;
 
+        // Act
         Capture(db);
 
+        // Assert
         var entry = AuditEntries(db).Should().ContainSingle().Which;
         entry.Colonnes.Should().Be("INTITULE");
         entry.Anciens.Should().Be("Avant");
@@ -65,27 +74,33 @@ public class AuditJournalSaveChangesInterceptorTests
     [Fact]
     public void Fully_marked_entity_with_no_value_change_creates_no_entry()
     {
+        // Arrange
         using var db = CreateContext();
         var entity = new JourFerie { Id = 1, Intitule = "Identique", BddSage = "SFOI_PAIE2025" };
         db.Attach(entity);
         db.Entry(entity).State = EntityState.Modified;
 
+        // Act
         Capture(db);
 
+        // Assert
         AuditEntries(db).Should().BeEmpty();
     }
 
     [Fact]
     public void Fully_marked_entity_with_one_value_change_creates_one_entry()
     {
+        // Arrange
         using var db = CreateContext();
         var entity = new JourFerie { Id = 1, Intitule = "Avant", BddSage = "SFOI_PAIE2025" };
         db.Attach(entity);
         entity.Intitule = "Après";
         db.Entry(entity).State = EntityState.Modified;
 
+        // Act
         Capture(db);
 
+        // Assert
         var entry = AuditEntries(db).Should().ContainSingle().Which;
         entry.Colonnes.Should().Be("INTITULE");
     }
@@ -96,6 +111,7 @@ public class AuditJournalSaveChangesInterceptorTests
     [InlineData(DateTimeKind.Utc)]
     public void Date_values_preserve_stored_clock_time_without_utc_conversion(DateTimeKind kind)
     {
+        // Arrange
         using var db = CreateContext();
         var original = new DateTime(2030, 1, 1, 0, 0, 0, kind);
         var current = new DateTime(2030, 1, 2, 0, 0, 0, kind);
@@ -104,8 +120,10 @@ public class AuditJournalSaveChangesInterceptorTests
         entity.Date = current;
         db.Entry(entity).Property(e => e.Date).IsModified = true;
 
+        // Act
         Capture(db);
 
+        // Assert
         var entry = AuditEntries(db).Should().ContainSingle().Which;
         entry.Anciens.Should().Be("2030-01-01 00:00:00.0000000");
         entry.Nouveaux.Should().Be("2030-01-02 00:00:00.0000000");
@@ -116,24 +134,30 @@ public class AuditJournalSaveChangesInterceptorTests
     [Fact]
     public void Suppression_creates_delete_entries()
     {
+        // Arrange
         using var db = CreateContext();
         var entity = new CodeAbsence { IdAbsence = 10, IntituleAbsence = "Congé" };
         db.Attach(entity);
         db.Remove(entity);
 
+        // Act
         Capture(db);
 
+        // Assert
         AuditEntries(db).Should().AllSatisfy(entry => entry.Actions.Should().Be("Suppression"));
     }
 
     [Fact]
     public void Rollback_keeps_journal_in_the_same_pending_unit_of_work()
     {
+        // Arrange
         using var db = CreateContext();
         db.Add(new CodeAbsence { IntituleAbsence = "Congé" });
 
+        // Act
         Capture(db);
 
+        // Assert
         db.Entry(db.ChangeTracker.Entries<CodeAbsence>().Single().Entity).State.Should().Be(EntityState.Added);
         AuditEntries(db).Should().AllSatisfy(entry => db.Entry(entry).State.Should().Be(EntityState.Added));
     }
@@ -141,11 +165,14 @@ public class AuditJournalSaveChangesInterceptorTests
     [Fact]
     public void Sensitive_columns_are_masked()
     {
+        // Arrange
         using var db = CreateContext();
         db.Add(new Responsable { Login = "agent", Password = "secret" });
 
+        // Act
         Capture(db);
 
+        // Assert
         var entry = AuditEntries(db).Where(e => e.Colonnes == "PASSWORD").Should().ContainSingle().Which;
         entry.Anciens.Should().Be("********");
         entry.Nouveaux.Should().Be("********");
@@ -161,36 +188,45 @@ public class AuditJournalSaveChangesInterceptorTests
     [InlineData(typeof(HistoriqueHs))]
     public void Technical_and_history_tables_are_excluded(Type type)
     {
+        // Arrange
         using var db = CreateContext();
         db.Add(Activator.CreateInstance(type)!);
 
+        // Act
         Capture(db);
 
+        // Assert
         AuditEntries(db).Should().BeEmpty();
     }
 
     [Fact]
     public void Capturing_twice_does_not_create_recursive_or_duplicate_entries()
     {
+        // Arrange
         using var db = CreateContext();
         db.Add(new CodeAbsence { IntituleAbsence = "Congé" });
+        var sut = CreateInterceptor();
+        sut.CaptureChanges(db);
 
-        var interceptor = CreateInterceptor();
-        interceptor.CaptureChanges(db);
-        interceptor.CaptureChanges(db);
+        // Act
+        sut.CaptureChanges(db);
 
+        // Assert
         AuditEntries(db).Count.Should().Be(2);
     }
 
     [Fact]
     public void Over_threshold_creates_one_summary()
     {
+        // Arrange
         using var db = CreateContext();
         for (var index = 0; index < 3; index++)
             db.Add(new CodeAbsence { IntituleAbsence = $"Congé {index}" });
 
+        // Act
         Capture(db, options: new AuditJournalOptions { DetailThreshold = 2 });
 
+        // Assert
         var entry = AuditEntries(db).Should().ContainSingle().Which;
         entry.Colonnes.Should().BeNull();
         entry.Nouveaux.Should().Contain("Insertion=3");
@@ -199,11 +235,14 @@ public class AuditJournalSaveChangesInterceptorTests
     [Fact]
     public void Missing_user_uses_system_identity()
     {
+        // Arrange
         using var db = CreateContext();
         db.Add(new CodeAbsence { IntituleAbsence = "Congé" });
 
+        // Act
         Capture(db, login: null);
 
+        // Assert
         AuditEntries(db).Should().AllSatisfy(entry => entry.Users.Should().Be("SYSTEME:SoftTimeDbContext"));
     }
 

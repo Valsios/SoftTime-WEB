@@ -134,15 +134,18 @@ public class OvertimeServiceTests
     [Fact]
     public async Task Apercu_MultiPointage_CalculeLesHSDeLaSemaine()
     {
-        var contexte = new Contexte();
-        SemaineOuvree(contexte);
+        // Arrange
+        var sut = new Contexte();
+        SemaineOuvree(sut);
 
-        var lignes = await contexte.Apercu(Lundi, Dimanche);
+        // Act
+        var lignes = await sut.Apercu(Lundi, Dimanche);
 
+        // Assert
         var ligne = lignes.Should().ContainSingle().Which;
         ligne.Ht.Should().Be(45m);
         ligne.Hs.Should().Be(5m);
-        var persistee = contexte.Semaines.Should().ContainSingle().Which;
+        var persistee = sut.Semaines.Should().ContainSingle().Which;
         persistee.Ht.Should().Be(45m);
         persistee.ValidationHs.Should().BeFalse();
     }
@@ -150,11 +153,14 @@ public class OvertimeServiceTests
     [Fact]
     public async Task Apercu_MonoPointage_UtiliseLesDepassementsJournaliers()
     {
-        var contexte = new Contexte(multi: false);
-        SemaineOuvree(contexte, heuresSortie: 18, pause: TimeSpan.FromMinutes(30));
+        // Arrange
+        var sut = new Contexte(multi: false);
+        SemaineOuvree(sut, heuresSortie: 18, pause: TimeSpan.FromMinutes(30));
 
-        var lignes = await contexte.Apercu(Lundi, Dimanche);
+        // Act
+        var lignes = await sut.Apercu(Lundi, Dimanche);
 
+        // Assert
         var ligne = lignes.Should().ContainSingle().Which;
         ligne.Ht.Should().Be(47.5m);
         ligne.Hs.Should().Be(5m);
@@ -163,21 +169,23 @@ public class OvertimeServiceTests
     [Fact]
     public async Task Apercu_Conge_CrediteLaJourneeSansAbsence()
     {
-        var contexte = new Contexte();
-        contexte.Source.Employees.Add(new ExternalEmployee("001", 1, null, null, null, false));
-        contexte.Source.Events.Add(new ExternalEvent("0100", "Congé"));
-        contexte.Source.EmployeeEvents.Add(new ExternalEmployeeEvent(1, "0100", Lundi, Lundi, false, false));
-
-        contexte.Planning(Lundi, TimeSpan.Zero);
+        // Arrange
+        var sut = new Contexte();
+        sut.Source.Employees.Add(new ExternalEmployee("001", 1, null, null, null, false));
+        sut.Source.Events.Add(new ExternalEvent("0100", "Congé"));
+        sut.Source.EmployeeEvents.Add(new ExternalEmployeeEvent(1, "0100", Lundi, Lundi, false, false));
+        sut.Planning(Lundi, TimeSpan.Zero);
         for (var i = 1; i < 5; i++)
         {
             var jour = Lundi.AddDays(i);
-            contexte.Planning(jour, TimeSpan.Zero);
-            contexte.Paire(jour, Huit, DixSept);
+            sut.Planning(jour, TimeSpan.Zero);
+            sut.Paire(jour, Huit, DixSept);
         }
 
-        var lignes = await contexte.Apercu(Lundi, Dimanche);
+        // Act
+        var lignes = await sut.Apercu(Lundi, Dimanche);
 
+        // Assert
         var ligne = lignes.Should().ContainSingle().Which;
         ligne.Ht.Should().Be(44m);
         ligne.Hs.Should().Be(4m);
@@ -187,10 +195,13 @@ public class OvertimeServiceTests
     [Fact]
     public async Task Apercu_UneLigneParSalarieMemeSansPointage()
     {
-        var contexte = new Contexte();
+        // Arrange
+        var sut = new Contexte();
 
-        var lignes = await contexte.Apercu(Lundi, Dimanche);
+        // Act
+        var lignes = await sut.Apercu(Lundi, Dimanche);
 
+        // Assert
         var ligne = lignes.Should().ContainSingle().Which;
         ligne.Matricule.Should().Be("001");
         ligne.Ht.Should().Be(0m);
@@ -202,22 +213,22 @@ public class OvertimeServiceTests
     [Fact]
     public async Task Validation_Puis_Annulation_RouvreLaSemaine()
     {
+        // Arrange
         var contexte = new Contexte();
         SemaineOuvree(contexte);
         var request = new WeeklyValidationRequest(null, null, Lundi, Dimanche, new[] { "001" });
 
+        // Act
         await contexte.Service.ValidateWeekAsync(request, true);
 
+        // Assert
         var ligne = contexte.Semaines.Should().ContainSingle().Which;
         ligne.ValidationHs.Should().BeTrue();
         contexte.Corrections.Should().AllSatisfy(h => h.ValiderHs.Should().BeTrue());
-
         // La semaine figée reste visible (pour pouvoir annuler la validation) et n'est pas recalculée.
         var pagine = await contexte.ApercuPagine(Lundi, Dimanche);
         pagine.Items.Should().ContainSingle().Which.Validated.Should().BeTrue();
-
         await contexte.Service.ValidateWeekAsync(request, false);
-
         contexte.Semaines.Should().ContainSingle().Which.ValidationHs.Should().BeFalse();
         contexte.Corrections.Should().AllSatisfy(h => h.ValiderHs.Should().BeFalse());
     }
@@ -225,12 +236,15 @@ public class OvertimeServiceTests
     [Fact]
     public async Task Validation_SansSelectionNeFaitRien()
     {
+        // Arrange
         var contexte = new Contexte();
         SemaineOuvree(contexte);
 
+        // Act
         await contexte.Service.ValidateWeekAsync(
             new WeeklyValidationRequest(null, null, Lundi, Dimanche, Array.Empty<string>()), true);
 
+        // Assert
         contexte.Semaines.Should().BeEmpty();
         contexte.Corrections.Should().AllSatisfy(h => h.ValiderHs.Should().BeNull());
     }
@@ -240,6 +254,7 @@ public class OvertimeServiceTests
     [Fact]
     public async Task ExoImpo_NeRegroupeQueLesSemainesValideesEtReconstruitLaRepartition()
     {
+        // Arrange
         var contexte = new Contexte();
         var debut = Lundi.AddDays(-7);
         var fin = Lundi.AddDays(13);
@@ -247,14 +262,15 @@ public class OvertimeServiceTests
         contexte.SemaineValidee(Lundi, 14);
         contexte.SemaineValidee(Lundi.AddDays(7), 20, validee: false);
 
+        // Act
         var exo = await contexte.Service.CalculateExoImpoAsync(new PeriodRequest(null, null, debut, fin));
 
+        // Assert
         var ligne = exo.Should().ContainSingle().Which;
         ligne.Exo130.Should().Be(16m);
         ligne.Exo150.Should().Be(4m);
         ligne.I130.Should().Be(0m);
         ligne.I150.Should().Be(6m);
-
         contexte.Repartition.Count.Should().Be(2);
         contexte.Repartition[0].Semaine.Should().Be(1);
         contexte.Repartition[0].Hs.Should().Be(12m);
@@ -268,14 +284,17 @@ public class OvertimeServiceTests
     [Fact]
     public async Task ExoImpo_ReconstruitLaRepartitionAUneReexecution()
     {
+        // Arrange
         var contexte = new Contexte();
         contexte.SemaineValidee(Lundi, 10);
         var request = new PeriodRequest(null, null, Lundi, Dimanche);
-
         await contexte.Service.CalculateExoImpoAsync(request);
         contexte.Semaines.Single().Hs = 6;
+
+        // Act
         await contexte.Service.CalculateExoImpoAsync(request);
 
+        // Assert
         var semaine = contexte.Repartition.Should().ContainSingle().Which;
         semaine.Hs.Should().Be(6m);
         semaine.Hs1.Should().Be(6m);
@@ -284,11 +303,14 @@ public class OvertimeServiceTests
     [Fact]
     public async Task ExoImpo_ReporteLabsenceDeLaPeriode()
     {
+        // Arrange
         var contexte = new Contexte();
         contexte.Planning(Lundi, TimeSpan.FromMinutes(30));
 
+        // Act
         var exo = await contexte.Service.CalculateExoImpoAsync(new PeriodRequest(null, null, Lundi, Dimanche));
 
+        // Assert
         var ligne = exo.Should().ContainSingle().Which;
         ligne.Absence.Should().Be(8.5m);
         ligne.Exo130.Should().Be(0m);
@@ -299,13 +321,16 @@ public class OvertimeServiceTests
     [Fact]
     public async Task ExoImpo_PeriodeDemarrantEnMilieuDeSemaine_InclutLaSemaineEnCours()
     {
+        // Arrange
         var contexte = new Contexte();
         contexte.SemaineValidee(Lundi, 10);
 
+        // Act
         // Période 01/09 → 30/09 : la semaine du 31/08 déborde sur le mois et doit être prise en compte.
         var exo = await contexte.Service.CalculateExoImpoAsync(
             new PeriodRequest(null, null, Lundi.AddDays(1), new DateTime(2026, 9, 30)));
 
+        // Assert
         var ligne = exo.Should().ContainSingle().Which;
         ligne.Exo130.Should().Be(8m);
         ligne.Exo150.Should().Be(2m);
@@ -314,15 +339,18 @@ public class OvertimeServiceTests
     [Fact]
     public async Task ExoImpo_SemaineAChevalSurDeuxMois_NEstPayeeQuUneFois()
     {
+        // Arrange
         var contexte = new Contexte();
         // Semaine du lundi 31/08 au dimanche 06/09 : elle appartient à septembre (son dimanche).
         contexte.SemaineValidee(Lundi, 10);
-
         var aout = await contexte.Service.CalculateExoImpoAsync(
             new PeriodRequest(null, null, new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)));
+
+        // Act
         var septembre = await contexte.Service.CalculateExoImpoAsync(
             new PeriodRequest(null, null, new DateTime(2026, 9, 1), new DateTime(2026, 9, 30)));
 
+        // Assert
         aout.Should().BeEmpty();
         var ligne = septembre.Should().ContainSingle().Which;
         ligne.Exo130.Should().Be(8m);
@@ -332,6 +360,7 @@ public class OvertimeServiceTests
     [Fact]
     public async Task ExoImpo_AbsenceArbitreeSansHeures_EstComptee()
     {
+        // Arrange
         var contexte = new Contexte();
         contexte.Planning(Lundi, TimeSpan.FromMinutes(30));
         // Anomalie d'absence validée : la journée porte une ligne d'absence, sans heure.
@@ -346,23 +375,26 @@ public class OvertimeServiceTests
             Origine = "MANUEL"
         });
 
+        // Act
         var exo = await contexte.Service.CalculateExoImpoAsync(new PeriodRequest(null, null, Lundi, Dimanche));
 
+        // Assert
         exo.Should().ContainSingle().Which.Absence.Should().Be(8.5m);
     }
 
     [Fact]
     public async Task Validation_SemaineDejaCalculeeEnExoImpo_NePeutEtreNiAnnuleeNiPurgee()
     {
+        // Arrange
         var contexte = new Contexte();
         contexte.SemaineValidee(Lundi, 10);
         await contexte.Service.CalculateExoImpoAsync(
             new PeriodRequest(null, null, new DateTime(2026, 9, 1), new DateTime(2026, 9, 30)));
-
         var annulation = new WeeklyValidationRequest(null, null, Lundi, Dimanche, new[] { "001" });
+
+        // Act & Assert
         await FluentActions.Awaiting(() => contexte.Service.ValidateWeekAsync(annulation, false)).Should().ThrowExactlyAsync<ConflictException>();
         await FluentActions.Awaiting(() => contexte.Service.PurgeValidationAsync(new PeriodRequest(null, null, Lundi, Dimanche))).Should().ThrowExactlyAsync<ConflictException>();
-
         contexte.Semaines.Should().ContainSingle().Which.ValidationHs.Should().BeTrue();
     }
 
@@ -371,6 +403,7 @@ public class OvertimeServiceTests
     [Fact]
     public async Task Detail_ExposeLesBornesReellesDesSemaines()
     {
+        // Arrange
         // Période 01/05 → 31/05/2025 : la première semaine validée commence avant le mois (28/04).
         var contexte = new Contexte();
         var debutPeriode = new DateTime(2025, 5, 1);
@@ -381,8 +414,10 @@ public class OvertimeServiceTests
         contexte.SemaineValidee(semaine2, 11.21m);
         await contexte.Service.CalculateExoImpoAsync(new PeriodRequest(null, null, debutPeriode, finPeriode));
 
+        // Act
         var detail = await contexte.Service.DetailAsync("001", debutPeriode, finPeriode);
 
+        // Assert
         detail.Semaines.Count.Should().Be(2);
         detail.Semaines[0].Semaine!.Value.Should().Be(1);
         detail.Semaines[0].Debut!.Value.Should().Be(semaine1);
@@ -398,6 +433,7 @@ public class OvertimeServiceTests
     [Fact]
     public async Task Detail_RepliSurLaPeriodeSiLesSemainesNeConcordentPas()
     {
+        // Arrange
         // Ligne héritée (aucune semaine validée correspondante) : on affiche la période stockée.
         var contexte = new Contexte();
         var debut = new DateTime(2025, 5, 1);
@@ -415,8 +451,10 @@ public class OvertimeServiceTests
             BddPointeuse = "PTE_TEST"
         });
 
+        // Act
         var detail = await contexte.Service.DetailAsync("001", debut, fin);
 
+        // Assert
         var semaine = detail.Semaines.Should().ContainSingle().Which;
         semaine.Semaine!.Value.Should().Be(2);
         semaine.Debut!.Value.Should().Be(debut);

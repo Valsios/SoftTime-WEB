@@ -49,11 +49,15 @@ public class UsersHttpSecurityTests : IClassFixture<ApiFactory>
     [MemberData(nameof(RefusedCases))]
     public async Task Non_administrators_cannot_write_other_accounts_and_nothing_is_written(string route, string profile)
     {
+        // Arrange
         var (method, url, body) = Routes[route];
         var before = _f.Snapshot();
         var (resp, text) = await Send(profile, method, url, body);
+
+        // Act
         ApiFactory.Report($"4B1|{route}|{profile}|{(int)resp.StatusCode}|{(text.Length == 0 ? "corps vide" : text)}");
 
+        // Assert
         resp.StatusCode.Should().Be(profile == "anonyme" ? HttpStatusCode.Unauthorized : HttpStatusCode.Forbidden);
         _f.Snapshot().Should().Be(before);
         // param2 a la porte 2 : il atteint le contrôle administrateur et reçoit le message prévu.
@@ -63,14 +67,15 @@ public class UsersHttpSecurityTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Administrator_can_create_modify_change_role_and_password_and_delete()
     {
+        // Act
         var (created, _) = await Send("admin", "POST", "/api/v1/users", NewUser);
+
+        // Assert
         created.IsSuccessStatusCode.Should().BeTrue(created.StatusCode.ToString());
         _f.Store.Get<Responsable>().Items.Should().Contain(u => u.Login == "nouveau");
-
         var (updated, _) = await Send("admin", "PUT", "/api/v1/users/10052", Promote);
         updated.IsSuccessStatusCode.Should().BeTrue(updated.StatusCode.ToString());
         _f.Store.Get<Responsable>().Items.Single(u => u.IdResponsable == 10052).IdRole.Should().Be(40);
-
         var (deleted, _) = await Send("admin", "DELETE", "/api/v1/users/10051", null);
         deleted.StatusCode.Should().Be(HttpStatusCode.NoContent);
         _f.Store.Get<Responsable>().Items.Should().NotContain(u => u.IdResponsable == 10051);
@@ -79,8 +84,11 @@ public class UsersHttpSecurityTests : IClassFixture<ApiFactory>
     [Fact]
     public void Production_container_provides_ICurrentUser_to_AuthService()
     {
+        // Act
         // ICurrentUser est obligatoire dans AuthService : si l'enregistrement de production disparaît, ce test échoue.
         using var scope = _f.Services.CreateScope();
+
+        // Assert
         scope.ServiceProvider.GetRequiredService<SoftTime.Application.Abstractions.ICurrentUser>().Should().NotBeNull();
         scope.ServiceProvider.GetRequiredService<IUserAdministrationService>().Should().NotBeNull();
     }

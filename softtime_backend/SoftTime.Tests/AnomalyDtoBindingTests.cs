@@ -24,9 +24,11 @@ public class AnomalyDtoBindingTests
     [Fact]
     public void AnomalyUpdateDto_BindsHtmlTimeInput_WithoutSeconds()
     {
+        // Act
         var dto = JsonSerializer.Deserialize<AnomalyUpdateDto>(
             """{"hEntree":"08:00","hPs":"12:00","hPe":"13:00","hSortie":"17:00"}""", Options);
 
+        // Assert
         dto.Should().NotBeNull();
         dto!.HEntree.Should().Be(new TimeSpan(8, 0, 0));
         dto.HPs.Should().Be(new TimeSpan(12, 0, 0));
@@ -37,9 +39,11 @@ public class AnomalyDtoBindingTests
     [Fact]
     public void AnomalyUpdateDto_BindsHtmlTimeInput_WithSeconds()
     {
+        // Act
         var dto = JsonSerializer.Deserialize<AnomalyUpdateDto>(
             """{"hEntree":"08:00:00","hSortie":"17:00:00"}""", Options);
 
+        // Assert
         dto.Should().NotBeNull();
         dto!.HEntree.Should().Be(new TimeSpan(8, 0, 0));
         dto.HSortie.Should().Be(new TimeSpan(17, 0, 0));
@@ -48,10 +52,12 @@ public class AnomalyDtoBindingTests
     [Fact]
     public void AnomalyUpdateDto_BindsFlagsAndDates()
     {
+        // Act
         var dto = JsonSerializer.Deserialize<AnomalyUpdateDto>(
             """{"dateIn":"2026-08-31","dateOut":"2026-08-31","absAm":true,"feriesPm":true,"intituleAbsence":"Maladie"}""",
             Options);
 
+        // Assert
         dto.Should().NotBeNull();
         dto!.DateIn.Should().Be(new DateTime(2026, 8, 31));
         dto.AbsAm.Should().BeTrue();
@@ -63,8 +69,10 @@ public class AnomalyDtoBindingTests
     [Fact]
     public void AnomalyValidationRequest_BindsIds()
     {
+        // Act
         var request = JsonSerializer.Deserialize<AnomalyValidationRequest>("""{"ids":[1,2,3]}""", Options);
 
+        // Assert
         request.Should().NotBeNull();
         request!.Ids.Should().Equal(new List<decimal> { 1, 2, 3 });
     }

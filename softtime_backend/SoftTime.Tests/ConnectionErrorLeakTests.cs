@@ -48,9 +48,13 @@ public class ConnectionErrorLeakTests
     [Fact]
     public async Task Failed_connections_leak_neither_password_login_nor_connection_string()
     {
+        // Arrange
         var svc = Catalog();
+
+        // Act
         var ct = Short();
 
+        // Assert
         async Task<(string Name, string Text)> Msg(string name, Func<Task<ConnectionTestResultDto>> act)
         {
             var r = await act();
@@ -58,21 +62,18 @@ public class ConnectionErrorLeakTests
             r.Message.Should().StartWith("Connexion impossible");
             return (name, r.Message);
         }
-
         async Task<(string Name, string Text)> Thrown(string name, Func<Task> act)
         {
             var ex = (await FluentActions.Awaiting(act).Should().ThrowAsync<Exception>()).Which;
             // ILogger.LogError(ex, ...) écrit ex.ToString() : type, message, exceptions internes et pile d'appels.
             return (name + " (journal Unhandled, " + ex.GetType().Name + ")", ex.ToString());
         }
-
         var results = await Task.WhenAll(
             Msg("test sage", () => svc.Sage.TestSageConnectionAsync(new TestSageConnectionDto(Host, true, FakeLogin, FakePassword, "BASE", "STANDARD"), ct)),
             Msg("test pointeuse", () => svc.Pointeuse.TestPointeuseConnectionAsync(new TestPointeuseConnectionDto(Host, true, FakeLogin, FakePassword, "BASE", "STANDARD"), ct)),
             Thrown("découverte bases", () => svc.Discovery.DiscoverDatabasesAsync(new DiscoverDatabasesDto(Host, true, FakeLogin, FakePassword), ct)),
             Thrown("découverte tables", () => svc.Discovery.DiscoverTablesAsync(new DiscoverTablesDto(Host, "BASE", true, FakeLogin, FakePassword), ct)),
             Thrown("découverte colonnes", () => svc.Discovery.DiscoverColumnsAsync(new DiscoverColumnsDto(Host, "BASE", "T", true, FakeLogin, FakePassword), ct)));
-
         foreach (var (name, text) in results)
         {
             AssertNoLeak(name, text);

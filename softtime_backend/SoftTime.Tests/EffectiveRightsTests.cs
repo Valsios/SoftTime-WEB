@@ -37,8 +37,14 @@ public class EffectiveRightsTests
     [Fact]
     public void Role_only_gives_exactly_the_role_rights_and_deduced_gates()
     {
+        // Arrange
         var r = Compute(Role(5, SalesRole, Databases, Processing, Reports));
-        r.Permissions.SetEquals(SalesRole).Should().BeTrue();
+
+        // Act
+        var result = r.Permissions.SetEquals(SalesRole);
+
+        // Assert
+        result.Should().BeTrue();
         r.Gates.SetEquals(new[] { Databases, Processing, Reports }).Should().BeTrue();
         r.IsCustomized.Should().BeFalse();
         r.Inconsistencies.Should().BeEmpty();
@@ -48,37 +54,57 @@ public class EffectiveRightsTests
     [Fact]
     public void Addition_grants_the_right_and_its_gate()
     {
-        var r = Compute(Role(5, SalesRole, Databases, Processing, Reports), Add("PARAMS:USERS"));
-        r.Has("PARAMS:USERS").Should().BeTrue();
-        r.HasGate(Parameters).Should().BeTrue();
-        r.IsCustomized.Should().BeTrue();
-        r.SensitiveRights.Should().Equal(new[] { "PARAMS:USERS" });
+        // Arrange
+        var sut = Compute(Role(5, SalesRole, Databases, Processing, Reports), Add("PARAMS:USERS"));
+
+        // Act
+        var result = sut.Has("PARAMS:USERS");
+
+        // Assert
+        result.Should().BeTrue();
+        sut.HasGate(Parameters).Should().BeTrue();
+        sut.IsCustomized.Should().BeTrue();
+        sut.SensitiveRights.Should().Equal(new[] { "PARAMS:USERS" });
     }
 
     [Fact]
     public void Removal_takes_the_right_away_and_the_gate_when_nothing_is_left()
     {
-        var r = Compute(Role(5, SalesRole, Databases, Processing, Reports), Remove("PROC:SHIFTS", "PROC:PUNCHES"));
-        r.Has("PROC:SHIFTS").Should().BeFalse();
-        r.HasGate(Processing).Should().BeFalse();
-        r.HasGate(Reports).Should().BeTrue();
-        r.IsCustomized.Should().BeTrue();
+        // Arrange
+        var sut = Compute(Role(5, SalesRole, Databases, Processing, Reports), Remove("PROC:SHIFTS", "PROC:PUNCHES"));
+
+        // Act
+        var result = sut.Has("PROC:SHIFTS");
+
+        // Assert
+        result.Should().BeFalse();
+        sut.HasGate(Processing).Should().BeFalse();
+        sut.HasGate(Reports).Should().BeTrue();
+        sut.IsCustomized.Should().BeTrue();
     }
 
     [Fact]
     public void Addition_and_removal_together()
     {
-        var r = Compute(Role(5, SalesRole, Databases, Processing, Reports), Add("OTHER:CANTEEN").Concat(Remove("REPORTS:REPORTS")).ToArray());
-        r.Has("OTHER:CANTEEN").Should().BeTrue();
-        r.Has("REPORTS:REPORTS").Should().BeFalse();
-        r.Gates.SetEquals(new[] { Databases, Processing, Other }).Should().BeTrue();
+        // Arrange
+        var sut = Compute(Role(5, SalesRole, Databases, Processing, Reports), Add("OTHER:CANTEEN").Concat(Remove("REPORTS:REPORTS")).ToArray());
+
+        // Act & Assert
+        sut.Has("OTHER:CANTEEN").Should().BeTrue();
+        sut.Has("REPORTS:REPORTS").Should().BeFalse();
+        sut.Gates.SetEquals(new[] { Databases, Processing, Other }).Should().BeTrue();
     }
 
     [Fact]
     public void Administrator_has_everything_and_is_not_modifiable()
     {
+        // Arrange
         var withRows = Compute(Role(1, new[] { "REPORTS:REPORTS" }), Remove("PARAMS:USERS", "SAGE:BASE1:READ").Concat(Add("INCONNU:X")).ToArray());
+
+        // Act
         var plain = Compute(Role(1));
+
+        // Assert
         withRows.IsAdministrator.Should().BeTrue();
         withRows.Permissions.SetEquals(plain.Permissions).Should().BeTrue();
         withRows.Gates.SetEquals(new[] { 1, 2, 3, 4, 5, 6 }).Should().BeTrue();
@@ -97,37 +123,51 @@ public class EffectiveRightsTests
     [Fact]
     public void Role_with_gates_but_no_rows_gets_the_old_defaults_minus_database_configuration()
     {
+        // Arrange
         var gates = new[] { Databases, Processing, Other, Traceability, Reports };
         var r = Compute(Role(10032, null, gates));
-
         var old = PermissionCatalog.BuildDefaultPermissionsList(
             gates.ToHashSet(),
             new[] { new BddSage { NomBd = "BASE1" }, new BddSage { NomBd = "BASE2" } },
             new[] { new BddPointeuse { NomBd = "PTG" } });
         var configuration = new[] { "SAGE:CREATE", "SAGE:BASE1:UPDATE", "SAGE:BASE1:DELETE", "SAGE:BASE2:UPDATE", "SAGE:BASE2:DELETE",
             "POINTEUSE:CREATE", "POINTEUSE:PTG:UPDATE", "POINTEUSE:PTG:DELETE" };
-        r.Permissions.SetEquals(old.Except(configuration)).Should().BeTrue();
+
+        // Act
+        var result = r.Permissions.SetEquals(old.Except(configuration));
+
+        // Assert
+        result.Should().BeTrue();
         configuration.Should().AllSatisfy(c => r.Has(c).Should().BeFalse());
         (r.Has("SAGE:BASE1:READ") && r.Has("SAGE:BASE2:READ") && r.Has("POINTEUSE:PTG:READ")).Should().BeTrue();
         r.Gates.SetEquals(gates).Should().BeTrue();
         r.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Create).Should().BeFalse();
         r.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Update, "BASE1").Should().BeFalse();
         r.CanUseDatabase(DatabaseKind.Sage, "BASE1").Should().BeTrue();
-        r.CanUseDatabase(DatabaseKind.Sage, "BASE2").Should().BeFalse(); // non cochée dans « Accès bases »
+        r.CanUseDatabase(DatabaseKind.Sage, "BASE2").Should().BeFalse();
     }
 
     [Fact]
     public void Database_gate_without_any_database_is_kept()
     {
-        var r = Compute(Role(7, null, Databases), None, DatabaseCatalog.Empty);
-        r.HasGate(Databases).Should().BeTrue();
-        r.Permissions.Should().BeEmpty();
+        // Arrange
+        var sut = Compute(Role(7, null, Databases), None, DatabaseCatalog.Empty);
+
+        // Act
+        var result = sut.HasGate(Databases);
+
+        // Assert
+        result.Should().BeTrue();
+        sut.Permissions.Should().BeEmpty();
     }
 
     [Fact]
     public void Role_marker_means_no_rights_and_no_defaults()
     {
+        // Act
         var r = Compute(Role(8, new[] { PermissionCatalog.EmptyRoleMarker }, Databases, Processing));
+
+        // Assert
         r.Permissions.Should().BeEmpty();
         r.Gates.Should().BeEmpty();
     }
@@ -135,12 +175,16 @@ public class EffectiveRightsTests
     [Fact]
     public void User_marker_removes_every_role_right_and_additions_still_apply()
     {
+        // Arrange
         var role = Role(5, SalesRole, Databases, Processing, Reports);
+
+        // Act
         var none = Compute(role, Add(PermissionCatalog.EmptyUserMarker));
+
+        // Assert
         none.Permissions.Should().BeEmpty();
         none.Gates.Should().BeEmpty();
         none.IsCustomized.Should().BeTrue();
-
         var plusOne = Compute(role, Add(PermissionCatalog.EmptyUserMarker, "REPORTS:REPORTS"));
         plusOne.Permissions.SetEquals(new[] { "REPORTS:REPORTS" }).Should().BeTrue();
         plusOne.Gates.SetEquals(new[] { Reports }).Should().BeTrue();
@@ -153,18 +197,30 @@ public class EffectiveRightsTests
     [Fact]
     public void Role_change_keeps_the_same_deviations_on_the_new_role()
     {
+        // Arrange
         var user = Add("PARAMS:USERS").Concat(Remove("PROC:SHIFTS")).ToArray();
         var a = Compute(Role(5, new[] { "PROC:SHIFTS", "REPORTS:REPORTS" }, Processing, Reports), user);
         var b = Compute(Role(6, new[] { "PROC:SHIFTS", "OTHER:CANTEEN" }, Processing, Other), user);
-        a.Permissions.SetEquals(new[] { "REPORTS:REPORTS", "PARAMS:USERS" }).Should().BeTrue();
+
+        // Act
+        var result = a.Permissions.SetEquals(new[] { "REPORTS:REPORTS", "PARAMS:USERS" });
+
+        // Assert
+        result.Should().BeTrue();
         b.Permissions.SetEquals(new[] { "OTHER:CANTEEN", "PARAMS:USERS" }).Should().BeTrue();
     }
 
     [Fact]
     public void Gates_are_deduced_from_effective_rights_only()
     {
+        // Arrange
         var r = Compute(Role(9, new[] { "SAGE:BASE1:READ", "PARAMS:ROLES", "PROC:SHIFTS", "OTHER:CANTEEN", "TRACE:AUDIT", "REPORTS:REPORTS" }));
-        r.Gates.SetEquals(new[] { 1, 2, 3, 4, 5, 6 }).Should().BeTrue();
+
+        // Act
+        var result = r.Gates.SetEquals(new[] { 1, 2, 3, 4, 5, 6 });
+
+        // Assert
+        result.Should().BeTrue();
         // Les portes de T_DROIT_ROLE ne comptent pas quand le rôle a des lignes détaillées.
         Compute(Role(9, new[] { "REPORTS:REPORTS" }, 1, 2, 3, 4, 5)).Gates.SetEquals(new[] { Reports }).Should().BeTrue();
     }
@@ -172,7 +228,10 @@ public class EffectiveRightsTests
     [Fact]
     public void Sensitive_rights_lists_the_four_rights_that_change_rights()
     {
+        // Act
         var r = Compute(Role(9, new[] { "PARAMS:DB_ACCESS", "PARAMS:USERS", "PARAMS:CARDPAIE" }), Add("PARAMS:PRIVILEGES", "PARAMS:ROLES"));
+
+        // Assert
         r.SensitiveRights.Should().Equal(new[] { "PARAMS:USERS", "PARAMS:ROLES", "PARAMS:PRIVILEGES", "PARAMS:DB_ACCESS" });
     }
 
@@ -186,15 +245,16 @@ public class EffectiveRightsTests
     [InlineData(Reports, "REPORTS:REPORTS")]
     public void Work_gate_without_database_access_is_reported_but_not_blocked(int gate, string code)
     {
+        // Act
         // Aucune base cochée dans « Accès bases ».
         var none = Compute(Role(5, new[] { code, "SAGE:BASE1:READ" }), None, new DatabaseCatalog(Dbs.Sage, Dbs.Pointeuse, Array.Empty<string>()));
+
+        // Assert
         none.Inconsistencies.Should().ContainSingle().Which.Gate.Should().Be(gate);
         none.Has(code).Should().BeTrue();
-
         // Base cochée mais sans permission de lecture.
         var noRead = Compute(Role(5, new[] { code, "SAGE:BASE2:READ" }));
         noRead.Inconsistencies.Should().ContainSingle();
-
         // Base cochée et lecture accordée : cohérent.
         Compute(Role(5, new[] { code, "SAGE:BASE1:READ" })).Inconsistencies.Should().BeEmpty();
     }
@@ -210,8 +270,14 @@ public class EffectiveRightsTests
     [Fact]
     public void Several_work_gates_give_one_inconsistency_each()
     {
+        // Arrange
         var r = Compute(Role(5, new[] { "PROC:SHIFTS", "REPORTS:REPORTS" }), None, DatabaseCatalog.Empty);
-        r.Inconsistencies.Select(i => i.Gate).OrderBy(g => g).Should().Equal(new[] { Processing, Reports });
+
+        // Act
+        var result = r.Inconsistencies.Select(i => i.Gate).OrderBy(g => g);
+
+        // Assert
+        result.Should().Equal(new[] { Processing, Reports });
     }
 
     #endregion
@@ -221,46 +287,58 @@ public class EffectiveRightsTests
     [Fact]
     public void Using_a_sage_database_needs_gate_1_checked_database_and_read()
     {
-        var ok = Compute(Role(5, new[] { "SAGE:BASE1:READ" }, Databases));
-        ok.CanUseDatabase(DatabaseKind.Sage, "BASE1").Should().BeTrue();
-        ok.CanUseDatabase(DatabaseKind.Sage, "base1").Should().BeTrue(); // les noms de base ne tiennent pas compte de la casse
+        // Arrange
+        var sut = Compute(Role(5, new[] { "SAGE:BASE1:READ" }, Databases));
 
-        Compute(Role(5, new[] { "SAGE:BASE2:READ" }, Databases)).CanUseDatabase(DatabaseKind.Sage, "BASE2").Should().BeFalse(); // non cochée
-        Compute(Role(5, new[] { "SAGE:BASE1:UPDATE" }, Databases)).CanUseDatabase(DatabaseKind.Sage, "BASE1").Should().BeFalse(); // pas de lecture
+        // Act & Assert
+        sut.CanUseDatabase(DatabaseKind.Sage, "BASE1").Should().BeTrue();
+        sut.CanUseDatabase(DatabaseKind.Sage, "base1").Should().BeTrue();
+        Compute(Role(5, new[] { "SAGE:BASE2:READ" }, Databases)).CanUseDatabase(DatabaseKind.Sage, "BASE2").Should().BeFalse();
+        Compute(Role(5, new[] { "SAGE:BASE1:UPDATE" }, Databases)).CanUseDatabase(DatabaseKind.Sage, "BASE1").Should().BeFalse();
         Compute(Role(5, new[] { "SAGE:BASE1:READ" }, Databases), Remove("SAGE:BASE1:READ")).CanUseDatabase(DatabaseKind.Sage, "BASE1").Should().BeFalse();
-        ok.CanUseDatabase(DatabaseKind.Sage, null).Should().BeFalse();
+        sut.CanUseDatabase(DatabaseKind.Sage, null).Should().BeFalse();
     }
 
     [Fact]
     public void Pointeuse_use_needs_gate_1_and_read_only_rule_to_be_decided()
     {
-        var r = Compute(Role(5, new[] { "POINTEUSE:PTG:READ" }, Databases));
-        r.CanUseDatabase(DatabaseKind.Pointeuse, "PTG").Should().BeTrue();
-        r.CanUseDatabase(DatabaseKind.Pointeuse, "AUTRE").Should().BeFalse();
+        // Arrange
+        var sut = Compute(Role(5, new[] { "POINTEUSE:PTG:READ" }, Databases));
+
+        // Act & Assert
+        sut.CanUseDatabase(DatabaseKind.Pointeuse, "PTG").Should().BeTrue();
+        sut.CanUseDatabase(DatabaseKind.Pointeuse, "AUTRE").Should().BeFalse();
     }
 
     [Fact]
     public void Administrator_uses_any_known_database_even_unchecked()
     {
-        var admin = Compute(Role(1));
-        admin.CanUseDatabase(DatabaseKind.Sage, "BASE2").Should().BeTrue();
-        admin.CanUseDatabase(DatabaseKind.Pointeuse, "PTG").Should().BeTrue();
-        admin.CanUseDatabase(DatabaseKind.Sage, "INCONNUE").Should().BeFalse();
+        // Arrange
+        var sut = Compute(Role(1));
+
+        // Act & Assert
+        sut.CanUseDatabase(DatabaseKind.Sage, "BASE2").Should().BeTrue();
+        sut.CanUseDatabase(DatabaseKind.Pointeuse, "PTG").Should().BeTrue();
+        sut.CanUseDatabase(DatabaseKind.Sage, "INCONNUE").Should().BeFalse();
     }
 
     [Fact]
     public void Configuring_needs_gate_1_and_a_configuration_permission_for_every_account()
     {
-        var reader = Compute(Role(5, new[] { "SAGE:BASE1:READ" }, Databases));
-        reader.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Update, "BASE1").Should().BeFalse();
+        // Arrange
+        var sut = Compute(Role(5, new[] { "SAGE:BASE1:READ" }, Databases));
 
+        // Act
+        var result = sut.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Update, "BASE1");
+
+        // Assert
+        result.Should().BeFalse();
         var editor = Compute(Role(5, new[] { "SAGE:BASE1:READ", "SAGE:BASE1:UPDATE", "SAGE:CREATE" }, Databases));
         editor.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Update, "BASE1").Should().BeTrue();
         editor.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Create).Should().BeTrue();
         editor.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Delete, "BASE1").Should().BeFalse();
         editor.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Update, null).Should().BeFalse();
         editor.CanConfigureDatabase(DatabaseKind.Pointeuse, DatabaseConfigAction.Create).Should().BeFalse();
-
         // Sans aucun droit sur les bases, aucune configuration (la porte 1 se déduit des codes SAGE: et POINTEUSE:).
         var noGate = Compute(Role(5, new[] { "PROC:SHIFTS" }, Processing));
         noGate.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Update, "BASE1").Should().BeFalse();
@@ -270,10 +348,16 @@ public class EffectiveRightsTests
     [Fact]
     public void Working_never_requires_configuration()
     {
-        var worker = Compute(Role(5, new[] { "SAGE:BASE1:READ", "PROC:SHIFTS" }, Databases, Processing));
-        worker.CanUseDatabase(DatabaseKind.Sage, "BASE1").Should().BeTrue();
-        worker.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Update, "BASE1").Should().BeFalse();
-        worker.Inconsistencies.Should().BeEmpty();
+        // Arrange
+        var sut = Compute(Role(5, new[] { "SAGE:BASE1:READ", "PROC:SHIFTS" }, Databases, Processing));
+
+        // Act
+        var result = sut.CanUseDatabase(DatabaseKind.Sage, "BASE1");
+
+        // Assert
+        result.Should().BeTrue();
+        sut.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Update, "BASE1").Should().BeFalse();
+        sut.Inconsistencies.Should().BeEmpty();
     }
 
     #endregion
@@ -283,16 +367,19 @@ public class EffectiveRightsTests
     [Fact]
     public void Legacy_list_of_a_user_like_joel_gives_37_additions_and_no_removal()
     {
+        // Arrange
         var roleRights = new[] { "SAGE:BASE1:READ", "POINTEUSE:PTG:READ" }
             .Concat(PermissionCatalog.BuildDefaultPermissionsList(new HashSet<int> { Processing }, Array.Empty<BddSage>(), Array.Empty<BddPointeuse>()))
             .ToList();
-        var params37 = PermissionCatalog.BuildDefaultPermissionsList(new HashSet<int> { Parameters }, Array.Empty<BddSage>(), Array.Empty<BddPointeuse>());
-        params37.Count.Should().Be(37);
 
+        // Act
+        var params37 = PermissionCatalog.BuildDefaultPermissionsList(new HashSet<int> { Parameters }, Array.Empty<BddSage>(), Array.Empty<BddPointeuse>());
+
+        // Assert
+        params37.Count.Should().Be(37);
         var (additions, removals) = ConvertLegacyList(roleRights, roleRights.Concat(params37).ToList());
         additions.ToHashSet().SetEquals(params37).Should().BeTrue();
         removals.Should().BeEmpty();
-
         // Appliquer les écarts au rôle redonne exactement la liste d'origine.
         var back = Compute(Role(10034, roleRights.ToArray(), Databases, Processing), additions.Select(a => new PermissionRow(a, true)).ToArray(), Dbs);
         back.Permissions.SetEquals(roleRights.Concat(params37)).Should().BeTrue();
@@ -303,9 +390,14 @@ public class EffectiveRightsTests
     [Fact]
     public void Legacy_empty_list_or_marker_removes_every_role_right()
     {
+        // Arrange
         var role = new[] { "PROC:SHIFTS", "REPORTS:REPORTS" };
         var (a1, r1) = ConvertLegacyList(role, Array.Empty<string>());
+
+        // Act
         var (a2, r2) = ConvertLegacyList(role, new[] { PermissionCatalog.EmptyUserMarker });
+
+        // Assert
         a1.Should().BeEmpty();
         a2.Should().BeEmpty();
         r1.Should().Equal(new[] { "PROC:SHIFTS", "REPORTS:REPORTS" });
@@ -315,7 +407,10 @@ public class EffectiveRightsTests
     [Fact]
     public void Legacy_conversion_handles_mixed_lists_duplicates_and_unknown_codes()
     {
+        // Act
         var result = ConvertLegacyList(new[] { "PROC:SHIFTS", "PROC:PUNCHES" }, new[] { "PROC:SHIFTS", "PROC:SHIFTS", "OTHER:CANTEEN", "INCONNU:X" });
+
+        // Assert
         result.Additions.Should().Equal(new[] { "OTHER:CANTEEN" });
         result.Removals.Should().Equal(new[] { "PROC:PUNCHES" });
         result.IgnoredUnknown.Should().Equal(new[] { "INCONNU:X" });
@@ -340,7 +435,10 @@ public class EffectiveRightsTests
     [Fact]
     public void Unknown_permissions_are_ignored_and_reported_never_accepted()
     {
+        // Act
         var r = Compute(Role(5, new[] { "PROC:SHIFTS", "FOO:BAR" }), Add("BAZ:QUX", "OTHER:CANTEEN"));
+
+        // Assert
         (r.Has("FOO:BAR") || r.Has("BAZ:QUX")).Should().BeFalse();
         r.IgnoredPermissions.OrderBy(x => x).SequenceEqual(new[] { "BAZ:QUX", "FOO:BAR" }).Should().BeTrue();
         r.Has("OTHER:CANTEEN").Should().BeTrue();
@@ -349,16 +447,25 @@ public class EffectiveRightsTests
     [Fact]
     public void Duplicates_are_merged_silently()
     {
+        // Act
         var r = Compute(Role(5, new[] { "PROC:SHIFTS", "PROC:SHIFTS", "proc:shifts" }), Add("OTHER:CANTEEN", "OTHER:CANTEEN"));
+
+        // Assert
         r.Permissions.Count.Should().Be(2);
     }
 
     [Fact]
     public void Removing_a_right_the_role_lacks_has_no_effect_and_is_listed()
     {
+        // Arrange
         var role = Role(5, new[] { "PROC:SHIFTS" }, Processing);
         var r = Compute(role, Remove("PARAMS:USERS"));
-        r.Permissions.SetEquals(new[] { "PROC:SHIFTS" }).Should().BeTrue();
+
+        // Act
+        var result = r.Permissions.SetEquals(new[] { "PROC:SHIFTS" });
+
+        // Assert
+        result.Should().BeTrue();
         r.IsCustomized.Should().BeFalse();
         r.IneffectiveDeviations.Should().Equal(new[] { "-PARAMS:USERS" });
     }
@@ -366,7 +473,10 @@ public class EffectiveRightsTests
     [Fact]
     public void Adding_a_right_the_role_already_has_has_no_effect_and_is_listed()
     {
+        // Act
         var r = Compute(Role(5, new[] { "PROC:SHIFTS" }, Processing), Add("PROC:SHIFTS"));
+
+        // Assert
         r.IsCustomized.Should().BeFalse();
         r.IneffectiveDeviations.Should().Equal(new[] { "+PROC:SHIFTS" });
     }
@@ -374,9 +484,15 @@ public class EffectiveRightsTests
     [Fact]
     public void Same_code_added_and_removed_is_removed()
     {
-        var r = Compute(Role(5, new[] { "PROC:SHIFTS" }), Add("OTHER:CANTEEN").Concat(Remove("OTHER:CANTEEN")).ToArray());
-        r.Has("OTHER:CANTEEN").Should().BeFalse();
-        r.IneffectiveDeviations.Should().Contain("+OTHER:CANTEEN");
+        // Arrange
+        var sut = Compute(Role(5, new[] { "PROC:SHIFTS" }), Add("OTHER:CANTEEN").Concat(Remove("OTHER:CANTEEN")).ToArray());
+
+        // Act
+        var result = sut.Has("OTHER:CANTEEN");
+
+        // Assert
+        result.Should().BeFalse();
+        sut.IneffectiveDeviations.Should().Contain("+OTHER:CANTEEN");
     }
 
     #endregion
@@ -409,32 +525,50 @@ public class EffectiveRightsTests
     [Fact]
     public async Task Equivalent_to_the_current_calculation_for_a_role_with_detail_rows()
     {
+        // Arrange
         var world = new OldWorld();
         var rows = new[] { "PROC:SHIFTS", "REPORTS:REPORTS", "SAGE:BASE1:READ" };
         var old = await world.OldAsync(5, rows, new[] { Databases, Processing, Reports });
         var now = Compute(Role(5, rows, Databases, Processing, Reports), None, new DatabaseCatalog(new[] { "BASE1", "BASE2" }, new[] { "PTG" }, new[] { "BASE1" }));
-        now.Permissions.SetEquals(old).Should().BeTrue();
+
+        // Act
+        var result = now.Permissions.SetEquals(old);
+
+        // Assert
+        result.Should().BeTrue();
     }
 
     [Fact]
     public async Task Equivalent_to_the_current_calculation_for_the_administrator()
     {
+        // Arrange
         var world = new OldWorld();
         var old = await world.OldAsync(1, null, new[] { 1, 2, 3, 4, 5, 6 });
         var now = Compute(Role(1));
-        now.Permissions.SetEquals(old).Should().BeTrue();
+
+        // Act
+        var result = now.Permissions.SetEquals(old);
+
+        // Assert
+        result.Should().BeTrue();
     }
 
     [Fact]
     public async Task Role_with_gates_and_no_rows_now_shows_the_same_rights_as_the_calculator()
     {
+        // Arrange
         // Étape 4b-10 : avant, la lecture actuelle ajoutait la configuration des bases (SAGE:CREATE, UPDATE, DELETE et pointeuse)
         // que le calculateur n'accorde pas ; l'attendu précédent était « différence = configuration seulement ».
         var world = new OldWorld();
         var gates = new[] { Databases, Processing, Reports };
         var shown = await world.OldAsync(10032, null, gates);
         var now = Compute(Role(10032, null, gates));
-        shown.SetEquals(now.Permissions).Should().BeTrue();
+
+        // Act
+        var result = shown.SetEquals(now.Permissions);
+
+        // Assert
+        result.Should().BeTrue();
         shown.Should().NotContain(c => (c.StartsWith("SAGE:") || c.StartsWith("POINTEUSE:")) && (c.EndsWith(":CREATE") || c.EndsWith(":UPDATE") || c.EndsWith(":DELETE")));
     }
 

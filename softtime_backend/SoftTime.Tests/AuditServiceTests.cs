@@ -18,7 +18,10 @@ public class AuditServiceTests
     [Fact]
     public void ListAllowedTypes_ReturnsNonEmptyOptions()
     {
+        // Act
         var types = _service.ListAllowedTypes();
+
+        // Assert
         types.Should().NotBeEmpty();
         types.Should().Contain(t => t.Value == "nvarchar");
     }
@@ -26,11 +29,14 @@ public class AuditServiceTests
     [Fact]
     public async Task SaveConfigAsync_Create_WithValidType_NormalizesAndAddsEntity()
     {
+        // Arrange
         var dto = new AuditConfigDto(0, "T_EMPLOYEE", "NOM", "  VARCHAR  ", true, "SOFTTIME_SUITE");
-
         await _service.SaveConfigAsync(dto);
 
+        // Act
         var repo = _uow.Get<SuiviConfiguration>();
+
+        // Assert
         repo.Items.Should().ContainSingle();
         var added = repo.Items[0];
         added.Tables.Should().Be("T_EMPLOYEE");
@@ -49,10 +55,14 @@ public class AuditServiceTests
     [InlineData("not_a_sql_type")]
     public async Task SaveConfigAsync_Create_WithInvalidType_ThrowsDomainException(string? invalidType)
     {
+        // Arrange
         var dto = new AuditConfigDto(0, "T_EMPLOYEE", "NOM", invalidType, true, "SOFTTIME_SUITE");
 
-        await FluentActions.Awaiting(() => _service.SaveConfigAsync(dto)).Should().ThrowExactlyAsync<DomainException>();
+        // Act
+        Func<Task> act = () => _service.SaveConfigAsync(dto);
 
+        // Assert
+        await act.Should().ThrowExactlyAsync<DomainException>();
         var repo = _uow.Get<SuiviConfiguration>();
         repo.Items.Should().BeEmpty();
     }
@@ -60,6 +70,7 @@ public class AuditServiceTests
     [Fact]
     public async Task SaveConfigAsync_Update_WithUnchangedLegacyType_DoesNotThrowAndPreservesValue()
     {
+        // Arrange
         var repo = _uow.Get<SuiviConfiguration>();
         var existing = new SuiviConfiguration
         {
@@ -71,11 +82,12 @@ public class AuditServiceTests
             Bases = "SOFTTIME_SUITE"
         };
         repo.Items.Add(existing);
-
         var dto = new AuditConfigDto(42, "T_LOG", "COMMENTAIRE_RENOMME", "legacy_exotic_type", false, "SOFTTIME_SUITE");
 
+        // Act
         await _service.SaveConfigAsync(dto);
 
+        // Assert
         existing.Colonnes.Should().Be("COMMENTAIRE_RENOMME");
         existing.Types.Should().Be("legacy_exotic_type");
         existing.Etats.Should().BeFalse();
@@ -84,6 +96,7 @@ public class AuditServiceTests
     [Fact]
     public async Task SaveConfigAsync_Update_WithModifiedValidType_ValidatesAndNormalizes()
     {
+        // Arrange
         var repo = _uow.Get<SuiviConfiguration>();
         var existing = new SuiviConfiguration
         {
@@ -95,17 +108,19 @@ public class AuditServiceTests
             Bases = "SOFTTIME_SUITE"
         };
         repo.Items.Add(existing);
-
         var dto = new AuditConfigDto(10, "T_TEST", "COL1", "  INT  ", true, "SOFTTIME_SUITE");
 
+        // Act
         await _service.SaveConfigAsync(dto);
 
+        // Assert
         existing.Types.Should().Be("int");
     }
 
     [Fact]
     public async Task SaveConfigAsync_Update_WithModifiedInvalidType_ThrowsDomainExceptionAndLeavesOriginal()
     {
+        // Arrange
         var repo = _uow.Get<SuiviConfiguration>();
         var existing = new SuiviConfiguration
         {
@@ -117,20 +132,27 @@ public class AuditServiceTests
             Bases = "SOFTTIME_SUITE"
         };
         repo.Items.Add(existing);
-
         var dto = new AuditConfigDto(10, "T_TEST", "COL1", "invalid_type", true, "SOFTTIME_SUITE");
 
-        await FluentActions.Awaiting(() => _service.SaveConfigAsync(dto)).Should().ThrowExactlyAsync<DomainException>();
+        // Act
+        Func<Task> act = () => _service.SaveConfigAsync(dto);
 
+        // Assert
+        await act.Should().ThrowExactlyAsync<DomainException>();
         existing.Types.Should().Be("varchar");
     }
 
     [Fact]
     public async Task SaveConfigAsync_Update_WhenNotFound_ThrowsNotFoundException()
     {
+        // Arrange
         var dto = new AuditConfigDto(999, "T_TEST", "COL1", "int", true, "SOFTTIME_SUITE");
 
-        await FluentActions.Awaiting(() => _service.SaveConfigAsync(dto)).Should().ThrowExactlyAsync<NotFoundException>();
+        // Act
+        Func<Task> act = () => _service.SaveConfigAsync(dto);
+
+        // Assert
+        await act.Should().ThrowExactlyAsync<NotFoundException>();
     }
 
     #region In-Memory Test Doubles

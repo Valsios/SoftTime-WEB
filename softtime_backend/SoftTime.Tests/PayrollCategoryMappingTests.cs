@@ -17,15 +17,33 @@ public class PayrollCategoryMappingTests
     [InlineData("Dimanche", 2.5)]
     [InlineData("Nuit", 4)]
     public void MapsEachPayrollCategoryToItsOwnHsValue(string category, decimal expected)
-        => OvertimePayrollCategoryMapper.ValueFor(category, Row).Should().Be(expected);
+    {
+        // Act
+        var result = OvertimePayrollCategoryMapper.ValueFor(category, Row);
+
+        // Assert
+        result.Should().Be(expected);
+    }
 
     [Fact]
     public void UnknownCategoryIsRejected()
-        => FluentActions.Invoking(() => OvertimePayrollCategoryMapper.ValueFor("Other", Row)).Should().ThrowExactly<DomainException>();
+    {
+        // Act
+        var act = () => OvertimePayrollCategoryMapper.ValueFor("Other", Row);
+
+        // Assert
+        act.Should().ThrowExactly<DomainException>();
+    }
 
     [Fact]
     public void SqlIdentifiersRejectDangerousCharacters()
-        => FluentActions.Invoking(() => PayrollWritingConfiguration.ValidateIdentifier("PAIE;DROP TABLE", "table")).Should().ThrowExactly<DomainException>();
+    {
+        // Act
+        var act = () => PayrollWritingConfiguration.ValidateIdentifier("PAIE;DROP TABLE", "table");
+
+        // Assert
+        act.Should().ThrowExactly<DomainException>();
+    }
 
     [Fact]
     public void CompleteConfigurationIsAccepted()
@@ -34,21 +52,33 @@ public class PayrollCategoryMappingTests
     [Fact]
     public void MissingCategoryIsRejected()
     {
+        // Arrange
         var configuration = Configuration();
         configuration.RemoveAt(6);
-        FluentActions.Invoking(() => PayrollWritingConfiguration.ValidateConfigurationRows(configuration)).Should().ThrowExactly<DomainException>();
+
+        // Act
+        var act = () => PayrollWritingConfiguration.ValidateConfigurationRows(configuration);
+
+        // Assert
+        act.Should().ThrowExactly<DomainException>();
     }
 
     [Fact]
     public void DuplicateCategoryIsRejected()
     {
+        // Arrange
         var configuration = Configuration();
         configuration.Add(new PaieEcriture
         {
             BddSage = "TEST_AUTRE_RH", TableCible = "PAIE_CUMULS", ColMatricule = "MatriculeEmploye",
             Categorie = "Exo130", ColValeur = "HeuresExo130Bis"
         });
-        FluentActions.Invoking(() => PayrollWritingConfiguration.ValidateConfigurationRows(configuration)).Should().ThrowExactly<DomainException>();
+
+        // Act
+        var act = () => PayrollWritingConfiguration.ValidateConfigurationRows(configuration);
+
+        // Assert
+        act.Should().ThrowExactly<DomainException>();
     }
 
     private static List<PaieEcriture> Configuration() => PayrollWritingConfiguration.Categories

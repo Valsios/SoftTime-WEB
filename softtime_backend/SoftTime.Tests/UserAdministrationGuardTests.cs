@@ -34,36 +34,47 @@ public class UserAdministrationGuardTests
     [Fact]
     public async Task Non_administrator_is_refused_on_every_write_and_nothing_changes()
     {
+        // Arrange
         var svc = Service(2, 3);
+
+        // Act
         var before = _uow.Snapshot();
 
+        // Assert
         await FluentActions.Awaiting(() => svc.SaveUserAsync(2, NewUserDto)).Should().ThrowExactlyAsync<ForbiddenException>();
         await FluentActions.Awaiting(() => svc.SaveUserAsync(2, new UserDto(3, 3, "Cible", "cible", null, "ValidP@ss123!"))).Should().ThrowExactlyAsync<ForbiddenException>();
         await FluentActions.Awaiting(() => svc.DeleteUserAsync(2, 3)).Should().ThrowExactlyAsync<ForbiddenException>();
         await FluentActions.Awaiting(() => svc.SetDbAccessAsync(3, new[] { 1 })).Should().ThrowExactlyAsync<ForbiddenException>();
         await FluentActions.Awaiting(() => svc.SaveUserDetailedPermissionsAsync(2, 3, new[] { "PROC:SHIFTS" })).Should().ThrowExactlyAsync<ForbiddenException>();
         await FluentActions.Awaiting(() => svc.ResetUserDetailedPermissionsAsync(2, 3)).Should().ThrowExactlyAsync<ForbiddenException>();
-
         _uow.Snapshot().Should().Be(before);
     }
 
     [Fact]
     public async Task Administrator_keeps_every_existing_ability()
     {
-        var svc = Service(1, 1);
-        var created = await svc.SaveUserAsync(1, NewUserDto);
-        var changed = await svc.SaveUserAsync(1, new UserDto(created.Id, 3, "Nouveau", "nouveau", null, null));
+        // Arrange
+        var sut = Service(1, 1);
+        var created = await sut.SaveUserAsync(1, NewUserDto);
+
+        // Act
+        var changed = await sut.SaveUserAsync(1, new UserDto(created.Id, 3, "Nouveau", "nouveau", null, null));
+
+        // Assert
         changed.RoleId.Should().Be(3);
-        await svc.SaveUserDetailedPermissionsAsync(1, 3, new[] { "PROC:SHIFTS" });
-        await svc.ResetUserDetailedPermissionsAsync(1, 3);
-        await svc.DeleteUserAsync(1, created.Id);
+        await sut.SaveUserDetailedPermissionsAsync(1, 3, new[] { "PROC:SHIFTS" });
+        await sut.ResetUserDetailedPermissionsAsync(1, 3);
+        await sut.DeleteUserAsync(1, created.Id);
         _uow.Get<Responsable>().Items.Should().NotContain(u => u.IdResponsable == created.Id);
     }
 
     [Fact]
     public async Task Existing_protections_still_apply_to_an_administrator()
     {
+        // Arrange
         var svc = Service(1, 1);
+
+        // Act & Assert
         // Pas d'auto-modification du rôle, pas de suppression de son propre compte.
         await FluentActions.Awaiting(() => svc.SaveUserAsync(1, new UserDto(1, 2, "Admin", "admin", null, null))).Should().ThrowExactlyAsync<DomainException>();
         await FluentActions.Awaiting(() => svc.DeleteUserAsync(1, 1)).Should().ThrowExactlyAsync<DomainException>();
@@ -73,11 +84,15 @@ public class UserAdministrationGuardTests
     [Fact]
     public async Task Role_named_admin_but_not_role_1_is_refused_by_the_guard_on_role_1_assignment_and_on_rights_changes()
     {
+        // Arrange
         _uow.Get<Role>().Items.Add(new Role { IdRole = 4, NomRole = "ROLE_ADMIN_CUSTOM" });
         _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 4, IdRole = 4, Login = "customadmin" });
         var svc = Service(4, 4);
+
+        // Act
         var before = _uow.Snapshot();
 
+        // Assert
         await FluentActions.Awaiting(() => svc.SaveUserAsync(4, new UserDto(0, 1, "Nouvel admin", "nouvel", null, "ValidP@ss123!"))).Should().ThrowExactlyAsync<ForbiddenException>();
         await FluentActions.Awaiting(() => svc.SaveUserAsync(4, new UserDto(3, 1, "Cible", "cible", null, null))).Should().ThrowExactlyAsync<ForbiddenException>();
         await FluentActions.Awaiting(() => svc.SaveUserDetailedPermissionsAsync(4, 3, new[] { "PROC:SHIFTS" })).Should().ThrowExactlyAsync<ForbiddenException>();
@@ -91,11 +106,15 @@ public class UserAdministrationGuardTests
     [Fact]
     public async Task Role_4_is_refused_on_every_guarded_overload_and_state_is_unchanged()
     {
+        // Arrange
         _uow.Get<Role>().Items.Add(new Role { IdRole = 4, NomRole = "ROLE_ADMIN_CUSTOM" });
         _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 4, IdRole = 4, Login = "customadmin" });
         var svc = Service(4, 4);
+
+        // Act
         var before = _uow.Snapshot();
 
+        // Assert
         // Créer, modifier, attribuer le rôle 1, rétrograder le compte 1 : la garde refuse avant tout contrôle interne.
         await FluentActions.Awaiting(() => svc.SaveUserAsync(4, new UserDto(0, 2, "Nouveau", "nouveau", null, "ValidP@ss123!"))).Should().ThrowExactlyAsync<ForbiddenException>();
         await FluentActions.Awaiting(() => svc.SaveUserAsync(4, new UserDto(3, 2, "Cible modifiée", "cible", null, null))).Should().ThrowExactlyAsync<ForbiddenException>();
@@ -107,22 +126,24 @@ public class UserAdministrationGuardTests
         await FluentActions.Awaiting(() => svc.SetDbAccessAsync(3, new[] { 1 })).Should().ThrowExactlyAsync<ForbiddenException>();
         await FluentActions.Awaiting(() => svc.SaveUserDetailedPermissionsAsync(4, 3, new[] { "PROC:SHIFTS" })).Should().ThrowExactlyAsync<ForbiddenException>();
         await FluentActions.Awaiting(() => svc.ResetUserDetailedPermissionsAsync(4, 3)).Should().ThrowExactlyAsync<ForbiddenException>();
-
         _uow.Snapshot().Should().Be(before);
     }
 
     [Fact]
     public async Task Role_4_changing_its_own_role_is_refused_the_same_way()
     {
+        // Arrange
         _uow.Get<Role>().Items.Add(new Role { IdRole = 4, NomRole = "ROLE_ADMIN_CUSTOM" });
         _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 4, IdRole = 4, Login = "customadmin" });
+
+        // Act
         var before = _uow.Snapshot();
 
+        // Assert
         await FluentActions.Awaiting(() =>
-            Service(4, 4).SaveUserAsync(4, new UserDto(4, 1, "customadmin", "customadmin", null, null))).Should().ThrowExactlyAsync<ForbiddenException>();   // vers le rôle 1
+            Service(4, 4).SaveUserAsync(4, new UserDto(4, 1, "customadmin", "customadmin", null, null))).Should().ThrowExactlyAsync<ForbiddenException>();
         await FluentActions.Awaiting(() =>
-            Service(4, 4).SaveUserAsync(4, new UserDto(4, 2, "customadmin", "customadmin", null, null))).Should().ThrowExactlyAsync<ForbiddenException>();   // vers un autre rôle
-
+            Service(4, 4).SaveUserAsync(4, new UserDto(4, 2, "customadmin", "customadmin", null, null))).Should().ThrowExactlyAsync<ForbiddenException>();
         _uow.Snapshot().Should().Be(before);
         _uow.Get<Responsable>().Items.Single(u => u.IdResponsable == 4).IdRole.Should().Be(4);
     }
@@ -130,10 +151,12 @@ public class UserAdministrationGuardTests
     [Fact]
     public async Task Role_1_stays_protected_against_deleting_itself_and_removing_the_last_administrator()
     {
+        // Arrange
         var svc = Service(1, 1);
+
+        // Act & Assert
         var own = (await FluentActions.Awaiting(() => svc.DeleteUserAsync(1, 1)).Should().ThrowExactlyAsync<DomainException>()).Which;
         own.Message.Should().Be("Vous ne pouvez pas supprimer votre propre compte.");
-
         // Dernier administrateur : suppression et rétrogradation refusées (surcharges sans appelant, utilisées par les tests historiques).
         var delete = (await FluentActions.Awaiting(() => svc.DeleteUserAsync(1)).Should().ThrowExactlyAsync<ConflictException>()).Which;
         delete.Message.Should().Be("Impossible de supprimer le dernier administrateur.");
@@ -145,10 +168,15 @@ public class UserAdministrationGuardTests
     [Fact]
     public async Task Role_1_cannot_modify_or_delete_another_administrator_without_keeping_one()
     {
+        // Arrange
         _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 5, IdRole = 1, Login = "admin2" });
-        var svc = Service(1, 1);
-        await svc.SaveUserAsync(1, new UserDto(5, 1, "Admin 2 renommé", "admin2", null, null));
-        await svc.DeleteUserAsync(1, 5);
+        var sut = Service(1, 1);
+        await sut.SaveUserAsync(1, new UserDto(5, 1, "Admin 2 renommé", "admin2", null, null));
+
+        // Act
+        await sut.DeleteUserAsync(1, 5);
+
+        // Assert
         _uow.Get<Responsable>().Items.Should().NotContain(u => u.IdResponsable == 5);
     }
 

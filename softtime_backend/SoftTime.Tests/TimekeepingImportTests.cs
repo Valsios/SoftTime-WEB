@@ -38,6 +38,7 @@ public class TimekeepingImportTests
     [Fact]
     public async Task ImportPunchesExcel_DedoublonneLesLignesIdentiquesDuFichier()
     {
+        // Arrange
         var contexte = new Contexte();
         var rows = new List<Dictionary<string, string>>
         {
@@ -45,8 +46,10 @@ public class TimekeepingImportTests
             new() { ["Matricule"] = "001", ["Date"] = "2026-08-31", ["Heure"] = "08:00" }
         };
 
+        // Act
         var resultat = await contexte.Service.ImportPunchesExcelAsync(rows);
 
+        // Assert
         resultat.Imported.Should().Be(1);
         resultat.Skipped.Should().Be(1);
         resultat.Message.Should().Be("1 pointage(s) importé(s), 1 ligne(s) ignorée(s).");
@@ -56,6 +59,7 @@ public class TimekeepingImportTests
     [Fact]
     public async Task ImportPunchesExcel_DedoublonneContreLaBase()
     {
+        // Arrange
         var contexte = new Contexte();
         contexte.Pointages.Add(new Pointage
         {
@@ -70,8 +74,10 @@ public class TimekeepingImportTests
             new() { ["Matricule"] = "001", ["Date"] = "2026-08-31", ["Heure"] = "08:00" }
         };
 
+        // Act
         var resultat = await contexte.Service.ImportPunchesExcelAsync(rows);
 
+        // Assert
         resultat.Imported.Should().Be(0);
         resultat.Skipped.Should().Be(1);
         contexte.Pointages.Should().ContainSingle();
@@ -80,14 +86,17 @@ public class TimekeepingImportTests
     [Fact]
     public async Task ImportFromClock_DeuxPasses_DedoublonneEnMultiPointage()
     {
+        // Arrange
         var contexte = new Contexte();
         contexte.External.Users.Add(new ExternalPunchUser(1, "B1", "001", "Test"));
         contexte.External.Punches.Add(new ExternalPunch(1, Lundi.AddHours(8), "IO"));
         var requete = new ImportPunchesRequest(null, null, Lundi, Lundi);
-
         var premier = await contexte.Service.ImportFromClockAsync(requete);
+
+        // Act
         var second = await contexte.Service.ImportFromClockAsync(requete);
 
+        // Assert
         premier.Imported.Should().Be(1);
         second.Imported.Should().Be(0);
         second.Skipped.Should().Be(1);
@@ -128,6 +137,7 @@ public class TimekeepingImportTests
     [Fact]
     public async Task Corrections_SemaineValidee_SaisieSuppressionEtImportRefuses()
     {
+        // Arrange
         var contexte = new Contexte();
         ValiderSemaine(contexte, Lundi);
         var existante = new HeureCorrigee
@@ -139,17 +149,18 @@ public class TimekeepingImportTests
             HEntree = new TimeSpan(8, 0, 0),
             HSortie = new TimeSpan(17, 0, 0)
         };
+
+        // Act
         contexte.Uow.Get<HeureCorrigee>().Items.Add(existante);
 
+        // Assert
         await FluentActions.Awaiting(() => contexte.Service.SaveCorrectionAsync(
             new CorrectedHourDto { Matricule = "001", DateIn = Lundi.AddDays(1), HEntree = new TimeSpan(8, 0, 0), HSortie = new TimeSpan(20, 0, 0) })).Should().ThrowExactlyAsync<ConflictException>();
         await FluentActions.Awaiting(() => contexte.Service.DeleteCorrectionAsync(5)).Should().ThrowExactlyAsync<ConflictException>();
-
         var import = await contexte.Service.ImportCorrectionsExcelAsync(new List<Dictionary<string, string>>
         {
             new() { ["Matricule"] = "001", ["DateEntree"] = "2026-09-01", ["HeureEntree"] = "08:00", ["HeureSortie"] = "20:00" }
         });
-
         import.Imported.Should().Be(0);
         import.Skipped.Should().Be(1);
         contexte.Uow.Get<HeureCorrigee>().Items.Should().ContainSingle().Which.Should().BeSameAs(existante);
@@ -158,11 +169,14 @@ public class TimekeepingImportTests
     [Fact]
     public async Task ValidationAnomalie_AbsenceJourneeComplete_SansHeures_DevientUneAbsence()
     {
+        // Arrange
         var contexte = new Contexte();
         var anomalie = AnomalieAbsence(contexte, Lundi);
 
+        // Act
         await contexte.Service.ValidateAnomaliesAsync(new[] { anomalie.Id });
 
+        // Assert
         var correction = contexte.Uow.Get<HeureCorrigee>().Items.Should().ContainSingle().Which;
         correction.AbsenceAm.Should().BeTrue();
         correction.AbsencePm.Should().BeTrue();
@@ -174,12 +188,16 @@ public class TimekeepingImportTests
     [Fact]
     public async Task ValidationAnomalie_SemaineValidee_EstRefusee()
     {
+        // Arrange
         var contexte = new Contexte();
         ValiderSemaine(contexte, Lundi);
         var anomalie = AnomalieAbsence(contexte, Lundi.AddDays(2));
 
-        await FluentActions.Awaiting(() => contexte.Service.ValidateAnomaliesAsync(new[] { anomalie.Id })).Should().ThrowExactlyAsync<ConflictException>();
+        // Act
+        Func<Task> act = () => contexte.Service.ValidateAnomaliesAsync(new[] { anomalie.Id });
 
+        // Assert
+        await act.Should().ThrowExactlyAsync<ConflictException>();
         contexte.Uow.Get<HeureCorrigee>().Items.Should().BeEmpty();
     }
 }

@@ -107,11 +107,14 @@ public class ImportTemplateImportTests
     [Fact]
     public async Task ModelePointages_EstImportable()
     {
+        // Arrange
         var contexte = new Contexte();
         var rows = LireXlsx("punches", out _);
 
+        // Act
         var resultat = await contexte.Timekeeping.ImportPunchesExcelAsync(rows);
 
+        // Assert
         resultat.Imported.Should().Be(rows.Count);
         resultat.Skipped.Should().Be(0);
         resultat.Message.Should().Contain($"{rows.Count} pointage(s) importé(s), 0 ligne(s) ignorée(s).");
@@ -121,11 +124,14 @@ public class ImportTemplateImportTests
     [Fact]
     public async Task ModeleCorrections_EstImportable()
     {
+        // Arrange
         var contexte = new Contexte();
         var rows = LireXlsx("corrections", out _);
 
+        // Act
         var resultat = await contexte.Timekeeping.ImportCorrectionsExcelAsync(rows);
 
+        // Assert
         resultat.Imported.Should().Be(rows.Count);
         resultat.Message.Should().Contain($"{rows.Count} correction(s) importée(s), 0 ligne(s) ignorée(s).");
         contexte.Corrections.Count.Should().Be(rows.Count);
@@ -139,11 +145,14 @@ public class ImportTemplateImportTests
     [Fact]
     public async Task ModeleShifts_EstImportable()
     {
+        // Arrange
         var contexte = new Contexte();
         var rows = LireXlsx("shifts", out _);
 
+        // Act
         var resultat = await contexte.Planning.ImportShiftsExcelAsync(rows);
 
+        // Assert
         resultat.Imported.Should().Be(2);
         resultat.Skipped.Should().Be(0);
         resultat.Message.Should().Contain("2 shift(s) importé(s), 0 ligne(s) ignorée(s).");
@@ -152,11 +161,14 @@ public class ImportTemplateImportTests
     [Fact]
     public async Task ModelePlanningMatricule_EstImportable()
     {
+        // Arrange
         var contexte = new Contexte();
         var rows = LireXlsx("planning-matricule", out var headers);
 
+        // Act
         var resultat = await contexte.Planning.ImportExcelAsync(rows, headers);
 
+        // Assert
         resultat.Imported.Should().Be(14);
         resultat.Skipped.Should().Be(0);
         resultat.Message.Should().Contain("14 ligne(s) de planning importée(s), 0 élément(s) ignoré(s).");
@@ -166,11 +178,14 @@ public class ImportTemplateImportTests
     [Fact]
     public async Task ModelePlanningCategorie_EstImportable()
     {
+        // Arrange
         var contexte = new Contexte();
         var rows = LireXlsx("planning-categorie", out var headers);
 
+        // Act
         var resultat = await contexte.Planning.ImportExcelAsync(rows, headers);
 
+        // Assert
         resultat.Imported.Should().Be(7);
         resultat.Skipped.Should().Be(0);
         resultat.Message.Should().Contain("7 ligne(s) de planning importée(s), 0 élément(s) ignoré(s).");
@@ -180,11 +195,14 @@ public class ImportTemplateImportTests
     [Fact]
     public async Task ModeleGenerationCategorie_EstImportable()
     {
+        // Arrange
         var contexte = new Contexte();
         var lignes = LireCsv("planning-generate-category");
 
+        // Act
         var resultat = await contexte.Planning.GenerateFromCategoryCsvAsync(lignes);
 
+        // Assert
         resultat.Imported.Should().Be(7);
         resultat.Skipped.Should().Be(0);
     }
@@ -192,11 +210,14 @@ public class ImportTemplateImportTests
     [Fact]
     public async Task ModeleGenerationMatricule_EstImportable()
     {
+        // Arrange
         var contexte = new Contexte();
         var lignes = LireCsv("planning-generate-matricule");
 
+        // Act
         var resultat = await contexte.Planning.GenerateFromMatriculeCsvAsync(lignes);
 
+        // Assert
         resultat.Imported.Should().Be(7);
         resultat.Skipped.Should().Be(0);
     }
@@ -204,11 +225,14 @@ public class ImportTemplateImportTests
     [Fact]
     public async Task ModeleAffectations_EstImportable()
     {
+        // Arrange
         var contexte = new Contexte();
         var rows = LireXlsx("affectations", out _);
 
+        // Act
         var resultat = await contexte.Catalog.AffectationImports.ImportAffectationsExcelAsync(rows);
 
+        // Assert
         resultat.Imported.Should().Be(1);
         resultat.Skipped.Should().Be(0);
         resultat.Message.Should().Be("1 affectation(s) importée(s), 0 ligne(s) ignorée(s).");
@@ -217,11 +241,14 @@ public class ImportTemplateImportTests
     [Fact]
     public async Task ModeleCorrespondances_EstImportable()
     {
+        // Arrange
         var contexte = new Contexte();
         var lignes = LireCsv("correspondences");
 
+        // Act
         var resultat = await contexte.Catalog.Cards.ImportCorrespondencesCsvAsync(lignes);
 
+        // Assert
         // La ligne d'en-tête est reconnue et ignorée : elle n'est pas comptée comme ligne ignorée.
         resultat.Imported.Should().Be(2);
         resultat.Skipped.Should().Be(0);

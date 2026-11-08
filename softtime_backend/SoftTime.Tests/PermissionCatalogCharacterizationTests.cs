@@ -32,9 +32,12 @@ public class PermissionCatalogCharacterizationTests
     [Fact]
     public void AuthService_entry_points_still_give_the_same_result_as_the_helper()
     {
+        // Arrange
         var all = new HashSet<int> { 1, 2, 3, 4, 5, 6 };
         var sages = new[] { Sage("A"), Sage("B") };
         var pointeuses = new[] { Pointeuse("P") };
+
+        // Act & Assert
         LegacyDefaults(all, sages, pointeuses).Should().Equal(Defaults(all, sages, pointeuses));
         LegacyDefaults(new HashSet<int>(), sages, pointeuses).Should().Equal(Defaults(new HashSet<int>(), sages, pointeuses));
         var codes = new[] { "sage:a:read", "PROC:SHIFTS", "OTHER:CANTEEN", "INCONNU:X" };
@@ -44,8 +47,14 @@ public class PermissionCatalogCharacterizationTests
     [Fact]
     public void Known_static_permissions_are_the_same_set_as_in_AuthService()
     {
+        // Arrange
         var legacy = (HashSet<string>)typeof(RolePermissionService).GetField("KnownStaticPermissions", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
-        legacy.SetEquals(PermissionCatalog.KnownStatic).Should().BeTrue();
+
+        // Act
+        var result = legacy.SetEquals(PermissionCatalog.KnownStatic);
+
+        // Assert
+        result.Should().BeTrue();
         PermissionCatalog.IsKnown("SAGE:X:READ").Should().BeTrue();
         PermissionCatalog.IsKnown("proc:shifts").Should().BeTrue();
         PermissionCatalog.IsKnown("N'IMPORTE:QUOI").Should().BeFalse();
@@ -93,16 +102,31 @@ public class PermissionCatalogCharacterizationTests
 
     [Fact]
     public void Defaults_without_gate_and_without_database_are_empty()
-        => Build(Array.Empty<int>()).Should().BeEmpty();
+    {
+        // Act
+        var result = Build(Array.Empty<int>());
+
+        // Assert
+        result.Should().BeEmpty();
+    }
 
     [Fact]
     public void Defaults_gate_1_without_database_gives_the_two_create_codes()
-        => Build(new[] { Rights.Databases }).Should().Equal(new[] { "SAGE:CREATE", "POINTEUSE:CREATE" });
+    {
+        // Act
+        var result = Build(new[] { Rights.Databases });
+
+        // Assert
+        result.Should().Equal(new[] { "SAGE:CREATE", "POINTEUSE:CREATE" });
+    }
 
     [Fact]
     public void Defaults_gate_1_with_databases_gives_create_then_read_update_delete_per_database()
     {
+        // Act
         var result = Build(new[] { Rights.Databases }, new[] { "A", "B" }, new[] { "P" });
+
+        // Assert
         result.Should().Equal(new[]
         {
             "SAGE:CREATE",
@@ -116,20 +140,27 @@ public class PermissionCatalogCharacterizationTests
     [Fact]
     public void Defaults_without_gate_1_but_with_sage_list_still_gives_sage_codes_and_no_pointeuse()
     {
+        // Act
         var result = Build(new[] { Rights.Processing }, new[] { "A" }, new[] { "P" });
+
+        // Assert
         result.Should().Equal(new[] { "SAGE:CREATE", "SAGE:A:READ", "SAGE:A:UPDATE", "SAGE:A:DELETE" }.Concat(Proc));
     }
 
     [Fact]
     public void Defaults_skip_blank_database_names()
     {
+        // Act
         var result = Build(new[] { Rights.Databases }, new[] { "A", "", " " }, new[] { "" });
+
+        // Assert
         result.Should().Equal(new[] { "SAGE:CREATE", "SAGE:A:READ", "SAGE:A:UPDATE", "SAGE:A:DELETE", "POINTEUSE:CREATE" });
     }
 
     [Fact]
     public void Defaults_single_gates_give_their_fixed_lists()
     {
+        // Act & Assert
         Build(new[] { Rights.Parameters }).Should().Equal(Params);
         Build(new[] { Rights.Processing }).Should().Equal(Proc);
         Build(new[] { Rights.Other }).Should().Equal(Other);
@@ -140,9 +171,14 @@ public class PermissionCatalogCharacterizationTests
     [Fact]
     public void Defaults_all_gates_are_concatenated_in_gate_order()
     {
+        // Arrange
         var all = new[] { Rights.Databases, Rights.Parameters, Rights.Processing, Rights.Other, Rights.Traceability, Rights.Reports };
+
+        // Act
         var expected = new[] { "SAGE:CREATE", "SAGE:A:READ", "SAGE:A:UPDATE", "SAGE:A:DELETE", "POINTEUSE:CREATE", "POINTEUSE:P:READ", "POINTEUSE:P:UPDATE", "POINTEUSE:P:DELETE" }
             .Concat(Params).Concat(Proc).Concat(Other).Concat(new[] { "TRACE:AUDIT", "REPORTS:REPORTS", "REPORTS:PREDICTIONS", "REPORTS:CLOSING" });
+
+        // Assert
         Build(all, new[] { "A" }, new[] { "P" }).Should().Equal(expected);
     }
 
@@ -153,6 +189,7 @@ public class PermissionCatalogCharacterizationTests
     [Fact]
     public void Gates_from_each_prefix()
     {
+        // Act & Assert
         Gates(new[] { "SAGE:A:READ" }).Should().Equal(new decimal[] { 1 });
         Gates(new[] { "POINTEUSE:CREATE" }).Should().Equal(new decimal[] { 1 });
         Gates(new[] { "PARAMS:USERS" }).Should().Equal(new decimal[] { 2 });
@@ -167,7 +204,11 @@ public class PermissionCatalogCharacterizationTests
     [Fact]
     public void Gates_ignore_case_unknown_prefixes_and_duplicates()
     {
-        Gates(new[] { "sage:a:read", "proc:shifts", "PROC:SHIFTS", "INCONNU:X", "" }).OrderBy(x => x).Should().Equal(new decimal[] { 1, 3 }.OrderBy(x => x));
+        // Act
+        var result = Gates(new[] { "sage:a:read", "proc:shifts", "PROC:SHIFTS", "INCONNU:X", "" }).OrderBy(x => x);
+
+        // Assert
+        result.Should().Equal(new decimal[] { 1, 3 }.OrderBy(x => x));
         Gates(Array.Empty<string>()).Should().BeEmpty();
         Gates(new[] { "INCONNU:X", "__SOFTTIME_EMPTY_CUSTOM_PERMISSIONS__" }).Should().BeEmpty();
     }
@@ -175,8 +216,14 @@ public class PermissionCatalogCharacterizationTests
     [Fact]
     public void Gates_from_a_full_default_list_give_all_six()
     {
+        // Arrange
         var all = new[] { Rights.Databases, Rights.Parameters, Rights.Processing, Rights.Other, Rights.Traceability, Rights.Reports };
-        Gates(Build(all, new[] { "A" }, new[] { "P" })).OrderBy(x => x).Should().Equal(new decimal[] { 1, 2, 3, 4, 5, 6 });
+
+        // Act
+        var result = Gates(Build(all, new[] { "A" }, new[] { "P" })).OrderBy(x => x);
+
+        // Assert
+        result.Should().Equal(new decimal[] { 1, 2, 3, 4, 5, 6 });
     }
 
     #endregion

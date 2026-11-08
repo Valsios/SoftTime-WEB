@@ -17,8 +17,11 @@ public class DisplayedRightsHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Role_route_of_a_role_with_the_database_gate_and_no_rows_has_no_configuration()
     {
+        // Act
         // Rôle 10034 du jeu de test : portes 1 et 3, aucune ligne détaillée.
         var resp = await _http.SendAsync(_f.Request("admin", HttpMethod.Get, "/api/v1/privileges/role/10034"));
+
+        // Assert
         resp.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
         using var doc = System.Text.Json.JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
         var perms = doc.RootElement.GetProperty("data").GetProperty("grantedPermissions").EnumerateArray().Select(e => e.GetString()!).ToList();

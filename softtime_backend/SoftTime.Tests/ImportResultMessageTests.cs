@@ -70,6 +70,7 @@ public class ImportResultMessageTests
     [Fact]
     public async Task Affectations_MessageDetailleImportesIgnoresEtRaisons()
     {
+        // Arrange
         var contexte = new Contexte();
         var rows = new List<Dictionary<string, string>>
         {
@@ -78,8 +79,10 @@ public class ImportResultMessageTests
             new() { ["Categorie"] = "Sédentaire", ["Matricule"] = "9999" }
         };
 
+        // Act
         var resultat = await contexte.Catalog.AffectationImports.ImportAffectationsExcelAsync(rows);
 
+        // Assert
         resultat.Imported.Should().Be(1);
         resultat.Skipped.Should().Be(2);
         resultat.Message.Should().Contain("1 affectation(s) importée(s), 2 ligne(s) ignorée(s)");
@@ -90,6 +93,7 @@ public class ImportResultMessageTests
     [Fact]
     public async Task Correspondances_EnteteNonCompteEtMessageChiffre()
     {
+        // Arrange
         var contexte = new Contexte();
         var lignes = new List<string[]>
         {
@@ -97,8 +101,10 @@ public class ImportResultMessageTests
             new[] { "00123", "04285" }
         };
 
+        // Act
         var resultat = await contexte.Catalog.Cards.ImportCorrespondencesCsvAsync(lignes);
 
+        // Assert
         resultat.Imported.Should().Be(1);
         resultat.Skipped.Should().Be(0);
         resultat.Message.Should().Be("1 correspondance(s) importée(s), 0 ligne(s) ignorée(s).");
@@ -107,6 +113,7 @@ public class ImportResultMessageTests
     [Fact]
     public async Task Shifts_MessageIndiqueImportesEtIgnores()
     {
+        // Arrange
         var contexte = new Contexte();
         var rows = new List<Dictionary<string, string>>
         {
@@ -118,8 +125,10 @@ public class ImportResultMessageTests
             new() { ["NoSHIFT"] = "abc", ["INTITULE"] = "Invalide" }
         };
 
+        // Act
         var resultat = await contexte.Planning.ImportShiftsExcelAsync(rows);
 
+        // Assert
         resultat.Imported.Should().Be(1);
         resultat.Skipped.Should().Be(1);
         resultat.Message.Should().Be("1 shift(s) importé(s), 1 ligne(s) ignorée(s).");
@@ -128,6 +137,7 @@ public class ImportResultMessageTests
     [Fact]
     public async Task PointagesExcel_MessageIndiqueImportesEtIgnores()
     {
+        // Arrange
         var contexte = new Contexte();
         var rows = new List<Dictionary<string, string>>
         {
@@ -135,8 +145,10 @@ public class ImportResultMessageTests
             new() { ["Matricule"] = "04285", ["Date"] = "2026-11-02", ["Heure"] = "08:00" }
         };
 
+        // Act
         var resultat = await contexte.Timekeeping.ImportPunchesExcelAsync(rows);
 
+        // Assert
         resultat.Imported.Should().Be(1);
         resultat.Skipped.Should().Be(1);
         resultat.Message.Should().Be("1 pointage(s) importé(s), 1 ligne(s) ignorée(s).");
@@ -145,6 +157,7 @@ public class ImportResultMessageTests
     [Fact]
     public async Task PointagesExcel_SansLigneValide_MessageExplicite()
     {
+        // Arrange
         var contexte = new Contexte();
         var rows = new List<Dictionary<string, string>>
         {
@@ -152,8 +165,10 @@ public class ImportResultMessageTests
             new() { ["Matricule"] = "04285", ["Date"] = "pas une date", ["Heure"] = "08:00" }
         };
 
+        // Act
         var resultat = await contexte.Timekeeping.ImportPunchesExcelAsync(rows);
 
+        // Assert
         resultat.Imported.Should().Be(0);
         resultat.Skipped.Should().Be(2);
         resultat.Message.Should().Contain("Aucun pointage valide : 2 ligne(s) ignorée(s)");
@@ -162,6 +177,7 @@ public class ImportResultMessageTests
     [Fact]
     public async Task Corrections_CompteLesLignesSansMatricule()
     {
+        // Arrange
         var contexte = new Contexte();
         var rows = new List<Dictionary<string, string>>
         {
@@ -172,8 +188,10 @@ public class ImportResultMessageTests
             }
         };
 
+        // Act
         var resultat = await contexte.Timekeeping.ImportCorrectionsExcelAsync(rows);
 
+        // Assert
         resultat.Imported.Should().Be(0);
         resultat.Skipped.Should().Be(1);
         resultat.Message.Should().Contain("0 correction(s) importée(s), 1 ligne(s) ignorée(s) (matricule manquant).");
@@ -182,6 +200,7 @@ public class ImportResultMessageTests
     [Fact]
     public async Task Planning_MessageIndiqueImportesEtIgnores()
     {
+        // Arrange
         var contexte = new Contexte();
         var headers = new List<string> { "CATEGORIE", "2026-11-02" };
         var rows = new List<Dictionary<string, string>>
@@ -189,8 +208,10 @@ public class ImportResultMessageTests
             new() { ["CATEGORIE"] = "Inconnue", ["2026-11-02"] = "1" }
         };
 
+        // Act
         var resultat = await contexte.Planning.ImportExcelAsync(rows, headers);
 
+        // Assert
         resultat.Imported.Should().Be(0);
         resultat.Skipped.Should().Be(1);
         resultat.Message.Should().Be("0 ligne(s) de planning importée(s), 1 élément(s) ignoré(s).");
@@ -199,6 +220,7 @@ public class ImportResultMessageTests
     [Fact]
     public async Task Planning_LigneValide_MessageChiffre()
     {
+        // Arrange
         var contexte = new Contexte();
         var headers = new List<string> { "CATEGORIE", LundiReference.ToString("yyyy-MM-dd") };
         var rows = new List<Dictionary<string, string>>
@@ -206,8 +228,10 @@ public class ImportResultMessageTests
             new() { ["CATEGORIE"] = "Sédentaire", [LundiReference.ToString("yyyy-MM-dd")] = "1" }
         };
 
+        // Act
         var resultat = await contexte.Planning.ImportExcelAsync(rows, headers);
 
+        // Assert
         resultat.Imported.Should().Be(1);
         resultat.Skipped.Should().Be(0);
         resultat.Message.Should().Be("1 ligne(s) de planning importée(s), 0 élément(s) ignoré(s).");

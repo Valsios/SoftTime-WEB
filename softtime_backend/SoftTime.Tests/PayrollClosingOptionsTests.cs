@@ -34,6 +34,7 @@ public class PayrollClosingOptionsTests
     [Fact]
     public void IgnoreValidatedWeeks_True_KeepsCurrentBehaviour()
     {
+        // Act & Assert
         Incomplets(options: null).Should().BeEmpty();
         Incomplets(new ClosingRulesOptions { IgnorerSemainesValidees = true }).Should().BeEmpty();
     }
@@ -51,8 +52,13 @@ public class PayrollClosingOptionsTests
     [Fact]
     public void IgnoreValidatedWeeks_False_StillIgnoresManualDays()
     {
+        // Arrange
         var manuelle = new HeureCorrigee { MatriculeSage = "369", DatePointageIn = Mercredi, Origine = "MANUEL" };
 
-        Incomplets(new ClosingRulesOptions { IgnorerSemainesValidees = false }, new[] { manuelle }).Should().BeEmpty();
+        // Act
+        var result = Incomplets(new ClosingRulesOptions { IgnorerSemainesValidees = false }, new[] { manuelle });
+
+        // Assert
+        result.Should().BeEmpty();
     }
 }

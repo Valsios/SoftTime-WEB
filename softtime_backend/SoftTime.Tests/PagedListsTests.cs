@@ -16,8 +16,10 @@ public class PagedListsTests
     [Fact]
     public void Page_EmptySource_ReturnsOnePage()
     {
+        // Act
         var result = PagedLists.Page(Array.Empty<int>(), null, null);
 
+        // Assert
         result.Items.Should().BeEmpty();
         result.Total.Should().Be(0);
         result.Page.Should().Be(1);
@@ -28,8 +30,10 @@ public class PagedListsTests
     [Fact]
     public void Page_ClampsPageToLastPage()
     {
+        // Act
         var result = PagedLists.Page(Enumerable.Range(1, 25).ToList(), page: 10, pageSize: 10);
 
+        // Assert
         result.Page.Should().Be(3);
         result.TotalPages.Should().Be(3);
         result.Items.Count.Should().Be(5);
@@ -43,16 +47,20 @@ public class PagedListsTests
     [InlineData(2, 2)]
     public void Page_NormalizesPage(int demandee, int attendue)
     {
+        // Act
         var result = PagedLists.Page(Enumerable.Range(1, 100).ToList(), demandee, 10);
 
+        // Assert
         result.Page.Should().Be(attendue);
     }
 
     [Fact]
     public void Page_CapsPageSizeAtMaximum()
     {
+        // Act
         var result = PagedLists.Page(Enumerable.Range(1, 200).ToList(), page: 1, pageSize: 5000);
 
+        // Assert
         result.PageSize.Should().Be(PaginationRules.TailleMax);
         result.Items.Count.Should().Be(PaginationRules.TailleMax);
         result.TotalPages.Should().Be(2);
@@ -61,8 +69,10 @@ public class PagedListsTests
     [Fact]
     public void Page_FallsBackOnDefaultPageSize()
     {
+        // Act
         var result = PagedLists.Page(Enumerable.Range(1, 120).ToList(), page: null, pageSize: null);
 
+        // Assert
         result.PageSize.Should().Be(PaginationRules.TailleDefaut);
         result.TotalPages.Should().Be(3);
         result.Items.Count.Should().Be(50);
@@ -71,21 +81,27 @@ public class PagedListsTests
     [Fact]
     public void Page_PreservesOrder()
     {
+        // Arrange
         var source = new[] { "c", "a", "b" };
 
+        // Act
         var result = PagedLists.Page(source, 1, 10);
 
+        // Assert
         result.Items.Should().Equal(source);
     }
 
     [Fact]
     public async Task PageAsync_CountsAndPages()
     {
+        // Arrange
         var repository = new FakeRepository<Item>(
             Enumerable.Range(1, 120).Select(i => new Item(i)).ToList());
 
+        // Act
         var result = await PagedLists.From(repository, _ => true, q => q.OrderBy(x => x.Value)).PageAsync(new PageRequest(2, 50), x => x.Value * 10);
 
+        // Assert
         result.Total.Should().Be(120);
         result.Page.Should().Be(2);
         result.PageSize.Should().Be(50);
@@ -98,10 +114,13 @@ public class PagedListsTests
     [Fact]
     public async Task PageAsync_EmptySource_DoesNotReadItems()
     {
+        // Arrange
         var repository = new FakeRepository<Item>(Array.Empty<Item>());
 
+        // Act
         var result = await PagedLists.From(repository, _ => false, q => q.OrderBy(x => x.Value)).PageAsync(new PageRequest(3, 50), x => x.Value);
 
+        // Assert
         result.Items.Should().BeEmpty();
         result.Total.Should().Be(0);
         result.Page.Should().Be(1);
@@ -111,11 +130,14 @@ public class PagedListsTests
     [Fact]
     public async Task PageAsync_AppliesPredicateAndClampsPage()
     {
+        // Arrange
         var repository = new FakeRepository<Item>(
             Enumerable.Range(1, 25).Select(i => new Item(i)).ToList());
 
+        // Act
         var result = await PagedLists.From(repository, x => x.Value % 2 == 0, q => q.OrderBy(x => x.Value)).PageAsync(new PageRequest(99, 10), x => x.Value);
 
+        // Assert
         result.Total.Should().Be(12);
         result.Page.Should().Be(2);
         result.TotalPages.Should().Be(2);
@@ -125,8 +147,10 @@ public class PagedListsTests
     [Fact]
     public void Page_PageExtreme_ClampsToLastPage()
     {
+        // Act
         var result = PagedLists.Page(Enumerable.Range(1, 25).ToList(), page: int.MaxValue, pageSize: 10);
 
+        // Assert
         result.Page.Should().Be(3);
         result.TotalPages.Should().Be(3);
         result.Items.Count.Should().Be(5);
@@ -137,11 +161,14 @@ public class PagedListsTests
     [Fact]
     public async Task PageAsync_PageExtreme_ClampsToLastPage()
     {
+        // Arrange
         var repository = new FakeRepository<Item>(
             Enumerable.Range(1, 25).Select(i => new Item(i)).ToList());
 
+        // Act
         var result = await PagedLists.From(repository, _ => true, q => q.OrderBy(x => x.Value)).PageAsync(new PageRequest(int.MaxValue, 10), x => x.Value);
 
+        // Assert
         result.Total.Should().Be(25);
         result.Page.Should().Be(3);
         result.TotalPages.Should().Be(3);

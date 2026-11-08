@@ -23,15 +23,18 @@ public class AuditJournalTransactionalTests
     [Fact]
     public void Generated_identity_is_written_to_the_journal_after_the_business_insert()
     {
+        // Arrange
         EnsureInitialized();
         using var db = CreateAuditedContext();
         using var transaction = db.Database.BeginTransaction();
         var entity = new CodeAbsence { IntituleAbsence = $"audit-{Guid.NewGuid():N}" };
         db.Add(entity);
-
         db.SaveChanges();
 
+        // Act
         var entries = db.JournalAudits.Where(item => item.Tables == "T_CODEABSENCE").ToList();
+
+        // Assert
         (entity.IdAbsence > 0).Should().BeTrue();
         entries.Should().NotBeEmpty();
         entries.Should().AllSatisfy(entry => entry.Cles.Should().Be($"ID_ABSENCE={entity.IdAbsence}"));
@@ -42,15 +45,18 @@ public class AuditJournalTransactionalTests
     [Fact]
     public void Non_generated_key_is_preserved_in_the_journal()
     {
+        // Arrange
         EnsureInitialized();
         using var db = CreateAuditedContext();
         using var transaction = db.Database.BeginTransaction();
         var code = $"AUDIT-{Guid.NewGuid():N}";
         db.Add(new FieldRole { Code = code, EntityKind = "EMPLOYEE", Label = "Audit", SystemType = "SAGE" });
-
         db.SaveChanges();
 
+        // Act
         var entries = db.JournalAudits.Where(item => item.Tables == "T_FIELD_ROLE").ToList();
+
+        // Assert
         entries.Should().NotBeEmpty();
         entries.Should().AllSatisfy(entry => entry.Cles.Should().Be($"Code={code}"));
         transaction.Rollback();
@@ -74,14 +80,17 @@ public class AuditJournalTransactionalTests
     [Fact]
     public void Existing_transaction_is_reused_without_being_committed()
     {
+        // Arrange
         EnsureInitialized();
-        using var db = CreateAuditedContext();
-        using var transaction = db.Database.BeginTransaction();
-        db.Add(new CodeAbsence { IntituleAbsence = $"external-{Guid.NewGuid():N}" });
+        using var sut = CreateAuditedContext();
+        using var transaction = sut.Database.BeginTransaction();
+        sut.Add(new CodeAbsence { IntituleAbsence = $"external-{Guid.NewGuid():N}" });
 
-        db.SaveChanges();
+        // Act
+        sut.SaveChanges();
 
-        db.Database.CurrentTransaction.Should().NotBeNull();
+        // Assert
+        sut.Database.CurrentTransaction.Should().NotBeNull();
         (transaction.GetDbTransaction().Connection is not null).Should().BeTrue();
         transaction.Rollback();
     }
@@ -89,14 +98,17 @@ public class AuditJournalTransactionalTests
     [Fact]
     public void Disabled_audit_writes_no_journal_entry()
     {
+        // Arrange
         EnsureInitialized();
-        using var db = CreateAuditedContext(options: new AuditJournalOptions { Enabled = false });
-        using var transaction = db.Database.BeginTransaction();
-        db.Add(new CodeAbsence { IntituleAbsence = $"disabled-{Guid.NewGuid():N}" });
+        using var sut = CreateAuditedContext(options: new AuditJournalOptions { Enabled = false });
+        using var transaction = sut.Database.BeginTransaction();
+        sut.Add(new CodeAbsence { IntituleAbsence = $"disabled-{Guid.NewGuid():N}" });
 
-        db.SaveChanges();
+        // Act
+        sut.SaveChanges();
 
-        db.JournalAudits.Should().BeEmpty();
+        // Assert
+        sut.JournalAudits.Should().BeEmpty();
         transaction.Rollback();
     }
 

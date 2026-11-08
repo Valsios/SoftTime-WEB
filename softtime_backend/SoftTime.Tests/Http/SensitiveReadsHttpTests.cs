@@ -45,11 +45,15 @@ public class SensitiveReadsHttpTests : IClassFixture<ApiFactory>
     [MemberData(nameof(Cases))]
     public async Task Sensitive_read_is_allowed_only_with_gate_2_and_a_matching_permission(string route, string profile)
     {
+        // Arrange
         var (url, allowed) = Routes[route];
         var resp = await _http.SendAsync(_f.Request(profile, HttpMethod.Get, url));
         var text = await resp.Content.ReadAsStringAsync();
+
+        // Act
         ApiFactory.Report($"4B9|{route}|{profile}|{(int)resp.StatusCode}|{(text.Length == 0 ? "corps vide" : text.Length > 90 ? text[..90] : text)}");
 
+        // Assert
         if (profile == "anonyme")
         {
             resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -69,8 +73,11 @@ public class SensitiveReadsHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Own_detailed_permissions_stay_readable_through_the_login_response_not_this_route()
     {
+        // Act
         // GET privileges/user/{id} est réservé à PARAMS:PRIVILEGES ; un compte lit les siens via /auth/me.
         var me = await _http.SendAsync(_f.Request("param2", HttpMethod.Get, "/api/v1/auth/me"));
+
+        // Assert
         me.StatusCode.Should().Be(HttpStatusCode.OK);
         var route = await _http.SendAsync(_f.Request("param2", HttpMethod.Get, "/api/v1/privileges/user/10040"));
         route.StatusCode.Should().Be(HttpStatusCode.Forbidden);
@@ -81,10 +88,13 @@ public class SensitiveReadsHttpTests : IClassFixture<ApiFactory>
     [InlineData("/api/v1/privileges/audit", "admin")]            // porte Traçabilité (5), pas Paramètres
     public async Task Audit_of_rights_is_governed_by_the_traceability_gate(string url, string profile)
     {
+        // Act
         var ok = await _http.SendAsync(_f.Request(profile, HttpMethod.Get, url));
+
+        // Assert
         ok.StatusCode.Should().Be(HttpStatusCode.OK);
         var refused = await _http.SendAsync(_f.Request(U, HttpMethod.Get, url));
-        refused.StatusCode.Should().Be(HttpStatusCode.Forbidden);   // porte 2 et PARAMS:USERS ne donnent pas la porte 5
+        refused.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Theory]
@@ -93,7 +103,10 @@ public class SensitiveReadsHttpTests : IClassFixture<ApiFactory>
     [InlineData("/api/v1/field-roles")]
     public async Task Lists_used_by_other_screens_stay_open_to_any_authenticated_account(string url)
     {
+        // Act
         var resp = await _http.SendAsync(_f.Request("paramsother", HttpMethod.Get, url));
+
+        // Assert
         resp.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
         resp.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
     }

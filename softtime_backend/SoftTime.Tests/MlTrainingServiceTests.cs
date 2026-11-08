@@ -21,11 +21,14 @@ public class MlTrainingServiceTests
     [Fact]
     public async Task Donnees_insuffisantes_restent_en_baseline()
     {
+        // Arrange
         var store = new FakeMlStore();
-        var service = new MlTrainingService(store, new FakeMlTrainer(), Options.Create(TrainingOptions()), NullLogger<MlTrainingService>.Instance);
+        var sut = new MlTrainingService(store, new FakeMlTrainer(), Options.Create(TrainingOptions()), NullLogger<MlTrainingService>.Instance);
 
-        var outcome = await service.TrainAsync(Sage);
+        // Act
+        var outcome = await sut.TrainAsync(Sage);
 
+        // Assert
         outcome.Etat.Should().Be("Baseline");
         outcome.HsProbabilite.Should().BeNull();
         outcome.HsMontant.Should().BeNull();
@@ -36,6 +39,7 @@ public class MlTrainingServiceTests
     [Fact]
     public async Task Modele_au_dessus_de_la_baseline_est_active()
     {
+        // Arrange
         var store = new FakeMlStore();
         Seed(store);
         var trainer = new FakeMlTrainer
@@ -43,10 +47,12 @@ public class MlTrainingServiceTests
             AmountResult = new MlTrainingResult(true, "Fake", new byte[] { 1, 2, 3 },
                 new MlMetrics(Mae: 0.5, TestRows: 50, TestPositives: 10), null)
         };
-        var service = new MlTrainingService(store, trainer, Options.Create(TrainingOptions()), NullLogger<MlTrainingService>.Instance);
+        var sut = new MlTrainingService(store, trainer, Options.Create(TrainingOptions()), NullLogger<MlTrainingService>.Instance);
 
-        var outcome = await service.TrainAsync(Sage);
+        // Act
+        var outcome = await sut.TrainAsync(Sage);
 
+        // Assert
         outcome.Etat.Should().Be("Pret");
         (outcome.HsProbabilite is { EstActif: true }).Should().BeTrue();
         (outcome.HsMontant is { EstActif: true }).Should().BeTrue();
@@ -58,6 +64,7 @@ public class MlTrainingServiceTests
     [Fact]
     public async Task Modele_sous_la_baseline_est_rejete_et_ancien_modele_conserve()
     {
+        // Arrange
         var store = new FakeMlStore();
         Seed(store);
         store.Models.Add(new MlModele
@@ -76,16 +83,17 @@ public class MlTrainingServiceTests
             SchemaHash = "ancien",
             ModeleBinaire = new byte[] { 9 }
         });
-
         var trainer = new FakeMlTrainer
         {
             AmountResult = new MlTrainingResult(true, "Fake", new byte[] { 1, 2, 3 },
                 new MlMetrics(Mae: 2.0, TestRows: 50, TestPositives: 10), null)
         };
-        var service = new MlTrainingService(store, trainer, Options.Create(TrainingOptions()), NullLogger<MlTrainingService>.Instance);
+        var sut = new MlTrainingService(store, trainer, Options.Create(TrainingOptions()), NullLogger<MlTrainingService>.Instance);
 
-        var outcome = await service.TrainAsync(Sage);
+        // Act
+        var outcome = await sut.TrainAsync(Sage);
 
+        // Assert
         outcome.Etat.Should().Be("Baseline");
         (outcome.HsMontant is { EstActif: true }).Should().BeFalse();
         store.Models.Count(m => m.TypeModele == MlModelTypes.HsMontant && m.EstActif).Should().Be(1);

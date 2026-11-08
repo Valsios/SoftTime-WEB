@@ -45,19 +45,23 @@ public class AccountDeletionTests
     [Fact]
     public async Task Deleting_an_account_removes_its_permissions_and_database_access_only()
     {
+        // Act
         await _auth.DeleteUserAsync(1, 2);
 
+        // Assert
         _store.Get<Responsable>().Items.Should().NotContain(u => u.IdResponsable == 2);
         Rows(2).Should().Be(0);
-        Rows(3).Should().Be(3);                                   // lignes des autres comptes intactes
-        _store.Get<AuditDroit>().Items.Should().ContainSingle();        // journal d'audit conservé
+        Rows(3).Should().Be(3);
+        _store.Get<AuditDroit>().Items.Should().ContainSingle();
     }
 
     [Fact]
     public async Task Everything_is_staged_before_one_single_save()
     {
+        // Act
         await _auth.DeleteUserAsync(1, 2);
 
+        // Assert
         _uow.SaveCount.Should().Be(1);
         // Au moment de l'unique sauvegarde, le compte et toutes ses lignes étaient déjà retirés : une seule transaction.
         _uow.StateAtSave.Should().Be((false, 0));
@@ -66,8 +70,14 @@ public class AccountDeletionTests
     [Fact]
     public async Task A_failed_save_is_the_only_save_attempted_by_the_service()
     {
+        // Arrange
         _uow.FailOnSave = true;
-        await FluentActions.Awaiting(() => _auth.DeleteUserAsync(1, 2)).Should().ThrowExactlyAsync<InvalidOperationException>();
+
+        // Act
+        Func<Task> act = () => _auth.DeleteUserAsync(1, 2);
+
+        // Assert
+        await act.Should().ThrowExactlyAsync<InvalidOperationException>();
         // Une seule sauvegarde (échouée) : avec une base réelle, la transaction annule toutes les suppressions ensemble.
         _uow.SaveCount.Should().Be(1);
     }
@@ -75,8 +85,14 @@ public class AccountDeletionTests
     [Fact]
     public async Task Self_deletion_is_refused_and_no_row_is_removed()
     {
+        // Arrange
         var before = _store.Snapshot();
-        await FluentActions.Awaiting(() => _auth.DeleteUserAsync(1, 1)).Should().ThrowExactlyAsync<DomainException>();
+
+        // Act
+        Func<Task> act = () => _auth.DeleteUserAsync(1, 1);
+
+        // Assert
+        await act.Should().ThrowExactlyAsync<DomainException>();
         _store.Snapshot().Should().Be(before);
         _uow.SaveCount.Should().Be(0);
     }
@@ -84,9 +100,15 @@ public class AccountDeletionTests
     [Fact]
     public async Task Last_administrator_deletion_is_refused_and_no_row_is_removed()
     {
+        // Arrange
         _store.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 1, PermissionCode = "PROC:SHIFTS", IsGranted = true });
         var before = _store.Snapshot();
-        var ex = (await FluentActions.Awaiting(() => _auth.DeleteUserAsync(1)).Should().ThrowExactlyAsync<ConflictException>()).Which;   // surcharge sans appelant
+
+        // Act
+        Func<Task> act = () => _auth.DeleteUserAsync(1);
+
+        // Assert
+        var ex = (await act.Should().ThrowExactlyAsync<ConflictException>()).Which;
         ex.Message.Should().Be("Impossible de supprimer le dernier administrateur.");
         _store.Snapshot().Should().Be(before);
     }
@@ -94,17 +116,28 @@ public class AccountDeletionTests
     [Fact]
     public async Task Another_administrator_can_be_deleted_with_its_rows()
     {
+        // Arrange
         _store.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 9, IdRole = 1, Login = "admin2" });
         _store.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 9, PermissionCode = "PROC:SHIFTS", IsGranted = true });
+
+        // Act
         await _auth.DeleteUserAsync(1, 9);
+
+        // Assert
         Rows(9).Should().Be(0);
     }
 
     [Fact]
     public async Task Unknown_account_deletes_nothing()
     {
+        // Arrange
         var before = _store.Snapshot();
-        await FluentActions.Awaiting(() => _auth.DeleteUserAsync(1, 999)).Should().ThrowExactlyAsync<NotFoundException>();
+
+        // Act
+        Func<Task> act = () => _auth.DeleteUserAsync(1, 999);
+
+        // Assert
+        await act.Should().ThrowExactlyAsync<NotFoundException>();
         _store.Snapshot().Should().Be(before);
     }
 

@@ -28,6 +28,7 @@ public class AuditConfigurationRulesTests
     [InlineData("uniqueidentifier")]
     public void IsValid_WithStandardTypes_ReturnsTrue(string type)
     {
+        // Act & Assert
         AuditConfigurationRules.IsValid(type).Should().BeTrue();
         AuditConfigurationRules.IsValid(type.ToUpperInvariant()).Should().BeTrue();
         AuditConfigurationRules.IsValid($"  {type}  ").Should().BeTrue();
@@ -43,7 +44,11 @@ public class AuditConfigurationRulesTests
     [InlineData("  image  ")]
     public void IsValid_WithExcludedLegacyTypes_ReturnsFalse(string type)
     {
-        AuditConfigurationRules.IsValid(type).Should().BeFalse();
+        // Act
+        var result = AuditConfigurationRules.IsValid(type);
+
+        // Assert
+        result.Should().BeFalse();
         AuditConfigurationRules.IsExcluded(type).Should().BeTrue();
     }
 
@@ -57,12 +62,17 @@ public class AuditConfigurationRulesTests
     [InlineData("variant")]
     public void IsValid_WithInvalidOrEmptyType_ReturnsFalse(string? type)
     {
-        AuditConfigurationRules.IsValid(type).Should().BeFalse();
+        // Act
+        var result = AuditConfigurationRules.IsValid(type);
+
+        // Assert
+        result.Should().BeFalse();
     }
 
     [Fact]
     public void Normalize_TrimsAndLowercases()
     {
+        // Act & Assert
         AuditConfigurationRules.Normalize("  NVARCHAR  ").Should().Be("nvarchar");
         AuditConfigurationRules.Normalize("INT").Should().Be("int");
         AuditConfigurationRules.Normalize(" DateTime ").Should().Be("datetime");
@@ -71,6 +81,7 @@ public class AuditConfigurationRulesTests
     [Fact]
     public void Normalize_WithNullOrInvalid_ThrowsDomainException()
     {
+        // Act & Assert
         FluentActions.Invoking(() => AuditConfigurationRules.Normalize(null!)).Should().ThrowExactly<DomainException>();
         FluentActions.Invoking(() => AuditConfigurationRules.Normalize("not_a_type")).Should().ThrowExactly<DomainException>();
     }
@@ -81,7 +92,11 @@ public class AuditConfigurationRulesTests
     [InlineData("   ")]
     public void Valider_WithEmptyOrNull_ThrowsDomainException(string? type)
     {
-        var ex = FluentActions.Invoking(() => AuditConfigurationRules.Valider(type)).Should().ThrowExactly<DomainException>().Which;
+        // Act
+        var act = () => AuditConfigurationRules.Valider(type);
+
+        // Assert
+        var ex = act.Should().ThrowExactly<DomainException>().Which;
         ex.Message.Should().ContainEquivalentOf("obligatoire");
     }
 
@@ -91,7 +106,11 @@ public class AuditConfigurationRulesTests
     [InlineData("image")]
     public void Valider_WithExcludedType_ThrowsDomainException(string type)
     {
-        var ex = FluentActions.Invoking(() => AuditConfigurationRules.Valider(type)).Should().ThrowExactly<DomainException>().Which;
+        // Act
+        var act = () => AuditConfigurationRules.Valider(type);
+
+        // Assert
+        var ex = act.Should().ThrowExactly<DomainException>().Which;
         ex.Message.Should().ContainEquivalentOf("exclu");
     }
 
@@ -100,7 +119,11 @@ public class AuditConfigurationRulesTests
     [InlineData("custom_sql_type")]
     public void Valider_WithUnknownType_ThrowsDomainException(string type)
     {
-        var ex = FluentActions.Invoking(() => AuditConfigurationRules.Valider(type)).Should().ThrowExactly<DomainException>().Which;
+        // Act
+        var act = () => AuditConfigurationRules.Valider(type);
+
+        // Assert
+        var ex = act.Should().ThrowExactly<DomainException>().Which;
         ex.Message.Should().ContainEquivalentOf("pas autorisé");
     }
 
@@ -115,8 +138,10 @@ public class AuditConfigurationRulesTests
     [Fact]
     public void AllowedTypeOptions_HasExpectedItemsWithoutDuplicatesOrExcludedTypes()
     {
+        // Act
         var options = AuditConfigurationRules.AllowedTypeOptions;
 
+        // Assert
         options.Should().NotBeEmpty();
         options.Select(o => o.Value).Distinct().Count().Should().Be(options.Count);
         options.Where(o => o.Value is "text" or "ntext" or "image").Should().BeEmpty();

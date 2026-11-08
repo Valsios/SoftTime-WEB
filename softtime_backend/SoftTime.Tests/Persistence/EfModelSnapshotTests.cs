@@ -43,15 +43,15 @@ public class EfModelSnapshotTests
     public void MlModel_ComparedToTheMigrationSnapshot_HasNoPendingChange()
     {
         // Arrange
-        using var db = new MlDbContext(Options<MlDbContext>());
-        var snapshot = db.GetService<IMigrationsAssembly>().ModelSnapshot!.Model;
+        using var sut = new MlDbContext(Options<MlDbContext>());
+        var snapshot = sut.GetService<IMigrationsAssembly>().ModelSnapshot!.Model;
         if (snapshot is IMutableModel mutable)
             snapshot = mutable.FinalizeModel();
-        snapshot = db.GetService<IModelRuntimeInitializer>().Initialize(snapshot);
-        var current = db.GetService<IDesignTimeModel>().Model;
+        snapshot = sut.GetService<IModelRuntimeInitializer>().Initialize(snapshot);
+        var current = sut.GetService<IDesignTimeModel>().Model;
 
         // Act
-        var pending = db.GetService<IMigrationsModelDiffer>()
+        var pending = sut.GetService<IMigrationsModelDiffer>()
             .GetDifferences(snapshot.GetRelationalModel(), current.GetRelationalModel())
             .Select(Describe)
             .ToList();

@@ -37,15 +37,20 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Preview_for_an_administrator_lists_the_adjustments_that_would_be_cleared()
     {
+        // Arrange
         var before = _f.Snapshot();
+
+        // Act
         var (resp, text) = await Send("admin", HttpMethod.Post, "/api/v1/users/10080/role-change-preview", """{"newRoleId":40}""");
+
+        // Assert
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
         using var doc = JsonDocument.Parse(text);
         doc.RootElement.GetProperty("data").GetProperty("count").GetInt32().Should().Be(2);
         doc.RootElement.GetProperty("data").GetProperty("accountLogin").GetString().Should().Be("adjusted1");
         var codes = doc.RootElement.GetProperty("data").GetProperty("adjustmentsToClear").EnumerateArray().Select(e => e.GetString()).ToList();
         codes.OrderBy(c => c).Should().Equal(new[] { "+PROC:PUNCHES", "+PROC:SHIFTS" });
-        _f.Snapshot().Should().Be(before);                 // l'aperçu n'écrit rien
+        _f.Snapshot().Should().Be(before);
     }
 
     [Theory]
@@ -55,24 +60,32 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
     [InlineData("user1")]
     public async Task Preview_is_refused_to_non_administrators(string profile)
     {
+        // Act
         var (resp, _) = await Send(profile, HttpMethod.Post, "/api/v1/users/10080/role-change-preview", """{"newRoleId":40}""");
+
+        // Assert
         resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
     public async Task Preview_is_refused_to_anonymous()
     {
+        // Act
         var (resp, _) = await Send("anonyme", HttpMethod.Post, "/api/v1/users/10080/role-change-preview", """{"newRoleId":40}""");
+
+        // Assert
         resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
     public async Task Preview_has_count_zero_without_adjustments_or_when_the_role_does_not_change()
     {
+        // Act
         var (withoutAdjustments, text1) = await Send("admin", HttpMethod.Post, "/api/v1/users/10050/role-change-preview", """{"newRoleId":40}""");
+
+        // Assert
         withoutAdjustments.StatusCode.Should().Be(HttpStatusCode.OK);
         JsonDocument.Parse(text1).RootElement.GetProperty("data").GetProperty("count").GetInt32().Should().Be(0);
-
         var (sameRole, text2) = await Send("admin", HttpMethod.Post, "/api/v1/users/10080/role-change-preview", """{"newRoleId":91}""");
         sameRole.StatusCode.Should().Be(HttpStatusCode.OK);
         using var doc = JsonDocument.Parse(text2);
@@ -83,8 +96,13 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Put_without_confirmation_gives_409_with_the_preview_body_and_writes_nothing()
     {
+        // Arrange
         var before = _f.Snapshot();
+
+        // Act
         var (resp, text) = await Send("admin", HttpMethod.Put, "/api/v1/users/10080", Put(10080, 40, "adjusted1"));
+
+        // Assert
         resp.StatusCode.Should().Be(HttpStatusCode.Conflict);
         using var doc = JsonDocument.Parse(text);
         doc.RootElement.GetProperty("data").GetProperty("count").GetInt32().Should().Be(2);
@@ -119,7 +137,10 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Put_changing_the_role_of_an_account_without_adjustments_needs_no_confirmation()
     {
+        // Act
         var (resp, _) = await Send("admin", HttpMethod.Put, "/api/v1/users/10050", Put(10050, 40, "cible"));
+
+        // Assert
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
         _f.Store.Get<Responsable>().Items.Single(u => u.IdResponsable == 10050).IdRole.Should().Be(40);
     }
@@ -127,8 +148,13 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Put_keeping_the_same_role_keeps_the_adjustments_without_confirmation()
     {
+        // Arrange
         var rows = Rows(10083);
+
+        // Act
         var (resp, _) = await Send("admin", HttpMethod.Put, "/api/v1/users/10083", Put(10083, 91, "adjusted3"));
+
+        // Assert
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
         Rows(10083).Should().Be(rows);
     }
@@ -138,8 +164,13 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
     [InlineData("joel")]
     public async Task Put_is_still_refused_to_non_administrators(string profile)
     {
+        // Arrange
         var before = _f.Snapshot();
+
+        // Act
         var (resp, _) = await Send(profile, HttpMethod.Put, "/api/v1/users/10080", Put(10080, 40, "adjusted1", confirm: true));
+
+        // Assert
         resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         _f.Snapshot().Should().Be(before);
     }

@@ -15,14 +15,17 @@ public class CardPaieMappingTests
     [Fact]
     public void Departement_IsMappedToCardPaieEntity()
     {
-        var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
+        // Arrange
+        var sut = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
         var dto = new CardPaieDto(0, "001", "Dupont", "Jean", null, null, null, null, null, null, null)
         {
             Departement = "INFO",
         };
 
-        var entity = mapper.Map<CardPaie>(dto);
+        // Act
+        var entity = sut.Map<CardPaie>(dto);
 
+        // Assert
         entity.Departement.Should().Be("INFO");
     }
 }

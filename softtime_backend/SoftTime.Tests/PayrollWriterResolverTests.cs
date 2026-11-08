@@ -12,8 +12,13 @@ public class PayrollWriterResolverTests
     [InlineData("AUTRE", "AUTRE")]
     public void SelectsWriterForConfiguredDatabaseType(string typeBase, string expected)
     {
-        var resolver = new PayrollWriterResolver(new IPayrollWriter[] { new StubWriter("STANDARD"), new StubWriter("AUTRE") });
-        var writer = resolver.Resolve(new BddSage { TypeBase = typeBase });
+        // Arrange
+        var sut = new PayrollWriterResolver(new IPayrollWriter[] { new StubWriter("STANDARD"), new StubWriter("AUTRE") });
+
+        // Act
+        var writer = sut.Resolve(new BddSage { TypeBase = typeBase });
+
+        // Assert
         ((StubWriter)writer).Type.Should().Be(expected);
     }
 

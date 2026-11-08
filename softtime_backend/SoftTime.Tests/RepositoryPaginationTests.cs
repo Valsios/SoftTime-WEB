@@ -58,7 +58,10 @@ public class RepositoryPaginationTests
     [InlineData(4, 25, 4, 25)]
     public void Normaliser_PageEtTaille_SontBornees(int? page, int? pageSize, int attenduPage, int attenduTaille)
     {
+        // Act
         var (p, s) = PaginationRules.Normaliser(page, pageSize);
+
+        // Assert
         p.Should().Be(attenduPage);
         s.Should().Be(attenduTaille);
     }
@@ -66,15 +69,18 @@ public class RepositoryPaginationTests
     [Fact]
     public async Task ToPagedAsync_PremierePage_RetournePremiereTrancheEtTotalExact()
     {
-        var repo = new InMemoryTestRepository();
+        // Arrange
+        var sut = new InMemoryTestRepository();
         for (int i = 1; i <= 25; i++)
-            repo.Items.Add(new TestEntity(i, "CatA", $"Item {i:D2}", i * 10));
+            sut.Items.Add(new TestEntity(i, "CatA", $"Item {i:D2}", i * 10));
 
-        var result = await repo.ToPagedAsync(
+        // Act
+        var result = await sut.ToPagedAsync(
             null,
             q => q.OrderBy(x => x.Id),
             new PageRequest(1, 10));
 
+        // Assert
         result.Total.Should().Be(25);
         result.Page.Should().Be(1);
         result.PageSize.Should().Be(10);
@@ -87,15 +93,18 @@ public class RepositoryPaginationTests
     [Fact]
     public async Task ToPagedAsync_DernierePage_RetourneReliquatEtBonsTotaux()
     {
-        var repo = new InMemoryTestRepository();
+        // Arrange
+        var sut = new InMemoryTestRepository();
         for (int i = 1; i <= 25; i++)
-            repo.Items.Add(new TestEntity(i, "CatA", $"Item {i:D2}", i * 10));
+            sut.Items.Add(new TestEntity(i, "CatA", $"Item {i:D2}", i * 10));
 
-        var result = await repo.ToPagedAsync(
+        // Act
+        var result = await sut.ToPagedAsync(
             null,
             q => q.OrderBy(x => x.Id),
             new PageRequest(3, 10));
 
+        // Assert
         result.Total.Should().Be(25);
         result.Page.Should().Be(3);
         result.PageSize.Should().Be(10);
@@ -108,15 +117,18 @@ public class RepositoryPaginationTests
     [Fact]
     public async Task ToPagedAsync_PageHorsLimites_RetourneItemsVidesMaisTotalConserve()
     {
-        var repo = new InMemoryTestRepository();
+        // Arrange
+        var sut = new InMemoryTestRepository();
         for (int i = 1; i <= 25; i++)
-            repo.Items.Add(new TestEntity(i, "CatA", $"Item {i:D2}", i * 10));
+            sut.Items.Add(new TestEntity(i, "CatA", $"Item {i:D2}", i * 10));
 
-        var result = await repo.ToPagedAsync(
+        // Act
+        var result = await sut.ToPagedAsync(
             null,
             q => q.OrderBy(x => x.Id),
             new PageRequest(10, 10));
 
+        // Assert
         result.Total.Should().Be(25);
         result.Page.Should().Be(10);
         result.PageSize.Should().Be(10);
@@ -127,15 +139,18 @@ public class RepositoryPaginationTests
     [Fact]
     public async Task ToPagedAsync_PageSizeTropGrand_PlafonneATailleMax()
     {
-        var repo = new InMemoryTestRepository();
+        // Arrange
+        var sut = new InMemoryTestRepository();
         for (int i = 1; i <= 150; i++)
-            repo.Items.Add(new TestEntity(i, "CatA", $"Item {i:D3}", i));
+            sut.Items.Add(new TestEntity(i, "CatA", $"Item {i:D3}", i));
 
-        var result = await repo.ToPagedAsync(
+        // Act
+        var result = await sut.ToPagedAsync(
             null,
             q => q.OrderBy(x => x.Id),
             new PageRequest(1, 500));
 
+        // Assert
         result.PageSize.Should().Be(100);
         result.Items.Count.Should().Be(100);
         result.Total.Should().Be(150);
@@ -145,15 +160,18 @@ public class RepositoryPaginationTests
     [Fact]
     public async Task ToPagedAsync_PageSizeInvalide_RetombeSurTailleDefaut()
     {
-        var repo = new InMemoryTestRepository();
+        // Arrange
+        var sut = new InMemoryTestRepository();
         for (int i = 1; i <= 60; i++)
-            repo.Items.Add(new TestEntity(i, "CatA", $"Item {i:D2}", i));
+            sut.Items.Add(new TestEntity(i, "CatA", $"Item {i:D2}", i));
 
-        var result = await repo.ToPagedAsync(
+        // Act
+        var result = await sut.ToPagedAsync(
             null,
             q => q.OrderBy(x => x.Id),
             new PageRequest(1, -1));
 
+        // Assert
         result.PageSize.Should().Be(PaginationRules.TailleDefaut);
         result.Items.Count.Should().Be(50);
         result.Total.Should().Be(60);
@@ -162,13 +180,16 @@ public class RepositoryPaginationTests
     [Fact]
     public async Task ToPagedAsync_ListeVide_RetourneZeroTotalEtUnePage()
     {
-        var repo = new InMemoryTestRepository();
+        // Arrange
+        var sut = new InMemoryTestRepository();
 
-        var result = await repo.ToPagedAsync(
+        // Act
+        var result = await sut.ToPagedAsync(
             null,
             q => q.OrderBy(x => x.Id),
             new PageRequest(1, 10));
 
+        // Assert
         result.Total.Should().Be(0);
         result.TotalPages.Should().Be(1);
         result.Items.Should().BeEmpty();
@@ -177,33 +198,39 @@ public class RepositoryPaginationTests
     [Fact]
     public async Task ToPagedAsync_TriStableAvecDoublons_GarantitOrdreDeterministe()
     {
-        var repo = new InMemoryTestRepository();
+        // Arrange
+        var sut = new InMemoryTestRepository();
         // Doublons sur Category, departages par Id
-        repo.Items.Add(new TestEntity(5, "SameCat", "B", 20));
-        repo.Items.Add(new TestEntity(2, "SameCat", "A", 10));
-        repo.Items.Add(new TestEntity(8, "SameCat", "C", 30));
-        repo.Items.Add(new TestEntity(1, "SameCat", "Z", 5));
+        sut.Items.Add(new TestEntity(5, "SameCat", "B", 20));
+        sut.Items.Add(new TestEntity(2, "SameCat", "A", 10));
+        sut.Items.Add(new TestEntity(8, "SameCat", "C", 30));
+        sut.Items.Add(new TestEntity(1, "SameCat", "Z", 5));
 
-        var result = await repo.ToPagedAsync(
+        // Act
+        var result = await sut.ToPagedAsync(
             null,
             q => q.OrderBy(x => x.Category).ThenBy(x => x.Id),
             new PageRequest(1, 10));
 
+        // Assert
         result.Items.Select(x => x.Id).ToArray().Should().Equal(new[] { 1, 2, 5, 8 });
     }
 
     [Fact]
     public async Task ToPagedAsync_CombinaisonFiltreEtPagination_FiltreEnAmont()
     {
-        var repo = new InMemoryTestRepository();
+        // Arrange
+        var sut = new InMemoryTestRepository();
         for (int i = 1; i <= 30; i++)
-            repo.Items.Add(new TestEntity(i, i % 2 == 0 ? "Pair" : "Impair", $"Item {i}", i));
+            sut.Items.Add(new TestEntity(i, i % 2 == 0 ? "Pair" : "Impair", $"Item {i}", i));
 
-        var result = await repo.ToPagedAsync(
+        // Act
+        var result = await sut.ToPagedAsync(
             x => x.Category == "Pair",
             q => q.OrderBy(x => x.Id),
             new PageRequest(2, 5));
 
+        // Assert
         // 15 pairs au total, page 2 de taille 5 -> éléments 6 à 10 (Ids: 12, 14, 16, 18, 20)
         result.Total.Should().Be(15);
         result.TotalPages.Should().Be(3);
@@ -215,16 +242,19 @@ public class RepositoryPaginationTests
     [Fact]
     public async Task ToPagedAsync_AvecProjectionDto_MappeCorrectement()
     {
-        var repo = new InMemoryTestRepository();
+        // Arrange
+        var sut = new InMemoryTestRepository();
         for (int i = 1; i <= 15; i++)
-            repo.Items.Add(new TestEntity(i, "Cat", $"Nom {i}", i * 100));
+            sut.Items.Add(new TestEntity(i, "Cat", $"Nom {i}", i * 100));
 
-        var result = await repo.ToPagedAsync(
+        // Act
+        var result = await sut.ToPagedAsync(
             x => x.Id > 5,
             q => q.OrderBy(x => x.Id),
             x => new TestDto(x.Id, $"{x.Name} ({x.Value})"),
             new PageRequest(1, 5));
 
+        // Assert
         result.Total.Should().Be(10);
         result.Items.Count.Should().Be(5);
         result.Items[0].Id.Should().Be(6);
@@ -234,15 +264,18 @@ public class RepositoryPaginationTests
     [Fact]
     public async Task ToPagedAsync_PageExtreme_ReturnsEmptyAndKeepsTotals()
     {
-        var repo = new InMemoryTestRepository();
+        // Arrange
+        var sut = new InMemoryTestRepository();
         for (int i = 1; i <= 25; i++)
-            repo.Items.Add(new TestEntity(i, "CatA", $"Item {i:D2}", i * 10));
+            sut.Items.Add(new TestEntity(i, "CatA", $"Item {i:D2}", i * 10));
 
-        var result = await repo.ToPagedAsync(
+        // Act
+        var result = await sut.ToPagedAsync(
             null,
             q => q.OrderBy(x => x.Id),
             new PageRequest(int.MaxValue, 10));
 
+        // Assert
         result.Total.Should().Be(25);
         result.Page.Should().Be(int.MaxValue);
         result.PageSize.Should().Be(10);
@@ -253,10 +286,15 @@ public class RepositoryPaginationTests
     [Fact]
     public async Task ToPagedAsync_SansOrderBy_LanceArgumentNullException()
     {
-        var repo = new InMemoryTestRepository();
-        repo.Items.Add(new TestEntity(1, "Cat", "A", 10));
+        // Arrange
+        var sut = new InMemoryTestRepository();
+        sut.Items.Add(new TestEntity(1, "Cat", "A", 10));
 
-        await FluentActions.Awaiting(() =>
-            repo.ToPagedAsync(null, null!, new PageRequest(1, 10))).Should().ThrowExactlyAsync<ArgumentNullException>();
+        // Act
+        Func<Task> act = () =>
+            sut.ToPagedAsync(null, null!, new PageRequest(1, 10));
+
+        // Assert
+        await act.Should().ThrowExactlyAsync<ArgumentNullException>();
     }
 }

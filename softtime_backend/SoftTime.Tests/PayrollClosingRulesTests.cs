@@ -117,14 +117,20 @@ public class PayrollClosingRulesTests
     [InlineData(ClosingAnomalyType.QuasiDoublon, ClosingSeverity.Mineure)]
     public void DefaultSeverity_MatchesSpecification(ClosingAnomalyType type, ClosingSeverity attendu)
     {
-        PayrollClosingRules.GraviteParDefaut(type).Should().Be(attendu);
+        // Act
+        var result = PayrollClosingRules.GraviteParDefaut(type);
+
+        // Assert
+        result.Should().Be(attendu);
     }
 
     [Fact]
     public void Options_Defaults_AreToleranceOf30sAndSeverityWeights()
     {
+        // Act
         var options = ClosingRulesOptions.Default;
 
+        // Assert
         options.DuplicateToleranceSeconds.Should().Be(30);
         options.Poids(ClosingSeverity.Information).Should().Be(0);
         options.Poids(ClosingSeverity.Mineure).Should().Be(1);
@@ -138,8 +144,10 @@ public class PayrollClosingRulesTests
     [Fact]
     public void Incomplete_SinglePunch_IsCriticalAnomalyWithCanonicalMatricule()
     {
+        // Act
         var result = Incomplets(new[] { Punch("369", Lundi, H8) });
 
+        // Assert
         var anomalie = result.Should().ContainSingle().Which;
         anomalie.Type.Should().Be(ClosingAnomalyType.PointageIncomplet);
         anomalie.Severity.Should().Be(ClosingSeverity.Critique);
@@ -150,25 +158,30 @@ public class PayrollClosingRulesTests
     [Fact]
     public void Incomplete_EvenPunches_NoAnomaly()
     {
+        // Act
         var result = Incomplets(new[] { Punch("369", Lundi, H8), Punch("369", Lundi, H17) });
 
+        // Assert
         result.Should().BeEmpty();
     }
 
     [Fact]
     public void Incomplete_MultiPunchOddCount_IsAnomaly()
     {
+        // Act
         var result = Incomplets(
             new[] { Punch("369", Lundi, H8), Punch("369", Lundi, H12), Punch("369", Lundi, H17) },
             plannings: new[] { Travail(1, 1, Lundi) },
             multi: true);
 
+        // Assert
         result.Should().ContainSingle().Which.Type.Should().Be(ClosingAnomalyType.PointageIncomplet);
     }
 
     [Fact]
     public void Incomplete_MultiPunchFourPunches_NoAnomaly()
     {
+        // Act
         var result = Incomplets(
             new[]
             {
@@ -178,26 +191,33 @@ public class PayrollClosingRulesTests
             plannings: new[] { Travail(1, 1, Lundi) },
             multi: true);
 
+        // Assert
         result.Should().BeEmpty();
     }
 
     [Fact]
     public void Incomplete_ValidatedWeek_IsIgnored()
     {
+        // Arrange
         var validee = new HsValidee { Matricules = "00369", DateDeb = Lundi, DateFin = Lundi.AddDays(6), ValidationHs = true };
 
+        // Act
         var result = Incomplets(new[] { Punch("369", Mercredi, H8) }, validees: new[] { validee });
 
+        // Assert
         result.Should().BeEmpty();
     }
 
     [Fact]
     public void Incomplete_UnvalidatedWeekRow_IsNotIgnored()
     {
+        // Arrange
         var nonValidee = new HsValidee { Matricules = "369", DateDeb = Lundi, ValidationHs = false };
 
+        // Act
         var result = Incomplets(new[] { Punch("369", Mercredi, H8) }, validees: new[] { nonValidee });
 
+        // Assert
         result.Should().ContainSingle();
     }
 
@@ -206,20 +226,24 @@ public class PayrollClosingRulesTests
     [InlineData(null)]
     public void Incomplete_DayWithManualOrLegacyCorrection_IsIgnored(string? origine)
     {
+        // Act
         var result = Incomplets(
             new[] { Punch("369", Lundi, H8) },
             corrections: new[] { Corr("369", Lundi, origine, entree: H8, sortie: H17) });
 
+        // Assert
         result.Should().BeEmpty();
     }
 
     [Fact]
     public void Incomplete_DayWithAutoCorrectionOnly_IsStillControlled()
     {
+        // Act
         var result = Incomplets(
             new[] { Punch("369", Lundi, H8) },
             corrections: new[] { Corr("369", Lundi, "AUTO", entree: H8, sortie: H17) });
 
+        // Assert
         result.Should().ContainSingle();
     }
 
@@ -228,8 +252,10 @@ public class PayrollClosingRulesTests
     [Fact]
     public void Missing_PlannedDayWithoutPunchOrCorrection_IsCriticalWithPlannedHours()
     {
+        // Act
         var result = Manquants(new[] { Travail(1, 1, Lundi) });
 
+        // Assert
         var anomalie = result.Should().ContainSingle().Which;
         anomalie.Type.Should().Be(ClosingAnomalyType.PointageManquant);
         anomalie.Severity.Should().Be(ClosingSeverity.Critique);
@@ -241,25 +267,30 @@ public class PayrollClosingRulesTests
     [Fact]
     public void Missing_PlannedDayWithCorrection_NoAnomaly()
     {
+        // Act
         var result = Manquants(
             new[] { Travail(1, 1, Lundi) },
             corrections: new[] { Corr("369", Lundi, entree: H8, sortie: H17) });
 
+        // Assert
         result.Should().BeEmpty();
     }
 
     [Fact]
     public void Missing_PlannedDayWithRawPunchOnly_NoAnomaly()
     {
+        // Act
         var result = Manquants(new[] { Travail(1, 1, Lundi) }, pointages: new[] { Punch("369", Lundi, H8) });
 
+        // Assert
         result.Should().BeEmpty();
     }
 
     [Fact]
     public void Missing_ExcludedDays_WeekendHolidayOffLeaveFuture_NoAnomaly()
     {
-        var jeudiFutur = Today; // aujourd'hui n'est pas encore clos
+        // Arrange
+        var jeudiFutur = Today;
         var plannings = new[]
         {
             Travail(1, 1, Samedi),
@@ -270,11 +301,13 @@ public class PayrollClosingRulesTests
             Travail(6, 1, Today.AddDays(1))
         };
 
+        // Act
         var result = Manquants(
             plannings,
             conges: Conges("369", new LeaveDay(Mardi, 1m, "CP")),
             feries: Feries);
 
+        // Assert
         result.Should().BeEmpty();
     }
 
@@ -283,10 +316,12 @@ public class PayrollClosingRulesTests
     [Fact]
     public void PlannedWithoutPunch_HalfDayLeaveAndNoPunch_IsImportantWithHalfHours()
     {
+        // Act
         var result = SansPointage(
             new[] { Travail(1, 1, Lundi) },
             conges: Conges("369", new LeaveDay(Lundi, 0.5m, "CP")));
 
+        // Assert
         var anomalie = result.Should().ContainSingle().Which;
         anomalie.Type.Should().Be(ClosingAnomalyType.PlanningSansPointage);
         anomalie.Severity.Should().Be(ClosingSeverity.Importante);
@@ -296,24 +331,30 @@ public class PayrollClosingRulesTests
     [Fact]
     public void PlannedWithoutPunch_HalfDayArbitratedAbsenceAndNoHours_IsAnomaly()
     {
+        // Act
         var result = SansPointage(
             new[] { Travail(1, 1, Lundi) },
             corrections: new[] { Corr("369", Lundi, "MANUEL", am: true) });
 
+        // Assert
         result.Should().ContainSingle().Which.Type.Should().Be(ClosingAnomalyType.PlanningSansPointage);
     }
 
     [Fact]
     public void PlannedWithoutPunch_HalfDayLeaveButOtherHalfPunched_NoAnomaly()
     {
+        // Arrange
         var parPointage = SansPointage(
             new[] { Travail(1, 1, Lundi) },
             pointages: new[] { Punch("369", Lundi, H12) },
             conges: Conges("369", new LeaveDay(Lundi, 0.5m, "CP")));
+
+        // Act
         var parCorrection = SansPointage(
             new[] { Travail(1, 1, Lundi) },
             corrections: new[] { Corr("369", Lundi, "MANUEL", am: true, entree: H12, sortie: H17) });
 
+        // Assert
         parPointage.Should().BeEmpty();
         parCorrection.Should().BeEmpty();
     }
@@ -321,9 +362,13 @@ public class PayrollClosingRulesTests
     [Fact]
     public void PlannedWithoutPunch_FullDayLeaveOrFullArbitration_NoAnomaly()
     {
+        // Arrange
         var conge = SansPointage(new[] { Travail(1, 1, Lundi) }, conges: Conges("369", new LeaveDay(Lundi, 1m, "CP")));
+
+        // Act
         var arbitrage = SansPointage(new[] { Travail(1, 1, Lundi) }, corrections: new[] { Corr("369", Lundi, am: true, pm: true) });
 
+        // Assert
         conge.Should().BeEmpty();
         arbitrage.Should().BeEmpty();
     }
@@ -331,12 +376,15 @@ public class PayrollClosingRulesTests
     [Fact]
     public void PlannedWithoutPunch_AndMissing_AreNeverBothRaisedForSameDay()
     {
+        // Arrange
         var plannings = new[] { Travail(1, 1, Lundi), Travail(2, 1, Mardi) };
         var conges = Conges("369", new LeaveDay(Mardi, 0.5m, "CP"));
-
         var manquants = Manquants(plannings, conges: conges);
+
+        // Act
         var sansPointage = SansPointage(plannings, conges: conges);
 
+        // Assert
         manquants.Should().ContainSingle().Which.Date.Should().Be(Lundi);
         sansPointage.Should().ContainSingle().Which.Date.Should().Be(Mardi);
     }
@@ -346,6 +394,7 @@ public class PayrollClosingRulesTests
     [Fact]
     public void PunchWithoutPlanning_IsImportantAnomaly()
     {
+        // Act
         // Salarié planifié un autre jour de la période : il est contrôlé, le jour pointé sans planning est signalé.
         var result = PlanningCoverageRules.PointagesSansPlanning(
             new[] { Carte(1, "00369") },
@@ -353,6 +402,7 @@ public class PayrollClosingRulesTests
             new[] { Punch("369", Lundi, H8), Punch("369", Lundi, H17) },
             new ClosingScope(From, To));
 
+        // Assert
         var anomalie = result.Should().ContainSingle().Which;
         anomalie.Type.Should().Be(ClosingAnomalyType.PointageSansPlanning);
         anomalie.Severity.Should().Be(ClosingSeverity.Importante);
@@ -362,12 +412,14 @@ public class PayrollClosingRulesTests
     [Fact]
     public void PunchWithAnyPlanningLine_IncludingOffAndPause_NoAnomaly()
     {
+        // Act
         var result = PlanningCoverageRules.PointagesSansPlanning(
             new[] { Carte(1, "00369"), Carte(2, "369") },
             new[] { Travail(1, 1, Lundi), Plan(2, 1, Mardi, offP: true), Pause(3, 2, Mercredi) },
             new[] { Punch("369", Lundi, H8), Punch("369", Mardi, H8), Punch("369", Mercredi, H8) },
             new ClosingScope(From, To));
 
+        // Assert
         result.Should().BeEmpty();
     }
 
@@ -376,10 +428,12 @@ public class PayrollClosingRulesTests
     [Fact]
     public void ExactDuplicate_SameMatriculeDateAndTime_IsOneMinorAnomaly()
     {
+        // Act
         var result = DuplicatePunchRules.DoublonsExacts(
             new[] { Punch("369", Lundi, H8), Punch("00369", Lundi, H8), Punch("369", Lundi, H8) },
             new ClosingScope(From, To));
 
+        // Assert
         var anomalie = result.Should().ContainSingle().Which;
         anomalie.Type.Should().Be(ClosingAnomalyType.DoublonExact);
         anomalie.Severity.Should().Be(ClosingSeverity.Mineure);
@@ -389,20 +443,24 @@ public class PayrollClosingRulesTests
     [Fact]
     public void ExactDuplicate_DifferentTimesOrMatricules_NoAnomaly()
     {
+        // Act
         var result = DuplicatePunchRules.DoublonsExacts(
             new[] { Punch("369", Lundi, H8), Punch("369", Lundi, H8.Add(TimeSpan.FromSeconds(1))), Punch("370", Lundi, H8) },
             new ClosingScope(From, To));
 
+        // Assert
         result.Should().BeEmpty();
     }
 
     [Fact]
     public void NearDuplicate_29Seconds_IsAnomaly()
     {
+        // Act
         var result = DuplicatePunchRules.QuasiDoublons(
             new[] { Punch("369", Lundi, H8), Punch("369", Lundi, H8.Add(TimeSpan.FromSeconds(29))) },
             new ClosingScope(From, To));
 
+        // Assert
         var anomalie = result.Should().ContainSingle().Which;
         anomalie.Type.Should().Be(ClosingAnomalyType.QuasiDoublon);
         anomalie.Severity.Should().Be(ClosingSeverity.Mineure);
@@ -413,33 +471,41 @@ public class PayrollClosingRulesTests
     [InlineData(31)]
     public void NearDuplicate_AtOrAboveTolerance_NoAnomaly(int secondes)
     {
+        // Act
         var result = DuplicatePunchRules.QuasiDoublons(
             new[] { Punch("369", Lundi, H8), Punch("369", Lundi, H8.Add(TimeSpan.FromSeconds(secondes))) },
             new ClosingScope(From, To));
 
+        // Assert
         result.Should().BeEmpty();
     }
 
     [Fact]
     public void NearDuplicate_CustomTolerance_IsApplied()
     {
+        // Arrange
         var options = new ClosingRulesOptions { DuplicateToleranceSeconds = 300 };
 
+        // Act
         var result = DuplicatePunchRules.QuasiDoublons(
             new[] { Punch("369", Lundi, H8), Punch("369", Lundi, H8.Add(TimeSpan.FromSeconds(200))) },
             new ClosingScope(From, To, Options: options));
 
+        // Assert
         result.Should().ContainSingle();
     }
 
     [Fact]
     public void ExactDuplicate_IsNotCountedAsNearDuplicate()
     {
+        // Arrange
         var pointages = new[] { Punch("369", Lundi, H8), Punch("369", Lundi, H8), Punch("369", Lundi, H17) };
-
         var exacts = DuplicatePunchRules.DoublonsExacts(pointages, new ClosingScope(From, To));
+
+        // Act
         var quasi = DuplicatePunchRules.QuasiDoublons(pointages, new ClosingScope(From, To));
 
+        // Assert
         exacts.Should().ContainSingle();
         quasi.Should().BeEmpty();
     }
@@ -447,13 +513,18 @@ public class PayrollClosingRulesTests
     [Fact]
     public void ExactAndNearDuplicate_SameMorning_EachCountedOnce()
     {
+        // Arrange
         var pointages = new[]
         {
             Punch("369", Lundi, H8), Punch("369", Lundi, H8),
             Punch("369", Lundi, H8.Add(TimeSpan.FromSeconds(20)))
         };
 
-        DuplicatePunchRules.DoublonsExacts(pointages, new ClosingScope(From, To)).Should().ContainSingle();
+        // Act
+        var result = DuplicatePunchRules.DoublonsExacts(pointages, new ClosingScope(From, To));
+
+        // Assert
+        result.Should().ContainSingle();
         DuplicatePunchRules.QuasiDoublons(pointages, new ClosingScope(From, To)).Should().ContainSingle();
     }
 
@@ -462,8 +533,10 @@ public class PayrollClosingRulesTests
     [Fact]
     public void HolidayNotApplied_PlannedHolidayWithoutHolidayCorrection_IsInformation()
     {
+        // Act
         var result = FeriesNonAppliques(new[] { Travail(1, 1, Ferie) });
 
+        // Assert
         var anomalie = result.Should().ContainSingle().Which;
         anomalie.Type.Should().Be(ClosingAnomalyType.FerieNonApplique);
         anomalie.Severity.Should().Be(ClosingSeverity.Information);
@@ -474,19 +547,25 @@ public class PayrollClosingRulesTests
     [Fact]
     public void HolidayNotApplied_CorrectionWithoutHolidayFlag_IsStillAnomaly()
     {
+        // Act
         var result = FeriesNonAppliques(
             new[] { Travail(1, 1, Ferie) },
             new[] { Corr("369", Ferie, entree: H8, sortie: H17) });
 
+        // Assert
         result.Should().ContainSingle();
     }
 
     [Fact]
     public void HolidayNotApplied_FerierFlagOrHolidayHours_NoAnomaly()
     {
+        // Arrange
         var parDrapeau = FeriesNonAppliques(new[] { Travail(1, 1, Ferie) }, new[] { Corr("369", Ferie, ferier: true) });
+
+        // Act
         var parHeures = FeriesNonAppliques(new[] { Travail(1, 1, Ferie) }, new[] { Corr("369", Ferie, mFeries: 8m) });
 
+        // Assert
         parDrapeau.Should().BeEmpty();
         parHeures.Should().BeEmpty();
     }
@@ -494,8 +573,10 @@ public class PayrollClosingRulesTests
     [Fact]
     public void HolidayNotApplied_OffDayOrNonHoliday_NoAnomaly()
     {
+        // Act
         var result = FeriesNonAppliques(new[] { Plan(1, 1, Ferie, H8, H17, offP: true), Travail(2, 1, Lundi) });
 
+        // Assert
         result.Should().BeEmpty();
     }
 
@@ -504,12 +585,12 @@ public class PayrollClosingRulesTests
     [Fact]
     public void PauseShift_HaEqualsHd_WithoutPunch_NeverRaisesAnyAnomaly()
     {
+        // Arrange
         var plannings = new[] { Pause(1, 1, Lundi), Pause(2, 1, Ferie), Pause(3, 1, Mardi) };
         var conges = Conges("369", new LeaveDay(Mardi, 0.5m, "CP"));
         var cartes = new[] { Carte(1, "00369") };
         var aucunPointage = Array.Empty<Pointage>();
         var aucuneCorrection = Array.Empty<HeureCorrigee>();
-
         var toutes = new List<ClosingAnomaly>();
         toutes.AddRange(PunchCompletenessRules.PointagesIncomplets(new EmployeeSources(cartes, plannings, aucuneCorrection), aucunPointage, Array.Empty<HsValidee>(), new ClosingScope(From, To, true)));
         toutes.AddRange(PunchCompletenessRules.PointagesManquants(new EmployeeSources(cartes, plannings, aucuneCorrection), aucunPointage, new AbsenceCalendar(conges, Feries), new ReportPeriod(From, To, Today)));
@@ -517,8 +598,11 @@ public class PayrollClosingRulesTests
         toutes.AddRange(PlanningCoverageRules.PointagesSansPlanning(cartes, plannings, aucunPointage, new ClosingScope(From, To)));
         toutes.AddRange(DuplicatePunchRules.DoublonsExacts(aucunPointage, new ClosingScope(From, To)));
         toutes.AddRange(DuplicatePunchRules.QuasiDoublons(aucunPointage, new ClosingScope(From, To)));
+
+        // Act
         toutes.AddRange(HolidayPunchRules.FeriesNonAppliques(new EmployeeSources(cartes, plannings, aucuneCorrection), Feries, new ReportPeriod(From, To, Today)));
 
+        // Assert
         toutes.Should().BeEmpty();
     }
 
@@ -530,46 +614,70 @@ public class PayrollClosingRulesTests
     [Fact]
     public void Score_NoAnomaly_Is100()
     {
-        PayrollClosingRules.Score(Array.Empty<ClosingAnomaly>(), 20).Should().Be(100);
+        // Act
+        var result = PayrollClosingRules.Score(Array.Empty<ClosingAnomaly>(), 20);
+
+        // Assert
+        result.Should().Be(100);
     }
 
     [Fact]
     public void Score_FixedSet_MatchesHandComputation()
     {
+        // Arrange
         // Poids : 5 + 3 + 1 + 1 = 10 ; 100 − 100 × 10 / (5 × 10) = 80
         var anomalies = new[] { A(ClosingSeverity.Critique), A(ClosingSeverity.Importante), A(ClosingSeverity.Mineure), A(ClosingSeverity.Mineure) };
 
-        PayrollClosingRules.Score(anomalies, 10).Should().Be(80);
+        // Act
+        var result = PayrollClosingRules.Score(anomalies, 10);
+
+        // Assert
+        result.Should().Be(80);
     }
 
     [Fact]
     public void Score_IsRoundedToNearestInteger()
     {
+        // Act
+        var result = PayrollClosingRules.Score(new[] { A(ClosingSeverity.Importante) }, 7);
+
+        // Assert
         // 100 − 100 × 3 / (5 × 7) = 91,43 → 91
-        PayrollClosingRules.Score(new[] { A(ClosingSeverity.Importante) }, 7).Should().Be(91);
+        result.Should().Be(91);
     }
 
     [Fact]
     public void Score_IsBoundedAtZero()
     {
+        // Act
         var anomalies = Enumerable.Range(0, 10).Select(_ => A(ClosingSeverity.Critique)).ToList();
 
+        // Assert
         PayrollClosingRules.Score(anomalies, 2).Should().Be(0);
     }
 
     [Fact]
     public void Score_NoControlledDay_IsNullNot100()
     {
-        PayrollClosingRules.Score(Array.Empty<ClosingAnomaly>(), 0).Should().BeNull();
+        // Act
+        var result = PayrollClosingRules.Score(Array.Empty<ClosingAnomaly>(), 0);
+
+        // Assert
+        result.Should().BeNull();
     }
 
     [Fact]
     public void Score_CustomWeights_AreUsed()
     {
+        // Arrange
         // Poids max 10, une Critique pesant 10 sur 5 jours : 100 − 100 × 10 / 50 = 80
         var options = new ClosingRulesOptions { PoidsCritique = 10 };
 
-        PayrollClosingRules.Score(new[] { A(ClosingSeverity.Critique) }, 5, options).Should().Be(80);
+        // Act
+        var result = PayrollClosingRules.Score(new[] { A(ClosingSeverity.Critique) }, 5, options);
+
+        // Assert
+        result.Should().Be(80);
     }
 
     [Fact]
@@ -584,6 +692,7 @@ public class PayrollClosingRulesTests
     [Fact]
     public void Rules_SameInputShuffled_ProduceSameOrder()
     {
+        // Arrange
         var pointages = new List<Pointage>
         {
             Punch("500", Mardi, H8), Punch("500", Mardi, H8),
@@ -593,13 +702,14 @@ public class PayrollClosingRulesTests
             Punch("500", Lundi, H8.Add(TimeSpan.FromSeconds(20)))
         };
         var inverses = Enumerable.Reverse(pointages).ToList();
-
         IReadOnlyList<ClosingAnomaly> Tout(IReadOnlyList<Pointage> p) => PayrollClosingRules.Trier(
             DuplicatePunchRules.DoublonsExacts(p, new ClosingScope(From, To)).Concat(DuplicatePunchRules.QuasiDoublons(p, new ClosingScope(From, To))));
-
         var premier = Tout(pointages);
+
+        // Act
         var second = Tout(inverses);
 
+        // Assert
         second.Should().Equal(premier);
         premier.Should().Equal(premier.OrderBy(a => a.Date).ThenBy(a => a.Matricule, StringComparer.Ordinal).ThenBy(a => a.Type).ToList());
         premier.Select(a => a.Matricule).Should().Equal(new[] { "369", "500", "500", "369", "500" });
@@ -608,12 +718,15 @@ public class PayrollClosingRulesTests
     [Fact]
     public void Missing_TwoRuns_SameOutputSequence()
     {
+        // Arrange
         var cartes = new[] { Carte(2, "500"), Carte(1, "00369") };
         var plannings = new[] { Travail(4, 2, Mardi), Travail(3, 1, Mardi), Travail(2, 2, Lundi), Travail(1, 1, Lundi) };
-
         var premier = PunchCompletenessRules.PointagesManquants(new EmployeeSources(cartes, plannings, Array.Empty<HeureCorrigee>()), Array.Empty<Pointage>(), new AbsenceCalendar(SansConge, SansFerie), new ReportPeriod(From, To, Today));
+
+        // Act
         var second = PunchCompletenessRules.PointagesManquants(new EmployeeSources(cartes.Reverse().ToArray(), plannings.Reverse().ToArray(), Array.Empty<HeureCorrigee>()), Array.Empty<Pointage>(), new AbsenceCalendar(SansConge, SansFerie), new ReportPeriod(From, To, Today));
 
+        // Assert
         second.Should().Equal(premier);
         premier.Select(a => (a.Date, a.Matricule)).Should().Equal(new[] { (Lundi, "369"), (Lundi, "500"), (Mardi, "369"), (Mardi, "500") });
     }

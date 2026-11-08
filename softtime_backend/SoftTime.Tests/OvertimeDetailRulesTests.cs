@@ -12,6 +12,7 @@ public class OvertimeDetailRulesTests
     [Fact]
     public void HeuresSupJournalieres_KeepsTheDesktopEightHourThreshold()
     {
+        // Act & Assert
         // Desktop : Math.Max(0, totalHeures - 8).
         OvertimeRules.HeuresSupJournalieres(new TimeSpan(8, 0, 0)).Should().Be(0m);
         OvertimeRules.HeuresSupJournalieres(new TimeSpan(6, 30, 0)).Should().Be(0m);
@@ -20,9 +21,21 @@ public class OvertimeDetailRulesTests
 
     [Fact]
     public void HeuresSupJournalieres_AcceptsAnExplicitThreshold()
-        => OvertimeRules.HeuresSupJournalieres(new TimeSpan(10, 0, 0), seuil: 8).Should().Be(2m);
+    {
+        // Act
+        var result = OvertimeRules.HeuresSupJournalieres(new TimeSpan(10, 0, 0), seuil: 8);
+
+        // Assert
+        result.Should().Be(2m);
+    }
 
     [Fact]
     public void HeuresSupJournalieres_NeverReturnsNegative()
-        => OvertimeRules.HeuresSupJournalieres(TimeSpan.Zero).Should().Be(0m);
+    {
+        // Act
+        var result = OvertimeRules.HeuresSupJournalieres(TimeSpan.Zero);
+
+        // Assert
+        result.Should().Be(0m);
+    }
 }

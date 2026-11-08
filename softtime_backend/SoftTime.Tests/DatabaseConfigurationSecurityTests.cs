@@ -54,6 +54,7 @@ public class DatabaseConfigurationSecurityTests
     [Fact]
     public void AdminAccess_OnlyRoleOneIsAdmin()
     {
+        // Act & Assert
         AdminAccess.IsAdmin(new TestCurrentUser(1, 1)).Should().BeTrue();
         AdminAccess.IsAdmin(new TestCurrentUser(2, 5, Rights.Parameters)).Should().BeFalse();
         FluentActions.Invoking(() => AdminAccess.Require(new TestCurrentUser(2, 5, Rights.Parameters))).Should().ThrowExactly<ForbiddenException>();
@@ -161,38 +162,58 @@ public class DatabaseConfigurationSecurityTests
     [Fact]
     public async Task CatalogService_DeleteSage_RefusedWithoutPermission_KeepsRow()
     {
+        // Arrange
         var svc = CatalogFor(AuthorizerFor(30, 5, Rights.Databases));
         GrantUser(30, $"SAGE:{Base}:READ");
+
+        // Act
         await Refused(() => svc.Sage.DeleteSageAsync(7));
+
+        // Assert
         _uow.Get<BddSage>().Items.Should().ContainSingle();
     }
 
     [Fact]
     public async Task CatalogService_DeleteSage_EmptyName_IsRefused()
     {
+        // Arrange
         _uow.Get<BddSage>().Items.Add(new BddSage { Id = 9, NomBd = "", Serveur = "srv" });
         GrantUser(31, "SAGE:CREATE", "SAGE::DELETE");
         var svc = CatalogFor(AuthorizerFor(31, 5, Rights.Databases));
+
+        // Act
         await Refused(() => svc.Sage.DeleteSageAsync(9));
+
+        // Assert
         _uow.Get<BddSage>().Items.Count.Should().Be(2);
     }
 
     [Fact]
     public async Task CatalogService_SaveSage_CreateAndUpdate_RefusedWithoutPermission()
     {
+        // Arrange
         var svc = CatalogFor(AuthorizerFor(32, 5, Rights.Reports));
         var dto = new SageDbDto(0, "srv", null, null, true, "NOUVELLE");
         await Refused(() => svc.Sage.SaveSageAsync(dto));
+
+        // Act
         await Refused(() => svc.Sage.SaveSageAsync(dto with { Id = 7 }));
+
+        // Assert
         _uow.Get<BddSage>().Items.Should().ContainSingle();
     }
 
     [Fact]
     public async Task CatalogService_Pointeuse_SaveAndDelete_RefusedWithoutPermission()
     {
+        // Arrange
         var svc = CatalogFor(AuthorizerFor(33, 5, Rights.Reports));
         await Refused(() => svc.Pointeuse.DeletePointeuseAsync(8));
+
+        // Act
         await Refused(() => svc.Pointeuse.SavePointeuseAsync(new PointeuseDbDto(0, "srv", null, null, true, "NEW", null, false)));
+
+        // Assert
         _uow.Get<BddPointeuse>().Items.Should().ContainSingle();
     }
 
@@ -203,6 +224,7 @@ public class DatabaseConfigurationSecurityTests
     [Fact]
     public async Task AdminRole_CannotBeRenamedDeletedOrHaveItsPrivilegesReplaced()
     {
+        // Act & Assert
         await FluentActions.Awaiting(() => _auth.SaveRoleAsync(new RoleDto(1, "Autre"))).Should().ThrowExactlyAsync<DomainException>();
         await FluentActions.Awaiting(() => _auth.DeleteRoleAsync(1)).Should().ThrowExactlyAsync<DomainException>();
         await FluentActions.Awaiting(() => _auth.SetPrivilegesAsync(1, new List<decimal> { Rights.Reports })).Should().ThrowExactlyAsync<DomainException>();
@@ -212,7 +234,10 @@ public class DatabaseConfigurationSecurityTests
     [Fact]
     public async Task OtherRoles_RemainEditable()
     {
+        // Act
         await _auth.SetPrivilegesAsync(5, new List<decimal> { Rights.Reports });
+
+        // Assert
         _uow.Get<DroitRole>().Items.Where(d => d.IdRole == 5).Should().ContainSingle();
         await _auth.SaveRoleAsync(new RoleDto(5, "Gestionnaire paie"));
         _uow.Get<Role>().Items.First(r => r.IdRole == 5).NomRole.Should().Be("Gestionnaire paie");

@@ -12,6 +12,7 @@ public class MlNetSmokeTests
     [Fact]
     public void Le_modele_absence_s_entraine_et_predit()
     {
+        // Arrange
         var random = new Random(42);
         var samples = Enumerable.Range(0, 300).Select(i =>
         {
@@ -36,15 +37,16 @@ public class MlNetSmokeTests
                 HeuresSemaineContrat = 40
             };
         }).ToList();
+        var sut = new MlNetTrainer();
 
-        var trainer = new MlNetTrainer();
-        var result = trainer.TrainAbsence(samples.Take(240).ToList(), samples.Skip(240).ToList(), "FastTree");
+        // Act
+        var result = sut.TrainAbsence(samples.Take(240).ToList(), samples.Skip(240).ToList(), "FastTree");
 
+        // Assert
         result.Accepted.Should().BeTrue();
         result.Model.Should().NotBeNull();
         (result.Metrics.Auc.HasValue && result.Metrics.Auc.Value > 0.5).Should().BeTrue($"AUC inattendue : {result.Metrics.Auc}");
         (result.Metrics.TestPositives > 0).Should().BeTrue();
-
         var predictions = new MlNetPredictor().PredictAbsence(result.Model!, samples.Take(5).ToList());
         predictions.Count.Should().Be(5);
         predictions.Should().AllSatisfy(p => p.Should().BeInRange(0f, 1f));
@@ -53,6 +55,7 @@ public class MlNetSmokeTests
     [Fact]
     public void Les_modeles_hs_s_entrainent_et_predisent()
     {
+        // Arrange
         var samples = Enumerable.Range(0, 240).Select(i =>
         {
             var montant = i % 4 == 0 ? 4f : 0f;
@@ -69,19 +72,19 @@ public class MlNetSmokeTests
                 HeuresSemaineContrat = 40
             };
         }).ToList();
-
-        var trainer = new MlNetTrainer();
+        var sut = new MlNetTrainer();
         var train = samples.Take(192).ToList();
         var test = samples.Skip(192).ToList();
+        var probabilite = sut.TrainHsProbability(train, test, "FastTree");
 
-        var probabilite = trainer.TrainHsProbability(train, test, "FastTree");
-        var montant = trainer.TrainHsAmount(train, test, "FastTree");
+        // Act
+        var montant = sut.TrainHsAmount(train, test, "FastTree");
 
+        // Assert
         probabilite.Accepted.Should().BeTrue();
         probabilite.Model.Should().NotBeNull();
         montant.Accepted.Should().BeTrue();
         montant.Model.Should().NotBeNull();
-
         var predictions = new MlNetPredictor().PredictHsAmount(montant.Model!, test.Take(5).ToList());
         predictions.Count.Should().Be(5);
         predictions.Should().AllSatisfy(p => float.IsNaN(p).Should().BeFalse());

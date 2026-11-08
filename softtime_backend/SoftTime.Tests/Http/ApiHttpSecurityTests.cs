@@ -83,15 +83,18 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     [MemberData(nameof(RefusedCases))]
     public async Task Refused_profiles_get_401_or_403_and_nothing_is_written(string route, string profile)
     {
+        // Arrange
         var (method, url, body, kind) = Routes[route];
         var before = _f.Snapshot();
         var (resp, text) = await Send(profile, method, url, body);
         var after = _f.Snapshot();
 
+        // Act
         ApiFactory.Report($"V2|{route}|{profile}|{(int)resp.StatusCode}|{Format(resp, text)}|{Trunc(text)}");
+
+        // Assert
         resp.StatusCode.Should().Be(profile == "anonyme" ? HttpStatusCode.Unauthorized : HttpStatusCode.Forbidden);
         after.Should().Be(before);
-
         if (profile == "param2" && kind == "admin")
             text.Should().Contain(AdminAccess.ReservedMessage);
         if (profile == "joel" && kind == "db")
@@ -104,9 +107,14 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     [MemberData(nameof(AdminCases))]
     public async Task Admin_is_not_refused(string route)
     {
+        // Arrange
         var (method, url, body, _) = Routes[route];
         var (resp, text) = await Send("admin", method, url, body);
+
+        // Act
         ApiFactory.Report($"V2|{route}|admin|{(int)resp.StatusCode}|{Format(resp, text)}|{Trunc(text)}");
+
+        // Assert
         resp.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
         resp.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
     }
@@ -133,9 +141,14 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     [MemberData(nameof(UsageNames))]
     public async Task Usage_routes_are_open_to_joel(string name)
     {
+        // Arrange
         var r = UsageRoutes.Single(x => x.Name == name);
         var (resp, text) = await Send("joel", r.Method, r.Url, r.Body, r.NeedsTenant ? ApiFactory.SageName : null);
+
+        // Act
         ApiFactory.Report($"V3|{name}|joel|{(int)resp.StatusCode}|{Format(resp, text)}|{Trunc(text)}");
+
+        // Assert
         resp.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
         resp.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
     }
@@ -144,9 +157,14 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     [MemberData(nameof(UsageNames))]
     public async Task Usage_routes_without_sage_header_give_400_to_user1(string name)
     {
+        // Arrange
         var r = UsageRoutes.Single(x => x.Name == name);
         var (resp, text) = await Send("user1", r.Method, r.Url, r.Body);
+
+        // Act
         ApiFactory.Report($"V3|{name}|user1 sans en-tête|{(int)resp.StatusCode}|{Format(resp, text)}|{Trunc(text)}");
+
+        // Assert
         if (!r.NeedsTenant)
         {
             resp.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
@@ -161,8 +179,13 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     [InlineData("user1")]
     public async Task Activate_by_account_without_access_to_the_base_gives_403_with_message(string profile)
     {
+        // Arrange
         var (resp, text) = await Send(profile, "POST", "/api/v1/sage-databases/activate", null, ApiFactory.SageName);
+
+        // Act
         ApiFactory.Report($"V3|activate sans accès|{profile}|{(int)resp.StatusCode}|{Format(resp, text)}|{Trunc(text)}");
+
+        // Assert
         // Étape 4b-5 : un refus d'usage est un 403 (un 401 déconnectait le client). Avant : 401 « Base SAGE non autorisée pour cet utilisateur. »
         resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         text.Should().Contain("Vous n'avez pas accès à cette base.");
@@ -191,15 +214,14 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     [Fact]
     public void V5_Endpoints_without_Authorize_in_touched_controllers_are_only_the_anonymous_auth_routes()
     {
+        // Arrange
         var actions = _f.Services.GetRequiredService<EndpointDataSource>().Endpoints
             .OfType<RouteEndpoint>()
             .Select(e => (Endpoint: e, Action: e.Metadata.GetMetadata<ControllerActionDescriptor>()))
             .Where(x => x.Action is not null)
             .ToList();
-
         var touched = new[] { "AuthController", "UsersController", "RolesController", "PrivilegesController", "AuditDroitController", "DbAccessController",
             "DiscoveryController", "SageDatabasesController", "PointeuseDatabasesController", "CardPaieController", "PayrollWriteConfigurationController" };
-
         var anonymous = new List<string>();
         var authorizeOnly = new List<string>();
         foreach (var (endpoint, action) in actions)
@@ -215,12 +237,15 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
                 .Any(f => f.ImplementationType.Name is "RequireDroitFilter" or "RequireAdminFilter");
             if (!guarded) authorizeOnly.Add(label);
         }
-
         foreach (var a in anonymous) ApiFactory.Report($"V5|sans Authorize|{a}");
         foreach (var a in authorizeOnly) ApiFactory.Report($"V5|Authorize seul|{a}");
 
+        // Act
+        var result = anonymous.Select(a => a.Split(' ')[0]).Select(a => a["AuthController.".Length..]).OrderBy(a => a, StringComparer.Ordinal).ToArray();
+
+        // Assert
         // Connexion, rafraîchissement et déconnexion (sans jeton d'accès valide par nature), démarrage initial, politique.
-        anonymous.Select(a => a.Split(' ')[0]).Select(a => a["AuthController.".Length..]).OrderBy(a => a, StringComparer.Ordinal).ToArray().Should().Equal(new[] { "CreateAdmin", "GetPasswordPolicy", "IsFirstRun", "Login", "Logout", "Refresh" });
+        result.Should().Equal(new[] { "CreateAdmin", "GetPasswordPolicy", "IsFirstRun", "Login", "Logout", "Refresh" });
         anonymous.Should().AllSatisfy(a => a.Should().StartWith("AuthController."));
     }
 
@@ -239,17 +264,27 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     [InlineData("admin", "/api/v1/auth/me")]
     public async Task V6_Responses_never_contain_a_database_password(string profile, string url)
     {
+        // Arrange
         var (resp, text) = await Send(profile, "GET", url, null);
         var leaks = new[] { ApiFactory.FakeSagePassword, ApiFactory.FakePointeusePassword }.Where(text.Contains).ToList();
+
+        // Act
         ApiFactory.Report($"V6|{profile}|GET {url}|{(int)resp.StatusCode}|fuite={(leaks.Count > 0 ? string.Join('+', leaks) : "non")}");
+
+        // Assert
         leaks.Should().BeEmpty();
     }
 
     [Fact]
     public async Task V6_Create_and_update_responses_never_contain_the_submitted_password()
     {
+        // Arrange
         var (resp, text) = await Send("admin", "POST", "/api/v1/sage-databases", SageBody.Replace("NEWBASE", "V6BASE"));
+
+        // Act
         ApiFactory.Report($"V6|admin|POST /api/v1/sage-databases|{(int)resp.StatusCode}|fuite={(text.Contains(ApiFactory.FakeSagePassword) ? ApiFactory.FakeSagePassword : "non")}");
+
+        // Assert
         resp.IsSuccessStatusCode.Should().BeTrue();
         text.Should().NotContain(ApiFactory.FakeSagePassword);
     }

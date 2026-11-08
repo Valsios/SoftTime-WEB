@@ -16,6 +16,7 @@ public class ExcelWorkbookTests
     [Fact]
     public void WriteWorkbook_EcritPlusieursFeuillesEtConserveLesTypes()
     {
+        // Arrange
         var bytes = new ExcelWorkbook().WriteWorkbook(new[]
         {
             new ExcelSheetContent(
@@ -35,18 +36,19 @@ public class ExcelWorkbookTests
                     new object?[] { "Semaine 40", 3 },
                 }),
         });
-
         using var stream = new MemoryStream(bytes);
         using var wb = new XLWorkbook(stream);
 
-        wb.Worksheets.Select(w => w.Name).Should().Equal(new[] { "Synthèse", "Périodes" });
+        // Act
+        var result = wb.Worksheets.Select(w => w.Name);
 
+        // Assert
+        result.Should().Equal(new[] { "Synthèse", "Périodes" });
         var synthese = wb.Worksheet("Synthèse");
         synthese.Cell(1, 1).GetString().Should().Be("Indicateur");
         synthese.Cell(2, 1).GetString().Should().Be("Période");
         synthese.Cell(3, 2).GetValue<int>().Should().Be(12);
         synthese.Cell(4, 2).GetValue<double>().Should().BeApproximately(12.5, 0.0005);
-
         var periodes = wb.Worksheet("Périodes");
         periodes.Cell(2, 2).GetValue<int>().Should().Be(3);
     }
@@ -54,17 +56,20 @@ public class ExcelWorkbookTests
     [Fact]
     public void WriteWorkbook_NettoieEtDedupliqueLesNomsDeFeuilles()
     {
+        // Arrange
         var bytes = new ExcelWorkbook().WriteWorkbook(new[]
         {
             new ExcelSheetContent("Répartition/Catégorie", new[] { "A" }, Array.Empty<IReadOnlyList<object?>>()),
             new ExcelSheetContent("Répartition/Catégorie", new[] { "B" }, Array.Empty<IReadOnlyList<object?>>()),
             new ExcelSheetContent(new string('x', 40), new[] { "C" }, Array.Empty<IReadOnlyList<object?>>()),
         });
-
         using var stream = new MemoryStream(bytes);
         using var wb = new XLWorkbook(stream);
+
+        // Act
         var noms = wb.Worksheets.Select(w => w.Name).ToList();
 
+        // Assert
         noms.Count.Should().Be(3);
         noms.Should().Contain("Répartition-Catégorie");
         noms.Should().Contain("Répartition-Catégorie (2)");
@@ -75,10 +80,10 @@ public class ExcelWorkbookTests
     [Fact]
     public void WriteWorkbook_ConvertitLesValeursJsonEnCellulesTypees()
     {
+        // Arrange
         using var doc = JsonDocument.Parse(
             """{"entier":7,"decimal":2.5,"texte":"ok","booleen":true,"vide":null}""");
         var json = doc.RootElement;
-
         var bytes = new ExcelWorkbook().WriteWorkbook(new[]
         {
             new ExcelSheetContent(
@@ -96,11 +101,13 @@ public class ExcelWorkbookTests
                     },
                 }),
         });
-
         using var stream = new MemoryStream(bytes);
-        using var wb = new XLWorkbook(stream);
-        var ws = wb.Worksheet("JSON");
+        using var sut = new XLWorkbook(stream);
 
+        // Act
+        var ws = sut.Worksheet("JSON");
+
+        // Assert
         ws.Cell(2, 1).GetValue<int>().Should().Be(7);
         ws.Cell(2, 2).GetValue<double>().Should().BeApproximately(2.5, 0.0005);
         ws.Cell(2, 3).GetString().Should().Be("ok");

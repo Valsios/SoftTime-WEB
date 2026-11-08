@@ -119,20 +119,22 @@ public class ReportServiceTests
     [Fact]
     public async Task AbsencesAsync_NAfficheQueLesNonJustifiees()
     {
+        // Arrange
         var ctx = new Contexte();
         var jours = JoursOuvresPasses(3);
         var nonPointe = jours[0];
         var conge = jours[1];
         var declaree = jours[2];
-
         ctx.Plan(nonPointe);
         ctx.Plan(conge);
         ctx.Plan(declaree);
         ctx.Conge(conge);
         ctx.AbsenceDeclaree(declaree);
 
+        // Act
         var rows = await ctx.Service.AbsencesAsync(Contexte.Filtre(nonPointe, declaree));
 
+        // Assert
         var row = rows.Should().ContainSingle().Which;
         row.Matricule.Should().Be("001");
         row.Nom.Should().Be("Dupont");
@@ -146,31 +148,36 @@ public class ReportServiceTests
     [Fact]
     public async Task AbsencesAsync_JourOffEtFerie_NeProduisentAucuneLigne()
     {
+        // Arrange
         var ctx = new Contexte();
         var jours = JoursOuvresPasses(2);
         var jourOff = jours[0];
         var ferie = jours[1];
-
         ctx.Plan(jourOff, off: true);
         ctx.Plan(ferie);
         ctx.Feries.Add(new JourFerie { Date = ferie.Date, Intitule = "Férié", BddSage = "SAGE_TEST" });
 
+        // Act
         var rows = await ctx.Service.AbsencesAsync(Contexte.Filtre(jourOff, ferie));
 
+        // Assert
         rows.Should().BeEmpty();
     }
 
     [Fact]
     public async Task AbsencesAsync_FiltreParDepartement()
     {
+        // Arrange
         var ctx = new Contexte();
         var jour = JoursOuvresPasses(1)[0];
         ctx.Plan(jour);
 
+        // Act
         // La comparaison ignore la casse et les espaces de saisie.
         var correspondant = await ctx.Service.AbsencesAsync(Contexte.Filtre(jour, jour, " info "));
-        correspondant.Should().ContainSingle();
 
+        // Assert
+        correspondant.Should().ContainSingle();
         var autre = await ctx.Service.AbsencesAsync(Contexte.Filtre(jour, jour, "RH"));
         autre.Should().BeEmpty();
     }
@@ -178,17 +185,19 @@ public class ReportServiceTests
     [Fact]
     public async Task AbsencesPagedAsync_FiltreAvantPagination()
     {
+        // Arrange
         var ctx = new Contexte();
         var jours = JoursOuvresPasses(2);
         var nonPointe = jours[0];
         var conge = jours[1];
-
         ctx.Plan(nonPointe);
         ctx.Plan(conge);
         ctx.Conge(conge);
 
+        // Act
         var page = await ctx.Service.AbsencesPagedAsync(Contexte.Filtre(nonPointe, conge), page: 1, pageSize: 50);
 
+        // Assert
         page.Total.Should().Be(1);
         var row = page.Items.Should().ContainSingle().Which;
         ((SoftTime.Domain.Services.AbsenceReportRow)row).Type.Should().Be("Non justifiée");

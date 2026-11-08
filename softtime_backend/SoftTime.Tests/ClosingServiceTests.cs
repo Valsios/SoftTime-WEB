@@ -198,11 +198,14 @@ public class ClosingServiceTests
     [Fact]
     public async Task Analyse_FixedSet_ScoreAndCountsMatchHandComputation()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
 
+        // Act
         var result = await ctx.Service.AnalyserAsync(Semaine());
 
+        // Assert
         // Poids 5 + 1 + 1 + 5 = 12 sur 10 jours-employé : 100 − 100 × 12 / (5 × 10) = 76
         result.JoursEmployeControles.Should().Be(10);
         result.Score.Should().Be(76);
@@ -222,11 +225,14 @@ public class ClosingServiceTests
     [Fact]
     public async Task Analyse_FixedSet_ScorePerDepartment()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
 
+        // Act
         var result = await ctx.Service.AnalyserAsync(Semaine());
 
+        // Assert
         // INFO : 5 + 1 + 1 = 7 sur 5 jours → 72 ; RH : 5 sur 5 jours → 80
         result.ParDepartement.Should().SatisfyRespectively(
             info =>
@@ -248,12 +254,15 @@ public class ClosingServiceTests
     [Fact]
     public async Task Analyse_ExposesMatriculeAndDepartmentOnly()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
-
         var result = await ctx.Service.AnalyserAsync(Semaine());
+
+        // Act
         var json = JsonSerializer.Serialize(result);
 
+        // Assert
         json.Should().NotContain("\"X\"");
         json.Should().NotContain("\"Y\"");
         result.Anomalies.Items.Should().Contain(a => a.Matricule == "2" && a.Departement == "RH");
@@ -262,11 +271,14 @@ public class ClosingServiceTests
     [Fact]
     public async Task Analyse_DepartmentFilter_KeepsOnlyThatDepartment()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
 
+        // Act
         var result = await ctx.Service.AnalyserAsync(Semaine(departement: "rh"));
 
+        // Assert
         result.Departement.Should().Be("rh");
         result.JoursEmployeControles.Should().Be(5);
         result.Score.Should().Be(80);
@@ -278,11 +290,14 @@ public class ClosingServiceTests
     [Fact]
     public async Task Analyse_PeriodWithoutData_ScoreAndComparisonAreNull()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
 
+        // Act
         var result = await ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(new DateTime(2025, 10, 1), new DateTime(2025, 10, 5)));
 
+        // Assert
         result.JoursEmployeControles.Should().Be(0);
         result.Score.Should().BeNull();
         result.Comparaison.Should().BeNull();
@@ -293,14 +308,17 @@ public class ClosingServiceTests
     [Fact]
     public async Task Analyse_FuturePeriod_IsNeverControlled()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.Carte(1, "001", "INFO");
         ctx.Plan(1, Today);
         ctx.Plan(1, Today.AddDays(1));
         ctx.Punch("001", Today, H8);
 
+        // Act
         var result = await ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(Today, Today.AddDays(1)));
 
+        // Assert
         result.JoursEmployeControles.Should().Be(0);
         result.Score.Should().BeNull();
         result.NombreAnomalies.Should().Be(0);
@@ -309,11 +327,14 @@ public class ClosingServiceTests
     [Fact]
     public async Task Analyse_PreviousPeriodWithoutData_ComparisonIsNull()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
 
+        // Act
         var result = await ctx.Service.AnalyserAsync(Semaine());
 
+        // Assert
         result.Score.Should().Be(76);
         result.Comparaison.Should().BeNull();
     }
@@ -321,12 +342,15 @@ public class ClosingServiceTests
     [Fact]
     public async Task Analyse_Comparison_Improvement()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
         ctx.SemainePrecedente(manquantsPour002: true);
 
+        // Act
         var result = await ctx.Service.AnalyserAsync(Semaine() with { IncludeComparison = true });
 
+        // Assert
         // Précédente (12 → 16 nov.) : 2 manquants sur 6 jours → 100 − 100 × 10 / 30 = 66,67 → 67
         var comparaison = result.Comparaison.Should().BeOfType<ClosingComparisonDto>().Which;
         comparaison.From.Should().Be(new DateTime(2025, 11, 12));
@@ -343,12 +367,15 @@ public class ClosingServiceTests
     [Fact]
     public async Task Analyse_Comparison_Degradation()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
         ctx.SemainePrecedente(manquantsPour002: false);
 
+        // Act
         var result = await ctx.Service.AnalyserAsync(Semaine() with { IncludeComparison = true });
 
+        // Assert
         var comparaison = result.Comparaison.Should().BeOfType<ClosingComparisonDto>().Which;
         comparaison.ScorePrecedent.Should().Be(100);
         comparaison.EcartScore.Should().Be(-24);
@@ -358,12 +385,15 @@ public class ClosingServiceTests
     [Fact]
     public async Task Analyse_Pagination_Page2WithStableOrderAndTotal()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
-
         var complet = await ctx.Service.AnalyserAsync(Semaine(page: 1, taille: 100));
+
+        // Act
         var page2 = await ctx.Service.AnalyserAsync(Semaine(page: 2, taille: 3));
 
+        // Assert
         complet.Anomalies.Items.Select(a => a.Type).Should().Equal(new[]
             {
                 nameof(ClosingAnomalyType.PointageManquant), nameof(ClosingAnomalyType.PointageIncomplet),
@@ -379,34 +409,47 @@ public class ClosingServiceTests
     [Fact]
     public async Task Analyse_FromAfterTo_ThrowsValidationError()
     {
+        // Arrange
         var ctx = new Contexte();
 
-        await FluentActions.Awaiting(() =>
-            ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(Vendredi, Lundi))).Should().ThrowExactlyAsync<DomainException>();
+        // Act
+        Func<Task> act = () =>
+            ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(Vendredi, Lundi));
+
+        // Assert
+        await act.Should().ThrowExactlyAsync<DomainException>();
     }
 
     [Fact]
     public async Task Analyse_PeriodLongerThan366Days_ThrowsValidationError()
     {
+        // Arrange
         var ctx = new Contexte();
         var from = new DateTime(2024, 1, 1);
 
-        await FluentActions.Awaiting(() =>
-            ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(from, from.AddDays(366)))).Should().ThrowExactlyAsync<DomainException>();
+        // Act
+        Func<Task> act = () =>
+            ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(from, from.AddDays(366)));
+
+        // Assert
+        await act.Should().ThrowExactlyAsync<DomainException>();
         ClosingComputation.Valider(new ClosingAnalysisRequest(from, from.AddDays(365)));
     }
 
     [Fact]
     public async Task Analyse_PauseShift_NeverRaisesAnomaly()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.Carte(1, "001", "INFO");
         ctx.Ferie(Lundi.AddDays(1));
         for (var jour = Lundi; jour <= Vendredi; jour = jour.AddDays(1))
             ctx.Plan(1, jour, TimeSpan.FromHours(12), TimeSpan.FromHours(12));
 
+        // Act
         var result = await ctx.Service.AnalyserAsync(Semaine());
 
+        // Assert
         result.NombreAnomalies.Should().Be(0);
         result.JoursEmployeControles.Should().Be(0);
         result.Score.Should().BeNull();
@@ -415,25 +458,31 @@ public class ClosingServiceTests
     [Fact]
     public async Task Analyse_SageLeave_ExcludesMissingPunch()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
         ctx.Conge(2, Lundi);
 
+        // Act
         var result = await ctx.Service.AnalyserAsync(Semaine());
 
+        // Assert
         Compte(result.ParType, ClosingAnomalyType.PointageManquant).Should().Be(0);
     }
 
     [Fact]
     public async Task Analyse_ValidatedWeek_FollowsIgnoreOption()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
         ctx.SemaineValidee("001", Lundi);
-
         var parDefaut = await ctx.Service.AnalyserAsync(Semaine());
+
+        // Act
         var signalees = await ctx.Service.AnalyserAsync(Semaine(options: new ClosingRulesOptions { IgnorerSemainesValidees = false }));
 
+        // Assert
         Compte(parDefaut.ParType, ClosingAnomalyType.PointageIncomplet).Should().Be(0);
         Compte(signalees.ParType, ClosingAnomalyType.PointageIncomplet).Should().Be(1);
     }
@@ -441,25 +490,31 @@ public class ClosingServiceTests
     [Fact]
     public async Task Analyse_TwoCalls_IdenticalResult()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
         ctx.SemainePrecedente(manquantsPour002: true);
-
         var premier = JsonSerializer.Serialize(await ctx.Service.AnalyserAsync(Semaine()));
+
+        // Act
         var second = JsonSerializer.Serialize(await ctx.Service.AnalyserAsync(Semaine()));
 
+        // Assert
         second.Should().Be(premier);
     }
 
     [Fact]
     public async Task Analyse_ComparisonNotRequested_IsAbsentByDefault()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
         ctx.SemainePrecedente(manquantsPour002: true);
 
+        // Act
         var result = await ctx.Service.AnalyserAsync(Semaine());
 
+        // Assert
         Semaine().IncludeComparison.Should().BeFalse();
         result.Comparaison.Should().BeNull();
         result.Score.Should().Be(76);
@@ -469,13 +524,16 @@ public class ClosingServiceTests
     [Fact]
     public async Task Analyse_ComparisonNotRequested_PreviousPeriodIsNotLoaded()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
         ctx.SemainePrecedente(manquantsPour002: true);
-
         var sans = await ctx.Service.ChargerAsync(Semaine(), CancellationToken.None);
+
+        // Act
         var avec = await ctx.Service.ChargerAsync(Semaine() with { IncludeComparison = true }, CancellationToken.None);
 
+        // Assert
         sans.Pointages.Should().NotContain(p => p.DatePointage < Lundi);
         sans.Plannings.Should().NotContain(p => p.DateP < Lundi.AddDays(-1));
         avec.Pointages.Should().Contain(p => p.DatePointage < Lundi);
@@ -484,13 +542,16 @@ public class ClosingServiceTests
     [Fact]
     public async Task Analyse_WithAndWithoutComparison_SameCurrentPeriodResult()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
         ctx.SemainePrecedente(manquantsPour002: true);
-
         var sans = await ctx.Service.AnalyserAsync(Semaine());
+
+        // Act
         var avec = await ctx.Service.AnalyserAsync(Semaine() with { IncludeComparison = true });
 
+        // Assert
         avec.Comparaison.Should().NotBeNull();
         JsonSerializer.Serialize(avec with { Comparaison = null }).Should().Be(JsonSerializer.Serialize(sans));
     }
@@ -498,11 +559,14 @@ public class ClosingServiceTests
     [Fact]
     public async Task Analyse_NoPeriod_DefaultsToPreviousCalendarMonth()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
 
+        // Act
         var result = await ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(default, default));
 
+        // Assert
         // Aujourd'hui = 1er décembre 2025 : mois civil complet précédent = novembre 2025.
         result.From.Should().Be(new DateTime(2025, 11, 1));
         result.To.Should().Be(new DateTime(2025, 11, 30));
@@ -516,8 +580,10 @@ public class ClosingServiceTests
     [InlineData(2024, 3, 10, 2024, 2, 1, 2024, 2, 29)]
     public void DefaultPeriod_IsPreviousCalendarMonth(int a, int m, int j, int a1, int m1, int j1, int a2, int m2, int j2)
     {
+        // Act
         var request = ClosingComputation.AvecPeriodeParDefaut(new ClosingAnalysisRequest(default, default), new DateTime(a, m, j));
 
+        // Assert
         request.From.Should().Be(new DateTime(a1, m1, j1));
         request.To.Should().Be(new DateTime(a2, m2, j2));
     }
@@ -525,8 +591,10 @@ public class ClosingServiceTests
     [Fact]
     public async Task Analyse_OnlyOneBoundProvided_ThrowsValidationError()
     {
+        // Arrange
         var ctx = new Contexte();
 
+        // Act & Assert
         await FluentActions.Awaiting(() =>
             ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(Lundi, default))).Should().ThrowExactlyAsync<DomainException>();
         await FluentActions.Awaiting(() =>
@@ -536,13 +604,16 @@ public class ClosingServiceTests
     [Fact]
     public async Task Analyse_NeverWrites()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
         ctx.SemainePrecedente(manquantsPour002: true);
-
         await ctx.Service.AnalyserAsync(Semaine());
+
+        // Act
         await ctx.Service.AnalyserAsync(Semaine(departement: "INFO", page: 2, taille: 1));
 
+        // Assert
         ctx.Uow.Ecritures.Should().Be(0);
     }
 
@@ -556,15 +627,19 @@ public class ClosingServiceTests
     [Fact]
     public async Task Cache_ResultIdenticalWithAndWithoutCache_ForEveryPageAndFilter()
     {
+        // Arrange
         var avec = new Contexte();
         avec.JeuFixe();
         avec.SemainePrecedente(manquantsPour002: true);
-        var sans = new Contexte(); // même données, cache jamais réutilisé
+        var sans = new Contexte();
         sans.JeuFixe();
         sans.SemainePrecedente(manquantsPour002: true);
 
+        // Act
         // Première demande : remplit le cache ; les suivantes (changements de page) le réutilisent.
         await avec.Service.AnalyserAsync(Page(1, 1, reuse: false, comparaison: true));
+
+        // Assert
         foreach (var info in new[] { false, true })
             foreach (var comparaison in new[] { true })
                 for (var page = 1; page <= 5; page++)
@@ -579,47 +654,57 @@ public class ClosingServiceTests
     [Fact]
     public async Task Cache_WithoutReuseRequest_AlwaysRecomputesFromData()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
         var avant = await ctx.Service.AnalyserAsync(Page(1, 50, reuse: false));
-
-        ctx.Punch("002", Lundi, H8, H17); // la donnée change : le manquant du lundi disparaît
+        ctx.Punch("002", Lundi, H8, H17);
         var recalcule = await ctx.Service.AnalyserAsync(Page(1, 50, reuse: false));
+
+        // Act
         var reutilise = await ctx.Service.AnalyserAsync(Page(1, 50, reuse: true));
 
+        // Assert
         avant.NombreAnomalies.Should().Be(4);
-        recalcule.NombreAnomalies.Should().Be(3);   // nouvelle analyse : toujours à jour
-        reutilise.NombreAnomalies.Should().Be(3);   // l'analyse précédente a remplacé l'entrée du cache
+        recalcule.NombreAnomalies.Should().Be(3);
+        reutilise.NombreAnomalies.Should().Be(3);
     }
 
     [Fact]
     public async Task Cache_ReuseServesStoredAnalysis_ThenExpires()
     {
+        // Arrange
         var horloge = new HorlogeMobile();
-        var ctx = new Contexte(horloge);
-        ctx.JeuFixe();
-        await ctx.Service.AnalyserAsync(Page(1, 50, reuse: false));
-        ctx.Punch("002", Lundi, H8, H17);
+        var sut = new Contexte(horloge);
+        sut.JeuFixe();
+        await sut.Service.AnalyserAsync(Page(1, 50, reuse: false));
 
-        (await ctx.Service.AnalyserAsync(Page(2, 1, reuse: true))).NombreAnomalies.Should().Be(4); // dans les 60 s : analyse conservée
+        // Act
+        sut.Punch("002", Lundi, H8, H17);
+
+        // Assert
+        (await sut.Service.AnalyserAsync(Page(2, 1, reuse: true))).NombreAnomalies.Should().Be(4);
         horloge.Avancer(TimeSpan.FromSeconds(61));
-        (await ctx.Service.AnalyserAsync(Page(2, 1, reuse: true))).NombreAnomalies.Should().Be(3); // expirée : recalculée
+        (await sut.Service.AnalyserAsync(Page(2, 1, reuse: true))).NombreAnomalies.Should().Be(3);
     }
 
     [Fact]
     public async Task Cache_KeyIncludesDepartmentComparisonAndRules()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
         ctx.SemainePrecedente(manquantsPour002: true);
         await ctx.Service.AnalyserAsync(Page(1, 50, reuse: false));
-
         var info = await ctx.Service.AnalyserAsync(Page(1, 50, reuse: true, departement: "INFO"));
         var rh = await ctx.Service.AnalyserAsync(Page(1, 50, reuse: true, departement: "RH"));
         var avecComparaison = await ctx.Service.AnalyserAsync(Page(1, 50, reuse: true, comparaison: true));
+
+        // Act
         var autresPoids = await ctx.Service.AnalyserAsync(
             new ClosingAnalysisRequest(Lundi, Vendredi, Options: new ClosingRulesOptions { PoidsCritique = 10 }, ReuseCached: true));
 
+        // Assert
         info.Departement.Should().Be("INFO");
         info.NombreAnomalies.Should().Be(3);
         rh.NombreAnomalies.Should().Be(1);

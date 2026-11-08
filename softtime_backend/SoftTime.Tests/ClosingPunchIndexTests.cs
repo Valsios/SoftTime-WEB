@@ -65,15 +65,23 @@ public class ClosingPunchIndexTests
     [InlineData(true)]
     public void Incomplete_IndexOverload_SameAsListOverload(bool multi)
     {
+        // Arrange
         var options = new ClosingRulesOptions { IgnorerSemainesValidees = false };
-        PunchCompletenessRules.PointagesIncomplets(new EmployeeSources(Cartes, Plannings, Corrections), Index, Array.Empty<HsValidee>(), new ClosingScope(From, To, multi, options)).Should().Equal(PunchCompletenessRules.PointagesIncomplets(new EmployeeSources(Cartes, Plannings, Corrections), Pointages, Array.Empty<HsValidee>(), new ClosingScope(From, To, multi, options)));
+
+        // Act
+        var result = PunchCompletenessRules.PointagesIncomplets(new EmployeeSources(Cartes, Plannings, Corrections), Index, Array.Empty<HsValidee>(), new ClosingScope(From, To, multi, options));
+
+        // Assert
+        result.Should().Equal(PunchCompletenessRules.PointagesIncomplets(new EmployeeSources(Cartes, Plannings, Corrections), Pointages, Array.Empty<HsValidee>(), new ClosingScope(From, To, multi, options)));
     }
 
     [Fact]
     public void MissingAndPlannedWithoutPunch_SharedAbsenceLines_SameAsListOverloads()
     {
+        // Act
         var lignes = AbsenceReportRules.Calculer(new EmployeeSources(Cartes, Plannings, Corrections), new AbsenceCalendar(Conges, Feries), new ReportPeriod(From, To, Today));
 
+        // Assert
         PunchCompletenessRules.PointagesManquants(lignes, Index).Should().Equal(PunchCompletenessRules.PointagesManquants(new EmployeeSources(Cartes, Plannings, Corrections), Pointages, new AbsenceCalendar(Conges, Feries), new ReportPeriod(From, To, Today)));
         PlanningCoverageRules.PlanningsSansPointage(lignes, Index, Corrections).Should().Equal(PlanningCoverageRules.PlanningsSansPointage(new EmployeeSources(Cartes, Plannings, Corrections), Pointages, new AbsenceCalendar(Conges, Feries), new ReportPeriod(From, To, Today)));
     }
@@ -81,7 +89,11 @@ public class ClosingPunchIndexTests
     [Fact]
     public void PunchRules_IndexOverloads_SameAsListOverloads()
     {
-        PlanningCoverageRules.PointagesSansPlanning(Cartes, Plannings, Index, new ClosingScope(From, To)).Should().Equal(PlanningCoverageRules.PointagesSansPlanning(Cartes, Plannings, Pointages, new ClosingScope(From, To)));
+        // Act
+        var result = PlanningCoverageRules.PointagesSansPlanning(Cartes, Plannings, Index, new ClosingScope(From, To));
+
+        // Assert
+        result.Should().Equal(PlanningCoverageRules.PointagesSansPlanning(Cartes, Plannings, Pointages, new ClosingScope(From, To)));
         DuplicatePunchRules.DoublonsExacts(Index, new ClosingScope(From, To)).Should().Equal(DuplicatePunchRules.DoublonsExacts(Pointages, new ClosingScope(From, To)));
         DuplicatePunchRules.QuasiDoublons(Index, new ClosingScope(From, To)).Should().Equal(DuplicatePunchRules.QuasiDoublons(Pointages, new ClosingScope(From, To)));
     }
@@ -89,9 +101,13 @@ public class ClosingPunchIndexTests
     [Fact]
     public void Rules_ProduceExpectedAnomaliesOnMixedSet()
     {
+        // Arrange
         var exacts = DuplicatePunchRules.DoublonsExacts(Index, new ClosingScope(From, To));
+
+        // Act
         var quasi = DuplicatePunchRules.QuasiDoublons(Index, new ClosingScope(From, To));
 
+        // Assert
         // 369 lundi 08:00 ×2, A12 mardi 17:00 ×2, 999 lundi 08:00 ×2 ; 369 du 20/11 hors période.
         exacts.Select(a => (a.Matricule, a.Date)).Should().Equal(new[] { ("369", Lundi), ("999", Lundi), ("A12", Lundi.AddDays(1)) });
         quasi.Select(a => (a.Matricule, a.Date)).Should().Equal(new[] { ("369", Lundi), ("500", Lundi.AddDays(2)) });
@@ -100,7 +116,11 @@ public class ClosingPunchIndexTests
     [Fact]
     public void Index_GroupsByCanonicalMatriculeSortedAndCountsPerDay()
     {
-        Index.Moments("369").Where(m => m.Date == Lundi).Select(m => m.Heure).Should().Equal(new[] { H8, H8, H8.Add(TimeSpan.FromSeconds(20)), H17 });
+        // Act
+        var result = Index.Moments("369").Where(m => m.Date == Lundi).Select(m => m.Heure);
+
+        // Assert
+        result.Should().Equal(new[] { H8, H8, H8.Add(TimeSpan.FromSeconds(20)), H17 });
         Index.APointage("369", Lundi.AddHours(10)).Should().BeTrue();
         Index.APointage("369", Lundi.AddDays(2)).Should().BeFalse();
         Index.Jours.Should().Contain(("A12", Lundi.AddDays(1), 3));

@@ -22,13 +22,16 @@ public class MlPredictionServiceTests
     [Fact]
     public async Task L_horizon_totalise_chaque_semaine_et_signale_les_semaines_sans_prevision()
     {
+        // Arrange
         var store = new FakeMlStore();
-        Montant(store, "001", Lundi, 24m, 22m, 26m);  // au-delà du plafond exonéré de 20 h
-        Montant(store, "002", Lundi, 20m, 18m, 22m);  // au plafond : pas au-delà
+        Montant(store, "001", Lundi, 24m, 22m, 26m);
+        Montant(store, "002", Lundi, 20m, 18m, 22m);
         Montant(store, "001", Lundi.AddDays(7), 2.5m, 0.5m, 4.5m);
 
+        // Act
         var semaines = await Service(store).GetHsHorizonAsync();
 
+        // Assert
         semaines.Count.Should().Be(4);
         semaines[0].SemaineDebut.Should().Be(Lundi);
         semaines[0].Salaries.Should().Be(2);
@@ -45,17 +48,20 @@ public class MlPredictionServiceTests
     [Fact]
     public async Task Le_suivi_compare_la_prevision_aux_hs_reelles_des_semaines_terminees()
     {
+        // Arrange
         var store = new FakeMlStore();
         var semainePassee = Lundi.AddDays(-7);
-        Montant(store, "001", semainePassee, 4m, 2m, 6m);   // réel 5 : dans la fourchette, écart 1
-        Montant(store, "002", semainePassee, 1m, 0m, 2m);   // réel 4 : hors fourchette, écart 3
-        Montant(store, "003", semainePassee, 2m, 0m, 4m);   // pas de ligne réelle : ignoré
-        Montant(store, "001", Lundi, 9m, 7m, 11m);          // semaine en cours : pas encore comparable
+        Montant(store, "001", semainePassee, 4m, 2m, 6m);
+        Montant(store, "002", semainePassee, 1m, 0m, 2m);
+        Montant(store, "003", semainePassee, 2m, 0m, 4m);
+        Montant(store, "001", Lundi, 9m, 7m, 11m);
         Reel(store, "001", semainePassee, 5m);
         Reel(store, "002", semainePassee, 4m);
 
+        // Act
         var suivi = await Service(store).GetHsAccuracyAsync(8);
 
+        // Assert
         var semaine = suivi.Should().ContainSingle().Which;
         semaine.SemaineDebut.Should().Be(semainePassee);
         semaine.Salaries.Should().Be(2);
@@ -68,8 +74,10 @@ public class MlPredictionServiceTests
     [Fact]
     public async Task Sans_historique_le_suivi_est_vide()
     {
+        // Act
         var suivi = await Service(new FakeMlStore()).GetHsAccuracyAsync(8);
 
+        // Assert
         suivi.Should().BeEmpty();
     }
 

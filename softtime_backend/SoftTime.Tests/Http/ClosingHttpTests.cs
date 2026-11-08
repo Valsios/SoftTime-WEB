@@ -110,36 +110,41 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     [InlineData("anonyme", HttpStatusCode.Unauthorized)]
     public async Task Analysis_needs_the_database_then_gate_6_and_REPORTS_CLOSING(string profil, HttpStatusCode attendu)
     {
+        // Arrange
         var before = _f.Snapshot();
         var (code, texte) = await Envoyer(_http, Requete(profil, HttpMethod.Get, $"{Url}?{Semaine}"));
+
+        // Act
         ApiFactory.Report($"CLOSE|{profil}|{(int)code}|{(texte.Length > 90 ? texte[..90] : texte)}");
 
+        // Assert
         code.Should().Be(attendu);
         if (profil is "closenobase" or "closenopte")
             texte.Should().Contain("accès à cette base");       // la base (SAGE puis pointeuse) est contrôlée en premier
         else if (attendu == HttpStatusCode.Forbidden)
             texte.Should().Contain(Denied);
-        _f.Snapshot().Should().Be(before);                     // lecture seule
+        _f.Snapshot().Should().Be(before);
     }
 
     [Fact]
     public async Task Analysis_returns_status_score_formula_counts_and_named_anomalies()
     {
+        // Act
         var (code, texte) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}&includeComparison=true"));
 
+        // Assert
         code.Should().Be(HttpStatusCode.OK);
         using var json = JsonDocument.Parse(texte);
         var r = json.RootElement.GetProperty("data");
-        r.GetProperty("statut").GetString().Should().Be("Bloquant");      // 1 critique sur 1 jour contrôlé
+        r.GetProperty("statut").GetString().Should().Be("Bloquant");
         r.GetProperty("statutLibelle").GetString().Should().Be("Bloquant");
         r.GetProperty("seuilBloquant").GetDecimal().Should().Be(0.05m);
         r.GetProperty("score").GetInt32().Should().Be(0);
         r.GetProperty("formule").GetString().Should().Contain("poids maximum");
         r.GetProperty("joursEmployeControles").GetInt32().Should().Be(1);
         r.GetProperty("nomsAffiches").GetBoolean().Should().BeTrue();
-        r.GetProperty("comparaison").ValueKind.Should().Be(JsonValueKind.Null);   // période précédente sans donnée
+        r.GetProperty("comparaison").ValueKind.Should().Be(JsonValueKind.Null);
         r.GetProperty("parDepartement")[0].GetProperty("departement").GetString().Should().Be("DEP1");
-
         var anomalie = r.GetProperty("anomalies").GetProperty("items")[0];
         anomalie.GetProperty("type").GetString().Should().Be("PointageManquant");
         anomalie.GetProperty("matricule").GetString().Should().Be("777");
@@ -151,8 +156,10 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Analysis_accepts_includeInformation_and_exposes_the_excluded_employee_count()
     {
+        // Act
         var (code, texte) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}&includeInformation=true"));
 
+        // Assert
         code.Should().Be(HttpStatusCode.OK);
         using var json = JsonDocument.Parse(texte);
         var r = json.RootElement.GetProperty("data");
@@ -164,9 +171,13 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task ShowNames_false_returns_the_matricule_only_without_error()
     {
-        using var factory = AvecReglages(("Closing:ShowNames", "false"));
-        var (code, texte) = await Envoyer(factory.CreateClient(), Requete("admin", HttpMethod.Get, $"{Url}?{Semaine}"));
+        // Arrange
+        using var sut = AvecReglages(("Closing:ShowNames", "false"));
 
+        // Act
+        var (code, texte) = await Envoyer(sut.CreateClient(), Requete("admin", HttpMethod.Get, $"{Url}?{Semaine}"));
+
+        // Assert
         code.Should().Be(HttpStatusCode.OK);
         using var json = JsonDocument.Parse(texte);
         json.RootElement.GetProperty("data").GetProperty("nomsAffiches").GetBoolean().Should().BeFalse();
@@ -189,8 +200,10 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     [InlineData("from=2025-11-03&to=2025-11-07&pageSize=0")]
     public async Task Invalid_period_or_paging_is_a_400(string query)
     {
+        // Act
         var (code, texte) = await Envoyer(_http, Requete("admin", HttpMethod.Get, $"{Url}?{query}"));
 
+        // Assert
         code.Should().Be(HttpStatusCode.BadRequest);
         texte.Should().NotContain("Exception");
     }
@@ -198,8 +211,10 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task PageSize_above_200_is_capped_to_200()
     {
+        // Act
         var (code, texte) = await Envoyer(_http, Requete("admin", HttpMethod.Get, $"{Url}?{Semaine}&page=1&pageSize=5000"));
 
+        // Assert
         code.Should().Be(HttpStatusCode.OK);
         using var json = JsonDocument.Parse(texte);
         json.RootElement.GetProperty("data").GetProperty("anomalies").GetProperty("pageSize").GetInt32().Should().Be(200);
@@ -208,8 +223,10 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Utc_dates_keep_the_requested_day()
     {
+        // Act
         var (code, texte) = await Envoyer(_http, Requete("admin", HttpMethod.Get, $"{Url}?from=2025-11-03T00:00:00Z&to=2025-11-07T00:00:00Z"));
 
+        // Assert
         code.Should().Be(HttpStatusCode.OK);
         using var json = JsonDocument.Parse(texte);
         json.RootElement.GetProperty("data").GetProperty("from").GetString().Should().StartWith("2025-11-03");
@@ -225,9 +242,13 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     [InlineData("DELETE")]
     public async Task Write_methods_are_405_and_write_nothing(string methode)
     {
+        // Arrange
         var before = _f.Snapshot();
+
+        // Act
         var (code, _) = await Envoyer(_http, Requete("admin", new HttpMethod(methode), $"{Url}?{Semaine}"));
 
+        // Assert
         code.Should().Be(HttpStatusCode.MethodNotAllowed);
         _f.Snapshot().Should().Be(before);
     }
@@ -235,9 +256,13 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Disabled_feature_is_an_explicit_404_not_a_500()
     {
-        using var factory = AvecReglages(("Closing:Enabled", "false"));
-        var (code, texte) = await Envoyer(factory.CreateClient(), Requete("admin", HttpMethod.Get, $"{Url}?{Semaine}"));
+        // Arrange
+        using var sut = AvecReglages(("Closing:Enabled", "false"));
 
+        // Act
+        var (code, texte) = await Envoyer(sut.CreateClient(), Requete("admin", HttpMethod.Get, $"{Url}?{Semaine}"));
+
+        // Assert
         code.Should().Be(HttpStatusCode.NotFound);
         texte.Should().Contain("désactivée");
     }
@@ -245,18 +270,27 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Disabled_feature_still_refuses_an_account_without_the_permission()
     {
-        using var factory = AvecReglages(("Closing:Enabled", "false"));
-        var (code, _) = await Envoyer(factory.CreateClient(), Requete("gate6only", HttpMethod.Get, $"{Url}?{Semaine}"));
+        // Arrange
+        using var sut = AvecReglages(("Closing:Enabled", "false"));
 
+        // Act
+        var (code, _) = await Envoyer(sut.CreateClient(), Requete("gate6only", HttpMethod.Get, $"{Url}?{Semaine}"));
+
+        // Assert
         code.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
     public void Invalid_setting_refuses_startup_with_a_clear_message()
     {
-        using var factory = AvecReglages(("Closing:CriticalRatioBlocking", "2"));
+        // Arrange
+        using var sut = AvecReglages(("Closing:CriticalRatioBlocking", "2"));
 
-        var erreur = FluentActions.Invoking(() => factory.CreateClient()).Should().Throw<Exception>().Which;
+        // Act
+        var act = () => sut.CreateClient();
+
+        // Assert
+        var erreur = act.Should().Throw<Exception>().Which;
         var validation = erreur as OptionsValidationException ?? erreur.InnerException as OptionsValidationException;
         validation.Should().NotBeNull();
         validation!.Message.Should().Contain("Closing:CriticalRatioBlocking doit être compris entre 0 et 1");

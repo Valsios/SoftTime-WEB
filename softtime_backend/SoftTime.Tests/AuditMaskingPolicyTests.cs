@@ -34,7 +34,13 @@ public class AuditMaskingPolicyTests
     [InlineData("T_QUELCONQUE", "CONNECTIONSTRING")]
     [InlineData("T_QUELCONQUE", "PRIVATE_KEY")]
     public void Listed_and_pattern_columns_are_sensitive(string table, string column)
-        => AuditMaskingPolicy.IsSensitive(table, column).Should().BeTrue();
+    {
+        // Act
+        var result = AuditMaskingPolicy.IsSensitive(table, column);
+
+        // Assert
+        result.Should().BeTrue();
+    }
 
     [Theory]
     [InlineData("T_RESPONSABLE", "EMAIL")]
@@ -44,11 +50,18 @@ public class AuditMaskingPolicyTests
     [InlineData("T_FERIE", "SERVEUR")]
     [InlineData("T_FERIE", null)]
     public void Email_matricule_and_ordinary_columns_stay_visible(string table, string? column)
-        => AuditMaskingPolicy.IsSensitive(table, column).Should().BeFalse();
+    {
+        // Act
+        var result = AuditMaskingPolicy.IsSensitive(table, column);
+
+        // Assert
+        result.Should().BeFalse();
+    }
 
     [Fact]
     public void Mask_value_keeps_null_and_masks_sensitive_values_only()
     {
+        // Act & Assert
         AuditMaskingPolicy.MaskValue("T_BDD_SAGE", "TMDP", null).Should().BeNull();
         AuditMaskingPolicy.MaskValue("T_BDD_SAGE", "TMDP", "clair").Should().Be(AuditMaskingPolicy.Mask);
         AuditMaskingPolicy.MaskValue("T_RESPONSABLE", "EMAIL", "a@b.test").Should().Be("a@b.test");
@@ -57,6 +70,7 @@ public class AuditMaskingPolicyTests
     [Fact]
     public void Mask_key_masks_only_sensitive_key_columns()
     {
+        // Act & Assert
         AuditMaskingPolicy.MaskKey("T_BDD_SAGE", "ID=3;TMDP=clair").Should().Be("ID=3;TMDP=********");
         AuditMaskingPolicy.MaskKey("T_RESPONSABLE", "IDRESPONSABLE=14").Should().Be("IDRESPONSABLE=14");
         AuditMaskingPolicy.MaskKey("T_RESPONSABLE", null).Should().BeNull();
@@ -65,20 +79,23 @@ public class AuditMaskingPolicyTests
     [Fact]
     public void Every_secret_like_column_of_the_application_context_is_masked()
     {
+        // Arrange
         using var db = CreateContext();
+
+        // Act
         var columns = db.Model.GetEntityTypes()
             .Select(type => (Table: type.GetTableName() ?? type.ClrType.Name, Type: type))
             .SelectMany(x => x.Type.GetProperties().Select(p => (x.Table, Column: p.GetColumnName() ?? p.Name, Property: p.Name)))
             .ToList();
-        columns.Should().NotBeEmpty();
 
+        // Assert
+        columns.Should().NotBeEmpty();
         var unmasked = columns
             .Where(c => SecretLikeFragments.Any(f => c.Column.Contains(f, StringComparison.OrdinalIgnoreCase)
                                                   || c.Property.Contains(f, StringComparison.OrdinalIgnoreCase)))
             .Where(c => !AuditMaskingPolicy.IsSensitive(c.Table, c.Column))
             .Select(c => $"{c.Table}.{c.Column}")
             .ToList();
-
         unmasked.Should().BeEmpty();
         // Les identifiants de connexion des bases sont bien présents dans le modèle et couverts par la liste explicite.
         columns.Should().Contain(c => c.Table == "T_BDD_SAGE" && c.Column == "TMDP");
@@ -88,17 +105,21 @@ public class AuditMaskingPolicyTests
     [Fact]
     public void Database_credentials_are_masked_but_the_changed_column_stays_visible()
     {
+        // Arrange
         using var db = CreateContext();
         var entity = new BddSage { Id = 3, NomBd = "BASE", Serveur = "srv-avant", TLogin = "l-avant", TMdp = "m-avant" };
         db.Attach(entity);
         entity.Serveur = "srv-apres";
         entity.TLogin = "l-apres";
         entity.TMdp = "m-apres";
-
         Capture(db);
-
         var entries = AuditEntries(db);
-        entries.Select(e => e.Colonnes).OrderBy(c => c).ToArray().Should().Equal(new[] { "SERVEUR", "TLOGIN", "TMDP" });
+
+        // Act
+        var result = entries.Select(e => e.Colonnes).OrderBy(c => c).ToArray();
+
+        // Assert
+        result.Should().Equal(new[] { "SERVEUR", "TLOGIN", "TMDP" });
         entries.Should().AllSatisfy(e =>
         {
             e.Anciens.Should().Be(AuditMaskingPolicy.Mask);
@@ -109,13 +130,16 @@ public class AuditMaskingPolicyTests
     [Fact]
     public void Pointeuse_password_is_masked_and_email_stays_visible()
     {
+        // Arrange
         using var db = CreateContext();
         db.Add(new BddPointeuse { Id = 9, NomBd = "PTG", TMdp = "clair" });
         db.Add(new Responsable { Login = "agent", Email = "agent@exemple.test", Password = "empreinte" });
-
         Capture(db);
 
+        // Act
         var entries = AuditEntries(db);
+
+        // Assert
         entries.Should().ContainSingle(e => e.Tables == "T_BDD_POINTEUSE" && e.Colonnes == "TMDP").Which.Nouveaux.Should().Be(AuditMaskingPolicy.Mask);
         entries.Should().ContainSingle(e => e.Colonnes == "PASSWORD").Which.Nouveaux.Should().Be(AuditMaskingPolicy.Mask);
         entries.Should().ContainSingle(e => e.Colonnes == "EMAIL").Which.Nouveaux.Should().Be("agent@exemple.test");
@@ -125,11 +149,14 @@ public class AuditMaskingPolicyTests
     [Fact]
     public void Rights_audit_table_is_excluded_from_the_central_journal()
     {
+        // Arrange
         using var db = CreateContext();
         db.Add(new AuditDroit { LoginOperateur = "admin" });
 
+        // Act
         Capture(db);
 
+        // Assert
         AuditEntries(db).Should().BeEmpty();
     }
 

@@ -21,8 +21,10 @@ public class ImportTemplateTests
     [Fact]
     public void Catalogue_ContientLesNeufModelesAttendus()
     {
+        // Act
         var cles = Modeles().Select(m => m.Key).ToList();
 
+        // Assert
         cles.Should().Equal(new[]
             {
                 "shifts", "punches", "corrections",
@@ -51,13 +53,14 @@ public class ImportTemplateTests
     [Fact]
     public void ModelesPlanning_OntUneColonneParJour()
     {
+        // Act
         var dates = Enumerable.Range(0, 7)
             .Select(i => LundiReference.AddDays(i).ToString("yyyy-MM-dd"))
             .ToList();
 
+        // Assert
         var parMatricule = Modeles().Should().ContainSingle(m => m.Key == "planning-matricule").Which;
         var parCategorie = Modeles().Should().ContainSingle(m => m.Key == "planning-categorie").Which;
-
         parMatricule.Columns[0].Header.Should().Be("MATRICULE");
         parCategorie.Columns[0].Header.Should().Be("CATEGORIE");
         foreach (var modele in new[] { parMatricule, parCategorie })

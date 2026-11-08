@@ -74,8 +74,13 @@ public class TokenGatesTests
     [Fact]
     public async Task Administrator_has_gates_1_to_6()
     {
+        // Arrange
         Account(14, 1, "admin");
+
+        // Act
         var (token, response, _) = await GatesOf("admin", 14);
+
+        // Assert
         token.Should().Equal(new[] { 1, 2, 3, 4, 5, 6 });
         response.Should().Equal(token);
     }
@@ -83,8 +88,13 @@ public class TokenGatesTests
     [Fact]
     public async Task Account_with_the_no_right_marker_has_no_gate()
     {
+        // Arrange
         Account(10028, 10034, "user", PermissionCatalogMarker);
+
+        // Act
         var (token, response, login) = await GatesOf("user", 10028);
+
+        // Assert
         token.Should().BeEmpty();
         response.Should().BeEmpty();
         login.AuthorizedDatabases.Should().BeEmpty();
@@ -93,41 +103,62 @@ public class TokenGatesTests
     [Fact]
     public async Task Consultation_account_has_gate_6_only()
     {
+        // Act
         Account(10030, 29, "user1");
+
+        // Assert
         (await GatesOf("user1", 10030)).TokenGates.Should().Equal(new[] { 6 });
     }
 
     [Fact]
     public async Task Account_like_joel_with_role_only_has_gates_1_and_3_and_keeps_its_databases()
     {
+        // Arrange
         Account(10034, 10034, "joel");
         _uow.Get<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = 1, IdResponsable = 10034, IdBdd = 3033 });
+
+        // Act
         var (token, _, login) = await GatesOf("joel", 10034);
+
+        // Assert
         token.Should().Equal(new[] { 1, 3 });
-        login.AuthorizedDatabases.Should().ContainSingle().Which.NomBd.Should().Be("BASE1");   // bases proposées : règle de l'étape 4b-5
+        login.AuthorizedDatabases.Should().ContainSingle().Which.NomBd.Should().Be("BASE1");
     }
 
     [Fact]
     public async Task Account_like_joel_with_PARAMS_additions_gets_gate_2_too()
     {
+        // Arrange
         // Stockage actuel : liste complète = droits du rôle + ajouts (convertie en écarts à la lecture).
         Account(10034, 10034, "joel", "SAGE:BASE1:READ", "PROC:SHIFTS", "PARAMS:USERS", "PARAMS:PRIVILEGES");
+
+        // Act
         var (token, _, _) = await GatesOf("joel", 10034);
+
+        // Assert
         token.Should().Equal(new[] { 1, 2, 3 });
     }
 
     [Fact]
     public async Task Removing_every_work_right_removes_gate_3()
     {
+        // Act
         Account(10034, 10034, "joel", "SAGE:BASE1:READ");
+
+        // Assert
         (await GatesOf("joel", 10034)).TokenGates.Should().Equal(new[] { 1 });
     }
 
     [Fact]
     public async Task Account_whose_role_does_not_exist_has_no_gate()
     {
+        // Arrange
         Account(10099, 999, "orphan");
+
+        // Act
         var (token, response, login) = await GatesOf("orphan", 10099);
+
+        // Assert
         token.Should().BeEmpty();
         response.Should().BeEmpty();
         login.AuthorizedDatabases.Should().BeEmpty();
@@ -136,10 +167,14 @@ public class TokenGatesTests
     [Fact]
     public async Task A_rights_change_is_visible_at_the_next_login()
     {
+        // Arrange
         Account(14, 1, "admin");
-        Account(10034, 10034, "joel");
-        (await GatesOf("joel", 10034)).TokenGates.Should().Equal(new[] { 1, 3 });
 
+        // Act
+        Account(10034, 10034, "joel");
+
+        // Assert
+        (await GatesOf("joel", 10034)).TokenGates.Should().Equal(new[] { 1, 3 });
         await _auth.SaveUserDetailedPermissionsAsync(14, 10034, new[] { "SAGE:BASE1:READ", "PROC:SHIFTS", "PARAMS:USERS" });
         (await GatesOf("joel", 10034)).TokenGates.Should().Equal(new[] { 1, 2, 3 });
     }
@@ -148,10 +183,13 @@ public class TokenGatesTests
     [Fact]
     public async Task SetPrivileges_is_refused_for_a_role_with_detailed_rights_and_still_works_without()
     {
-        var ex = (await FluentActions.Awaiting(() => _auth.SetPrivilegesAsync(10034, new List<decimal> { 6 })).Should().ThrowExactlyAsync<DomainException>()).Which;
+        // Act
+        Func<Task> act = () => _auth.SetPrivilegesAsync(10034, new List<decimal> { 6 });
+
+        // Assert
+        var ex = (await act.Should().ThrowExactlyAsync<DomainException>()).Which;
         ex.Message.Should().Contain("droits détaillés");
         _uow.Get<DroitRole>().Items.Where(d => d.IdRole == 10034).Select(d => d.IdDroit).OrderBy(x => x).Should().Equal(new[] { 1m, 3m });
-
         _uow.Get<Role>().Items.Add(new Role { IdRole = 50, NomRole = "Sans lignes" });
         await _auth.SetPrivilegesAsync(50, new List<decimal> { 6 });
         _uow.Get<DroitRole>().Items.Where(d => d.IdRole == 50).Should().ContainSingle();

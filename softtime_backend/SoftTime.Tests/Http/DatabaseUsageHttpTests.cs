@@ -52,7 +52,10 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
     [MemberData(nameof(AllowedCases))]
     public async Task Administrator_and_a_checked_account_with_read_use_the_base(string profile, string route)
     {
+        // Act
         var (resp, _) = await Send(profile, route);
+
+        // Assert
         resp.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
         resp.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
     }
@@ -61,7 +64,10 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
     [MemberData(nameof(DeniedCases))]
     public async Task Unchecked_base_missing_read_or_no_gate_is_refused_with_403_and_the_message(string profile, string route)
     {
+        // Act
         var (resp, text) = await Send(profile, route);
+
+        // Assert
         resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         text.Should().Contain(Denied);
     }
@@ -72,7 +78,10 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
     [InlineData("activation (POST sage-databases/activate)")]
     public async Task Account_like_user1_without_any_base_gets_403_not_401(string route)
     {
+        // Act
         var (resp, _) = await Send("user1", route);
+
+        // Assert
         resp.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
         resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -80,7 +89,10 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Account_like_user1_without_the_sage_header_still_gets_400()
     {
+        // Act
         var (resp, text) = await Send("user1", "catalogue (GET cardpaie)", withSage: false);
+
+        // Assert
         resp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         text.Should().Contain("X-Sage-Database");
     }
@@ -88,10 +100,12 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Pointeuse_is_allowed_with_read_and_refused_without()
     {
+        // Act
         var (allowed, _) = await Send("joel", "pointeuse (POST punches/import-clock)");
+
+        // Assert
         allowed.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
         allowed.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
-
         // Même base SAGE autorisée, mais aucun droit sur la pointeuse.
         var (sageOnly, _) = await Send("ptenone", "catalogue (GET cardpaie)");
         sageOnly.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
@@ -103,8 +117,13 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Stale_pointeuse_header_does_not_break_routes_that_do_not_use_the_pointeuse()
     {
+        // Arrange
         var req = _f.Request("ptenone", HttpMethod.Get, "/api/v1/card-paie", null, ApiFactory.SageName, "PTG");
+
+        // Act
         var resp = await _http.SendAsync(req);
+
+        // Assert
         resp.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
     }
 
