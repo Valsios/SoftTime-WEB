@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Api.Responses;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Infrastructure.Excel;
@@ -99,7 +100,7 @@ public class EmployeePlanningController : ControllerBase
         var rows = ExcelWorkbook.ReadFirstSheet(stream);
         var headers = rows.Count > 0 ? rows[0].Keys.ToList() : new List<string>();
         if (headers.Count == 0)
-            return BadRequest("Fichier Excel vide ou sans en-têtes.");
+            return ApiErrors.Result(StatusCodes.Status400BadRequest, "Fichier Excel vide ou sans en-têtes.");
         return Ok(await _imports.ImportExcelAsync(rows, headers, ct));
     }
 

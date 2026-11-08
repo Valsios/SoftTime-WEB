@@ -284,8 +284,9 @@ export function personLabel(a: { matricule: string; nom: string | null; prenom: 
 /** Réponse 404 « désactivée » de la route : la fonction est coupée côté serveur. */
 export function isDisabledError(err: { status?: number; error?: unknown } | null | undefined): boolean {
   if (!err || err.status !== 404) return false;
-  const body = err.error as { error?: unknown } | null | undefined;
-  return typeof body?.error === 'string' && body.error.toLowerCase().includes('désactivée');
+  const body = err.error as { error?: unknown; message?: unknown } | null | undefined;
+  const message = body?.error ?? body?.message;
+  return typeof message === 'string' && message.toLowerCase().includes('désactivée');
 }
 
 /** Carte du tableau de bord : statut, score et critiques du mois précédent. */

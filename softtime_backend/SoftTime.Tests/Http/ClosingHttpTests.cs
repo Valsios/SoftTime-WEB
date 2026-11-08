@@ -129,7 +129,7 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
 
         Assert.Equal(HttpStatusCode.OK, code);
         using var json = JsonDocument.Parse(texte);
-        var r = json.RootElement;
+        var r = json.RootElement.GetProperty("data");
         Assert.Equal("Bloquant", r.GetProperty("statut").GetString());      // 1 critique sur 1 jour contrôlé
         Assert.Equal("Bloquant", r.GetProperty("statutLibelle").GetString());
         Assert.Equal(0.05m, r.GetProperty("seuilBloquant").GetDecimal());
@@ -155,7 +155,7 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
 
         Assert.Equal(HttpStatusCode.OK, code);
         using var json = JsonDocument.Parse(texte);
-        var r = json.RootElement;
+        var r = json.RootElement.GetProperty("data");
         Assert.Equal(0, r.GetProperty("salariesSansPlanningExclus").GetInt32());
         Assert.Contains(r.GetProperty("parGravite").EnumerateArray(), g => g.GetProperty("cle").GetString() == "Information");
         Assert.True(r.GetProperty("anomalies").GetProperty("items")[0].TryGetProperty("pointageExiste", out _));
@@ -169,8 +169,8 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
 
         Assert.Equal(HttpStatusCode.OK, code);
         using var json = JsonDocument.Parse(texte);
-        Assert.False(json.RootElement.GetProperty("nomsAffiches").GetBoolean());
-        var anomalie = json.RootElement.GetProperty("anomalies").GetProperty("items")[0];
+        Assert.False(json.RootElement.GetProperty("data").GetProperty("nomsAffiches").GetBoolean());
+        var anomalie = json.RootElement.GetProperty("data").GetProperty("anomalies").GetProperty("items")[0];
         Assert.Equal("777", anomalie.GetProperty("matricule").GetString());
         Assert.Equal(JsonValueKind.Null, anomalie.GetProperty("nom").ValueKind);
         Assert.Equal(JsonValueKind.Null, anomalie.GetProperty("prenom").ValueKind);
@@ -202,7 +202,7 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
 
         Assert.Equal(HttpStatusCode.OK, code);
         using var json = JsonDocument.Parse(texte);
-        Assert.Equal(200, json.RootElement.GetProperty("anomalies").GetProperty("pageSize").GetInt32());
+        Assert.Equal(200, json.RootElement.GetProperty("data").GetProperty("anomalies").GetProperty("pageSize").GetInt32());
     }
 
     [Fact]
@@ -212,8 +212,8 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
 
         Assert.Equal(HttpStatusCode.OK, code);
         using var json = JsonDocument.Parse(texte);
-        Assert.StartsWith("2025-11-03", json.RootElement.GetProperty("from").GetString());
-        Assert.StartsWith("2025-11-07", json.RootElement.GetProperty("to").GetString());
+        Assert.StartsWith("2025-11-03", json.RootElement.GetProperty("data").GetProperty("from").GetString());
+        Assert.StartsWith("2025-11-07", json.RootElement.GetProperty("data").GetProperty("to").GetString());
     }
 
     // ---------- Lecture seule et désactivation ----------

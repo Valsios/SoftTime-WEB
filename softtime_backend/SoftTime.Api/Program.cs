@@ -25,7 +25,13 @@ using SoftTime.Infrastructure.SchemaMigrations;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers(o => o.Filters.Add<SoftTime.Api.Validation.FluentValidationFilter>())
+builder.Services.AddControllers(o =>
+    {
+        o.Filters.Add<SoftTime.Api.Validation.FluentValidationFilter>();
+        o.Filters.Add<SoftTime.Api.Responses.ApiResponseResultFilter>();
+    })
+    .ConfigureApiBehaviorOptions(o => o.InvalidModelStateResponseFactory =
+        context => SoftTime.Api.Responses.ApiErrors.FromModelState(context.ModelState))
     .AddJsonOptions(o => SoftTimeJsonOptions.Configure(o.JsonSerializerOptions));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -154,7 +160,7 @@ builder.Services.AddRateLimiter(o =>
 {
     o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     o.OnRejected = (context, ct) => new ValueTask(context.HttpContext.Response.WriteAsJsonAsync(
-        new { error = "Trop de tentatives. Patientez une minute avant de réessayer." }, ct));
+        SoftTime.Api.Responses.ApiErrors.Fail("Trop de tentatives. Patientez une minute avant de réessayer."), ct));
     o.AddPolicy(AuthRateLimit.Policy, context =>
     {
         var permits = context.RequestServices.GetRequiredService<IOptions<AccountSecurityOptions>>().Value.AuthRequestsPerMinute;

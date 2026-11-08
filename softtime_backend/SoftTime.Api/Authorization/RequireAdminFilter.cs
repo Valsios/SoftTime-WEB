@@ -1,6 +1,7 @@
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Mvc;
 
+using SoftTime.Api.Responses;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Services;
 
@@ -16,7 +17,7 @@ public class RequireAdminFilter : IAuthorizationFilter
         if (context.HttpContext.User.Identity?.IsAuthenticated != true)
             return;
         if (!AdminAccess.IsAdmin(_user))
-            context.Result = new ObjectResult(new { error = AdminAccess.ReservedMessage })
+            context.Result = new ObjectResult(ApiErrors.Fail(AdminAccess.ReservedMessage))
             {
                 StatusCode = StatusCodes.Status403Forbidden
             };

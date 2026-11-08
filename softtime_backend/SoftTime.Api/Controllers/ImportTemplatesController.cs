@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+using SoftTime.Api.Responses;
 using SoftTime.Application.ImportTemplates;
 using SoftTime.Infrastructure.Excel;
 
@@ -28,7 +29,7 @@ public class ImportTemplatesController : ControllerBase
     {
         var template = ImportTemplateCatalog.Find(key);
         if (template is null)
-            return NotFound($"Modèle d'import inconnu : {key}.");
+            return ApiErrors.Result(StatusCodes.Status404NotFound, $"Modèle d'import inconnu : {key}.");
 
         return File(ImportTemplateFile.Build(template), ImportTemplateFile.Mime(template), template.FileName);
     }

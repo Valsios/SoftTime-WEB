@@ -121,9 +121,9 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
 
         var (_, detail) = await Send("admin", HttpMethod.Get, $"/api/v1/journal/{ClearRowId}");
         using var doc = JsonDocument.Parse(detail);
-        Assert.Equal("TMDP", doc.RootElement.GetProperty("column").GetString());
-        Assert.Equal(AuditMaskingPolicy.Mask, doc.RootElement.GetProperty("before").GetString());
-        Assert.Equal(AuditMaskingPolicy.Mask, doc.RootElement.GetProperty("after").GetString());
+        Assert.Equal("TMDP", doc.RootElement.GetProperty("data").GetProperty("column").GetString());
+        Assert.Equal(AuditMaskingPolicy.Mask, doc.RootElement.GetProperty("data").GetProperty("before").GetString());
+        Assert.Equal(AuditMaskingPolicy.Mask, doc.RootElement.GetProperty("data").GetProperty("after").GetString());
         // Le stockage n'est pas modifié par la lecture (aucune purge implicite).
         Assert.Equal(InjectedClearValue, _f.Store.GetRepo<JournalAudit>().Items.Single(e => e.Id == ClearRowId).Nouveaux);
     }
@@ -182,7 +182,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.OK, status);
         using var doc = JsonDocument.Parse(text);
         // L'ordre suit la collation de la source : on compare les ensembles.
-        string[] Values(string name) => doc.RootElement.GetProperty(name).EnumerateArray()
+        string[] Values(string name) => doc.RootElement.GetProperty("data").GetProperty(name).EnumerateArray()
             .Select(v => v.GetString()!).OrderBy(v => v, StringComparer.Ordinal).ToArray();
         Assert.Equal(new[] { "T_BDD_SAGE", "T_CUMSAL", "T_FERIE", "T_RESPONSABLE" }, Values("tables"));
         Assert.Equal(new[] { "Insertion", "Modification", "SYNC_PAIE", "Suppression" }, Values("actions"));
@@ -267,7 +267,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
         var (status, text) = await Send("admin", HttpMethod.Get, url);
         Assert.Equal(HttpStatusCode.OK, status);
         using var doc = JsonDocument.Parse(text);
-        var root = doc.RootElement;
+        var root = doc.RootElement.GetProperty("data");
         return (root.GetProperty("total").GetInt32(), root.GetProperty("pageSize").GetInt32(),
             root.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("id").GetInt64()).ToArray());
     }

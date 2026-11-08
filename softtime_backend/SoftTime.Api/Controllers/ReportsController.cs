@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Api.Responses;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 
@@ -78,7 +79,7 @@ public class ReportsController : ControllerBase
     {
         var normalized = type.Trim().ToLowerInvariant();
         if (!PagedReportTypes.Contains(normalized))
-            return BadRequest($"Type de rapport inconnu : {type}.");
+            return ApiErrors.Result(StatusCodes.Status400BadRequest, $"Type de rapport inconnu : {type}.");
         return Ok(await _svc.PagedAsync(normalized, filter, page, pageSize, ct));
     }
 

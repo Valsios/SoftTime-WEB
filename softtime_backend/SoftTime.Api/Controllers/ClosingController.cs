@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
+using SoftTime.Api.Responses;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Security;
@@ -68,7 +69,7 @@ public class ClosingController : ControllerBase
     {
         await FineReadAccess.EnsureAsync(_user, _rights, Rights.Reports, Permission, ct);
         if (!_reglages.Enabled)
-            return NotFound(new { error = Desactivee });
+            return ApiErrors.Result(StatusCodes.Status404NotFound, Desactivee);
 
         var request = new ClosingAnalysisRequest(
             Jour(from), Jour(to), departement, page, pageSize, Options: null, IncludeComparison: includeComparison == true,

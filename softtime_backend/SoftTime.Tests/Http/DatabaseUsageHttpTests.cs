@@ -117,7 +117,7 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
             var resp = await _http.SendAsync(_f.Request(profile, HttpMethod.Get, "/api/v1/auth/me"));
             var json = await resp.Content.ReadAsStringAsync();
             using var doc = System.Text.Json.JsonDocument.Parse(json);
-            var count = doc.RootElement.GetProperty("authorizedDatabases").GetArrayLength();
+            var count = doc.RootElement.GetProperty("data").GetProperty("authorizedDatabases").GetArrayLength();
             Assert.True(expected == count, $"{profile} : {count} base(s) proposée(s), {expected} attendue(s)");
         }
     }

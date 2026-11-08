@@ -1,3 +1,5 @@
+using SoftTime.Api.Responses;
+using SoftTime.Application.DTOs;
 using SoftTime.Application.Services;
 
 namespace SoftTime.Api.Middleware;
@@ -40,7 +42,7 @@ public sealed class ExceptionHandlingMiddleware
             if (context.Response.HasStarted)
                 throw;
             context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-            await context.Response.WriteAsJsonAsync(new { error = InternalErrorMessage });
+            await context.Response.WriteAsJsonAsync(ApiErrors.Fail(InternalErrorMessage));
         }
     }
 
@@ -49,10 +51,11 @@ public sealed class ExceptionHandlingMiddleware
         context.Response.StatusCode = StatusCodeOf(exception);
         return exception switch
         {
-            // Même corps que l'aperçu : le client demande confirmation puis renvoie confirmClearAdjustments = true.
-            RoleChangeConfirmationRequiredException roleChange => context.Response.WriteAsJsonAsync(roleChange.Preview),
-            FieldValidationException field => context.Response.WriteAsJsonAsync(new { error = field.Message, field = field.Field }),
-            _ => context.Response.WriteAsJsonAsync(new { error = exception.Message })
+            // L'aperçu est porté par Data : le client demande confirmation puis renvoie confirmClearAdjustments = true.
+            RoleChangeConfirmationRequiredException roleChange => context.Response.WriteAsJsonAsync(
+                ApiResponse<RoleChangePreviewDto>.FailResult(roleChange.Message) with { Data = roleChange.Preview }),
+            FieldValidationException field => context.Response.WriteAsJsonAsync(ApiErrors.Fail(field.Message, field.Field)),
+            _ => context.Response.WriteAsJsonAsync(ApiErrors.Fail(exception.Message))
         };
     }
 

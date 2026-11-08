@@ -1,13 +1,15 @@
+using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Mvc;
+
 using FluentValidation;
 
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Filters;
+using SoftTime.Api.Responses;
 
 namespace SoftTime.Api.Validation;
 
 /// <summary>
 /// Valide chaque argument d'action pour lequel un <see cref="IValidator{T}"/> est enregistré (validateurs de
-/// SoftTime.Application). En cas d'échec : 400 <c>{ error, field }</c>, la même forme que FieldValidationException,
+/// SoftTime.Application). En cas d'échec : 400 <c>ApiResponse</c> avec <c>message</c> et <c>field</c>, la même forme que FieldValidationException,
 /// que l'interface affiche sous le champ concerné. L'action n'est pas exécutée.
 /// </summary>
 public sealed class FluentValidationFilter : IAsyncActionFilter
@@ -27,7 +29,7 @@ public sealed class FluentValidationFilter : IAsyncActionFilter
                 continue;
 
             var failure = result.Errors[0];
-            context.Result = new BadRequestObjectResult(new { error = failure.ErrorMessage, field = CamelCase(failure.PropertyName) });
+            context.Result = new BadRequestObjectResult(ApiErrors.Fail(failure.ErrorMessage, CamelCase(failure.PropertyName)));
             return;
         }
         await next();

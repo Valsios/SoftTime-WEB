@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Api.Responses;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.Security;
 using SoftTime.Application.Services;
@@ -105,6 +106,6 @@ public class PredictionsController : ControllerBase
 
         return _jobs.TryEnqueue(job)
             ? Accepted(new { message })
-            : Conflict(new { message = "Un traitement ML est déjà en cours." });
+            : ApiErrors.Result(StatusCodes.Status409Conflict, "Un traitement ML est déjà en cours.");
     }
 }

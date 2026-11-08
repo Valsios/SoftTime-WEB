@@ -41,9 +41,9 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
         var (resp, text) = await Send("admin", HttpMethod.Post, "/api/v1/users/10080/role-change-preview", """{"newRoleId":40}""");
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         using var doc = JsonDocument.Parse(text);
-        Assert.Equal(2, doc.RootElement.GetProperty("count").GetInt32());
-        Assert.Equal("adjusted1", doc.RootElement.GetProperty("accountLogin").GetString());
-        var codes = doc.RootElement.GetProperty("adjustmentsToClear").EnumerateArray().Select(e => e.GetString()).ToList();
+        Assert.Equal(2, doc.RootElement.GetProperty("data").GetProperty("count").GetInt32());
+        Assert.Equal("adjusted1", doc.RootElement.GetProperty("data").GetProperty("accountLogin").GetString());
+        var codes = doc.RootElement.GetProperty("data").GetProperty("adjustmentsToClear").EnumerateArray().Select(e => e.GetString()).ToList();
         Assert.Equal(new[] { "+PROC:PUNCHES", "+PROC:SHIFTS" }, codes.OrderBy(c => c));
         Assert.Equal(before, _f.Snapshot());                 // l'aperçu n'écrit rien
     }
@@ -71,13 +71,13 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
     {
         var (withoutAdjustments, text1) = await Send("admin", HttpMethod.Post, "/api/v1/users/10050/role-change-preview", """{"newRoleId":40}""");
         Assert.Equal(HttpStatusCode.OK, withoutAdjustments.StatusCode);
-        Assert.Equal(0, JsonDocument.Parse(text1).RootElement.GetProperty("count").GetInt32());
+        Assert.Equal(0, JsonDocument.Parse(text1).RootElement.GetProperty("data").GetProperty("count").GetInt32());
 
         var (sameRole, text2) = await Send("admin", HttpMethod.Post, "/api/v1/users/10080/role-change-preview", """{"newRoleId":91}""");
         Assert.Equal(HttpStatusCode.OK, sameRole.StatusCode);
         using var doc = JsonDocument.Parse(text2);
-        Assert.Equal(0, doc.RootElement.GetProperty("count").GetInt32());
-        Assert.Empty(doc.RootElement.GetProperty("adjustmentsToClear").EnumerateArray());
+        Assert.Equal(0, doc.RootElement.GetProperty("data").GetProperty("count").GetInt32());
+        Assert.Empty(doc.RootElement.GetProperty("data").GetProperty("adjustmentsToClear").EnumerateArray());
     }
 
     [Fact]
@@ -87,8 +87,8 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
         var (resp, text) = await Send("admin", HttpMethod.Put, "/api/v1/users/10080", Put(10080, 40, "adjusted1"));
         Assert.Equal(HttpStatusCode.Conflict, resp.StatusCode);
         using var doc = JsonDocument.Parse(text);
-        Assert.Equal(2, doc.RootElement.GetProperty("count").GetInt32());
-        Assert.Equal("adjusted1", doc.RootElement.GetProperty("accountLogin").GetString());
+        Assert.Equal(2, doc.RootElement.GetProperty("data").GetProperty("count").GetInt32());
+        Assert.Equal("adjusted1", doc.RootElement.GetProperty("data").GetProperty("accountLogin").GetString());
         Assert.Equal(before, _f.Snapshot());
         Assert.Equal(91, _f.Store.GetRepo<Responsable>().Items.Single(u => u.IdResponsable == 10080).IdRole);
     }

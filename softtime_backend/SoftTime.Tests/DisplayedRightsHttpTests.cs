@@ -21,11 +21,11 @@ public class DisplayedRightsHttpTests : IClassFixture<ApiFactory>
         var resp = await _http.SendAsync(_f.Request("admin", HttpMethod.Get, "/api/v1/privileges/role/10034"));
         Assert.Equal(System.Net.HttpStatusCode.OK, resp.StatusCode);
         using var doc = System.Text.Json.JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
-        var perms = doc.RootElement.GetProperty("grantedPermissions").EnumerateArray().Select(e => e.GetString()!).ToList();
+        var perms = doc.RootElement.GetProperty("data").GetProperty("grantedPermissions").EnumerateArray().Select(e => e.GetString()!).ToList();
         Assert.Contains("SAGE:SFOI_PAIE2025:READ", perms);
         Assert.DoesNotContain("SAGE:CREATE", perms);
         Assert.DoesNotContain("SAGE:SFOI_PAIE2025:UPDATE", perms);
         Assert.DoesNotContain("SAGE:SFOI_PAIE2025:DELETE", perms);
-        Assert.False(doc.RootElement.GetProperty("isConfigured").GetBoolean());
+        Assert.False(doc.RootElement.GetProperty("data").GetProperty("isConfigured").GetBoolean());
     }
 }
