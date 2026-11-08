@@ -2,6 +2,7 @@ using System.Text.Json;
 
 using ClosedXML.Excel;
 
+using SoftTime.Application.DTOs;
 using SoftTime.Infrastructure.Excel;
 
 namespace SoftTime.Tests;
@@ -15,7 +16,7 @@ public class ExcelWorkbookTests
     [Fact]
     public void WriteWorkbook_EcritPlusieursFeuillesEtConserveLesTypes()
     {
-        var bytes = ExcelWorkbook.WriteWorkbook(new[]
+        var bytes = new ExcelWorkbook().WriteWorkbook(new[]
         {
             new ExcelSheetContent(
                 "Synthèse",
@@ -53,7 +54,7 @@ public class ExcelWorkbookTests
     [Fact]
     public void WriteWorkbook_NettoieEtDedupliqueLesNomsDeFeuilles()
     {
-        var bytes = ExcelWorkbook.WriteWorkbook(new[]
+        var bytes = new ExcelWorkbook().WriteWorkbook(new[]
         {
             new ExcelSheetContent("Répartition/Catégorie", new[] { "A" }, Array.Empty<IReadOnlyList<object?>>()),
             new ExcelSheetContent("Répartition/Catégorie", new[] { "B" }, Array.Empty<IReadOnlyList<object?>>()),
@@ -78,7 +79,7 @@ public class ExcelWorkbookTests
             """{"entier":7,"decimal":2.5,"texte":"ok","booleen":true,"vide":null}""");
         var json = doc.RootElement;
 
-        var bytes = ExcelWorkbook.WriteWorkbook(new[]
+        var bytes = new ExcelWorkbook().WriteWorkbook(new[]
         {
             new ExcelSheetContent(
                 "JSON",
@@ -110,7 +111,7 @@ public class ExcelWorkbookTests
     [Fact]
     public void WriteWorkbook_SansFeuille_ProduitUneFeuilleParDefaut()
     {
-        var bytes = ExcelWorkbook.WriteWorkbook(Array.Empty<ExcelSheetContent>());
+        var bytes = new ExcelWorkbook().WriteWorkbook(Array.Empty<ExcelSheetContent>());
 
         using var stream = new MemoryStream(bytes);
         using var wb = new XLWorkbook(stream);

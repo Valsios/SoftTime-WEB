@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Responses;
+using SoftTime.Application.Abstractions;
 using SoftTime.Application.ImportTemplates;
 using SoftTime.Infrastructure.Excel;
 
@@ -18,6 +19,10 @@ namespace SoftTime.Api.Controllers;
 [Tags("ImportTemplates")]
 public class ImportTemplatesController : ApiControllerBase
 {
+    private readonly IExcelWorkbook _excel;
+
+    public ImportTemplatesController(IExcelWorkbook excel) => _excel = excel;
+
     /// <summary>Liste des modèles : libellé, format, colonnes, exemple et règles.</summary>
     [HttpGet]
     public IActionResult List()
@@ -31,6 +36,6 @@ public class ImportTemplatesController : ApiControllerBase
         if (template is null)
             return ApiErrors.Result(StatusCodes.Status404NotFound, $"Modèle d'import inconnu : {key}.");
 
-        return File(ImportTemplateFile.Build(template), ImportTemplateFile.Mime(template), template.FileName);
+        return File(ImportTemplateFile.Build(template, _excel), ImportTemplateFile.Mime(template), template.FileName);
     }
 }

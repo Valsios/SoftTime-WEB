@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Mvc;
 using SoftTime.Api.Authorization;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Infrastructure.Excel;
 
 namespace SoftTime.Api.Controllers;
 
@@ -16,7 +15,12 @@ namespace SoftTime.Api.Controllers;
 public class CorrectedHoursController : ApiControllerBase
 {
     private readonly ICorrectedHoursService _svc;
-    public CorrectedHoursController(ICorrectedHoursService svc) => _svc = svc;
+    private readonly IExcelWorkbook _excel;
+    public CorrectedHoursController(ICorrectedHoursService svc, IExcelWorkbook excel)
+    {
+        _svc = svc;
+        _excel = excel;
+    }
 
     [HttpGet]
     public async Task<IActionResult> GetAsync([FromQuery] PeriodRequest filter, CancellationToken ct)
@@ -50,6 +54,6 @@ public class CorrectedHoursController : ApiControllerBase
     public async Task<IActionResult> ImportExcelAsync(IFormFile file, CancellationToken ct)
     {
         await using var s = file.OpenReadStream();
-        return Ok(await _svc.ImportCorrectionsExcelAsync(ExcelWorkbook.ReadFirstSheet(s), ct));
+        return Ok(await _svc.ImportCorrectionsExcelAsync(_excel.ReadFirstSheet(s), ct));
     }
 }

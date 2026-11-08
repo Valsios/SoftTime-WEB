@@ -76,6 +76,7 @@ public static class DependencyInjection
     private static void AddCatalogServices(this IServiceCollection services)
     {
         services.AddScoped<IAbsenceCodeService, AbsenceCodeService>();
+        services.AddSingleton<IExcelWorkbook, SoftTime.Infrastructure.Excel.ExcelWorkbook>();
         services.AddScoped<IAffectationService, AffectationService>();
         services.AddScoped<IAffectationImportService, AffectationImportService>();
         services.AddScoped<ICardPaieService, CardPaieService>();

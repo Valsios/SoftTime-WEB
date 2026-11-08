@@ -5,7 +5,6 @@ using SoftTime.Api.Authorization;
 using SoftTime.Api.Responses;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Infrastructure.Excel;
 
 namespace SoftTime.Api.Controllers;
 
@@ -18,10 +17,12 @@ public class EmployeePlanningController : ApiControllerBase
 {
     private readonly IEmployeePlanningService _planning;
     private readonly IPlanningImportService _imports;
-    public EmployeePlanningController(IEmployeePlanningService planning, IPlanningImportService imports)
+    private readonly IExcelWorkbook _excel;
+    public EmployeePlanningController(IEmployeePlanningService planning, IPlanningImportService imports, IExcelWorkbook excel)
     {
         _planning = planning;
         _imports = imports;
+        _excel = excel;
     }
 
     [HttpGet("employees")]
@@ -84,7 +85,7 @@ public class EmployeePlanningController : ApiControllerBase
     public async Task<IActionResult> ImportExcelAsync(IFormFile file, CancellationToken ct)
     {
         await using var stream = file.OpenReadStream();
-        var rows = ExcelWorkbook.ReadFirstSheet(stream);
+        var rows = _excel.ReadFirstSheet(stream);
         var headers = rows.Count > 0 ? rows[0].Keys.ToList() : new List<string>();
         if (headers.Count == 0)
             return ApiErrors.Result(StatusCodes.Status400BadRequest, "Fichier Excel vide ou sans en-têtes.");

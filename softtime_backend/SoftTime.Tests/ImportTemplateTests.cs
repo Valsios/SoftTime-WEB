@@ -75,8 +75,8 @@ public class ImportTemplateTests
     {
         foreach (var modele in Modeles().Where(m => m.Format == ImportTemplateCatalog.FormatXlsx))
         {
-            using var flux = new MemoryStream(ImportTemplateFile.Build(modele));
-            var lignes = ExcelWorkbook.ReadFirstSheet(flux);
+            using var flux = new MemoryStream(ImportTemplateFile.Build(modele, new ExcelWorkbook()));
+            var lignes = new ExcelWorkbook().ReadFirstSheet(flux);
 
             Assert.Equal(modele.ExampleRows.Count, lignes.Count);
             Assert.Equal(modele.Headers.ToList(), lignes[0].Keys.ToList());
@@ -100,7 +100,7 @@ public class ImportTemplateTests
         foreach (var modele in Modeles().Where(m => m.Format == ImportTemplateCatalog.FormatCsv))
         {
             var texte = new UTF8Encoding(false)
-                .GetString(ImportTemplateFile.Build(modele))
+                .GetString(ImportTemplateFile.Build(modele, new ExcelWorkbook()))
                 .TrimStart('\uFEFF');
             var lignes = texte.Split(new[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries);
 

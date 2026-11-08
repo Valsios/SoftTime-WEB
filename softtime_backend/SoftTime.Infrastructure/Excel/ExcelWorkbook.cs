@@ -3,11 +3,15 @@ using System.Text.Json;
 
 using ClosedXML.Excel;
 
+using SoftTime.Application.Abstractions;
+using SoftTime.Application.DTOs;
+
 namespace SoftTime.Infrastructure.Excel;
 
-public static class ExcelWorkbook
+/// <summary>Classeurs Excel via ClosedXML.</summary>
+public sealed class ExcelWorkbook : IExcelWorkbook
 {
-    public static List<Dictionary<string, string>> ReadFirstSheet(Stream stream)
+    public List<Dictionary<string, string>> ReadFirstSheet(Stream stream)
     {
         using var wb = new XLWorkbook(stream);
         var ws = wb.Worksheets.First();
@@ -41,7 +45,7 @@ public static class ExcelWorkbook
         return rows;
     }
 
-    public static byte[] WriteSheet(string sheetName, IEnumerable<string> headers, IEnumerable<IEnumerable<object?>> data)
+    public byte[] WriteSheet(string sheetName, IEnumerable<string> headers, IEnumerable<IEnumerable<object?>> data)
     {
         using var wb = new XLWorkbook();
         var ws = wb.AddWorksheet(sheetName);
@@ -68,7 +72,7 @@ public static class ExcelWorkbook
     /// Écrit un classeur multi-feuilles : en-têtes en gras, ligne d'en-tête figée, filtre
     /// automatique et largeurs ajustées. Au moins une feuille est toujours produite.
     /// </summary>
-    public static byte[] WriteWorkbook(IEnumerable<ExcelSheetContent> sheets)
+    public byte[] WriteWorkbook(IEnumerable<ExcelSheetContent> sheets)
     {
         using var wb = new XLWorkbook();
         var feuilles = (sheets ?? Enumerable.Empty<ExcelSheetContent>()).ToList();

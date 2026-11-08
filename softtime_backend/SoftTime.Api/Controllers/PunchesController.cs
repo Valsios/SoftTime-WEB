@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Mvc;
 using SoftTime.Api.Authorization;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Infrastructure.Excel;
 
 namespace SoftTime.Api.Controllers;
 
@@ -18,11 +17,13 @@ public class PunchesController : ApiControllerBase
     private readonly IPunchService _svc;
     private readonly IPunchImportService _imports;
     private readonly IPunchProcessingService _processing;
-    public PunchesController(IPunchService svc, IPunchImportService imports, IPunchProcessingService processing)
+    private readonly IExcelWorkbook _excel;
+    public PunchesController(IPunchService svc, IPunchImportService imports, IPunchProcessingService processing, IExcelWorkbook excel)
     {
         _svc = svc;
         _imports = imports;
         _processing = processing;
+        _excel = excel;
     }
 
     [HttpGet]
@@ -61,6 +62,6 @@ public class PunchesController : ApiControllerBase
     public async Task<IActionResult> ImportExcelAsync(IFormFile file, CancellationToken ct)
     {
         await using var s = file.OpenReadStream();
-        return Ok(await _imports.ImportPunchesExcelAsync(ExcelWorkbook.ReadFirstSheet(s), ct));
+        return Ok(await _imports.ImportPunchesExcelAsync(_excel.ReadFirstSheet(s), ct));
     }
 }

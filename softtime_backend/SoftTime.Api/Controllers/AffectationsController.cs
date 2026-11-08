@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Mvc;
 using SoftTime.Api.Authorization;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Infrastructure.Excel;
 
 namespace SoftTime.Api.Controllers;
 
@@ -18,10 +17,12 @@ public class AffectationsController : ApiControllerBase
     private readonly IAffectationService _svc;
     private readonly IAffectationImportService _imports;
 
-    public AffectationsController(IAffectationService svc, IAffectationImportService imports)
+    private readonly IExcelWorkbook _excel;
+    public AffectationsController(IAffectationService svc, IAffectationImportService imports, IExcelWorkbook excel)
     {
         _svc = svc;
         _imports = imports;
+        _excel = excel;
     }
 
     [HttpGet]
@@ -64,6 +65,6 @@ public class AffectationsController : ApiControllerBase
     public async Task<IActionResult> ImportExcelAsync(IFormFile file, CancellationToken ct)
     {
         await using var s = file.OpenReadStream();
-        return Ok(await _imports.ImportAffectationsExcelAsync(ExcelWorkbook.ReadFirstSheet(s), ct));
+        return Ok(await _imports.ImportAffectationsExcelAsync(_excel.ReadFirstSheet(s), ct));
     }
 }

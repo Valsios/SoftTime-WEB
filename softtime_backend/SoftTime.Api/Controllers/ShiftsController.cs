@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Mvc;
 using SoftTime.Api.Authorization;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
-using SoftTime.Infrastructure.Excel;
 
 namespace SoftTime.Api.Controllers;
 
@@ -16,7 +15,12 @@ namespace SoftTime.Api.Controllers;
 public class ShiftsController : ApiControllerBase
 {
     private readonly IShiftService _svc;
-    public ShiftsController(IShiftService svc) => _svc = svc;
+    private readonly IExcelWorkbook _excel;
+    public ShiftsController(IShiftService svc, IExcelWorkbook excel)
+    {
+        _svc = svc;
+        _excel = excel;
+    }
 
     [HttpGet]
     public async Task<IActionResult> GetAllAsync(CancellationToken ct) => Ok(await _svc.ListShiftsAsync(ct));
@@ -47,6 +51,6 @@ public class ShiftsController : ApiControllerBase
     public async Task<IActionResult> ImportExcelAsync(IFormFile file, CancellationToken ct)
     {
         await using var s = file.OpenReadStream();
-        return Ok(await _svc.ImportShiftsExcelAsync(ExcelWorkbook.ReadFirstSheet(s), ct));
+        return Ok(await _svc.ImportShiftsExcelAsync(_excel.ReadFirstSheet(s), ct));
     }
 }
