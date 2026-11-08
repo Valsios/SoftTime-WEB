@@ -14,18 +14,18 @@ namespace SoftTime.Api.Controllers;
 [Authorize]
 [Route("api/v1/dashboard")]
 [Tags("Dashboard")]
-public class DashboardController : ControllerBase
+public class DashboardController : ApiControllerBase
 {
     private readonly IDashboardService _svc;
 
     public DashboardController(IDashboardService svc) => _svc = svc;
 
     [HttpGet("stats")]
-    public async Task<IActionResult> Stats([FromQuery] DashboardStatsQuery query, CancellationToken ct)
+    public async Task<IActionResult> StatsAsync([FromQuery] DashboardStatsQuery query, CancellationToken ct)
         => Ok(await _svc.GetStatsAsync(query.ToPeriodRequest(), query.Categorie, query.Granularite, ct));
 
     /// <summary>Valeurs proposées par les filtres (départements, catégories de personnel).</summary>
     [HttpGet("filters")]
-    public async Task<IActionResult> Filters(CancellationToken ct)
+    public async Task<IActionResult> FiltersAsync(CancellationToken ct)
         => Ok(await _svc.GetFiltersAsync(ct));
 }

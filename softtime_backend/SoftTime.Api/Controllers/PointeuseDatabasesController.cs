@@ -12,7 +12,7 @@ namespace SoftTime.Api.Controllers;
 [Authorize]
 [Route("api/v1/pointeuse-databases")]
 [Tags("PointeuseDatabases")]
-public class PointeuseDatabasesController : ControllerBase
+public class PointeuseDatabasesController : ApiControllerBase
 {
     private readonly IPointeuseDatabaseService _svc;
     private readonly IUserPermissionService _auth;
@@ -28,7 +28,7 @@ public class PointeuseDatabasesController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct)
+    public async Task<IActionResult> GetAllAsync(CancellationToken ct)
     {
         var list = await _svc.ListPointeuseAsync(ct);
         if (_user.UserId is decimal uid)
@@ -43,7 +43,7 @@ public class PointeuseDatabasesController : ControllerBase
     }
 
     [HttpGet("paged")]
-    public async Task<IActionResult> GetPaged(
+    public async Task<IActionResult> GetPagedAsync(
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
     {
         IReadOnlyCollection<string>? allowed = null;
@@ -58,17 +58,17 @@ public class PointeuseDatabasesController : ControllerBase
 
     [HttpPost]
     [RequireDroit(Droit.Databases)]
-    public async Task<IActionResult> Create([FromBody] PointeuseDbDto dto, CancellationToken ct)
+    public async Task<IActionResult> CreateAsync([FromBody] PointeuseDbDto dto, CancellationToken ct)
         => Ok(await _svc.SavePointeuseAsync(dto with { Id = 0 }, ct));
 
     [HttpPut("{id:int}")]
     [RequireDroit(Droit.Databases)]
-    public async Task<IActionResult> Update(int id, [FromBody] PointeuseDbDto dto, CancellationToken ct)
+    public async Task<IActionResult> UpdateAsync(int id, [FromBody] PointeuseDbDto dto, CancellationToken ct)
         => Ok(await _svc.SavePointeuseAsync(dto with { Id = id }, ct));
 
     [HttpDelete("{id:int}")]
     [RequireDroit(Droit.Databases)]
-    public async Task<IActionResult> Delete(int id, CancellationToken ct)
+    public async Task<IActionResult> DeleteAsync(int id, CancellationToken ct)
     {
         await _svc.DeletePointeuseAsync(id, ct);
         return NoContent();
@@ -76,7 +76,7 @@ public class PointeuseDatabasesController : ControllerBase
 
     [HttpPost("test-connection")]
     [RequireDroit(Droit.Databases)]
-    public async Task<IActionResult> TestConnection([FromBody] TestPointeuseConnectionDto dto, CancellationToken ct)
+    public async Task<IActionResult> TestConnectionAsync([FromBody] TestPointeuseConnectionDto dto, CancellationToken ct)
     {
         await _configAuth.EnsureCanConfigureAnyAsync(DatabaseKind.Pointeuse, ct);
         return Ok(await _svc.TestPointeuseConnectionAsync(dto, ct));

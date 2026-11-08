@@ -16,7 +16,7 @@ namespace SoftTime.Api.Controllers;
 [Authorize]
 [Route("api/v1/import-templates")]
 [Tags("ImportTemplates")]
-public class ImportTemplatesController : ControllerBase
+public class ImportTemplatesController : ApiControllerBase
 {
     /// <summary>Liste des modèles : libellé, format, colonnes, exemple et règles.</summary>
     [HttpGet]

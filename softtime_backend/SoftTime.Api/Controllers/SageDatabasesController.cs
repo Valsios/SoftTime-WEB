@@ -12,7 +12,7 @@ namespace SoftTime.Api.Controllers;
 [Authorize]
 [Route("api/v1/sage-databases")]
 [Tags("SageDatabases")]
-public class SageDatabasesController : ControllerBase
+public class SageDatabasesController : ApiControllerBase
 {
     private readonly ISageDatabaseService _svc;
     private readonly IDepartementServiceLookup _departements;
@@ -35,7 +35,7 @@ public class SageDatabasesController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct)
+    public async Task<IActionResult> GetAllAsync(CancellationToken ct)
     {
         var list = await _svc.ListSageAsync(ct);
         if (_user.UserId is decimal uid)
@@ -50,7 +50,7 @@ public class SageDatabasesController : ControllerBase
     }
 
     [HttpGet("paged")]
-    public async Task<IActionResult> GetPaged(
+    public async Task<IActionResult> GetPagedAsync(
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
     {
         IReadOnlyCollection<string>? allowed = null;
@@ -65,17 +65,17 @@ public class SageDatabasesController : ControllerBase
 
     [HttpPost]
     [RequireDroit(Droit.Databases)]
-    public async Task<IActionResult> Create([FromBody] SageDbDto dto, CancellationToken ct)
+    public async Task<IActionResult> CreateAsync([FromBody] SageDbDto dto, CancellationToken ct)
         => Ok(await _svc.SaveSageAsync(dto with { Id = 0 }, ct));
 
     [HttpPut("{id:int}")]
     [RequireDroit(Droit.Databases)]
-    public async Task<IActionResult> Update(int id, [FromBody] SageDbDto dto, CancellationToken ct)
+    public async Task<IActionResult> UpdateAsync(int id, [FromBody] SageDbDto dto, CancellationToken ct)
         => Ok(await _svc.SaveSageAsync(dto with { Id = id }, ct));
 
     [HttpDelete("{id:int}")]
     [RequireDroit(Droit.Databases)]
-    public async Task<IActionResult> Delete(int id, CancellationToken ct)
+    public async Task<IActionResult> DeleteAsync(int id, CancellationToken ct)
     {
         await _svc.DeleteSageAsync(id, ct);
         return NoContent();
@@ -83,25 +83,25 @@ public class SageDatabasesController : ControllerBase
 
     [HttpPost("test-connection")]
     [RequireDroit(Droit.Databases)]
-    public async Task<IActionResult> TestConnection([FromBody] TestSageConnectionDto dto, CancellationToken ct)
+    public async Task<IActionResult> TestConnectionAsync([FromBody] TestSageConnectionDto dto, CancellationToken ct)
     {
         await _configAuth.EnsureCanConfigureAnyAsync(DatabaseKind.Sage, ct);
         return Ok(await _svc.TestSageConnectionAsync(dto, ct));
     }
 
     [HttpPost("activate")]
-    public async Task<IActionResult> Activate(CancellationToken ct)
+    public async Task<IActionResult> ActivateAsync(CancellationToken ct)
         => Ok(await _svc.ActivateSagePairAsync(ct));
 
     [HttpGet("lookup/{matricule}")]
-    public async Task<IActionResult> Lookup(string matricule, CancellationToken ct)
+    public async Task<IActionResult> LookupAsync(string matricule, CancellationToken ct)
         => Ok(await _departements.GetDepartementServiceAsync(matricule, ct));
 
     [HttpPost("lookup-batch")]
-    public async Task<IActionResult> LookupBatch([FromBody] string[] matricules, CancellationToken ct)
+    public async Task<IActionResult> LookupBatchAsync([FromBody] string[] matricules, CancellationToken ct)
         => Ok(await _departements.GetDepartementServiceBatchAsync(matricules ?? Array.Empty<string>(), ct));
 
     [HttpGet("departement-service-options")]
-    public async Task<IActionResult> DepartementServiceOptions(CancellationToken ct)
+    public async Task<IActionResult> DepartementServiceOptionsAsync(CancellationToken ct)
         => Ok(await _svc.GetDepartementServiceOptionsAsync(ct));
 }

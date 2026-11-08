@@ -11,13 +11,13 @@ namespace SoftTime.Api.Controllers;
 [RequireDroit(Droit.Traceability)]
 [Route("api/v1/privileges/audit")]
 [Tags("Privileges")]
-public class AuditDroitController : ControllerBase
+public class AuditDroitController : ApiControllerBase
 {
     private readonly IRightsAuditService _auth;
     public AuditDroitController(IRightsAuditService auth) => _auth = auth;
 
     [HttpGet]
-    public async Task<IActionResult> Get(
+    public async Task<IActionResult> GetAsync(
         [FromQuery] string? typeCible,
         [FromQuery] decimal? idCible,
         [FromQuery] DateTime? from,

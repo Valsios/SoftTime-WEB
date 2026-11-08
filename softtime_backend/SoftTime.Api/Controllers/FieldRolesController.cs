@@ -9,12 +9,12 @@ namespace SoftTime.Api.Controllers;
 [Authorize]
 [Route("api/v1/field-roles")]
 [Tags("FieldRoles")]
-public class FieldRolesController : ControllerBase
+public class FieldRolesController : ApiControllerBase
 {
     private readonly IFieldRoleService _svc;
     public FieldRolesController(IFieldRoleService svc) => _svc = svc;
 
     [HttpGet]
-    public async Task<IActionResult> GetAll([FromQuery] string? systemType, CancellationToken ct)
+    public async Task<IActionResult> GetAllAsync([FromQuery] string? systemType, CancellationToken ct)
         => Ok(await _svc.GetFieldRolesAsync(systemType, ct));
 }

@@ -11,16 +11,16 @@ namespace SoftTime.Api.Controllers;
 [RequireDroit(Droit.Parameters)]
 [Route("api/v1/departement-service")]
 [Tags("DepartementService")]
-public class DepartementServiceController : ControllerBase
+public class DepartementServiceController : ApiControllerBase
 {
     private readonly IDepartementServiceLookup _svc;
     public DepartementServiceController(IDepartementServiceLookup svc) => _svc = svc;
 
     [HttpGet("lookup/{matricule}")]
-    public async Task<IActionResult> Lookup(string matricule, CancellationToken ct)
+    public async Task<IActionResult> LookupAsync(string matricule, CancellationToken ct)
         => Ok(await _svc.GetDepartementServiceAsync(matricule, ct));
 
     [HttpPost("lookup-batch")]
-    public async Task<IActionResult> LookupBatch([FromBody] string[] matricules, CancellationToken ct)
+    public async Task<IActionResult> LookupBatchAsync([FromBody] string[] matricules, CancellationToken ct)
         => Ok(await _svc.GetDepartementServiceBatchAsync(matricules ?? Array.Empty<string>(), ct));
 }

@@ -11,32 +11,32 @@ namespace SoftTime.Api.Controllers;
 [Authorize]
 [Route("api/v1/card-paie")]
 [Tags("CardPaie")]
-public class CardPaieController : ControllerBase
+public class CardPaieController : ApiControllerBase
 {
     private readonly ICardPaieService _svc;
     public CardPaieController(ICardPaieService svc) => _svc = svc;
 
     [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await _svc.ListCardsAsync(ct));
+    public async Task<IActionResult> GetAllAsync(CancellationToken ct) => Ok(await _svc.ListCardsAsync(ct));
 
     [HttpGet("paged")]
-    public async Task<IActionResult> GetPaged(
+    public async Task<IActionResult> GetPagedAsync(
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
         => Ok(await _svc.ListCardsPagedAsync(page, pageSize, search, ct));
 
     [HttpPost]
     [RequireDroit(Droit.Parameters)]
-    public async Task<IActionResult> Create([FromBody] CardPaieDto dto, CancellationToken ct)
+    public async Task<IActionResult> CreateAsync([FromBody] CardPaieDto dto, CancellationToken ct)
         => Ok(await _svc.SaveCardAsync(dto with { Id = 0 }, ct));
 
     [HttpPut("{id:int}")]
     [RequireDroit(Droit.Parameters)]
-    public async Task<IActionResult> Update(int id, [FromBody] CardPaieDto dto, CancellationToken ct)
+    public async Task<IActionResult> UpdateAsync(int id, [FromBody] CardPaieDto dto, CancellationToken ct)
         => Ok(await _svc.SaveCardAsync(dto with { Id = id }, ct));
 
     [HttpDelete("{id:int}")]
     [RequireDroit(Droit.Parameters)]
-    public async Task<IActionResult> Delete(int id, CancellationToken ct)
+    public async Task<IActionResult> DeleteAsync(int id, CancellationToken ct)
     {
         await _svc.DeleteCardAsync(id, ct);
         return NoContent();
@@ -48,7 +48,7 @@ public class CardPaieController : ControllerBase
     /// </summary>
     [HttpDelete("by-correspondence")]
     [RequireDroit(Droit.Parameters)]
-    public async Task<IActionResult> DeleteByCorrespondence(
+    public async Task<IActionResult> DeleteByCorrespondenceAsync(
         [FromQuery] string matriculeSage,
         [FromQuery] string? matriculePointeuse,
         CancellationToken ct)
@@ -59,13 +59,13 @@ public class CardPaieController : ControllerBase
 
     [HttpPost("auto-map")]
     [RequireDroit(Droit.Parameters)]
-    public async Task<IActionResult> AutoMap(CancellationToken ct)
+    public async Task<IActionResult> AutoMapAsync(CancellationToken ct)
         => Ok(await _svc.AutoMapCardsAsync(ct));
 
     [HttpPost("import-csv")]
     [RequireDroit(Droit.Parameters)]
     [Consumes("multipart/form-data")]
-    public async Task<IActionResult> ImportCsv(IFormFile file, CancellationToken ct)
+    public async Task<IActionResult> ImportCsvAsync(IFormFile file, CancellationToken ct)
     {
         using var reader = new StreamReader(file.OpenReadStream());
         var text = await reader.ReadToEndAsync(ct);

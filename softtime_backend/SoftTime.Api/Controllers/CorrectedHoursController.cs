@@ -13,13 +13,13 @@ namespace SoftTime.Api.Controllers;
 [RequireDroit(Droit.Processing)]
 [Route("api/v1/corrected-hours")]
 [Tags("CorrectedHours")]
-public class CorrectedHoursController : ControllerBase
+public class CorrectedHoursController : ApiControllerBase
 {
     private readonly ICorrectedHoursService _svc;
     public CorrectedHoursController(ICorrectedHoursService svc) => _svc = svc;
 
     [HttpGet]
-    public async Task<IActionResult> Get([FromQuery] PeriodRequest filter, CancellationToken ct)
+    public async Task<IActionResult> GetAsync([FromQuery] PeriodRequest filter, CancellationToken ct)
         => Ok(await _svc.ListCorrectionsAsync(filter, ct));
 
     /// <summary>
@@ -27,19 +27,19 @@ public class CorrectedHoursController : ControllerBase
     /// Variante additive : le contrat de l'endpoint non paginé est conservé pour l'export Excel du client.
     /// </summary>
     [HttpGet("paged")]
-    public async Task<IActionResult> GetPaged([FromQuery] PeriodRequest filter, [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
+    public async Task<IActionResult> GetPagedAsync([FromQuery] PeriodRequest filter, [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
         => Ok(await _svc.ListCorrectionsPagedAsync(filter, page, pageSize, ct));
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CorrectedHourDto dto, CancellationToken ct)
+    public async Task<IActionResult> CreateAsync([FromBody] CorrectedHourDto dto, CancellationToken ct)
         => Ok(await _svc.SaveCorrectionAsync(dto with { Id = 0 }, ct));
 
     [HttpPut("{id}")]
-    public async Task<IActionResult> Update(decimal id, [FromBody] CorrectedHourDto dto, CancellationToken ct)
+    public async Task<IActionResult> UpdateAsync(decimal id, [FromBody] CorrectedHourDto dto, CancellationToken ct)
         => Ok(await _svc.SaveCorrectionAsync(dto with { Id = id }, ct));
 
     [HttpDelete("{id}")]
-    public async Task<IActionResult> Delete(decimal id, CancellationToken ct)
+    public async Task<IActionResult> DeleteAsync(decimal id, CancellationToken ct)
     {
         await _svc.DeleteCorrectionAsync(id, ct);
         return NoContent();
@@ -47,7 +47,7 @@ public class CorrectedHoursController : ControllerBase
 
     [HttpPost("import-excel")]
     [Consumes("multipart/form-data")]
-    public async Task<IActionResult> ImportExcel(IFormFile file, CancellationToken ct)
+    public async Task<IActionResult> ImportExcelAsync(IFormFile file, CancellationToken ct)
     {
         await using var s = file.OpenReadStream();
         return Ok(await _svc.ImportCorrectionsExcelAsync(ExcelWorkbook.ReadFirstSheet(s), ct));

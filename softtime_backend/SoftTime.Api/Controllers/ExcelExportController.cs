@@ -10,7 +10,7 @@ namespace SoftTime.Api.Controllers;
 [Authorize]
 [Route("api/v1/excel")]
 [Tags("Excel")]
-public class ExcelExportController : ControllerBase
+public class ExcelExportController : ApiControllerBase
 {
     [HttpPost("export")]
     public IActionResult Export([FromBody] ExcelExportRequest? request)

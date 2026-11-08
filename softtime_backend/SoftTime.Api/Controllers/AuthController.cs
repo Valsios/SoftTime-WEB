@@ -14,7 +14,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Route("api/v1/auth")]
 [Tags("Auth")]
-public class AuthController : ControllerBase
+public class AuthController : ApiControllerBase
 {
     private readonly IAuthenticationService _auth;
     private readonly IFirstRunService _firstRun;
@@ -37,7 +37,7 @@ public class AuthController : ControllerBase
     [EnableRateLimiting(AuthRateLimit.Policy)]
     [HttpPost("login")]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
-    public async Task<ActionResult<LoginResponse>> Login([FromBody] LoginRequest request, CancellationToken ct)
+    public async Task<ActionResult<LoginResponse>> LoginAsync([FromBody] LoginRequest request, CancellationToken ct)
         => Ok(RefreshTokenCookie.Issue(HttpContext, await _auth.LoginAsync(request, ct), _security));
 
     /// <summary>
@@ -47,7 +47,7 @@ public class AuthController : ControllerBase
     [EnableRateLimiting(AuthRateLimit.Policy)]
     [HttpPost("refresh")]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
-    public async Task<ActionResult<LoginResponse>> Refresh(
+    public async Task<ActionResult<LoginResponse>> RefreshAsync(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RefreshTokenRequest? request, CancellationToken ct)
     {
         // Un refus (401) n'efface pas le cookie : quand deux onglets rafraîchissent en même temps, le refus du second
@@ -61,7 +61,7 @@ public class AuthController : ControllerBase
     [EnableRateLimiting(AuthRateLimit.Policy)]
     [HttpPost("logout")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<IActionResult> Logout(
+    public async Task<IActionResult> LogoutAsync(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RefreshTokenRequest? request, CancellationToken ct)
     {
         await _auth.LogoutAsync(RefreshTokenCookie.Read(HttpContext, request?.RefreshToken), ct);
@@ -73,7 +73,7 @@ public class AuthController : ControllerBase
     [Authorize]
     [HttpGet("me")]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
-    public async Task<ActionResult<LoginResponse>> Me(CancellationToken ct)
+    public async Task<ActionResult<LoginResponse>> MeAsync(CancellationToken ct)
     {
         if (_user.UserId is not decimal id)
             return Unauthorized();
@@ -86,7 +86,7 @@ public class AuthController : ControllerBase
     /// </summary>
     [AllowAnonymous]
     [HttpGet("is-first-run")]
-    public async Task<ActionResult<bool>> IsFirstRun(CancellationToken ct)
+    public async Task<ActionResult<bool>> IsFirstRunAsync(CancellationToken ct)
         => Ok(await _firstRun.IsFirstRunAsync(ct));
 
     /// <summary>
@@ -97,7 +97,7 @@ public class AuthController : ControllerBase
     [EnableRateLimiting(AuthRateLimit.Policy)]
     [HttpPost("create-admin")]
     [ProducesResponseType(typeof(AdminSetupResultDto), StatusCodes.Status200OK)]
-    public async Task<ActionResult<AdminSetupResultDto>> CreateAdmin([FromBody] AdminSetupDto dto, CancellationToken ct)
+    public async Task<ActionResult<AdminSetupResultDto>> CreateAdminAsync([FromBody] AdminSetupDto dto, CancellationToken ct)
         => Ok(await _firstRun.CreateAdminAsync(dto, ct));
 
     /// <summary>

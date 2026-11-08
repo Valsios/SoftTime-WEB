@@ -12,7 +12,7 @@ namespace SoftTime.Api.Controllers;
 [RequireDroit(Droit.Processing)]
 [Route("api/v1/overtime")]
 [Tags("Overtime")]
-public class OvertimeController : ControllerBase
+public class OvertimeController : ApiControllerBase
 {
     private readonly IOvertimeExoImpoService _exoImpo;
     private readonly IOvertimeDetailService _detail;
@@ -25,38 +25,38 @@ public class OvertimeController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> List([FromQuery] OvertimeListQuery query, CancellationToken ct)
+    public async Task<IActionResult> ListAsync([FromQuery] OvertimeListQuery query, CancellationToken ct)
         => Ok(await _exoImpo.ListExoAsync(query.ToPeriodRequest(withSearch: false), ct));
 
     /// <summary>Même liste que <c>GET /api/overtime</c>, paginée (page bornée, total serveur).</summary>
     [HttpGet("paged")]
-    public async Task<IActionResult> ListPaged([FromQuery] OvertimeListQuery query, CancellationToken ct)
+    public async Task<IActionResult> ListPagedAsync([FromQuery] OvertimeListQuery query, CancellationToken ct)
         => Ok(await _exoImpo.ListExoPagedAsync(query.ToPeriodRequest(withSearch: true), query.Page, query.PageSize, ct));
 
     [HttpPost("calculate")]
-    public async Task<IActionResult> Calculate([FromBody] PeriodRequest request, CancellationToken ct)
+    public async Task<IActionResult> CalculateAsync([FromBody] PeriodRequest request, CancellationToken ct)
         => Ok(await _exoImpo.CalculateExoImpoAsync(request, ct));
 
     [HttpPost("purge")]
-    public async Task<IActionResult> Purge([FromBody] PeriodRequest request, CancellationToken ct)
+    public async Task<IActionResult> PurgeAsync([FromBody] PeriodRequest request, CancellationToken ct)
     {
         await _detail.PurgeHsAsync(request, ct);
         return NoContent();
     }
 
     [HttpPost("sync-sage")]
-    public async Task<IActionResult> SyncSage([FromBody] PeriodRequest request, CancellationToken ct)
+    public async Task<IActionResult> SyncSageAsync([FromBody] PeriodRequest request, CancellationToken ct)
     {
         await _payrollSync.SyncSageAsync(request, ct);
         return NoContent();
     }
 
     [HttpPost("sync-payroll")]
-    public async Task<IActionResult> SyncPayroll([FromBody] PeriodRequest request, CancellationToken ct)
+    public async Task<IActionResult> SyncPayrollAsync([FromBody] PeriodRequest request, CancellationToken ct)
         => Ok(await _payrollSync.SyncPayrollAsync(request, ct));
 
     /// <summary>Détail du calcul des heures supplémentaires d'un salarié (jours, semaines, EXO/IMPO).</summary>
     [HttpGet("detail/{matricule}")]
-    public async Task<IActionResult> Detail(string matricule, [FromQuery] DateTime from, [FromQuery] DateTime to, CancellationToken ct)
+    public async Task<IActionResult> DetailAsync(string matricule, [FromQuery] DateTime from, [FromQuery] DateTime to, CancellationToken ct)
         => Ok(await _detail.DetailAsync(matricule, from, to, ct));
 }

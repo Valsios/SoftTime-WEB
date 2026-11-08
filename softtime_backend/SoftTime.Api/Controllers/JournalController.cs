@@ -16,7 +16,7 @@ namespace SoftTime.Api.Controllers;
 [Authorize]
 [Route("api/v1/journal")]
 [Tags("Audit")]
-public class JournalController : ControllerBase
+public class JournalController : ApiControllerBase
 {
     private readonly IJournalService _journal;
 
@@ -24,15 +24,15 @@ public class JournalController : ControllerBase
 
     /// <summary>Lignes du journal, les plus récentes d'abord (pagination SQL, 50 par défaut, 200 au plus).</summary>
     [HttpGet]
-    public async Task<IActionResult> List([FromQuery] JournalQuery query, CancellationToken ct)
+    public async Task<IActionResult> ListAsync([FromQuery] JournalQuery query, CancellationToken ct)
         => Ok(await _journal.ListAsync(query, ct));
 
     /// <summary>Valeurs distinctes (tables, actions, utilisateurs) de la période, plafonnées.</summary>
     [HttpGet("facets")]
-    public async Task<IActionResult> Facets([FromQuery] DateTime? from, [FromQuery] DateTime? to, CancellationToken ct)
+    public async Task<IActionResult> FacetsAsync([FromQuery] DateTime? from, [FromQuery] DateTime? to, CancellationToken ct)
         => Ok(await _journal.GetFacetsAsync(from, to, ct));
 
     [HttpGet("{id:long}")]
-    public async Task<IActionResult> Get(long id, CancellationToken ct)
+    public async Task<IActionResult> GetAsync(long id, CancellationToken ct)
         => Ok(await _journal.GetAsync(id, ct));
 }

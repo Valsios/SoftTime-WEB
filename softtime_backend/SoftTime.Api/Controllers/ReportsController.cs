@@ -13,7 +13,7 @@ namespace SoftTime.Api.Controllers;
 [RequireDroit(Droit.Reports)]
 [Route("api/v1/reports")]
 [Tags("Reports")]
-public class ReportsController : ControllerBase
+public class ReportsController : ApiControllerBase
 {
     private readonly IReportService _svc;
     private readonly IPointageReportService _pointages;
@@ -42,27 +42,27 @@ public class ReportsController : ControllerBase
     };
 
     [HttpGet("pointage")]
-    public async Task<IActionResult> Pointage([FromQuery] ReportFilter filter, CancellationToken ct)
+    public async Task<IActionResult> PointageAsync([FromQuery] ReportFilter filter, CancellationToken ct)
         => Ok(await _pointages.PointageAsync(filter, ct));
 
     [HttpGet("absences")]
-    public async Task<IActionResult> Absences([FromQuery] ReportFilter filter, CancellationToken ct)
+    public async Task<IActionResult> AbsencesAsync([FromQuery] ReportFilter filter, CancellationToken ct)
         => Ok(await _absences.AbsencesAsync(filter, ct));
 
     [HttpGet("retards")]
-    public async Task<IActionResult> Retards([FromQuery] ReportFilter filter, CancellationToken ct)
+    public async Task<IActionResult> RetardsAsync([FromQuery] ReportFilter filter, CancellationToken ct)
         => Ok(await _retards.RetardsAsync(filter, ct));
 
     [HttpGet("hs-recap")]
-    public async Task<IActionResult> HsRecap([FromQuery] ReportFilter filter, CancellationToken ct)
+    public async Task<IActionResult> HsRecapAsync([FromQuery] ReportFilter filter, CancellationToken ct)
         => Ok(await _heures.HsRecapAsync(filter, ct));
 
     [HttpGet("heures-semaine")]
-    public async Task<IActionResult> HeuresSemaine([FromQuery] ReportFilter filter, CancellationToken ct)
+    public async Task<IActionResult> HeuresSemaineAsync([FromQuery] ReportFilter filter, CancellationToken ct)
         => Ok(await _heures.HeuresParSemaineAsync(filter, ct));
 
     [HttpGet("heures-dimanche")]
-    public async Task<IActionResult> HeuresDimanche([FromQuery] ReportFilter filter, CancellationToken ct)
+    public async Task<IActionResult> HeuresDimancheAsync([FromQuery] ReportFilter filter, CancellationToken ct)
         => Ok(await _heures.HeuresDimancheAsync(filter, ct));
 
     /// <summary>
@@ -70,7 +70,7 @@ public class ReportsController : ControllerBase
     /// <c>hs-recap</c>, <c>heures-semaine</c>, <c>heures-dimanche</c>).
     /// </summary>
     [HttpGet("{type}/paged")]
-    public async Task<IActionResult> Paged(
+    public async Task<IActionResult> PagedAsync(
         string type,
         [FromQuery] ReportFilter filter,
         [FromQuery] int? page,
@@ -84,6 +84,6 @@ public class ReportsController : ControllerBase
     }
 
     [HttpGet("leave")]
-    public async Task<IActionResult> Leave([FromQuery] string matricule, [FromQuery] DateTime date, CancellationToken ct)
+    public async Task<IActionResult> LeaveAsync([FromQuery] string matricule, [FromQuery] DateTime date, CancellationToken ct)
         => Ok(await _svc.GetLeaveAsync(matricule, date, ct));
 }

@@ -11,7 +11,7 @@ namespace SoftTime.Api.Controllers;
 [RequireDroit(Droit.Databases)]
 [Route("api/v1/discovery")]
 [Tags("Discovery")]
-public class DiscoveryController : ControllerBase
+public class DiscoveryController : ApiControllerBase
 {
     private readonly IDiscoveryService _svc;
     private readonly IDatabaseConfigurationAuthorizer _configAuth;
@@ -21,25 +21,25 @@ public class DiscoveryController : ControllerBase
         _configAuth = configAuth;
     }
     [HttpGet("servers")]
-    public async Task<IActionResult> Servers(CancellationToken ct)
+    public async Task<IActionResult> ServersAsync(CancellationToken ct)
     {
         await _configAuth.EnsureCanConfigureAnyAsync(null, ct);
         return Ok(await _svc.DiscoverServersAsync(ct));
     }
     [HttpPost("databases")]
-    public async Task<IActionResult> Databases([FromBody] DiscoverDatabasesDto dto, CancellationToken ct)
+    public async Task<IActionResult> DatabasesAsync([FromBody] DiscoverDatabasesDto dto, CancellationToken ct)
     {
         await _configAuth.EnsureCanConfigureAnyAsync(null, ct);
         return Ok(await _svc.DiscoverDatabasesAsync(dto, ct));
     }
     [HttpPost("tables")]
-    public async Task<IActionResult> Tables([FromBody] DiscoverTablesDto dto, CancellationToken ct)
+    public async Task<IActionResult> TablesAsync([FromBody] DiscoverTablesDto dto, CancellationToken ct)
     {
         await _configAuth.EnsureCanConfigureAnyAsync(null, ct);
         return Ok(await _svc.DiscoverTablesAsync(dto, ct));
     }
     [HttpPost("columns")]
-    public async Task<IActionResult> Columns([FromBody] DiscoverColumnsDto dto, CancellationToken ct)
+    public async Task<IActionResult> ColumnsAsync([FromBody] DiscoverColumnsDto dto, CancellationToken ct)
     {
         await _configAuth.EnsureCanConfigureAnyAsync(null, ct);
         return Ok(await _svc.DiscoverColumnsAsync(dto, ct));

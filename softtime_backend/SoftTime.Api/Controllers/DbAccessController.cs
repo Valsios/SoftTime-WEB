@@ -11,18 +11,18 @@ namespace SoftTime.Api.Controllers;
 [RequireDroit(Droit.Parameters)]
 [Route("api/v1/db-access")]
 [Tags("DbAccess")]
-public class DbAccessController : ControllerBase
+public class DbAccessController : ApiControllerBase
 {
     private readonly IDatabaseAccessService _auth;
     public DbAccessController(IDatabaseAccessService auth) => _auth = auth;
 
     [HttpGet]
-    public async Task<IActionResult> Get([FromQuery] decimal? userId, CancellationToken ct)
+    public async Task<IActionResult> GetAsync([FromQuery] decimal? userId, CancellationToken ct)
         => Ok(await _auth.GetDbAccessAsync(userId, ct));
 
     [RequireAdmin]
     [HttpPut("{userId}")]
-    public async Task<IActionResult> Replace(decimal userId, [FromBody] List<int> sageDbIds, CancellationToken ct)
+    public async Task<IActionResult> ReplaceAsync(decimal userId, [FromBody] List<int> sageDbIds, CancellationToken ct)
     {
         await _auth.SetDbAccessAsync(userId, sageDbIds, ct);
         return NoContent();

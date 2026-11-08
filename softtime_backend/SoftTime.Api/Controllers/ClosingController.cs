@@ -21,7 +21,7 @@ namespace SoftTime.Api.Controllers;
 [Authorize]
 [Route("api/v1/closing")]
 [Tags("Clôture")]
-public class ClosingController : ControllerBase
+public class ClosingController : ApiControllerBase
 {
     public const string Permission = "REPORTS:CLOSING";
     public const string Desactivee = "La clôture de paie assistée est désactivée.";
@@ -56,7 +56,7 @@ public class ClosingController : ControllerBase
     /// <c>reuseCache=true</c> (changement de page seulement) réutilise, jusqu'à 60 s, l'analyse déjà calculée pour la même période.
     /// </summary>
     [HttpGet("analysis")]
-    public async Task<IActionResult> Analysis([FromQuery] ClosingAnalysisQuery query, CancellationToken ct)
+    public async Task<IActionResult> AnalysisAsync([FromQuery] ClosingAnalysisQuery query, CancellationToken ct)
     {
         await FineReadAccess.EnsureAsync(_user, _rights, Rights.Reports, Permission, ct);
         if (!_reglages.Enabled)

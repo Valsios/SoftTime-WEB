@@ -8,7 +8,7 @@ namespace SoftTime.Api.Controllers;
 [Authorize]
 [Route("api/v1/meta")]
 [Tags("Meta")]
-public class MetaController : ControllerBase
+public class MetaController : ApiControllerBase
 {
     /// <summary>
     /// Catalogue des méthodes HTTP pour le frontend Angular (HttpClient).
