@@ -39,8 +39,7 @@ public interface IMlStore
     Task<IReadOnlyList<MlModele>> ListModelsAsync(string bddSage, CancellationToken ct = default);
 
     Task ReplacePredictionsAsync(
-        string bddSage, MlModelType type, DateTime from, DateTime to,
-        IReadOnlyCollection<MlPrediction> rows, CancellationToken ct = default);
+        MlPeriod periode, MlModelType type, IReadOnlyCollection<MlPrediction> rows, CancellationToken ct = default);
 
     Task<IReadOnlyList<MlPrediction>> GetPredictionsAsync(
         string bddSage, MlModelType type, DateTime from, DateTime to, CancellationToken ct = default);

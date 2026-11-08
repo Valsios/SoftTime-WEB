@@ -132,7 +132,7 @@ public sealed class PointeuseDatabaseService : IPointeuseDatabaseService
 
     public async Task<ConnectionTestResultDto> TestPointeuseConnectionAsync(TestPointeuseConnectionDto dto, CancellationToken ct = default)
     {
-        var password = await _sourceMappingStore.ResolveStoredPasswordAsync("POINTEUSE", dto.Id, dto.Serveur, dto.SqlAuth, dto.Login, dto.Password, ct);
+        var password = await _sourceMappingStore.ResolveStoredPasswordAsync(new ConnectionAttempt("POINTEUSE", dto.Id, dto.Serveur, dto.SqlAuth, dto.Login, dto.Password), ct);
         if (string.IsNullOrWhiteSpace(dto.Serveur) || string.IsNullOrWhiteSpace(dto.NomBd))
             return new ConnectionTestResultDto(false, "Serveur et nom de base requis.");
         var cible = new ExternalConnectionTarget(new SqlServerCredentials(dto.Serveur, dto.SqlAuth ?? true, dto.Login, password), dto.NomBd, dto.TypeBase, dto.Mappings);

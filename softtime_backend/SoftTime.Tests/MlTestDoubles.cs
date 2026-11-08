@@ -73,9 +73,9 @@ internal sealed class FakeMlStore : IMlStore
             Models.Where(m => m.BddSage == bddSage).OrderByDescending(m => m.EntraineLe).ToList());
 
     public Task ReplacePredictionsAsync(
-        string bddSage, MlModelType type, DateTime from, DateTime to,
-        IReadOnlyCollection<MlPrediction> rows, CancellationToken ct = default)
+        MlPeriod periode, MlModelType type, IReadOnlyCollection<MlPrediction> rows, CancellationToken ct = default)
     {
+        var (bddSage, from, to) = periode;
         var storageType = MlModelTypes.ToStorage(type);
         Predictions.RemoveAll(p => p.BddSage == bddSage
                                    && p.TypeModele == storageType

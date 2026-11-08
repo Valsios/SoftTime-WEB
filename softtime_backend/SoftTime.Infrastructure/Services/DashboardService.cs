@@ -28,13 +28,12 @@ public sealed class DashboardService : IDashboardService
         PeriodRequest filter, string? categorie, string periode, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var sageDb = _tenant.SageDb;
         var from = filter.From.Date;
         var to = filter.To.Date;
 
         var perimetre = await LoadPerimetreAsync(filter, categorie, ct);
         if (perimetre.Cartes.Count == 0)
-            return Vide(await BuildKpiAsync(sageDb, from, to, 0, VideMetrics, ct));
+            return Vide(await BuildKpiAsync(from, to, 0, VideMetrics, ct));
 
         var data = await LoadDataAsync(perimetre, from, to, ct);
         var collector = new DashboardEventCollector(data);
@@ -44,7 +43,7 @@ public sealed class DashboardService : IDashboardService
 
         var metrics = new PeriodeMetrics(events.JoursPlanifies, events.Presences.Count, events.Absences.Count,
             events.Retards.Count, events.MinutesRetard, data.Semaines);
-        var kpi = await BuildKpiAsync(sageDb, from, to, perimetre.Cartes.Count(c => c.Actif), metrics, ct);
+        var kpi = await BuildKpiAsync(from, to, perimetre.Cartes.Count(c => c.Actif), metrics, ct);
         return DashboardStatsBuilder.Build(data, events, kpi, periode);
     }
 
@@ -196,8 +195,9 @@ public sealed class DashboardService : IDashboardService
     }
 
     private async Task<DashboardKpiDto> BuildKpiAsync(
-        string sageDb, DateTime from, DateTime to, int cartesActives, PeriodeMetrics metrics, CancellationToken ct)
+        DateTime from, DateTime to, int cartesActives, PeriodeMetrics metrics, CancellationToken ct)
     {
+        var sageDb = _tenant.SageDb;
         var anomalies = (await _uow.Repository<HeureAnomalie>().ListAsync(
             a => a.BddSage == sageDb && a.DatePointageIn >= from && a.DatePointageIn <= to, ct)).Count;
         var corrections = await _uow.Repository<HeureCorrigee>().ListAsync(

@@ -79,20 +79,21 @@ public sealed class AnomalyService : IAnomalyService
         var entity = await LoadAnomalyAsync(id, ct)
             ?? throw new NotFoundException($"Anomalie introuvable (ID={id}).");
 
-        var dateIn = dto.DateIn?.Date ?? entity.DatePointageIn?.Date;
-        var dateOut = dto.DateOut?.Date ?? entity.DatePointageOut?.Date;
-        var hEntree = dto.HEntree ?? entity.HEntree;
-        var hPs = dto.HPs ?? entity.Hps;
-        var hPe = dto.HPe ?? entity.Hpe;
-        var hSortie = dto.HSortie ?? entity.HSortie;
-        ValidateAnomalyHours(dateIn, hEntree, hPs, hPe, dateOut, hSortie);
+        var heures = new AnomalyHours(
+            dto.DateIn?.Date ?? entity.DatePointageIn?.Date,
+            dto.HEntree ?? entity.HEntree,
+            dto.HPs ?? entity.Hps,
+            dto.HPe ?? entity.Hpe,
+            dto.DateOut?.Date ?? entity.DatePointageOut?.Date,
+            dto.HSortie ?? entity.HSortie);
+        heures.Valider();
 
-        entity.DatePointageIn = dateIn;
-        entity.DatePointageOut = dateOut;
-        entity.HEntree = hEntree;
-        entity.Hps = hPs;
-        entity.Hpe = hPe;
-        entity.HSortie = hSortie;
+        entity.DatePointageIn = heures.DateIn;
+        entity.DatePointageOut = heures.DateOut;
+        entity.HEntree = heures.HEntree;
+        entity.Hps = heures.HPs;
+        entity.Hpe = heures.HPe;
+        entity.HSortie = heures.HSortie;
         if (dto.AbsAm.HasValue) entity.AbsAm = dto.AbsAm;
         if (dto.AbsPm.HasValue) entity.AbsPm = dto.AbsPm;
         if (dto.Feries.HasValue) entity.Feries = dto.Feries;
@@ -209,32 +210,6 @@ public sealed class AnomalyService : IAnomalyService
         var sageDb = _tenant.SageDb;
         return (await _uow.Repository<HeureAnomalie>()
             .ListAsync(a => a.Id == id && a.BddSage == sageDb, ct)).FirstOrDefault();
-    }
-
-    /// <summary>
-    /// Cohérence des heures arbitrées : la sortie doit être postérieure à l'entrée et, le même jour,
-    /// les heures de pause doivent être comprises entre les deux (portage de la validation desktop).
-    /// </summary>
-    private static void ValidateAnomalyHours(
-        DateTime? dateIn, TimeSpan? hEntree, TimeSpan? hPs, TimeSpan? hPe, DateTime? dateOut, TimeSpan? hSortie)
-    {
-        if (!dateIn.HasValue || !dateOut.HasValue || !hEntree.HasValue || !hSortie.HasValue)
-            return;
-
-        var entree = dateIn.Value.Date.Add(hEntree.Value);
-        var sortie = dateOut.Value.Date.Add(hSortie.Value);
-        if (sortie <= entree)
-            throw new DomainException("La sortie doit être postérieure à l'entrée.");
-
-        if (dateIn.Value.Date != dateOut.Value.Date)
-            return;
-        foreach (var pause in new[] { hPs, hPe }.Where(h => h.HasValue).Select(h => h!.Value))
-        {
-            var t = dateIn.Value.Date.Add(pause);
-            if (t < entree || t > sortie)
-                throw new DomainException(
-                    "Les heures de pause doivent être comprises entre l'entrée et la sortie.");
-        }
     }
 
     private static AnomalyDto MapAnomaly(HeureAnomalie a) => new(

@@ -57,7 +57,7 @@ internal sealed class MlEmployeeCalendar
         var congeValeur = LeaveRules.Valeur(_conges, date);
         var conge = congeValeur > 0m;
         var dureePlanifiee = off ? null : AbsenceReportRules.CalculerDureeHeures(plan);
-        var overtimeDay = OvertimeDayRules.Construire(date, lignes, _plansHsParJour.GetValueOrDefault(date), ferie, congeValeur);
+        var overtimeDay = OvertimeDayRules.Construire(new CalendarDay(date, ferie, congeValeur), lignes, _plansHsParJour.GetValueOrDefault(date));
         var absenceNonJustifiee = date < _ctx.ObservedUntil
             && AbsenceReportRules.EstNonJustifiee(estNonTravaille: weekend || ferie, estConge: conge, plan, aPointage: lignes.Count > 0);
 

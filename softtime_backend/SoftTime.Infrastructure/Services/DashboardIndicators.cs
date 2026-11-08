@@ -23,11 +23,7 @@ internal static class DashboardIndicators
     /// et les événements sont donc restreints aux mêmes salariés pour que la ligne reste cohérente.
     /// </summary>
     internal static List<DashboardSliceDto> Repartition(
-        IReadOnlyCollection<CardPaie> cartes,
-        Func<CardPaie, string?> axe,
-        IReadOnlyList<(string Cle, DateTime Date)> absences,
-        IReadOnlyList<(string Cle, DateTime Date, int Minutes)> retards,
-        IReadOnlyDictionary<string, decimal> hsParCle) => cartes
+        DashboardData data, DashboardEvents events, Func<CardPaie, string?> axe) => data.Perimetre.Cartes
         .Where(c => c.Actif)
         .GroupBy(c => Normaliser(axe(c)), StringComparer.OrdinalIgnoreCase)
         .Select(g =>
@@ -36,10 +32,10 @@ internal static class DashboardIndicators
             return new DashboardSliceDto(
                 g.Key,
                 g.Count(),
-                absences.Count(a => clesGroupe.Contains(a.Cle)),
-                retards.Count(r => clesGroupe.Contains(r.Cle)),
-                retards.Where(r => clesGroupe.Contains(r.Cle)).Sum(r => r.Minutes),
-                hsParCle.Where(kv => clesGroupe.Contains(kv.Key)).Sum(kv => kv.Value));
+                events.Absences.Count(a => clesGroupe.Contains(a.Cle)),
+                events.Retards.Count(r => clesGroupe.Contains(r.Cle)),
+                events.Retards.Where(r => clesGroupe.Contains(r.Cle)).Sum(r => r.Minutes),
+                data.HsParCle.Where(kv => clesGroupe.Contains(kv.Key)).Sum(kv => kv.Value));
         })
         .OrderByDescending(s => s.Effectif)
         .ThenBy(s => s.Libelle, StringComparer.CurrentCultureIgnoreCase)

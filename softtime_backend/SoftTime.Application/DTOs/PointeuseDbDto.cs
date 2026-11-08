@@ -11,7 +11,7 @@ public record PointeuseDbDto(
     bool? Active,
     string TypeBase = "STANDARD",
     IReadOnlyList<SourceEntityMappingDto>? Mappings = null,
-    bool PasswordDefined = false)
+    bool PasswordDefined = false) : IExternalConnectionFields
 {
     public PointeuseDbDto() : this(default, default, default, default, default, default, default, default) { }
 }

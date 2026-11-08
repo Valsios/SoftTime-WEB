@@ -72,12 +72,12 @@ public sealed class ExternalSourceService : IExternalSourceService
         return (entity.SourceTable, map);
     }
 
-    private async Task<IReadOnlyList<MappedRow>> ReadEntityAsync(bool isSage, int connectionId, string entityKind, string connectionString, MappedQuery? query, CancellationToken ct)
+    private async Task<IReadOnlyList<MappedRow>> ReadEntityAsync(bool isSage, int connectionId, string entityKind, string connectionString, CancellationToken ct)
     {
         var (table, map) = await LoadRoleMapAsync(isSage, connectionId, entityKind, ct);
         if (string.IsNullOrWhiteSpace(table))
             return Array.Empty<MappedRow>();
-        return await _reader.ReadAsync(connectionString, table!, map, query, ct);
+        return await _reader.ReadAsync(connectionString, table!, map, null, ct);
     }
 
     public async Task<IReadOnlyList<ExternalEmployee>> GetEmployeesAsync(BddSage row, CancellationToken ct = default)
@@ -91,7 +91,7 @@ public sealed class ExternalSourceService : IExternalSourceService
                 .Select(e => new ExternalEmployee(e.MatriculeSalarie.Trim(), e.SaCompteurNumero, e.Nom, e.Prenom, e.NumeroDeBadge, false, e.Civilite))
                 .ToList();
         }
-        var rows = await ReadEntityAsync(true, row.Id, "EMPLOYEE", conn, null, ct);
+        var rows = await ReadEntityAsync(true, row.Id, "EMPLOYEE", conn, ct);
         var result = new List<ExternalEmployee>();
         foreach (var r in rows)
         {
@@ -114,7 +114,7 @@ public sealed class ExternalSourceService : IExternalSourceService
                 .Select(a => new ExternalAffectation(a.NumSalarie, a.Departement, a.Service, a.DateDebut, a.DateSortiePoste))
                 .ToList();
         }
-        var rows = await ReadEntityAsync(true, row.Id, "AFFECTATION", conn, null, ct);
+        var rows = await ReadEntityAsync(true, row.Id, "AFFECTATION", conn, ct);
         var result = new List<ExternalAffectation>();
         foreach (var r in rows)
         {
@@ -135,7 +135,7 @@ public sealed class ExternalSourceService : IExternalSourceService
                 .Select(d => new ExternalDepartment(d.Code, d.Intitule))
                 .ToList();
         }
-        var rows = await ReadEntityAsync(true, row.Id, "DEPARTMENT", conn, null, ct);
+        var rows = await ReadEntityAsync(true, row.Id, "DEPARTMENT", conn, ct);
         var result = new List<ExternalDepartment>();
         foreach (var r in rows)
         {
@@ -157,7 +157,7 @@ public sealed class ExternalSourceService : IExternalSourceService
                 .Select(c => new ExternalHoliday(c.PeriodeDebut!.Value.Date))
                 .ToList();
         }
-        var rows = await ReadEntityAsync(true, row.Id, "COMPANY_CALENDAR", conn, null, ct);
+        var rows = await ReadEntityAsync(true, row.Id, "COMPANY_CALENDAR", conn, ct);
         var result = new List<ExternalHoliday>();
         foreach (var r in rows)
         {
@@ -179,7 +179,7 @@ public sealed class ExternalSourceService : IExternalSourceService
                 .Select(c => new ExternalConstant(c.CodeConstante, c.CodeOperande1, c.Intitule))
                 .ToList();
         }
-        var rows = await ReadEntityAsync(true, row.Id, "CONSTANT", conn, null, ct);
+        var rows = await ReadEntityAsync(true, row.Id, "CONSTANT", conn, ct);
         return rows.Select(r => new ExternalConstant(r["SAGE_CST_CODE"], ParseShort(r["SAGE_CST_OPERANDE"]), r["SAGE_CST_LABEL"])).ToList();
     }
 
@@ -193,7 +193,7 @@ public sealed class ExternalSourceService : IExternalSourceService
                 .Select(e => new ExternalEvent(e.CodeNE, e.Intitule))
                 .ToList();
         }
-        var rows = await ReadEntityAsync(true, row.Id, "ABSENCE_EVENT", conn, null, ct);
+        var rows = await ReadEntityAsync(true, row.Id, "ABSENCE_EVENT", conn, ct);
         return rows.Select(r => new ExternalEvent(r["SAGE_EVT_CODE"], r["SAGE_EVT_LABEL"])).ToList();
     }
 
@@ -213,7 +213,7 @@ public sealed class ExternalSourceService : IExternalSourceService
                     e.ApresMidi.HasValue ? e.ApresMidi.Value != 0 : null))
                 .ToList();
         }
-        var rows = await ReadEntityAsync(true, row.Id, "EMPLOYEE_EVENT", conn, null, ct);
+        var rows = await ReadEntityAsync(true, row.Id, "EMPLOYEE_EVENT", conn, ct);
         var result = new List<ExternalEmployeeEvent>();
         foreach (var r in rows)
         {
@@ -234,7 +234,7 @@ public sealed class ExternalSourceService : IExternalSourceService
                 .Select(u => new ExternalPunchUser(u.UserId, u.BadgeNumber, u.Ssn, u.Name))
                 .ToList();
         }
-        var rows = await ReadEntityAsync(false, row.Id, "PUNCH_USER", conn, null, ct);
+        var rows = await ReadEntityAsync(false, row.Id, "PUNCH_USER", conn, ct);
         var result = new List<ExternalPunchUser>();
         foreach (var r in rows)
         {

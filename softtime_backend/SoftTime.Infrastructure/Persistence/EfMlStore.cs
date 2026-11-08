@@ -33,7 +33,7 @@ public sealed class EfMlStore : IMlStore
         await strategy.ExecuteAsync(async () =>
         {
             await using var transaction = await _db.Database.BeginTransactionAsync(ct);
-            await DeleteInChunksAsync("SalarieJour", "Date", bddSage, from, to, ct);
+            await DeleteInChunksAsync("SalarieJour", "Date", new MlPeriod(bddSage, from, to), ct);
             await BulkInsertAsync(table, "SalarieJour", transaction, ct);
             await transaction.CommitAsync(ct);
         });
@@ -48,7 +48,7 @@ public sealed class EfMlStore : IMlStore
         await strategy.ExecuteAsync(async () =>
         {
             await using var transaction = await _db.Database.BeginTransactionAsync(ct);
-            await DeleteInChunksAsync("SalarieSemaine", "SemaineDebut", bddSage, from, to, ct);
+            await DeleteInChunksAsync("SalarieSemaine", "SemaineDebut", new MlPeriod(bddSage, from, to), ct);
             await BulkInsertAsync(table, "SalarieSemaine", transaction, ct);
             await transaction.CommitAsync(ct);
         });
@@ -111,9 +111,9 @@ public sealed class EfMlStore : IMlStore
             .ToListAsync(ct);
 
     public async Task ReplacePredictionsAsync(
-        string bddSage, MlModelType type, DateTime from, DateTime to,
-        IReadOnlyCollection<MlPrediction> rows, CancellationToken ct = default)
+        MlPeriod periode, MlModelType type, IReadOnlyCollection<MlPrediction> rows, CancellationToken ct = default)
     {
+        var (bddSage, from, to) = periode;
         var storageType = MlModelTypes.ToStorage(type);
         await _db.Prediction
             .Where(x => x.BddSage == bddSage
@@ -208,8 +208,9 @@ public sealed class EfMlStore : IMlStore
     /// indéfiniment sur RESOURCE_SEMAPHORE sur une instance SQL Express.
     /// </summary>
     private async Task DeleteInChunksAsync(
-        string table, string dateColumn, string bddSage, DateTime from, DateTime to, CancellationToken ct)
+        string table, string dateColumn, MlPeriod periode, CancellationToken ct)
     {
+        var (bddSage, from, to) = periode;
         // Les noms de table/colonne sont des constantes internes ; les valeurs sont paramétrées.
         var sql = $@"DELETE TOP (5000) FROM [ml].[{table}]
                      WHERE [BddSage] = {{0}}

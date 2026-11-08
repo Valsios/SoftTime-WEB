@@ -12,7 +12,7 @@ public interface ISourceMappingStore
     /// l'appelant peut modifier cette base ET que serveur, login et mode d'authentification sont inchangés :
     /// le mot de passe stocké ne doit jamais être envoyé vers un autre serveur choisi par le client.
     /// </summary>
-    Task<string?> ResolveStoredPasswordAsync(string? kind, int? id, string? serveur, bool? sqlAuth, string? login, string? password, CancellationToken ct);
+    Task<string?> ResolveStoredPasswordAsync(ConnectionAttempt saisie, CancellationToken ct);
 
     Task ReplaceMappingsAsync(bool isSage, int connectionId, IReadOnlyList<SourceEntityMappingDto> mappings, CancellationToken ct);
 

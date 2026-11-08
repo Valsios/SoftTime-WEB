@@ -128,15 +128,18 @@ public static class WorkIntervals
 
     /// <summary>Part d'un intervalle tombant dans la plage de nuit 22:00 → 05:00 (synthèse §4.3 d).</summary>
     internal static TimeSpan NuitEntre(DateTime debut, DateTime fin)
-        => Intersection(debut, fin, debut.Date, TimeSpan.Zero, OvertimeRules.NightEnd)
-           + Intersection(debut, fin, debut.Date, OvertimeRules.NightStart, TimeSpan.FromDays(1));
-
-    internal static TimeSpan Intersection(DateTime debut, DateTime fin, DateTime jour, TimeSpan de, TimeSpan a)
     {
-        var borneDebut = jour + de;
-        var borneFin = jour + a;
-        var d = debut > borneDebut ? debut : borneDebut;
-        var f = fin < borneFin ? fin : borneFin;
+        var travail = new Intervalle(debut, fin);
+        var jour = debut.Date;
+        return Intersection(travail, new Intervalle(jour, jour + OvertimeRules.NightEnd))
+               + Intersection(travail, new Intervalle(jour + OvertimeRules.NightStart, jour + TimeSpan.FromDays(1)));
+    }
+
+    /// <summary>Durée commune à deux intervalles (nulle s'ils ne se chevauchent pas).</summary>
+    internal static TimeSpan Intersection(Intervalle travail, Intervalle plage)
+    {
+        var d = travail.Debut > plage.Debut ? travail.Debut : plage.Debut;
+        var f = travail.Fin < plage.Fin ? travail.Fin : plage.Fin;
         return f > d ? f - d : TimeSpan.Zero;
     }
 

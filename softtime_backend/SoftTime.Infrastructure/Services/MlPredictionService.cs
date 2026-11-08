@@ -100,7 +100,7 @@ public sealed class MlPredictionService : IMlPredictionService
     }
 
     private Task ClearAsync(string sage, MlModelType type, DateTime from, DateTime to, CancellationToken ct) =>
-        _store.ReplacePredictionsAsync(sage, type, from, to, Array.Empty<MlPrediction>(), ct);
+        _store.ReplacePredictionsAsync(new MlPeriod(sage, from, to), type, Array.Empty<MlPrediction>(), ct);
 
     private async Task ClearHsAsync(string sage, DateTime from, DateTime to, CancellationToken ct)
     {
@@ -128,8 +128,8 @@ public sealed class MlPredictionService : IMlPredictionService
         var probabilityPredictions = ProbabilityPredictions(batch, hsProbability.Id);
         var amountPredictions = AmountPredictions(batch, hsAmount, _predictor.PredictHsAmount(amountBinary, samples));
 
-        await _store.ReplacePredictionsAsync(sage, MlModelType.HsProbabilite, window.WeekStart, window.WeekEnd, probabilityPredictions, ct);
-        await _store.ReplacePredictionsAsync(sage, MlModelType.HsMontant, window.WeekStart, window.WeekEnd, amountPredictions, ct);
+        await _store.ReplacePredictionsAsync(new MlPeriod(sage, window.WeekStart, window.WeekEnd), MlModelType.HsProbabilite, probabilityPredictions, ct);
+        await _store.ReplacePredictionsAsync(new MlPeriod(sage, window.WeekStart, window.WeekEnd), MlModelType.HsMontant, amountPredictions, ct);
         return (weeks.Count, amountPredictions.Count);
     }
 

@@ -365,7 +365,7 @@ public class AccountSecurityTests
 
     private sealed class Token : ITokenService
     {
-        public string CreateToken(decimal userId, string login, decimal roleId, string? matricule, IEnumerable<int> rights) => "FAKE_TOKEN";
+        public string CreateToken(TokenSubject subject) => "FAKE_TOKEN";
     }
 
     private sealed class Mail : IEmailService

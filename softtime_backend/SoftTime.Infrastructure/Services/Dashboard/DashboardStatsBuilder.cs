@@ -16,8 +16,8 @@ internal static class DashboardStatsBuilder
         var periodes = PeriodGrouping.Clefs(data.From, data.To, periode);
         var cartes = data.Perimetre.Cartes;
         var repartition = new DashboardRepartitionDto(
-            DashboardIndicators.Repartition(cartes, c => data.CategorieParCle.GetValueOrDefault(DashboardIndicators.Cle(c.SageMatricule)), events.Absences, events.Retards, data.HsParCle),
-            DashboardIndicators.Repartition(cartes, c => c.Departement, events.Absences, events.Retards, data.HsParCle));
+            DashboardIndicators.Repartition(data, events, c => data.CategorieParCle.GetValueOrDefault(DashboardIndicators.Cle(c.SageMatricule))),
+            DashboardIndicators.Repartition(data, events, c => c.Departement));
 
         return new DashboardStatsDto(
             cartes.Count,

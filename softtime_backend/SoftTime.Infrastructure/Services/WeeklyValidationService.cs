@@ -169,7 +169,6 @@ public sealed class WeeklyValidationService : IWeeklyValidationService
         var from = request.From.Date;
         var to = request.To.Date;
         var ctx = await _overtimeWeekContext.ChargerContexteAsync(request, avecExistantes: true, ct);
-        var hsRepo = _uow.Repository<HsValidee>();
         var resultat = new List<WeeklyHsDto>(ctx.Cards.Count);
 
         foreach (var card in ctx.Cards)
@@ -185,7 +184,7 @@ public sealed class WeeklyValidationService : IWeeklyValidationService
             var config = _overtimeWeekContext.Configurer(ctx, card);
             var semaine = OvertimeCalculator.CalculerSemaine(config, _overtimeWeekContext.ConstruireJours(ctx, card, from, to));
             if (persistNonValidated)
-                existante = await EnregistrerSemaineAsync(hsRepo, ctx, card, existante, semaine, from, to, ct);
+                existante = await EnregistrerSemaineAsync(existante ?? NouvelleLigne(ctx, card, from), existante is null, semaine, to, ct);
 
             resultat.Add(new WeeklyHsDto(
                 existante?.Id ?? 0, card.SageMatricule, from, to,
@@ -203,50 +202,34 @@ public sealed class WeeklyValidationService : IWeeklyValidationService
             ligne.Ht, ligne.Hs, ligne.Nuit, ligne.Dimanche, ligne.Feries,
             ligne.Retard, ligne.Absence, ligne.ValidationHs == true);
 
-    private static async Task<HsValidee> EnregistrerSemaineAsync(
-        IRepository<HsValidee> repo,
-        WeeklyContext ctx,
-        CardPaie card,
-        HsValidee? existante,
-        OvertimeWeekResult semaine,
-        DateTime from,
-        DateTime to,
-        CancellationToken ct)
+    /// <summary>Ligne de semaine à créer pour un salarié qui n'en a pas encore.</summary>
+    private static HsValidee NouvelleLigne(WeeklyContext ctx, CardPaie card, DateTime lundi) => new()
     {
-        if (existante != null)
-        {
-            existante.BddPointage = ctx.PointeuseDb;
-            existante.DateFin = to;
-            existante.Ht = semaine.Ht;
-            existante.Hs = semaine.Hs;
-            existante.Nuit = semaine.Nuit;
-            existante.Dimanche = semaine.Dimanche;
-            existante.Feries = semaine.Ferie;
-            existante.Retard = semaine.Retard;
-            existante.Absence = semaine.Absence;
-            existante.ValidationHs = false;
-            repo.Update(existante);
-            return existante;
-        }
+        BddSage = ctx.SageDb,
+        Matricules = card.SageMatricule,
+        DateDeb = lundi
+    };
 
-        var nouvelle = new HsValidee
-        {
-            BddSage = ctx.SageDb,
-            BddPointage = ctx.PointeuseDb,
-            Matricules = card.SageMatricule,
-            DateDeb = from,
-            DateFin = to,
-            Ht = semaine.Ht,
-            Hs = semaine.Hs,
-            Nuit = semaine.Nuit,
-            Dimanche = semaine.Dimanche,
-            Feries = semaine.Ferie,
-            Retard = semaine.Retard,
-            Absence = semaine.Absence,
-            ValidationHs = false
-        };
-        await repo.AddAsync(nouvelle, ct);
-        return nouvelle;
+    /// <summary>Enregistre le résultat recalculé (non validé) d'une semaine, en création ou en mise à jour.</summary>
+    private async Task<HsValidee> EnregistrerSemaineAsync(
+        HsValidee ligne, bool nouvelle, OvertimeWeekResult semaine, DateTime to, CancellationToken ct)
+    {
+        // Même base pointeuse que le contexte de calcul, chargé depuis le tenant.
+        ligne.BddPointage = _tenant.PointeuseDb;
+        ligne.DateFin = to;
+        ligne.Ht = semaine.Ht;
+        ligne.Hs = semaine.Hs;
+        ligne.Nuit = semaine.Nuit;
+        ligne.Dimanche = semaine.Dimanche;
+        ligne.Feries = semaine.Ferie;
+        ligne.Retard = semaine.Retard;
+        ligne.Absence = semaine.Absence;
+        ligne.ValidationHs = false;
+        if (nouvelle)
+            await _uow.Repository<HsValidee>().AddAsync(ligne, ct);
+        else
+            _uow.Repository<HsValidee>().Update(ligne);
+        return ligne;
     }
 
     /// <summary>

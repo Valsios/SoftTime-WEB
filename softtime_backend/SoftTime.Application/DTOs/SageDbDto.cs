@@ -10,7 +10,7 @@ public record SageDbDto(
     string? NomBd,
     string TypeBase = "STANDARD",
     IReadOnlyList<SourceEntityMappingDto>? Mappings = null,
-    bool PasswordDefined = false)
+    bool PasswordDefined = false) : IExternalConnectionFields
 {
     public SageDbDto() : this(default, default, default, default, default, default) { }
 }

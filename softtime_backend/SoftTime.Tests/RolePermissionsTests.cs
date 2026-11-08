@@ -640,8 +640,8 @@ public class RolePermissionsTests
 
     private sealed class FakeTokenService : ITokenService
     {
-        public string CreateToken(decimal userId, string login, decimal roleId, string? matricule, IEnumerable<int> rights)
-            => $"FAKE_JWT_TOKEN_{userId}_{login}";
+        public string CreateToken(TokenSubject subject)
+            => $"FAKE_JWT_TOKEN_{subject.UserId}_{subject.Login}";
     }
 
     private sealed class FakeEmailService : IEmailService

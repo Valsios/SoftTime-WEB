@@ -35,8 +35,7 @@ public static class PunchDayGrouping
         IReadOnlyList<PunchMoment> punches,
         IReadOnlyDictionary<DateTime, PunchPlanningWindow> planningByDay,
         DateTime from,
-        DateTime to,
-        TimeSpan? nightExitGrace = null)
+        DateTime to)
     {
         var result = new Dictionary<DateTime, IReadOnlyList<PunchMoment>>();
         from = from.Date;
@@ -44,9 +43,7 @@ public static class PunchDayGrouping
         if (to < from)
             return result;
 
-        var grace = nightExitGrace ?? NightExitGrace;
-        if (grace < TimeSpan.Zero)
-            grace = TimeSpan.Zero;
+        var grace = NightExitGrace;
         var ordered = punches
             .Where(p => p.Heure >= TimeSpan.Zero && p.Heure < TimeSpan.FromDays(1))
             .OrderBy(p => p.Date.Date)

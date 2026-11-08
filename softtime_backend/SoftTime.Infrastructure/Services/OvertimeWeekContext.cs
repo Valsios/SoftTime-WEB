@@ -141,11 +141,9 @@ public sealed class OvertimeWeekContext : IOvertimeWeekContext
         for (var jour = from.Date; jour <= to.Date; jour = jour.AddDays(1))
         {
             jours.Add(OvertimeDayRules.Construire(
-                jour,
+                new CalendarDay(jour, ctx.Feries.Any(f => f.Date.HasValue && f.Date.Value.Date == jour), LeaveRules.Valeur(conges, jour)),
                 heures.Where(h => h.DatePointageIn.HasValue && h.DatePointageIn.Value.Date == jour),
-                OvertimeDayRules.PlanDuJour(planning.Where(p => p.DateP.HasValue && p.DateP.Value.Date == jour)),
-                ctx.Feries.Any(f => f.Date.HasValue && f.Date.Value.Date == jour),
-                LeaveRules.Valeur(conges, jour)));
+                OvertimeDayRules.PlanDuJour(planning.Where(p => p.DateP.HasValue && p.DateP.Value.Date == jour))));
         }
         return jours;
     }

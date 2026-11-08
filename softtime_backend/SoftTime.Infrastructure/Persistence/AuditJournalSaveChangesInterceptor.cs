@@ -221,14 +221,15 @@ public sealed class AuditJournalSaveChangesInterceptor : SaveChangesInterceptor
         {
             var column = property.Metadata.GetColumnName() ?? property.Metadata.Name;
             var masked = AuditMaskingPolicy.IsSensitive(table, column);
-            yield return CreateEntry(
-                table,
-                AuditMaskingPolicy.MaskKey(table, AuditValueFormat.KeyFor(entry, state)),
-                column,
-                action,
-                masked ? AuditMaskingPolicy.Mask : AuditValueFormat.OldValueFor(property, state),
-                masked ? AuditMaskingPolicy.Mask : AuditValueFormat.NewValueFor(property, state),
-                correlation);
+            yield return Stamp(new JournalAudit
+            {
+                Tables = table,
+                Cles = AuditMaskingPolicy.MaskKey(table, AuditValueFormat.KeyFor(entry, state)),
+                Colonnes = column,
+                Actions = action,
+                Anciens = masked ? AuditMaskingPolicy.Mask : AuditValueFormat.OldValueFor(property, state),
+                Nouveaux = masked ? AuditMaskingPolicy.Mask : AuditValueFormat.NewValueFor(property, state)
+            }, correlation);
         }
     }
 
@@ -238,14 +239,12 @@ public sealed class AuditJournalSaveChangesInterceptor : SaveChangesInterceptor
         var inserted = list.Count(e => e.State == EntityState.Added);
         var modified = list.Count(e => e.State == EntityState.Modified);
         var deleted = list.Count(e => e.State == EntityState.Deleted);
-        return CreateEntry(
-            table,
-            null,
-            null,
-            "Modification",
-            null,
-            $"Synthèse volume : Insertion={inserted}; Modification={modified}; Suppression={deleted}",
-            correlation);
+        return Stamp(new JournalAudit
+        {
+            Tables = table,
+            Actions = "Modification",
+            Nouveaux = $"Synthèse volume : Insertion={inserted}; Modification={modified}; Suppression={deleted}"
+        }, correlation);
     }
 
     private IEnumerable<PropertyEntry> ChangedProperties(EntityEntry entry, EntityState state)
@@ -256,29 +255,17 @@ public sealed class AuditJournalSaveChangesInterceptor : SaveChangesInterceptor
             && (state != EntityState.Modified || (property.IsModified && AuditValueFormat.ValuesDiffer(property))));
     }
 
-    private JournalAudit CreateEntry(
-        string table,
-        string? key,
-        string? column,
-        string action,
-        string? oldValue,
-        string? newValue,
-        Guid correlation)
-        => new()
-        {
-            DateUtc = DateTime.UtcNow,
-            Tables = table,
-            Cles = key,
-            Colonnes = column,
-            Actions = action,
-            Anciens = oldValue,
-            Nouveaux = newValue,
-            Users = string.IsNullOrWhiteSpace(_user.Login) ? "SYSTEME:SoftTimeDbContext" : _user.Login,
-            BaseSage = _company.SageDatabase,
-            BasePointeuse = _company.PointeuseDatabase,
-            Correlations = correlation,
-            Source = "EF:SoftTimeDbContext"
-        };
+    /// <summary>Complète une ligne du journal : horodatage, auteur, bases du tenant et corrélation de la sauvegarde.</summary>
+    private JournalAudit Stamp(JournalAudit entry, Guid correlation)
+    {
+        entry.DateUtc = DateTime.UtcNow;
+        entry.Users = string.IsNullOrWhiteSpace(_user.Login) ? "SYSTEME:SoftTimeDbContext" : _user.Login;
+        entry.BaseSage = _company.SageDatabase;
+        entry.BasePointeuse = _company.PointeuseDatabase;
+        entry.Correlations = correlation;
+        entry.Source = "EF:SoftTimeDbContext";
+        return entry;
+    }
 
     private sealed record DeferredAddition(string Table, EntityEntry Entry, Guid Correlation);
 

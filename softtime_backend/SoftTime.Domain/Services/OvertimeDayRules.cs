@@ -47,12 +47,9 @@ public static class OvertimeDayRules
 
     /// <summary>Journée du calcul : paires, planning (reconstruit s'il manque), férié, congé, retard saisi.</summary>
     public static OvertimeDayInput Construire(
-        DateTime jour,
-        IEnumerable<HeureCorrigee> lignesDuJour,
-        PlanningSalarie? plan,
-        bool ferie,
-        decimal congeValeur)
+        CalendarDay journee, IEnumerable<HeureCorrigee> lignesDuJour, PlanningSalarie? plan)
     {
+        var (jour, ferie, congeValeur) = journee;
         var lignes = lignesDuJour
             .OrderBy(h => h.HEntree ?? TimeSpan.Zero)
             .ToList();

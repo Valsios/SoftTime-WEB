@@ -45,33 +45,29 @@ public sealed class SourceMappingStore : ISourceMappingStore
     /// l'appelant peut modifier cette base ET que serveur, login et mode d'authentification sont inchangés :
     /// le mot de passe stocké ne doit jamais être envoyé vers un autre serveur choisi par le client.
     /// </summary>
-    public async Task<string?> ResolveStoredPasswordAsync(string? kind, int? id, string? serveur, bool? sqlAuth, string? login, string? password, CancellationToken ct)
+    public async Task<string?> ResolveStoredPasswordAsync(ConnectionAttempt saisie, CancellationToken ct)
     {
+        var (kind, id, serveur, sqlAuth, login, password) = saisie;
         if (!string.IsNullOrEmpty(password) || id is not > 0 || sqlAuth == false) return password;
         var isSage = string.Equals(kind, "SAGE", StringComparison.OrdinalIgnoreCase);
         if (!isSage && !string.Equals(kind, "POINTEUSE", StringComparison.OrdinalIgnoreCase)) return password;
 
-        string? storedServeur, storedLogin, storedPassword, storedName;
-        bool storedSqlAuth;
-        if (isSage)
-        {
-            var row = await _uow.Repository<BddSage>().GetByIdAsync(id.Value, ct) ?? throw new NotFoundException();
-            (storedServeur, storedLogin, storedPassword, storedName, storedSqlAuth) = (row.Serveur, row.TLogin, row.TMdp, row.NomBd, row.TypeAuth == true);
-        }
-        else
-        {
-            var row = await _uow.Repository<BddPointeuse>().GetByIdAsync(id.Value, ct) ?? throw new NotFoundException();
-            (storedServeur, storedLogin, storedPassword, storedName, storedSqlAuth) = (row.Serveur, row.TLogin, row.TMdp, row.NomBd, row.TypeAuth == true);
-        }
+        var (stored, storedName) = isSage
+            ? Enregistree(await _uow.Repository<BddSage>().GetByIdAsync(id.Value, ct) ?? throw new NotFoundException())
+            : Enregistree(await _uow.Repository<BddPointeuse>().GetByIdAsync(id.Value, ct) ?? throw new NotFoundException());
 
         await _configAuth.EnsureCanConfigureAsync(isSage ? DatabaseKind.Sage : DatabaseKind.Pointeuse, DatabaseConfigAction.Update, storedName, ct);
-        var sameTarget = storedSqlAuth
-                         && string.Equals((serveur ?? string.Empty).Trim(), (storedServeur ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase)
-                         && string.Equals((login ?? string.Empty).Trim(), (storedLogin ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase);
+        var sameTarget = stored.SqlAuth
+                         && string.Equals((serveur ?? string.Empty).Trim(), (stored.Serveur ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase)
+                         && string.Equals((login ?? string.Empty).Trim(), (stored.Login ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase);
         if (!sameTarget)
             throw new DomainException("Le serveur, le login ou le mode d'authentification a changé : saisissez le mot de passe pour utiliser cette connexion.");
-        return storedPassword;
+        return stored.Password;
     }
+
+    private static (SqlServerCredentials Stored, string? Nom) Enregistree(BddSage row) => (SqlServerCredentials.Of(row), row.NomBd);
+
+    private static (SqlServerCredentials Stored, string? Nom) Enregistree(BddPointeuse row) => (SqlServerCredentials.Of(row), row.NomBd);
 
     public async Task ReplaceMappingsAsync(bool isSage, int connectionId, IReadOnlyList<SourceEntityMappingDto> mappings, CancellationToken ct)
     {

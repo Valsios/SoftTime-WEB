@@ -51,7 +51,7 @@ public sealed class OtherPayrollWriter : IPayrollWriter
             foreach (var row in rows)
             foreach (var category in PayrollWritingConfiguration.Categories)
             {
-                var affected = await UpdateAsync(connection, transaction, plan, category, row, ct);
+                var affected = await UpdateAsync(transaction, plan, category, row, ct);
                 if (affected != 1)
                     throw new DomainException($"La synchronisation a été annulée : {affected} ligne(s) mise(s) à jour pour le matricule {row.Matricule} et la catégorie {category}; une seule ligne était attendue.");
                 updates++;
@@ -203,12 +203,12 @@ public sealed class OtherPayrollWriter : IPayrollWriter
         }
     }
 
-    private static async Task<int> UpdateAsync(SqlConnection connection, SqlTransaction transaction, WritePlan plan, string category, HsExoDto row, CancellationToken ct)
+    private static async Task<int> UpdateAsync(SqlTransaction transaction, WritePlan plan, string category, HsExoDto row, CancellationToken ct)
     {
         var table = $"[{plan.Schema}].[{plan.Table}]";
         var valueColumn = PayrollWritingConfiguration.QuoteIdentifier(plan.ValueColumns[category]);
         var matriculeColumn = PayrollWritingConfiguration.QuoteIdentifier(plan.MatriculeColumn);
-        await using var cmd = new SqlCommand($"UPDATE {table} SET {valueColumn} = @value WHERE {matriculeColumn} = @matricule", connection, transaction);
+        await using var cmd = new SqlCommand($"UPDATE {table} SET {valueColumn} = @value WHERE {matriculeColumn} = @matricule", transaction.Connection, transaction);
         cmd.Parameters.Add("@value", SqlDbType.Decimal).Value = OvertimePayrollCategoryMapper.ValueFor(category, row);
         cmd.Parameters["@value"].Precision = 18;
         cmd.Parameters["@value"].Scale = 4;
