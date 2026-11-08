@@ -9,17 +9,17 @@ public class OvertimeRulesTests
     public void SplitWeekly_FirstEightHours_Are130()
     {
         var split = OvertimeRules.SplitWeekly(11);
-        Assert.Equal(8, split.Hs1);
-        Assert.Equal(3, split.Hs2);
-        Assert.Equal(11, split.Hs);
+        split.Hs1.Should().Be(8);
+        split.Hs2.Should().Be(3);
+        split.Hs.Should().Be(11);
     }
 
     [Fact]
     public void SplitWeekly_Zero_IsEmpty()
     {
         var split = OvertimeRules.SplitWeekly(0);
-        Assert.Equal(0, split.Hs1);
-        Assert.Equal(0, split.Hs2);
+        split.Hs1.Should().Be(0);
+        split.Hs2.Should().Be(0);
     }
 
     [Fact]
@@ -31,8 +31,8 @@ public class OvertimeRulesTests
             OvertimeRules.SplitWeekly(12)
         };
         var exo = OvertimeRules.AllocateExempt(weeks);
-        Assert.Equal(20, exo.Exo130 + exo.Exo150);
-        Assert.True(exo.Impo130 + exo.Impo150 >= 2);
+        (exo.Exo130 + exo.Exo150).Should().Be(20);
+        (exo.Impo130 + exo.Impo150 >= 2).Should().BeTrue();
     }
 
     [Fact]
@@ -45,10 +45,10 @@ public class OvertimeRulesTests
             OvertimeRules.SplitWeekly(14)
         });
 
-        Assert.Equal(16m, exo.Exo130);
-        Assert.Equal(4m, exo.Exo150);
-        Assert.Equal(0m, exo.Impo130);
-        Assert.Equal(6m, exo.Impo150);
+        exo.Exo130.Should().Be(16m);
+        exo.Exo150.Should().Be(4m);
+        exo.Impo130.Should().Be(0m);
+        exo.Impo150.Should().Be(6m);
     }
 
     [Fact]
@@ -58,12 +58,12 @@ public class OvertimeRulesTests
         var split = OvertimeRules.SplitWeekly(26);
         var exo = OvertimeRules.AllocateExempt(new[] { split });
 
-        Assert.Equal(8m, split.Hs1);
-        Assert.Equal(18m, split.Hs2);
-        Assert.Equal(8m, exo.Exo130);
-        Assert.Equal(12m, exo.Exo150);
-        Assert.Equal(0m, exo.Impo130);
-        Assert.Equal(6m, exo.Impo150);
+        split.Hs1.Should().Be(8m);
+        split.Hs2.Should().Be(18m);
+        exo.Exo130.Should().Be(8m);
+        exo.Exo150.Should().Be(12m);
+        exo.Impo130.Should().Be(0m);
+        exo.Impo150.Should().Be(6m);
     }
 
     [Fact]
@@ -71,49 +71,49 @@ public class OvertimeRulesTests
     {
         var exo = OvertimeRules.AllocateExempt(Array.Empty<HsWeekSplit>());
 
-        Assert.Equal(0m, exo.Exo130);
-        Assert.Equal(0m, exo.Exo150);
-        Assert.Equal(0m, exo.Impo130);
-        Assert.Equal(0m, exo.Impo150);
+        exo.Exo130.Should().Be(0m);
+        exo.Exo150.Should().Be(0m);
+        exo.Impo130.Should().Be(0m);
+        exo.Impo150.Should().Be(0m);
     }
 
     [Fact]
     public void IsMondayToSundayWeek_RequiresExactSpan()
     {
         var monday = new DateTime(2026, 8, 31);
-        Assert.True(OvertimeRules.IsMondayToSundayWeek(monday, monday.AddDays(6)));
-        Assert.False(OvertimeRules.IsMondayToSundayWeek(monday, monday.AddDays(5)));
-        Assert.False(OvertimeRules.IsMondayToSundayWeek(monday.AddDays(1), monday.AddDays(7)));
+        OvertimeRules.IsMondayToSundayWeek(monday, monday.AddDays(6)).Should().BeTrue();
+        OvertimeRules.IsMondayToSundayWeek(monday, monday.AddDays(5)).Should().BeFalse();
+        OvertimeRules.IsMondayToSundayWeek(monday.AddDays(1), monday.AddDays(7)).Should().BeFalse();
     }
 
     [Fact]
     public void GetMinuteSortie_RoundsByTolerance()
     {
-        Assert.Equal(30, OvertimeRules.GetMinuteSortie(35, 30));
-        Assert.Equal(0, OvertimeRules.GetMinuteSortie(20, 30));
+        OvertimeRules.GetMinuteSortie(35, 30).Should().Be(30);
+        OvertimeRules.GetMinuteSortie(20, 30).Should().Be(0);
         // Multiple exact : le desktop retirait un pas de trop (17:45 → 17:30 avec un pas de 15).
-        Assert.Equal(30, OvertimeRules.GetMinuteSortie(30, 30));
-        Assert.Equal(45, OvertimeRules.GetMinuteSortie(45, 15));
-        Assert.Equal(45, OvertimeRules.GetMinuteSortie(50, 15));
+        OvertimeRules.GetMinuteSortie(30, 30).Should().Be(30);
+        OvertimeRules.GetMinuteSortie(45, 15).Should().Be(45);
+        OvertimeRules.GetMinuteSortie(50, 15).Should().Be(45);
         // Pas nul ou minute nulle : aucune modification.
-        Assert.Equal(59, OvertimeRules.GetMinuteSortie(59, 0));
-        Assert.Equal(0, OvertimeRules.GetMinuteSortie(0, 15));
+        OvertimeRules.GetMinuteSortie(59, 0).Should().Be(59);
+        OvertimeRules.GetMinuteSortie(0, 15).Should().Be(0);
     }
 
     [Fact]
     public void IsMaxOneMonth_AcceptsWithinMonth()
     {
         var start = new DateTime(2026, 1, 15);
-        Assert.True(OvertimeRules.IsMaxOneMonth(start, start));
-        Assert.True(OvertimeRules.IsMaxOneMonth(start, start.AddDays(10)));
-        Assert.True(OvertimeRules.IsMaxOneMonth(start, new DateTime(2026, 2, 15)));
+        OvertimeRules.IsMaxOneMonth(start, start).Should().BeTrue();
+        OvertimeRules.IsMaxOneMonth(start, start.AddDays(10)).Should().BeTrue();
+        OvertimeRules.IsMaxOneMonth(start, new DateTime(2026, 2, 15)).Should().BeTrue();
     }
 
     [Fact]
     public void IsMaxOneMonth_RejectsExceedingMonth()
     {
         var start = new DateTime(2026, 1, 15);
-        Assert.False(OvertimeRules.IsMaxOneMonth(start, new DateTime(2026, 2, 16)));
-        Assert.False(OvertimeRules.IsMaxOneMonth(start, start.AddDays(-1)));
+        OvertimeRules.IsMaxOneMonth(start, new DateTime(2026, 2, 16)).Should().BeFalse();
+        OvertimeRules.IsMaxOneMonth(start, start.AddDays(-1)).Should().BeFalse();
     }
 }

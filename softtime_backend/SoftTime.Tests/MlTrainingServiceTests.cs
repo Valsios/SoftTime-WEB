@@ -26,11 +26,11 @@ public class MlTrainingServiceTests
 
         var outcome = await service.TrainAsync(Sage);
 
-        Assert.Equal("Baseline", outcome.Etat);
-        Assert.Null(outcome.HsProbabilite);
-        Assert.Null(outcome.HsMontant);
-        Assert.NotEmpty(store.Models);
-        Assert.All(store.Models, m => Assert.Equal(MlModelStatus.Rejete, m.Statut));
+        outcome.Etat.Should().Be("Baseline");
+        outcome.HsProbabilite.Should().BeNull();
+        outcome.HsMontant.Should().BeNull();
+        store.Models.Should().NotBeEmpty();
+        store.Models.Should().AllSatisfy(m => m.Statut.Should().Be(MlModelStatus.Rejete));
     }
 
     [Fact]
@@ -47,12 +47,12 @@ public class MlTrainingServiceTests
 
         var outcome = await service.TrainAsync(Sage);
 
-        Assert.Equal("Pret", outcome.Etat);
-        Assert.True(outcome.HsProbabilite is { EstActif: true });
-        Assert.True(outcome.HsMontant is { EstActif: true });
-        Assert.Contains(store.Models, m => m.TypeModele == MlModelTypes.HsMontant && m.EstActif);
+        outcome.Etat.Should().Be("Pret");
+        (outcome.HsProbabilite is { EstActif: true }).Should().BeTrue();
+        (outcome.HsMontant is { EstActif: true }).Should().BeTrue();
+        store.Models.Should().Contain(m => m.TypeModele == MlModelTypes.HsMontant && m.EstActif);
         // La prévision d'absence n'est plus entraînée.
-        Assert.DoesNotContain(store.Models, m => m.TypeModele == MlModelTypes.Absence);
+        store.Models.Should().NotContain(m => m.TypeModele == MlModelTypes.Absence);
     }
 
     [Fact]
@@ -86,11 +86,11 @@ public class MlTrainingServiceTests
 
         var outcome = await service.TrainAsync(Sage);
 
-        Assert.Equal("Baseline", outcome.Etat);
-        Assert.False(outcome.HsMontant is { EstActif: true });
-        Assert.Equal(1, store.Models.Count(m => m.TypeModele == MlModelTypes.HsMontant && m.EstActif));
-        Assert.Equal("ancien", store.Models.Single(m => m.TypeModele == MlModelTypes.HsMontant && m.EstActif).Version);
-        Assert.Contains(store.Models, m => m.TypeModele == MlModelTypes.HsMontant && m.Statut == MlModelStatus.Rejete);
+        outcome.Etat.Should().Be("Baseline");
+        (outcome.HsMontant is { EstActif: true }).Should().BeFalse();
+        store.Models.Count(m => m.TypeModele == MlModelTypes.HsMontant && m.EstActif).Should().Be(1);
+        store.Models.Single(m => m.TypeModele == MlModelTypes.HsMontant && m.EstActif).Version.Should().Be("ancien");
+        store.Models.Should().Contain(m => m.TypeModele == MlModelTypes.HsMontant && m.Statut == MlModelStatus.Rejete);
     }
 
     private static MlOptions TrainingOptions() => new()

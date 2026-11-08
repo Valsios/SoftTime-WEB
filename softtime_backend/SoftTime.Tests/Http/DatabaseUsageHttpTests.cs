@@ -53,8 +53,8 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
     public async Task Administrator_and_a_checked_account_with_read_use_the_base(string profile, string route)
     {
         var (resp, _) = await Send(profile, route);
-        Assert.NotEqual(HttpStatusCode.Unauthorized, resp.StatusCode);
-        Assert.NotEqual(HttpStatusCode.Forbidden, resp.StatusCode);
+        resp.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
+        resp.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
     }
 
     [Theory]
@@ -62,8 +62,8 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
     public async Task Unchecked_base_missing_read_or_no_gate_is_refused_with_403_and_the_message(string profile, string route)
     {
         var (resp, text) = await Send(profile, route);
-        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
-        Assert.Contains(Denied, text);
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        text.Should().Contain(Denied);
     }
 
     [Theory]
@@ -73,31 +73,31 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
     public async Task Account_like_user1_without_any_base_gets_403_not_401(string route)
     {
         var (resp, _) = await Send("user1", route);
-        Assert.NotEqual(HttpStatusCode.Unauthorized, resp.StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        resp.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
     public async Task Account_like_user1_without_the_sage_header_still_gets_400()
     {
         var (resp, text) = await Send("user1", "catalogue (GET cardpaie)", withSage: false);
-        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
-        Assert.Contains("X-Sage-Database", text);
+        resp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        text.Should().Contain("X-Sage-Database");
     }
 
     [Fact]
     public async Task Pointeuse_is_allowed_with_read_and_refused_without()
     {
         var (allowed, _) = await Send("joel", "pointeuse (POST punches/import-clock)");
-        Assert.NotEqual(HttpStatusCode.Forbidden, allowed.StatusCode);
-        Assert.NotEqual(HttpStatusCode.Unauthorized, allowed.StatusCode);
+        allowed.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+        allowed.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
 
         // Même base SAGE autorisée, mais aucun droit sur la pointeuse.
         var (sageOnly, _) = await Send("ptenone", "catalogue (GET cardpaie)");
-        Assert.NotEqual(HttpStatusCode.Forbidden, sageOnly.StatusCode);
+        sageOnly.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
         var (refused, text) = await Send("ptenone", "pointeuse (POST punches/import-clock)");
-        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
-        Assert.Contains(Denied, text);
+        refused.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        text.Should().Contain(Denied);
     }
 
     [Fact]
@@ -105,7 +105,7 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
     {
         var req = _f.Request("ptenone", HttpMethod.Get, "/api/v1/card-paie", null, ApiFactory.SageName, "PTG");
         var resp = await _http.SendAsync(req);
-        Assert.NotEqual(HttpStatusCode.Forbidden, resp.StatusCode);
+        resp.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
     }
 
     [Fact]
@@ -118,7 +118,7 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
             var json = await resp.Content.ReadAsStringAsync();
             using var doc = System.Text.Json.JsonDocument.Parse(json);
             var count = doc.RootElement.GetProperty("data").GetProperty("authorizedDatabases").GetArrayLength();
-            Assert.True(expected == count, $"{profile} : {count} base(s) proposée(s), {expected} attendue(s)");
+            (expected == count).Should().BeTrue($"{profile} : {count} base(s) proposée(s), {expected} attendue(s)");
         }
     }
 }

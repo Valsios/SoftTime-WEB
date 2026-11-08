@@ -14,36 +14,36 @@ public class MatriculeIdentityTests
     [InlineData("369", " 369 ")]
     [InlineData("ab12", "AB12")]
     public void Cle_ProducesSameKeyForEquivalentMatricules(string gauche, string droite)
-        => Assert.Equal(MatriculeIdentity.Cle(gauche), MatriculeIdentity.Cle(droite));
+        => MatriculeIdentity.Cle(droite).Should().Be(MatriculeIdentity.Cle(gauche));
 
     [Theory]
     [InlineData("369")]
     [InlineData("0369")]
     [InlineData(" 00369 ")]
     public void Cle_NormalizesNumericMatricules(string matricule)
-        => Assert.Equal("369", MatriculeIdentity.Cle(matricule));
+        => MatriculeIdentity.Cle(matricule).Should().Be("369");
 
     [Fact]
     public void Cle_KeepsLeadingZerosOnNonNumericMatricules()
-        => Assert.Equal("A0369", MatriculeIdentity.Cle("a0369"));
+        => MatriculeIdentity.Cle("a0369").Should().Be("A0369");
 
     [Fact]
     public void Cle_NullOrEmptyYieldsEmpty()
     {
-        Assert.Equal(string.Empty, MatriculeIdentity.Cle(null));
-        Assert.Equal(string.Empty, MatriculeIdentity.Cle("   "));
+        MatriculeIdentity.Cle(null).Should().Be(string.Empty);
+        MatriculeIdentity.Cle("   ").Should().Be(string.Empty);
     }
 
     [Fact]
     public void MemeSalarie_MatchesPaddedAndUnpadded()
-        => Assert.True(MatriculeIdentity.MemeSalarie("00369", "369"));
+        => MatriculeIdentity.MemeSalarie("00369", "369").Should().BeTrue();
 
     [Fact]
     public void MemeSalarie_RejectsDistinctOrEmpty()
     {
-        Assert.False(MatriculeIdentity.MemeSalarie("369", "412"));
-        Assert.False(MatriculeIdentity.MemeSalarie(null, null));
-        Assert.False(MatriculeIdentity.MemeSalarie(string.Empty, string.Empty));
-        Assert.False(MatriculeIdentity.MemeSalarie("369", null));
+        MatriculeIdentity.MemeSalarie("369", "412").Should().BeFalse();
+        MatriculeIdentity.MemeSalarie(null, null).Should().BeFalse();
+        MatriculeIdentity.MemeSalarie(string.Empty, string.Empty).Should().BeFalse();
+        MatriculeIdentity.MemeSalarie("369", null).Should().BeFalse();
     }
 }

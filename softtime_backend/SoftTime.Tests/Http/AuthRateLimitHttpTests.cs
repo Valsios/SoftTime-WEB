@@ -20,7 +20,7 @@ public class AuthRateLimitHttpTests : IClassFixture<ApiFactory>
             statuses.Add((await _http.PostAsync("/api/v1/auth/refresh", SecurityPipelineHttpTests.Json("""{"refreshToken":"jeton-inconnu"}"""))).StatusCode);
 
         // Assert
-        Assert.Equal(HttpStatusCode.Unauthorized, statuses[0]);
-        Assert.Equal(HttpStatusCode.TooManyRequests, statuses[^1]);
+        statuses[0].Should().Be(HttpStatusCode.Unauthorized);
+        statuses[^1].Should().Be(HttpStatusCode.TooManyRequests);
     }
 }

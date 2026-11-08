@@ -36,9 +36,9 @@ public class CreateAdminFirstRunTests
 
         await _auth.CreateAdminAsync(Dto);
 
-        var created = Assert.Single(_uow.Get<Responsable>().Items);
-        Assert.Equal(1, created.IdRole);
-        Assert.Contains(_uow.Get<DroitRole>().Items, d => d.IdRole == 1 && d.IdDroit == 1);
+        var created = _uow.Get<Responsable>().Items.Should().ContainSingle().Which;
+        created.IdRole.Should().Be(1);
+        _uow.Get<DroitRole>().Items.Should().Contain(d => d.IdRole == 1 && d.IdDroit == 1);
     }
 
     [Fact]
@@ -46,11 +46,11 @@ public class CreateAdminFirstRunTests
     {
         _uow.Get<Role>().Items.Add(new Role { IdRole = 2, NomRole = "Administrateur" });
 
-        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.CreateAdminAsync(Dto));
+        var ex = (await FluentActions.Awaiting(() => _auth.CreateAdminAsync(Dto)).Should().ThrowExactlyAsync<DomainException>()).Which;
 
-        Assert.Equal(Missing, ex.Message);
-        Assert.Empty(_uow.Get<Responsable>().Items);
-        Assert.Empty(_uow.Get<DroitRole>().Items);
+        ex.Message.Should().Be(Missing);
+        _uow.Get<Responsable>().Items.Should().BeEmpty();
+        _uow.Get<DroitRole>().Items.Should().BeEmpty();
     }
 
     [Fact]
@@ -59,27 +59,27 @@ public class CreateAdminFirstRunTests
         _uow.Get<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
         _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 5, IdRole = 1, Login = "deja" });
 
-        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.CreateAdminAsync(Dto));
+        var ex = (await FluentActions.Awaiting(() => _auth.CreateAdminAsync(Dto)).Should().ThrowExactlyAsync<DomainException>()).Which;
 
-        Assert.StartsWith("Des comptes existent déjà", ex.Message);
-        Assert.Single(_uow.Get<Responsable>().Items);
+        ex.Message.Should().StartWith("Des comptes existent déjà");
+        _uow.Get<Responsable>().Items.Should().ContainSingle();
     }
 
     [Fact]
     public async Task Database_without_any_role_is_refused()
     {
-        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.CreateAdminAsync(Dto));
+        var ex = (await FluentActions.Awaiting(() => _auth.CreateAdminAsync(Dto)).Should().ThrowExactlyAsync<DomainException>()).Which;
 
-        Assert.Equal(Missing, ex.Message);
-        Assert.Empty(_uow.Get<Responsable>().Items);
+        ex.Message.Should().Be(Missing);
+        _uow.Get<Responsable>().Items.Should().BeEmpty();
     }
 
     [Fact]
     public async Task Weak_password_is_still_refused_before_any_role_lookup()
     {
         _uow.Get<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
-        await Assert.ThrowsAnyAsync<Exception>(() => _auth.CreateAdminAsync(new AdminSetupDto("Admin", "admin", "weak", null)));
-        Assert.Empty(_uow.Get<Responsable>().Items);
+        await FluentActions.Awaiting(() => _auth.CreateAdminAsync(new AdminSetupDto("Admin", "admin", "weak", null))).Should().ThrowAsync<Exception>();
+        _uow.Get<Responsable>().Items.Should().BeEmpty();
     }
 
     private sealed class Token : ITokenService

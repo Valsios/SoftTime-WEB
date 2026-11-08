@@ -1,5 +1,3 @@
-using FluentAssertions;
-
 using SoftTime.Api.Responses;
 
 namespace SoftTime.Tests;

@@ -1,7 +1,5 @@
 using AutoMapper;
 
-using FluentAssertions;
-
 using SoftTime.Application.Mapping;
 
 namespace SoftTime.Tests;

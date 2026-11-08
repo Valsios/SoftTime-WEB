@@ -47,16 +47,16 @@ public class DatabaseConfigurationSecurityTests
             _uow.Get<RolePermission>().Items.Add(new RolePermission { IdRole = roleId, PermissionCode = c, IsGranted = true });
     }
 
-    private static Task<ForbiddenException> Refused(Func<Task> act) => Assert.ThrowsAsync<ForbiddenException>(act);
+    private static async Task<ForbiddenException> Refused(Func<Task> act) => (await act.Should().ThrowExactlyAsync<ForbiddenException>()).Which;
 
     #region AdminAccess
 
     [Fact]
     public void AdminAccess_OnlyRoleOneIsAdmin()
     {
-        Assert.True(AdminAccess.IsAdmin(new TestCurrentUser(1, 1)));
-        Assert.False(AdminAccess.IsAdmin(new TestCurrentUser(2, 5, Rights.Parameters)));
-        Assert.Throws<ForbiddenException>(() => AdminAccess.Require(new TestCurrentUser(2, 5, Rights.Parameters)));
+        AdminAccess.IsAdmin(new TestCurrentUser(1, 1)).Should().BeTrue();
+        AdminAccess.IsAdmin(new TestCurrentUser(2, 5, Rights.Parameters)).Should().BeFalse();
+        FluentActions.Invoking(() => AdminAccess.Require(new TestCurrentUser(2, 5, Rights.Parameters))).Should().ThrowExactly<ForbiddenException>();
         AdminAccess.Require(new TestCurrentUser(1, 1));
     }
 
@@ -164,7 +164,7 @@ public class DatabaseConfigurationSecurityTests
         var svc = CatalogFor(AuthorizerFor(30, 5, Rights.Databases));
         GrantUser(30, $"SAGE:{Base}:READ");
         await Refused(() => svc.Sage.DeleteSageAsync(7));
-        Assert.Single(_uow.Get<BddSage>().Items);
+        _uow.Get<BddSage>().Items.Should().ContainSingle();
     }
 
     [Fact]
@@ -174,7 +174,7 @@ public class DatabaseConfigurationSecurityTests
         GrantUser(31, "SAGE:CREATE", "SAGE::DELETE");
         var svc = CatalogFor(AuthorizerFor(31, 5, Rights.Databases));
         await Refused(() => svc.Sage.DeleteSageAsync(9));
-        Assert.Equal(2, _uow.Get<BddSage>().Items.Count);
+        _uow.Get<BddSage>().Items.Count.Should().Be(2);
     }
 
     [Fact]
@@ -184,7 +184,7 @@ public class DatabaseConfigurationSecurityTests
         var dto = new SageDbDto(0, "srv", null, null, true, "NOUVELLE");
         await Refused(() => svc.Sage.SaveSageAsync(dto));
         await Refused(() => svc.Sage.SaveSageAsync(dto with { Id = 7 }));
-        Assert.Single(_uow.Get<BddSage>().Items);
+        _uow.Get<BddSage>().Items.Should().ContainSingle();
     }
 
     [Fact]
@@ -193,7 +193,7 @@ public class DatabaseConfigurationSecurityTests
         var svc = CatalogFor(AuthorizerFor(33, 5, Rights.Reports));
         await Refused(() => svc.Pointeuse.DeletePointeuseAsync(8));
         await Refused(() => svc.Pointeuse.SavePointeuseAsync(new PointeuseDbDto(0, "srv", null, null, true, "NEW", null, false)));
-        Assert.Single(_uow.Get<BddPointeuse>().Items);
+        _uow.Get<BddPointeuse>().Items.Should().ContainSingle();
     }
 
     #endregion
@@ -203,21 +203,21 @@ public class DatabaseConfigurationSecurityTests
     [Fact]
     public async Task AdminRole_CannotBeRenamedDeletedOrHaveItsPrivilegesReplaced()
     {
-        await Assert.ThrowsAsync<DomainException>(() => _auth.SaveRoleAsync(new RoleDto(1, "Autre")));
-        await Assert.ThrowsAsync<DomainException>(() => _auth.DeleteRoleAsync(1));
-        await Assert.ThrowsAsync<DomainException>(() => _auth.SetPrivilegesAsync(1, new List<decimal> { Rights.Reports }));
-        Assert.Equal("Administrateur", _uow.Get<Role>().Items.First(r => r.IdRole == 1).NomRole);
+        await FluentActions.Awaiting(() => _auth.SaveRoleAsync(new RoleDto(1, "Autre"))).Should().ThrowExactlyAsync<DomainException>();
+        await FluentActions.Awaiting(() => _auth.DeleteRoleAsync(1)).Should().ThrowExactlyAsync<DomainException>();
+        await FluentActions.Awaiting(() => _auth.SetPrivilegesAsync(1, new List<decimal> { Rights.Reports })).Should().ThrowExactlyAsync<DomainException>();
+        _uow.Get<Role>().Items.First(r => r.IdRole == 1).NomRole.Should().Be("Administrateur");
     }
 
     [Fact]
     public async Task OtherRoles_RemainEditable()
     {
         await _auth.SetPrivilegesAsync(5, new List<decimal> { Rights.Reports });
-        Assert.Single(_uow.Get<DroitRole>().Items.Where(d => d.IdRole == 5));
+        _uow.Get<DroitRole>().Items.Where(d => d.IdRole == 5).Should().ContainSingle();
         await _auth.SaveRoleAsync(new RoleDto(5, "Gestionnaire paie"));
-        Assert.Equal("Gestionnaire paie", _uow.Get<Role>().Items.First(r => r.IdRole == 5).NomRole);
+        _uow.Get<Role>().Items.First(r => r.IdRole == 5).NomRole.Should().Be("Gestionnaire paie");
         await _auth.DeleteRoleAsync(5);
-        Assert.DoesNotContain(_uow.Get<Role>().Items, r => r.IdRole == 5);
+        _uow.Get<Role>().Items.Should().NotContain(r => r.IdRole == 5);
     }
 
     #endregion

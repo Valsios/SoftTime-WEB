@@ -33,20 +33,20 @@ public class ClosingSettingsTests
     {
         var o = Lus();
 
-        Assert.True(o.Enabled);
-        Assert.True(o.ShowNames);
-        Assert.Equal(30, o.DuplicateToleranceSeconds);
-        Assert.True(o.ExclureSansPlanningSurPeriode);
-        Assert.Equal(ClosingSeverity.Mineure, o.DoublonsMonoGravite);
-        Assert.True(o.IgnorerSemainesValidees);
-        Assert.Equal(366, o.MaxPeriodDays);
-        Assert.Equal(0.05m, o.CriticalRatioBlocking);
-        Assert.Empty(o.Gravites);
-        Assert.Equal(new[] { 0, 1, 3, 5 }, new[] { o.Poids[ClosingSeverity.Information], o.Poids[ClosingSeverity.Mineure], o.Poids[ClosingSeverity.Importante], o.Poids[ClosingSeverity.Critique] });
-        Assert.Empty(o.Erreurs());
+        o.Enabled.Should().BeTrue();
+        o.ShowNames.Should().BeTrue();
+        o.DuplicateToleranceSeconds.Should().Be(30);
+        o.ExclureSansPlanningSurPeriode.Should().BeTrue();
+        o.DoublonsMonoGravite.Should().Be(ClosingSeverity.Mineure);
+        o.IgnorerSemainesValidees.Should().BeTrue();
+        o.MaxPeriodDays.Should().Be(366);
+        o.CriticalRatioBlocking.Should().Be(0.05m);
+        o.Gravites.Should().BeEmpty();
+        new[] { o.Poids[ClosingSeverity.Information], o.Poids[ClosingSeverity.Mineure], o.Poids[ClosingSeverity.Importante], o.Poids[ClosingSeverity.Critique] }.Should().Equal(new[] { 0, 1, 3, 5 });
+        o.Erreurs().Should().BeEmpty();
         var regles = o.ReglesParDefaut();
-        Assert.Empty(regles.Gravites);
-        Assert.Equal(ClosingRulesOptions.Default with { Gravites = regles.Gravites }, regles);
+        regles.Gravites.Should().BeEmpty();
+        regles.Should().Be(ClosingRulesOptions.Default with { Gravites = regles.Gravites });
     }
 
     [Fact]
@@ -60,17 +60,17 @@ public class ClosingSettingsTests
             ("Closing:Poids:Critique", "10"));
         var regles = o.ReglesParDefaut();
 
-        Assert.Empty(o.Erreurs());
-        Assert.False(o.Enabled);
-        Assert.False(o.ShowNames);
-        Assert.Equal(31, o.MaxPeriodDays);
-        Assert.Equal(60, regles.DuplicateToleranceSeconds);
-        Assert.False(regles.IgnorerSemainesValidees);
-        Assert.Equal(0.05m, regles.CriticalRatioBlocking);
-        Assert.Equal(ClosingSeverity.Importante, regles.Gravite(ClosingAnomalyType.QuasiDoublon));
-        Assert.Equal(ClosingSeverity.Mineure, regles.Gravite(ClosingAnomalyType.PointageManquant));
-        Assert.Equal(ClosingSeverity.Critique, regles.Gravite(ClosingAnomalyType.PointageIncomplet));
-        Assert.Equal(10, regles.PoidsMaximum);
+        o.Erreurs().Should().BeEmpty();
+        o.Enabled.Should().BeFalse();
+        o.ShowNames.Should().BeFalse();
+        o.MaxPeriodDays.Should().Be(31);
+        regles.DuplicateToleranceSeconds.Should().Be(60);
+        regles.IgnorerSemainesValidees.Should().BeFalse();
+        regles.CriticalRatioBlocking.Should().Be(0.05m);
+        regles.Gravite(ClosingAnomalyType.QuasiDoublon).Should().Be(ClosingSeverity.Importante);
+        regles.Gravite(ClosingAnomalyType.PointageManquant).Should().Be(ClosingSeverity.Mineure);
+        regles.Gravite(ClosingAnomalyType.PointageIncomplet).Should().Be(ClosingSeverity.Critique);
+        regles.PoidsMaximum.Should().Be(10);
     }
 
     // ---------- Valeurs invalides ----------
@@ -94,11 +94,11 @@ public class ClosingSettingsTests
         var o = Lus((cle, valeur));
         var resultat = new ClosingOptionsValidator().Validate(null, o);
 
-        Assert.True(resultat.Failed);
-        var message = Assert.Single(resultat.Failures!);
-        Assert.Contains("Réglage de clôture invalide", message);
-        Assert.Contains(attendu, message);
-        Assert.DoesNotContain(valeur, message.Replace(attendu, string.Empty));
+        resultat.Failed.Should().BeTrue();
+        var message = resultat.Failures!.Should().ContainSingle().Which;
+        message.Should().Contain("Réglage de clôture invalide");
+        message.Should().Contain(attendu);
+        message.Replace(attendu, string.Empty).Should().NotContain(valeur);
     }
 
     [Fact]
@@ -106,7 +106,7 @@ public class ClosingSettingsTests
     {
         var o = Lus(("Closing:Poids:Mineure", "0"), ("Closing:Poids:Importante", "0"), ("Closing:Poids:Critique", "0"));
 
-        Assert.Contains(o.Erreurs(), e => e.Contains("poids positif"));
+        o.Erreurs().Should().Contain(e => e.Contains("poids positif"));
     }
 
     [Fact]
@@ -119,8 +119,8 @@ public class ClosingSettingsTests
         services.AddApplication();
         using var provider = services.BuildServiceProvider();
 
-        var erreur = Assert.Throws<OptionsValidationException>(() => provider.GetRequiredService<IOptions<ClosingOptions>>().Value);
-        Assert.Contains("CriticalRatioBlocking", erreur.Message);
+        var erreur = FluentActions.Invoking(() => provider.GetRequiredService<IOptions<ClosingOptions>>().Value).Should().ThrowExactly<OptionsValidationException>().Which;
+        erreur.Message.Should().Contain("CriticalRatioBlocking");
     }
 
     // ---------- Statut ----------
@@ -134,24 +134,24 @@ public class ClosingSettingsTests
     [InlineData(1, 50, "Bloquant")]
     public void Status_FromCriticalRatio(int critiques, int jours, string attendu)
     {
-        Assert.Equal(attendu, ClosingStatusRules.Statut(critiques, jours, 0.02m)?.ToString());
+        (ClosingStatusRules.Statut(critiques, jours, 0.02m)?.ToString()).Should().Be(attendu);
     }
 
     [Fact]
     public void Status_NoControlledDay_IsNull_AndOnlyCriticalsCount()
     {
-        Assert.Null(ClosingStatusRules.Statut(0, 0, 0.02m));
+        ClosingStatusRules.Statut(0, 0, 0.02m).Should().BeNull();
         var mineures = Enumerable.Range(0, 50)
             .Select(_ => new ClosingAnomaly(ClosingAnomalyType.QuasiDoublon, ClosingSeverity.Mineure, "1", DateTime.Today, "x"))
             .ToList();
-        Assert.Equal(ClosingStatus.Pret, ClosingStatusRules.Statut(mineures, 10, 0.02m));
-        Assert.Equal("À corriger", ClosingStatusRules.Libelle(ClosingStatus.ACorriger));
+        ClosingStatusRules.Statut(mineures, 10, 0.02m).Should().Be(ClosingStatus.Pret);
+        ClosingStatusRules.Libelle(ClosingStatus.ACorriger).Should().Be("À corriger");
     }
 
     [Fact]
     public void Status_ZeroRatio_AnyCriticalBlocks()
     {
-        Assert.Equal(ClosingStatus.Bloquant, ClosingStatusRules.Statut(1, 1000, 0m));
+        ClosingStatusRules.Statut(1, 1000, 0m).Should().Be(ClosingStatus.Bloquant);
     }
 
     // ---------- Effet des réglages sur l'analyse ----------
@@ -189,16 +189,16 @@ public class ClosingSettingsTests
         var modifie = await Service(reglages).AnalyserAsync(request);
 
         // Un jour planifié sans pointage : Critique (5) → score 100 − 100 × 5 / 5 = 0, statut Bloquant.
-        Assert.Equal("Critique", Assert.Single(parDefaut.Anomalies.Items).Gravite);
-        Assert.Equal(0, parDefaut.Score);
-        Assert.Equal("Bloquant", parDefaut.Statut);
+        parDefaut.Anomalies.Items.Should().ContainSingle().Which.Gravite.Should().Be("Critique");
+        parDefaut.Score.Should().Be(0);
+        parDefaut.Statut.Should().Be("Bloquant");
         // Gravité ramenée à Mineure (1) : 100 − 100 × 1 / 5 = 80, aucune critique → Prêt.
-        var anomalie = Assert.Single(modifie.Anomalies.Items);
-        Assert.Equal("Mineure", anomalie.Gravite);
-        Assert.Equal(1, anomalie.Poids);
-        Assert.Equal(80, modifie.Score);
-        Assert.Equal("Pret", modifie.Statut);
-        Assert.Equal(1, modifie.ParGravite.Single(g => g.Cle == "Mineure").Nombre);
+        var anomalie = modifie.Anomalies.Items.Should().ContainSingle().Which;
+        anomalie.Gravite.Should().Be("Mineure");
+        anomalie.Poids.Should().Be(1);
+        modifie.Score.Should().Be(80);
+        modifie.Statut.Should().Be("Pret");
+        modifie.ParGravite.Single(g => g.Cle == "Mineure").Nombre.Should().Be(1);
     }
 
     [Fact]
@@ -206,8 +206,8 @@ public class ClosingSettingsTests
     {
         var service = Service(Lus(("Closing:MaxPeriodDays", "7")));
 
-        await Assert.ThrowsAsync<DomainException>(() =>
-            service.AnalyserAsync(new ClosingAnalysisRequest(Lundi, Lundi.AddDays(7))));
+        await FluentActions.Awaiting(() =>
+            service.AnalyserAsync(new ClosingAnalysisRequest(Lundi, Lundi.AddDays(7)))).Should().ThrowExactlyAsync<DomainException>();
         await service.AnalyserAsync(new ClosingAnalysisRequest(Lundi, Lundi.AddDays(6)));
     }
 
@@ -218,6 +218,6 @@ public class ClosingSettingsTests
 
         var resultat = await service.AnalyserAsync(new ClosingAnalysisRequest(Lundi, Lundi, Options: ClosingRulesOptions.Default));
 
-        Assert.Equal("Critique", Assert.Single(resultat.Anomalies.Items).Gravite);
+        resultat.Anomalies.Items.Should().ContainSingle().Which.Gravite.Should().Be("Critique");
     }
 }

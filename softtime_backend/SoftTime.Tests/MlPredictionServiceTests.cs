@@ -29,17 +29,17 @@ public class MlPredictionServiceTests
 
         var semaines = await Service(store).GetHsHorizonAsync();
 
-        Assert.Equal(4, semaines.Count);
-        Assert.Equal(Lundi, semaines[0].SemaineDebut);
-        Assert.Equal(2, semaines[0].Salaries);
-        Assert.Equal(1, semaines[0].AuDelaPlafond);
-        Assert.Equal(44m, semaines[0].HeuresPrevues);
-        Assert.Equal(40m, semaines[0].BorneBasse);
-        Assert.Equal(48m, semaines[0].BorneHaute);
-        Assert.Equal(2.5m, semaines[1].HeuresPrevues);
+        semaines.Count.Should().Be(4);
+        semaines[0].SemaineDebut.Should().Be(Lundi);
+        semaines[0].Salaries.Should().Be(2);
+        semaines[0].AuDelaPlafond.Should().Be(1);
+        semaines[0].HeuresPrevues.Should().Be(44m);
+        semaines[0].BorneBasse.Should().Be(40m);
+        semaines[0].BorneHaute.Should().Be(48m);
+        semaines[1].HeuresPrevues.Should().Be(2.5m);
         // Planning pas encore saisi : la semaine existe, vide.
-        Assert.Equal(0, semaines[3].Salaries);
-        Assert.Equal(0m, semaines[3].HeuresPrevues);
+        semaines[3].Salaries.Should().Be(0);
+        semaines[3].HeuresPrevues.Should().Be(0m);
     }
 
     [Fact]
@@ -56,13 +56,13 @@ public class MlPredictionServiceTests
 
         var suivi = await Service(store).GetHsAccuracyAsync(8);
 
-        var semaine = Assert.Single(suivi);
-        Assert.Equal(semainePassee, semaine.SemaineDebut);
-        Assert.Equal(2, semaine.Salaries);
-        Assert.Equal(5m, semaine.HeuresPrevues);
-        Assert.Equal(9m, semaine.HeuresReelles);
-        Assert.Equal(2m, semaine.EcartMoyen);
-        Assert.Equal(0.5, semaine.Couverture);
+        var semaine = suivi.Should().ContainSingle().Which;
+        semaine.SemaineDebut.Should().Be(semainePassee);
+        semaine.Salaries.Should().Be(2);
+        semaine.HeuresPrevues.Should().Be(5m);
+        semaine.HeuresReelles.Should().Be(9m);
+        semaine.EcartMoyen.Should().Be(2m);
+        semaine.Couverture.Should().Be(0.5);
     }
 
     [Fact]
@@ -70,7 +70,7 @@ public class MlPredictionServiceTests
     {
         var suivi = await Service(new FakeMlStore()).GetHsAccuracyAsync(8);
 
-        Assert.Empty(suivi);
+        suivi.Should().BeEmpty();
     }
 
     // ------------------------------------------------------------------ fixtures

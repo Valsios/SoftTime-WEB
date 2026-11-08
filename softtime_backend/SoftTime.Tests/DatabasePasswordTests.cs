@@ -47,24 +47,24 @@ public class DatabasePasswordTests
     {
         var sage = _mapper.Map<SageDbDto>(_uow.Get<BddSage>().Items[0]);
         var pointeuse = _mapper.Map<PointeuseDbDto>(_uow.Get<BddPointeuse>().Items[0]);
-        Assert.True(sage.PasswordDefined);
-        Assert.True(pointeuse.PasswordDefined);
-        Assert.Null(sage.Password);
-        Assert.Null(pointeuse.Password);
+        sage.PasswordDefined.Should().BeTrue();
+        pointeuse.PasswordDefined.Should().BeTrue();
+        sage.Password.Should().BeNull();
+        pointeuse.Password.Should().BeNull();
 
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         SoftTimeJsonOptions.Configure(options);
         var json = JsonSerializer.Serialize(new object[] { sage, pointeuse }, options);
-        Assert.DoesNotContain(Stored, json);
-        Assert.DoesNotContain("\"password\"", json);
-        Assert.Contains("\"passwordDefined\":true", json);
+        json.Should().NotContain(Stored);
+        json.Should().NotContain("\"password\"");
+        json.Should().Contain("\"passwordDefined\":true");
     }
 
     [Fact]
     public void PasswordDefined_is_false_when_no_password_is_stored()
     {
         var dto = _mapper.Map<SageDbDto>(new BddSage { Id = 1, NomBd = "X", TMdp = "" });
-        Assert.False(dto.PasswordDefined);
+        dto.PasswordDefined.Should().BeFalse();
     }
 
     [Fact]
@@ -72,84 +72,84 @@ public class DatabasePasswordTests
     {
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         var dto = JsonSerializer.Deserialize<SageDbDto>("""{"id":0,"serveur":"s","login":"l","password":"FAKE-INPUT-PWD","nomBd":"B"}""", options)!;
-        Assert.Equal("FAKE-INPUT-PWD", dto.Password);
+        dto.Password.Should().Be("FAKE-INPUT-PWD");
     }
 
     [Fact]
     public async Task Save_without_password_keeps_the_stored_one()
     {
         var result = await Admin().Sage.SaveSageAsync(new SageDbDto(7, "srv", "sa", null, true, "BASE1"));
-        Assert.Equal(Stored, _uow.Get<BddSage>().Items[0].TMdp);
-        Assert.True(result.PasswordDefined);
-        Assert.Null(result.Password);
+        _uow.Get<BddSage>().Items[0].TMdp.Should().Be(Stored);
+        result.PasswordDefined.Should().BeTrue();
+        result.Password.Should().BeNull();
 
         await Admin().Pointeuse.SavePointeuseAsync(new PointeuseDbDto(8, "srv", "sa", "", true, "PTG", null, false));
-        Assert.Equal(Stored, _uow.Get<BddPointeuse>().Items[0].TMdp);
+        _uow.Get<BddPointeuse>().Items[0].TMdp.Should().Be(Stored);
     }
 
     [Fact]
     public async Task Save_with_password_replaces_the_stored_one()
     {
         var result = await Admin().Sage.SaveSageAsync(new SageDbDto(7, "srv", "sa", Typed, true, "BASE1"));
-        Assert.Equal(Typed, _uow.Get<BddSage>().Items[0].TMdp);
-        Assert.Null(result.Password);
+        _uow.Get<BddSage>().Items[0].TMdp.Should().Be(Typed);
+        result.Password.Should().BeNull();
 
         await Admin().Pointeuse.SavePointeuseAsync(new PointeuseDbDto(8, "srv", "sa", Typed, true, "PTG", null, false));
-        Assert.Equal(Typed, _uow.Get<BddPointeuse>().Items[0].TMdp);
+        _uow.Get<BddPointeuse>().Items[0].TMdp.Should().Be(Typed);
     }
 
     [Fact]
     public async Task Create_stores_the_password_and_does_not_return_it()
     {
         var result = await Admin().Sage.SaveSageAsync(new SageDbDto(0, "srv2", "sa", Typed, true, "NOUVELLE"));
-        Assert.Equal(Typed, _uow.Get<BddSage>().Items.Single(s => s.NomBd == "NOUVELLE").TMdp);
-        Assert.True(result.PasswordDefined);
-        Assert.Null(result.Password);
+        _uow.Get<BddSage>().Items.Single(s => s.NomBd == "NOUVELLE").TMdp.Should().Be(Typed);
+        result.PasswordDefined.Should().BeTrue();
+        result.Password.Should().BeNull();
     }
 
     [Fact]
     public async Task Connection_test_of_an_existing_base_uses_the_stored_password()
     {
         await Admin().Sage.TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "sa", null, "BASE1", "STANDARD", null, 7));
-        Assert.Equal(Stored, _discovery.LastPassword);
+        _discovery.LastPassword.Should().Be(Stored);
 
         await Admin().Pointeuse.TestPointeuseConnectionAsync(new TestPointeuseConnectionDto("srv", true, "sa", "", "PTG", "STANDARD", null, 8));
-        Assert.Equal(Stored, _discovery.LastPassword);
+        _discovery.LastPassword.Should().Be(Stored);
     }
 
     [Fact]
     public async Task Connection_test_prefers_a_typed_password()
     {
         await Admin().Sage.TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "sa", Typed, "BASE1", "STANDARD", null, 7));
-        Assert.Equal(Typed, _discovery.LastPassword);
+        _discovery.LastPassword.Should().Be(Typed);
     }
 
     [Fact]
     public async Task Connection_test_of_a_new_base_without_password_sends_none()
     {
         await Admin().Sage.TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "sa", null, "BASE1", "STANDARD", null, null));
-        Assert.Null(_discovery.LastPassword);
+        _discovery.LastPassword.Should().BeNull();
     }
 
     [Fact]
     public async Task Stored_password_is_never_sent_to_another_server_or_login()
     {
-        await Assert.ThrowsAsync<DomainException>(() =>
-            Admin().Sage.TestSageConnectionAsync(new TestSageConnectionDto("autre-serveur", true, "sa", null, "BASE1", "STANDARD", null, 7)));
-        await Assert.ThrowsAsync<DomainException>(() =>
-            Admin().Sage.TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "autre-login", null, "BASE1", "STANDARD", null, 7)));
-        Assert.Null(_discovery.LastPassword);
+        await FluentActions.Awaiting(() =>
+            Admin().Sage.TestSageConnectionAsync(new TestSageConnectionDto("autre-serveur", true, "sa", null, "BASE1", "STANDARD", null, 7))).Should().ThrowExactlyAsync<DomainException>();
+        await FluentActions.Awaiting(() =>
+            Admin().Sage.TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "autre-login", null, "BASE1", "STANDARD", null, 7))).Should().ThrowExactlyAsync<DomainException>();
+        _discovery.LastPassword.Should().BeNull();
     }
 
     [Fact]
     public async Task Discovery_of_an_existing_base_uses_the_stored_password()
     {
         await Admin().Discovery.DiscoverTablesAsync(new DiscoverTablesDto("srv", "BASE1", true, "sa", null, 7, "SAGE"));
-        Assert.Equal(Stored, _discovery.LastPassword);
+        _discovery.LastPassword.Should().Be(Stored);
         await Admin().Discovery.DiscoverColumnsAsync(new DiscoverColumnsDto("srv", "PTG", "T", true, "sa", "", 8, "POINTEUSE"));
-        Assert.Equal(Stored, _discovery.LastPassword);
+        _discovery.LastPassword.Should().Be(Stored);
         await Admin().Discovery.DiscoverDatabasesAsync(new DiscoverDatabasesDto("srv", true, "sa", null, 7, "SAGE"));
-        Assert.Equal(Stored, _discovery.LastPassword);
+        _discovery.LastPassword.Should().Be(Stored);
     }
 
     [Fact]
@@ -158,13 +158,13 @@ public class DatabasePasswordTests
         // Compte avec la porte Bases mais seulement la lecture : l'usage du mot de passe stocké est refusé.
         _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 2, PermissionCode = "SAGE:BASE1:READ", IsGranted = true });
         var svc = Catalog(2, 5, Rights.Databases);
-        await Assert.ThrowsAsync<ForbiddenException>(() =>
-            svc.Sage.TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "sa", null, "BASE1", "STANDARD", null, 7)));
-        Assert.Null(_discovery.LastPassword);
+        await FluentActions.Awaiting(() =>
+            svc.Sage.TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "sa", null, "BASE1", "STANDARD", null, 7))).Should().ThrowExactlyAsync<ForbiddenException>();
+        _discovery.LastPassword.Should().BeNull();
 
         _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 2, PermissionCode = "SAGE:BASE1:UPDATE", IsGranted = true });
         await svc.Sage.TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "sa", null, "BASE1", "STANDARD", null, 7));
-        Assert.Equal(Stored, _discovery.LastPassword);
+        _discovery.LastPassword.Should().Be(Stored);
     }
 
     [Fact]
@@ -181,10 +181,10 @@ public class DatabasePasswordTests
         var me = await _auth.GetMeAsync(9);
         foreach (var response in new[] { login, me })
         {
-            Assert.NotEmpty(response.AuthorizedDatabases);
+            response.AuthorizedDatabases.Should().NotBeEmpty();
             var json = JsonSerializer.Serialize(response, options);
-            Assert.DoesNotContain(Stored, json);
-            Assert.All(response.AuthorizedDatabases, d => { Assert.Null(d.Password); Assert.True(d.PasswordDefined); });
+            json.Should().NotContain(Stored);
+            response.AuthorizedDatabases.Should().AllSatisfy(d => { d.Password.Should().BeNull(); d.PasswordDefined.Should().BeTrue(); });
         }
     }
 

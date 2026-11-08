@@ -13,7 +13,7 @@ public class SearchExpressionTests
     [Fact]
     public void EmptySearchReturnsNull()
     {
-        Assert.Null(SearchExpression.For<Row>("  ", row => row.Nom));
+        SearchExpression.For<Row>("  ", row => row.Nom).Should().BeNull();
     }
 
     [Fact]
@@ -28,10 +28,10 @@ public class SearchExpressionTests
 
         var predicate = SearchExpression.For<Row>("dupont ren", row => row.Nom, row => row.Code);
 
-        Assert.NotNull(predicate);
+        predicate.Should().NotBeNull();
         var result = rows.Where(predicate!).ToList();
-        Assert.Single(result);
-        Assert.Equal("MAT-01", result[0].Code);
+        result.Should().ContainSingle();
+        result[0].Code.Should().Be("MAT-01");
     }
 
     [Fact]
@@ -40,8 +40,8 @@ public class SearchExpressionTests
         var rows = new[] { new Row { Nom = null, Code = "X" } }.AsQueryable();
         var predicate = SearchExpression.For<Row>("x", row => row.Nom);
 
-        Assert.NotNull(predicate);
-        Assert.Empty(rows.Where(predicate!).ToList());
+        predicate.Should().NotBeNull();
+        rows.Where(predicate!).ToList().Should().BeEmpty();
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public class SearchExpressionTests
         var combined = SearchExpression.AndAlso(left, right);
 
         var result = rows.Where(combined).ToList();
-        Assert.Single(result);
-        Assert.Equal("A", result[0].Code);
+        result.Should().ContainSingle();
+        result[0].Code.Should().Be("A");
     }
 }

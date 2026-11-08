@@ -114,10 +114,10 @@ public class MlDatasetParityTests
         var result = await ctx.Dataset().BuildAsync(Lundi, Dimanche, persist: true);
 
         var planned = ctx.Store.Daily.Where(d => d.EstJourPlanifie).ToList();
-        Assert.Equal(5, planned.Count);
-        Assert.Equal(2, ctx.Store.Daily.Count(d => d.AbsenceNonJustifiee));
-        Assert.True(ctx.Store.Daily.Single(d => d.Date == Vendredi).AbsenceDeclaree);
-        Assert.False(ctx.Store.Daily.Single(d => d.Date == Vendredi).AbsenceNonJustifiee);
+        planned.Count.Should().Be(5);
+        ctx.Store.Daily.Count(d => d.AbsenceNonJustifiee).Should().Be(2);
+        ctx.Store.Daily.Single(d => d.Date == Vendredi).AbsenceDeclaree.Should().BeTrue();
+        ctx.Store.Daily.Single(d => d.Date == Vendredi).AbsenceNonJustifiee.Should().BeFalse();
 
         // ParitÃ© avec l'Ã©tat des absences, sur la mÃªme population et la mÃªme rÃ¨gle.
         var absences = AbsenceReportRules.Calculer(
@@ -135,11 +135,11 @@ public class MlDatasetParityTests
             .Select(d => d.Date.Date)
             .OrderBy(d => d)
             .ToList();
-        Assert.Equal(datesEtat, datesMl);
+        datesMl.Should().Equal(datesEtat);
 
-        Assert.Single(ctx.Store.Weekly);
-        Assert.False(ctx.Store.Weekly[0].HsValidee);
-        Assert.Equal(1, result.WeeklyRows);
+        ctx.Store.Weekly.Should().ContainSingle();
+        ctx.Store.Weekly[0].HsValidee.Should().BeFalse();
+        result.WeeklyRows.Should().Be(1);
     }
 
     [Fact]
@@ -167,10 +167,10 @@ public class MlDatasetParityTests
             .Where(d => (d.RetardMinutes ?? 0) > 0)
             .ToDictionary(d => d.Date.Date, d => d.RetardMinutes ?? 0);
 
-        Assert.Equal(2, etat.Count);
-        Assert.Equal(etat.OrderBy(kv => kv.Key), ml.OrderBy(kv => kv.Key));
-        Assert.Equal(15, ml[Lundi]);
-        Assert.Equal(55, ml[Lundi.AddDays(3)]);
+        etat.Count.Should().Be(2);
+        ml.OrderBy(kv => kv.Key).Should().Equal(etat.OrderBy(kv => kv.Key));
+        ml[Lundi].Should().Be(15);
+        ml[Lundi.AddDays(3)].Should().Be(55);
     }
 
     [Fact]
@@ -198,10 +198,10 @@ public class MlDatasetParityTests
         var ecran = (await ctx.Overtime().PreviewWeekPagedAsync(new PeriodRequest(null, null, Lundi, Dimanche), 1, 50))
             .Items.Single();
 
-        var semaine = Assert.Single(ctx.Store.Weekly);
-        Assert.True(ecran.Hs > 0m);
-        Assert.Equal(Math.Round(ecran.Hs ?? 0m, 2), semaine.Hs);
-        Assert.Equal(Math.Round(ecran.Absence ?? 0m, 2), semaine.AbsenceHeures);
+        var semaine = ctx.Store.Weekly.Should().ContainSingle().Which;
+        (ecran.Hs > 0m).Should().BeTrue();
+        semaine.Hs.Should().Be(Math.Round(ecran.Hs ?? 0m, 2));
+        semaine.AbsenceHeures.Should().Be(Math.Round(ecran.Absence ?? 0m, 2));
     }
 
     [Fact]
@@ -218,12 +218,12 @@ public class MlDatasetParityTests
 
         var lignes = await ctx.Dataset().BuildInferenceDailyAsync(aujourdHui, aujourdHui.AddDays(6));
 
-        Assert.NotEmpty(lignes);
-        Assert.All(lignes, l =>
+        lignes.Should().NotBeEmpty();
+        lignes.Should().AllSatisfy(l =>
         {
-            Assert.False(l.AbsenceNonJustifiee);
-            Assert.Equal(0, l.Absences7j);
-            Assert.Equal(0d, l.TauxAbsence30j);
+            l.AbsenceNonJustifiee.Should().BeFalse();
+            l.Absences7j.Should().Be(0);
+            l.TauxAbsence30j.Should().Be(0d);
         });
     }
 
@@ -241,7 +241,7 @@ public class MlDatasetParityTests
 
         var resultat = MlDataQuality.JoursSansPointage(jours, options);
 
-        Assert.Equal(new[] { trou }, resultat.ToArray());
+        resultat.ToArray().Should().Equal(new[] { trou });
     }
 
     [Fact]
@@ -252,16 +252,16 @@ public class MlDatasetParityTests
 
         var tranches = MlPipelineService.Chunks(from, to, 3).ToList();
 
-        Assert.Equal(DayOfWeek.Monday, tranches[0].Start.DayOfWeek);
-        Assert.True(tranches[0].Start <= from);
-        Assert.Equal(to, tranches[^1].End);
+        tranches[0].Start.DayOfWeek.Should().Be(DayOfWeek.Monday);
+        (tranches[0].Start <= from).Should().BeTrue();
+        tranches[^1].End.Should().Be(to);
         foreach (var (start, end) in tranches.SkipLast(1))
         {
-            Assert.Equal(DayOfWeek.Monday, start.DayOfWeek);
-            Assert.Equal(DayOfWeek.Sunday, end.DayOfWeek);
+            start.DayOfWeek.Should().Be(DayOfWeek.Monday);
+            end.DayOfWeek.Should().Be(DayOfWeek.Sunday);
         }
         for (var i = 1; i < tranches.Count; i++)
-            Assert.Equal(tranches[i - 1].End.AddDays(1), tranches[i].Start);
+            tranches[i].Start.Should().Be(tranches[i - 1].End.AddDays(1));
     }
 
     private static PlanningSalarie Plan(int id, DateTime jour, TimeSpan fin, string pointeuse) => new()

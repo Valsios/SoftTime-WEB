@@ -52,17 +52,17 @@ public class SensitiveReadsHttpTests : IClassFixture<ApiFactory>
 
         if (profile == "anonyme")
         {
-            Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
+            resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         }
         else if (profile == "admin" || allowed.Contains(profile))
         {
-            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+            resp.StatusCode.Should().Be(HttpStatusCode.OK);
         }
         else
         {
-            Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+            resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
             // joel et user1 n'ont pas la porte 2 : RequireDroit répond sans corps ; les autres reçoivent le message prévu.
-            if (Gate2Profiles.Contains(profile)) Assert.Contains(Denied, text);
+            if (Gate2Profiles.Contains(profile)) text.Should().Contain(Denied);
         }
     }
 
@@ -71,9 +71,9 @@ public class SensitiveReadsHttpTests : IClassFixture<ApiFactory>
     {
         // GET privileges/user/{id} est réservé à PARAMS:PRIVILEGES ; un compte lit les siens via /auth/me.
         var me = await _http.SendAsync(_f.Request("param2", HttpMethod.Get, "/api/v1/auth/me"));
-        Assert.Equal(HttpStatusCode.OK, me.StatusCode);
+        me.StatusCode.Should().Be(HttpStatusCode.OK);
         var route = await _http.SendAsync(_f.Request("param2", HttpMethod.Get, "/api/v1/privileges/user/10040"));
-        Assert.Equal(HttpStatusCode.Forbidden, route.StatusCode);
+        route.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     // Routes volontairement NON protégées par cette étape : elles documentent le comportement actuel.
@@ -82,9 +82,9 @@ public class SensitiveReadsHttpTests : IClassFixture<ApiFactory>
     public async Task Audit_of_rights_is_governed_by_the_traceability_gate(string url, string profile)
     {
         var ok = await _http.SendAsync(_f.Request(profile, HttpMethod.Get, url));
-        Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        ok.StatusCode.Should().Be(HttpStatusCode.OK);
         var refused = await _http.SendAsync(_f.Request(U, HttpMethod.Get, url));
-        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);   // porte 2 et PARAMS:USERS ne donnent pas la porte 5
+        refused.StatusCode.Should().Be(HttpStatusCode.Forbidden);   // porte 2 et PARAMS:USERS ne donnent pas la porte 5
     }
 
     [Theory]
@@ -94,7 +94,7 @@ public class SensitiveReadsHttpTests : IClassFixture<ApiFactory>
     public async Task Lists_used_by_other_screens_stay_open_to_any_authenticated_account(string url)
     {
         var resp = await _http.SendAsync(_f.Request("paramsother", HttpMethod.Get, url));
-        Assert.NotEqual(HttpStatusCode.Forbidden, resp.StatusCode);
-        Assert.NotEqual(HttpStatusCode.Unauthorized, resp.StatusCode);
+        resp.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+        resp.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
     }
 }

@@ -19,8 +19,8 @@ public class AuditServiceTests
     public void ListAllowedTypes_ReturnsNonEmptyOptions()
     {
         var types = _service.ListAllowedTypes();
-        Assert.NotEmpty(types);
-        Assert.Contains(types, t => t.Value == "nvarchar");
+        types.Should().NotBeEmpty();
+        types.Should().Contain(t => t.Value == "nvarchar");
     }
 
     [Fact]
@@ -31,13 +31,13 @@ public class AuditServiceTests
         await _service.SaveConfigAsync(dto);
 
         var repo = _uow.Get<SuiviConfiguration>();
-        Assert.Single(repo.Items);
+        repo.Items.Should().ContainSingle();
         var added = repo.Items[0];
-        Assert.Equal("T_EMPLOYEE", added.Tables);
-        Assert.Equal("NOM", added.Colonnes);
-        Assert.Equal("varchar", added.Types);
-        Assert.True(added.Etats);
-        Assert.Equal("SOFTTIME_SUITE", added.Bases);
+        added.Tables.Should().Be("T_EMPLOYEE");
+        added.Colonnes.Should().Be("NOM");
+        added.Types.Should().Be("varchar");
+        added.Etats.Should().BeTrue();
+        added.Bases.Should().Be("SOFTTIME_SUITE");
     }
 
     [Theory]
@@ -51,10 +51,10 @@ public class AuditServiceTests
     {
         var dto = new AuditConfigDto(0, "T_EMPLOYEE", "NOM", invalidType, true, "SOFTTIME_SUITE");
 
-        await Assert.ThrowsAsync<DomainException>(() => _service.SaveConfigAsync(dto));
+        await FluentActions.Awaiting(() => _service.SaveConfigAsync(dto)).Should().ThrowExactlyAsync<DomainException>();
 
         var repo = _uow.Get<SuiviConfiguration>();
-        Assert.Empty(repo.Items);
+        repo.Items.Should().BeEmpty();
     }
 
     [Fact]
@@ -76,9 +76,9 @@ public class AuditServiceTests
 
         await _service.SaveConfigAsync(dto);
 
-        Assert.Equal("COMMENTAIRE_RENOMME", existing.Colonnes);
-        Assert.Equal("legacy_exotic_type", existing.Types);
-        Assert.False(existing.Etats);
+        existing.Colonnes.Should().Be("COMMENTAIRE_RENOMME");
+        existing.Types.Should().Be("legacy_exotic_type");
+        existing.Etats.Should().BeFalse();
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public class AuditServiceTests
 
         await _service.SaveConfigAsync(dto);
 
-        Assert.Equal("int", existing.Types);
+        existing.Types.Should().Be("int");
     }
 
     [Fact]
@@ -120,9 +120,9 @@ public class AuditServiceTests
 
         var dto = new AuditConfigDto(10, "T_TEST", "COL1", "invalid_type", true, "SOFTTIME_SUITE");
 
-        await Assert.ThrowsAsync<DomainException>(() => _service.SaveConfigAsync(dto));
+        await FluentActions.Awaiting(() => _service.SaveConfigAsync(dto)).Should().ThrowExactlyAsync<DomainException>();
 
-        Assert.Equal("varchar", existing.Types);
+        existing.Types.Should().Be("varchar");
     }
 
     [Fact]
@@ -130,7 +130,7 @@ public class AuditServiceTests
     {
         var dto = new AuditConfigDto(999, "T_TEST", "COL1", "int", true, "SOFTTIME_SUITE");
 
-        await Assert.ThrowsAsync<NotFoundException>(() => _service.SaveConfigAsync(dto));
+        await FluentActions.Awaiting(() => _service.SaveConfigAsync(dto)).Should().ThrowExactlyAsync<NotFoundException>();
     }
 
     #region In-Memory Test Doubles

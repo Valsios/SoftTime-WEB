@@ -38,21 +38,21 @@ public class PredictionsHttpTests : IClassFixture<ApiFactory>
 
         if (profile == "anonyme")
         {
-            Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
+            resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         }
         else if (profile is "admin" or "predreader" || (profile == "prednobase" && url.EndsWith("/job", StringComparison.Ordinal)))
         {
             // Autorisé : la route répond (la base analytique est remplacée par une doublure vide dans ces tests).
-            Assert.NotEqual(HttpStatusCode.Forbidden, resp.StatusCode);
-            Assert.NotEqual(HttpStatusCode.Unauthorized, resp.StatusCode);
-            if (url.EndsWith("/job", StringComparison.Ordinal)) Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+            resp.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+            resp.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
+            if (url.EndsWith("/job", StringComparison.Ordinal)) resp.StatusCode.Should().Be(HttpStatusCode.OK);
         }
         else
         {
-            Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+            resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
             // La base est contrôlée en premier (règle 4b-5) : le message de permission n'apparaît que pour un compte qui a accès à la base.
-            if (profile is "gate6only" || profile == "joel" || url.EndsWith("/job", StringComparison.Ordinal)) Assert.Contains(Denied, text);
-            else Assert.Contains("accès à cette base", text);
+            if (profile is "gate6only" || profile == "joel" || url.EndsWith("/job", StringComparison.Ordinal)) text.Should().Contain(Denied);
+            else text.Should().Contain("accès à cette base");
         }
     }
 
@@ -60,7 +60,7 @@ public class PredictionsHttpTests : IClassFixture<ApiFactory>
     public async Task Gate_6_alone_without_the_prediction_permission_is_refused_even_on_the_job_state()
     {
         var resp = await _http.SendAsync(_f.Request("gate6only", HttpMethod.Get, "/api/v1/predictions/job"));
-        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public class PredictionsHttpTests : IClassFixture<ApiFactory>
     {
         var before = _f.Snapshot();
         await _http.SendAsync(_f.Request("gate6only", HttpMethod.Get, "/api/v1/predictions/overtime", sageHeader: ApiFactory.SageName));
-        Assert.Equal(before, _f.Snapshot());
+        _f.Snapshot().Should().Be(before);
     }
 
     // Étape 4b-11 : déclencher un traitement (entraînement, recalcul) est réservé aux administrateurs.
@@ -90,18 +90,18 @@ public class PredictionsHttpTests : IClassFixture<ApiFactory>
 
         if (profile == "anonyme")
         {
-            Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
+            resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         }
         else if (profile == "admin")
         {
             // Accepté, ou « déjà en cours » si un autre test a déjà programmé un traitement : jamais refusé.
-            Assert.Contains(resp.StatusCode, new[] { HttpStatusCode.Accepted, HttpStatusCode.Conflict });
+            new[] { HttpStatusCode.Accepted, HttpStatusCode.Conflict }.Should().Contain(resp.StatusCode);
         }
         else
         {
-            Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
-            Assert.Contains("Cette opération est réservée aux administrateurs.", text);
+            resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            text.Should().Contain("Cette opération est réservée aux administrateurs.");
         }
-        Assert.Equal(before, _f.Snapshot());   // aucune donnée applicative n'est écrite
+        _f.Snapshot().Should().Be(before);   // aucune donnée applicative n'est écrite
     }
 }

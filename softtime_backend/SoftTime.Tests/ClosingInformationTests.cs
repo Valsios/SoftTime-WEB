@@ -142,10 +142,10 @@ public class ClosingInformationTests
     [Fact]
     public void Information_HasWeightZeroAndOtherSeveritiesKeepTheirValues()
     {
-        Assert.Equal(0, (int)ClosingSeverity.Information);
-        Assert.Equal(new[] { 1, 3, 5 }, new[] { (int)ClosingSeverity.Mineure, (int)ClosingSeverity.Importante, (int)ClosingSeverity.Critique });
-        Assert.Equal(0, ClosingRulesOptions.Default.Poids(ClosingSeverity.Information));
-        Assert.Equal(5, ClosingRulesOptions.Default.PoidsMaximum);
+        ((int)ClosingSeverity.Information).Should().Be(0);
+        new[] { (int)ClosingSeverity.Mineure, (int)ClosingSeverity.Importante, (int)ClosingSeverity.Critique }.Should().Equal(new[] { 1, 3, 5 });
+        ClosingRulesOptions.Default.Poids(ClosingSeverity.Information).Should().Be(0);
+        ClosingRulesOptions.Default.PoidsMaximum.Should().Be(5);
     }
 
     [Fact]
@@ -156,9 +156,9 @@ public class ClosingInformationTests
             .ToList();
         var avecMineure = information.Append(new ClosingAnomaly(ClosingAnomalyType.QuasiDoublon, ClosingSeverity.Mineure, "1", Lundi, "x")).ToList();
 
-        Assert.Equal(100, PayrollClosingRules.Score(information, 10));
+        PayrollClosingRules.Score(information, 10).Should().Be(100);
         // Une Mineure (1) sur 10 jours : 100 − 100 × 1 / 50 = 98, quel que soit le nombre d'Information.
-        Assert.Equal(98, PayrollClosingRules.Score(avecMineure, 10));
+        PayrollClosingRules.Score(avecMineure, 10).Should().Be(98);
     }
 
     [Fact]
@@ -168,7 +168,7 @@ public class ClosingInformationTests
             .Select(_ => new ClosingAnomaly(ClosingAnomalyType.FerieNonApplique, ClosingSeverity.Information, "1", Lundi, "x"))
             .ToList();
 
-        Assert.Equal(ClosingStatus.Pret, ClosingStatusRules.Statut(information, 10, 0.05m));
+        ClosingStatusRules.Statut(information, 10, 0.05m).Should().Be(ClosingStatus.Pret);
     }
 
     [Fact]
@@ -179,24 +179,24 @@ public class ClosingInformationTests
 
         var resultat = await ctx.Service.AnalyserAsync(Periode());
 
-        Assert.Equal(2, Compte(resultat.ParGravite, ClosingSeverity.Information));      // les deux fériés
-        Assert.Equal(2, Compte(resultat.ParGravite, ClosingSeverity.Mineure));          // doublon exact + quasi (20 s)
-        Assert.Equal(1, Compte(resultat.ParGravite, ClosingSeverity.Importante));       // pointage sans planning (003, mardi)
-        Assert.Equal(0, Compte(resultat.ParGravite, ClosingSeverity.Critique));
-        Assert.Equal(Enum.GetValues<ClosingSeverity>().Length, resultat.ParGravite.Count);
+        Compte(resultat.ParGravite, ClosingSeverity.Information).Should().Be(2);      // les deux fériés
+        Compte(resultat.ParGravite, ClosingSeverity.Mineure).Should().Be(2);          // doublon exact + quasi (20 s)
+        Compte(resultat.ParGravite, ClosingSeverity.Importante).Should().Be(1);       // pointage sans planning (003, mardi)
+        Compte(resultat.ParGravite, ClosingSeverity.Critique).Should().Be(0);
+        resultat.ParGravite.Count.Should().Be(Enum.GetValues<ClosingSeverity>().Length);
     }
 
     [Fact]
     public void InformationWeight_IsAdjustableButNegativeIsRefused()
     {
         var reglable = Lus(("Closing:Poids:Information", "2"));
-        Assert.Empty(reglable.Erreurs());
-        Assert.Equal(2, reglable.ReglesParDefaut().Poids(ClosingSeverity.Information));
+        reglable.Erreurs().Should().BeEmpty();
+        reglable.ReglesParDefaut().Poids(ClosingSeverity.Information).Should().Be(2);
 
         var negatif = Lus(("Closing:Poids:Information", "-1"));
         var resultat = new ClosingOptionsValidator().Validate(null, negatif);
-        Assert.True(resultat.Failed);
-        Assert.Contains("Poids:Information", Assert.Single(resultat.Failures!));
+        resultat.Failed.Should().BeTrue();
+        resultat.Failures!.Should().ContainSingle().Which.Should().Contain("Poids:Information");
     }
 
     // ---------- Étape 2 : doublons selon le mode ----------
@@ -214,15 +214,11 @@ public class ClosingInformationTests
     {
         var options = ClosingRulesOptions.Default;
 
-        Assert.All(DuplicatePunchRules.DoublonsExacts(Doublons, new ClosingScope(Lundi, Vendredi, true, Options: options)),
-            a => Assert.Equal(ClosingSeverity.Information, a.Severity));
-        Assert.All(DuplicatePunchRules.QuasiDoublons(Doublons, new ClosingScope(Lundi, Vendredi, true, Options: options)),
-            a => Assert.Equal(ClosingSeverity.Information, a.Severity));
-        Assert.All(DuplicatePunchRules.DoublonsExacts(Doublons, new ClosingScope(Lundi, Vendredi, false, Options: options)),
-            a => Assert.Equal(ClosingSeverity.Mineure, a.Severity));
-        Assert.All(DuplicatePunchRules.QuasiDoublons(Doublons, new ClosingScope(Lundi, Vendredi, false, Options: options)),
-            a => Assert.Equal(ClosingSeverity.Mineure, a.Severity));
-        Assert.NotEmpty(DuplicatePunchRules.QuasiDoublons(Doublons, new ClosingScope(Lundi, Vendredi, true, Options: options)));
+        DuplicatePunchRules.DoublonsExacts(Doublons, new ClosingScope(Lundi, Vendredi, true, Options: options)).Should().AllSatisfy(a => a.Severity.Should().Be(ClosingSeverity.Information));
+        DuplicatePunchRules.QuasiDoublons(Doublons, new ClosingScope(Lundi, Vendredi, true, Options: options)).Should().AllSatisfy(a => a.Severity.Should().Be(ClosingSeverity.Information));
+        DuplicatePunchRules.DoublonsExacts(Doublons, new ClosingScope(Lundi, Vendredi, false, Options: options)).Should().AllSatisfy(a => a.Severity.Should().Be(ClosingSeverity.Mineure));
+        DuplicatePunchRules.QuasiDoublons(Doublons, new ClosingScope(Lundi, Vendredi, false, Options: options)).Should().AllSatisfy(a => a.Severity.Should().Be(ClosingSeverity.Mineure));
+        DuplicatePunchRules.QuasiDoublons(Doublons, new ClosingScope(Lundi, Vendredi, true, Options: options)).Should().NotBeEmpty();
     }
 
     [Fact]
@@ -230,11 +226,10 @@ public class ClosingInformationTests
     {
         var options = new ClosingRulesOptions { DoublonsMonoGravite = ClosingSeverity.Importante };
 
-        Assert.Equal(ClosingSeverity.Importante, options.Gravite(ClosingAnomalyType.DoublonExact, multiPointage: false));
-        Assert.Equal(ClosingSeverity.Importante, options.Gravite(ClosingAnomalyType.QuasiDoublon, multiPointage: false));
-        Assert.Equal(ClosingSeverity.Information, options.Gravite(ClosingAnomalyType.DoublonExact, multiPointage: true));
-        Assert.All(DuplicatePunchRules.DoublonsExacts(Doublons, new ClosingScope(Lundi, Vendredi, false, Options: options)),
-            a => Assert.Equal(ClosingSeverity.Importante, a.Severity));
+        options.Gravite(ClosingAnomalyType.DoublonExact, multiPointage: false).Should().Be(ClosingSeverity.Importante);
+        options.Gravite(ClosingAnomalyType.QuasiDoublon, multiPointage: false).Should().Be(ClosingSeverity.Importante);
+        options.Gravite(ClosingAnomalyType.DoublonExact, multiPointage: true).Should().Be(ClosingSeverity.Information);
+        DuplicatePunchRules.DoublonsExacts(Doublons, new ClosingScope(Lundi, Vendredi, false, Options: options)).Should().AllSatisfy(a => a.Severity.Should().Be(ClosingSeverity.Importante));
     }
 
     [Theory]
@@ -248,11 +243,9 @@ public class ClosingInformationTests
 
         var resultat = await ctx.Service.AnalyserAsync(Periode(information: true));
 
-        Assert.All(resultat.Anomalies.Items.Where(a => a.Type == nameof(ClosingAnomalyType.DoublonExact)),
-            a => Assert.Equal("Critique", a.Gravite));
-        Assert.All(resultat.Anomalies.Items.Where(a => a.Type == nameof(ClosingAnomalyType.QuasiDoublon)),
-            a => Assert.Equal("Importante", a.Gravite));
-        Assert.Contains(resultat.Anomalies.Items, a => a.Type == nameof(ClosingAnomalyType.DoublonExact));
+        resultat.Anomalies.Items.Where(a => a.Type == nameof(ClosingAnomalyType.DoublonExact)).Should().AllSatisfy(a => a.Gravite.Should().Be("Critique"));
+        resultat.Anomalies.Items.Where(a => a.Type == nameof(ClosingAnomalyType.QuasiDoublon)).Should().AllSatisfy(a => a.Gravite.Should().Be("Importante"));
+        resultat.Anomalies.Items.Should().Contain(a => a.Type == nameof(ClosingAnomalyType.DoublonExact));
     }
 
     [Fact]
@@ -267,21 +260,21 @@ public class ClosingInformationTests
 
         var appliquees = PayrollClosingRules.AppliquerGravites(exacts, options);
 
-        Assert.All(appliquees, a => Assert.Equal(ClosingSeverity.Information, a.Severity));
+        appliquees.Should().AllSatisfy(a => a.Severity.Should().Be(ClosingSeverity.Information));
     }
 
     [Fact]
     public void Duplicates_DetailTextStatesTheEffectOnPayroll()
     {
-        var exactMulti = Assert.Single(DuplicatePunchRules.DoublonsExacts(Doublons, new ClosingScope(Lundi, Vendredi, true)));
-        var exactMono = Assert.Single(DuplicatePunchRules.DoublonsExacts(Doublons, new ClosingScope(Lundi, Vendredi, false)));
-        var quasiMulti = Assert.Single(DuplicatePunchRules.QuasiDoublons(Doublons, new ClosingScope(Lundi, Vendredi, true)));
-        var quasiMono = Assert.Single(DuplicatePunchRules.QuasiDoublons(Doublons, new ClosingScope(Lundi, Vendredi, false)));
+        var exactMulti = DuplicatePunchRules.DoublonsExacts(Doublons, new ClosingScope(Lundi, Vendredi, true)).Should().ContainSingle().Which;
+        var exactMono = DuplicatePunchRules.DoublonsExacts(Doublons, new ClosingScope(Lundi, Vendredi, false)).Should().ContainSingle().Which;
+        var quasiMulti = DuplicatePunchRules.QuasiDoublons(Doublons, new ClosingScope(Lundi, Vendredi, true)).Should().ContainSingle().Which;
+        var quasiMono = DuplicatePunchRules.QuasiDoublons(Doublons, new ClosingScope(Lundi, Vendredi, false)).Should().ContainSingle().Which;
 
-        Assert.Contains("double passage sans effet sur la paie (multi-pointage)", exactMulti.Detail);
-        Assert.Contains("double passage sans effet sur la paie (multi-pointage)", quasiMulti.Detail);
-        Assert.Contains("peut fausser les heures", exactMono.Detail);
-        Assert.Contains("peut fausser les heures", quasiMono.Detail);
+        exactMulti.Detail.Should().Contain("double passage sans effet sur la paie (multi-pointage)");
+        quasiMulti.Detail.Should().Contain("double passage sans effet sur la paie (multi-pointage)");
+        exactMono.Detail.Should().Contain("peut fausser les heures");
+        quasiMono.Detail.Should().Contain("peut fausser les heures");
     }
 
     // ---------- Étape 2.1 : tolérance de 30 s ----------
@@ -294,7 +287,7 @@ public class ClosingInformationTests
     {
         var pointages = new[] { Punch("369", Lundi, H8), Punch("369", Lundi, Plus(H8, secondes)) };
 
-        Assert.Equal(attendu, DuplicatePunchRules.QuasiDoublons(pointages, new ClosingScope(Lundi, Vendredi)).Count);
+        DuplicatePunchRules.QuasiDoublons(pointages, new ClosingScope(Lundi, Vendredi)).Count.Should().Be(attendu);
     }
 
     // ---------- Étape 3 : salariés sans planning ----------
@@ -320,9 +313,9 @@ public class ClosingInformationTests
 
         var resultat = PlanningCoverageRules.PointagesSansPlanning(Cartes, plannings, PointagesSansPlanning, new ClosingScope(Lundi, Vendredi));
 
-        var anomalie = Assert.Single(resultat);
-        Assert.Equal("3", anomalie.Matricule);          // salarié partiellement planifié : PAS exclu
-        Assert.Equal(Mardi, anomalie.Date);
+        var anomalie = resultat.Should().ContainSingle().Which;
+        anomalie.Matricule.Should().Be("3");          // salarié partiellement planifié : PAS exclu
+        anomalie.Date.Should().Be(Mardi);
     }
 
     [Fact]
@@ -333,7 +326,7 @@ public class ClosingInformationTests
 
         var resultat = PlanningCoverageRules.PointagesSansPlanning(Cartes, plannings, PointagesSansPlanning, new ClosingScope(Lundi, Vendredi, Options: options));
 
-        Assert.Equal(new[] { ("2", Lundi), ("3", Mardi) }, resultat.Select(a => (a.Matricule, a.Date)));
+        resultat.Select(a => (a.Matricule, a.Date)).Should().Equal(new[] { ("2", Lundi), ("3", Mardi) });
     }
 
     [Fact]
@@ -344,7 +337,7 @@ public class ClosingInformationTests
 
         var resultat = PlanningCoverageRules.PointagesSansPlanning(Cartes, plannings, PointagesSansPlanning, new ClosingScope(Lundi, Vendredi));
 
-        Assert.Contains(resultat, a => a.Matricule == "2" && a.Date == Lundi);
+        resultat.Should().Contain(a => a.Matricule == "2" && a.Date == Lundi);
     }
 
     [Fact]
@@ -355,9 +348,9 @@ public class ClosingInformationTests
 
         var exclus = PlanningCoverageRules.SalariesSansPlanningSurPeriode(Cartes, plannings, index, new ClosingScope(Lundi, Vendredi));
 
-        Assert.Contains("2", exclus);
-        Assert.DoesNotContain("1", exclus);
-        Assert.DoesNotContain("3", exclus);
+        exclus.Should().Contain("2");
+        exclus.Should().NotContain("1");
+        exclus.Should().NotContain("3");
     }
 
     [Fact]
@@ -369,13 +362,13 @@ public class ClosingInformationTests
         var parDefaut = await ctx.Service.AnalyserAsync(Periode());
         var sansExclusion = await ctx.Service.AnalyserAsync(Periode(new ClosingRulesOptions { ExclureSansPlanningSurPeriode = false }));
 
-        Assert.Equal(1, parDefaut.SalariesSansPlanningExclus);                      // 002
-        Assert.Equal(1, Compte(parDefaut.ParType, ClosingAnomalyType.PointageSansPlanning));
-        Assert.Equal(0, sansExclusion.SalariesSansPlanningExclus);
-        Assert.Equal(2, Compte(sansExclusion.ParType, ClosingAnomalyType.PointageSansPlanning));
+        parDefaut.SalariesSansPlanningExclus.Should().Be(1);                      // 002
+        Compte(parDefaut.ParType, ClosingAnomalyType.PointageSansPlanning).Should().Be(1);
+        sansExclusion.SalariesSansPlanningExclus.Should().Be(0);
+        Compte(sansExclusion.ParType, ClosingAnomalyType.PointageSansPlanning).Should().Be(2);
         // Les jours de 002 restent dans les jours-employé contrôlés dans les deux cas : 5 + 1 + 2.
-        Assert.Equal(8, parDefaut.JoursEmployeControles);
-        Assert.Equal(8, sansExclusion.JoursEmployeControles);
+        parDefaut.JoursEmployeControles.Should().Be(8);
+        sansExclusion.JoursEmployeControles.Should().Be(8);
     }
 
     // ---------- Étape 4 : férié non appliqué ----------
@@ -389,19 +382,18 @@ public class ClosingInformationTests
         var resultat = await ctx.Service.AnalyserAsync(Periode(information: true));
         var feries = resultat.Anomalies.Items.Where(a => a.Type == nameof(ClosingAnomalyType.FerieNonApplique)).OrderBy(a => a.Date).ToList();
 
-        Assert.Equal(2, feries.Count);
-        Assert.All(feries, a =>
+        feries.Count.Should().Be(2);
+        feries.Should().AllSatisfy(a =>
         {
-            Assert.Equal("Information", a.Gravite);
-            Assert.Equal(0, a.Poids);
-            Assert.Equal("drapeau férié absent (sans effet sur le calcul de la paie)", a.Detail);
+            a.Gravite.Should().Be("Information");
+            a.Poids.Should().Be(0);
+            a.Detail.Should().Be("drapeau férié absent (sans effet sur le calcul de la paie)");
         });
-        Assert.Equal(Mercredi, feries[0].Date);
-        Assert.True(feries[0].PointageExiste);                                       // pointage le mercredi
-        Assert.Equal(Jeudi, feries[1].Date);
-        Assert.False(feries[1].PointageExiste);                                      // aucun pointage le jeudi
-        Assert.All(resultat.Anomalies.Items.Where(a => a.Type != nameof(ClosingAnomalyType.FerieNonApplique)),
-            a => Assert.Null(a.PointageExiste));
+        feries[0].Date.Should().Be(Mercredi);
+        feries[0].PointageExiste.Should().BeTrue();                                       // pointage le mercredi
+        feries[1].Date.Should().Be(Jeudi);
+        feries[1].PointageExiste.Should().BeFalse();                                      // aucun pointage le jeudi
+        resultat.Anomalies.Items.Where(a => a.Type != nameof(ClosingAnomalyType.FerieNonApplique)).Should().AllSatisfy(a => a.PointageExiste.Should().BeNull());
     }
 
     [Fact]
@@ -416,8 +408,8 @@ public class ClosingInformationTests
                                                         new ReportPeriod(Lundi, Vendredi, new DateTime(2025, 12, 1)),
                                                         ClosingPunchIndex.Build(new[] { Punch("001", Mercredi, H8) }));
 
-        Assert.Null(Assert.Single(sans).PointageExiste);
-        Assert.True(Assert.Single(avec).PointageExiste);
+        sans.Should().ContainSingle().Which.PointageExiste.Should().BeNull();
+        avec.Should().ContainSingle().Which.PointageExiste.Should().BeTrue();
     }
 
     // ---------- Étape 5 : seuil ----------
@@ -425,12 +417,12 @@ public class ClosingInformationTests
     [Fact]
     public void BlockingThreshold_DefaultIsFivePercent()
     {
-        Assert.Equal(0.05m, ClosingStatusRules.DefaultCriticalRatioBlocking);
-        Assert.Equal(0.05m, ClosingRulesOptions.Default.CriticalRatioBlocking);
-        Assert.Equal(0.05m, new ClosingOptions().CriticalRatioBlocking);
+        ClosingStatusRules.DefaultCriticalRatioBlocking.Should().Be(0.05m);
+        ClosingRulesOptions.Default.CriticalRatioBlocking.Should().Be(0.05m);
+        new ClosingOptions().CriticalRatioBlocking.Should().Be(0.05m);
         // 4 critiques sur 100 jours (4 %) : à corriger ; 5 sur 100 (5 %) : bloquant.
-        Assert.Equal(ClosingStatus.ACorriger, ClosingStatusRules.Statut(4, 100, ClosingRulesOptions.Default.CriticalRatioBlocking));
-        Assert.Equal(ClosingStatus.Bloquant, ClosingStatusRules.Statut(5, 100, ClosingRulesOptions.Default.CriticalRatioBlocking));
+        ClosingStatusRules.Statut(4, 100, ClosingRulesOptions.Default.CriticalRatioBlocking).Should().Be(ClosingStatus.ACorriger);
+        ClosingStatusRules.Statut(5, 100, ClosingRulesOptions.Default.CriticalRatioBlocking).Should().Be(ClosingStatus.Bloquant);
     }
 
     // ---------- Étape 6 : includeInformation ----------
@@ -445,15 +437,15 @@ public class ClosingInformationTests
         var visible = await ctx.Service.AnalyserAsync(Periode(information: true));
 
         // 1 doublon exact + 1 quasi + 2 fériés (Information) + 1 sans planning = 5 ; sans Information : 3.
-        Assert.Equal(5, masque.NombreAnomalies);
-        Assert.Equal(5, visible.NombreAnomalies);
-        Assert.Equal(3, masque.Anomalies.Total);
-        Assert.DoesNotContain(masque.Anomalies.Items, a => a.Gravite == "Information");
-        Assert.Equal(5, visible.Anomalies.Total);
-        Assert.Equal(2, visible.Anomalies.Items.Count(a => a.Gravite == "Information"));
-        Assert.Equal(2, Compte(masque.ParGravite, ClosingSeverity.Information));
-        Assert.Equal(masque.Score, visible.Score);
-        Assert.Equal(masque.Statut, visible.Statut);
+        masque.NombreAnomalies.Should().Be(5);
+        visible.NombreAnomalies.Should().Be(5);
+        masque.Anomalies.Total.Should().Be(3);
+        masque.Anomalies.Items.Should().NotContain(a => a.Gravite == "Information");
+        visible.Anomalies.Total.Should().Be(5);
+        visible.Anomalies.Items.Count(a => a.Gravite == "Information").Should().Be(2);
+        Compte(masque.ParGravite, ClosingSeverity.Information).Should().Be(2);
+        visible.Score.Should().Be(masque.Score);
+        visible.Statut.Should().Be(masque.Statut);
     }
 
     [Fact]
@@ -465,10 +457,10 @@ public class ClosingInformationTests
         var masque = await ctx.Service.AnalyserAsync(Periode());
         var visible = await ctx.Service.AnalyserAsync(Periode(information: true));
 
-        Assert.DoesNotContain(masque.Anomalies.Items, a => a.Type is "DoublonExact" or "QuasiDoublon");
-        Assert.Contains(visible.Anomalies.Items, a => a.Type == "DoublonExact" && a.Gravite == "Information");
-        Assert.Contains(visible.Anomalies.Items, a => a.Type == "QuasiDoublon" && a.Gravite == "Information");
-        Assert.True(Compte(masque.ParGravite, ClosingSeverity.Information) >= 4);
+        masque.Anomalies.Items.Where(a => a.Type is "DoublonExact" or "QuasiDoublon").Should().BeEmpty();
+        visible.Anomalies.Items.Should().Contain(a => a.Type == "DoublonExact" && a.Gravite == "Information");
+        visible.Anomalies.Items.Should().Contain(a => a.Type == "QuasiDoublon" && a.Gravite == "Information");
+        (Compte(masque.ParGravite, ClosingSeverity.Information) >= 4).Should().BeTrue();
     }
 
     [Fact]
@@ -479,9 +471,9 @@ public class ClosingInformationTests
 
         var page = await ctx.Service.AnalyserAsync(Periode(information: true) with { PageSize = 2 });
 
-        Assert.Equal(5, page.Anomalies.Total);
-        Assert.Equal(3, page.Anomalies.TotalPages);
-        Assert.Equal(2, page.Anomalies.Items.Count);
+        page.Anomalies.Total.Should().Be(5);
+        page.Anomalies.TotalPages.Should().Be(3);
+        page.Anomalies.Items.Count.Should().Be(2);
     }
 
     [Fact]
@@ -495,10 +487,10 @@ public class ClosingInformationTests
         var analyse = await ctx.Service.AnalyserAsync(Periode(information: true));
         var rapport = await presentation.PresenterAsync(analyse);
 
-        Assert.Equal(1, rapport.SalariesSansPlanningExclus);
-        Assert.Equal(0.05m, rapport.SeuilBloquant);
+        rapport.SalariesSansPlanningExclus.Should().Be(1);
+        rapport.SeuilBloquant.Should().Be(0.05m);
         var ferie = rapport.Anomalies.Items.First(a => a.Type == nameof(ClosingAnomalyType.FerieNonApplique));
-        Assert.True(ferie.PointageExiste);
+        ferie.PointageExiste.Should().BeTrue();
     }
 
     // ---------- Réglages ----------
@@ -511,12 +503,12 @@ public class ClosingInformationTests
             ("Closing:Gravites:DoublonExact", "Information"));
         var regles = o.ReglesParDefaut();
 
-        Assert.Empty(o.Erreurs());
-        Assert.Equal(ClosingSeverity.Importante, regles.DoublonsMonoGravite);
-        Assert.False(regles.ExclureSansPlanningSurPeriode);
-        Assert.Equal(120, regles.DuplicateToleranceSeconds);
-        Assert.Equal(ClosingSeverity.Importante, regles.Gravite(ClosingAnomalyType.FerieNonApplique));
-        Assert.Equal(ClosingSeverity.Information, regles.Gravite(ClosingAnomalyType.DoublonExact, multiPointage: false));
+        o.Erreurs().Should().BeEmpty();
+        regles.DoublonsMonoGravite.Should().Be(ClosingSeverity.Importante);
+        regles.ExclureSansPlanningSurPeriode.Should().BeFalse();
+        regles.DuplicateToleranceSeconds.Should().Be(120);
+        regles.Gravite(ClosingAnomalyType.FerieNonApplique).Should().Be(ClosingSeverity.Importante);
+        regles.Gravite(ClosingAnomalyType.DoublonExact, multiPointage: false).Should().Be(ClosingSeverity.Information);
     }
 
     [Theory]
@@ -528,10 +520,10 @@ public class ClosingInformationTests
     {
         var resultat = new ClosingOptionsValidator().Validate(null, Lus((cle, valeur)));
 
-        Assert.True(resultat.Failed);
-        var message = Assert.Single(resultat.Failures!);
-        Assert.Contains(attendu, message);
-        Assert.DoesNotContain(valeur, message.Replace(attendu, string.Empty));
+        resultat.Failed.Should().BeTrue();
+        var message = resultat.Failures!.Should().ContainSingle().Which;
+        message.Should().Contain(attendu);
+        message.Replace(attendu, string.Empty).Should().NotContain(valeur);
     }
 
     // ---------- Non-régression : anciens réglages ----------
@@ -545,24 +537,24 @@ public class ClosingInformationTests
         var ancien = await ctx.Service.AnalyserAsync(Periode(AnciensReglages(), information: true));
 
         // Tolérance 120 s : les quasi-doublons à 20 s et à 60 s sont tous deux détectés.
-        Assert.Equal(1, Compte(ancien.ParType, ClosingAnomalyType.DoublonExact));
-        Assert.Equal(2, Compte(ancien.ParType, ClosingAnomalyType.QuasiDoublon));
+        Compte(ancien.ParType, ClosingAnomalyType.DoublonExact).Should().Be(1);
+        Compte(ancien.ParType, ClosingAnomalyType.QuasiDoublon).Should().Be(2);
         // Exclusion désactivée : 002 (lundi) et 003 (mardi) sont tous deux signalés.
-        Assert.Equal(2, Compte(ancien.ParType, ClosingAnomalyType.PointageSansPlanning));
-        Assert.Equal(2, Compte(ancien.ParType, ClosingAnomalyType.FerieNonApplique));
-        Assert.Equal(0, ancien.SalariesSansPlanningExclus);
+        Compte(ancien.ParType, ClosingAnomalyType.PointageSansPlanning).Should().Be(2);
+        Compte(ancien.ParType, ClosingAnomalyType.FerieNonApplique).Should().Be(2);
+        ancien.SalariesSansPlanningExclus.Should().Be(0);
         // Gravités d'avant : 3 Mineures, 4 Importantes, aucune Information ni Critique.
-        Assert.Equal(0, Compte(ancien.ParGravite, ClosingSeverity.Information));
-        Assert.Equal(3, Compte(ancien.ParGravite, ClosingSeverity.Mineure));
-        Assert.Equal(4, Compte(ancien.ParGravite, ClosingSeverity.Importante));
-        Assert.Equal(0, Compte(ancien.ParGravite, ClosingSeverity.Critique));
+        Compte(ancien.ParGravite, ClosingSeverity.Information).Should().Be(0);
+        Compte(ancien.ParGravite, ClosingSeverity.Mineure).Should().Be(3);
+        Compte(ancien.ParGravite, ClosingSeverity.Importante).Should().Be(4);
+        Compte(ancien.ParGravite, ClosingSeverity.Critique).Should().Be(0);
         // La liste complète est visible sans demander les Information : 7 anomalies, 8 jours-employé.
-        Assert.Equal(7, ancien.NombreAnomalies);
-        Assert.Equal(7, ancien.Anomalies.Total);
+        ancien.NombreAnomalies.Should().Be(7);
+        ancien.Anomalies.Total.Should().Be(7);
         // Score : 100 − 100 × (3 × 1 + 4 × 3) / (5 × 8) = 62,5 → 63 ; aucune critique → Prêt.
-        Assert.Equal(63, ancien.Score);
-        Assert.Equal("Pret", ancien.Statut);
-        Assert.All(ancien.Anomalies.Items, a => Assert.NotEqual("Information", a.Gravite));
+        ancien.Score.Should().Be(63);
+        ancien.Statut.Should().Be("Pret");
+        ancien.Anomalies.Items.Should().AllSatisfy(a => a.Gravite.Should().NotBe("Information"));
     }
 
     [Fact]
@@ -574,8 +566,7 @@ public class ClosingInformationTests
         var sans = await ctx.Service.AnalyserAsync(Periode(AnciensReglages(), information: false));
         var avec = await ctx.Service.AnalyserAsync(Periode(AnciensReglages(), information: true));
 
-        Assert.Equal(avec.Anomalies.Items.Select(a => (a.Type, a.Gravite, a.Matricule, a.Date)),
-            sans.Anomalies.Items.Select(a => (a.Type, a.Gravite, a.Matricule, a.Date)));
+        sans.Anomalies.Items.Select(a => (a.Type, a.Gravite, a.Matricule, a.Date)).Should().Equal(avec.Anomalies.Items.Select(a => (a.Type, a.Gravite, a.Matricule, a.Date)));
     }
 
     [Fact]
@@ -586,10 +577,10 @@ public class ClosingInformationTests
 
         var nouveau = await ctx.Service.AnalyserAsync(Periode());
 
-        Assert.Equal(1, Compte(nouveau.ParType, ClosingAnomalyType.QuasiDoublon));           // 20 s oui, 60 s non
-        Assert.Equal(1, Compte(nouveau.ParType, ClosingAnomalyType.PointageSansPlanning));   // 002 exclu
-        Assert.Equal(2, Compte(nouveau.ParGravite, ClosingSeverity.Information));            // fériés
+        Compte(nouveau.ParType, ClosingAnomalyType.QuasiDoublon).Should().Be(1);           // 20 s oui, 60 s non
+        Compte(nouveau.ParType, ClosingAnomalyType.PointageSansPlanning).Should().Be(1);   // 002 exclu
+        Compte(nouveau.ParGravite, ClosingSeverity.Information).Should().Be(2);            // fériés
         // Score : 100 − 100 × (2 × 1 + 1 × 3) / (5 × 8) = 87,5 → 88.
-        Assert.Equal(88, nouveau.Score);
+        nouveau.Score.Should().Be(88);
     }
 }

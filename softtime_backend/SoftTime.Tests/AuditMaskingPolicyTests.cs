@@ -34,7 +34,7 @@ public class AuditMaskingPolicyTests
     [InlineData("T_QUELCONQUE", "CONNECTIONSTRING")]
     [InlineData("T_QUELCONQUE", "PRIVATE_KEY")]
     public void Listed_and_pattern_columns_are_sensitive(string table, string column)
-        => Assert.True(AuditMaskingPolicy.IsSensitive(table, column));
+        => AuditMaskingPolicy.IsSensitive(table, column).Should().BeTrue();
 
     [Theory]
     [InlineData("T_RESPONSABLE", "EMAIL")]
@@ -44,22 +44,22 @@ public class AuditMaskingPolicyTests
     [InlineData("T_FERIE", "SERVEUR")]
     [InlineData("T_FERIE", null)]
     public void Email_matricule_and_ordinary_columns_stay_visible(string table, string? column)
-        => Assert.False(AuditMaskingPolicy.IsSensitive(table, column));
+        => AuditMaskingPolicy.IsSensitive(table, column).Should().BeFalse();
 
     [Fact]
     public void Mask_value_keeps_null_and_masks_sensitive_values_only()
     {
-        Assert.Null(AuditMaskingPolicy.MaskValue("T_BDD_SAGE", "TMDP", null));
-        Assert.Equal(AuditMaskingPolicy.Mask, AuditMaskingPolicy.MaskValue("T_BDD_SAGE", "TMDP", "clair"));
-        Assert.Equal("a@b.test", AuditMaskingPolicy.MaskValue("T_RESPONSABLE", "EMAIL", "a@b.test"));
+        AuditMaskingPolicy.MaskValue("T_BDD_SAGE", "TMDP", null).Should().BeNull();
+        AuditMaskingPolicy.MaskValue("T_BDD_SAGE", "TMDP", "clair").Should().Be(AuditMaskingPolicy.Mask);
+        AuditMaskingPolicy.MaskValue("T_RESPONSABLE", "EMAIL", "a@b.test").Should().Be("a@b.test");
     }
 
     [Fact]
     public void Mask_key_masks_only_sensitive_key_columns()
     {
-        Assert.Equal("ID=3;TMDP=********", AuditMaskingPolicy.MaskKey("T_BDD_SAGE", "ID=3;TMDP=clair"));
-        Assert.Equal("IDRESPONSABLE=14", AuditMaskingPolicy.MaskKey("T_RESPONSABLE", "IDRESPONSABLE=14"));
-        Assert.Null(AuditMaskingPolicy.MaskKey("T_RESPONSABLE", null));
+        AuditMaskingPolicy.MaskKey("T_BDD_SAGE", "ID=3;TMDP=clair").Should().Be("ID=3;TMDP=********");
+        AuditMaskingPolicy.MaskKey("T_RESPONSABLE", "IDRESPONSABLE=14").Should().Be("IDRESPONSABLE=14");
+        AuditMaskingPolicy.MaskKey("T_RESPONSABLE", null).Should().BeNull();
     }
 
     [Fact]
@@ -70,7 +70,7 @@ public class AuditMaskingPolicyTests
             .Select(type => (Table: type.GetTableName() ?? type.ClrType.Name, Type: type))
             .SelectMany(x => x.Type.GetProperties().Select(p => (x.Table, Column: p.GetColumnName() ?? p.Name, Property: p.Name)))
             .ToList();
-        Assert.NotEmpty(columns);
+        columns.Should().NotBeEmpty();
 
         var unmasked = columns
             .Where(c => SecretLikeFragments.Any(f => c.Column.Contains(f, StringComparison.OrdinalIgnoreCase)
@@ -79,10 +79,10 @@ public class AuditMaskingPolicyTests
             .Select(c => $"{c.Table}.{c.Column}")
             .ToList();
 
-        Assert.Empty(unmasked);
+        unmasked.Should().BeEmpty();
         // Les identifiants de connexion des bases sont bien présents dans le modèle et couverts par la liste explicite.
-        Assert.Contains(columns, c => c.Table == "T_BDD_SAGE" && c.Column == "TMDP");
-        Assert.Contains(columns, c => c.Table == "T_BDD_POINTEUSE" && c.Column == "SERVEUR");
+        columns.Should().Contain(c => c.Table == "T_BDD_SAGE" && c.Column == "TMDP");
+        columns.Should().Contain(c => c.Table == "T_BDD_POINTEUSE" && c.Column == "SERVEUR");
     }
 
     [Fact]
@@ -98,11 +98,11 @@ public class AuditMaskingPolicyTests
         Capture(db);
 
         var entries = AuditEntries(db);
-        Assert.Equal(new[] { "SERVEUR", "TLOGIN", "TMDP" }, entries.Select(e => e.Colonnes).OrderBy(c => c).ToArray());
-        Assert.All(entries, e =>
+        entries.Select(e => e.Colonnes).OrderBy(c => c).ToArray().Should().Equal(new[] { "SERVEUR", "TLOGIN", "TMDP" });
+        entries.Should().AllSatisfy(e =>
         {
-            Assert.Equal(AuditMaskingPolicy.Mask, e.Anciens);
-            Assert.Equal(AuditMaskingPolicy.Mask, e.Nouveaux);
+            e.Anciens.Should().Be(AuditMaskingPolicy.Mask);
+            e.Nouveaux.Should().Be(AuditMaskingPolicy.Mask);
         });
     }
 
@@ -116,10 +116,10 @@ public class AuditMaskingPolicyTests
         Capture(db);
 
         var entries = AuditEntries(db);
-        Assert.Equal(AuditMaskingPolicy.Mask, Assert.Single(entries, e => e.Tables == "T_BDD_POINTEUSE" && e.Colonnes == "TMDP").Nouveaux);
-        Assert.Equal(AuditMaskingPolicy.Mask, Assert.Single(entries, e => e.Colonnes == "PASSWORD").Nouveaux);
-        Assert.Equal("agent@exemple.test", Assert.Single(entries, e => e.Colonnes == "EMAIL").Nouveaux);
-        Assert.DoesNotContain(entries, e => e.Anciens == "clair" || e.Nouveaux == "clair" || e.Nouveaux == "empreinte");
+        entries.Should().ContainSingle(e => e.Tables == "T_BDD_POINTEUSE" && e.Colonnes == "TMDP").Which.Nouveaux.Should().Be(AuditMaskingPolicy.Mask);
+        entries.Should().ContainSingle(e => e.Colonnes == "PASSWORD").Which.Nouveaux.Should().Be(AuditMaskingPolicy.Mask);
+        entries.Should().ContainSingle(e => e.Colonnes == "EMAIL").Which.Nouveaux.Should().Be("agent@exemple.test");
+        entries.Should().NotContain(e => e.Anciens == "clair" || e.Nouveaux == "clair" || e.Nouveaux == "empreinte");
     }
 
     [Fact]
@@ -130,7 +130,7 @@ public class AuditMaskingPolicyTests
 
         Capture(db);
 
-        Assert.Empty(AuditEntries(db));
+        AuditEntries(db).Should().BeEmpty();
     }
 
     private static SoftTimeDbContext CreateContext()

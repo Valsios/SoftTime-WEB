@@ -41,7 +41,7 @@ public class ConnectionErrorLeakTests
     private static void AssertNoLeak(string where, string text)
     {
         foreach (var f in Forbidden)
-            Assert.False(text.Contains(f, StringComparison.OrdinalIgnoreCase), $"{where} contient « {f} » : {text}");
+            text.Contains(f, StringComparison.OrdinalIgnoreCase).Should().BeFalse($"{where} contient « {f} » : {text}");
     }
 
     // Les cinq échecs sont lancés en parallèle : chacun attend le délai de connexion (60 s) de la fabrique de chaînes.
@@ -54,14 +54,14 @@ public class ConnectionErrorLeakTests
         async Task<(string Name, string Text)> Msg(string name, Func<Task<ConnectionTestResultDto>> act)
         {
             var r = await act();
-            Assert.False(r.Success);
-            Assert.StartsWith("Connexion impossible", r.Message);
+            r.Success.Should().BeFalse();
+            r.Message.Should().StartWith("Connexion impossible");
             return (name, r.Message);
         }
 
         async Task<(string Name, string Text)> Thrown(string name, Func<Task> act)
         {
-            var ex = await Assert.ThrowsAnyAsync<Exception>(act);
+            var ex = (await FluentActions.Awaiting(act).Should().ThrowAsync<Exception>()).Which;
             // ILogger.LogError(ex, ...) écrit ex.ToString() : type, message, exceptions internes et pile d'appels.
             return (name + " (journal Unhandled, " + ex.GetType().Name + ")", ex.ToString());
         }

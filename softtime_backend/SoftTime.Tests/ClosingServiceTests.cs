@@ -204,19 +204,19 @@ public class ClosingServiceTests
         var result = await ctx.Service.AnalyserAsync(Semaine());
 
         // Poids 5 + 1 + 1 + 5 = 12 sur 10 jours-employé : 100 − 100 × 12 / (5 × 10) = 76
-        Assert.Equal(10, result.JoursEmployeControles);
-        Assert.Equal(76, result.Score);
-        Assert.Equal(4, result.NombreAnomalies);
-        Assert.Equal(PayrollClosingRules.FormuleScore, result.Formule);
-        Assert.Equal(2, Compte(result.ParGravite, ClosingSeverity.Critique));
-        Assert.Equal(0, Compte(result.ParGravite, ClosingSeverity.Importante));
-        Assert.Equal(2, Compte(result.ParGravite, ClosingSeverity.Mineure));
-        Assert.Equal(1, Compte(result.ParType, ClosingAnomalyType.PointageIncomplet));
-        Assert.Equal(1, Compte(result.ParType, ClosingAnomalyType.PointageManquant));
-        Assert.Equal(1, Compte(result.ParType, ClosingAnomalyType.DoublonExact));
-        Assert.Equal(1, Compte(result.ParType, ClosingAnomalyType.QuasiDoublon));
-        Assert.Equal(0, Compte(result.ParType, ClosingAnomalyType.PointageSansPlanning));
-        Assert.Equal(Enum.GetValues<ClosingAnomalyType>().Length, result.ParType.Count);
+        result.JoursEmployeControles.Should().Be(10);
+        result.Score.Should().Be(76);
+        result.NombreAnomalies.Should().Be(4);
+        result.Formule.Should().Be(PayrollClosingRules.FormuleScore);
+        Compte(result.ParGravite, ClosingSeverity.Critique).Should().Be(2);
+        Compte(result.ParGravite, ClosingSeverity.Importante).Should().Be(0);
+        Compte(result.ParGravite, ClosingSeverity.Mineure).Should().Be(2);
+        Compte(result.ParType, ClosingAnomalyType.PointageIncomplet).Should().Be(1);
+        Compte(result.ParType, ClosingAnomalyType.PointageManquant).Should().Be(1);
+        Compte(result.ParType, ClosingAnomalyType.DoublonExact).Should().Be(1);
+        Compte(result.ParType, ClosingAnomalyType.QuasiDoublon).Should().Be(1);
+        Compte(result.ParType, ClosingAnomalyType.PointageSansPlanning).Should().Be(0);
+        result.ParType.Count.Should().Be(Enum.GetValues<ClosingAnomalyType>().Length);
     }
 
     [Fact]
@@ -228,20 +228,20 @@ public class ClosingServiceTests
         var result = await ctx.Service.AnalyserAsync(Semaine());
 
         // INFO : 5 + 1 + 1 = 7 sur 5 jours → 72 ; RH : 5 sur 5 jours → 80
-        Assert.Collection(result.ParDepartement,
+        result.ParDepartement.Should().SatisfyRespectively(
             info =>
             {
-                Assert.Equal("INFO", info.Departement);
-                Assert.Equal(5, info.JoursEmployeControles);
-                Assert.Equal(72, info.Score);
-                Assert.Equal(3, info.NombreAnomalies);
+                info.Departement.Should().Be("INFO");
+                info.JoursEmployeControles.Should().Be(5);
+                info.Score.Should().Be(72);
+                info.NombreAnomalies.Should().Be(3);
             },
             rh =>
             {
-                Assert.Equal("RH", rh.Departement);
-                Assert.Equal(5, rh.JoursEmployeControles);
-                Assert.Equal(80, rh.Score);
-                Assert.Equal(1, Compte(rh.ParType, ClosingAnomalyType.PointageManquant));
+                rh.Departement.Should().Be("RH");
+                rh.JoursEmployeControles.Should().Be(5);
+                rh.Score.Should().Be(80);
+                Compte(rh.ParType, ClosingAnomalyType.PointageManquant).Should().Be(1);
             });
     }
 
@@ -254,9 +254,9 @@ public class ClosingServiceTests
         var result = await ctx.Service.AnalyserAsync(Semaine());
         var json = JsonSerializer.Serialize(result);
 
-        Assert.DoesNotContain("\"X\"", json);
-        Assert.DoesNotContain("\"Y\"", json);
-        Assert.Contains(result.Anomalies.Items, a => a.Matricule == "2" && a.Departement == "RH");
+        json.Should().NotContain("\"X\"");
+        json.Should().NotContain("\"Y\"");
+        result.Anomalies.Items.Should().Contain(a => a.Matricule == "2" && a.Departement == "RH");
     }
 
     [Fact]
@@ -267,12 +267,12 @@ public class ClosingServiceTests
 
         var result = await ctx.Service.AnalyserAsync(Semaine(departement: "rh"));
 
-        Assert.Equal("rh", result.Departement);
-        Assert.Equal(5, result.JoursEmployeControles);
-        Assert.Equal(80, result.Score);
-        var anomalie = Assert.Single(result.Anomalies.Items);
-        Assert.Equal(nameof(ClosingAnomalyType.PointageManquant), anomalie.Type);
-        Assert.Equal("RH", Assert.Single(result.ParDepartement).Departement);
+        result.Departement.Should().Be("rh");
+        result.JoursEmployeControles.Should().Be(5);
+        result.Score.Should().Be(80);
+        var anomalie = result.Anomalies.Items.Should().ContainSingle().Which;
+        anomalie.Type.Should().Be(nameof(ClosingAnomalyType.PointageManquant));
+        result.ParDepartement.Should().ContainSingle().Which.Departement.Should().Be("RH");
     }
 
     [Fact]
@@ -283,11 +283,11 @@ public class ClosingServiceTests
 
         var result = await ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(new DateTime(2025, 10, 1), new DateTime(2025, 10, 5)));
 
-        Assert.Equal(0, result.JoursEmployeControles);
-        Assert.Null(result.Score);
-        Assert.Null(result.Comparaison);
-        Assert.Empty(result.Anomalies.Items);
-        Assert.Equal(1, result.Anomalies.Page);
+        result.JoursEmployeControles.Should().Be(0);
+        result.Score.Should().BeNull();
+        result.Comparaison.Should().BeNull();
+        result.Anomalies.Items.Should().BeEmpty();
+        result.Anomalies.Page.Should().Be(1);
     }
 
     [Fact]
@@ -301,9 +301,9 @@ public class ClosingServiceTests
 
         var result = await ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(Today, Today.AddDays(1)));
 
-        Assert.Equal(0, result.JoursEmployeControles);
-        Assert.Null(result.Score);
-        Assert.Equal(0, result.NombreAnomalies);
+        result.JoursEmployeControles.Should().Be(0);
+        result.Score.Should().BeNull();
+        result.NombreAnomalies.Should().Be(0);
     }
 
     [Fact]
@@ -314,8 +314,8 @@ public class ClosingServiceTests
 
         var result = await ctx.Service.AnalyserAsync(Semaine());
 
-        Assert.Equal(76, result.Score);
-        Assert.Null(result.Comparaison);
+        result.Score.Should().Be(76);
+        result.Comparaison.Should().BeNull();
     }
 
     [Fact]
@@ -328,16 +328,16 @@ public class ClosingServiceTests
         var result = await ctx.Service.AnalyserAsync(Semaine() with { IncludeComparison = true });
 
         // Précédente (12 → 16 nov.) : 2 manquants sur 6 jours → 100 − 100 × 10 / 30 = 66,67 → 67
-        var comparaison = Assert.IsType<ClosingComparisonDto>(result.Comparaison);
-        Assert.Equal(new DateTime(2025, 11, 12), comparaison.From);
-        Assert.Equal(new DateTime(2025, 11, 16), comparaison.To);
-        Assert.Equal(6, comparaison.JoursEmployeControlesPrecedent);
-        Assert.Equal(67, comparaison.ScorePrecedent);
-        Assert.Equal(9, comparaison.EcartScore);
+        var comparaison = result.Comparaison.Should().BeOfType<ClosingComparisonDto>().Which;
+        comparaison.From.Should().Be(new DateTime(2025, 11, 12));
+        comparaison.To.Should().Be(new DateTime(2025, 11, 16));
+        comparaison.JoursEmployeControlesPrecedent.Should().Be(6);
+        comparaison.ScorePrecedent.Should().Be(67);
+        comparaison.EcartScore.Should().Be(9);
         var manquants = comparaison.ParType.Single(t => t.Type == nameof(ClosingAnomalyType.PointageManquant));
-        Assert.Equal((2, 1, -1), (manquants.Precedent, manquants.Actuel, manquants.Ecart));
+        ((manquants.Precedent, manquants.Actuel, manquants.Ecart)).Should().Be((2, 1, -1));
         var exacts = comparaison.ParType.Single(t => t.Type == nameof(ClosingAnomalyType.DoublonExact));
-        Assert.Equal((0, 1, 1), (exacts.Precedent, exacts.Actuel, exacts.Ecart));
+        ((exacts.Precedent, exacts.Actuel, exacts.Ecart)).Should().Be((0, 1, 1));
     }
 
     [Fact]
@@ -349,10 +349,10 @@ public class ClosingServiceTests
 
         var result = await ctx.Service.AnalyserAsync(Semaine() with { IncludeComparison = true });
 
-        var comparaison = Assert.IsType<ClosingComparisonDto>(result.Comparaison);
-        Assert.Equal(100, comparaison.ScorePrecedent);
-        Assert.Equal(-24, comparaison.EcartScore);
-        Assert.All(comparaison.ParType, t => Assert.Equal(t.Actuel - t.Precedent, t.Ecart));
+        var comparaison = result.Comparaison.Should().BeOfType<ClosingComparisonDto>().Which;
+        comparaison.ScorePrecedent.Should().Be(100);
+        comparaison.EcartScore.Should().Be(-24);
+        comparaison.ParType.Should().AllSatisfy(t => t.Ecart.Should().Be(t.Actuel - t.Precedent));
     }
 
     [Fact]
@@ -364,18 +364,16 @@ public class ClosingServiceTests
         var complet = await ctx.Service.AnalyserAsync(Semaine(page: 1, taille: 100));
         var page2 = await ctx.Service.AnalyserAsync(Semaine(page: 2, taille: 3));
 
-        Assert.Equal(
-            new[]
+        complet.Anomalies.Items.Select(a => a.Type).Should().Equal(new[]
             {
                 nameof(ClosingAnomalyType.PointageManquant), nameof(ClosingAnomalyType.PointageIncomplet),
                 nameof(ClosingAnomalyType.DoublonExact), nameof(ClosingAnomalyType.QuasiDoublon)
-            },
-            complet.Anomalies.Items.Select(a => a.Type));
-        Assert.Equal(4, page2.Anomalies.Total);
-        Assert.Equal(2, page2.Anomalies.Page);
-        Assert.Equal(3, page2.Anomalies.PageSize);
-        Assert.Equal(2, page2.Anomalies.TotalPages);
-        Assert.Equal(complet.Anomalies.Items[3], Assert.Single(page2.Anomalies.Items));
+            });
+        page2.Anomalies.Total.Should().Be(4);
+        page2.Anomalies.Page.Should().Be(2);
+        page2.Anomalies.PageSize.Should().Be(3);
+        page2.Anomalies.TotalPages.Should().Be(2);
+        page2.Anomalies.Items.Should().ContainSingle().Which.Should().Be(complet.Anomalies.Items[3]);
     }
 
     [Fact]
@@ -383,8 +381,8 @@ public class ClosingServiceTests
     {
         var ctx = new Contexte();
 
-        await Assert.ThrowsAsync<DomainException>(() =>
-            ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(Vendredi, Lundi)));
+        await FluentActions.Awaiting(() =>
+            ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(Vendredi, Lundi))).Should().ThrowExactlyAsync<DomainException>();
     }
 
     [Fact]
@@ -393,8 +391,8 @@ public class ClosingServiceTests
         var ctx = new Contexte();
         var from = new DateTime(2024, 1, 1);
 
-        await Assert.ThrowsAsync<DomainException>(() =>
-            ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(from, from.AddDays(366))));
+        await FluentActions.Awaiting(() =>
+            ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(from, from.AddDays(366)))).Should().ThrowExactlyAsync<DomainException>();
         ClosingComputation.Valider(new ClosingAnalysisRequest(from, from.AddDays(365)));
     }
 
@@ -409,9 +407,9 @@ public class ClosingServiceTests
 
         var result = await ctx.Service.AnalyserAsync(Semaine());
 
-        Assert.Equal(0, result.NombreAnomalies);
-        Assert.Equal(0, result.JoursEmployeControles);
-        Assert.Null(result.Score);
+        result.NombreAnomalies.Should().Be(0);
+        result.JoursEmployeControles.Should().Be(0);
+        result.Score.Should().BeNull();
     }
 
     [Fact]
@@ -423,7 +421,7 @@ public class ClosingServiceTests
 
         var result = await ctx.Service.AnalyserAsync(Semaine());
 
-        Assert.Equal(0, Compte(result.ParType, ClosingAnomalyType.PointageManquant));
+        Compte(result.ParType, ClosingAnomalyType.PointageManquant).Should().Be(0);
     }
 
     [Fact]
@@ -436,8 +434,8 @@ public class ClosingServiceTests
         var parDefaut = await ctx.Service.AnalyserAsync(Semaine());
         var signalees = await ctx.Service.AnalyserAsync(Semaine(options: new ClosingRulesOptions { IgnorerSemainesValidees = false }));
 
-        Assert.Equal(0, Compte(parDefaut.ParType, ClosingAnomalyType.PointageIncomplet));
-        Assert.Equal(1, Compte(signalees.ParType, ClosingAnomalyType.PointageIncomplet));
+        Compte(parDefaut.ParType, ClosingAnomalyType.PointageIncomplet).Should().Be(0);
+        Compte(signalees.ParType, ClosingAnomalyType.PointageIncomplet).Should().Be(1);
     }
 
     [Fact]
@@ -450,7 +448,7 @@ public class ClosingServiceTests
         var premier = JsonSerializer.Serialize(await ctx.Service.AnalyserAsync(Semaine()));
         var second = JsonSerializer.Serialize(await ctx.Service.AnalyserAsync(Semaine()));
 
-        Assert.Equal(premier, second);
+        second.Should().Be(premier);
     }
 
     [Fact]
@@ -462,10 +460,10 @@ public class ClosingServiceTests
 
         var result = await ctx.Service.AnalyserAsync(Semaine());
 
-        Assert.False(Semaine().IncludeComparison);
-        Assert.Null(result.Comparaison);
-        Assert.Equal(76, result.Score);
-        Assert.Equal(4, result.NombreAnomalies);
+        Semaine().IncludeComparison.Should().BeFalse();
+        result.Comparaison.Should().BeNull();
+        result.Score.Should().Be(76);
+        result.NombreAnomalies.Should().Be(4);
     }
 
     [Fact]
@@ -478,9 +476,9 @@ public class ClosingServiceTests
         var sans = await ctx.Service.ChargerAsync(Semaine(), CancellationToken.None);
         var avec = await ctx.Service.ChargerAsync(Semaine() with { IncludeComparison = true }, CancellationToken.None);
 
-        Assert.DoesNotContain(sans.Pointages, p => p.DatePointage < Lundi);
-        Assert.DoesNotContain(sans.Plannings, p => p.DateP < Lundi.AddDays(-1));
-        Assert.Contains(avec.Pointages, p => p.DatePointage < Lundi);
+        sans.Pointages.Should().NotContain(p => p.DatePointage < Lundi);
+        sans.Plannings.Should().NotContain(p => p.DateP < Lundi.AddDays(-1));
+        avec.Pointages.Should().Contain(p => p.DatePointage < Lundi);
     }
 
     [Fact]
@@ -493,10 +491,8 @@ public class ClosingServiceTests
         var sans = await ctx.Service.AnalyserAsync(Semaine());
         var avec = await ctx.Service.AnalyserAsync(Semaine() with { IncludeComparison = true });
 
-        Assert.NotNull(avec.Comparaison);
-        Assert.Equal(
-            JsonSerializer.Serialize(sans),
-            JsonSerializer.Serialize(avec with { Comparaison = null }));
+        avec.Comparaison.Should().NotBeNull();
+        JsonSerializer.Serialize(avec with { Comparaison = null }).Should().Be(JsonSerializer.Serialize(sans));
     }
 
     [Fact]
@@ -508,9 +504,9 @@ public class ClosingServiceTests
         var result = await ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(default, default));
 
         // Aujourd'hui = 1er décembre 2025 : mois civil complet précédent = novembre 2025.
-        Assert.Equal(new DateTime(2025, 11, 1), result.From);
-        Assert.Equal(new DateTime(2025, 11, 30), result.To);
-        Assert.Equal(76, result.Score);
+        result.From.Should().Be(new DateTime(2025, 11, 1));
+        result.To.Should().Be(new DateTime(2025, 11, 30));
+        result.Score.Should().Be(76);
     }
 
     [Theory]
@@ -522,8 +518,8 @@ public class ClosingServiceTests
     {
         var request = ClosingComputation.AvecPeriodeParDefaut(new ClosingAnalysisRequest(default, default), new DateTime(a, m, j));
 
-        Assert.Equal(new DateTime(a1, m1, j1), request.From);
-        Assert.Equal(new DateTime(a2, m2, j2), request.To);
+        request.From.Should().Be(new DateTime(a1, m1, j1));
+        request.To.Should().Be(new DateTime(a2, m2, j2));
     }
 
     [Fact]
@@ -531,10 +527,10 @@ public class ClosingServiceTests
     {
         var ctx = new Contexte();
 
-        await Assert.ThrowsAsync<DomainException>(() =>
-            ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(Lundi, default)));
-        await Assert.ThrowsAsync<DomainException>(() =>
-            ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(default, Vendredi)));
+        await FluentActions.Awaiting(() =>
+            ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(Lundi, default))).Should().ThrowExactlyAsync<DomainException>();
+        await FluentActions.Awaiting(() =>
+            ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(default, Vendredi))).Should().ThrowExactlyAsync<DomainException>();
     }
 
     [Fact]
@@ -547,7 +543,7 @@ public class ClosingServiceTests
         await ctx.Service.AnalyserAsync(Semaine());
         await ctx.Service.AnalyserAsync(Semaine(departement: "INFO", page: 2, taille: 1));
 
-        Assert.Equal(0, ctx.Uow.Ecritures);
+        ctx.Uow.Ecritures.Should().Be(0);
     }
 
     // ----------------------------------------------------------------------------- cache de l'analyse
@@ -576,7 +572,7 @@ public class ClosingServiceTests
                     {
                         var attendu = await sans.Service.AnalyserAsync(Page(page, taille, reuse: false, info, comparaison: comparaison));
                         var obtenu = await avec.Service.AnalyserAsync(Page(page, taille, reuse: true, info, comparaison: comparaison));
-                        Assert.Equal(Json(attendu), Json(obtenu));
+                        Json(obtenu).Should().Be(Json(attendu));
                     }
     }
 
@@ -591,9 +587,9 @@ public class ClosingServiceTests
         var recalcule = await ctx.Service.AnalyserAsync(Page(1, 50, reuse: false));
         var reutilise = await ctx.Service.AnalyserAsync(Page(1, 50, reuse: true));
 
-        Assert.Equal(4, avant.NombreAnomalies);
-        Assert.Equal(3, recalcule.NombreAnomalies);   // nouvelle analyse : toujours à jour
-        Assert.Equal(3, reutilise.NombreAnomalies);   // l'analyse précédente a remplacé l'entrée du cache
+        avant.NombreAnomalies.Should().Be(4);
+        recalcule.NombreAnomalies.Should().Be(3);   // nouvelle analyse : toujours à jour
+        reutilise.NombreAnomalies.Should().Be(3);   // l'analyse précédente a remplacé l'entrée du cache
     }
 
     [Fact]
@@ -605,9 +601,9 @@ public class ClosingServiceTests
         await ctx.Service.AnalyserAsync(Page(1, 50, reuse: false));
         ctx.Punch("002", Lundi, H8, H17);
 
-        Assert.Equal(4, (await ctx.Service.AnalyserAsync(Page(2, 1, reuse: true))).NombreAnomalies); // dans les 60 s : analyse conservée
+        (await ctx.Service.AnalyserAsync(Page(2, 1, reuse: true))).NombreAnomalies.Should().Be(4); // dans les 60 s : analyse conservée
         horloge.Avancer(TimeSpan.FromSeconds(61));
-        Assert.Equal(3, (await ctx.Service.AnalyserAsync(Page(2, 1, reuse: true))).NombreAnomalies); // expirée : recalculée
+        (await ctx.Service.AnalyserAsync(Page(2, 1, reuse: true))).NombreAnomalies.Should().Be(3); // expirée : recalculée
     }
 
     [Fact]
@@ -624,10 +620,10 @@ public class ClosingServiceTests
         var autresPoids = await ctx.Service.AnalyserAsync(
             new ClosingAnalysisRequest(Lundi, Vendredi, Options: new ClosingRulesOptions { PoidsCritique = 10 }, ReuseCached: true));
 
-        Assert.Equal("INFO", info.Departement);
-        Assert.Equal(3, info.NombreAnomalies);
-        Assert.Equal(1, rh.NombreAnomalies);
-        Assert.NotNull(avecComparaison.Comparaison);
-        Assert.NotEqual((await ctx.Service.AnalyserAsync(Page(1, 50, reuse: true))).Score, autresPoids.Score);
+        info.Departement.Should().Be("INFO");
+        info.NombreAnomalies.Should().Be(3);
+        rh.NombreAnomalies.Should().Be(1);
+        avecComparaison.Comparaison.Should().NotBeNull();
+        autresPoids.Score.Should().NotBe((await ctx.Service.AnalyserAsync(Page(1, 50, reuse: true))).Score);
     }
 }

@@ -34,9 +34,9 @@ public class SqlCompatibilityTests
         // EF Core 8 génère OPENJSON pour les Contains de collection, rejeté par la base (niveau 100).
         var extension = options.Extensions
             .FirstOrDefault(e => e.GetType().Name == "SqlServerOptionsExtension");
-        Assert.NotNull(extension);
+        extension.Should().NotBeNull();
         var compatibility = extension!.GetType().GetProperty("CompatibilityLevel");
-        Assert.NotNull(compatibility);
-        Assert.Equal(120, compatibility!.GetValue(extension));
+        compatibility.Should().NotBeNull();
+        compatibility!.GetValue(extension).Should().Be(120);
     }
 }

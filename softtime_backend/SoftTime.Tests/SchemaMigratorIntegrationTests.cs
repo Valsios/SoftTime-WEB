@@ -31,19 +31,18 @@ public class SchemaMigratorIntegrationTests
         await migrator.RunAsync();
         var second = await migrator.RunAsync();
 
-        Assert.Empty(second.Applied);
-        Assert.Empty(second.ChecksumMismatches);
+        second.Applied.Should().BeEmpty();
+        second.ChecksumMismatches.Should().BeEmpty();
 
         var initial = new EmbeddedMigrationScriptSource().Load().Single(s => s.Version == 1);
         await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync();
-        Assert.Equal(initial.Checksum, await ScalarAsync<string>(connection,
-            "SELECT RTRIM(SOMME_CONTROLE) FROM dbo.T_SCHEMA_VERSION WHERE VERSION = 1;"));
+        (await ScalarAsync<string>(connection,
+            "SELECT RTRIM(SOMME_CONTROLE) FROM dbo.T_SCHEMA_VERSION WHERE VERSION = 1;")).Should().Be(initial.Checksum);
         foreach (var table in ApplicationTables)
-            Assert.True(await ScalarAsync<int>(connection, $"SELECT CASE WHEN OBJECT_ID(N'dbo.{table}', N'U') IS NULL THEN 0 ELSE 1 END;") == 1,
-                $"Table dbo.{table} absente après la migration.");
-        Assert.Equal(1, await ScalarAsync<int>(connection, "SELECT COUNT(*) FROM dbo.T_ROLE WHERE IDROLE = 1;"));
-        Assert.Equal(6, await ScalarAsync<int>(connection, "SELECT COUNT(*) FROM dbo.T_DROIT WHERE IDDROIT BETWEEN 1 AND 6;"));
+            (await ScalarAsync<int>(connection, $"SELECT CASE WHEN OBJECT_ID(N'dbo.{table}', N'U') IS NULL THEN 0 ELSE 1 END;") == 1).Should().BeTrue($"Table dbo.{table} absente après la migration.");
+        (await ScalarAsync<int>(connection, "SELECT COUNT(*) FROM dbo.T_ROLE WHERE IDROLE = 1;")).Should().Be(1);
+        (await ScalarAsync<int>(connection, "SELECT COUNT(*) FROM dbo.T_DROIT WHERE IDDROIT BETWEEN 1 AND 6;")).Should().Be(6);
     }
 
     [MigrationIntegrationFact]
@@ -56,10 +55,10 @@ public class SchemaMigratorIntegrationTests
             "EXEC sys.sp_getapplock @Resource = N'SoftTime.SchemaMigration', @LockMode = N'Exclusive', @LockOwner = N'Session', @LockTimeout = 0;", holder))
             await take.ExecuteNonQueryAsync();
 
-        var ex = await Assert.ThrowsAsync<SchemaMigrationException>(() => Migrator(connectionString, lockTimeoutSeconds: 1).RunAsync());
+        var ex = (await FluentActions.Awaiting(() => Migrator(connectionString, lockTimeoutSeconds: 1).RunAsync()).Should().ThrowExactlyAsync<SchemaMigrationException>()).Which;
 
-        Assert.Contains("verrou", ex.Message);
-        Assert.DoesNotContain("Data Source", ex.Message, StringComparison.OrdinalIgnoreCase);
+        ex.Message.Should().Contain("verrou");
+        ex.Message.Should().NotContainEquivalentOf("Data Source");
     }
 
     [MigrationIntegrationFact]
@@ -79,8 +78,8 @@ public class SchemaMigratorIntegrationTests
             await command.ExecuteNonQueryAsync();
         }
 
-        Assert.Equal(before, await ScalarAsync<int>(connection, fingerprint));
-        Assert.Equal(3, await ScalarAsync<int>(connection, "SELECT COUNT(*) FROM dbo.T_SCHEMA_VERSION WHERE VERSION IN (1, 2, 3);"));
+        (await ScalarAsync<int>(connection, fingerprint)).Should().Be(before);
+        (await ScalarAsync<int>(connection, "SELECT COUNT(*) FROM dbo.T_SCHEMA_VERSION WHERE VERSION IN (1, 2, 3);")).Should().Be(3);
     }
 
     [MigrationIntegrationFact]
@@ -94,8 +93,8 @@ public class SchemaMigratorIntegrationTests
         const string fingerprint = "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.suivi_JOURNAL')";
         const string columns = "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.suivi_JOURNAL')";
         var indexesBefore = await ScalarAsync<int>(connection, fingerprint);
-        Assert.Equal(13, await ScalarAsync<int>(connection, columns));
-        Assert.Equal(7, indexesBefore);
+        (await ScalarAsync<int>(connection, columns)).Should().Be(13);
+        indexesBefore.Should().Be(7);
         var script = new EmbeddedMigrationScriptSource().Load().Single(s => s.Version == 3);
         foreach (var batch in SqlBatchSplitter.Split(script.Content))
         {
@@ -103,8 +102,8 @@ public class SchemaMigratorIntegrationTests
             await command.ExecuteNonQueryAsync();
         }
 
-        Assert.Equal(indexesBefore, await ScalarAsync<int>(connection, fingerprint));
-        Assert.Equal(13, await ScalarAsync<int>(connection, columns));
+        (await ScalarAsync<int>(connection, fingerprint)).Should().Be(indexesBefore);
+        (await ScalarAsync<int>(connection, columns)).Should().Be(13);
     }
 
     private static SchemaMigrator Migrator(string connectionString, int lockTimeoutSeconds)
@@ -116,8 +115,7 @@ public class SchemaMigratorIntegrationTests
     {
         var value = Environment.GetEnvironmentVariable(MigrationIntegrationFactAttribute.Variable)!;
         var database = new SqlConnectionStringBuilder(value).InitialCatalog;
-        Assert.True(database.StartsWith("SOFTTIME_MIGTEST_", StringComparison.OrdinalIgnoreCase),
-            "SOFTTIME_MIGTEST_CONN doit viser une base jetable SOFTTIME_MIGTEST_*.");
+        database.StartsWith("SOFTTIME_MIGTEST_", StringComparison.OrdinalIgnoreCase).Should().BeTrue("SOFTTIME_MIGTEST_CONN doit viser une base jetable SOFTTIME_MIGTEST_*.");
         return value;
     }
 

@@ -59,8 +59,8 @@ public class RepositoryPaginationTests
     public void Normaliser_PageEtTaille_SontBornees(int? page, int? pageSize, int attenduPage, int attenduTaille)
     {
         var (p, s) = PaginationRules.Normaliser(page, pageSize);
-        Assert.Equal(attenduPage, p);
-        Assert.Equal(attenduTaille, s);
+        p.Should().Be(attenduPage);
+        s.Should().Be(attenduTaille);
     }
 
     [Fact]
@@ -75,13 +75,13 @@ public class RepositoryPaginationTests
             q => q.OrderBy(x => x.Id),
             new PageRequest(1, 10));
 
-        Assert.Equal(25, result.Total);
-        Assert.Equal(1, result.Page);
-        Assert.Equal(10, result.PageSize);
-        Assert.Equal(3, result.TotalPages);
-        Assert.Equal(10, result.Items.Count);
-        Assert.Equal(1, result.Items[0].Id);
-        Assert.Equal(10, result.Items[9].Id);
+        result.Total.Should().Be(25);
+        result.Page.Should().Be(1);
+        result.PageSize.Should().Be(10);
+        result.TotalPages.Should().Be(3);
+        result.Items.Count.Should().Be(10);
+        result.Items[0].Id.Should().Be(1);
+        result.Items[9].Id.Should().Be(10);
     }
 
     [Fact]
@@ -96,13 +96,13 @@ public class RepositoryPaginationTests
             q => q.OrderBy(x => x.Id),
             new PageRequest(3, 10));
 
-        Assert.Equal(25, result.Total);
-        Assert.Equal(3, result.Page);
-        Assert.Equal(10, result.PageSize);
-        Assert.Equal(3, result.TotalPages);
-        Assert.Equal(5, result.Items.Count);
-        Assert.Equal(21, result.Items[0].Id);
-        Assert.Equal(25, result.Items[4].Id);
+        result.Total.Should().Be(25);
+        result.Page.Should().Be(3);
+        result.PageSize.Should().Be(10);
+        result.TotalPages.Should().Be(3);
+        result.Items.Count.Should().Be(5);
+        result.Items[0].Id.Should().Be(21);
+        result.Items[4].Id.Should().Be(25);
     }
 
     [Fact]
@@ -117,11 +117,11 @@ public class RepositoryPaginationTests
             q => q.OrderBy(x => x.Id),
             new PageRequest(10, 10));
 
-        Assert.Equal(25, result.Total);
-        Assert.Equal(10, result.Page);
-        Assert.Equal(10, result.PageSize);
-        Assert.Equal(3, result.TotalPages);
-        Assert.Empty(result.Items);
+        result.Total.Should().Be(25);
+        result.Page.Should().Be(10);
+        result.PageSize.Should().Be(10);
+        result.TotalPages.Should().Be(3);
+        result.Items.Should().BeEmpty();
     }
 
     [Fact]
@@ -136,10 +136,10 @@ public class RepositoryPaginationTests
             q => q.OrderBy(x => x.Id),
             new PageRequest(1, 500));
 
-        Assert.Equal(100, result.PageSize);
-        Assert.Equal(100, result.Items.Count);
-        Assert.Equal(150, result.Total);
-        Assert.Equal(2, result.TotalPages);
+        result.PageSize.Should().Be(100);
+        result.Items.Count.Should().Be(100);
+        result.Total.Should().Be(150);
+        result.TotalPages.Should().Be(2);
     }
 
     [Fact]
@@ -154,9 +154,9 @@ public class RepositoryPaginationTests
             q => q.OrderBy(x => x.Id),
             new PageRequest(1, -1));
 
-        Assert.Equal(PaginationRules.TailleDefaut, result.PageSize);
-        Assert.Equal(50, result.Items.Count);
-        Assert.Equal(60, result.Total);
+        result.PageSize.Should().Be(PaginationRules.TailleDefaut);
+        result.Items.Count.Should().Be(50);
+        result.Total.Should().Be(60);
     }
 
     [Fact]
@@ -169,9 +169,9 @@ public class RepositoryPaginationTests
             q => q.OrderBy(x => x.Id),
             new PageRequest(1, 10));
 
-        Assert.Equal(0, result.Total);
-        Assert.Equal(1, result.TotalPages);
-        Assert.Empty(result.Items);
+        result.Total.Should().Be(0);
+        result.TotalPages.Should().Be(1);
+        result.Items.Should().BeEmpty();
     }
 
     [Fact]
@@ -189,7 +189,7 @@ public class RepositoryPaginationTests
             q => q.OrderBy(x => x.Category).ThenBy(x => x.Id),
             new PageRequest(1, 10));
 
-        Assert.Equal(new[] { 1, 2, 5, 8 }, result.Items.Select(x => x.Id).ToArray());
+        result.Items.Select(x => x.Id).ToArray().Should().Equal(new[] { 1, 2, 5, 8 });
     }
 
     [Fact]
@@ -205,11 +205,11 @@ public class RepositoryPaginationTests
             new PageRequest(2, 5));
 
         // 15 pairs au total, page 2 de taille 5 -> éléments 6 à 10 (Ids: 12, 14, 16, 18, 20)
-        Assert.Equal(15, result.Total);
-        Assert.Equal(3, result.TotalPages);
-        Assert.Equal(5, result.Items.Count);
-        Assert.Equal(12, result.Items[0].Id);
-        Assert.Equal(20, result.Items[4].Id);
+        result.Total.Should().Be(15);
+        result.TotalPages.Should().Be(3);
+        result.Items.Count.Should().Be(5);
+        result.Items[0].Id.Should().Be(12);
+        result.Items[4].Id.Should().Be(20);
     }
 
     [Fact]
@@ -225,10 +225,10 @@ public class RepositoryPaginationTests
             x => new TestDto(x.Id, $"{x.Name} ({x.Value})"),
             new PageRequest(1, 5));
 
-        Assert.Equal(10, result.Total);
-        Assert.Equal(5, result.Items.Count);
-        Assert.Equal(6, result.Items[0].Id);
-        Assert.Equal("Nom 6 (600)", result.Items[0].Label);
+        result.Total.Should().Be(10);
+        result.Items.Count.Should().Be(5);
+        result.Items[0].Id.Should().Be(6);
+        result.Items[0].Label.Should().Be("Nom 6 (600)");
     }
 
     [Fact]
@@ -243,11 +243,11 @@ public class RepositoryPaginationTests
             q => q.OrderBy(x => x.Id),
             new PageRequest(int.MaxValue, 10));
 
-        Assert.Equal(25, result.Total);
-        Assert.Equal(int.MaxValue, result.Page);
-        Assert.Equal(10, result.PageSize);
-        Assert.Equal(3, result.TotalPages);
-        Assert.Empty(result.Items);
+        result.Total.Should().Be(25);
+        result.Page.Should().Be(int.MaxValue);
+        result.PageSize.Should().Be(10);
+        result.TotalPages.Should().Be(3);
+        result.Items.Should().BeEmpty();
     }
 
     [Fact]
@@ -256,7 +256,7 @@ public class RepositoryPaginationTests
         var repo = new InMemoryTestRepository();
         repo.Items.Add(new TestEntity(1, "Cat", "A", 10));
 
-        await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            repo.ToPagedAsync(null, null!, new PageRequest(1, 10)));
+        await FluentActions.Awaiting(() =>
+            repo.ToPagedAsync(null, null!, new PageRequest(1, 10))).Should().ThrowExactlyAsync<ArgumentNullException>();
     }
 }

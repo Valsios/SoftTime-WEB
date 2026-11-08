@@ -40,15 +40,14 @@ public class MlNetSmokeTests
         var trainer = new MlNetTrainer();
         var result = trainer.TrainAbsence(samples.Take(240).ToList(), samples.Skip(240).ToList(), "FastTree");
 
-        Assert.True(result.Accepted);
-        Assert.NotNull(result.Model);
-        Assert.True(result.Metrics.Auc.HasValue && result.Metrics.Auc.Value > 0.5,
-            $"AUC inattendue : {result.Metrics.Auc}");
-        Assert.True(result.Metrics.TestPositives > 0);
+        result.Accepted.Should().BeTrue();
+        result.Model.Should().NotBeNull();
+        (result.Metrics.Auc.HasValue && result.Metrics.Auc.Value > 0.5).Should().BeTrue($"AUC inattendue : {result.Metrics.Auc}");
+        (result.Metrics.TestPositives > 0).Should().BeTrue();
 
         var predictions = new MlNetPredictor().PredictAbsence(result.Model!, samples.Take(5).ToList());
-        Assert.Equal(5, predictions.Count);
-        Assert.All(predictions, p => Assert.InRange(p, 0f, 1f));
+        predictions.Count.Should().Be(5);
+        predictions.Should().AllSatisfy(p => p.Should().BeInRange(0f, 1f));
     }
 
     [Fact]
@@ -78,13 +77,13 @@ public class MlNetSmokeTests
         var probabilite = trainer.TrainHsProbability(train, test, "FastTree");
         var montant = trainer.TrainHsAmount(train, test, "FastTree");
 
-        Assert.True(probabilite.Accepted);
-        Assert.NotNull(probabilite.Model);
-        Assert.True(montant.Accepted);
-        Assert.NotNull(montant.Model);
+        probabilite.Accepted.Should().BeTrue();
+        probabilite.Model.Should().NotBeNull();
+        montant.Accepted.Should().BeTrue();
+        montant.Model.Should().NotBeNull();
 
         var predictions = new MlNetPredictor().PredictHsAmount(montant.Model!, test.Take(5).ToList());
-        Assert.Equal(5, predictions.Count);
-        Assert.All(predictions, p => Assert.False(float.IsNaN(p)));
+        predictions.Count.Should().Be(5);
+        predictions.Should().AllSatisfy(p => float.IsNaN(p).Should().BeFalse());
     }
 }

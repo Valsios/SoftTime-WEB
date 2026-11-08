@@ -15,35 +15,35 @@ public class PlanningGenerationRulesTests
     [InlineData("off")]
     [InlineData(" Off ")]
     public void EstOff_RecognizesToken_WhateverTheCase(string value)
-        => Assert.True(PlanningGenerationRules.EstOff(value));
+        => PlanningGenerationRules.EstOff(value).Should().BeTrue();
 
     [Theory]
     [InlineData("08:00")]
     [InlineData("0:00")]
     [InlineData("08:00:00")]
     public void EstOff_IsFalse_ForRealHours(string value)
-        => Assert.False(PlanningGenerationRules.EstOff(value));
+        => PlanningGenerationRules.EstOff(value).Should().BeFalse();
 
     [Fact]
     public void TryLundi_AcceptsMonday()
     {
-        Assert.True(PlanningGenerationRules.TryLundi("2026-08-31", out var lundi));
-        Assert.Equal(Lundi, lundi);
+        PlanningGenerationRules.TryLundi("2026-08-31", out var lundi).Should().BeTrue();
+        lundi.Should().Be(Lundi);
     }
 
     [Fact]
     public void TryLundi_RejectsAnyOtherWeekday()
     {
         // Le desktop exige un lundi : les autres lignes sont ignorées.
-        Assert.False(PlanningGenerationRules.TryLundi("2026-09-02", out _));
+        PlanningGenerationRules.TryLundi("2026-09-02", out _).Should().BeFalse();
     }
 
     [Fact]
     public void TryLundi_IgnoresTimePart()
     {
-        Assert.True(PlanningGenerationRules.TryLundi("2026-08-31 00:00:00", out var lundi));
-        Assert.Equal(Lundi, lundi);
-        Assert.Equal(TimeSpan.Zero, lundi.TimeOfDay);
+        PlanningGenerationRules.TryLundi("2026-08-31 00:00:00", out var lundi).Should().BeTrue();
+        lundi.Should().Be(Lundi);
+        lundi.TimeOfDay.Should().Be(TimeSpan.Zero);
     }
 
     [Theory]
@@ -51,108 +51,108 @@ public class PlanningGenerationRulesTests
     [InlineData("")]
     [InlineData("lundi")]
     public void TryLundi_RejectsEmptyOrInvalid(string? value)
-        => Assert.False(PlanningGenerationRules.TryLundi(value, out _));
+        => PlanningGenerationRules.TryLundi(value, out _).Should().BeFalse();
 
     [Fact]
     public void TryHeure_ParsesHourAndMinute()
     {
-        Assert.True(PlanningGenerationRules.TryHeure("08:30", out var heure));
-        Assert.Equal(new TimeSpan(8, 30, 0), heure);
+        PlanningGenerationRules.TryHeure("08:30", out var heure).Should().BeTrue();
+        heure.Should().Be(new TimeSpan(8, 30, 0));
     }
 
     [Fact]
     public void TryIntervalle_BuildsSameDayRange()
     {
-        Assert.True(PlanningGenerationRules.TryIntervalle(Lundi, "08:00", "17:00", out var ha, out var hd));
-        Assert.Equal(Lundi.AddHours(8), ha);
-        Assert.Equal(Lundi.AddHours(17), hd);
+        PlanningGenerationRules.TryIntervalle(Lundi, "08:00", "17:00", out var ha, out var hd).Should().BeTrue();
+        ha.Should().Be(Lundi.AddHours(8));
+        hd.Should().Be(Lundi.AddHours(17));
     }
 
     [Fact]
     public void TryIntervalle_NightShift_EndsNextDay()
     {
         // Fin < début → poste de nuit : la sortie tombe le lendemain.
-        Assert.True(PlanningGenerationRules.TryIntervalle(Lundi, "22:00", "06:00", out var ha, out var hd));
-        Assert.Equal(Lundi.AddHours(22), ha);
-        Assert.Equal(Lundi.AddDays(1).AddHours(6), hd);
+        PlanningGenerationRules.TryIntervalle(Lundi, "22:00", "06:00", out var ha, out var hd).Should().BeTrue();
+        ha.Should().Be(Lundi.AddHours(22));
+        hd.Should().Be(Lundi.AddDays(1).AddHours(6));
     }
 
     [Fact]
     public void TryIntervalle_EqualHours_StaySameDay()
     {
-        Assert.True(PlanningGenerationRules.TryIntervalle(Lundi, "08:00", "08:00", out var ha, out var hd));
-        Assert.Equal(Lundi.AddHours(8), ha);
-        Assert.Equal(Lundi.AddHours(8), hd);
+        PlanningGenerationRules.TryIntervalle(Lundi, "08:00", "08:00", out var ha, out var hd).Should().BeTrue();
+        ha.Should().Be(Lundi.AddHours(8));
+        hd.Should().Be(Lundi.AddHours(8));
     }
 
     [Fact]
     public void TryIntervalle_ReturnsFalse_OnUnreadableHour()
     {
-        Assert.False(PlanningGenerationRules.TryIntervalle(Lundi, "huit heures", "17:00", out var ha, out var hd));
-        Assert.Null(ha);
-        Assert.Null(hd);
+        PlanningGenerationRules.TryIntervalle(Lundi, "huit heures", "17:00", out var ha, out var hd).Should().BeFalse();
+        ha.Should().BeNull();
+        hd.Should().BeNull();
     }
 
     [Fact]
     public void TryIntervalle_TimeSpan_BuildsSameDayRange()
     {
-        Assert.True(PlanningGenerationRules.TryIntervalle(
-            Lundi, new TimeSpan(8, 0, 0), new TimeSpan(17, 0, 0), out var ha, out var hd));
-        Assert.Equal(Lundi.AddHours(8), ha);
-        Assert.Equal(Lundi.AddHours(17), hd);
+        PlanningGenerationRules.TryIntervalle(
+            Lundi, new TimeSpan(8, 0, 0), new TimeSpan(17, 0, 0), out var ha, out var hd).Should().BeTrue();
+        ha.Should().Be(Lundi.AddHours(8));
+        hd.Should().Be(Lundi.AddHours(17));
     }
 
     [Fact]
     public void TryIntervalle_TimeSpan_NightShift_EndsNextDay()
     {
-        Assert.True(PlanningGenerationRules.TryIntervalle(
-            Lundi, new TimeSpan(17, 0, 0), new TimeSpan(7, 0, 0), out var ha, out var hd));
-        Assert.Equal(Lundi.AddHours(17), ha);
-        Assert.Equal(Lundi.AddDays(1).AddHours(7), hd);
+        PlanningGenerationRules.TryIntervalle(
+            Lundi, new TimeSpan(17, 0, 0), new TimeSpan(7, 0, 0), out var ha, out var hd).Should().BeTrue();
+        ha.Should().Be(Lundi.AddHours(17));
+        hd.Should().Be(Lundi.AddDays(1).AddHours(7));
     }
 
     [Fact]
     public void TryIntervalle_TimeSpan_EqualHours_StaySameDay()
     {
-        Assert.True(PlanningGenerationRules.TryIntervalle(
-            Lundi, new TimeSpan(8, 0, 0), new TimeSpan(8, 0, 0), out var ha, out var hd));
-        Assert.Equal(Lundi.AddHours(8), ha);
-        Assert.Equal(Lundi.AddHours(8), hd);
+        PlanningGenerationRules.TryIntervalle(
+            Lundi, new TimeSpan(8, 0, 0), new TimeSpan(8, 0, 0), out var ha, out var hd).Should().BeTrue();
+        ha.Should().Be(Lundi.AddHours(8));
+        hd.Should().Be(Lundi.AddHours(8));
     }
 
     [Fact]
     public void TryIntervalle_TimeSpan_MissingHour_ReturnsFalse()
     {
-        Assert.False(PlanningGenerationRules.TryIntervalle(
-            Lundi, new TimeSpan(8, 0, 0), null, out var ha, out var hd));
-        Assert.Null(ha);
-        Assert.Null(hd);
+        PlanningGenerationRules.TryIntervalle(
+            Lundi, new TimeSpan(8, 0, 0), null, out var ha, out var hd).Should().BeFalse();
+        ha.Should().BeNull();
+        hd.Should().BeNull();
     }
 
     [Fact]
     public void IndiceDebut_CategoryFormat_SkipsTwoCellsPerDay()
     {
         // catégorie ; lundi ; (début ; fin) × 7
-        Assert.Equal(2, PlanningGenerationRules.IndiceDebut(0, avecPauseParJour: false));
-        Assert.Equal(4, PlanningGenerationRules.IndiceDebut(1, avecPauseParJour: false));
-        Assert.Equal(14, PlanningGenerationRules.IndiceDebut(6, avecPauseParJour: false));
+        PlanningGenerationRules.IndiceDebut(0, avecPauseParJour: false).Should().Be(2);
+        PlanningGenerationRules.IndiceDebut(1, avecPauseParJour: false).Should().Be(4);
+        PlanningGenerationRules.IndiceDebut(6, avecPauseParJour: false).Should().Be(14);
     }
 
     [Fact]
     public void IndiceDebut_MatriculeFormat_SkipsThreeCellsPerDay()
     {
         // matricule ; lundi ; (début ; pause ; fin) × 7
-        Assert.Equal(2, PlanningGenerationRules.IndiceDebut(0, avecPauseParJour: true));
-        Assert.Equal(5, PlanningGenerationRules.IndiceDebut(1, avecPauseParJour: true));
-        Assert.Equal(20, PlanningGenerationRules.IndiceDebut(6, avecPauseParJour: true));
+        PlanningGenerationRules.IndiceDebut(0, avecPauseParJour: true).Should().Be(2);
+        PlanningGenerationRules.IndiceDebut(1, avecPauseParJour: true).Should().Be(5);
+        PlanningGenerationRules.IndiceDebut(6, avecPauseParJour: true).Should().Be(20);
     }
 
     [Fact]
     public void Cellule_ToleratesShortLines()
     {
         var cells = new[] { "CAT A", "2026-08-31", "08:00" };
-        Assert.Equal("08:00", PlanningGenerationRules.Cellule(cells, 2));
-        Assert.Null(PlanningGenerationRules.Cellule(cells, 3));
+        PlanningGenerationRules.Cellule(cells, 2).Should().Be("08:00");
+        PlanningGenerationRules.Cellule(cells, 3).Should().BeNull();
     }
 
     [Fact]
@@ -170,7 +170,7 @@ public class PlanningGenerationRulesTests
             "OFF", "OFF"        // dimanche
         };
 
-        Assert.True(PlanningGenerationRules.TryLundi(PlanningGenerationRules.Cellule(cells, 1), out var lundi));
+        PlanningGenerationRules.TryLundi(PlanningGenerationRules.Cellule(cells, 1), out var lundi).Should().BeTrue();
         var jours = new List<DateTime?>();
         var offs = 0;
         for (var i = 0; i < PlanningGenerationRules.JoursParSemaine; i++)
@@ -183,14 +183,14 @@ public class PlanningGenerationRulesTests
                 jours.Add(null);
                 continue;
             }
-            Assert.True(PlanningGenerationRules.TryIntervalle(
-                lundi.AddDays(i), debutTxt, PlanningGenerationRules.Cellule(cells, debutIndex + 1), out var ha, out _));
+            PlanningGenerationRules.TryIntervalle(
+                lundi.AddDays(i), debutTxt, PlanningGenerationRules.Cellule(cells, debutIndex + 1), out var ha, out _).Should().BeTrue();
             jours.Add(ha);
         }
 
-        Assert.Equal(3, offs);
-        Assert.Equal(4, jours.Count(j => j != null));
-        Assert.Equal(lundi.AddHours(8), jours[0]);
-        Assert.Null(jours[2]);
+        offs.Should().Be(3);
+        jours.Count(j => j != null).Should().Be(4);
+        jours[0].Should().Be(lundi.AddHours(8));
+        jours[2].Should().BeNull();
     }
 }

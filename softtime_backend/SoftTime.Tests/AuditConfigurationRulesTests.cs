@@ -28,9 +28,9 @@ public class AuditConfigurationRulesTests
     [InlineData("uniqueidentifier")]
     public void IsValid_WithStandardTypes_ReturnsTrue(string type)
     {
-        Assert.True(AuditConfigurationRules.IsValid(type));
-        Assert.True(AuditConfigurationRules.IsValid(type.ToUpperInvariant()));
-        Assert.True(AuditConfigurationRules.IsValid($"  {type}  "));
+        AuditConfigurationRules.IsValid(type).Should().BeTrue();
+        AuditConfigurationRules.IsValid(type.ToUpperInvariant()).Should().BeTrue();
+        AuditConfigurationRules.IsValid($"  {type}  ").Should().BeTrue();
     }
 
     [Theory]
@@ -43,8 +43,8 @@ public class AuditConfigurationRulesTests
     [InlineData("  image  ")]
     public void IsValid_WithExcludedLegacyTypes_ReturnsFalse(string type)
     {
-        Assert.False(AuditConfigurationRules.IsValid(type));
-        Assert.True(AuditConfigurationRules.IsExcluded(type));
+        AuditConfigurationRules.IsValid(type).Should().BeFalse();
+        AuditConfigurationRules.IsExcluded(type).Should().BeTrue();
     }
 
     [Theory]
@@ -57,22 +57,22 @@ public class AuditConfigurationRulesTests
     [InlineData("variant")]
     public void IsValid_WithInvalidOrEmptyType_ReturnsFalse(string? type)
     {
-        Assert.False(AuditConfigurationRules.IsValid(type));
+        AuditConfigurationRules.IsValid(type).Should().BeFalse();
     }
 
     [Fact]
     public void Normalize_TrimsAndLowercases()
     {
-        Assert.Equal("nvarchar", AuditConfigurationRules.Normalize("  NVARCHAR  "));
-        Assert.Equal("int", AuditConfigurationRules.Normalize("INT"));
-        Assert.Equal("datetime", AuditConfigurationRules.Normalize(" DateTime "));
+        AuditConfigurationRules.Normalize("  NVARCHAR  ").Should().Be("nvarchar");
+        AuditConfigurationRules.Normalize("INT").Should().Be("int");
+        AuditConfigurationRules.Normalize(" DateTime ").Should().Be("datetime");
     }
 
     [Fact]
     public void Normalize_WithNullOrInvalid_ThrowsDomainException()
     {
-        Assert.Throws<DomainException>(() => AuditConfigurationRules.Normalize(null!));
-        Assert.Throws<DomainException>(() => AuditConfigurationRules.Normalize("not_a_type"));
+        FluentActions.Invoking(() => AuditConfigurationRules.Normalize(null!)).Should().ThrowExactly<DomainException>();
+        FluentActions.Invoking(() => AuditConfigurationRules.Normalize("not_a_type")).Should().ThrowExactly<DomainException>();
     }
 
     [Theory]
@@ -81,8 +81,8 @@ public class AuditConfigurationRulesTests
     [InlineData("   ")]
     public void Valider_WithEmptyOrNull_ThrowsDomainException(string? type)
     {
-        var ex = Assert.Throws<DomainException>(() => AuditConfigurationRules.Valider(type));
-        Assert.Contains("obligatoire", ex.Message, StringComparison.OrdinalIgnoreCase);
+        var ex = FluentActions.Invoking(() => AuditConfigurationRules.Valider(type)).Should().ThrowExactly<DomainException>().Which;
+        ex.Message.Should().ContainEquivalentOf("obligatoire");
     }
 
     [Theory]
@@ -91,8 +91,8 @@ public class AuditConfigurationRulesTests
     [InlineData("image")]
     public void Valider_WithExcludedType_ThrowsDomainException(string type)
     {
-        var ex = Assert.Throws<DomainException>(() => AuditConfigurationRules.Valider(type));
-        Assert.Contains("exclu", ex.Message, StringComparison.OrdinalIgnoreCase);
+        var ex = FluentActions.Invoking(() => AuditConfigurationRules.Valider(type)).Should().ThrowExactly<DomainException>().Which;
+        ex.Message.Should().ContainEquivalentOf("exclu");
     }
 
     [Theory]
@@ -100,8 +100,8 @@ public class AuditConfigurationRulesTests
     [InlineData("custom_sql_type")]
     public void Valider_WithUnknownType_ThrowsDomainException(string type)
     {
-        var ex = Assert.Throws<DomainException>(() => AuditConfigurationRules.Valider(type));
-        Assert.Contains("pas autorisé", ex.Message, StringComparison.OrdinalIgnoreCase);
+        var ex = FluentActions.Invoking(() => AuditConfigurationRules.Valider(type)).Should().ThrowExactly<DomainException>().Which;
+        ex.Message.Should().ContainEquivalentOf("pas autorisé");
     }
 
     [Fact]
@@ -117,11 +117,11 @@ public class AuditConfigurationRulesTests
     {
         var options = AuditConfigurationRules.AllowedTypeOptions;
 
-        Assert.NotEmpty(options);
-        Assert.Equal(options.Count, options.Select(o => o.Value).Distinct().Count());
-        Assert.DoesNotContain(options, o => o.Value is "text" or "ntext" or "image");
-        Assert.Contains(options, o => o.Value == "varchar");
-        Assert.Contains(options, o => o.Value == "nvarchar");
-        Assert.Contains(options, o => o.Value == "int");
+        options.Should().NotBeEmpty();
+        options.Select(o => o.Value).Distinct().Count().Should().Be(options.Count);
+        options.Where(o => o.Value is "text" or "ntext" or "image").Should().BeEmpty();
+        options.Should().Contain(o => o.Value == "varchar");
+        options.Should().Contain(o => o.Value == "nvarchar");
+        options.Should().Contain(o => o.Value == "int");
     }
 }

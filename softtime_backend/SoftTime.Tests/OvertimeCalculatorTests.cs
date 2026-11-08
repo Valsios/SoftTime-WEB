@@ -72,9 +72,9 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerSemaine(config, semaine);
 
-        Assert.Equal(40m, resultat.Ht);
-        Assert.Equal(0m, resultat.Hs);
-        Assert.Equal(0m, resultat.Nuit);
+        resultat.Ht.Should().Be(40m);
+        resultat.Hs.Should().Be(0m);
+        resultat.Nuit.Should().Be(0m);
     }
 
     [Fact]
@@ -85,8 +85,8 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerSemaine(config, semaine);
 
-        Assert.Equal(45m, resultat.Ht);
-        Assert.Equal(5m, resultat.Hs);
+        resultat.Ht.Should().Be(45m);
+        resultat.Hs.Should().Be(5m);
     }
 
     [Fact]
@@ -98,8 +98,8 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerSemaine(config, semaine);
 
-        Assert.Equal(46m, resultat.Ht);
-        Assert.Equal(6m, resultat.Hs);
+        resultat.Ht.Should().Be(46m);
+        resultat.Hs.Should().Be(6m);
     }
 
     [Fact]
@@ -110,9 +110,9 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(6m, resultat.HeuresReelles);
-        Assert.Equal(5.5m, resultat.HeuresRetenues);
-        Assert.Equal(4m, resultat.Nuit);
+        resultat.HeuresReelles.Should().Be(6m);
+        resultat.HeuresRetenues.Should().Be(5.5m);
+        resultat.Nuit.Should().Be(4m);
     }
 
     [Fact]
@@ -123,10 +123,10 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(9m, resultat.HeuresReelles);
-        Assert.Equal(8m, resultat.HeuresRetenues);
-        Assert.Equal(8m, resultat.Dimanche);
-        Assert.Equal(0m, resultat.Nuit);
+        resultat.HeuresReelles.Should().Be(9m);
+        resultat.HeuresRetenues.Should().Be(8m);
+        resultat.Dimanche.Should().Be(8m);
+        resultat.Nuit.Should().Be(0m);
     }
 
     [Fact]
@@ -137,9 +137,9 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(6m, resultat.HeuresReelles);
-        Assert.Equal(5.5m, resultat.HeuresRetenues);
-        Assert.Equal(6m, resultat.Ferie);
+        resultat.HeuresReelles.Should().Be(6m);
+        resultat.HeuresRetenues.Should().Be(5.5m);
+        resultat.Ferie.Should().Be(6m);
     }
 
     [Fact]
@@ -151,8 +151,8 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(6m, resultat.Nuit);
-        Assert.Equal(0m, resultat.Dimanche);
+        resultat.Nuit.Should().Be(6m);
+        resultat.Dimanche.Should().Be(0m);
     }
 
     [Fact]
@@ -164,8 +164,8 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(2m, resultat.Nuit);
-        Assert.Equal(4m, resultat.Dimanche);
+        resultat.Nuit.Should().Be(2m);
+        resultat.Dimanche.Should().Be(4m);
     }
 
     [Fact]
@@ -176,10 +176,10 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.True(resultat.Conge);
-        Assert.Equal(8m, resultat.HeuresRetenues);
-        Assert.Equal(0m, resultat.Absence);
-        Assert.Equal(0m, resultat.Retard);
+        resultat.Conge.Should().BeTrue();
+        resultat.HeuresRetenues.Should().Be(8m);
+        resultat.Absence.Should().Be(0m);
+        resultat.Retard.Should().Be(0m);
     }
 
     [Fact]
@@ -190,7 +190,7 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(4m, resultat.HeuresRetenues);
+        resultat.HeuresRetenues.Should().Be(4m);
     }
 
     [Fact]
@@ -201,9 +201,9 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.False(resultat.JourTravaille);
-        Assert.Equal(0m, resultat.HeuresRetenues);
-        Assert.Equal(8m, resultat.Absence);
+        resultat.JourTravaille.Should().BeFalse();
+        resultat.HeuresRetenues.Should().Be(0m);
+        resultat.Absence.Should().Be(8m);
     }
 
     [Fact]
@@ -214,8 +214,8 @@ public class OvertimeCalculatorTests
         var absorbe = OvertimeCalculator.CalculerJour(Multi(toleranceEntree: 10), jour);
         var depasse = OvertimeCalculator.CalculerJour(Multi(toleranceEntree: 5), jour);
 
-        Assert.Equal(0m, absorbe.Retard);
-        Assert.Equal(0.08m, depasse.Retard);
+        absorbe.Retard.Should().Be(0m);
+        depasse.Retard.Should().Be(0.08m);
     }
 
     [Fact]
@@ -225,7 +225,7 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerJour(Multi(), jour);
 
-        Assert.Equal(0.7m, resultat.Retard);
+        resultat.Retard.Should().Be(0.7m);
     }
 
     [Fact]
@@ -236,9 +236,9 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(H("07:30"), resultat.Entree);
-        Assert.Equal(9m, resultat.HeuresReelles);
-        Assert.Equal(8m, resultat.HeuresRetenues);
+        resultat.Entree.Should().Be(H("07:30"));
+        resultat.HeuresReelles.Should().Be(9m);
+        resultat.HeuresRetenues.Should().Be(8m);
     }
 
     [Fact]
@@ -250,8 +250,8 @@ public class OvertimeCalculatorTests
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
         // 17:50 → 17:45 : 9,75 h réelles, moins 30 min de pause manquante.
-        Assert.Equal(9.75m, resultat.HeuresReelles);
-        Assert.Equal(9.25m, resultat.HeuresRetenues);
+        resultat.HeuresReelles.Should().Be(9.75m);
+        resultat.HeuresRetenues.Should().Be(9.25m);
     }
 
     [Fact]
@@ -262,8 +262,8 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(8m, resultat.HeuresReelles);
-        Assert.Equal(8m, resultat.HeuresRetenues);
+        resultat.HeuresReelles.Should().Be(8m);
+        resultat.HeuresRetenues.Should().Be(8m);
     }
 
     [Fact]
@@ -274,8 +274,8 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(8.75m, resultat.HeuresReelles);
-        Assert.Equal(8.5m, resultat.HeuresRetenues);
+        resultat.HeuresReelles.Should().Be(8.75m);
+        resultat.HeuresRetenues.Should().Be(8.5m);
     }
 
     [Fact]
@@ -286,8 +286,8 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(3m, resultat.HeuresReelles);
-        Assert.Equal(3m, resultat.HeuresRetenues);
+        resultat.HeuresReelles.Should().Be(3m);
+        resultat.HeuresRetenues.Should().Be(3m);
     }
 
     // ------------------------------------------------------------------ règles complémentaires (multi)
@@ -300,9 +300,9 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(8m, resultat.HeuresRetenues);
-        Assert.Equal(0m, resultat.Ferie);
-        Assert.Equal(0m, resultat.Absence);
+        resultat.HeuresRetenues.Should().Be(8m);
+        resultat.Ferie.Should().Be(0m);
+        resultat.Absence.Should().Be(0m);
     }
 
     [Fact]
@@ -313,8 +313,8 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerJour(Multi(estFemme: true), jour);
 
-        Assert.Equal(8m, resultat.HeuresRetenues);
-        Assert.Equal(3m, resultat.Ferie);
+        resultat.HeuresRetenues.Should().Be(8m);
+        resultat.Ferie.Should().Be(3m);
     }
 
     [Fact]
@@ -325,8 +325,8 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerJour(Multi(estFemme: false), jour);
 
-        Assert.Equal(3m, resultat.HeuresRetenues);
-        Assert.Equal(0m, resultat.Ferie);
+        resultat.HeuresRetenues.Should().Be(3m);
+        resultat.Ferie.Should().Be(0m);
     }
 
     [Fact]
@@ -336,8 +336,8 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerJour(Multi(), jour);
 
-        Assert.Equal(4m, resultat.Ferie);
-        Assert.Equal(0m, resultat.Dimanche);
+        resultat.Ferie.Should().Be(4m);
+        resultat.Dimanche.Should().Be(0m);
     }
 
     [Fact]
@@ -345,9 +345,9 @@ public class OvertimeCalculatorTests
     {
         var resultat = OvertimeCalculator.CalculerSemaine(Multi(), Array.Empty<OvertimeDayInput>());
 
-        Assert.Equal(0m, resultat.Ht);
-        Assert.Equal(0m, resultat.Hs);
-        Assert.Empty(resultat.Jours);
+        resultat.Ht.Should().Be(0m);
+        resultat.Hs.Should().Be(0m);
+        resultat.Jours.Should().BeEmpty();
     }
 
     // ------------------------------------------------------------------ mode 2 pointages
@@ -363,8 +363,8 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerSemaine(config, semaine);
 
-        Assert.Equal(42.5m, resultat.Ht);
-        Assert.Equal(0m, resultat.Hs);
+        resultat.Ht.Should().Be(42.5m);
+        resultat.Hs.Should().Be(0m);
     }
 
     [Fact]
@@ -380,8 +380,8 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerSemaine(config, semaine);
 
-        Assert.Equal(47.5m, resultat.Ht);
-        Assert.Equal(5m, resultat.Hs);
+        resultat.Ht.Should().Be(47.5m);
+        resultat.Hs.Should().Be(5m);
     }
 
     [Fact]
@@ -392,8 +392,8 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(3.5m, resultat.HeuresRetenues);
-        Assert.Equal(3.5m, resultat.HeuresSup);
+        resultat.HeuresRetenues.Should().Be(3.5m);
+        resultat.HeuresSup.Should().Be(3.5m);
     }
 
     [Fact]
@@ -405,8 +405,8 @@ public class OvertimeCalculatorTests
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
         // 17:40 → 17:30 (et non 17:40) : 9,5 h réelles.
-        Assert.Equal(9.5m, resultat.HeuresReelles);
-        Assert.Equal(9m, resultat.HeuresRetenues);
+        resultat.HeuresReelles.Should().Be(9.5m);
+        resultat.HeuresRetenues.Should().Be(9m);
     }
 
     [Fact]
@@ -417,8 +417,8 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(1m, resultat.Nuit);
-        Assert.Equal(2.5m, resultat.HeuresRetenues);
+        resultat.Nuit.Should().Be(1m);
+        resultat.HeuresRetenues.Should().Be(2.5m);
     }
 
     [Fact]
@@ -429,8 +429,8 @@ public class OvertimeCalculatorTests
 
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(8m, resultat.HeuresRetenues);
-        Assert.Equal(0m, resultat.HeuresSup);
+        resultat.HeuresRetenues.Should().Be(8m);
+        resultat.HeuresSup.Should().Be(0m);
     }
 
     [Fact]
@@ -443,9 +443,9 @@ public class OvertimeCalculatorTests
         var dimancheResultat = OvertimeCalculator.CalculerJour(config, dimanche);
         var ferieResultat = OvertimeCalculator.CalculerJour(config, ferie);
 
-        Assert.Equal(8.5m, dimancheResultat.Dimanche);
-        Assert.Equal(0m, dimancheResultat.HeuresSup);
-        Assert.Equal(8.5m, ferieResultat.Ferie);
-        Assert.Equal(0m, ferieResultat.HeuresSup);
+        dimancheResultat.Dimanche.Should().Be(8.5m);
+        dimancheResultat.HeuresSup.Should().Be(0m);
+        ferieResultat.Ferie.Should().Be(8.5m);
+        ferieResultat.HeuresSup.Should().Be(0m);
     }
 }

@@ -82,12 +82,12 @@ public class PunchProcessingServiceTests
 
         var resultat = await contexte.Traiter(Lundi, Lundi);
 
-        Assert.Equal(0, resultat.CorrectionsCreees);
-        var anomalie = Assert.Single(contexte.Anomalies);
-        Assert.True(anomalie.AbsAm);
-        Assert.True(anomalie.AbsPm);
-        Assert.Null(anomalie.H1);
-        Assert.Null(anomalie.H2);
+        resultat.CorrectionsCreees.Should().Be(0);
+        var anomalie = contexte.Anomalies.Should().ContainSingle().Which;
+        anomalie.AbsAm.Should().BeTrue();
+        anomalie.AbsPm.Should().BeTrue();
+        anomalie.H1.Should().BeNull();
+        anomalie.H2.Should().BeNull();
     }
 
     [Fact]
@@ -98,11 +98,11 @@ public class PunchProcessingServiceTests
 
         await contexte.Traiter(Lundi, Lundi);
 
-        var anomalie = Assert.Single(contexte.Anomalies);
-        Assert.Equal(new TimeSpan(8, 0, 0), anomalie.H1);
-        Assert.Equal(new TimeSpan(8, 0, 0), anomalie.H2);
-        Assert.Null(anomalie.AbsAm);
-        Assert.Null(anomalie.AbsPm);
+        var anomalie = contexte.Anomalies.Should().ContainSingle().Which;
+        anomalie.H1.Should().Be(new TimeSpan(8, 0, 0));
+        anomalie.H2.Should().Be(new TimeSpan(8, 0, 0));
+        anomalie.AbsAm.Should().BeNull();
+        anomalie.AbsPm.Should().BeNull();
     }
 
     [Fact]
@@ -114,16 +114,16 @@ public class PunchProcessingServiceTests
 
         var resultat = await contexte.Traiter(Lundi, Lundi);
 
-        var correction = Assert.Single(contexte.Corrections);
-        Assert.Equal(new TimeSpan(8, 0, 0), correction.HEntree);
-        Assert.Equal(new TimeSpan(17, 0, 0), correction.HSortie);
-        Assert.Equal(Lundi.Date, correction.DatePointageIn);
-        Assert.Equal(Lundi.Date, correction.DatePointageOut);
-        Assert.True(correction.ValiderCorrection);
-        Assert.Equal(PunchProcessingConfiguration.OrigineAuto, correction.Origine);
-        Assert.Null(correction.Ferier);
-        Assert.Empty(contexte.Anomalies);
-        Assert.Equal(1, resultat.CorrectionsCreees);
+        var correction = contexte.Corrections.Should().ContainSingle().Which;
+        correction.HEntree.Should().Be(new TimeSpan(8, 0, 0));
+        correction.HSortie.Should().Be(new TimeSpan(17, 0, 0));
+        correction.DatePointageIn.Should().Be(Lundi.Date);
+        correction.DatePointageOut.Should().Be(Lundi.Date);
+        correction.ValiderCorrection.Should().BeTrue();
+        correction.Origine.Should().Be(PunchProcessingConfiguration.OrigineAuto);
+        correction.Ferier.Should().BeNull();
+        contexte.Anomalies.Should().BeEmpty();
+        resultat.CorrectionsCreees.Should().Be(1);
     }
 
     [Fact]
@@ -136,10 +136,10 @@ public class PunchProcessingServiceTests
 
         await contexte.Traiter(Lundi, Lundi);
 
-        var correction = Assert.Single(contexte.Corrections);
-        Assert.True(correction.Ferier);
-        Assert.True(correction.FerierAm);
-        Assert.True(correction.FerierPm);
+        var correction = contexte.Corrections.Should().ContainSingle().Which;
+        correction.Ferier.Should().BeTrue();
+        correction.FerierAm.Should().BeTrue();
+        correction.FerierPm.Should().BeTrue();
     }
 
     [Fact]
@@ -150,8 +150,8 @@ public class PunchProcessingServiceTests
 
         var resultat = await contexte.Traiter(Lundi, Lundi);
 
-        Assert.Empty(contexte.Anomalies);
-        Assert.Equal(0, resultat.AnomaliesCreees);
+        contexte.Anomalies.Should().BeEmpty();
+        resultat.AnomaliesCreees.Should().Be(0);
     }
 
     [Fact]
@@ -163,9 +163,9 @@ public class PunchProcessingServiceTests
 
         var resultat = await contexte.Traiter(Samedi, Samedi);
 
-        var correction = Assert.Single(contexte.Corrections);
-        Assert.Null(correction.Ferier);
-        Assert.Equal(1, resultat.CorrectionsCreees);
+        var correction = contexte.Corrections.Should().ContainSingle().Which;
+        correction.Ferier.Should().BeNull();
+        resultat.CorrectionsCreees.Should().Be(1);
     }
 
     [Fact]
@@ -175,7 +175,7 @@ public class PunchProcessingServiceTests
 
         await contexte.Traiter(Samedi, Samedi);
 
-        Assert.Empty(contexte.Anomalies);
+        contexte.Anomalies.Should().BeEmpty();
     }
 
     [Fact]
@@ -189,8 +189,8 @@ public class PunchProcessingServiceTests
 
         await contexte.Traiter(Lundi, mardi);
 
-        Assert.Equal(2, contexte.Anomalies.Count);
-        Assert.Empty(contexte.Corrections);
+        contexte.Anomalies.Count.Should().Be(2);
+        contexte.Corrections.Should().BeEmpty();
     }
 
     [Fact]
@@ -204,13 +204,13 @@ public class PunchProcessingServiceTests
 
         var resultat = await contexte.Traiter(Lundi, Lundi);
 
-        Assert.Equal(2, contexte.Corrections.Count);
-        Assert.Equal(2, resultat.CorrectionsCreees);
-        Assert.Equal(new TimeSpan(8, 0, 0), contexte.Corrections[0].HEntree);
-        Assert.Equal(new TimeSpan(12, 0, 0), contexte.Corrections[0].HSortie);
-        Assert.Equal(new TimeSpan(13, 0, 0), contexte.Corrections[1].HEntree);
-        Assert.Equal(new TimeSpan(17, 0, 0), contexte.Corrections[1].HSortie);
-        Assert.Empty(contexte.Anomalies);
+        contexte.Corrections.Count.Should().Be(2);
+        resultat.CorrectionsCreees.Should().Be(2);
+        contexte.Corrections[0].HEntree.Should().Be(new TimeSpan(8, 0, 0));
+        contexte.Corrections[0].HSortie.Should().Be(new TimeSpan(12, 0, 0));
+        contexte.Corrections[1].HEntree.Should().Be(new TimeSpan(13, 0, 0));
+        contexte.Corrections[1].HSortie.Should().Be(new TimeSpan(17, 0, 0));
+        contexte.Anomalies.Should().BeEmpty();
     }
 
     [Fact]
@@ -223,10 +223,10 @@ public class PunchProcessingServiceTests
 
         await contexte.Traiter(Lundi, Lundi);
 
-        var anomalie = Assert.Single(contexte.Anomalies);
-        Assert.Equal(new TimeSpan(8, 0, 0), anomalie.H1);
-        Assert.Equal(new TimeSpan(17, 0, 0), anomalie.H2);
-        Assert.Empty(contexte.Corrections);
+        var anomalie = contexte.Anomalies.Should().ContainSingle().Which;
+        anomalie.H1.Should().Be(new TimeSpan(8, 0, 0));
+        anomalie.H2.Should().Be(new TimeSpan(17, 0, 0));
+        contexte.Corrections.Should().BeEmpty();
     }
 
     [Fact]
@@ -237,9 +237,9 @@ public class PunchProcessingServiceTests
 
         await contexte.Traiter(Lundi, Lundi);
 
-        var anomalie = Assert.Single(contexte.Anomalies);
-        Assert.True(anomalie.AbsAm);
-        Assert.True(anomalie.AbsPm);
+        var anomalie = contexte.Anomalies.Should().ContainSingle().Which;
+        anomalie.AbsAm.Should().BeTrue();
+        anomalie.AbsPm.Should().BeTrue();
     }
 
     [Fact]
@@ -249,7 +249,7 @@ public class PunchProcessingServiceTests
 
         await contexte.Traiter(Lundi, Lundi);
 
-        Assert.Empty(contexte.Anomalies);
+        contexte.Anomalies.Should().BeEmpty();
     }
 
     [Fact]
@@ -260,7 +260,7 @@ public class PunchProcessingServiceTests
 
         await contexte.Traiter(Lundi, Lundi);
 
-        Assert.Empty(contexte.Anomalies);
+        contexte.Anomalies.Should().BeEmpty();
     }
 
     [Fact]
@@ -274,12 +274,12 @@ public class PunchProcessingServiceTests
 
         await contexte.Traiter(Lundi, mardi);
 
-        var correction = Assert.Single(contexte.Corrections);
-        Assert.Equal(Lundi.Date, correction.DatePointageIn);
-        Assert.Equal(mardi.Date, correction.DatePointageOut);
-        Assert.Equal(new TimeSpan(22, 0, 0), correction.HEntree);
-        Assert.Equal(new TimeSpan(6, 0, 0), correction.HSortie);
-        Assert.Empty(contexte.Anomalies);
+        var correction = contexte.Corrections.Should().ContainSingle().Which;
+        correction.DatePointageIn.Should().Be(Lundi.Date);
+        correction.DatePointageOut.Should().Be(mardi.Date);
+        correction.HEntree.Should().Be(new TimeSpan(22, 0, 0));
+        correction.HSortie.Should().Be(new TimeSpan(6, 0, 0));
+        contexte.Anomalies.Should().BeEmpty();
     }
 
     [Fact]
@@ -302,10 +302,10 @@ public class PunchProcessingServiceTests
 
         var resultat = await contexte.Traiter(Lundi, Lundi);
 
-        Assert.Equal(1, resultat.JoursIgnores);
-        Assert.Single(contexte.Corrections);
-        Assert.Equal(PunchProcessingConfiguration.OrigineManuel, contexte.Corrections[0].Origine);
-        Assert.Equal(new TimeSpan(16, 0, 0), contexte.Corrections[0].HSortie);
+        resultat.JoursIgnores.Should().Be(1);
+        contexte.Corrections.Should().ContainSingle();
+        contexte.Corrections[0].Origine.Should().Be(PunchProcessingConfiguration.OrigineManuel);
+        contexte.Corrections[0].HSortie.Should().Be(new TimeSpan(16, 0, 0));
     }
 
     [Fact]
@@ -324,8 +324,8 @@ public class PunchProcessingServiceTests
 
         var resultat = await contexte.Traiter(Lundi, Lundi);
 
-        Assert.Equal(1, resultat.JoursIgnores);
-        Assert.Empty(contexte.Corrections);
+        resultat.JoursIgnores.Should().Be(1);
+        contexte.Corrections.Should().BeEmpty();
     }
 
     [Fact]
@@ -338,9 +338,9 @@ public class PunchProcessingServiceTests
         var premier = await contexte.Traiter(Lundi, Lundi);
         var second = await contexte.Traiter(Lundi, Lundi);
 
-        Assert.Equal(1, premier.CorrectionsCreees);
-        Assert.Equal(1, second.CorrectionsCreees);
-        Assert.Single(contexte.Corrections);
+        premier.CorrectionsCreees.Should().Be(1);
+        second.CorrectionsCreees.Should().Be(1);
+        contexte.Corrections.Should().ContainSingle();
     }
 
     [Fact]
@@ -352,9 +352,9 @@ public class PunchProcessingServiceTests
         var premier = await contexte.Traiter(Lundi, Lundi);
         var second = await contexte.Traiter(Lundi, Lundi);
 
-        Assert.Equal(1, premier.AnomaliesCreees);
-        Assert.Equal(0, second.AnomaliesCreees);
-        Assert.Single(contexte.Anomalies);
+        premier.AnomaliesCreees.Should().Be(1);
+        second.AnomaliesCreees.Should().Be(0);
+        contexte.Anomalies.Should().ContainSingle();
     }
 
     [Fact]
@@ -366,7 +366,7 @@ public class PunchProcessingServiceTests
 
         await contexte.Traiter(Lundi, Lundi);
 
-        Assert.Empty(contexte.Anomalies);
+        contexte.Anomalies.Should().BeEmpty();
     }
 
     private static HeureCorrigee CorrectionAuto(string matricule, DateTime jour) => new()
@@ -399,7 +399,7 @@ public class PunchProcessingServiceTests
 
         await contexte.Service.ProcessAsync(new PeriodRequest(null, null, Lundi, Lundi, "ATELIER"));
 
-        Assert.Contains(autre, contexte.Corrections);
+        contexte.Corrections.Should().Contain(autre);
     }
 
     [Fact]
@@ -419,7 +419,7 @@ public class PunchProcessingServiceTests
 
         var resultat = await contexte.Traiter(Lundi, Lundi);
 
-        Assert.Contains(validee, contexte.Corrections);
-        Assert.Equal(1, resultat.JoursIgnores);
+        contexte.Corrections.Should().Contain(validee);
+        resultat.JoursIgnores.Should().Be(1);
     }
 }

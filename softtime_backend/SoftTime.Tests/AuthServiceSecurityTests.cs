@@ -44,12 +44,12 @@ public class AuthServiceSecurityTests
 
         var adminUser = _uow.Get<Responsable>().Items.Single(u => u.Login == "admin");
 
-        Assert.NotNull(adminUser.Password);
-        Assert.NotEqual("AdminSecret123!", adminUser.Password);
-        Assert.True(PasswordHashClassifier.IsHashedPassword(adminUser.Password));
+        adminUser.Password.Should().NotBeNull();
+        adminUser.Password.Should().NotBe("AdminSecret123!");
+        PasswordHashClassifier.IsHashedPassword(adminUser.Password).Should().BeTrue();
 
         var verifyResult = _hasher.VerifyHashedPassword(adminUser, adminUser.Password, "AdminSecret123!");
-        Assert.Equal(PasswordVerificationResult.Success, verifyResult);
+        verifyResult.Should().Be(PasswordVerificationResult.Success);
     }
 
     [Fact]
@@ -63,12 +63,12 @@ public class AuthServiceSecurityTests
         var createdDto = await _auth.SaveUserAsync(userDto);
 
         var savedEntity = _uow.Get<Responsable>().Items.Single(u => u.Login == "testuser");
-        Assert.NotNull(savedEntity.Password);
-        Assert.NotEqual("UserPassword456!", savedEntity.Password);
-        Assert.True(PasswordHashClassifier.IsHashedPassword(savedEntity.Password));
+        savedEntity.Password.Should().NotBeNull();
+        savedEntity.Password.Should().NotBe("UserPassword456!");
+        PasswordHashClassifier.IsHashedPassword(savedEntity.Password).Should().BeTrue();
 
         // Returned DTO must NEVER contain password or hash
-        Assert.Null(createdDto.Password);
+        createdDto.Password.Should().BeNull();
     }
 
     [Fact]
@@ -76,10 +76,10 @@ public class AuthServiceSecurityTests
     {
         var userDto = new UserDto(0, 2, "No Pwd", "nopwd", "M002", "");
 
-        var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(userDto));
+        var ex = (await FluentActions.Awaiting(() => _auth.SaveUserAsync(userDto)).Should().ThrowExactlyAsync<FieldValidationException>()).Which;
 
-        Assert.Equal("password", ex.Field);
-        Assert.Empty(_uow.Get<Responsable>().Items);
+        ex.Field.Should().Be("password");
+        _uow.Get<Responsable>().Items.Should().BeEmpty();
     }
 
     [Fact]
@@ -87,11 +87,11 @@ public class AuthServiceSecurityTests
     {
         var userDto = new UserDto(0, 2, "Weak User", "weakuser", "M010", "password");
 
-        var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(userDto));
+        var ex = (await FluentActions.Awaiting(() => _auth.SaveUserAsync(userDto)).Should().ThrowExactlyAsync<FieldValidationException>()).Which;
 
-        Assert.Equal("password", ex.Field);
-        Assert.Contains("règles de sécurité", ex.Message);
-        Assert.Empty(_uow.Get<Responsable>().Items.Where(u => u.Login == "weakuser"));
+        ex.Field.Should().Be("password");
+        ex.Message.Should().Contain("règles de sécurité");
+        _uow.Get<Responsable>().Items.Where(u => u.Login == "weakuser").Should().BeEmpty();
     }
 
     [Fact]
@@ -99,10 +99,10 @@ public class AuthServiceSecurityTests
     {
         var userDto = new UserDto(0, 2, "   ", "sansnom", null, "StrongPassword123!");
 
-        var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(userDto));
+        var ex = (await FluentActions.Awaiting(() => _auth.SaveUserAsync(userDto)).Should().ThrowExactlyAsync<FieldValidationException>()).Which;
 
-        Assert.Equal("nom", ex.Field);
-        Assert.Empty(_uow.Get<Responsable>().Items);
+        ex.Field.Should().Be("nom");
+        _uow.Get<Responsable>().Items.Should().BeEmpty();
     }
 
     [Fact]
@@ -110,10 +110,10 @@ public class AuthServiceSecurityTests
     {
         var userDto = new UserDto(0, 2, "Sans Login", "   ", null, "StrongPassword123!");
 
-        var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(userDto));
+        var ex = (await FluentActions.Awaiting(() => _auth.SaveUserAsync(userDto)).Should().ThrowExactlyAsync<FieldValidationException>()).Which;
 
-        Assert.Equal("login", ex.Field);
-        Assert.Empty(_uow.Get<Responsable>().Items);
+        ex.Field.Should().Be("login");
+        _uow.Get<Responsable>().Items.Should().BeEmpty();
     }
 
     [Fact]
@@ -121,10 +121,10 @@ public class AuthServiceSecurityTests
     {
         var userDto = new UserDto(0, 0, "Sans Rôle", "sansrole", null, "StrongPassword123!");
 
-        var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(userDto));
+        var ex = (await FluentActions.Awaiting(() => _auth.SaveUserAsync(userDto)).Should().ThrowExactlyAsync<FieldValidationException>()).Which;
 
-        Assert.Equal("roleId", ex.Field);
-        Assert.Empty(_uow.Get<Responsable>().Items);
+        ex.Field.Should().Be("roleId");
+        _uow.Get<Responsable>().Items.Should().BeEmpty();
     }
 
     [Fact]
@@ -141,10 +141,10 @@ public class AuthServiceSecurityTests
 
         var userDto = new UserDto(0, 2, "Doublon", "  alice ", null, "StrongPassword123!");
 
-        var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(userDto));
+        var ex = (await FluentActions.Awaiting(() => _auth.SaveUserAsync(userDto)).Should().ThrowExactlyAsync<FieldValidationException>()).Which;
 
-        Assert.Equal("login", ex.Field);
-        Assert.Single(_uow.Get<Responsable>().Items);
+        ex.Field.Should().Be("login");
+        _uow.Get<Responsable>().Items.Should().ContainSingle();
     }
 
     [Fact]
@@ -161,18 +161,18 @@ public class AuthServiceSecurityTests
 
         var result = await _auth.SaveUserAsync(updateDto);
 
-        Assert.Equal("Premier Renommé", result.Nom);
-        Assert.Equal(hash, _uow.Get<Responsable>().Items.Single(u => u.IdResponsable == 60).Password);
+        result.Nom.Should().Be("Premier Renommé");
+        _uow.Get<Responsable>().Items.Single(u => u.IdResponsable == 60).Password.Should().Be(hash);
     }
 
     [Fact]
     public async Task CreateAdminAsync_WithWeakPassword_ThrowsAndDoesNotCreateAccount()
     {
-        var ex = await Assert.ThrowsAsync<DomainException>(() =>
-            _auth.CreateAdminAsync(new AdminSetupDto("Admin User", "admin", "weakpass", null)));
+        var ex = (await FluentActions.Awaiting(() =>
+            _auth.CreateAdminAsync(new AdminSetupDto("Admin User", "admin", "weakpass", null))).Should().ThrowExactlyAsync<DomainException>()).Which;
 
-        Assert.Contains("règles de sécurité", ex.Message);
-        Assert.Empty(_uow.Get<Responsable>().Items);
+        ex.Message.Should().Contain("règles de sécurité");
+        _uow.Get<Responsable>().Items.Should().BeEmpty();
     }
 
     [Fact]
@@ -191,11 +191,11 @@ public class AuthServiceSecurityTests
 
         var updateDto = new UserDto(12, 2, "User To Update", "weakupdate", "M011", "azerty");
 
-        var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(updateDto));
+        var ex = (await FluentActions.Awaiting(() => _auth.SaveUserAsync(updateDto)).Should().ThrowExactlyAsync<FieldValidationException>()).Which;
 
-        Assert.Equal("password", ex.Field);
+        ex.Field.Should().Be("password");
         var unchanged = _uow.Get<Responsable>().Items.Single(u => u.IdResponsable == 12);
-        Assert.Equal(initialHash, unchanged.Password);
+        unchanged.Password.Should().Be(initialHash);
     }
 
     [Fact]
@@ -217,9 +217,9 @@ public class AuthServiceSecurityTests
         var resultDto = await _auth.SaveUserAsync(updateDto);
 
         var updatedEntity = _uow.Get<Responsable>().Items.Single(u => u.IdResponsable == 10);
-        Assert.Equal("Existing User Renamed", updatedEntity.NomResponsable);
-        Assert.Equal(initialHash, updatedEntity.Password);
-        Assert.Null(resultDto.Password);
+        updatedEntity.NomResponsable.Should().Be("Existing User Renamed");
+        updatedEntity.Password.Should().Be(initialHash);
+        resultDto.Password.Should().BeNull();
     }
 
     [Fact]
@@ -240,12 +240,12 @@ public class AuthServiceSecurityTests
         var resultDto = await _auth.SaveUserAsync(updateDto);
 
         var updatedEntity = _uow.Get<Responsable>().Items.Single(u => u.IdResponsable == 11);
-        Assert.NotEqual(initialHash, updatedEntity.Password);
-        Assert.True(PasswordHashClassifier.IsHashedPassword(updatedEntity.Password));
+        updatedEntity.Password.Should().NotBe(initialHash);
+        PasswordHashClassifier.IsHashedPassword(updatedEntity.Password).Should().BeTrue();
 
         var verify = _hasher.VerifyHashedPassword(updatedEntity, updatedEntity.Password!, "BrandNewSecret789!");
-        Assert.Equal(PasswordVerificationResult.Success, verify);
-        Assert.Null(resultDto.Password);
+        verify.Should().Be(PasswordVerificationResult.Success);
+        resultDto.Password.Should().BeNull();
     }
 
     [Fact]
@@ -263,9 +263,9 @@ public class AuthServiceSecurityTests
 
         var response = await _auth.LoginAsync(new LoginRequest("admin", "CorrectPassword123"));
 
-        Assert.NotNull(response);
-        Assert.Equal("admin", response.Login);
-        Assert.Equal("FAKE_JWT_TOKEN_1_admin", response.Token);
+        response.Should().NotBeNull();
+        response.Login.Should().Be("admin");
+        response.Token.Should().Be("FAKE_JWT_TOKEN_1_admin");
     }
 
     [Fact]
@@ -280,19 +280,19 @@ public class AuthServiceSecurityTests
         };
         _uow.Get<Responsable>().Items.Add(user);
 
-        var ex = await Assert.ThrowsAsync<UnauthorizedException>(() =>
-            _auth.LoginAsync(new LoginRequest("admin", "WrongPassword!")));
+        var ex = (await FluentActions.Awaiting(() =>
+            _auth.LoginAsync(new LoginRequest("admin", "WrongPassword!"))).Should().ThrowExactlyAsync<UnauthorizedException>()).Which;
 
-        Assert.Equal("Identifiants invalides.", ex.Message);
+        ex.Message.Should().Be("Identifiants invalides.");
     }
 
     [Fact]
     public async Task LoginAsync_WithNonExistentUser_ThrowsUnauthorized()
     {
-        var ex = await Assert.ThrowsAsync<UnauthorizedException>(() =>
-            _auth.LoginAsync(new LoginRequest("ghost", "SomePassword")));
+        var ex = (await FluentActions.Awaiting(() =>
+            _auth.LoginAsync(new LoginRequest("ghost", "SomePassword"))).Should().ThrowExactlyAsync<UnauthorizedException>()).Which;
 
-        Assert.Equal("Identifiants invalides.", ex.Message);
+        ex.Message.Should().Be("Identifiants invalides.");
     }
 
     [Theory]
@@ -302,8 +302,8 @@ public class AuthServiceSecurityTests
     [InlineData("admin", null)]
     public async Task LoginAsync_WithEmptyCredentials_ThrowsUnauthorized(string? login, string? password)
     {
-        await Assert.ThrowsAsync<UnauthorizedException>(() =>
-            _auth.LoginAsync(new LoginRequest(login!, password!)));
+        await FluentActions.Awaiting(() =>
+            _auth.LoginAsync(new LoginRequest(login!, password!))).Should().ThrowExactlyAsync<UnauthorizedException>();
     }
 
     [Theory]
@@ -321,8 +321,8 @@ public class AuthServiceSecurityTests
         };
         _uow.Get<Responsable>().Items.Add(user);
 
-        await Assert.ThrowsAsync<UnauthorizedException>(() =>
-            _auth.LoginAsync(new LoginRequest(injectionLogin, "Secret")));
+        await FluentActions.Awaiting(() =>
+            _auth.LoginAsync(new LoginRequest(injectionLogin, "Secret"))).Should().ThrowExactlyAsync<UnauthorizedException>();
     }
 
     [Fact]
@@ -338,21 +338,21 @@ public class AuthServiceSecurityTests
         };
         _uow.Get<Responsable>().Items.Add(legacyUser);
 
-        Assert.False(PasswordHashClassifier.IsHashedPassword(legacyUser.Password));
+        PasswordHashClassifier.IsHashedPassword(legacyUser.Password).Should().BeFalse();
 
         // Attempt login with the legacy plain text password
         var response = await _auth.LoginAsync(new LoginRequest("legacy_admin", "plain_text_password"));
 
-        Assert.NotNull(response);
-        Assert.Equal("legacy_admin", response.Login);
+        response.Should().NotBeNull();
+        response.Login.Should().Be("legacy_admin");
 
         // Stored password must now be upgraded to a secure PBKDF2 hash!
-        Assert.True(PasswordHashClassifier.IsHashedPassword(legacyUser.Password));
-        Assert.NotEqual("plain_text_password", legacyUser.Password);
+        PasswordHashClassifier.IsHashedPassword(legacyUser.Password).Should().BeTrue();
+        legacyUser.Password.Should().NotBe("plain_text_password");
 
         // Next login must succeed verifying against the upgraded hash
         var nextLogin = await _auth.LoginAsync(new LoginRequest("legacy_admin", "plain_text_password"));
-        Assert.NotNull(nextLogin);
+        nextLogin.Should().NotBeNull();
     }
 
     [Fact]
@@ -369,21 +369,21 @@ public class AuthServiceSecurityTests
         };
         _uow.Get<Responsable>().Items.Add(user);
 
-        Assert.True(PasswordHashClassifier.IsIdentityV2(user.Password));
-        Assert.False(PasswordHashClassifier.IsIdentityV3(user.Password));
+        PasswordHashClassifier.IsIdentityV2(user.Password).Should().BeTrue();
+        PasswordHashClassifier.IsIdentityV3(user.Password).Should().BeFalse();
 
         // First login with V2 password
         var response = await _auth.LoginAsync(new LoginRequest("v2user", "v2_secret_password"));
-        Assert.NotNull(response);
-        Assert.Equal("v2user", response.Login);
+        response.Should().NotBeNull();
+        response.Login.Should().Be("v2user");
 
         // Password in DB must now be transparently upgraded to Identity V3!
-        Assert.True(PasswordHashClassifier.IsIdentityV3(user.Password));
-        Assert.NotEqual(v2Hash, user.Password);
+        PasswordHashClassifier.IsIdentityV3(user.Password).Should().BeTrue();
+        user.Password.Should().NotBe(v2Hash);
 
         // Subsequent login verifies via the upgraded V3 hash
         var nextLogin = await _auth.LoginAsync(new LoginRequest("v2user", "v2_secret_password"));
-        Assert.NotNull(nextLogin);
+        nextLogin.Should().NotBeNull();
     }
 
     [Fact]
@@ -400,12 +400,12 @@ public class AuthServiceSecurityTests
         };
         _uow.Get<Responsable>().Items.Add(user);
 
-        await Assert.ThrowsAsync<UnauthorizedException>(() =>
-            _auth.LoginAsync(new LoginRequest("v2user_wrong", "completely_wrong_pwd")));
+        await FluentActions.Awaiting(() =>
+            _auth.LoginAsync(new LoginRequest("v2user_wrong", "completely_wrong_pwd"))).Should().ThrowExactlyAsync<UnauthorizedException>();
 
         // V2 hash must remain intact in DB
-        Assert.Equal(v2Hash, user.Password);
-        Assert.True(PasswordHashClassifier.IsIdentityV2(user.Password));
+        user.Password.Should().Be(v2Hash);
+        PasswordHashClassifier.IsIdentityV2(user.Password).Should().BeTrue();
     }
 
     [Fact]
@@ -423,10 +423,10 @@ public class AuthServiceSecurityTests
         _uow.Get<Responsable>().Items.Add(user);
 
         var response = await _auth.LoginAsync(new LoginRequest("v3user", "v3_password"));
-        Assert.NotNull(response);
+        response.Should().NotBeNull();
 
         // Hash was already V3, so it should not be mutated
-        Assert.Equal(v3Hash, user.Password);
+        user.Password.Should().Be(v3Hash);
     }
 
     [Fact]
@@ -442,12 +442,12 @@ public class AuthServiceSecurityTests
         };
         _uow.Get<Responsable>().Items.Add(user);
 
-        var ex = await Assert.ThrowsAsync<UnauthorizedException>(() =>
-            _auth.LoginAsync(new LoginRequest("corrupt", "some_guess")));
+        var ex = (await FluentActions.Awaiting(() =>
+            _auth.LoginAsync(new LoginRequest("corrupt", "some_guess"))).Should().ThrowExactlyAsync<UnauthorizedException>()).Which;
 
-        Assert.Equal("Identifiants invalides.", ex.Message);
+        ex.Message.Should().Be("Identifiants invalides.");
         // Value in DB was not wiped or corrupted
-        Assert.Equal("NOT_A_VALID_BASE64_HASH!#@$%", user.Password);
+        user.Password.Should().Be("NOT_A_VALID_BASE64_HASH!#@$%");
     }
 
     [Fact]
@@ -466,26 +466,26 @@ public class AuthServiceSecurityTests
 
         // First run: only userPlain1 and userPlain2 must be migrated
         var migratedCount = await UserAccountConfiguration.MigrateLegacyPasswordsAsync(_uow, _hasher);
-        Assert.Equal(2, migratedCount);
+        migratedCount.Should().Be(2);
 
         // Plain text users must now be hashed with Identity V3
-        Assert.True(PasswordHashClassifier.IsIdentityV3(userPlain1.Password));
-        Assert.True(PasswordHashClassifier.IsIdentityV3(userPlain2.Password));
+        PasswordHashClassifier.IsIdentityV3(userPlain1.Password).Should().BeTrue();
+        PasswordHashClassifier.IsIdentityV3(userPlain2.Password).Should().BeTrue();
 
         // CRITICAL: V2 and V3 users MUST NOT be double-hashed!
-        Assert.Equal(v2Hash, userV2.Password);
-        Assert.True(PasswordHashClassifier.IsIdentityV2(userV2.Password));
+        userV2.Password.Should().Be(v2Hash);
+        PasswordHashClassifier.IsIdentityV2(userV2.Password).Should().BeTrue();
 
-        Assert.Equal(v3Hash, userV3.Password);
-        Assert.True(PasswordHashClassifier.IsIdentityV3(userV3.Password));
+        userV3.Password.Should().Be(v3Hash);
+        PasswordHashClassifier.IsIdentityV3(userV3.Password).Should().BeTrue();
 
         // Second run: completely idempotent (0 migrated)
         var secondRun = await UserAccountConfiguration.MigrateLegacyPasswordsAsync(_uow, _hasher);
-        Assert.Equal(0, secondRun);
+        secondRun.Should().Be(0);
 
         // Verify V2 and V3 are still exactly the same
-        Assert.Equal(v2Hash, userV2.Password);
-        Assert.Equal(v3Hash, userV3.Password);
+        userV2.Password.Should().Be(v2Hash);
+        userV3.Password.Should().Be(v3Hash);
     }
 
     [Fact]
@@ -499,12 +499,12 @@ public class AuthServiceSecurityTests
 
         // Authenticate with the original password
         var authResponse = await _auth.LoginAsync(new LoginRequest("migrated_admin", "InitialPassword123"));
-        Assert.NotNull(authResponse);
-        Assert.Equal("migrated_admin", authResponse.Login);
+        authResponse.Should().NotBeNull();
+        authResponse.Login.Should().Be("migrated_admin");
 
         // Authenticate with wrong password fails
-        await Assert.ThrowsAsync<UnauthorizedException>(() =>
-            _auth.LoginAsync(new LoginRequest("migrated_admin", "WrongGuess")));
+        await FluentActions.Awaiting(() =>
+            _auth.LoginAsync(new LoginRequest("migrated_admin", "WrongGuess"))).Should().ThrowExactlyAsync<UnauthorizedException>();
     }
 
     [Fact]
@@ -516,11 +516,11 @@ public class AuthServiceSecurityTests
         using var cts = new CancellationTokenSource();
         cts.Cancel(); // cancelled before execution
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            UserAccountConfiguration.MigrateLegacyPasswordsAsync(_uow, _hasher, cts.Token));
+        await FluentActions.Awaiting(() =>
+            UserAccountConfiguration.MigrateLegacyPasswordsAsync(_uow, _hasher, cts.Token)).Should().ThrowAsync<OperationCanceledException>();
 
         // Data must remain intact
-        Assert.Equal("initial_plain", user.Password);
+        user.Password.Should().Be("initial_plain");
     }
 
     [Fact]
@@ -552,37 +552,37 @@ public class AuthServiceSecurityTests
         // First migration run
         var report = await UserAccountConfiguration.MigrateLegacyPasswordsDetailedAsync(_uow, _hasher);
 
-        Assert.Equal(9, report.TotalScanned);
-        Assert.Equal(1, report.MigratedCount); // Only userPlain
-        Assert.Equal(3, report.AlreadyHashedV3Count); // userV3Std, userV3Sha512, and userV3Sha512_32b
-        Assert.Equal(1, report.PreservedV2Count); // userV2
-        Assert.Equal(1, report.SkippedEmptyCount); // userEmpty
-        Assert.Equal(3, report.AmbiguousCount); // userMd5, userBcrypt, userCorrupt
-        Assert.Equal(3, report.AmbiguousAccounts.Count);
+        report.TotalScanned.Should().Be(9);
+        report.MigratedCount.Should().Be(1); // Only userPlain
+        report.AlreadyHashedV3Count.Should().Be(3); // userV3Std, userV3Sha512, and userV3Sha512_32b
+        report.PreservedV2Count.Should().Be(1); // userV2
+        report.SkippedEmptyCount.Should().Be(1); // userEmpty
+        report.AmbiguousCount.Should().Be(3); // userMd5, userBcrypt, userCorrupt
+        report.AmbiguousAccounts.Count.Should().Be(3);
 
         // Plain text user must now be hashed with Identity V3
-        Assert.True(PasswordHashClassifier.IsIdentityV3(userPlain.Password));
+        PasswordHashClassifier.IsIdentityV3(userPlain.Password).Should().BeTrue();
 
         // Ambiguous, unknown and existing hashes MUST be preserved without double-hashing
-        Assert.Equal(md5Hash, userMd5.Password);
-        Assert.Equal(bcryptHash, userBcrypt.Password);
-        Assert.Equal(corruptedV3, userCorrupt.Password);
-        Assert.Equal(v2Hash, userV2.Password);
-        Assert.Equal(v3StdHash, userV3Std.Password);
-        Assert.Equal(v3Sha512Hash, userV3Sha512.Password);
-        Assert.Equal(v3Sha512_32bHash, userV3Sha512_32b.Password);
+        userMd5.Password.Should().Be(md5Hash);
+        userBcrypt.Password.Should().Be(bcryptHash);
+        userCorrupt.Password.Should().Be(corruptedV3);
+        userV2.Password.Should().Be(v2Hash);
+        userV3Std.Password.Should().Be(v3StdHash);
+        userV3Sha512.Password.Should().Be(v3Sha512Hash);
+        userV3Sha512_32b.Password.Should().Be(v3Sha512_32bHash);
 
         // Second run: completely idempotent
         var report2 = await UserAccountConfiguration.MigrateLegacyPasswordsDetailedAsync(_uow, _hasher);
-        Assert.Equal(0, report2.MigratedCount);
-        Assert.Equal(4, report2.AlreadyHashedV3Count); // userPlain is now V3 too
-        Assert.Equal(3, report2.AmbiguousCount);
+        report2.MigratedCount.Should().Be(0);
+        report2.AlreadyHashedV3Count.Should().Be(4); // userPlain is now V3 too
+        report2.AmbiguousCount.Should().Be(3);
 
         // Values are still intact
-        Assert.Equal(md5Hash, userMd5.Password);
-        Assert.Equal(bcryptHash, userBcrypt.Password);
-        Assert.Equal(corruptedV3, userCorrupt.Password);
-        Assert.Equal(v3Sha512_32bHash, userV3Sha512_32b.Password);
+        userMd5.Password.Should().Be(md5Hash);
+        userBcrypt.Password.Should().Be(bcryptHash);
+        userCorrupt.Password.Should().Be(corruptedV3);
+        userV3Sha512_32b.Password.Should().Be(v3Sha512_32bHash);
     }
 
     [Fact]
@@ -599,12 +599,12 @@ public class AuthServiceSecurityTests
         _uow.Get<Responsable>().Items.Add(user);
 
         var loginResult = await _auth.LoginAsync(new LoginRequest("v2_login_user", "v2_secret_password"));
-        Assert.NotNull(loginResult);
-        Assert.Equal("v2_login_user", loginResult.Login);
+        loginResult.Should().NotBeNull();
+        loginResult.Login.Should().Be("v2_login_user");
 
         // User must now be automatically upgraded to Identity V3 in storage
-        Assert.True(PasswordHashClassifier.IsIdentityV3(user.Password));
-        Assert.NotEqual(v2Hash, user.Password);
+        PasswordHashClassifier.IsIdentityV3(user.Password).Should().BeTrue();
+        user.Password.Should().NotBe(v2Hash);
     }
 
     [Fact]
@@ -621,8 +621,8 @@ public class AuthServiceSecurityTests
         _uow.Get<Responsable>().Items.Add(user);
 
         var loginResult = await _auth.LoginAsync(new LoginRequest("sha512_user", "sha512_secret_pwd"));
-        Assert.NotNull(loginResult);
-        Assert.Equal("sha512_user", loginResult.Login);
+        loginResult.Should().NotBeNull();
+        loginResult.Login.Should().Be("sha512_user");
     }
 
     [Fact]
@@ -639,15 +639,15 @@ public class AuthServiceSecurityTests
         _uow.Get<Responsable>().Items.Add(user);
 
         // Attempting to log in by submitting the raw MD5 hash must fail
-        await Assert.ThrowsAsync<UnauthorizedException>(() =>
-            _auth.LoginAsync(new LoginRequest("md5_locked_user", md5Hash)));
+        await FluentActions.Awaiting(() =>
+            _auth.LoginAsync(new LoginRequest("md5_locked_user", md5Hash))).Should().ThrowExactlyAsync<UnauthorizedException>();
 
         // Attempting with arbitrary password also fails
-        await Assert.ThrowsAsync<UnauthorizedException>(() =>
-            _auth.LoginAsync(new LoginRequest("md5_locked_user", "secret")));
+        await FluentActions.Awaiting(() =>
+            _auth.LoginAsync(new LoginRequest("md5_locked_user", "secret"))).Should().ThrowExactlyAsync<UnauthorizedException>();
 
         // Value in DB is untouched
-        Assert.Equal(md5Hash, user.Password);
+        user.Password.Should().Be(md5Hash);
     }
 
     [Fact]
@@ -662,13 +662,13 @@ public class AuthServiceSecurityTests
 
         var result = await _auth.GetUsersPagedAsync(1, 2);
 
-        Assert.Equal(3, result.Total);
-        Assert.Equal(2, result.Items.Count);
-        Assert.Equal("Alice", result.Items[0].Nom);
-        Assert.Equal("Bob", result.Items[1].Nom);
-        Assert.Equal(1, result.Page);
-        Assert.Equal(2, result.PageSize);
-        Assert.Equal(2, result.TotalPages);
+        result.Total.Should().Be(3);
+        result.Items.Count.Should().Be(2);
+        result.Items[0].Nom.Should().Be("Alice");
+        result.Items[1].Nom.Should().Be("Bob");
+        result.Page.Should().Be(1);
+        result.PageSize.Should().Be(2);
+        result.TotalPages.Should().Be(2);
     }
 
     [Fact]
@@ -676,11 +676,11 @@ public class AuthServiceSecurityTests
     {
         var result = await _auth.GetRolesPagedAsync(1, 1);
 
-        Assert.Equal(2, result.Total);
-        Assert.Single(result.Items);
-        Assert.Equal("Administrateur", result.Items[0].Nom);
-        Assert.Equal(1, result.Page);
-        Assert.Equal(2, result.TotalPages);
+        result.Total.Should().Be(2);
+        result.Items.Should().ContainSingle();
+        result.Items[0].Nom.Should().Be("Administrateur");
+        result.Page.Should().Be(1);
+        result.TotalPages.Should().Be(2);
     }
 
     #region In-Memory Test Doubles

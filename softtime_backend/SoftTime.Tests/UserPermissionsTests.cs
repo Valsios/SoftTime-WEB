@@ -9,9 +9,9 @@ public class UserPermissionsTests
     public void UserDetailedPermissionsDto_Default_IsEmpty()
     {
         var dto = new UserDetailedPermissionsDto();
-        Assert.Equal(0, dto.UserId);
-        Assert.Empty(dto.GrantedPermissions);
-        Assert.False(dto.IsCustomized);
+        dto.UserId.Should().Be(0);
+        dto.GrantedPermissions.Should().BeEmpty();
+        dto.IsCustomized.Should().BeFalse();
     }
 
     [Fact]
@@ -20,11 +20,11 @@ public class UserPermissionsTests
         var perms = new List<string> { "SAGE:DB1:READ", "PARAMS:USERS" };
         var dto = new UserDetailedPermissionsDto(5, perms, true);
 
-        Assert.Equal(5, dto.UserId);
-        Assert.Equal(2, dto.GrantedPermissions.Count);
-        Assert.True(dto.IsCustomized);
-        Assert.Contains("SAGE:DB1:READ", dto.GrantedPermissions);
-        Assert.Contains("PARAMS:USERS", dto.GrantedPermissions);
+        dto.UserId.Should().Be(5);
+        dto.GrantedPermissions.Count.Should().Be(2);
+        dto.IsCustomized.Should().BeTrue();
+        dto.GrantedPermissions.Should().Contain("SAGE:DB1:READ");
+        dto.GrantedPermissions.Should().Contain("PARAMS:USERS");
     }
 
     [Fact]
@@ -38,9 +38,9 @@ public class UserPermissionsTests
             IsGranted = true
         };
 
-        Assert.Equal(1, entity.Id);
-        Assert.Equal(10, entity.IdResponsable);
-        Assert.Equal("POINTEUSE:CLOCK1:READ", entity.PermissionCode);
-        Assert.True(entity.IsGranted);
+        entity.Id.Should().Be(1);
+        entity.IdResponsable.Should().Be(10);
+        entity.PermissionCode.Should().Be("POINTEUSE:CLOCK1:READ");
+        entity.IsGranted.Should().BeTrue();
     }
 }

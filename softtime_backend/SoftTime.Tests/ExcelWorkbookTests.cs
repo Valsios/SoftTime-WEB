@@ -39,16 +39,16 @@ public class ExcelWorkbookTests
         using var stream = new MemoryStream(bytes);
         using var wb = new XLWorkbook(stream);
 
-        Assert.Equal(new[] { "Synthèse", "Périodes" }, wb.Worksheets.Select(w => w.Name));
+        wb.Worksheets.Select(w => w.Name).Should().Equal(new[] { "Synthèse", "Périodes" });
 
         var synthese = wb.Worksheet("Synthèse");
-        Assert.Equal("Indicateur", synthese.Cell(1, 1).GetString());
-        Assert.Equal("Période", synthese.Cell(2, 1).GetString());
-        Assert.Equal(12, synthese.Cell(3, 2).GetValue<int>());
-        Assert.Equal(12.5, synthese.Cell(4, 2).GetValue<double>(), 3);
+        synthese.Cell(1, 1).GetString().Should().Be("Indicateur");
+        synthese.Cell(2, 1).GetString().Should().Be("Période");
+        synthese.Cell(3, 2).GetValue<int>().Should().Be(12);
+        synthese.Cell(4, 2).GetValue<double>().Should().BeApproximately(12.5, 0.0005);
 
         var periodes = wb.Worksheet("Périodes");
-        Assert.Equal(3, periodes.Cell(2, 2).GetValue<int>());
+        periodes.Cell(2, 2).GetValue<int>().Should().Be(3);
     }
 
     [Fact]
@@ -65,11 +65,11 @@ public class ExcelWorkbookTests
         using var wb = new XLWorkbook(stream);
         var noms = wb.Worksheets.Select(w => w.Name).ToList();
 
-        Assert.Equal(3, noms.Count);
-        Assert.Contains("Répartition-Catégorie", noms);
-        Assert.Contains("Répartition-Catégorie (2)", noms);
-        Assert.All(noms, nom => Assert.True(nom.Length <= 31));
-        Assert.Equal(noms.Count, noms.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        noms.Count.Should().Be(3);
+        noms.Should().Contain("Répartition-Catégorie");
+        noms.Should().Contain("Répartition-Catégorie (2)");
+        noms.Should().AllSatisfy(nom => (nom.Length <= 31).Should().BeTrue());
+        noms.Distinct(StringComparer.OrdinalIgnoreCase).Count().Should().Be(noms.Count);
     }
 
     [Fact]
@@ -101,11 +101,11 @@ public class ExcelWorkbookTests
         using var wb = new XLWorkbook(stream);
         var ws = wb.Worksheet("JSON");
 
-        Assert.Equal(7, ws.Cell(2, 1).GetValue<int>());
-        Assert.Equal(2.5, ws.Cell(2, 2).GetValue<double>(), 3);
-        Assert.Equal("ok", ws.Cell(2, 3).GetString());
-        Assert.True(ws.Cell(2, 4).GetValue<bool>());
-        Assert.True(ws.Cell(2, 5).IsEmpty());
+        ws.Cell(2, 1).GetValue<int>().Should().Be(7);
+        ws.Cell(2, 2).GetValue<double>().Should().BeApproximately(2.5, 0.0005);
+        ws.Cell(2, 3).GetString().Should().Be("ok");
+        ws.Cell(2, 4).GetValue<bool>().Should().BeTrue();
+        ws.Cell(2, 5).IsEmpty().Should().BeTrue();
     }
 
     [Fact]
@@ -116,7 +116,7 @@ public class ExcelWorkbookTests
         using var stream = new MemoryStream(bytes);
         using var wb = new XLWorkbook(stream);
 
-        Assert.Single(wb.Worksheets);
-        Assert.Equal("Données", wb.Worksheets.First().Name);
+        wb.Worksheets.Should().ContainSingle();
+        wb.Worksheets.First().Name.Should().Be("Données");
     }
 }

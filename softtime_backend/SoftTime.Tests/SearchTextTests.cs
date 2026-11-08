@@ -10,29 +10,29 @@ public class SearchTextTests
     [InlineData("   ")]
     public void EmptySearchMatchesEverything(string? search)
     {
-        Assert.True(SearchText.Matches(search, "Dupont", "Jean"));
+        SearchText.Matches(search, "Dupont", "Jean").Should().BeTrue();
     }
 
     [Fact]
     public void MatchesIsCaseAndAccentInsensitive()
     {
-        Assert.True(SearchText.Matches("rene", "René Dupont"));
-        Assert.True(SearchText.Matches("DUPONT", "René Dupont"));
-        Assert.True(SearchText.Matches("é", "Rene"));
+        SearchText.Matches("rene", "René Dupont").Should().BeTrue();
+        SearchText.Matches("DUPONT", "René Dupont").Should().BeTrue();
+        SearchText.Matches("é", "Rene").Should().BeTrue();
     }
 
     [Fact]
     public void MatchesRequiresEveryWord()
     {
-        Assert.True(SearchText.Matches("rene dupont", "René", "Dupont"));
-        Assert.False(SearchText.Matches("rene martin", "René", "Dupont"));
+        SearchText.Matches("rene dupont", "René", "Dupont").Should().BeTrue();
+        SearchText.Matches("rene martin", "René", "Dupont").Should().BeFalse();
     }
 
     [Fact]
     public void RawTermsPreserveAccentsForSql()
     {
-        Assert.Equal(new[] { "René" }, SearchText.RawTerms(" René "));
-        Assert.Equal(new[] { "rene" }, SearchText.Terms(" René "));
+        SearchText.RawTerms(" René ").Should().Equal(new[] { "René" });
+        SearchText.Terms(" René ").Should().Equal(new[] { "rene" });
     }
 
     [Fact]
@@ -40,8 +40,8 @@ public class SearchTextTests
     {
         var row = new SearchRow(42, "Dupont", "Rene");
 
-        Assert.True(SearchText.MatchesObject("dupont", row));
-        Assert.False(SearchText.MatchesObject("42", row));
+        SearchText.MatchesObject("dupont", row).Should().BeTrue();
+        SearchText.MatchesObject("42", row).Should().BeFalse();
     }
 
     [Fact]
@@ -49,8 +49,8 @@ public class SearchTextTests
     {
         var normalized = SearchText.Normalize(new string('a', SearchText.MaxLength + 20));
 
-        Assert.NotNull(normalized);
-        Assert.Equal(SearchText.MaxLength, normalized!.Length);
+        normalized.Should().NotBeNull();
+        normalized!.Length.Should().Be(SearchText.MaxLength);
     }
 
     private sealed record SearchRow(int Id, string Nom, string Prenom);

@@ -18,7 +18,7 @@ public class AuditJournalSaveChangesInterceptorTests
 
         Capture(db);
 
-        Assert.Contains(AuditEntries(db), e => e.Actions == "Insertion" && e.Colonnes == "INTITULE_ABSENCE");
+        AuditEntries(db).Should().Contain(e => e.Actions == "Insertion" && e.Colonnes == "INTITULE_ABSENCE");
     }
 
     [Fact]
@@ -35,14 +35,14 @@ public class AuditJournalSaveChangesInterceptorTests
         Capture(db);
 
         var entries = AuditEntries(db).Where(e => e.Tables == "T_CODEABSENCE").ToList();
-        Assert.Equal(2, entries.Count);
-        Assert.Single(entries.Select(e => e.Correlations).Distinct());
-        var title = Assert.Single(entries.Where(entry => entry.Colonnes == "INTITULE_ABSENCE"));
-        Assert.Equal("Avant", title.Anciens);
-        Assert.Equal("Après", title.Nouveaux);
-        var paid = Assert.Single(entries.Where(entry => entry.Colonnes == "NOT_PAY"));
-        Assert.Equal("False", paid.Anciens);
-        Assert.Equal("True", paid.Nouveaux);
+        entries.Count.Should().Be(2);
+        entries.Select(e => e.Correlations).Distinct().Should().ContainSingle();
+        var title = entries.Where(entry => entry.Colonnes == "INTITULE_ABSENCE").Should().ContainSingle().Which;
+        title.Anciens.Should().Be("Avant");
+        title.Nouveaux.Should().Be("Après");
+        var paid = entries.Where(entry => entry.Colonnes == "NOT_PAY").Should().ContainSingle().Which;
+        paid.Anciens.Should().Be("False");
+        paid.Nouveaux.Should().Be("True");
     }
 
     [Fact]
@@ -56,10 +56,10 @@ public class AuditJournalSaveChangesInterceptorTests
 
         Capture(db);
 
-        var entry = Assert.Single(AuditEntries(db));
-        Assert.Equal("INTITULE", entry.Colonnes);
-        Assert.Equal("Avant", entry.Anciens);
-        Assert.Equal("Après", entry.Nouveaux);
+        var entry = AuditEntries(db).Should().ContainSingle().Which;
+        entry.Colonnes.Should().Be("INTITULE");
+        entry.Anciens.Should().Be("Avant");
+        entry.Nouveaux.Should().Be("Après");
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public class AuditJournalSaveChangesInterceptorTests
 
         Capture(db);
 
-        Assert.Empty(AuditEntries(db));
+        AuditEntries(db).Should().BeEmpty();
     }
 
     [Fact]
@@ -86,8 +86,8 @@ public class AuditJournalSaveChangesInterceptorTests
 
         Capture(db);
 
-        var entry = Assert.Single(AuditEntries(db));
-        Assert.Equal("INTITULE", entry.Colonnes);
+        var entry = AuditEntries(db).Should().ContainSingle().Which;
+        entry.Colonnes.Should().Be("INTITULE");
     }
 
     [Theory]
@@ -106,11 +106,11 @@ public class AuditJournalSaveChangesInterceptorTests
 
         Capture(db);
 
-        var entry = Assert.Single(AuditEntries(db));
-        Assert.Equal("2030-01-01 00:00:00.0000000", entry.Anciens);
-        Assert.Equal("2030-01-02 00:00:00.0000000", entry.Nouveaux);
-        Assert.DoesNotContain("Z", entry.Anciens);
-        Assert.DoesNotContain("Z", entry.Nouveaux);
+        var entry = AuditEntries(db).Should().ContainSingle().Which;
+        entry.Anciens.Should().Be("2030-01-01 00:00:00.0000000");
+        entry.Nouveaux.Should().Be("2030-01-02 00:00:00.0000000");
+        entry.Anciens.Should().NotContain("Z");
+        entry.Nouveaux.Should().NotContain("Z");
     }
 
     [Fact]
@@ -123,7 +123,7 @@ public class AuditJournalSaveChangesInterceptorTests
 
         Capture(db);
 
-        Assert.All(AuditEntries(db), entry => Assert.Equal("Suppression", entry.Actions));
+        AuditEntries(db).Should().AllSatisfy(entry => entry.Actions.Should().Be("Suppression"));
     }
 
     [Fact]
@@ -134,8 +134,8 @@ public class AuditJournalSaveChangesInterceptorTests
 
         Capture(db);
 
-        Assert.Equal(EntityState.Added, db.Entry(db.ChangeTracker.Entries<CodeAbsence>().Single().Entity).State);
-        Assert.All(AuditEntries(db), entry => Assert.Equal(EntityState.Added, db.Entry(entry).State));
+        db.Entry(db.ChangeTracker.Entries<CodeAbsence>().Single().Entity).State.Should().Be(EntityState.Added);
+        AuditEntries(db).Should().AllSatisfy(entry => db.Entry(entry).State.Should().Be(EntityState.Added));
     }
 
     [Fact]
@@ -146,9 +146,9 @@ public class AuditJournalSaveChangesInterceptorTests
 
         Capture(db);
 
-        var entry = Assert.Single(AuditEntries(db).Where(e => e.Colonnes == "PASSWORD"));
-        Assert.Equal("********", entry.Anciens);
-        Assert.Equal("********", entry.Nouveaux);
+        var entry = AuditEntries(db).Where(e => e.Colonnes == "PASSWORD").Should().ContainSingle().Which;
+        entry.Anciens.Should().Be("********");
+        entry.Nouveaux.Should().Be("********");
     }
 
     [Theory]
@@ -166,7 +166,7 @@ public class AuditJournalSaveChangesInterceptorTests
 
         Capture(db);
 
-        Assert.Empty(AuditEntries(db));
+        AuditEntries(db).Should().BeEmpty();
     }
 
     [Fact]
@@ -179,7 +179,7 @@ public class AuditJournalSaveChangesInterceptorTests
         interceptor.CaptureChanges(db);
         interceptor.CaptureChanges(db);
 
-        Assert.Equal(2, AuditEntries(db).Count);
+        AuditEntries(db).Count.Should().Be(2);
     }
 
     [Fact]
@@ -191,9 +191,9 @@ public class AuditJournalSaveChangesInterceptorTests
 
         Capture(db, options: new AuditJournalOptions { DetailThreshold = 2 });
 
-        var entry = Assert.Single(AuditEntries(db));
-        Assert.Null(entry.Colonnes);
-        Assert.Contains("Insertion=3", entry.Nouveaux);
+        var entry = AuditEntries(db).Should().ContainSingle().Which;
+        entry.Colonnes.Should().BeNull();
+        entry.Nouveaux.Should().Contain("Insertion=3");
     }
 
     [Fact]
@@ -204,7 +204,7 @@ public class AuditJournalSaveChangesInterceptorTests
 
         Capture(db, login: null);
 
-        Assert.All(AuditEntries(db), entry => Assert.Equal("SYSTEME:SoftTimeDbContext", entry.Users));
+        AuditEntries(db).Should().AllSatisfy(entry => entry.Users.Should().Be("SYSTEME:SoftTimeDbContext"));
     }
 
     private static SoftTimeDbContext CreateContext()

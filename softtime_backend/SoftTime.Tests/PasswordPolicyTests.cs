@@ -13,9 +13,9 @@ public class PasswordPolicyTests
     {
         var result = PasswordPolicy.Validate(StrongPassword);
 
-        Assert.True(result.IsValid);
-        Assert.Empty(result.Violations);
-        Assert.Equal(string.Empty, result.ErrorMessage);
+        result.IsValid.Should().BeTrue();
+        result.Violations.Should().BeEmpty();
+        result.ErrorMessage.Should().Be(string.Empty);
     }
 
     [Fact]
@@ -23,8 +23,8 @@ public class PasswordPolicyTests
     {
         var result = PasswordPolicy.Validate("Aa1!Bb2#");
 
-        Assert.Equal(PasswordPolicy.MinimumLength, "Aa1!Bb2#".Length);
-        Assert.True(result.IsValid);
+        "Aa1!Bb2#".Length.Should().Be(PasswordPolicy.MinimumLength);
+        result.IsValid.Should().BeTrue();
     }
 
     [Fact]
@@ -32,7 +32,7 @@ public class PasswordPolicyTests
     {
         var result = PasswordPolicy.Validate("Été2026!");
 
-        Assert.True(result.IsValid);
+        result.IsValid.Should().BeTrue();
     }
 
     [Fact]
@@ -48,8 +48,8 @@ public class PasswordPolicyTests
     {
         var result = PasswordPolicy.Validate("Ab1!xY");
 
-        Assert.False(result.IsValid);
-        Assert.Equal(new[] { "length" }, result.Violations.Select(v => v.Code));
+        result.IsValid.Should().BeFalse();
+        result.Violations.Select(v => v.Code).Should().Equal(new[] { "length" });
     }
 
     [Fact]
@@ -57,8 +57,8 @@ public class PasswordPolicyTests
     {
         var result = PasswordPolicy.Validate("abcdefg1!");
 
-        Assert.False(result.IsValid);
-        Assert.Equal(new[] { "uppercase" }, result.Violations.Select(v => v.Code));
+        result.IsValid.Should().BeFalse();
+        result.Violations.Select(v => v.Code).Should().Equal(new[] { "uppercase" });
     }
 
     [Fact]
@@ -66,8 +66,8 @@ public class PasswordPolicyTests
     {
         var result = PasswordPolicy.Validate("ABCDEFG1!");
 
-        Assert.False(result.IsValid);
-        Assert.Equal(new[] { "lowercase" }, result.Violations.Select(v => v.Code));
+        result.IsValid.Should().BeFalse();
+        result.Violations.Select(v => v.Code).Should().Equal(new[] { "lowercase" });
     }
 
     [Fact]
@@ -75,8 +75,8 @@ public class PasswordPolicyTests
     {
         var result = PasswordPolicy.Validate("Abcdefgh!");
 
-        Assert.False(result.IsValid);
-        Assert.Equal(new[] { "digit" }, result.Violations.Select(v => v.Code));
+        result.IsValid.Should().BeFalse();
+        result.Violations.Select(v => v.Code).Should().Equal(new[] { "digit" });
     }
 
     [Fact]
@@ -85,8 +85,8 @@ public class PasswordPolicyTests
         // L'espace ne compte pas comme caractère spécial.
         var result = PasswordPolicy.Validate("Abcdefg1 ");
 
-        Assert.False(result.IsValid);
-        Assert.Equal(new[] { "special" }, result.Violations.Select(v => v.Code));
+        result.IsValid.Should().BeFalse();
+        result.Violations.Select(v => v.Code).Should().Equal(new[] { "special" });
     }
 
     [Theory]
@@ -97,8 +97,8 @@ public class PasswordPolicyTests
     {
         var result = PasswordPolicy.Validate(password);
 
-        Assert.False(result.IsValid);
-        Assert.Equal(new[] { "required" }, result.Violations.Select(v => v.Code));
+        result.IsValid.Should().BeFalse();
+        result.Violations.Select(v => v.Code).Should().Equal(new[] { "required" });
     }
 
     [Fact]
@@ -106,11 +106,11 @@ public class PasswordPolicyTests
     {
         var result = PasswordPolicy.Validate("abc");
 
-        Assert.False(result.IsValid);
-        Assert.Contains(result.Violations, v => v.Code == "length");
-        Assert.Contains(result.Violations, v => v.Code == "uppercase");
-        Assert.Contains(result.Violations, v => v.Code == "digit");
-        Assert.Contains(result.Violations, v => v.Code == "special");
+        result.IsValid.Should().BeFalse();
+        result.Violations.Should().Contain(v => v.Code == "length");
+        result.Violations.Should().Contain(v => v.Code == "uppercase");
+        result.Violations.Should().Contain(v => v.Code == "digit");
+        result.Violations.Should().Contain(v => v.Code == "special");
     }
 
     [Fact]
@@ -118,17 +118,17 @@ public class PasswordPolicyTests
     {
         var result = PasswordPolicy.Validate("abc");
 
-        Assert.StartsWith("Le mot de passe ne respecte pas les règles de sécurité : ", result.ErrorMessage);
-        Assert.Contains("au moins 8 caractères", result.ErrorMessage);
-        Assert.EndsWith(".", result.ErrorMessage);
+        result.ErrorMessage.Should().StartWith("Le mot de passe ne respecte pas les règles de sécurité : ");
+        result.ErrorMessage.Should().Contain("au moins 8 caractères");
+        result.ErrorMessage.Should().EndWith(".");
     }
 
     [Fact]
     public void EnsureValid_WithWeakPassword_ThrowsDomainException()
     {
-        var ex = Assert.Throws<DomainException>(() => PasswordPolicy.EnsureValid("password"));
+        var ex = FluentActions.Invoking(() => PasswordPolicy.EnsureValid("password")).Should().ThrowExactly<DomainException>().Which;
 
-        Assert.Contains("règles de sécurité", ex.Message);
+        ex.Message.Should().Contain("règles de sécurité");
     }
 
     // ---------- Descripteur exposé au frontend ----------
@@ -138,10 +138,8 @@ public class PasswordPolicyTests
     {
         var policy = PasswordPolicy.Describe();
 
-        Assert.Equal(PasswordPolicy.MinimumLength, policy.MinLength);
-        Assert.Equal(
-            new[] { "length", "uppercase", "lowercase", "digit", "special" },
-            policy.Rules.Select(r => r.Code));
-        Assert.All(policy.Rules, rule => Assert.False(string.IsNullOrWhiteSpace(rule.Label)));
+        policy.MinLength.Should().Be(PasswordPolicy.MinimumLength);
+        policy.Rules.Select(r => r.Code).Should().Equal(new[] { "length", "uppercase", "lowercase", "digit", "special" });
+        policy.Rules.Should().AllSatisfy(rule => string.IsNullOrWhiteSpace(rule.Label).Should().BeFalse());
     }
 }

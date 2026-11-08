@@ -98,15 +98,15 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
         ApiFactory.Report($"JOURNAL|{url}|{profile}|{(int)status}");
 
         if (profile == "anonyme")
-            Assert.Equal(HttpStatusCode.Unauthorized, status);
+            status.Should().Be(HttpStatusCode.Unauthorized);
         else if (profile is "admin" or "tracereader")
-            Assert.Equal(HttpStatusCode.OK, status);
+            status.Should().Be(HttpStatusCode.OK);
         else
         {
-            Assert.Equal(HttpStatusCode.Forbidden, status);
-            Assert.Contains(Denied, text);
+            status.Should().Be(HttpStatusCode.Forbidden);
+            text.Should().Contain(Denied);
         }
-        Assert.Equal(before, _f.Snapshot());   // une lecture n'écrit rien, pas même dans le journal
+        _f.Snapshot().Should().Be(before);   // une lecture n'écrit rien, pas même dans le journal
     }
 
     [Fact]
@@ -115,24 +115,24 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
         foreach (var url in new[] { "/api/v1/journal", $"/api/v1/journal/{ClearRowId}", "/api/v1/journal?table=T_BDD_SAGE" })
         {
             var (status, text) = await Send("tracereader", HttpMethod.Get, url);
-            Assert.Equal(HttpStatusCode.OK, status);
-            Assert.DoesNotContain(InjectedClearValue, text);
+            status.Should().Be(HttpStatusCode.OK);
+            text.Should().NotContain(InjectedClearValue);
         }
 
         var (_, detail) = await Send("admin", HttpMethod.Get, $"/api/v1/journal/{ClearRowId}");
         using var doc = JsonDocument.Parse(detail);
-        Assert.Equal("TMDP", doc.RootElement.GetProperty("data").GetProperty("column").GetString());
-        Assert.Equal(AuditMaskingPolicy.Mask, doc.RootElement.GetProperty("data").GetProperty("before").GetString());
-        Assert.Equal(AuditMaskingPolicy.Mask, doc.RootElement.GetProperty("data").GetProperty("after").GetString());
+        doc.RootElement.GetProperty("data").GetProperty("column").GetString().Should().Be("TMDP");
+        doc.RootElement.GetProperty("data").GetProperty("before").GetString().Should().Be(AuditMaskingPolicy.Mask);
+        doc.RootElement.GetProperty("data").GetProperty("after").GetString().Should().Be(AuditMaskingPolicy.Mask);
         // Le stockage n'est pas modifié par la lecture (aucune purge implicite).
-        Assert.Equal(InjectedClearValue, _f.Store.Get<JournalAudit>().Items.Single(e => e.Id == ClearRowId).Nouveaux);
+        _f.Store.Get<JournalAudit>().Items.Single(e => e.Id == ClearRowId).Nouveaux.Should().Be(InjectedClearValue);
     }
 
     [Fact]
     public async Task Email_stays_visible()
     {
         var (_, text) = await Send("admin", HttpMethod.Get, "/api/v1/journal/3");
-        Assert.Contains("a@exemple.test", text);
+        text.Should().Contain("a@exemple.test");
     }
 
     [Fact]
@@ -142,36 +142,36 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
         var to = Base.AddDays(5).ToString("O");
 
         var period = await Page($"/api/v1/journal?from={from}&to={to}");
-        Assert.Equal(5, period.Total);
-        Assert.Equal(new long[] { ClearRowId, 4, 3, 2, 1 }, period.Ids);   // DATE_UTC décroissante
+        period.Total.Should().Be(5);
+        period.Ids.Should().Equal(new long[] { ClearRowId, 4, 3, 2, 1 });   // DATE_UTC décroissante
 
-        Assert.Equal(new long[] { ClearRowId, 3, 1 }, (await Page($"/api/v1/journal?from={from}&to={to}&user=agent1")).Ids);
-        Assert.Equal(new long[] { 4 }, (await Page($"/api/v1/journal?from={from}&action=SYNC_PAIE")).Ids);
-        Assert.Equal(new long[] { 2, 1 }, (await Page($"/api/v1/journal?from={from}&table=T_FERIE")).Ids);
-        Assert.Equal(new long[] { 2 }, (await Page($"/api/v1/journal?from={from}&table=T_FERIE&action=Modification")).Ids);
-        Assert.Equal(new long[] { 3 }, (await Page("/api/v1/journal?key=ID%3D3")).Ids);
-        Assert.Equal(new long[] { 2 }, (await Page($"/api/v1/journal?correlation={new Guid(2, 0, 0, new byte[8])}")).Ids);
-        Assert.Equal(0, (await Page($"/api/v1/journal?sageDatabase={ApiFactory.OtherSageName}")).Total);
+        (await Page($"/api/v1/journal?from={from}&to={to}&user=agent1")).Ids.Should().Equal(new long[] { ClearRowId, 3, 1 });
+        (await Page($"/api/v1/journal?from={from}&action=SYNC_PAIE")).Ids.Should().Equal(new long[] { 4 });
+        (await Page($"/api/v1/journal?from={from}&table=T_FERIE")).Ids.Should().Equal(new long[] { 2, 1 });
+        (await Page($"/api/v1/journal?from={from}&table=T_FERIE&action=Modification")).Ids.Should().Equal(new long[] { 2 });
+        (await Page("/api/v1/journal?key=ID%3D3")).Ids.Should().Equal(new long[] { 3 });
+        (await Page($"/api/v1/journal?correlation={new Guid(2, 0, 0, new byte[8])}")).Ids.Should().Equal(new long[] { 2 });
+        (await Page($"/api/v1/journal?sageDatabase={ApiFactory.OtherSageName}")).Total.Should().Be(0);
     }
 
     [Fact]
     public async Task Pagination_defaults_to_50_and_caps_the_page_size_at_200()
     {
         var first = await Page("/api/v1/journal?table=T_VOLUME");
-        Assert.Equal(230, first.Total);
-        Assert.Equal(50, first.PageSize);
-        Assert.Equal(50, first.Ids.Length);
-        Assert.Equal(1229, first.Ids[0]);
+        first.Total.Should().Be(230);
+        first.PageSize.Should().Be(50);
+        first.Ids.Length.Should().Be(50);
+        first.Ids[0].Should().Be(1229);
 
         var capped = await Page("/api/v1/journal?table=T_VOLUME&pageSize=5000");
-        Assert.Equal(200, capped.PageSize);
-        Assert.Equal(200, capped.Ids.Length);
+        capped.PageSize.Should().Be(200);
+        capped.Ids.Length.Should().Be(200);
 
         var last = await Page("/api/v1/journal?table=T_VOLUME&page=2&pageSize=200");
-        Assert.Equal(30, last.Ids.Length);
-        Assert.Equal(1000, last.Ids[^1]);
+        last.Ids.Length.Should().Be(30);
+        last.Ids[^1].Should().Be(1000);
 
-        Assert.Empty((await Page("/api/v1/journal?table=T_VOLUME&page=99&pageSize=200")).Ids);
+        (await Page("/api/v1/journal?table=T_VOLUME&page=99&pageSize=200")).Ids.Should().BeEmpty();
     }
 
     [Fact]
@@ -179,21 +179,21 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     {
         var (status, text) = await Send("tracereader", HttpMethod.Get,
             $"/api/v1/journal/facets?from={Base:O}&to={Base.AddDays(5):O}");
-        Assert.Equal(HttpStatusCode.OK, status);
+        status.Should().Be(HttpStatusCode.OK);
         using var doc = JsonDocument.Parse(text);
         // L'ordre suit la collation de la source : on compare les ensembles.
         string[] Values(string name) => doc.RootElement.GetProperty("data").GetProperty(name).EnumerateArray()
             .Select(v => v.GetString()!).OrderBy(v => v, StringComparer.Ordinal).ToArray();
-        Assert.Equal(new[] { "T_BDD_SAGE", "T_CUMSAL", "T_FERIE", "T_RESPONSABLE" }, Values("tables"));
-        Assert.Equal(new[] { "Insertion", "Modification", "SYNC_PAIE", "Suppression" }, Values("actions"));
-        Assert.Equal(new[] { "agent1", "agent2" }, Values("users"));
+        Values("tables").Should().Equal(new[] { "T_BDD_SAGE", "T_CUMSAL", "T_FERIE", "T_RESPONSABLE" });
+        Values("actions").Should().Equal(new[] { "Insertion", "Modification", "SYNC_PAIE", "Suppression" });
+        Values("users").Should().Equal(new[] { "agent1", "agent2" });
     }
 
     [Fact]
     public async Task Unknown_journal_line_is_404_for_an_authorized_reader()
     {
         var (status, _) = await Send("admin", HttpMethod.Get, "/api/v1/journal/424242");
-        Assert.Equal(HttpStatusCode.NotFound, status);
+        status.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Theory]
@@ -210,8 +210,8 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
         var before = _f.Snapshot();
         var (status, _) = await Send("admin", new HttpMethod(method), url, "{}");
         ApiFactory.Report($"JOURNAL-WRITE|{method} {url}|admin|{(int)status}");
-        Assert.Contains(status, new[] { HttpStatusCode.NotFound, HttpStatusCode.MethodNotAllowed });
-        Assert.Equal(before, _f.Snapshot());
+        new[] { HttpStatusCode.NotFound, HttpStatusCode.MethodNotAllowed }.Should().Contain(status);
+        _f.Snapshot().Should().Be(before);
     }
 
     public static IEnumerable<object[]> ConfigWrites()
@@ -230,22 +230,22 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
         ApiFactory.Report($"AUDIT-CONFIG|{method} {url}|{profile}|{(int)status}");
 
         if (profile == "anonyme")
-            Assert.Equal(HttpStatusCode.Unauthorized, status);
+            status.Should().Be(HttpStatusCode.Unauthorized);
         else
         {
-            Assert.Equal(HttpStatusCode.Forbidden, status);
+            status.Should().Be(HttpStatusCode.Forbidden);
             // Avec la porte 5 dans le jeton, c'est la règle administrateur qui refuse (sans porte 5, le filtre de porte refuse avant).
-            if (profile is "tracereader" or "gate5only") Assert.Contains(AdminOnly, text);
+            if (profile is "tracereader" or "gate5only") text.Should().Contain(AdminOnly);
         }
-        Assert.Equal(before, _f.Snapshot());
+        _f.Snapshot().Should().Be(before);
     }
 
     [Fact]
     public async Task Administrator_can_create_audit_configuration()
     {
         var (status, _) = await Send("admin", HttpMethod.Post, "/api/v1/audit/config", ConfigBody);
-        Assert.Equal(HttpStatusCode.NoContent, status);
-        Assert.Contains(_f.Store.Get<SuiviConfiguration>().Items, c => c.Tables == "T_JOURNAL_TEST");
+        status.Should().Be(HttpStatusCode.NoContent);
+        _f.Store.Get<SuiviConfiguration>().Items.Should().Contain(c => c.Tables == "T_JOURNAL_TEST");
     }
 
     [Fact]
@@ -254,9 +254,9 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
         // Le double en mémoire ne retrouve pas suivi_TBLCLN par identifiant : 404 attendu, jamais 401 ni 403.
         var (status, text) = await Send("admin", HttpMethod.Put, "/api/v1/audit/config/1", ConfigBody);
         ApiFactory.Report($"AUDIT-CONFIG|PUT /api/v1/audit/config/1|admin|{(int)status}");
-        Assert.NotEqual(HttpStatusCode.Unauthorized, status);
-        Assert.NotEqual(HttpStatusCode.Forbidden, status);
-        Assert.DoesNotContain(AdminOnly, text);
+        status.Should().NotBe(HttpStatusCode.Unauthorized);
+        status.Should().NotBe(HttpStatusCode.Forbidden);
+        text.Should().NotContain(AdminOnly);
     }
 
     private const string ConfigBody =
@@ -265,7 +265,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     private async Task<(int Total, int PageSize, long[] Ids)> Page(string url)
     {
         var (status, text) = await Send("admin", HttpMethod.Get, url);
-        Assert.Equal(HttpStatusCode.OK, status);
+        status.Should().Be(HttpStatusCode.OK);
         using var doc = JsonDocument.Parse(text);
         var root = doc.RootElement.GetProperty("data");
         return (root.GetProperty("total").GetInt32(), root.GetProperty("pageSize").GetInt32(),

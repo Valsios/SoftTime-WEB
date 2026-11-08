@@ -67,7 +67,7 @@ public class TokenGatesTests
         var claim = new JwtSecurityTokenHandler().ReadJwtToken(response.Token).Claims.First(c => c.Type == "rights").Value;
         var token = claim.Length == 0 ? Array.Empty<int>() : claim.Split(',').Select(int.Parse).OrderBy(x => x).ToArray();
         var me = await _auth.GetMeAsync(id);
-        Assert.Equal(response.Rights.OrderBy(x => x), me.Rights.OrderBy(x => x));       // /auth/me renvoie les mêmes portes
+        me.Rights.OrderBy(x => x).Should().Equal(response.Rights.OrderBy(x => x));       // /auth/me renvoie les mêmes portes
         return (token, response.Rights.OrderBy(x => x).ToArray(), response);
     }
 
@@ -76,8 +76,8 @@ public class TokenGatesTests
     {
         Account(14, 1, "admin");
         var (token, response, _) = await GatesOf("admin", 14);
-        Assert.Equal(new[] { 1, 2, 3, 4, 5, 6 }, token);
-        Assert.Equal(token, response);
+        token.Should().Equal(new[] { 1, 2, 3, 4, 5, 6 });
+        response.Should().Equal(token);
     }
 
     [Fact]
@@ -85,16 +85,16 @@ public class TokenGatesTests
     {
         Account(10028, 10034, "user", PermissionCatalogMarker);
         var (token, response, login) = await GatesOf("user", 10028);
-        Assert.Empty(token);
-        Assert.Empty(response);
-        Assert.Empty(login.AuthorizedDatabases);
+        token.Should().BeEmpty();
+        response.Should().BeEmpty();
+        login.AuthorizedDatabases.Should().BeEmpty();
     }
 
     [Fact]
     public async Task Consultation_account_has_gate_6_only()
     {
         Account(10030, 29, "user1");
-        Assert.Equal(new[] { 6 }, (await GatesOf("user1", 10030)).TokenGates);
+        (await GatesOf("user1", 10030)).TokenGates.Should().Equal(new[] { 6 });
     }
 
     [Fact]
@@ -103,8 +103,8 @@ public class TokenGatesTests
         Account(10034, 10034, "joel");
         _uow.Get<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = 1, IdResponsable = 10034, IdBdd = 3033 });
         var (token, _, login) = await GatesOf("joel", 10034);
-        Assert.Equal(new[] { 1, 3 }, token);
-        Assert.Equal("BASE1", Assert.Single(login.AuthorizedDatabases).NomBd);   // bases proposées : règle de l'étape 4b-5
+        token.Should().Equal(new[] { 1, 3 });
+        login.AuthorizedDatabases.Should().ContainSingle().Which.NomBd.Should().Be("BASE1");   // bases proposées : règle de l'étape 4b-5
     }
 
     [Fact]
@@ -113,14 +113,14 @@ public class TokenGatesTests
         // Stockage actuel : liste complète = droits du rôle + ajouts (convertie en écarts à la lecture).
         Account(10034, 10034, "joel", "SAGE:BASE1:READ", "PROC:SHIFTS", "PARAMS:USERS", "PARAMS:PRIVILEGES");
         var (token, _, _) = await GatesOf("joel", 10034);
-        Assert.Equal(new[] { 1, 2, 3 }, token);
+        token.Should().Equal(new[] { 1, 2, 3 });
     }
 
     [Fact]
     public async Task Removing_every_work_right_removes_gate_3()
     {
         Account(10034, 10034, "joel", "SAGE:BASE1:READ");
-        Assert.Equal(new[] { 1 }, (await GatesOf("joel", 10034)).TokenGates);
+        (await GatesOf("joel", 10034)).TokenGates.Should().Equal(new[] { 1 });
     }
 
     [Fact]
@@ -128,9 +128,9 @@ public class TokenGatesTests
     {
         Account(10099, 999, "orphan");
         var (token, response, login) = await GatesOf("orphan", 10099);
-        Assert.Empty(token);
-        Assert.Empty(response);
-        Assert.Empty(login.AuthorizedDatabases);
+        token.Should().BeEmpty();
+        response.Should().BeEmpty();
+        login.AuthorizedDatabases.Should().BeEmpty();
     }
 
     [Fact]
@@ -138,23 +138,23 @@ public class TokenGatesTests
     {
         Account(14, 1, "admin");
         Account(10034, 10034, "joel");
-        Assert.Equal(new[] { 1, 3 }, (await GatesOf("joel", 10034)).TokenGates);
+        (await GatesOf("joel", 10034)).TokenGates.Should().Equal(new[] { 1, 3 });
 
         await _auth.SaveUserDetailedPermissionsAsync(14, 10034, new[] { "SAGE:BASE1:READ", "PROC:SHIFTS", "PARAMS:USERS" });
-        Assert.Equal(new[] { 1, 2, 3 }, (await GatesOf("joel", 10034)).TokenGates);
+        (await GatesOf("joel", 10034)).TokenGates.Should().Equal(new[] { 1, 2, 3 });
     }
 
     // S2 : PUT privileges/{role} ne doit pas contredire les portes déduites des droits détaillés d'un rôle.
     [Fact]
     public async Task SetPrivileges_is_refused_for_a_role_with_detailed_rights_and_still_works_without()
     {
-        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.SetPrivilegesAsync(10034, new List<decimal> { 6 }));
-        Assert.Contains("droits détaillés", ex.Message);
-        Assert.Equal(new[] { 1m, 3m }, _uow.Get<DroitRole>().Items.Where(d => d.IdRole == 10034).Select(d => d.IdDroit).OrderBy(x => x));
+        var ex = (await FluentActions.Awaiting(() => _auth.SetPrivilegesAsync(10034, new List<decimal> { 6 })).Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().Contain("droits détaillés");
+        _uow.Get<DroitRole>().Items.Where(d => d.IdRole == 10034).Select(d => d.IdDroit).OrderBy(x => x).Should().Equal(new[] { 1m, 3m });
 
         _uow.Get<Role>().Items.Add(new Role { IdRole = 50, NomRole = "Sans lignes" });
         await _auth.SetPrivilegesAsync(50, new List<decimal> { 6 });
-        Assert.Single(_uow.Get<DroitRole>().Items.Where(d => d.IdRole == 50));
+        _uow.Get<DroitRole>().Items.Where(d => d.IdRole == 50).Should().ContainSingle();
     }
 
     private const string PermissionCatalogMarker = "__SOFTTIME_EMPTY_CUSTOM_PERMISSIONS__";

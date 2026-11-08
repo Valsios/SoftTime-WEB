@@ -155,7 +155,7 @@ public class ClosingServiceIntegrationTests
         }
 
         Ecrire("verite-terrain-resultat", rapport.ToString(), "csv", sansEtiquette: true);
-        Assert.True(manquees.Count == 0, "Anomalies injectées non détectées : " + string.Join(", ", manquees));
+        (manquees.Count == 0).Should().BeTrue("Anomalies injectées non détectées : " + string.Join(", ", manquees));
     }
 
     /// <summary>

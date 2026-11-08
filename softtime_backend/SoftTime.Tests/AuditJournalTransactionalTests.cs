@@ -32,10 +32,10 @@ public class AuditJournalTransactionalTests
         db.SaveChanges();
 
         var entries = db.JournalAudits.Where(item => item.Tables == "T_CODEABSENCE").ToList();
-        Assert.True(entity.IdAbsence > 0);
-        Assert.NotEmpty(entries);
-        Assert.All(entries, entry => Assert.Equal($"ID_ABSENCE={entity.IdAbsence}", entry.Cles));
-        Assert.DoesNotContain(entries.Select(entry => entry.Cles), key => key!.Contains('-'));
+        (entity.IdAbsence > 0).Should().BeTrue();
+        entries.Should().NotBeEmpty();
+        entries.Should().AllSatisfy(entry => entry.Cles.Should().Be($"ID_ABSENCE={entity.IdAbsence}"));
+        entries.Select(entry => entry.Cles).Should().NotContain(key => key!.Contains('-'));
         transaction.Rollback();
     }
 
@@ -51,8 +51,8 @@ public class AuditJournalTransactionalTests
         db.SaveChanges();
 
         var entries = db.JournalAudits.Where(item => item.Tables == "T_FIELD_ROLE").ToList();
-        Assert.NotEmpty(entries);
-        Assert.All(entries, entry => Assert.Equal($"Code={code}", entry.Cles));
+        entries.Should().NotBeEmpty();
+        entries.Should().AllSatisfy(entry => entry.Cles.Should().Be($"Code={code}"));
         transaction.Rollback();
     }
 
@@ -64,11 +64,11 @@ public class AuditJournalTransactionalTests
         using (var db = CreateAuditedContext(new ThrowOnJournalInsertInterceptor()))
         {
             db.Add(new CodeAbsence { IntituleAbsence = label });
-            Assert.Throws<DbUpdateException>(() => db.SaveChanges());
+            FluentActions.Invoking(() => db.SaveChanges()).Should().ThrowExactly<DbUpdateException>();
         }
 
         using var verification = CreatePlainContext();
-        Assert.False(verification.CodeAbsences.Any(item => item.IntituleAbsence == label));
+        verification.CodeAbsences.Any(item => item.IntituleAbsence == label).Should().BeFalse();
     }
 
     [Fact]
@@ -81,8 +81,8 @@ public class AuditJournalTransactionalTests
 
         db.SaveChanges();
 
-        Assert.NotNull(db.Database.CurrentTransaction);
-        Assert.True(transaction.GetDbTransaction().Connection is not null);
+        db.Database.CurrentTransaction.Should().NotBeNull();
+        (transaction.GetDbTransaction().Connection is not null).Should().BeTrue();
         transaction.Rollback();
     }
 
@@ -96,7 +96,7 @@ public class AuditJournalTransactionalTests
 
         db.SaveChanges();
 
-        Assert.Empty(db.JournalAudits);
+        db.JournalAudits.Should().BeEmpty();
         transaction.Rollback();
     }
 

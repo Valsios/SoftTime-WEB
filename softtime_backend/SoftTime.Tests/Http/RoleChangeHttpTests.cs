@@ -39,13 +39,13 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
     {
         var before = _f.Snapshot();
         var (resp, text) = await Send("admin", HttpMethod.Post, "/api/v1/users/10080/role-change-preview", """{"newRoleId":40}""");
-        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
         using var doc = JsonDocument.Parse(text);
-        Assert.Equal(2, doc.RootElement.GetProperty("data").GetProperty("count").GetInt32());
-        Assert.Equal("adjusted1", doc.RootElement.GetProperty("data").GetProperty("accountLogin").GetString());
+        doc.RootElement.GetProperty("data").GetProperty("count").GetInt32().Should().Be(2);
+        doc.RootElement.GetProperty("data").GetProperty("accountLogin").GetString().Should().Be("adjusted1");
         var codes = doc.RootElement.GetProperty("data").GetProperty("adjustmentsToClear").EnumerateArray().Select(e => e.GetString()).ToList();
-        Assert.Equal(new[] { "+PROC:PUNCHES", "+PROC:SHIFTS" }, codes.OrderBy(c => c));
-        Assert.Equal(before, _f.Snapshot());                 // l'aperçu n'écrit rien
+        codes.OrderBy(c => c).Should().Equal(new[] { "+PROC:PUNCHES", "+PROC:SHIFTS" });
+        _f.Snapshot().Should().Be(before);                 // l'aperçu n'écrit rien
     }
 
     [Theory]
@@ -56,28 +56,28 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
     public async Task Preview_is_refused_to_non_administrators(string profile)
     {
         var (resp, _) = await Send(profile, HttpMethod.Post, "/api/v1/users/10080/role-change-preview", """{"newRoleId":40}""");
-        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
     public async Task Preview_is_refused_to_anonymous()
     {
         var (resp, _) = await Send("anonyme", HttpMethod.Post, "/api/v1/users/10080/role-change-preview", """{"newRoleId":40}""");
-        Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
+        resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
     public async Task Preview_has_count_zero_without_adjustments_or_when_the_role_does_not_change()
     {
         var (withoutAdjustments, text1) = await Send("admin", HttpMethod.Post, "/api/v1/users/10050/role-change-preview", """{"newRoleId":40}""");
-        Assert.Equal(HttpStatusCode.OK, withoutAdjustments.StatusCode);
-        Assert.Equal(0, JsonDocument.Parse(text1).RootElement.GetProperty("data").GetProperty("count").GetInt32());
+        withoutAdjustments.StatusCode.Should().Be(HttpStatusCode.OK);
+        JsonDocument.Parse(text1).RootElement.GetProperty("data").GetProperty("count").GetInt32().Should().Be(0);
 
         var (sameRole, text2) = await Send("admin", HttpMethod.Post, "/api/v1/users/10080/role-change-preview", """{"newRoleId":91}""");
-        Assert.Equal(HttpStatusCode.OK, sameRole.StatusCode);
+        sameRole.StatusCode.Should().Be(HttpStatusCode.OK);
         using var doc = JsonDocument.Parse(text2);
-        Assert.Equal(0, doc.RootElement.GetProperty("data").GetProperty("count").GetInt32());
-        Assert.Empty(doc.RootElement.GetProperty("data").GetProperty("adjustmentsToClear").EnumerateArray());
+        doc.RootElement.GetProperty("data").GetProperty("count").GetInt32().Should().Be(0);
+        doc.RootElement.GetProperty("data").GetProperty("adjustmentsToClear").EnumerateArray().Should().BeEmpty();
     }
 
     [Fact]
@@ -85,12 +85,12 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
     {
         var before = _f.Snapshot();
         var (resp, text) = await Send("admin", HttpMethod.Put, "/api/v1/users/10080", Put(10080, 40, "adjusted1"));
-        Assert.Equal(HttpStatusCode.Conflict, resp.StatusCode);
+        resp.StatusCode.Should().Be(HttpStatusCode.Conflict);
         using var doc = JsonDocument.Parse(text);
-        Assert.Equal(2, doc.RootElement.GetProperty("data").GetProperty("count").GetInt32());
-        Assert.Equal("adjusted1", doc.RootElement.GetProperty("data").GetProperty("accountLogin").GetString());
-        Assert.Equal(before, _f.Snapshot());
-        Assert.Equal(91, _f.Store.Get<Responsable>().Items.Single(u => u.IdResponsable == 10080).IdRole);
+        doc.RootElement.GetProperty("data").GetProperty("count").GetInt32().Should().Be(2);
+        doc.RootElement.GetProperty("data").GetProperty("accountLogin").GetString().Should().Be("adjusted1");
+        _f.Snapshot().Should().Be(before);
+        _f.Store.Get<Responsable>().Items.Single(u => u.IdResponsable == 10080).IdRole.Should().Be(91);
     }
 
     [Fact]
@@ -99,29 +99,29 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
         using (var scope = _f.Services.CreateScope())
         {
             var rights = await scope.ServiceProvider.GetRequiredService<IEffectiveRightsService>().GetAsync(10081);   // met en cache
-            Assert.True(rights.Has("PROC:SHIFTS"));
+            rights.Has("PROC:SHIFTS").Should().BeTrue();
         }
         var otherRows = Rows(10083);
-        Assert.True(otherRows > 0);
+        (otherRows > 0).Should().BeTrue();
 
         var (resp, _) = await Send("admin", HttpMethod.Put, "/api/v1/users/10081", Put(10081, 40, "adjusted2", confirm: true));
 
-        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        Assert.Equal(40, _f.Store.Get<Responsable>().Items.Single(u => u.IdResponsable == 10081).IdRole);
-        Assert.Equal(0, Rows(10081));
-        Assert.Equal(otherRows, Rows(10083));                                       // un autre compte n'est pas touché
-        Assert.Contains(_f.Store.Get<AuditDroit>().Items, a => a.IdCible == 10081 && a.Action == "RESET_USER_PERMS");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        _f.Store.Get<Responsable>().Items.Single(u => u.IdResponsable == 10081).IdRole.Should().Be(40);
+        Rows(10081).Should().Be(0);
+        Rows(10083).Should().Be(otherRows);                                       // un autre compte n'est pas touché
+        _f.Store.Get<AuditDroit>().Items.Should().Contain(a => a.IdCible == 10081 && a.Action == "RESET_USER_PERMS");
         using var after = _f.Services.CreateScope();
         var fresh = await after.ServiceProvider.GetRequiredService<IEffectiveRightsService>().GetAsync(10081);
-        Assert.False(fresh.Has("PROC:SHIFTS"));                                     // le cache a été invalidé
+        fresh.Has("PROC:SHIFTS").Should().BeFalse();                                     // le cache a été invalidé
     }
 
     [Fact]
     public async Task Put_changing_the_role_of_an_account_without_adjustments_needs_no_confirmation()
     {
         var (resp, _) = await Send("admin", HttpMethod.Put, "/api/v1/users/10050", Put(10050, 40, "cible"));
-        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        Assert.Equal(40, _f.Store.Get<Responsable>().Items.Single(u => u.IdResponsable == 10050).IdRole);
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        _f.Store.Get<Responsable>().Items.Single(u => u.IdResponsable == 10050).IdRole.Should().Be(40);
     }
 
     [Fact]
@@ -129,8 +129,8 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
     {
         var rows = Rows(10083);
         var (resp, _) = await Send("admin", HttpMethod.Put, "/api/v1/users/10083", Put(10083, 91, "adjusted3"));
-        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        Assert.Equal(rows, Rows(10083));
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        Rows(10083).Should().Be(rows);
     }
 
     [Theory]
@@ -140,7 +140,7 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
     {
         var before = _f.Snapshot();
         var (resp, _) = await Send(profile, HttpMethod.Put, "/api/v1/users/10080", Put(10080, 40, "adjusted1", confirm: true));
-        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
-        Assert.Equal(before, _f.Snapshot());
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        _f.Snapshot().Should().Be(before);
     }
 }

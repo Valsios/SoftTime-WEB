@@ -133,14 +133,14 @@ public class ReportServiceTests
 
         var rows = await ctx.Service.AbsencesAsync(Contexte.Filtre(nonPointe, declaree));
 
-        var row = Assert.Single(rows);
-        Assert.Equal("001", row.Matricule);
-        Assert.Equal("Dupont", row.Nom);
-        Assert.Equal("Jean", row.Prenom);
-        Assert.Equal("INFO", row.Departement);
-        Assert.Equal(nonPointe, row.Date);
-        Assert.Equal("Non justifiée", row.Type);
-        Assert.Equal(8m, row.DureeHeures);
+        var row = rows.Should().ContainSingle().Which;
+        row.Matricule.Should().Be("001");
+        row.Nom.Should().Be("Dupont");
+        row.Prenom.Should().Be("Jean");
+        row.Departement.Should().Be("INFO");
+        row.Date.Should().Be(nonPointe);
+        row.Type.Should().Be("Non justifiée");
+        row.DureeHeures.Should().Be(8m);
     }
 
     [Fact]
@@ -157,7 +157,7 @@ public class ReportServiceTests
 
         var rows = await ctx.Service.AbsencesAsync(Contexte.Filtre(jourOff, ferie));
 
-        Assert.Empty(rows);
+        rows.Should().BeEmpty();
     }
 
     [Fact]
@@ -169,10 +169,10 @@ public class ReportServiceTests
 
         // La comparaison ignore la casse et les espaces de saisie.
         var correspondant = await ctx.Service.AbsencesAsync(Contexte.Filtre(jour, jour, " info "));
-        Assert.Single(correspondant);
+        correspondant.Should().ContainSingle();
 
         var autre = await ctx.Service.AbsencesAsync(Contexte.Filtre(jour, jour, "RH"));
-        Assert.Empty(autre);
+        autre.Should().BeEmpty();
     }
 
     [Fact]
@@ -189,8 +189,8 @@ public class ReportServiceTests
 
         var page = await ctx.Service.AbsencesPagedAsync(Contexte.Filtre(nonPointe, conge), page: 1, pageSize: 50);
 
-        Assert.Equal(1, page.Total);
-        var row = Assert.Single(page.Items);
-        Assert.Equal("Non justifiée", ((SoftTime.Domain.Services.AbsenceReportRow)row).Type);
+        page.Total.Should().Be(1);
+        var row = page.Items.Should().ContainSingle().Which;
+        ((SoftTime.Domain.Services.AbsenceReportRow)row).Type.Should().Be("Non justifiée");
     }
 }

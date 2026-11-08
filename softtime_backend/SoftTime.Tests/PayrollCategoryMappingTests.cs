@@ -17,15 +17,15 @@ public class PayrollCategoryMappingTests
     [InlineData("Dimanche", 2.5)]
     [InlineData("Nuit", 4)]
     public void MapsEachPayrollCategoryToItsOwnHsValue(string category, decimal expected)
-        => Assert.Equal(expected, OvertimePayrollCategoryMapper.ValueFor(category, Row));
+        => OvertimePayrollCategoryMapper.ValueFor(category, Row).Should().Be(expected);
 
     [Fact]
     public void UnknownCategoryIsRejected()
-        => Assert.Throws<DomainException>(() => OvertimePayrollCategoryMapper.ValueFor("Other", Row));
+        => FluentActions.Invoking(() => OvertimePayrollCategoryMapper.ValueFor("Other", Row)).Should().ThrowExactly<DomainException>();
 
     [Fact]
     public void SqlIdentifiersRejectDangerousCharacters()
-        => Assert.Throws<DomainException>(() => PayrollWritingConfiguration.ValidateIdentifier("PAIE;DROP TABLE", "table"));
+        => FluentActions.Invoking(() => PayrollWritingConfiguration.ValidateIdentifier("PAIE;DROP TABLE", "table")).Should().ThrowExactly<DomainException>();
 
     [Fact]
     public void CompleteConfigurationIsAccepted()
@@ -36,7 +36,7 @@ public class PayrollCategoryMappingTests
     {
         var configuration = Configuration();
         configuration.RemoveAt(6);
-        Assert.Throws<DomainException>(() => PayrollWritingConfiguration.ValidateConfigurationRows(configuration));
+        FluentActions.Invoking(() => PayrollWritingConfiguration.ValidateConfigurationRows(configuration)).Should().ThrowExactly<DomainException>();
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public class PayrollCategoryMappingTests
             BddSage = "TEST_AUTRE_RH", TableCible = "PAIE_CUMULS", ColMatricule = "MatriculeEmploye",
             Categorie = "Exo130", ColValeur = "HeuresExo130Bis"
         });
-        Assert.Throws<DomainException>(() => PayrollWritingConfiguration.ValidateConfigurationRows(configuration));
+        FluentActions.Invoking(() => PayrollWritingConfiguration.ValidateConfigurationRows(configuration)).Should().ThrowExactly<DomainException>();
     }
 
     private static List<PaieEcriture> Configuration() => PayrollWritingConfiguration.Categories

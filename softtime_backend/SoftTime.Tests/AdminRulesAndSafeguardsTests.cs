@@ -47,44 +47,44 @@ public class AdminRulesAndSafeguardsTests
     [Fact]
     public void AdminRules_IsAdmin_IdentifiesAdminRoleId()
     {
-        Assert.True(AdminRules.IsAdmin(1, null));
-        Assert.True(AdminRules.IsAdmin(1, "AutreNom"));
+        AdminRules.IsAdmin(1, null).Should().BeTrue();
+        AdminRules.IsAdmin(1, "AutreNom").Should().BeTrue();
     }
 
     [Fact]
     public void AdminRules_IsAdmin_DoesNotRecognizeRoleNameContainingAdmin()
     {
         // Règle 4b-2 : seul le rôle 1 est administrateur, le nom du rôle ne confère rien (avant : ces quatre cas étaient vrais).
-        Assert.False(AdminRules.IsAdmin(2, "Administrateur"));
-        Assert.False(AdminRules.IsAdmin(3, "ROLE_ADMIN_CUSTOM"));
-        Assert.False(AdminRules.IsAdmin(4, "super-admin"));
-        Assert.False(AdminRules.IsAdmin(5, "Administrateur RH"));
-        Assert.False(AdminRules.IsAdmin(new Role { IdRole = 3, NomRole = "ROLE_ADMIN_CUSTOM" }));
-        Assert.True(AdminRules.IsAdmin(new Role { IdRole = 1, NomRole = "Autre nom" }));
+        AdminRules.IsAdmin(2, "Administrateur").Should().BeFalse();
+        AdminRules.IsAdmin(3, "ROLE_ADMIN_CUSTOM").Should().BeFalse();
+        AdminRules.IsAdmin(4, "super-admin").Should().BeFalse();
+        AdminRules.IsAdmin(5, "Administrateur RH").Should().BeFalse();
+        AdminRules.IsAdmin(new Role { IdRole = 3, NomRole = "ROLE_ADMIN_CUSTOM" }).Should().BeFalse();
+        AdminRules.IsAdmin(new Role { IdRole = 1, NomRole = "Autre nom" }).Should().BeTrue();
     }
 
     [Fact]
     public void AdminRules_IsAdmin_RejectsNonAdminRole()
     {
-        Assert.False(AdminRules.IsAdmin(2, "Utilisateur"));
-        Assert.False(AdminRules.IsAdmin(2, "Opérateur"));
-        Assert.False(AdminRules.IsAdmin(2, null));
-        Assert.False(AdminRules.IsAdmin(2, ""));
+        AdminRules.IsAdmin(2, "Utilisateur").Should().BeFalse();
+        AdminRules.IsAdmin(2, "Opérateur").Should().BeFalse();
+        AdminRules.IsAdmin(2, null).Should().BeFalse();
+        AdminRules.IsAdmin(2, "").Should().BeFalse();
     }
 
     [Fact]
     public void AdminRules_IsAdmin_WithNullRoleEntity_ReturnsFalse()
     {
         Role? nullRole = null;
-        Assert.False(AdminRules.IsAdmin(nullRole));
+        AdminRules.IsAdmin(nullRole).Should().BeFalse();
     }
 
     [Fact]
     public void AdminRules_IsSuperAdmin_ReturnsTrueOnlyForAdminRoleId()
     {
-        Assert.True(AdminRules.IsSuperAdmin(1));
-        Assert.False(AdminRules.IsSuperAdmin(2));
-        Assert.False(AdminRules.IsSuperAdmin(3)); // Rôle dont le nom contient "ADMIN" mais IDROLE != 1
+        AdminRules.IsSuperAdmin(1).Should().BeTrue();
+        AdminRules.IsSuperAdmin(2).Should().BeFalse();
+        AdminRules.IsSuperAdmin(3).Should().BeFalse(); // Rôle dont le nom contient "ADMIN" mais IDROLE != 1
     }
 
     #endregion
@@ -95,8 +95,8 @@ public class AdminRulesAndSafeguardsTests
     public async Task SaveUserAsync_UnknownCaller_ThrowsDomainException()
     {
         var dto = new UserDto(0, 2, "Nouveau", "nouveau", null, "ValidP@ss123!");
-        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.SaveUserAsync(currentUserId: 999, dto));
-        Assert.Equal("Utilisateur appelant introuvable.", ex.Message);
+        var ex = (await FluentActions.Awaiting(() => _auth.SaveUserAsync(currentUserId: 999, dto)).Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().Be("Utilisateur appelant introuvable.");
     }
 
     [Fact]
@@ -106,15 +106,15 @@ public class AdminRulesAndSafeguardsTests
         _uow.Get<Responsable>().Items.Add(caller);
 
         var dto = new UserDto(0, 2, "Nouveau", "nouveau", null, "ValidP@ss123!");
-        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.SaveUserAsync(currentUserId: 10, dto));
-        Assert.Equal("Utilisateur appelant introuvable.", ex.Message);
+        var ex = (await FluentActions.Awaiting(() => _auth.SaveUserAsync(currentUserId: 10, dto)).Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().Be("Utilisateur appelant introuvable.");
     }
 
     [Fact]
     public async Task DeleteUserAsync_UnknownCaller_ThrowsDomainException()
     {
-        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.DeleteUserAsync(currentUserId: 999, id: 2));
-        Assert.Equal("Utilisateur appelant introuvable.", ex.Message);
+        var ex = (await FluentActions.Awaiting(() => _auth.DeleteUserAsync(currentUserId: 999, id: 2)).Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().Be("Utilisateur appelant introuvable.");
     }
 
     #endregion
@@ -131,8 +131,8 @@ public class AdminRulesAndSafeguardsTests
 
         // L'admin 1 tente de changer son propre rôle vers le rôle 2
         var updateDto = new UserDto(1, 2, "Admin Modifié", "admin", null, null);
-        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.SaveUserAsync(currentUserId: 1, updateDto));
-        Assert.Equal("Vous ne pouvez pas modifier votre propre rôle.", ex.Message);
+        var ex = (await FluentActions.Awaiting(() => _auth.SaveUserAsync(currentUserId: 1, updateDto)).Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().Be("Vous ne pouvez pas modifier votre propre rôle.");
     }
 
     [Fact]
@@ -144,9 +144,9 @@ public class AdminRulesAndSafeguardsTests
         var updateDto = new UserDto(1, 1, "Admin Nouveau Nom", "admin", "MAT-01", null) { Email = "new@softtime.local" };
         var result = await _auth.SaveUserAsync(currentUserId: 1, updateDto);
 
-        Assert.Equal("Admin Nouveau Nom", result.Nom);
-        Assert.Equal("new@softtime.local", result.Email);
-        Assert.Equal(1, result.RoleId);
+        result.Nom.Should().Be("Admin Nouveau Nom");
+        result.Email.Should().Be("new@softtime.local");
+        result.RoleId.Should().Be(1);
     }
 
     #endregion
@@ -161,8 +161,8 @@ public class AdminRulesAndSafeguardsTests
 
         // Un utilisateur non-admin tente de créer un super-admin (rôle 1)
         var createDto = new UserDto(0, 1, "Nouvel Admin", "newadmin", null, "ValidP@ss123!");
-        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.SaveUserAsync(currentUserId: 2, createDto));
-        Assert.Equal("Seul un super-administrateur peut attribuer le rôle Administrateur.", ex.Message);
+        var ex = (await FluentActions.Awaiting(() => _auth.SaveUserAsync(currentUserId: 2, createDto)).Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().Be("Seul un super-administrateur peut attribuer le rôle Administrateur.");
     }
 
     [Fact]
@@ -175,8 +175,8 @@ public class AdminRulesAndSafeguardsTests
 
         // L'utilisateur tente de modifier le mot de passe du super-admin (rôle 1)
         var updateDto = new UserDto(1, 1, "Admin Hacké", "admin", null, "NewPass123!@");
-        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.SaveUserAsync(currentUserId: 2, updateDto));
-        Assert.Equal("Seul un super-administrateur peut modifier un compte administrateur.", ex.Message);
+        var ex = (await FluentActions.Awaiting(() => _auth.SaveUserAsync(currentUserId: 2, updateDto)).Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().Be("Seul un super-administrateur peut modifier un compte administrateur.");
     }
 
     [Fact]
@@ -187,8 +187,8 @@ public class AdminRulesAndSafeguardsTests
         _uow.Get<Responsable>().Items.Add(admin);
         _uow.Get<Responsable>().Items.Add(user);
 
-        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.DeleteUserAsync(currentUserId: 2, id: 1));
-        Assert.Equal("Seul un super-administrateur peut supprimer un compte administrateur.", ex.Message);
+        var ex = (await FluentActions.Awaiting(() => _auth.DeleteUserAsync(currentUserId: 2, id: 1)).Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().Be("Seul un super-administrateur peut supprimer un compte administrateur.");
     }
 
     [Fact]
@@ -203,16 +203,16 @@ public class AdminRulesAndSafeguardsTests
         var asUser = CallerAuth(2, 2);
 
         var createDto = new UserDto(0, 3, "New Custom Admin", "newcustom", null, "ValidP@ss123!");
-        var exCreate = await Assert.ThrowsAsync<ForbiddenException>(() => asUser.SaveUserAsync(currentUserId: 2, createDto));
-        Assert.Equal(AdminAccess.ReservedMessage, exCreate.Message);
+        var exCreate = (await FluentActions.Awaiting(() => asUser.SaveUserAsync(currentUserId: 2, createDto)).Should().ThrowExactlyAsync<ForbiddenException>()).Which;
+        exCreate.Message.Should().Be(AdminAccess.ReservedMessage);
 
         var updateDto = new UserDto(3, 3, "Custom Admin Modifié", "customadmin", null, null);
-        var exMod = await Assert.ThrowsAsync<ForbiddenException>(() => asUser.SaveUserAsync(currentUserId: 2, updateDto));
-        Assert.Equal(AdminAccess.ReservedMessage, exMod.Message);
+        var exMod = (await FluentActions.Awaiting(() => asUser.SaveUserAsync(currentUserId: 2, updateDto)).Should().ThrowExactlyAsync<ForbiddenException>()).Which;
+        exMod.Message.Should().Be(AdminAccess.ReservedMessage);
 
-        var exDel = await Assert.ThrowsAsync<ForbiddenException>(() => asUser.DeleteUserAsync(currentUserId: 2, id: 3));
-        Assert.Equal(AdminAccess.ReservedMessage, exDel.Message);
-        Assert.Equal("Custom Admin", _uow.Get<Responsable>().Items.Single(u => u.IdResponsable == 3).NomResponsable);
+        var exDel = (await FluentActions.Awaiting(() => asUser.DeleteUserAsync(currentUserId: 2, id: 3)).Should().ThrowExactlyAsync<ForbiddenException>()).Which;
+        exDel.Message.Should().Be(AdminAccess.ReservedMessage);
+        _uow.Get<Responsable>().Items.Single(u => u.IdResponsable == 3).NomResponsable.Should().Be("Custom Admin");
     }
 
     [Fact]
@@ -225,13 +225,13 @@ public class AdminRulesAndSafeguardsTests
 
         // Création avec rôle 1 par un admin personnalisé
         var createDto = new UserDto(0, 1, "New SuperAdmin", "newsuper", null, "ValidP@ss123!");
-        var exCreate = await Assert.ThrowsAsync<DomainException>(() => _auth.SaveUserAsync(currentUserId: 3, createDto));
-        Assert.Equal("Seul un super-administrateur peut attribuer le rôle Administrateur.", exCreate.Message);
+        var exCreate = (await FluentActions.Awaiting(() => _auth.SaveUserAsync(currentUserId: 3, createDto)).Should().ThrowExactlyAsync<DomainException>()).Which;
+        exCreate.Message.Should().Be("Seul un super-administrateur peut attribuer le rôle Administrateur.");
 
         // Modification avec rôle 1 par un admin personnalisé
         var updateDto = new UserDto(4, 1, "User 4 Promu", "user4", null, null);
-        var exUpdate = await Assert.ThrowsAsync<DomainException>(() => _auth.SaveUserAsync(currentUserId: 3, updateDto));
-        Assert.Equal("Seul un super-administrateur peut attribuer le rôle Administrateur.", exUpdate.Message);
+        var exUpdate = (await FluentActions.Awaiting(() => _auth.SaveUserAsync(currentUserId: 3, updateDto)).Should().ThrowExactlyAsync<DomainException>()).Which;
+        exUpdate.Message.Should().Be("Seul un super-administrateur peut attribuer le rôle Administrateur.");
     }
 
     [Fact]
@@ -246,12 +246,12 @@ public class AdminRulesAndSafeguardsTests
 
         // Tentative de modification du compte rôle 1
         var updateDto = new UserDto(1, 1, "Admin 1 Renommé", "admin1", null, null);
-        var exMod = await Assert.ThrowsAsync<DomainException>(() => _auth.SaveUserAsync(currentUserId: 3, updateDto));
-        Assert.Equal("Seul un super-administrateur peut modifier un compte administrateur.", exMod.Message);
+        var exMod = (await FluentActions.Awaiting(() => _auth.SaveUserAsync(currentUserId: 3, updateDto)).Should().ThrowExactlyAsync<DomainException>()).Which;
+        exMod.Message.Should().Be("Seul un super-administrateur peut modifier un compte administrateur.");
 
         // Tentative de suppression du compte rôle 1
-        var exDel = await Assert.ThrowsAsync<DomainException>(() => _auth.DeleteUserAsync(currentUserId: 3, id: 1));
-        Assert.Equal("Seul un super-administrateur peut supprimer un compte administrateur.", exDel.Message);
+        var exDel = (await FluentActions.Awaiting(() => _auth.DeleteUserAsync(currentUserId: 3, id: 1)).Should().ThrowExactlyAsync<DomainException>()).Which;
+        exDel.Message.Should().Be("Seul un super-administrateur peut supprimer un compte administrateur.");
     }
 
     [Fact]
@@ -264,10 +264,10 @@ public class AdminRulesAndSafeguardsTests
         _uow.Get<Responsable>().Items.Add(ordinary);
         var asCustom = CallerAuth(3, 3);
 
-        await Assert.ThrowsAsync<ForbiddenException>(() => asCustom.SaveUserAsync(currentUserId: 3, new UserDto(0, 2, "Employé 2", "employe2", null, "ValidP@ss123!")));
-        await Assert.ThrowsAsync<ForbiddenException>(() => asCustom.SaveUserAsync(currentUserId: 3, new UserDto(5, 2, "Employé 1 Modifié", "employe1_mod", null, null)));
-        await Assert.ThrowsAsync<ForbiddenException>(() => asCustom.DeleteUserAsync(currentUserId: 3, id: 5));
-        Assert.Equal("employe1", _uow.Get<Responsable>().Items.Single(u => u.IdResponsable == 5).Login);
+        await FluentActions.Awaiting(() => asCustom.SaveUserAsync(currentUserId: 3, new UserDto(0, 2, "Employé 2", "employe2", null, "ValidP@ss123!"))).Should().ThrowExactlyAsync<ForbiddenException>();
+        await FluentActions.Awaiting(() => asCustom.SaveUserAsync(currentUserId: 3, new UserDto(5, 2, "Employé 1 Modifié", "employe1_mod", null, null))).Should().ThrowExactlyAsync<ForbiddenException>();
+        await FluentActions.Awaiting(() => asCustom.DeleteUserAsync(currentUserId: 3, id: 5)).Should().ThrowExactlyAsync<ForbiddenException>();
+        _uow.Get<Responsable>().Items.Single(u => u.IdResponsable == 5).Login.Should().Be("employe1");
     }
 
     [Fact]
@@ -280,10 +280,10 @@ public class AdminRulesAndSafeguardsTests
         _uow.Get<Responsable>().Items.Add(other);
         var asOrdinary = CallerAuth(2, 2);
 
-        await Assert.ThrowsAsync<ForbiddenException>(() => asOrdinary.SaveUserAsync(currentUserId: 2, new UserDto(0, 2, "Employé 2", "employe2", null, "ValidP@ss123!")));
-        await Assert.ThrowsAsync<ForbiddenException>(() => asOrdinary.SaveUserAsync(currentUserId: 2, new UserDto(6, 2, "Employé 3 Modifié", "employe3_mod", null, null)));
-        await Assert.ThrowsAsync<ForbiddenException>(() => asOrdinary.DeleteUserAsync(currentUserId: 2, id: 6));
-        Assert.Equal("employe3", _uow.Get<Responsable>().Items.Single(u => u.IdResponsable == 6).Login);
+        await FluentActions.Awaiting(() => asOrdinary.SaveUserAsync(currentUserId: 2, new UserDto(0, 2, "Employé 2", "employe2", null, "ValidP@ss123!"))).Should().ThrowExactlyAsync<ForbiddenException>();
+        await FluentActions.Awaiting(() => asOrdinary.SaveUserAsync(currentUserId: 2, new UserDto(6, 2, "Employé 3 Modifié", "employe3_mod", null, null))).Should().ThrowExactlyAsync<ForbiddenException>();
+        await FluentActions.Awaiting(() => asOrdinary.DeleteUserAsync(currentUserId: 2, id: 6)).Should().ThrowExactlyAsync<ForbiddenException>();
+        _uow.Get<Responsable>().Items.Single(u => u.IdResponsable == 6).Login.Should().Be("employe3");
     }
 
     [Fact]
@@ -295,15 +295,15 @@ public class AdminRulesAndSafeguardsTests
         // Création d'un nouvel administrateur rôle 1
         var createDto = new UserDto(0, 1, "Admin 2", "admin2", null, "ValidP@ss123!");
         var created = await _auth.SaveUserAsync(currentUserId: 1, createDto);
-        Assert.Equal(1, created.RoleId);
-        Assert.Equal("admin2", created.Login);
+        created.RoleId.Should().Be(1);
+        created.Login.Should().Be("admin2");
 
         // Promotion d'un compte ordinaire vers le rôle 1
         var user = new Responsable { IdResponsable = 10, IdRole = 2, Login = "user10", NomResponsable = "User 10" };
         _uow.Get<Responsable>().Items.Add(user);
         var updateDto = new UserDto(10, 1, "User 10 Promu", "user10", null, null);
         var promoted = await _auth.SaveUserAsync(currentUserId: 1, updateDto);
-        Assert.Equal(1, promoted.RoleId);
+        promoted.RoleId.Should().Be(1);
     }
 
     #endregion
@@ -321,14 +321,14 @@ public class AdminRulesAndSafeguardsTests
         // Admin 2 rétrograde Admin 1 vers le rôle 2 -> Permis car Admin 2 reste administrateur
         var updateDto = new UserDto(1, 2, "Admin 1", "admin1", null, null);
         var res = await _auth.SaveUserAsync(currentUserId: 2, updateDto);
-        Assert.Equal(2, res.RoleId);
+        res.RoleId.Should().Be(2);
 
         // Maintenant Admin 1 est rôle 2. Si un admin tente de rétrograder le seul admin restant (Admin 2):
         // Note: Admin 2 ne peut pas rétrograder son propre rôle (G1), mais créons un test où l'appelant tente de rétrograder le dernier admin restant
         // Simulons un troisième compte avec un rôle de délégation ou appel direct
         var updateLastAdmin = new UserDto(2, 2, "Admin 2", "admin2", null, null);
-        var ex = await Assert.ThrowsAsync<ConflictException>(() => _auth.SaveUserAsync(updateLastAdmin));
-        Assert.Equal("Impossible de rétrograder le dernier administrateur.", ex.Message);
+        var ex = (await FluentActions.Awaiting(() => _auth.SaveUserAsync(updateLastAdmin)).Should().ThrowExactlyAsync<ConflictException>()).Which;
+        ex.Message.Should().Be("Impossible de rétrograder le dernier administrateur.");
     }
 
     [Fact]
@@ -342,8 +342,8 @@ public class AdminRulesAndSafeguardsTests
 
         // Tenter de rétrograder le seul superAdmin (IDROLE = 1) vers rôle 2 via la surcharge sans appelant
         var updateDto = new UserDto(1, 2, "Super Admin", "superadmin", null, null);
-        var ex = await Assert.ThrowsAsync<ConflictException>(() => _auth.SaveUserAsync(updateDto));
-        Assert.Equal("Impossible de rétrograder le dernier administrateur.", ex.Message);
+        var ex = (await FluentActions.Awaiting(() => _auth.SaveUserAsync(updateDto)).Should().ThrowExactlyAsync<ConflictException>()).Which;
+        ex.Message.Should().Be("Impossible de rétrograder le dernier administrateur.");
     }
 
     [Fact]
@@ -353,8 +353,8 @@ public class AdminRulesAndSafeguardsTests
         _uow.Get<Responsable>().Items.Add(admin);
 
         // Surcharge de test sans appelant
-        var ex = await Assert.ThrowsAsync<ConflictException>(() => _auth.DeleteUserAsync(1));
-        Assert.Equal("Impossible de supprimer le dernier administrateur.", ex.Message);
+        var ex = (await FluentActions.Awaiting(() => _auth.DeleteUserAsync(1)).Should().ThrowExactlyAsync<ConflictException>()).Which;
+        ex.Message.Should().Be("Impossible de supprimer le dernier administrateur.");
     }
 
     [Fact]
@@ -368,8 +368,8 @@ public class AdminRulesAndSafeguardsTests
         // Admin 1 supprime Admin 2
         await _auth.DeleteUserAsync(currentUserId: 1, id: 2);
 
-        Assert.Null(await _uow.Get<Responsable>().GetByIdAsync(2));
-        Assert.NotNull(await _uow.Get<Responsable>().GetByIdAsync(1));
+        (await _uow.Get<Responsable>().GetByIdAsync(2)).Should().BeNull();
+        (await _uow.Get<Responsable>().GetByIdAsync(1)).Should().NotBeNull();
     }
 
     #endregion
@@ -384,8 +384,8 @@ public class AdminRulesAndSafeguardsTests
         _uow.Get<Responsable>().Items.Add(admin1);
         _uow.Get<Responsable>().Items.Add(admin2);
 
-        var ex = await Assert.ThrowsAsync<DomainException>(() => _auth.DeleteUserAsync(currentUserId: 1, id: 1));
-        Assert.Equal("Vous ne pouvez pas supprimer votre propre compte.", ex.Message);
+        var ex = (await FluentActions.Awaiting(() => _auth.DeleteUserAsync(currentUserId: 1, id: 1)).Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().Be("Vous ne pouvez pas supprimer votre propre compte.");
     }
 
     #endregion

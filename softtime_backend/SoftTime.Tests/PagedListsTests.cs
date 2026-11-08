@@ -18,11 +18,11 @@ public class PagedListsTests
     {
         var result = PagedLists.Page(Array.Empty<int>(), null, null);
 
-        Assert.Empty(result.Items);
-        Assert.Equal(0, result.Total);
-        Assert.Equal(1, result.Page);
-        Assert.Equal(PaginationRules.TailleDefaut, result.PageSize);
-        Assert.Equal(1, result.TotalPages);
+        result.Items.Should().BeEmpty();
+        result.Total.Should().Be(0);
+        result.Page.Should().Be(1);
+        result.PageSize.Should().Be(PaginationRules.TailleDefaut);
+        result.TotalPages.Should().Be(1);
     }
 
     [Fact]
@@ -30,11 +30,11 @@ public class PagedListsTests
     {
         var result = PagedLists.Page(Enumerable.Range(1, 25).ToList(), page: 10, pageSize: 10);
 
-        Assert.Equal(3, result.Page);
-        Assert.Equal(3, result.TotalPages);
-        Assert.Equal(5, result.Items.Count);
-        Assert.Equal(21, result.Items[0]);
-        Assert.Equal(25, result.Items[^1]);
+        result.Page.Should().Be(3);
+        result.TotalPages.Should().Be(3);
+        result.Items.Count.Should().Be(5);
+        result.Items[0].Should().Be(21);
+        result.Items[^1].Should().Be(25);
     }
 
     [Theory]
@@ -45,7 +45,7 @@ public class PagedListsTests
     {
         var result = PagedLists.Page(Enumerable.Range(1, 100).ToList(), demandee, 10);
 
-        Assert.Equal(attendue, result.Page);
+        result.Page.Should().Be(attendue);
     }
 
     [Fact]
@@ -53,9 +53,9 @@ public class PagedListsTests
     {
         var result = PagedLists.Page(Enumerable.Range(1, 200).ToList(), page: 1, pageSize: 5000);
 
-        Assert.Equal(PaginationRules.TailleMax, result.PageSize);
-        Assert.Equal(PaginationRules.TailleMax, result.Items.Count);
-        Assert.Equal(2, result.TotalPages);
+        result.PageSize.Should().Be(PaginationRules.TailleMax);
+        result.Items.Count.Should().Be(PaginationRules.TailleMax);
+        result.TotalPages.Should().Be(2);
     }
 
     [Fact]
@@ -63,9 +63,9 @@ public class PagedListsTests
     {
         var result = PagedLists.Page(Enumerable.Range(1, 120).ToList(), page: null, pageSize: null);
 
-        Assert.Equal(PaginationRules.TailleDefaut, result.PageSize);
-        Assert.Equal(3, result.TotalPages);
-        Assert.Equal(50, result.Items.Count);
+        result.PageSize.Should().Be(PaginationRules.TailleDefaut);
+        result.TotalPages.Should().Be(3);
+        result.Items.Count.Should().Be(50);
     }
 
     [Fact]
@@ -75,7 +75,7 @@ public class PagedListsTests
 
         var result = PagedLists.Page(source, 1, 10);
 
-        Assert.Equal(source, result.Items);
+        result.Items.Should().Equal(source);
     }
 
     [Fact]
@@ -86,13 +86,13 @@ public class PagedListsTests
 
         var result = await PagedLists.From(repository, _ => true, q => q.OrderBy(x => x.Value)).PageAsync(new PageRequest(2, 50), x => x.Value * 10);
 
-        Assert.Equal(120, result.Total);
-        Assert.Equal(2, result.Page);
-        Assert.Equal(50, result.PageSize);
-        Assert.Equal(3, result.TotalPages);
-        Assert.Equal(50, result.Items.Count);
-        Assert.Equal(510, result.Items[0]);
-        Assert.Equal(1000, result.Items[^1]);
+        result.Total.Should().Be(120);
+        result.Page.Should().Be(2);
+        result.PageSize.Should().Be(50);
+        result.TotalPages.Should().Be(3);
+        result.Items.Count.Should().Be(50);
+        result.Items[0].Should().Be(510);
+        result.Items[^1].Should().Be(1000);
     }
 
     [Fact]
@@ -102,10 +102,10 @@ public class PagedListsTests
 
         var result = await PagedLists.From(repository, _ => false, q => q.OrderBy(x => x.Value)).PageAsync(new PageRequest(3, 50), x => x.Value);
 
-        Assert.Empty(result.Items);
-        Assert.Equal(0, result.Total);
-        Assert.Equal(1, result.Page);
-        Assert.Equal(1, result.TotalPages);
+        result.Items.Should().BeEmpty();
+        result.Total.Should().Be(0);
+        result.Page.Should().Be(1);
+        result.TotalPages.Should().Be(1);
     }
 
     [Fact]
@@ -116,10 +116,10 @@ public class PagedListsTests
 
         var result = await PagedLists.From(repository, x => x.Value % 2 == 0, q => q.OrderBy(x => x.Value)).PageAsync(new PageRequest(99, 10), x => x.Value);
 
-        Assert.Equal(12, result.Total);
-        Assert.Equal(2, result.Page);
-        Assert.Equal(2, result.TotalPages);
-        Assert.Equal(new[] { 22, 24 }, result.Items);
+        result.Total.Should().Be(12);
+        result.Page.Should().Be(2);
+        result.TotalPages.Should().Be(2);
+        result.Items.Should().Equal(new[] { 22, 24 });
     }
 
     [Fact]
@@ -127,11 +127,11 @@ public class PagedListsTests
     {
         var result = PagedLists.Page(Enumerable.Range(1, 25).ToList(), page: int.MaxValue, pageSize: 10);
 
-        Assert.Equal(3, result.Page);
-        Assert.Equal(3, result.TotalPages);
-        Assert.Equal(5, result.Items.Count);
-        Assert.Equal(21, result.Items[0]);
-        Assert.Equal(25, result.Items[^1]);
+        result.Page.Should().Be(3);
+        result.TotalPages.Should().Be(3);
+        result.Items.Count.Should().Be(5);
+        result.Items[0].Should().Be(21);
+        result.Items[^1].Should().Be(25);
     }
 
     [Fact]
@@ -142,10 +142,10 @@ public class PagedListsTests
 
         var result = await PagedLists.From(repository, _ => true, q => q.OrderBy(x => x.Value)).PageAsync(new PageRequest(int.MaxValue, 10), x => x.Value);
 
-        Assert.Equal(25, result.Total);
-        Assert.Equal(3, result.Page);
-        Assert.Equal(3, result.TotalPages);
-        Assert.Equal(new[] { 21, 22, 23, 24, 25 }, result.Items);
+        result.Total.Should().Be(25);
+        result.Page.Should().Be(3);
+        result.TotalPages.Should().Be(3);
+        result.Items.Should().Equal(new[] { 21, 22, 23, 24, 25 });
     }
 
     private sealed record Item(int Value);

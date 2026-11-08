@@ -14,7 +14,7 @@ public class PayrollWriterResolverTests
     {
         var resolver = new PayrollWriterResolver(new IPayrollWriter[] { new StubWriter("STANDARD"), new StubWriter("AUTRE") });
         var writer = resolver.Resolve(new BddSage { TypeBase = typeBase });
-        Assert.Equal(expected, ((StubWriter)writer).Type);
+        ((StubWriter)writer).Type.Should().Be(expected);
     }
 
     private sealed class StubWriter(string type) : IPayrollWriter

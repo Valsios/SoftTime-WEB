@@ -14,22 +14,22 @@ public class EmailTemplatesTests
     [Fact]
     public void EchapperHtml_NeutralizesMarkupCharacters()
     {
-        Assert.Equal("&lt;script&gt;", EmailTemplates.EchapperHtml("<script>"));
-        Assert.Equal("A &amp; B", EmailTemplates.EchapperHtml("A & B"));
-        Assert.Equal("&quot;", EmailTemplates.EchapperHtml("\""));
+        EmailTemplates.EchapperHtml("<script>").Should().Be("&lt;script&gt;");
+        EmailTemplates.EchapperHtml("A & B").Should().Be("A &amp; B");
+        EmailTemplates.EchapperHtml("\"").Should().Be("&quot;");
     }
 
     [Fact]
     public void EchapperHtml_NullBecomesEmpty()
-        => Assert.Equal(string.Empty, EmailTemplates.EchapperHtml(null));
+        => EmailTemplates.EchapperHtml(null).Should().Be(string.Empty);
 
     [Fact]
     public void Identifiants_EscapesInjectedMarkup()
     {
         // Un nom saisi librement ne doit pas pouvoir casser le message ni y injecter de balise.
         var corps = EmailTemplates.Identifiants("<b>Nom</b>", "Ines", "login", "secret");
-        Assert.DoesNotContain("<b>Nom</b>", corps);
-        Assert.Contains("&lt;b&gt;Nom&lt;/b&gt;", corps);
+        corps.Should().NotContain("<b>Nom</b>");
+        corps.Should().Contain("&lt;b&gt;Nom&lt;/b&gt;");
     }
 
     // ---- Identifiants ----
@@ -38,22 +38,22 @@ public class EmailTemplatesTests
     public void Identifiants_ContainsLoginAndPassword()
     {
         var corps = EmailTemplates.Identifiants("Rakoto", "Ines", "irakoto", "MotDePasse!42");
-        Assert.Contains("irakoto", corps);
-        Assert.Contains("MotDePasse!42", corps);
-        Assert.Contains("Ines", corps);
-        Assert.Contains("Rakoto", corps);
+        corps.Should().Contain("irakoto");
+        corps.Should().Contain("MotDePasse!42");
+        corps.Should().Contain("Ines");
+        corps.Should().Contain("Rakoto");
     }
 
     [Fact]
     public void Identifiants_UsesTheCredentialsSubject()
-        => Assert.Equal("Vos identifiants SoftTime", EmailTemplates.SujetIdentifiants);
+        => EmailTemplates.SujetIdentifiants.Should().Be("Vos identifiants SoftTime");
 
     [Fact]
     public void Identifiants_ToleratesMissingValues()
     {
         var corps = EmailTemplates.Identifiants(null, null, null, null);
-        Assert.Contains("Bonjour", corps);
-        Assert.DoesNotContain("null", corps);
+        corps.Should().Contain("Bonjour");
+        corps.Should().NotContain("null");
     }
 
     // ---- Mise à jour ----
@@ -62,19 +62,19 @@ public class EmailTemplatesTests
     public void MiseAJour_MentionsOnlyWhatChanged()
     {
         var corps = EmailTemplates.MiseAJour(new AccountMailRecipient(null, "nouveau.login", "Rakoto", "Ines"), null, true, false);
-        Assert.Contains("nouveau.login", corps);
-        Assert.DoesNotContain("Nouveau mot de passe", corps);
+        corps.Should().Contain("nouveau.login");
+        corps.Should().NotContain("Nouveau mot de passe");
     }
 
     [Fact]
     public void MiseAJour_ShowsTheNewPasswordOnlyWhenItChanged()
     {
         var corps = EmailTemplates.MiseAJour(new AccountMailRecipient(null, "login", "Rakoto", "Ines"), "NouveauMotDePasse!1", false, true);
-        Assert.Contains("NouveauMotDePasse!1", corps);
-        Assert.DoesNotContain("Nouvel identifiant", corps);
+        corps.Should().Contain("NouveauMotDePasse!1");
+        corps.Should().NotContain("Nouvel identifiant");
     }
 
     [Fact]
     public void MiseAJour_UsesTheUpdateSubject()
-        => Assert.Equal("Mise à jour de vos identifiants SoftTime", EmailTemplates.SujetMiseAJour);
+        => EmailTemplates.SujetMiseAJour.Should().Be("Mise à jour de vos identifiants SoftTime");
 }

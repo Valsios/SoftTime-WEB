@@ -10,12 +10,12 @@ public class ExternalConnectionFactorySecurityTests
     {
         var cs = ExternalConnectionFactory.Build(new SqlServerCredentials("localhost", true, "sa", "P@ssword123"), "SoftTimeDb");
 
-        Assert.Contains("Data Source=localhost", cs);
-        Assert.Contains("Initial Catalog=SoftTimeDb", cs);
-        Assert.Contains("User ID=sa", cs);
-        Assert.Contains("Password=P@ssword123", cs);
-        Assert.Contains("TrustServerCertificate=True", cs);
-        Assert.Contains("Connect Timeout=60", cs);
+        cs.Should().Contain("Data Source=localhost");
+        cs.Should().Contain("Initial Catalog=SoftTimeDb");
+        cs.Should().Contain("User ID=sa");
+        cs.Should().Contain("Password=P@ssword123");
+        cs.Should().Contain("TrustServerCertificate=True");
+        cs.Should().Contain("Connect Timeout=60");
     }
 
     [Fact]
@@ -23,11 +23,11 @@ public class ExternalConnectionFactorySecurityTests
     {
         var cs = ExternalConnectionFactory.Build(new SqlServerCredentials("localhost", false, "sa", "secret"), "SoftTimeDb");
 
-        Assert.Contains("Data Source=localhost", cs);
-        Assert.Contains("Initial Catalog=SoftTimeDb", cs);
-        Assert.Contains("Integrated Security=True", cs);
-        Assert.DoesNotContain("User ID", cs);
-        Assert.DoesNotContain("Password", cs);
+        cs.Should().Contain("Data Source=localhost");
+        cs.Should().Contain("Initial Catalog=SoftTimeDb");
+        cs.Should().Contain("Integrated Security=True");
+        cs.Should().NotContain("User ID");
+        cs.Should().NotContain("Password");
     }
 
     [Theory]
@@ -39,7 +39,7 @@ public class ExternalConnectionFactorySecurityTests
         var cs = ExternalConnectionFactory.Build(new SqlServerCredentials(server, true, "admin", password), "DbTest");
 
         // DbConnectionStringBuilder must safely encapsulate semicolons and special characters
-        Assert.NotNull(cs);
+        cs.Should().NotBeNull();
 
         var builder = new System.Data.Common.DbConnectionStringBuilder
         {
@@ -47,9 +47,9 @@ public class ExternalConnectionFactorySecurityTests
         };
 
         // When parsed back, the values must match exactly what was passed in, without injecting new keys
-        Assert.Equal(server, builder["Data Source"]);
-        Assert.Equal("DbTest", builder["Initial Catalog"]);
-        Assert.Equal("admin", builder["User ID"]);
-        Assert.Equal(password, builder["Password"]);
+        builder["Data Source"].Should().Be(server);
+        builder["Initial Catalog"].Should().Be("DbTest");
+        builder["User ID"].Should().Be("admin");
+        builder["Password"].Should().Be(password);
     }
 }

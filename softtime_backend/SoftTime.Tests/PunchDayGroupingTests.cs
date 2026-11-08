@@ -20,10 +20,10 @@ public class PunchDayGroupingTests
 
         var resultat = PunchDayGrouping.Build(pointages, Planifier(), Lundi, mardi);
 
-        Assert.Equal(2, resultat[Lundi].Count);
-        Assert.Single(resultat[mardi]);
-        Assert.Equal(new TimeSpan(8, 0, 0), resultat[Lundi][0].Heure);
-        Assert.Equal(new TimeSpan(17, 0, 0), resultat[Lundi][1].Heure);
+        resultat[Lundi].Count.Should().Be(2);
+        resultat[mardi].Should().ContainSingle();
+        resultat[Lundi][0].Heure.Should().Be(new TimeSpan(8, 0, 0));
+        resultat[Lundi][1].Heure.Should().Be(new TimeSpan(17, 0, 0));
     }
 
     [Fact]
@@ -35,7 +35,7 @@ public class PunchDayGroupingTests
 
         var resultat = PunchDayGrouping.Build(pointages, fenetres, Lundi, Lundi);
 
-        Assert.Equal(3, resultat[Lundi].Count);
+        resultat[Lundi].Count.Should().Be(3);
     }
 
     [Fact]
@@ -48,8 +48,8 @@ public class PunchDayGroupingTests
 
         var resultat = PunchDayGrouping.Build(pointages, fenetres, Lundi, mardi);
 
-        Assert.Equal(2, resultat[Lundi].Count);
-        Assert.Empty(resultat[mardi]);
+        resultat[Lundi].Count.Should().Be(2);
+        resultat[mardi].Should().BeEmpty();
     }
 
     [Fact]
@@ -69,12 +69,12 @@ public class PunchDayGroupingTests
 
         var resultat = PunchDayGrouping.Build(pointages, fenetres, Lundi, mardi);
 
-        Assert.Equal(2, resultat[Lundi].Count);
-        Assert.Equal(new TimeSpan(22, 0, 0), resultat[Lundi][0].Heure);
-        Assert.Equal(new TimeSpan(7, 0, 0), resultat[Lundi][1].Heure);
-        Assert.Equal(2, resultat[mardi].Count);
-        Assert.Equal(new TimeSpan(8, 0, 0), resultat[mardi][0].Heure);
-        Assert.Equal(new TimeSpan(17, 0, 0), resultat[mardi][1].Heure);
+        resultat[Lundi].Count.Should().Be(2);
+        resultat[Lundi][0].Heure.Should().Be(new TimeSpan(22, 0, 0));
+        resultat[Lundi][1].Heure.Should().Be(new TimeSpan(7, 0, 0));
+        resultat[mardi].Count.Should().Be(2);
+        resultat[mardi][0].Heure.Should().Be(new TimeSpan(8, 0, 0));
+        resultat[mardi][1].Heure.Should().Be(new TimeSpan(17, 0, 0));
     }
 
     [Fact]
@@ -87,9 +87,9 @@ public class PunchDayGroupingTests
 
         var resultat = PunchDayGrouping.Build(pointages, fenetres, Lundi, mardi);
 
-        Assert.Equal(2, resultat[Lundi].Count);
-        Assert.Single(resultat[mardi]);
-        Assert.Equal(new TimeSpan(11, 0, 0), resultat[mardi][0].Heure);
+        resultat[Lundi].Count.Should().Be(2);
+        resultat[mardi].Should().ContainSingle();
+        resultat[mardi][0].Heure.Should().Be(new TimeSpan(11, 0, 0));
     }
 
     [Fact]
@@ -102,8 +102,8 @@ public class PunchDayGroupingTests
 
         var resultat = PunchDayGrouping.Build(pointages, fenetres, Lundi, mardi);
 
-        Assert.Equal(2, resultat[Lundi].Count);
-        Assert.Empty(resultat[mardi]);
+        resultat[Lundi].Count.Should().Be(2);
+        resultat[mardi].Should().BeEmpty();
     }
 
     [Fact]
@@ -116,8 +116,8 @@ public class PunchDayGroupingTests
 
         var resultat = PunchDayGrouping.Build(pointages, fenetres, Lundi, mardi);
 
-        Assert.Single(resultat[Lundi]);
-        Assert.Single(resultat[mardi]);
+        resultat[Lundi].Should().ContainSingle();
+        resultat[mardi].Should().ContainSingle();
     }
 
     [Fact]
@@ -127,6 +127,6 @@ public class PunchDayGroupingTests
 
         var resultat = PunchDayGrouping.Build(pointages, Planifier(), Lundi, Lundi);
 
-        Assert.Equal(new[] { 8, 12, 17 }, resultat[Lundi].Select(p => p.Heure.Hours));
+        resultat[Lundi].Select(p => p.Heure.Hours).Should().Equal(new[] { 8, 12, 17 });
     }
 }

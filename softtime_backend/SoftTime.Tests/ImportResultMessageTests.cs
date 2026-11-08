@@ -80,11 +80,11 @@ public class ImportResultMessageTests
 
         var resultat = await contexte.Catalog.AffectationImports.ImportAffectationsExcelAsync(rows);
 
-        Assert.Equal(1, resultat.Imported);
-        Assert.Equal(2, resultat.Skipped);
-        Assert.Contains("1 affectation(s) importée(s), 2 ligne(s) ignorée(s)", resultat.Message);
-        Assert.Contains("1 catégorie(s) introuvable(s) : Inconnue", resultat.Message);
-        Assert.Contains("1 matricule(s) introuvable(s) : 9999", resultat.Message);
+        resultat.Imported.Should().Be(1);
+        resultat.Skipped.Should().Be(2);
+        resultat.Message.Should().Contain("1 affectation(s) importée(s), 2 ligne(s) ignorée(s)");
+        resultat.Message.Should().Contain("1 catégorie(s) introuvable(s) : Inconnue");
+        resultat.Message.Should().Contain("1 matricule(s) introuvable(s) : 9999");
     }
 
     [Fact]
@@ -99,9 +99,9 @@ public class ImportResultMessageTests
 
         var resultat = await contexte.Catalog.Cards.ImportCorrespondencesCsvAsync(lignes);
 
-        Assert.Equal(1, resultat.Imported);
-        Assert.Equal(0, resultat.Skipped);
-        Assert.Equal("1 correspondance(s) importée(s), 0 ligne(s) ignorée(s).", resultat.Message);
+        resultat.Imported.Should().Be(1);
+        resultat.Skipped.Should().Be(0);
+        resultat.Message.Should().Be("1 correspondance(s) importée(s), 0 ligne(s) ignorée(s).");
     }
 
     [Fact]
@@ -120,9 +120,9 @@ public class ImportResultMessageTests
 
         var resultat = await contexte.Planning.ImportShiftsExcelAsync(rows);
 
-        Assert.Equal(1, resultat.Imported);
-        Assert.Equal(1, resultat.Skipped);
-        Assert.Equal("1 shift(s) importé(s), 1 ligne(s) ignorée(s).", resultat.Message);
+        resultat.Imported.Should().Be(1);
+        resultat.Skipped.Should().Be(1);
+        resultat.Message.Should().Be("1 shift(s) importé(s), 1 ligne(s) ignorée(s).");
     }
 
     [Fact]
@@ -137,9 +137,9 @@ public class ImportResultMessageTests
 
         var resultat = await contexte.Timekeeping.ImportPunchesExcelAsync(rows);
 
-        Assert.Equal(1, resultat.Imported);
-        Assert.Equal(1, resultat.Skipped);
-        Assert.Equal("1 pointage(s) importé(s), 1 ligne(s) ignorée(s).", resultat.Message);
+        resultat.Imported.Should().Be(1);
+        resultat.Skipped.Should().Be(1);
+        resultat.Message.Should().Be("1 pointage(s) importé(s), 1 ligne(s) ignorée(s).");
     }
 
     [Fact]
@@ -154,9 +154,9 @@ public class ImportResultMessageTests
 
         var resultat = await contexte.Timekeeping.ImportPunchesExcelAsync(rows);
 
-        Assert.Equal(0, resultat.Imported);
-        Assert.Equal(2, resultat.Skipped);
-        Assert.Contains("Aucun pointage valide : 2 ligne(s) ignorée(s)", resultat.Message);
+        resultat.Imported.Should().Be(0);
+        resultat.Skipped.Should().Be(2);
+        resultat.Message.Should().Contain("Aucun pointage valide : 2 ligne(s) ignorée(s)");
     }
 
     [Fact]
@@ -174,9 +174,9 @@ public class ImportResultMessageTests
 
         var resultat = await contexte.Timekeeping.ImportCorrectionsExcelAsync(rows);
 
-        Assert.Equal(0, resultat.Imported);
-        Assert.Equal(1, resultat.Skipped);
-        Assert.Contains("0 correction(s) importée(s), 1 ligne(s) ignorée(s) (matricule manquant).", resultat.Message);
+        resultat.Imported.Should().Be(0);
+        resultat.Skipped.Should().Be(1);
+        resultat.Message.Should().Contain("0 correction(s) importée(s), 1 ligne(s) ignorée(s) (matricule manquant).");
     }
 
     [Fact]
@@ -191,9 +191,9 @@ public class ImportResultMessageTests
 
         var resultat = await contexte.Planning.ImportExcelAsync(rows, headers);
 
-        Assert.Equal(0, resultat.Imported);
-        Assert.Equal(1, resultat.Skipped);
-        Assert.Equal("0 ligne(s) de planning importée(s), 1 élément(s) ignoré(s).", resultat.Message);
+        resultat.Imported.Should().Be(0);
+        resultat.Skipped.Should().Be(1);
+        resultat.Message.Should().Be("0 ligne(s) de planning importée(s), 1 élément(s) ignoré(s).");
     }
 
     [Fact]
@@ -208,8 +208,8 @@ public class ImportResultMessageTests
 
         var resultat = await contexte.Planning.ImportExcelAsync(rows, headers);
 
-        Assert.Equal(1, resultat.Imported);
-        Assert.Equal(0, resultat.Skipped);
-        Assert.Equal("1 ligne(s) de planning importée(s), 0 élément(s) ignoré(s).", resultat.Message);
+        resultat.Imported.Should().Be(1);
+        resultat.Skipped.Should().Be(0);
+        resultat.Message.Should().Be("1 ligne(s) de planning importée(s), 0 élément(s) ignoré(s).");
     }
 }

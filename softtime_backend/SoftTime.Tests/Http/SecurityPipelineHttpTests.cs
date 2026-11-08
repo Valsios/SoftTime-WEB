@@ -21,9 +21,9 @@ public class SecurityPipelineHttpTests : IClassFixture<ApiFactory>
         var response = await _http.GetAsync("/health");
 
         // Assert
-        Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
-        Assert.Equal("DENY", response.Headers.GetValues("X-Frame-Options").Single());
-        Assert.Contains("frame-ancestors 'none'", response.Headers.GetValues("Content-Security-Policy").Single());
+        response.Headers.GetValues("X-Content-Type-Options").Single().Should().Be("nosniff");
+        response.Headers.GetValues("X-Frame-Options").Single().Should().Be("DENY");
+        response.Headers.GetValues("Content-Security-Policy").Single().Should().Contain("frame-ancestors 'none'");
     }
 
     [Fact]
@@ -38,7 +38,7 @@ public class SecurityPipelineHttpTests : IClassFixture<ApiFactory>
         var response = await _http.SendAsync(request);
 
         // Assert
-        Assert.False(response.Headers.Contains("Access-Control-Allow-Origin"));
+        response.Headers.Contains("Access-Control-Allow-Origin").Should().BeFalse();
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public class SecurityPipelineHttpTests : IClassFixture<ApiFactory>
         var response = await _http.GetAsync("/swagger/v1/swagger.json");
 
         // Assert
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Fact]
@@ -58,7 +58,7 @@ public class SecurityPipelineHttpTests : IClassFixture<ApiFactory>
         var response = await _http.PostAsync("/api/v1/auth/logout", Json("""{"refreshToken":"jeton-inconnu"}"""));
 
         // Assert
-        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
 
     internal static StringContent Json(string body) => new(body, Encoding.UTF8, "application/json");

@@ -46,7 +46,7 @@ public class LoginUniquenessTests
         var key = LoginKey.Normalize(login);
 
         // Assert
-        Assert.Equal(expected, key);
+        key.Should().Be(expected);
     }
 
     // ---------- Connexion ----------
@@ -65,7 +65,7 @@ public class LoginUniquenessTests
         var response = await sut.LoginAsync(new LoginRequest(typed, Password));
 
         // Assert
-        Assert.Equal(2, response.UserId);
+        response.UserId.Should().Be(2);
     }
 
     [Fact]
@@ -80,7 +80,7 @@ public class LoginUniquenessTests
         var response = await sut.LoginAsync(new LoginRequest("agent", Password));
 
         // Assert
-        Assert.Equal(3, response.UserId);
+        response.UserId.Should().Be(3);
     }
 
     [Fact]
@@ -92,11 +92,11 @@ public class LoginUniquenessTests
         var sut = CreateAuth();
 
         // Act
-        var ex = await Assert.ThrowsAsync<UnauthorizedException>(() => sut.LoginAsync(new LoginRequest("agent", Password)));
+        var ex = (await FluentActions.Awaiting(() => sut.LoginAsync(new LoginRequest("agent", Password))).Should().ThrowExactlyAsync<UnauthorizedException>()).Which;
 
         // Assert
-        Assert.Equal("Identifiants invalides.", ex.Message);
-        Assert.Empty(_uow.Inner.Get<RefreshTokenRecord>().Items);
+        ex.Message.Should().Be("Identifiants invalides.");
+        _uow.Inner.Get<RefreshTokenRecord>().Items.Should().BeEmpty();
     }
 
     // ---------- Unicité à l'enregistrement ----------
@@ -111,13 +111,13 @@ public class LoginUniquenessTests
         var sut = CreateAuth();
 
         // Act
-        var ex = await Assert.ThrowsAsync<FieldValidationException>(() =>
-            sut.SaveUserAsync(new UserDto(0, 2, "Autre", login, null, Password)));
+        var ex = (await FluentActions.Awaiting(() =>
+            sut.SaveUserAsync(new UserDto(0, 2, "Autre", login, null, Password))).Should().ThrowExactlyAsync<FieldValidationException>()).Which;
 
         // Assert
-        Assert.Equal("login", ex.Field);
-        Assert.Equal(LoginKey.TakenMessage, ex.Message);
-        Assert.Single(_uow.Inner.Get<Responsable>().Items);
+        ex.Field.Should().Be("login");
+        ex.Message.Should().Be(LoginKey.TakenMessage);
+        _uow.Inner.Get<Responsable>().Items.Should().ContainSingle();
     }
 
     [Fact]
@@ -131,7 +131,7 @@ public class LoginUniquenessTests
         var saved = await sut.SaveUserAsync(new UserDto(2, 2, "Agent", "AGENT", null, null));
 
         // Assert
-        Assert.Equal("AGENT", saved.Login);
+        saved.Login.Should().Be("AGENT");
     }
 
     // ---------- Création initiale de l'administrateur ----------
@@ -146,8 +146,8 @@ public class LoginUniquenessTests
         await sut.CreateAdminAsync(new AdminSetupDto("Admin", "admin", AdminPassword, null));
 
         // Assert
-        Assert.Equal(new[] { "SoftTime.CreateAdmin" }, _uow.LockedResources);
-        Assert.Single(_uow.Inner.Get<Responsable>().Items);
+        _uow.LockedResources.Should().Equal(new[] { "SoftTime.CreateAdmin" });
+        _uow.Inner.Get<Responsable>().Items.Should().ContainSingle();
     }
 
     [Fact]
@@ -158,13 +158,13 @@ public class LoginUniquenessTests
         var sut = CreateAuth();
 
         // Act
-        var ex = await Assert.ThrowsAsync<DomainException>(() =>
-            sut.CreateAdminAsync(new AdminSetupDto("Admin", "admin", AdminPassword, null)));
+        var ex = (await FluentActions.Awaiting(() =>
+            sut.CreateAdminAsync(new AdminSetupDto("Admin", "admin", AdminPassword, null))).Should().ThrowExactlyAsync<DomainException>()).Which;
 
         // Assert
-        Assert.StartsWith("Des comptes existent déjà", ex.Message);
-        var only = Assert.Single(_uow.Inner.Get<Responsable>().Items);
-        Assert.Equal("intrus", only.Login);
+        ex.Message.Should().StartWith("Des comptes existent déjà");
+        var only = _uow.Inner.Get<Responsable>().Items.Should().ContainSingle().Which;
+        only.Login.Should().Be("intrus");
     }
 
     [Fact]
@@ -180,9 +180,9 @@ public class LoginUniquenessTests
             Capture(() => second.CreateAdminAsync(new AdminSetupDto("Admin B", "admin-b", AdminPassword, null))));
 
         // Assert
-        Assert.Single(_uow.Inner.Get<Responsable>().Items);
-        Assert.Single(results, r => r is null);
-        Assert.Single(results, r => r is DomainException);
+        _uow.Inner.Get<Responsable>().Items.Should().ContainSingle();
+        results.Where(r => r is null).Should().ContainSingle();
+        results.Should().ContainSingle(r => r is DomainException);
     }
 
     private static async Task<Exception?> Capture(Func<Task> action)

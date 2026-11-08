@@ -26,17 +26,17 @@ public class AuditTrailTests
             ["Nuit"] = 2
         }));
 
-        var entry = Assert.Single(uow.Get<JournalAudit>().Items);
-        Assert.Equal("T_CUMSAL", entry.Tables);
-        Assert.Equal("SYNC_PAIE", entry.Actions);
-        Assert.Equal("admin", entry.Users);
-        Assert.Equal("SAGE_TEST", entry.BaseSage);
-        Assert.Equal("SYNC_PAIE:STANDARD", entry.Source);
-        Assert.Contains("Statut=SUCCES", entry.Nouveaux);
-        Assert.Contains("LignesMisesÀJour=4", entry.Nouveaux);
-        Assert.Contains("Exo130=2", entry.Nouveaux);
-        Assert.DoesNotContain("123.45", entry.Nouveaux);
-        Assert.DoesNotContain("Dupont", entry.Nouveaux);
+        var entry = uow.Get<JournalAudit>().Items.Should().ContainSingle().Which;
+        entry.Tables.Should().Be("T_CUMSAL");
+        entry.Actions.Should().Be("SYNC_PAIE");
+        entry.Users.Should().Be("admin");
+        entry.BaseSage.Should().Be("SAGE_TEST");
+        entry.Source.Should().Be("SYNC_PAIE:STANDARD");
+        entry.Nouveaux.Should().Contain("Statut=SUCCES");
+        entry.Nouveaux.Should().Contain("LignesMisesÀJour=4");
+        entry.Nouveaux.Should().Contain("Exo130=2");
+        entry.Nouveaux.Should().NotContain("123.45");
+        entry.Nouveaux.Should().NotContain("Dupont");
     }
 
     [Fact]
@@ -47,10 +47,10 @@ public class AuditTrailTests
 
         await trail.WritePayrollSyncAsync(Audit("ECHEC", new Dictionary<string, int> { ["Exo130"] = 3 }));
 
-        var entry = Assert.Single(uow.Get<JournalAudit>().Items);
-        Assert.Contains("Statut=ECHEC", entry.Nouveaux);
-        Assert.Contains("LignesMisesÀJour=3", entry.Nouveaux);
-        Assert.DoesNotContain("matricule", entry.Nouveaux, StringComparison.OrdinalIgnoreCase);
+        var entry = uow.Get<JournalAudit>().Items.Should().ContainSingle().Which;
+        entry.Nouveaux.Should().Contain("Statut=ECHEC");
+        entry.Nouveaux.Should().Contain("LignesMisesÀJour=3");
+        entry.Nouveaux.Should().NotContainEquivalentOf("matricule");
     }
 
     [Fact]
@@ -61,7 +61,7 @@ public class AuditTrailTests
 
         await trail.WritePayrollSyncAsync(Audit("SUCCES", new Dictionary<string, int>()));
 
-        Assert.Empty(uow.Get<JournalAudit>().Items);
+        uow.Get<JournalAudit>().Items.Should().BeEmpty();
     }
 
     [Fact]
@@ -72,8 +72,8 @@ public class AuditTrailTests
 
         var exception = await Record.ExceptionAsync(() => trail.WritePayrollSyncAsync(Audit("SUCCES", new Dictionary<string, int>())));
 
-        Assert.Null(exception);
-        Assert.Contains(logger.Messages, message => message.Contains("Impossible d'écrire la synthèse", StringComparison.Ordinal));
+        exception.Should().BeNull();
+        logger.Messages.Should().Contain(message => message.Contains("Impossible d'écrire la synthèse", StringComparison.Ordinal));
     }
 
     private static PayrollSyncAudit Audit(string status, IReadOnlyDictionary<string, int> categories)
@@ -90,9 +90,9 @@ public class AuditTrailTests
 
         await trail.WritePayrollSyncAsync(audit);
 
-        var entry = Assert.Single(uow.Get<JournalAudit>().Items);
-        Assert.Equal("SAGE_COURANTE", entry.BaseSage);
-        Assert.Equal("POINTEUSE_COURANTE", entry.BasePointeuse);
+        var entry = uow.Get<JournalAudit>().Items.Should().ContainSingle().Which;
+        entry.BaseSage.Should().Be("SAGE_COURANTE");
+        entry.BasePointeuse.Should().Be("POINTEUSE_COURANTE");
     }
 
     [Fact]
@@ -103,11 +103,11 @@ public class AuditTrailTests
 
         await writer.WriteAsync(Database(), Rows(), Context());
 
-        var summary = Assert.Single(audit.Entries);
-        Assert.Equal("SUCCES", summary.Status);
-        Assert.Equal(7, summary.UpdatedRows);
-        Assert.Equal(1, summary.Employees);
-        Assert.All(summary.UpdatesByCategory.Values, value => Assert.Equal(1, value));
+        var summary = audit.Entries.Should().ContainSingle().Which;
+        summary.Status.Should().Be("SUCCES");
+        summary.UpdatedRows.Should().Be(7);
+        summary.Employees.Should().Be(1);
+        summary.UpdatesByCategory.Values.Should().AllSatisfy(value => value.Should().Be(1));
     }
 
     [Fact]
@@ -117,12 +117,12 @@ public class AuditTrailTests
         var audit = new CapturingAuditTrail();
         var writer = new TestStandardWriter(new FailingSageWriter(original, 3), audit);
 
-        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() => writer.WriteAsync(Database(), Rows(), Context()));
+        var thrown = (await FluentActions.Awaiting(() => writer.WriteAsync(Database(), Rows(), Context())).Should().ThrowExactlyAsync<InvalidOperationException>()).Which;
 
-        Assert.Same(original, thrown);
-        var summary = Assert.Single(audit.Entries);
-        Assert.Equal("ECHEC", summary.Status);
-        Assert.Equal(3, summary.UpdatedRows);
+        thrown.Should().BeSameAs(original);
+        var summary = audit.Entries.Should().ContainSingle().Which;
+        summary.Status.Should().Be("ECHEC");
+        summary.UpdatedRows.Should().Be(3);
     }
 
     [Fact]
@@ -133,10 +133,10 @@ public class AuditTrailTests
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => writer.WriteAsync(Database(), Rows(), Context(), cancellation.Token));
+        await FluentActions.Awaiting(() => writer.WriteAsync(Database(), Rows(), Context(), cancellation.Token)).Should().ThrowAsync<OperationCanceledException>();
 
-        Assert.Equal("ECHEC", Assert.Single(audit.Entries).Status);
-        Assert.Equal(CancellationToken.None, audit.Tokens.Single());
+        audit.Entries.Should().ContainSingle().Which.Status.Should().Be("ECHEC");
+        audit.Tokens.Single().Should().Be(CancellationToken.None);
     }
 
     [Fact]
@@ -148,9 +148,9 @@ public class AuditTrailTests
 
         var result = await writer.WriteAsync(Database(), Rows(), Context());
 
-        Assert.Equal(1, result.EmployeesUpdated);
-        Assert.Equal(7, result.CategoriesUpdated);
-        Assert.NotEmpty(logger.Messages);
+        result.EmployeesUpdated.Should().Be(1);
+        result.CategoriesUpdated.Should().Be(7);
+        logger.Messages.Should().NotBeEmpty();
     }
 
     [Fact]
@@ -159,12 +159,12 @@ public class AuditTrailTests
         var audit = new CapturingAuditTrail();
         var writer = new TestStandardWriter(new SagePayrollWriter(), audit);
 
-        var exception = await Assert.ThrowsAsync<DomainException>(() => writer.WriteAsync(Database(), Rows(), Context()));
+        var exception = (await FluentActions.Awaiting(() => writer.WriteAsync(Database(), Rows(), Context())).Should().ThrowExactlyAsync<DomainException>()).Which;
 
-        Assert.Contains("Constante SAGE HS01 introuvable", exception.Message);
-        var summary = Assert.Single(audit.Entries);
-        Assert.Equal("ECHEC", summary.Status);
-        Assert.Equal(0, summary.UpdatedRows);
+        exception.Message.Should().Contain("Constante SAGE HS01 introuvable");
+        var summary = audit.Entries.Should().ContainSingle().Which;
+        summary.Status.Should().Be("ECHEC");
+        summary.UpdatedRows.Should().Be(0);
     }
 
     [Fact]
@@ -176,8 +176,8 @@ public class AuditTrailTests
 
         await writer.WriteAsync(Database(), Rows(), Context(), cancellation.Token);
 
-        Assert.Equal("SUCCES", Assert.Single(audit.Entries).Status);
-        Assert.Equal(CancellationToken.None, audit.Tokens.Single());
+        audit.Entries.Should().ContainSingle().Which.Status.Should().Be("SUCCES");
+        audit.Tokens.Single().Should().Be(CancellationToken.None);
     }
 
     private static BddSage Database() => new() { NomBd = "SAGE_TEST", TypeBase = "STANDARD" };

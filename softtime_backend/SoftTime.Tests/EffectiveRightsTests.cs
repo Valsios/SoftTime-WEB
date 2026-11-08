@@ -38,40 +38,40 @@ public class EffectiveRightsTests
     public void Role_only_gives_exactly_the_role_rights_and_deduced_gates()
     {
         var r = Compute(Role(5, SalesRole, Databases, Processing, Reports));
-        Assert.True(r.Permissions.SetEquals(SalesRole));
-        Assert.True(r.Gates.SetEquals(new[] { Databases, Processing, Reports }));
-        Assert.False(r.IsCustomized);
-        Assert.Empty(r.Inconsistencies);
-        Assert.Empty(r.SensitiveRights);
+        r.Permissions.SetEquals(SalesRole).Should().BeTrue();
+        r.Gates.SetEquals(new[] { Databases, Processing, Reports }).Should().BeTrue();
+        r.IsCustomized.Should().BeFalse();
+        r.Inconsistencies.Should().BeEmpty();
+        r.SensitiveRights.Should().BeEmpty();
     }
 
     [Fact]
     public void Addition_grants_the_right_and_its_gate()
     {
         var r = Compute(Role(5, SalesRole, Databases, Processing, Reports), Add("PARAMS:USERS"));
-        Assert.True(r.Has("PARAMS:USERS"));
-        Assert.True(r.HasGate(Parameters));
-        Assert.True(r.IsCustomized);
-        Assert.Equal(new[] { "PARAMS:USERS" }, r.SensitiveRights);
+        r.Has("PARAMS:USERS").Should().BeTrue();
+        r.HasGate(Parameters).Should().BeTrue();
+        r.IsCustomized.Should().BeTrue();
+        r.SensitiveRights.Should().Equal(new[] { "PARAMS:USERS" });
     }
 
     [Fact]
     public void Removal_takes_the_right_away_and_the_gate_when_nothing_is_left()
     {
         var r = Compute(Role(5, SalesRole, Databases, Processing, Reports), Remove("PROC:SHIFTS", "PROC:PUNCHES"));
-        Assert.False(r.Has("PROC:SHIFTS"));
-        Assert.False(r.HasGate(Processing));
-        Assert.True(r.HasGate(Reports));
-        Assert.True(r.IsCustomized);
+        r.Has("PROC:SHIFTS").Should().BeFalse();
+        r.HasGate(Processing).Should().BeFalse();
+        r.HasGate(Reports).Should().BeTrue();
+        r.IsCustomized.Should().BeTrue();
     }
 
     [Fact]
     public void Addition_and_removal_together()
     {
         var r = Compute(Role(5, SalesRole, Databases, Processing, Reports), Add("OTHER:CANTEEN").Concat(Remove("REPORTS:REPORTS")).ToArray());
-        Assert.True(r.Has("OTHER:CANTEEN"));
-        Assert.False(r.Has("REPORTS:REPORTS"));
-        Assert.True(r.Gates.SetEquals(new[] { Databases, Processing, Other }));
+        r.Has("OTHER:CANTEEN").Should().BeTrue();
+        r.Has("REPORTS:REPORTS").Should().BeFalse();
+        r.Gates.SetEquals(new[] { Databases, Processing, Other }).Should().BeTrue();
     }
 
     [Fact]
@@ -79,15 +79,15 @@ public class EffectiveRightsTests
     {
         var withRows = Compute(Role(1, new[] { "REPORTS:REPORTS" }), Remove("PARAMS:USERS", "SAGE:BASE1:READ").Concat(Add("INCONNU:X")).ToArray());
         var plain = Compute(Role(1));
-        Assert.True(withRows.IsAdministrator);
-        Assert.True(withRows.Permissions.SetEquals(plain.Permissions));
-        Assert.True(withRows.Gates.SetEquals(new[] { 1, 2, 3, 4, 5, 6 }));
-        Assert.False(withRows.IsCustomized);
-        Assert.Equal(SensitiveCodes, withRows.SensitiveRights);
-        Assert.Empty(withRows.Inconsistencies);
-        Assert.True(withRows.Has("SAGE:BASE2:UPDATE") && withRows.Has("POINTEUSE:CREATE"));
+        withRows.IsAdministrator.Should().BeTrue();
+        withRows.Permissions.SetEquals(plain.Permissions).Should().BeTrue();
+        withRows.Gates.SetEquals(new[] { 1, 2, 3, 4, 5, 6 }).Should().BeTrue();
+        withRows.IsCustomized.Should().BeFalse();
+        withRows.SensitiveRights.Should().Equal(SensitiveCodes);
+        withRows.Inconsistencies.Should().BeEmpty();
+        (withRows.Has("SAGE:BASE2:UPDATE") && withRows.Has("POINTEUSE:CREATE")).Should().BeTrue();
         // Seul le rôle 1 est administrateur : un rôle nommé comme tel n'a rien de spécial.
-        Assert.False(Compute(Role(3, new[] { "REPORTS:REPORTS" }, Reports)).IsAdministrator);
+        Compute(Role(3, new[] { "REPORTS:REPORTS" }, Reports)).IsAdministrator.Should().BeFalse();
     }
 
     #endregion
@@ -106,30 +106,30 @@ public class EffectiveRightsTests
             new[] { new BddPointeuse { NomBd = "PTG" } });
         var configuration = new[] { "SAGE:CREATE", "SAGE:BASE1:UPDATE", "SAGE:BASE1:DELETE", "SAGE:BASE2:UPDATE", "SAGE:BASE2:DELETE",
             "POINTEUSE:CREATE", "POINTEUSE:PTG:UPDATE", "POINTEUSE:PTG:DELETE" };
-        Assert.True(r.Permissions.SetEquals(old.Except(configuration)));
-        Assert.All(configuration, c => Assert.False(r.Has(c)));
-        Assert.True(r.Has("SAGE:BASE1:READ") && r.Has("SAGE:BASE2:READ") && r.Has("POINTEUSE:PTG:READ"));
-        Assert.True(r.Gates.SetEquals(gates));
-        Assert.False(r.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Create));
-        Assert.False(r.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Update, "BASE1"));
-        Assert.True(r.CanUseDatabase(DatabaseKind.Sage, "BASE1"));
-        Assert.False(r.CanUseDatabase(DatabaseKind.Sage, "BASE2")); // non cochée dans « Accès bases »
+        r.Permissions.SetEquals(old.Except(configuration)).Should().BeTrue();
+        configuration.Should().AllSatisfy(c => r.Has(c).Should().BeFalse());
+        (r.Has("SAGE:BASE1:READ") && r.Has("SAGE:BASE2:READ") && r.Has("POINTEUSE:PTG:READ")).Should().BeTrue();
+        r.Gates.SetEquals(gates).Should().BeTrue();
+        r.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Create).Should().BeFalse();
+        r.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Update, "BASE1").Should().BeFalse();
+        r.CanUseDatabase(DatabaseKind.Sage, "BASE1").Should().BeTrue();
+        r.CanUseDatabase(DatabaseKind.Sage, "BASE2").Should().BeFalse(); // non cochée dans « Accès bases »
     }
 
     [Fact]
     public void Database_gate_without_any_database_is_kept()
     {
         var r = Compute(Role(7, null, Databases), None, DatabaseCatalog.Empty);
-        Assert.True(r.HasGate(Databases));
-        Assert.Empty(r.Permissions);
+        r.HasGate(Databases).Should().BeTrue();
+        r.Permissions.Should().BeEmpty();
     }
 
     [Fact]
     public void Role_marker_means_no_rights_and_no_defaults()
     {
         var r = Compute(Role(8, new[] { PermissionCatalog.EmptyRoleMarker }, Databases, Processing));
-        Assert.Empty(r.Permissions);
-        Assert.Empty(r.Gates);
+        r.Permissions.Should().BeEmpty();
+        r.Gates.Should().BeEmpty();
     }
 
     [Fact]
@@ -137,13 +137,13 @@ public class EffectiveRightsTests
     {
         var role = Role(5, SalesRole, Databases, Processing, Reports);
         var none = Compute(role, Add(PermissionCatalog.EmptyUserMarker));
-        Assert.Empty(none.Permissions);
-        Assert.Empty(none.Gates);
-        Assert.True(none.IsCustomized);
+        none.Permissions.Should().BeEmpty();
+        none.Gates.Should().BeEmpty();
+        none.IsCustomized.Should().BeTrue();
 
         var plusOne = Compute(role, Add(PermissionCatalog.EmptyUserMarker, "REPORTS:REPORTS"));
-        Assert.True(plusOne.Permissions.SetEquals(new[] { "REPORTS:REPORTS" }));
-        Assert.True(plusOne.Gates.SetEquals(new[] { Reports }));
+        plusOne.Permissions.SetEquals(new[] { "REPORTS:REPORTS" }).Should().BeTrue();
+        plusOne.Gates.SetEquals(new[] { Reports }).Should().BeTrue();
     }
 
     #endregion
@@ -156,24 +156,24 @@ public class EffectiveRightsTests
         var user = Add("PARAMS:USERS").Concat(Remove("PROC:SHIFTS")).ToArray();
         var a = Compute(Role(5, new[] { "PROC:SHIFTS", "REPORTS:REPORTS" }, Processing, Reports), user);
         var b = Compute(Role(6, new[] { "PROC:SHIFTS", "OTHER:CANTEEN" }, Processing, Other), user);
-        Assert.True(a.Permissions.SetEquals(new[] { "REPORTS:REPORTS", "PARAMS:USERS" }));
-        Assert.True(b.Permissions.SetEquals(new[] { "OTHER:CANTEEN", "PARAMS:USERS" }));
+        a.Permissions.SetEquals(new[] { "REPORTS:REPORTS", "PARAMS:USERS" }).Should().BeTrue();
+        b.Permissions.SetEquals(new[] { "OTHER:CANTEEN", "PARAMS:USERS" }).Should().BeTrue();
     }
 
     [Fact]
     public void Gates_are_deduced_from_effective_rights_only()
     {
         var r = Compute(Role(9, new[] { "SAGE:BASE1:READ", "PARAMS:ROLES", "PROC:SHIFTS", "OTHER:CANTEEN", "TRACE:AUDIT", "REPORTS:REPORTS" }));
-        Assert.True(r.Gates.SetEquals(new[] { 1, 2, 3, 4, 5, 6 }));
+        r.Gates.SetEquals(new[] { 1, 2, 3, 4, 5, 6 }).Should().BeTrue();
         // Les portes de T_DROIT_ROLE ne comptent pas quand le rôle a des lignes détaillées.
-        Assert.True(Compute(Role(9, new[] { "REPORTS:REPORTS" }, 1, 2, 3, 4, 5)).Gates.SetEquals(new[] { Reports }));
+        Compute(Role(9, new[] { "REPORTS:REPORTS" }, 1, 2, 3, 4, 5)).Gates.SetEquals(new[] { Reports }).Should().BeTrue();
     }
 
     [Fact]
     public void Sensitive_rights_lists_the_four_rights_that_change_rights()
     {
         var r = Compute(Role(9, new[] { "PARAMS:DB_ACCESS", "PARAMS:USERS", "PARAMS:CARDPAIE" }), Add("PARAMS:PRIVILEGES", "PARAMS:ROLES"));
-        Assert.Equal(new[] { "PARAMS:USERS", "PARAMS:ROLES", "PARAMS:PRIVILEGES", "PARAMS:DB_ACCESS" }, r.SensitiveRights);
+        r.SensitiveRights.Should().Equal(new[] { "PARAMS:USERS", "PARAMS:ROLES", "PARAMS:PRIVILEGES", "PARAMS:DB_ACCESS" });
     }
 
     #endregion
@@ -188,30 +188,30 @@ public class EffectiveRightsTests
     {
         // Aucune base cochée dans « Accès bases ».
         var none = Compute(Role(5, new[] { code, "SAGE:BASE1:READ" }), None, new DatabaseCatalog(Dbs.Sage, Dbs.Pointeuse, Array.Empty<string>()));
-        Assert.Equal(gate, Assert.Single(none.Inconsistencies).Gate);
-        Assert.True(none.Has(code));
+        none.Inconsistencies.Should().ContainSingle().Which.Gate.Should().Be(gate);
+        none.Has(code).Should().BeTrue();
 
         // Base cochée mais sans permission de lecture.
         var noRead = Compute(Role(5, new[] { code, "SAGE:BASE2:READ" }));
-        Assert.Single(noRead.Inconsistencies);
+        noRead.Inconsistencies.Should().ContainSingle();
 
         // Base cochée et lecture accordée : cohérent.
-        Assert.Empty(Compute(Role(5, new[] { code, "SAGE:BASE1:READ" })).Inconsistencies);
+        Compute(Role(5, new[] { code, "SAGE:BASE1:READ" })).Inconsistencies.Should().BeEmpty();
     }
 
     [Fact]
     public void Non_work_gates_and_administrator_are_never_inconsistent()
     {
         var noAccess = new DatabaseCatalog(Dbs.Sage, Dbs.Pointeuse, Array.Empty<string>());
-        Assert.Empty(Compute(Role(5, new[] { "PARAMS:USERS", "TRACE:AUDIT" }), None, noAccess).Inconsistencies);
-        Assert.Empty(Compute(Role(1), None, noAccess).Inconsistencies);
+        Compute(Role(5, new[] { "PARAMS:USERS", "TRACE:AUDIT" }), None, noAccess).Inconsistencies.Should().BeEmpty();
+        Compute(Role(1), None, noAccess).Inconsistencies.Should().BeEmpty();
     }
 
     [Fact]
     public void Several_work_gates_give_one_inconsistency_each()
     {
         var r = Compute(Role(5, new[] { "PROC:SHIFTS", "REPORTS:REPORTS" }), None, DatabaseCatalog.Empty);
-        Assert.Equal(new[] { Processing, Reports }, r.Inconsistencies.Select(i => i.Gate).OrderBy(g => g));
+        r.Inconsistencies.Select(i => i.Gate).OrderBy(g => g).Should().Equal(new[] { Processing, Reports });
     }
 
     #endregion
@@ -222,58 +222,58 @@ public class EffectiveRightsTests
     public void Using_a_sage_database_needs_gate_1_checked_database_and_read()
     {
         var ok = Compute(Role(5, new[] { "SAGE:BASE1:READ" }, Databases));
-        Assert.True(ok.CanUseDatabase(DatabaseKind.Sage, "BASE1"));
-        Assert.True(ok.CanUseDatabase(DatabaseKind.Sage, "base1")); // les noms de base ne tiennent pas compte de la casse
+        ok.CanUseDatabase(DatabaseKind.Sage, "BASE1").Should().BeTrue();
+        ok.CanUseDatabase(DatabaseKind.Sage, "base1").Should().BeTrue(); // les noms de base ne tiennent pas compte de la casse
 
-        Assert.False(Compute(Role(5, new[] { "SAGE:BASE2:READ" }, Databases)).CanUseDatabase(DatabaseKind.Sage, "BASE2")); // non cochée
-        Assert.False(Compute(Role(5, new[] { "SAGE:BASE1:UPDATE" }, Databases)).CanUseDatabase(DatabaseKind.Sage, "BASE1")); // pas de lecture
-        Assert.False(Compute(Role(5, new[] { "SAGE:BASE1:READ" }, Databases), Remove("SAGE:BASE1:READ")).CanUseDatabase(DatabaseKind.Sage, "BASE1"));
-        Assert.False(ok.CanUseDatabase(DatabaseKind.Sage, null));
+        Compute(Role(5, new[] { "SAGE:BASE2:READ" }, Databases)).CanUseDatabase(DatabaseKind.Sage, "BASE2").Should().BeFalse(); // non cochée
+        Compute(Role(5, new[] { "SAGE:BASE1:UPDATE" }, Databases)).CanUseDatabase(DatabaseKind.Sage, "BASE1").Should().BeFalse(); // pas de lecture
+        Compute(Role(5, new[] { "SAGE:BASE1:READ" }, Databases), Remove("SAGE:BASE1:READ")).CanUseDatabase(DatabaseKind.Sage, "BASE1").Should().BeFalse();
+        ok.CanUseDatabase(DatabaseKind.Sage, null).Should().BeFalse();
     }
 
     [Fact]
     public void Pointeuse_use_needs_gate_1_and_read_only_rule_to_be_decided()
     {
         var r = Compute(Role(5, new[] { "POINTEUSE:PTG:READ" }, Databases));
-        Assert.True(r.CanUseDatabase(DatabaseKind.Pointeuse, "PTG"));
-        Assert.False(r.CanUseDatabase(DatabaseKind.Pointeuse, "AUTRE"));
+        r.CanUseDatabase(DatabaseKind.Pointeuse, "PTG").Should().BeTrue();
+        r.CanUseDatabase(DatabaseKind.Pointeuse, "AUTRE").Should().BeFalse();
     }
 
     [Fact]
     public void Administrator_uses_any_known_database_even_unchecked()
     {
         var admin = Compute(Role(1));
-        Assert.True(admin.CanUseDatabase(DatabaseKind.Sage, "BASE2"));
-        Assert.True(admin.CanUseDatabase(DatabaseKind.Pointeuse, "PTG"));
-        Assert.False(admin.CanUseDatabase(DatabaseKind.Sage, "INCONNUE"));
+        admin.CanUseDatabase(DatabaseKind.Sage, "BASE2").Should().BeTrue();
+        admin.CanUseDatabase(DatabaseKind.Pointeuse, "PTG").Should().BeTrue();
+        admin.CanUseDatabase(DatabaseKind.Sage, "INCONNUE").Should().BeFalse();
     }
 
     [Fact]
     public void Configuring_needs_gate_1_and_a_configuration_permission_for_every_account()
     {
         var reader = Compute(Role(5, new[] { "SAGE:BASE1:READ" }, Databases));
-        Assert.False(reader.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Update, "BASE1"));
+        reader.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Update, "BASE1").Should().BeFalse();
 
         var editor = Compute(Role(5, new[] { "SAGE:BASE1:READ", "SAGE:BASE1:UPDATE", "SAGE:CREATE" }, Databases));
-        Assert.True(editor.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Update, "BASE1"));
-        Assert.True(editor.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Create));
-        Assert.False(editor.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Delete, "BASE1"));
-        Assert.False(editor.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Update, null));
-        Assert.False(editor.CanConfigureDatabase(DatabaseKind.Pointeuse, DatabaseConfigAction.Create));
+        editor.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Update, "BASE1").Should().BeTrue();
+        editor.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Create).Should().BeTrue();
+        editor.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Delete, "BASE1").Should().BeFalse();
+        editor.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Update, null).Should().BeFalse();
+        editor.CanConfigureDatabase(DatabaseKind.Pointeuse, DatabaseConfigAction.Create).Should().BeFalse();
 
         // Sans aucun droit sur les bases, aucune configuration (la porte 1 se déduit des codes SAGE: et POINTEUSE:).
         var noGate = Compute(Role(5, new[] { "PROC:SHIFTS" }, Processing));
-        Assert.False(noGate.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Update, "BASE1"));
-        Assert.True(Compute(Role(1)).CanConfigureDatabase(DatabaseKind.Pointeuse, DatabaseConfigAction.Delete, "PTG"));
+        noGate.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Update, "BASE1").Should().BeFalse();
+        Compute(Role(1)).CanConfigureDatabase(DatabaseKind.Pointeuse, DatabaseConfigAction.Delete, "PTG").Should().BeTrue();
     }
 
     [Fact]
     public void Working_never_requires_configuration()
     {
         var worker = Compute(Role(5, new[] { "SAGE:BASE1:READ", "PROC:SHIFTS" }, Databases, Processing));
-        Assert.True(worker.CanUseDatabase(DatabaseKind.Sage, "BASE1"));
-        Assert.False(worker.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Update, "BASE1"));
-        Assert.Empty(worker.Inconsistencies);
+        worker.CanUseDatabase(DatabaseKind.Sage, "BASE1").Should().BeTrue();
+        worker.CanConfigureDatabase(DatabaseKind.Sage, DatabaseConfigAction.Update, "BASE1").Should().BeFalse();
+        worker.Inconsistencies.Should().BeEmpty();
     }
 
     #endregion
@@ -287,17 +287,17 @@ public class EffectiveRightsTests
             .Concat(PermissionCatalog.BuildDefaultPermissionsList(new HashSet<int> { Processing }, Array.Empty<BddSage>(), Array.Empty<BddPointeuse>()))
             .ToList();
         var params37 = PermissionCatalog.BuildDefaultPermissionsList(new HashSet<int> { Parameters }, Array.Empty<BddSage>(), Array.Empty<BddPointeuse>());
-        Assert.Equal(37, params37.Count);
+        params37.Count.Should().Be(37);
 
         var (additions, removals) = ConvertLegacyList(roleRights, roleRights.Concat(params37).ToList());
-        Assert.True(additions.ToHashSet().SetEquals(params37));
-        Assert.Empty(removals);
+        additions.ToHashSet().SetEquals(params37).Should().BeTrue();
+        removals.Should().BeEmpty();
 
         // Appliquer les écarts au rôle redonne exactement la liste d'origine.
         var back = Compute(Role(10034, roleRights.ToArray(), Databases, Processing), additions.Select(a => new PermissionRow(a, true)).ToArray(), Dbs);
-        Assert.True(back.Permissions.SetEquals(roleRights.Concat(params37)));
-        Assert.True(back.HasGate(Parameters));
-        Assert.Equal(new[] { "PARAMS:USERS", "PARAMS:ROLES", "PARAMS:PRIVILEGES", "PARAMS:DB_ACCESS" }, back.SensitiveRights);
+        back.Permissions.SetEquals(roleRights.Concat(params37)).Should().BeTrue();
+        back.HasGate(Parameters).Should().BeTrue();
+        back.SensitiveRights.Should().Equal(new[] { "PARAMS:USERS", "PARAMS:ROLES", "PARAMS:PRIVILEGES", "PARAMS:DB_ACCESS" });
     }
 
     [Fact]
@@ -306,19 +306,19 @@ public class EffectiveRightsTests
         var role = new[] { "PROC:SHIFTS", "REPORTS:REPORTS" };
         var (a1, r1) = ConvertLegacyList(role, Array.Empty<string>());
         var (a2, r2) = ConvertLegacyList(role, new[] { PermissionCatalog.EmptyUserMarker });
-        Assert.Empty(a1);
-        Assert.Empty(a2);
-        Assert.Equal(new[] { "PROC:SHIFTS", "REPORTS:REPORTS" }, r1);
-        Assert.Equal(r1, r2);
+        a1.Should().BeEmpty();
+        a2.Should().BeEmpty();
+        r1.Should().Equal(new[] { "PROC:SHIFTS", "REPORTS:REPORTS" });
+        r2.Should().Equal(r1);
     }
 
     [Fact]
     public void Legacy_conversion_handles_mixed_lists_duplicates_and_unknown_codes()
     {
         var result = ConvertLegacyList(new[] { "PROC:SHIFTS", "PROC:PUNCHES" }, new[] { "PROC:SHIFTS", "PROC:SHIFTS", "OTHER:CANTEEN", "INCONNU:X" });
-        Assert.Equal(new[] { "OTHER:CANTEEN" }, result.Additions);
-        Assert.Equal(new[] { "PROC:PUNCHES" }, result.Removals);
-        Assert.Equal(new[] { "INCONNU:X" }, result.IgnoredUnknown);
+        result.Additions.Should().Equal(new[] { "OTHER:CANTEEN" });
+        result.Removals.Should().Equal(new[] { "PROC:PUNCHES" });
+        result.IgnoredUnknown.Should().Equal(new[] { "INCONNU:X" });
     }
 
     #endregion
@@ -331,9 +331,9 @@ public class EffectiveRightsTests
         foreach (var role in new[] { new RoleDefinition(null, false, None, Array.Empty<int>()), new RoleDefinition(404, false, None, new[] { 1, 3 }) })
         {
             var r = Compute(role, Add("PARAMS:USERS", "PROC:SHIFTS"));
-            Assert.Empty(r.Permissions);
-            Assert.Empty(r.Gates);
-            Assert.Equal("ROLE_NOT_FOUND", Assert.Single(r.Inconsistencies).Code);
+            r.Permissions.Should().BeEmpty();
+            r.Gates.Should().BeEmpty();
+            r.Inconsistencies.Should().ContainSingle().Which.Code.Should().Be("ROLE_NOT_FOUND");
         }
     }
 
@@ -341,16 +341,16 @@ public class EffectiveRightsTests
     public void Unknown_permissions_are_ignored_and_reported_never_accepted()
     {
         var r = Compute(Role(5, new[] { "PROC:SHIFTS", "FOO:BAR" }), Add("BAZ:QUX", "OTHER:CANTEEN"));
-        Assert.False(r.Has("FOO:BAR") || r.Has("BAZ:QUX"));
-        Assert.True(r.IgnoredPermissions.OrderBy(x => x).SequenceEqual(new[] { "BAZ:QUX", "FOO:BAR" }));
-        Assert.True(r.Has("OTHER:CANTEEN"));
+        (r.Has("FOO:BAR") || r.Has("BAZ:QUX")).Should().BeFalse();
+        r.IgnoredPermissions.OrderBy(x => x).SequenceEqual(new[] { "BAZ:QUX", "FOO:BAR" }).Should().BeTrue();
+        r.Has("OTHER:CANTEEN").Should().BeTrue();
     }
 
     [Fact]
     public void Duplicates_are_merged_silently()
     {
         var r = Compute(Role(5, new[] { "PROC:SHIFTS", "PROC:SHIFTS", "proc:shifts" }), Add("OTHER:CANTEEN", "OTHER:CANTEEN"));
-        Assert.Equal(2, r.Permissions.Count);
+        r.Permissions.Count.Should().Be(2);
     }
 
     [Fact]
@@ -358,25 +358,25 @@ public class EffectiveRightsTests
     {
         var role = Role(5, new[] { "PROC:SHIFTS" }, Processing);
         var r = Compute(role, Remove("PARAMS:USERS"));
-        Assert.True(r.Permissions.SetEquals(new[] { "PROC:SHIFTS" }));
-        Assert.False(r.IsCustomized);
-        Assert.Equal(new[] { "-PARAMS:USERS" }, r.IneffectiveDeviations);
+        r.Permissions.SetEquals(new[] { "PROC:SHIFTS" }).Should().BeTrue();
+        r.IsCustomized.Should().BeFalse();
+        r.IneffectiveDeviations.Should().Equal(new[] { "-PARAMS:USERS" });
     }
 
     [Fact]
     public void Adding_a_right_the_role_already_has_has_no_effect_and_is_listed()
     {
         var r = Compute(Role(5, new[] { "PROC:SHIFTS" }, Processing), Add("PROC:SHIFTS"));
-        Assert.False(r.IsCustomized);
-        Assert.Equal(new[] { "+PROC:SHIFTS" }, r.IneffectiveDeviations);
+        r.IsCustomized.Should().BeFalse();
+        r.IneffectiveDeviations.Should().Equal(new[] { "+PROC:SHIFTS" });
     }
 
     [Fact]
     public void Same_code_added_and_removed_is_removed()
     {
         var r = Compute(Role(5, new[] { "PROC:SHIFTS" }), Add("OTHER:CANTEEN").Concat(Remove("OTHER:CANTEEN")).ToArray());
-        Assert.False(r.Has("OTHER:CANTEEN"));
-        Assert.Contains("+OTHER:CANTEEN", r.IneffectiveDeviations);
+        r.Has("OTHER:CANTEEN").Should().BeFalse();
+        r.IneffectiveDeviations.Should().Contain("+OTHER:CANTEEN");
     }
 
     #endregion
@@ -413,7 +413,7 @@ public class EffectiveRightsTests
         var rows = new[] { "PROC:SHIFTS", "REPORTS:REPORTS", "SAGE:BASE1:READ" };
         var old = await world.OldAsync(5, rows, new[] { Databases, Processing, Reports });
         var now = Compute(Role(5, rows, Databases, Processing, Reports), None, new DatabaseCatalog(new[] { "BASE1", "BASE2" }, new[] { "PTG" }, new[] { "BASE1" }));
-        Assert.True(now.Permissions.SetEquals(old));
+        now.Permissions.SetEquals(old).Should().BeTrue();
     }
 
     [Fact]
@@ -422,7 +422,7 @@ public class EffectiveRightsTests
         var world = new OldWorld();
         var old = await world.OldAsync(1, null, new[] { 1, 2, 3, 4, 5, 6 });
         var now = Compute(Role(1));
-        Assert.True(now.Permissions.SetEquals(old));
+        now.Permissions.SetEquals(old).Should().BeTrue();
     }
 
     [Fact]
@@ -434,8 +434,8 @@ public class EffectiveRightsTests
         var gates = new[] { Databases, Processing, Reports };
         var shown = await world.OldAsync(10032, null, gates);
         var now = Compute(Role(10032, null, gates));
-        Assert.True(shown.SetEquals(now.Permissions));
-        Assert.DoesNotContain(shown, c => (c.StartsWith("SAGE:") || c.StartsWith("POINTEUSE:")) && (c.EndsWith(":CREATE") || c.EndsWith(":UPDATE") || c.EndsWith(":DELETE")));
+        shown.SetEquals(now.Permissions).Should().BeTrue();
+        shown.Should().NotContain(c => (c.StartsWith("SAGE:") || c.StartsWith("POINTEUSE:")) && (c.EndsWith(":CREATE") || c.EndsWith(":UPDATE") || c.EndsWith(":DELETE")));
     }
 
     private sealed class Token : ITokenService

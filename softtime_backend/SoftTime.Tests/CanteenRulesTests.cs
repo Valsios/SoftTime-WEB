@@ -18,7 +18,7 @@ public class CanteenRulesTests
     [InlineData(12, 30)]
     [InlineData(14, 30)]
     public void DansFenetre_AcceptsHoursWithinMealWindow(int h, int m)
-        => Assert.True(CanteenRules.DansFenetre(new TimeSpan(h, m, 0)));
+        => CanteenRules.DansFenetre(new TimeSpan(h, m, 0)).Should().BeTrue();
 
     [Theory]
     [InlineData(10, 59)]
@@ -26,27 +26,27 @@ public class CanteenRulesTests
     [InlineData(7, 0)]
     [InlineData(23, 0)]
     public void DansFenetre_RejectsHoursOutsideMealWindow(int h, int m)
-        => Assert.False(CanteenRules.DansFenetre(new TimeSpan(h, m, 0)));
+        => CanteenRules.DansFenetre(new TimeSpan(h, m, 0)).Should().BeFalse();
 
     // ---- Absence complète (règle du desktop : AbsenceAm && AbsencePm) ----
 
     [Fact]
     public void EstAbsenceComplete_RequiresBothHalves()
-        => Assert.True(CanteenRules.EstAbsenceComplete(true, true));
+        => CanteenRules.EstAbsenceComplete(true, true).Should().BeTrue();
 
     [Theory]
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(false, false)]
     public void EstAbsenceComplete_RejectsPartialOrNoAbsence(bool am, bool pm)
-        => Assert.False(CanteenRules.EstAbsenceComplete(am, pm));
+        => CanteenRules.EstAbsenceComplete(am, pm).Should().BeFalse();
 
     [Theory]
     [InlineData(null, null)]
     [InlineData(true, null)]
     [InlineData(null, true)]
     public void EstAbsenceComplete_RejectsMissingFlags(bool? am, bool? pm)
-        => Assert.False(CanteenRules.EstAbsenceComplete(am, pm));
+        => CanteenRules.EstAbsenceComplete(am, pm).Should().BeFalse();
 
     // ---- Détection d'anomalies ----
 
@@ -58,10 +58,10 @@ public class CanteenRulesTests
 
         var anomalies = CanteenRules.DetecterAnomalies(pointes, absences);
 
-        var anomalie = Assert.Single(anomalies);
-        Assert.Equal("369", anomalie.Matricule);
-        Assert.Equal(Lundi, anomalie.Date);
-        Assert.Equal(CanteenRules.MotifAbsenceContredite, anomalie.Motif);
+        var anomalie = anomalies.Should().ContainSingle().Which;
+        anomalie.Matricule.Should().Be("369");
+        anomalie.Date.Should().Be(Lundi);
+        anomalie.Motif.Should().Be(CanteenRules.MotifAbsenceContredite);
     }
 
     [Fact]
@@ -70,7 +70,7 @@ public class CanteenRulesTests
         // Une absence complète sans pointage est une journée normale : elle ne doit pas remonter.
         var anomalies = CanteenRules.DetecterAnomalies(
             Array.Empty<CanteenDay>(), new[] { new CanteenDay("369", Lundi) });
-        Assert.Empty(anomalies);
+        anomalies.Should().BeEmpty();
     }
 
     [Fact]
@@ -78,7 +78,7 @@ public class CanteenRulesTests
     {
         var pointes = new[] { new CanteenDay("369", Lundi) };
         var absences = new[] { new CanteenDay("412", Lundi) };
-        Assert.Empty(CanteenRules.DetecterAnomalies(pointes, absences));
+        CanteenRules.DetecterAnomalies(pointes, absences).Should().BeEmpty();
     }
 
     [Fact]
@@ -86,7 +86,7 @@ public class CanteenRulesTests
     {
         var pointes = new[] { new CanteenDay("369", Lundi) };
         var absences = new[] { new CanteenDay("369", Lundi.AddDays(1)) };
-        Assert.Empty(CanteenRules.DetecterAnomalies(pointes, absences));
+        CanteenRules.DetecterAnomalies(pointes, absences).Should().BeEmpty();
     }
 
     [Fact]
@@ -95,8 +95,8 @@ public class CanteenRulesTests
         var pointes = new[] { new CanteenDay("369", Lundi.AddHours(12)) };
         var absences = new[] { new CanteenDay("369", Lundi) };
 
-        var anomalie = Assert.Single(CanteenRules.DetecterAnomalies(pointes, absences));
-        Assert.Equal(Lundi, anomalie.Date);
+        var anomalie = CanteenRules.DetecterAnomalies(pointes, absences).Should().ContainSingle().Which;
+        anomalie.Date.Should().Be(Lundi);
     }
 
     [Fact]
@@ -118,14 +118,14 @@ public class CanteenRulesTests
 
         var anomalies = CanteenRules.DetecterAnomalies(pointes, absences);
 
-        Assert.Equal(3, anomalies.Count);
-        Assert.Equal("369", anomalies[0].Matricule);
-        Assert.Equal(Lundi, anomalies[0].Date);
-        Assert.Equal(Lundi.AddDays(1), anomalies[1].Date);
-        Assert.Equal("412", anomalies[2].Matricule);
+        anomalies.Count.Should().Be(3);
+        anomalies[0].Matricule.Should().Be("369");
+        anomalies[0].Date.Should().Be(Lundi);
+        anomalies[1].Date.Should().Be(Lundi.AddDays(1));
+        anomalies[2].Matricule.Should().Be("412");
     }
 
     [Fact]
     public void DetecterAnomalies_EmptyInputsYieldNothing()
-        => Assert.Empty(CanteenRules.DetecterAnomalies(Array.Empty<CanteenDay>(), Array.Empty<CanteenDay>()));
+        => CanteenRules.DetecterAnomalies(Array.Empty<CanteenDay>(), Array.Empty<CanteenDay>()).Should().BeEmpty();
 }

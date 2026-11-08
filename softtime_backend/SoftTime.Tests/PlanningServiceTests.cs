@@ -52,13 +52,13 @@ public class PlanningServiceTests
             new EmployeePlanningDto(0, 1, 1, Lundi, null, null, null, false)
         });
 
-        var ligne = Assert.Single(contexte.Planning);
-        Assert.Equal(Lundi.Date, ligne.DateP);
-        Assert.Equal(Lundi.AddHours(17), ligne.Ha);
-        Assert.Equal(Lundi.AddDays(1).AddHours(7), ligne.Hd);
-        Assert.Equal(TimeSpan.Zero, ligne.Pause);
-        Assert.False(ligne.OffP);
-        Assert.Equal(1, ligne.NoShift);
+        var ligne = contexte.Planning.Should().ContainSingle().Which;
+        ligne.DateP.Should().Be(Lundi.Date);
+        ligne.Ha.Should().Be(Lundi.AddHours(17));
+        ligne.Hd.Should().Be(Lundi.AddDays(1).AddHours(7));
+        ligne.Pause.Should().Be(TimeSpan.Zero);
+        ligne.OffP.Should().BeFalse();
+        ligne.NoShift.Should().Be(1);
     }
 
     [Fact]
@@ -72,9 +72,9 @@ public class PlanningServiceTests
             new EmployeePlanningDto(0, 1, 1, Lundi, null, null, null, false)
         });
 
-        var ligne = Assert.Single(contexte.Planning);
-        Assert.Equal(Lundi.AddHours(7).AddMinutes(30), ligne.Ha);
-        Assert.Equal(Lundi.AddHours(17), ligne.Hd);
+        var ligne = contexte.Planning.Should().ContainSingle().Which;
+        ligne.Ha.Should().Be(Lundi.AddHours(7).AddMinutes(30));
+        ligne.Hd.Should().Be(Lundi.AddHours(17));
     }
 
     [Fact]
@@ -99,9 +99,9 @@ public class PlanningServiceTests
             new EmployeePlanningDto(10, 1, null, Lundi, null, null, null, false)
         });
 
-        var ligne = Assert.Single(contexte.Planning);
-        Assert.Equal(Lundi.AddHours(8), ligne.Ha);
-        Assert.Equal(Lundi.AddHours(17), ligne.Hd);
+        var ligne = contexte.Planning.Should().ContainSingle().Which;
+        ligne.Ha.Should().Be(Lundi.AddHours(8));
+        ligne.Hd.Should().Be(Lundi.AddHours(17));
     }
 
     [Fact]
@@ -114,9 +114,9 @@ public class PlanningServiceTests
             new EmployeePlanningDto(0, 1, null, Lundi, Lundi.AddHours(22), null, Lundi.AddHours(6), false)
         });
 
-        var ligne = Assert.Single(contexte.Planning);
-        Assert.Equal(Lundi.AddHours(22), ligne.Ha);
-        Assert.Equal(Lundi.AddDays(1).AddHours(6), ligne.Hd);
+        var ligne = contexte.Planning.Should().ContainSingle().Which;
+        ligne.Ha.Should().Be(Lundi.AddHours(22));
+        ligne.Hd.Should().Be(Lundi.AddDays(1).AddHours(6));
     }
 
     [Fact]
@@ -130,11 +130,11 @@ public class PlanningServiceTests
             new EmployeePlanningDto(0, 1, 1, Lundi, null, null, null, true)
         });
 
-        var ligne = Assert.Single(contexte.Planning);
-        Assert.Null(ligne.Ha);
-        Assert.Null(ligne.Hd);
-        Assert.Equal(TimeSpan.Zero, ligne.Pause);
-        Assert.True(ligne.OffP);
+        var ligne = contexte.Planning.Should().ContainSingle().Which;
+        ligne.Ha.Should().BeNull();
+        ligne.Hd.Should().BeNull();
+        ligne.Pause.Should().Be(TimeSpan.Zero);
+        ligne.OffP.Should().BeTrue();
     }
 
     [Fact]
@@ -152,7 +152,7 @@ public class PlanningServiceTests
             new EmployeePlanningDto(0, 1, 1, Lundi, null, null, null, false)
         });
 
-        Assert.Single(contexte.Planning);
+        contexte.Planning.Should().ContainSingle();
     }
 
     [Fact]
@@ -160,11 +160,11 @@ public class PlanningServiceTests
     {
         var contexte = new Contexte();
 
-        await Assert.ThrowsAsync<DomainException>(() =>
+        await FluentActions.Awaiting(() =>
             contexte.Service.SaveEmployeePlanningAsync(new[]
             {
                 new EmployeePlanningDto(0, 1, 99, Lundi, null, null, null, false)
-            }));
+            })).Should().ThrowExactlyAsync<DomainException>();
     }
 
     [Fact]
@@ -172,11 +172,11 @@ public class PlanningServiceTests
     {
         var contexte = new Contexte();
 
-        await Assert.ThrowsAsync<DomainException>(() =>
+        await FluentActions.Awaiting(() =>
             contexte.Service.SaveEmployeePlanningAsync(new[]
             {
                 new EmployeePlanningDto(0, 1, null, Lundi, null, null, null, false)
-            }));
+            })).Should().ThrowExactlyAsync<DomainException>();
     }
 
     [Fact]
@@ -190,7 +190,7 @@ public class PlanningServiceTests
             new EmployeePlanningDto(0, 1, 1, Lundi, null, null, null, false)
         });
 
-        Assert.Equal(TimeSpan.Zero, Assert.Single(contexte.Planning).Pause);
+        contexte.Planning.Should().ContainSingle().Which.Pause.Should().Be(TimeSpan.Zero);
     }
 
     [Fact]
@@ -206,12 +206,12 @@ public class PlanningServiceTests
 
         var resultat = await contexte.Service.ImportExcelAsync(rows, headers);
 
-        Assert.Equal(1, resultat.Imported);
-        var ligne = Assert.Single(contexte.Planning);
-        Assert.Equal(Lundi.AddHours(17), ligne.Ha);
-        Assert.Equal(Lundi.AddDays(1).AddHours(7), ligne.Hd);
-        Assert.Equal(1, ligne.NoShift);
-        Assert.Equal(TimeSpan.Zero, ligne.Pause);
+        resultat.Imported.Should().Be(1);
+        var ligne = contexte.Planning.Should().ContainSingle().Which;
+        ligne.Ha.Should().Be(Lundi.AddHours(17));
+        ligne.Hd.Should().Be(Lundi.AddDays(1).AddHours(7));
+        ligne.NoShift.Should().Be(1);
+        ligne.Pause.Should().Be(TimeSpan.Zero);
     }
 
     [Fact]
@@ -226,12 +226,12 @@ public class PlanningServiceTests
 
         await contexte.Service.ImportExcelAsync(rows, headers);
 
-        var ligne = Assert.Single(contexte.Planning);
-        Assert.True(ligne.OffP);
-        Assert.Null(ligne.Ha);
-        Assert.Null(ligne.Hd);
-        Assert.Null(ligne.NoShift);
-        Assert.Equal(TimeSpan.Zero, ligne.Pause);
+        var ligne = contexte.Planning.Should().ContainSingle().Which;
+        ligne.OffP.Should().BeTrue();
+        ligne.Ha.Should().BeNull();
+        ligne.Hd.Should().BeNull();
+        ligne.NoShift.Should().BeNull();
+        ligne.Pause.Should().Be(TimeSpan.Zero);
     }
 
     [Fact]
@@ -246,8 +246,8 @@ public class PlanningServiceTests
 
         var resultat = await contexte.Service.ImportExcelAsync(rows, headers);
 
-        Assert.Equal(0, resultat.Imported);
-        Assert.Empty(contexte.Planning);
+        resultat.Imported.Should().Be(0);
+        contexte.Planning.Should().BeEmpty();
     }
 
     [Fact]
@@ -262,11 +262,11 @@ public class PlanningServiceTests
 
         var resultat = await contexte.Service.GenerateFromMatriculeCsvAsync(lignes);
 
-        Assert.Equal(1, resultat.Imported);
-        var ligne = Assert.Single(contexte.Planning);
-        Assert.Equal(Lundi.AddHours(22), ligne.Ha);
-        Assert.Equal(Lundi.AddDays(1).AddHours(6), ligne.Hd);
-        Assert.Equal(TimeSpan.Zero, ligne.Pause);
-        Assert.Null(ligne.NoShift);
+        resultat.Imported.Should().Be(1);
+        var ligne = contexte.Planning.Should().ContainSingle().Which;
+        ligne.Ha.Should().Be(Lundi.AddHours(22));
+        ligne.Hd.Should().Be(Lundi.AddDays(1).AddHours(6));
+        ligne.Pause.Should().Be(TimeSpan.Zero);
+        ligne.NoShift.Should().BeNull();
     }
 }

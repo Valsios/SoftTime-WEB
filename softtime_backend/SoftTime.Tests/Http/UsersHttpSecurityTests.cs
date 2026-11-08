@@ -54,26 +54,26 @@ public class UsersHttpSecurityTests : IClassFixture<ApiFactory>
         var (resp, text) = await Send(profile, method, url, body);
         ApiFactory.Report($"4B1|{route}|{profile}|{(int)resp.StatusCode}|{(text.Length == 0 ? "corps vide" : text)}");
 
-        Assert.Equal(profile == "anonyme" ? HttpStatusCode.Unauthorized : HttpStatusCode.Forbidden, resp.StatusCode);
-        Assert.Equal(before, _f.Snapshot());
+        resp.StatusCode.Should().Be(profile == "anonyme" ? HttpStatusCode.Unauthorized : HttpStatusCode.Forbidden);
+        _f.Snapshot().Should().Be(before);
         // param2 a la porte 2 : il atteint le contrôle administrateur et reçoit le message prévu.
-        if (profile == "param2") Assert.Contains(AdminAccess.ReservedMessage, text);
+        if (profile == "param2") text.Should().Contain(AdminAccess.ReservedMessage);
     }
 
     [Fact]
     public async Task Administrator_can_create_modify_change_role_and_password_and_delete()
     {
         var (created, _) = await Send("admin", "POST", "/api/v1/users", NewUser);
-        Assert.True(created.IsSuccessStatusCode, created.StatusCode.ToString());
-        Assert.Contains(_f.Store.Get<Responsable>().Items, u => u.Login == "nouveau");
+        created.IsSuccessStatusCode.Should().BeTrue(created.StatusCode.ToString());
+        _f.Store.Get<Responsable>().Items.Should().Contain(u => u.Login == "nouveau");
 
         var (updated, _) = await Send("admin", "PUT", "/api/v1/users/10052", Promote);
-        Assert.True(updated.IsSuccessStatusCode, updated.StatusCode.ToString());
-        Assert.Equal(40, _f.Store.Get<Responsable>().Items.Single(u => u.IdResponsable == 10052).IdRole);
+        updated.IsSuccessStatusCode.Should().BeTrue(updated.StatusCode.ToString());
+        _f.Store.Get<Responsable>().Items.Single(u => u.IdResponsable == 10052).IdRole.Should().Be(40);
 
         var (deleted, _) = await Send("admin", "DELETE", "/api/v1/users/10051", null);
-        Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
-        Assert.DoesNotContain(_f.Store.Get<Responsable>().Items, u => u.IdResponsable == 10051);
+        deleted.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        _f.Store.Get<Responsable>().Items.Should().NotContain(u => u.IdResponsable == 10051);
     }
 
     [Fact]
@@ -81,8 +81,8 @@ public class UsersHttpSecurityTests : IClassFixture<ApiFactory>
     {
         // ICurrentUser est obligatoire dans AuthService : si l'enregistrement de production disparaît, ce test échoue.
         using var scope = _f.Services.CreateScope();
-        Assert.NotNull(scope.ServiceProvider.GetRequiredService<SoftTime.Application.Abstractions.ICurrentUser>());
-        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IUserAdministrationService>());
+        scope.ServiceProvider.GetRequiredService<SoftTime.Application.Abstractions.ICurrentUser>().Should().NotBeNull();
+        scope.ServiceProvider.GetRequiredService<IUserAdministrationService>().Should().NotBeNull();
     }
 
     [Fact]
@@ -92,12 +92,12 @@ public class UsersHttpSecurityTests : IClassFixture<ApiFactory>
         foreach (var url in new[] { "/api/v1/users", "/api/v1/users/10052" })
         {
             var (ok, _) = await Send("usersreader", "GET", url, null);
-            Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+            ok.StatusCode.Should().Be(HttpStatusCode.OK);
             var (refused, text) = await Send("param2", "GET", url, null);
-            Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+            refused.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         }
         // Sans la porte 2, la lecture reste refusée comme avant.
         var (denied, _) = await Send("joel", "GET", "/api/v1/users", null);
-        Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        denied.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 }

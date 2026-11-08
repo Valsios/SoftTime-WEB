@@ -80,17 +80,17 @@ public class RetardReportRulesTests
             new[] { Affectation(1, 10) },
             new[] { Tolerance(10, 10) });
 
-        var row = Assert.Single(result);
-        Assert.Equal("001", row.Matricule);
-        Assert.Equal("Dupont", row.Nom);
-        Assert.Equal("Jean", row.Prenom);
-        Assert.Equal("INFO", row.Departement);
-        Assert.Equal(Mardi, row.Date);
-        Assert.Equal(TimeSpan.Parse("08:45"), row.HeureEntree);
-        Assert.Equal(TimeSpan.Parse("08:00"), row.HeurePrevue);
-        Assert.Equal(10, row.ToleranceMinutes);
-        Assert.Equal(35, row.MinutesRetard);
-        Assert.False(row.RetardSaisi);
+        var row = result.Should().ContainSingle().Which;
+        row.Matricule.Should().Be("001");
+        row.Nom.Should().Be("Dupont");
+        row.Prenom.Should().Be("Jean");
+        row.Departement.Should().Be("INFO");
+        row.Date.Should().Be(Mardi);
+        row.HeureEntree.Should().Be(TimeSpan.Parse("08:45"));
+        row.HeurePrevue.Should().Be(TimeSpan.Parse("08:00"));
+        row.ToleranceMinutes.Should().Be(10);
+        row.MinutesRetard.Should().Be(35);
+        row.RetardSaisi.Should().BeFalse();
     }
 
     [Fact]
@@ -103,7 +103,7 @@ public class RetardReportRulesTests
             new[] { Affectation(1, 10) },
             new[] { Tolerance(10, 10) });
 
-        Assert.Empty(result);
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -114,7 +114,7 @@ public class RetardReportRulesTests
             new[] { Carte(1, "001") },
             new[] { Corr(1, "001", Mardi, entree: "08:45") });
 
-        Assert.Empty(result);
+        result.Should().BeEmpty();
     }
 
     [Theory]
@@ -127,7 +127,7 @@ public class RetardReportRulesTests
             new[] { Corr(1, "001", Mardi, entree: "08:45") },
             new[] { Plan(1, 1, Mardi, ha, hd) });
 
-        Assert.Empty(result);
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -138,7 +138,7 @@ public class RetardReportRulesTests
             new[] { Corr(1, "001", Mardi, entree: "08:45") },
             new[] { Plan(1, 1, Mardi, offP: true) });
 
-        Assert.Empty(result);
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -157,7 +157,7 @@ public class RetardReportRulesTests
             from: Samedi,
             to: ferie);
 
-        Assert.Empty(result);
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -171,7 +171,7 @@ public class RetardReportRulesTests
             new[] { Affectation(1, 10) },
             new[] { Tolerance(10, 10) });
 
-        Assert.Empty(result);
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -189,9 +189,9 @@ public class RetardReportRulesTests
             new[] { Affectation(1, 10) },
             new[] { Tolerance(10, 10) });
 
-        var row = Assert.Single(result);
-        Assert.Equal(TimeSpan.Parse("08:30"), row.HeureEntree);
-        Assert.Equal(20, row.MinutesRetard);
+        var row = result.Should().ContainSingle().Which;
+        row.HeureEntree.Should().Be(TimeSpan.Parse("08:30"));
+        row.MinutesRetard.Should().Be(20);
     }
 
     [Fact]
@@ -205,8 +205,8 @@ public class RetardReportRulesTests
             new[] { Affectation(1, 10) },
             new[] { Tolerance(10, 10) });
 
-        var row = Assert.Single(result);
-        Assert.Equal(20, row.MinutesRetard);
+        var row = result.Should().ContainSingle().Which;
+        row.MinutesRetard.Should().Be(20);
     }
 
     [Fact]
@@ -219,9 +219,9 @@ public class RetardReportRulesTests
             new[] { Affectation(1, 10) },
             new[] { Tolerance(10, 10) });
 
-        var row = Assert.Single(result);
-        Assert.Equal(42, row.MinutesRetard);
-        Assert.True(row.RetardSaisi);
+        var row = result.Should().ContainSingle().Which;
+        row.MinutesRetard.Should().Be(42);
+        row.RetardSaisi.Should().BeTrue();
     }
 
     [Fact]
@@ -234,7 +234,7 @@ public class RetardReportRulesTests
             new[] { Affectation(1, 10) },
             new[] { Tolerance(10, 10) });
 
-        Assert.Empty(result);
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -245,7 +245,7 @@ public class RetardReportRulesTests
             new[] { Corr(1, "001", Mardi, entree: null) },
             new[] { Plan(1, 1, Mardi) });
 
-        Assert.Empty(result);
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -259,7 +259,7 @@ public class RetardReportRulesTests
             from: Today,
             to: Today.AddDays(5));
 
-        Assert.Empty(result);
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -278,8 +278,8 @@ public class RetardReportRulesTests
             new[] { Affectation(1, 10) },
             new[] { Tolerance(10, 10) });
 
-        Assert.Equal(5, Assert.Single(sansTolerance).MinutesRetard);
-        Assert.Empty(avecTolerance);
+        sansTolerance.Should().ContainSingle().Which.MinutesRetard.Should().Be(5);
+        avecTolerance.Should().BeEmpty();
     }
 
     [Fact]
@@ -299,35 +299,35 @@ public class RetardReportRulesTests
             from: j1,
             to: j2);
 
-        Assert.Equal(3, result.Count);
-        Assert.Equal(j1, result[0].Date);
-        Assert.Equal("002", result[0].Matricule);
-        Assert.Equal(j2, result[1].Date);
-        Assert.Equal("001", result[1].Matricule);
-        Assert.Equal(j2, result[2].Date);
-        Assert.Equal("002", result[2].Matricule);
+        result.Count.Should().Be(3);
+        result[0].Date.Should().Be(j1);
+        result[0].Matricule.Should().Be("002");
+        result[1].Date.Should().Be(j2);
+        result[1].Matricule.Should().Be("001");
+        result[2].Date.Should().Be(j2);
+        result[2].Matricule.Should().Be("002");
     }
 
     [Fact]
     public void MinutesRetard_JamaisNegatif()
     {
-        Assert.Equal(0, RetardReportRules.MinutesRetard(TimeSpan.Parse("07:55"), TimeSpan.Parse("08:00"), 10));
-        Assert.Equal(0, RetardReportRules.MinutesRetard(TimeSpan.Parse("08:05"), TimeSpan.Parse("08:00"), 10));
-        Assert.Equal(35, RetardReportRules.MinutesRetard(TimeSpan.Parse("08:45"), TimeSpan.Parse("08:00"), 10));
+        RetardReportRules.MinutesRetard(TimeSpan.Parse("07:55"), TimeSpan.Parse("08:00"), 10).Should().Be(0);
+        RetardReportRules.MinutesRetard(TimeSpan.Parse("08:05"), TimeSpan.Parse("08:00"), 10).Should().Be(0);
+        RetardReportRules.MinutesRetard(TimeSpan.Parse("08:45"), TimeSpan.Parse("08:00"), 10).Should().Be(35);
     }
 
     [Fact]
     public void HeurePrevue_PlanningOffOuSentinelle_EstNulle()
     {
-        Assert.Null(RetardReportRules.HeurePrevue(null));
-        Assert.Null(RetardReportRules.HeurePrevue(Plan(1, 1, Mardi, offP: true)));
-        Assert.Null(RetardReportRules.HeurePrevue(Plan(1, 1, Mardi, ha: null)));
-        Assert.Null(RetardReportRules.HeurePrevue(new PlanningSalarie
+        RetardReportRules.HeurePrevue(null).Should().BeNull();
+        RetardReportRules.HeurePrevue(Plan(1, 1, Mardi, offP: true)).Should().BeNull();
+        RetardReportRules.HeurePrevue(Plan(1, 1, Mardi, ha: null)).Should().BeNull();
+        RetardReportRules.HeurePrevue(new PlanningSalarie
         {
             Id = 1,
             DateP = Mardi,
             Ha = new DateTime(1800, 1, 1, 8, 0, 0)
-        }));
-        Assert.Equal(TimeSpan.Parse("08:00"), RetardReportRules.HeurePrevue(Plan(1, 1, Mardi)));
+        }).Should().BeNull();
+        RetardReportRules.HeurePrevue(Plan(1, 1, Mardi)).Should().Be(TimeSpan.Parse("08:00"));
     }
 }

@@ -89,15 +89,15 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
         var after = _f.Snapshot();
 
         ApiFactory.Report($"V2|{route}|{profile}|{(int)resp.StatusCode}|{Format(resp, text)}|{Trunc(text)}");
-        Assert.Equal(profile == "anonyme" ? HttpStatusCode.Unauthorized : HttpStatusCode.Forbidden, resp.StatusCode);
-        Assert.Equal(before, after);
+        resp.StatusCode.Should().Be(profile == "anonyme" ? HttpStatusCode.Unauthorized : HttpStatusCode.Forbidden);
+        after.Should().Be(before);
 
         if (profile == "param2" && kind == "admin")
-            Assert.Contains(AdminAccess.ReservedMessage, text);
+            text.Should().Contain(AdminAccess.ReservedMessage);
         if (profile == "joel" && kind == "db")
-            Assert.Contains("permission", text);
+            text.Should().Contain("permission");
         if (profile == "joel" && kind == "dbany")
-            Assert.Contains("permission de configurer", text);
+            text.Should().Contain("permission de configurer");
     }
 
     [Theory]
@@ -107,8 +107,8 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
         var (method, url, body, _) = Routes[route];
         var (resp, text) = await Send("admin", method, url, body);
         ApiFactory.Report($"V2|{route}|admin|{(int)resp.StatusCode}|{Format(resp, text)}|{Trunc(text)}");
-        Assert.NotEqual(HttpStatusCode.Unauthorized, resp.StatusCode);
-        Assert.NotEqual(HttpStatusCode.Forbidden, resp.StatusCode);
+        resp.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
+        resp.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
     }
 
     #region V3 : routes d'usage
@@ -136,8 +136,8 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
         var r = UsageRoutes.Single(x => x.Name == name);
         var (resp, text) = await Send("joel", r.Method, r.Url, r.Body, r.NeedsTenant ? ApiFactory.SageName : null);
         ApiFactory.Report($"V3|{name}|joel|{(int)resp.StatusCode}|{Format(resp, text)}|{Trunc(text)}");
-        Assert.NotEqual(HttpStatusCode.Unauthorized, resp.StatusCode);
-        Assert.NotEqual(HttpStatusCode.Forbidden, resp.StatusCode);
+        resp.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
+        resp.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
     }
 
     [Theory]
@@ -149,11 +149,11 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
         ApiFactory.Report($"V3|{name}|user1 sans en-tête|{(int)resp.StatusCode}|{Format(resp, text)}|{Trunc(text)}");
         if (!r.NeedsTenant)
         {
-            Assert.NotEqual(HttpStatusCode.Forbidden, resp.StatusCode);
+            resp.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
             return;
         }
-        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
-        Assert.Contains("X-Sage-Database", text);
+        resp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        text.Should().Contain("X-Sage-Database");
     }
 
     [Theory]
@@ -164,8 +164,8 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
         var (resp, text) = await Send(profile, "POST", "/api/v1/sage-databases/activate", null, ApiFactory.SageName);
         ApiFactory.Report($"V3|activate sans accès|{profile}|{(int)resp.StatusCode}|{Format(resp, text)}|{Trunc(text)}");
         // Étape 4b-5 : un refus d'usage est un 403 (un 401 déconnectait le client). Avant : 401 « Base SAGE non autorisée pour cet utilisateur. »
-        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
-        Assert.Contains("Vous n'avez pas accès à cette base.", text);
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        text.Should().Contain("Vous n'avez pas accès à cette base.");
     }
 
     /// <summary>
@@ -175,12 +175,12 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task FormerGap_Activate_with_gate_1_refuses_a_base_missing_from_BDD_AUTORISE()
     {
-        Assert.DoesNotContain(_f.Store.Get<BddAutorisee>().Items, a => a.IdResponsable == 10034 && a.IdBdd == 3034);
+        _f.Store.Get<BddAutorisee>().Items.Should().NotContain(a => a.IdResponsable == 10034 && a.IdBdd == 3034);
         var (resp, text) = await Send("joel", "POST", "/api/v1/sage-databases/activate", null, ApiFactory.OtherSageName);
         ApiFactory.Report($"V3|activate base non attribuée|joel|{(int)resp.StatusCode}|{Format(resp, text)}|{Trunc(text)}");
-        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
-        Assert.Contains("Vous n'avez pas accès à cette base.", text);
-        Assert.DoesNotContain(_f.Store.Get<BddAutorisee>().Items, a => a.IdResponsable == 10034 && a.IdBdd == 3034);
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        text.Should().Contain("Vous n'avez pas accès à cette base.");
+        _f.Store.Get<BddAutorisee>().Items.Should().NotContain(a => a.IdResponsable == 10034 && a.IdBdd == 3034);
     }
 
 
@@ -220,10 +220,8 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
         foreach (var a in authorizeOnly) ApiFactory.Report($"V5|Authorize seul|{a}");
 
         // Connexion, rafraîchissement et déconnexion (sans jeton d'accès valide par nature), démarrage initial, politique.
-        Assert.Equal(
-            new[] { "CreateAdmin", "GetPasswordPolicy", "IsFirstRun", "Login", "Logout", "Refresh" },
-            anonymous.Select(a => a.Split(' ')[0]).Select(a => a["AuthController.".Length..]).OrderBy(a => a, StringComparer.Ordinal).ToArray());
-        Assert.All(anonymous, a => Assert.StartsWith("AuthController.", a));
+        anonymous.Select(a => a.Split(' ')[0]).Select(a => a["AuthController.".Length..]).OrderBy(a => a, StringComparer.Ordinal).ToArray().Should().Equal(new[] { "CreateAdmin", "GetPasswordPolicy", "IsFirstRun", "Login", "Logout", "Refresh" });
+        anonymous.Should().AllSatisfy(a => a.Should().StartWith("AuthController."));
     }
 
     #endregion
@@ -244,7 +242,7 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
         var (resp, text) = await Send(profile, "GET", url, null);
         var leaks = new[] { ApiFactory.FakeSagePassword, ApiFactory.FakePointeusePassword }.Where(text.Contains).ToList();
         ApiFactory.Report($"V6|{profile}|GET {url}|{(int)resp.StatusCode}|fuite={(leaks.Count > 0 ? string.Join('+', leaks) : "non")}");
-        Assert.Empty(leaks);
+        leaks.Should().BeEmpty();
     }
 
     [Fact]
@@ -252,8 +250,8 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     {
         var (resp, text) = await Send("admin", "POST", "/api/v1/sage-databases", SageBody.Replace("NEWBASE", "V6BASE"));
         ApiFactory.Report($"V6|admin|POST /api/v1/sage-databases|{(int)resp.StatusCode}|fuite={(text.Contains(ApiFactory.FakeSagePassword) ? ApiFactory.FakeSagePassword : "non")}");
-        Assert.True(resp.IsSuccessStatusCode);
-        Assert.DoesNotContain(ApiFactory.FakeSagePassword, text);
+        resp.IsSuccessStatusCode.Should().BeTrue();
+        text.Should().NotContain(ApiFactory.FakeSagePassword);
     }
 
     #endregion

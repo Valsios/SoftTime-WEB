@@ -139,12 +139,12 @@ public class OvertimeServiceTests
 
         var lignes = await contexte.Apercu(Lundi, Dimanche);
 
-        var ligne = Assert.Single(lignes);
-        Assert.Equal(45m, ligne.Ht);
-        Assert.Equal(5m, ligne.Hs);
-        var persistee = Assert.Single(contexte.Semaines);
-        Assert.Equal(45m, persistee.Ht);
-        Assert.False(persistee.ValidationHs);
+        var ligne = lignes.Should().ContainSingle().Which;
+        ligne.Ht.Should().Be(45m);
+        ligne.Hs.Should().Be(5m);
+        var persistee = contexte.Semaines.Should().ContainSingle().Which;
+        persistee.Ht.Should().Be(45m);
+        persistee.ValidationHs.Should().BeFalse();
     }
 
     [Fact]
@@ -155,9 +155,9 @@ public class OvertimeServiceTests
 
         var lignes = await contexte.Apercu(Lundi, Dimanche);
 
-        var ligne = Assert.Single(lignes);
-        Assert.Equal(47.5m, ligne.Ht);
-        Assert.Equal(5m, ligne.Hs);
+        var ligne = lignes.Should().ContainSingle().Which;
+        ligne.Ht.Should().Be(47.5m);
+        ligne.Hs.Should().Be(5m);
     }
 
     [Fact]
@@ -178,10 +178,10 @@ public class OvertimeServiceTests
 
         var lignes = await contexte.Apercu(Lundi, Dimanche);
 
-        var ligne = Assert.Single(lignes);
-        Assert.Equal(44m, ligne.Ht);
-        Assert.Equal(4m, ligne.Hs);
-        Assert.Equal(0m, ligne.Absence);
+        var ligne = lignes.Should().ContainSingle().Which;
+        ligne.Ht.Should().Be(44m);
+        ligne.Hs.Should().Be(4m);
+        ligne.Absence.Should().Be(0m);
     }
 
     [Fact]
@@ -191,10 +191,10 @@ public class OvertimeServiceTests
 
         var lignes = await contexte.Apercu(Lundi, Dimanche);
 
-        var ligne = Assert.Single(lignes);
-        Assert.Equal("001", ligne.Matricule);
-        Assert.Equal(0m, ligne.Ht);
-        Assert.Equal(0m, ligne.Hs);
+        var ligne = lignes.Should().ContainSingle().Which;
+        ligne.Matricule.Should().Be("001");
+        ligne.Ht.Should().Be(0m);
+        ligne.Hs.Should().Be(0m);
     }
 
     // ------------------------------------------------------------------ validation / annulation
@@ -208,18 +208,18 @@ public class OvertimeServiceTests
 
         await contexte.Service.ValidateWeekAsync(request, true);
 
-        var ligne = Assert.Single(contexte.Semaines);
-        Assert.True(ligne.ValidationHs);
-        Assert.All(contexte.Corrections, h => Assert.True(h.ValiderHs));
+        var ligne = contexte.Semaines.Should().ContainSingle().Which;
+        ligne.ValidationHs.Should().BeTrue();
+        contexte.Corrections.Should().AllSatisfy(h => h.ValiderHs.Should().BeTrue());
 
         // La semaine figée reste visible (pour pouvoir annuler la validation) et n'est pas recalculée.
         var pagine = await contexte.ApercuPagine(Lundi, Dimanche);
-        Assert.True(Assert.Single(pagine.Items).Validated);
+        pagine.Items.Should().ContainSingle().Which.Validated.Should().BeTrue();
 
         await contexte.Service.ValidateWeekAsync(request, false);
 
-        Assert.False(Assert.Single(contexte.Semaines).ValidationHs);
-        Assert.All(contexte.Corrections, h => Assert.False(h.ValiderHs));
+        contexte.Semaines.Should().ContainSingle().Which.ValidationHs.Should().BeFalse();
+        contexte.Corrections.Should().AllSatisfy(h => h.ValiderHs.Should().BeFalse());
     }
 
     [Fact]
@@ -231,8 +231,8 @@ public class OvertimeServiceTests
         await contexte.Service.ValidateWeekAsync(
             new WeeklyValidationRequest(null, null, Lundi, Dimanche, Array.Empty<string>()), true);
 
-        Assert.Empty(contexte.Semaines);
-        Assert.All(contexte.Corrections, h => Assert.Null(h.ValiderHs));
+        contexte.Semaines.Should().BeEmpty();
+        contexte.Corrections.Should().AllSatisfy(h => h.ValiderHs.Should().BeNull());
     }
 
     // ------------------------------------------------------------------ ventilation / exonération
@@ -249,20 +249,20 @@ public class OvertimeServiceTests
 
         var exo = await contexte.Service.CalculateExoImpoAsync(new PeriodRequest(null, null, debut, fin));
 
-        var ligne = Assert.Single(exo);
-        Assert.Equal(16m, ligne.Exo130);
-        Assert.Equal(4m, ligne.Exo150);
-        Assert.Equal(0m, ligne.I130);
-        Assert.Equal(6m, ligne.I150);
+        var ligne = exo.Should().ContainSingle().Which;
+        ligne.Exo130.Should().Be(16m);
+        ligne.Exo150.Should().Be(4m);
+        ligne.I130.Should().Be(0m);
+        ligne.I150.Should().Be(6m);
 
-        Assert.Equal(2, contexte.Repartition.Count);
-        Assert.Equal(1, contexte.Repartition[0].Semaine);
-        Assert.Equal(12m, contexte.Repartition[0].Hs);
-        Assert.Equal(8m, contexte.Repartition[0].Hs1);
-        Assert.Equal(4m, contexte.Repartition[0].Hs2);
-        Assert.Equal(2, contexte.Repartition[1].Semaine);
-        Assert.Equal(8m, contexte.Repartition[1].Hs1);
-        Assert.Equal(6m, contexte.Repartition[1].Hs2);
+        contexte.Repartition.Count.Should().Be(2);
+        contexte.Repartition[0].Semaine.Should().Be(1);
+        contexte.Repartition[0].Hs.Should().Be(12m);
+        contexte.Repartition[0].Hs1.Should().Be(8m);
+        contexte.Repartition[0].Hs2.Should().Be(4m);
+        contexte.Repartition[1].Semaine.Should().Be(2);
+        contexte.Repartition[1].Hs1.Should().Be(8m);
+        contexte.Repartition[1].Hs2.Should().Be(6m);
     }
 
     [Fact]
@@ -276,9 +276,9 @@ public class OvertimeServiceTests
         contexte.Semaines.Single().Hs = 6;
         await contexte.Service.CalculateExoImpoAsync(request);
 
-        var semaine = Assert.Single(contexte.Repartition);
-        Assert.Equal(6m, semaine.Hs);
-        Assert.Equal(6m, semaine.Hs1);
+        var semaine = contexte.Repartition.Should().ContainSingle().Which;
+        semaine.Hs.Should().Be(6m);
+        semaine.Hs1.Should().Be(6m);
     }
 
     [Fact]
@@ -289,11 +289,11 @@ public class OvertimeServiceTests
 
         var exo = await contexte.Service.CalculateExoImpoAsync(new PeriodRequest(null, null, Lundi, Dimanche));
 
-        var ligne = Assert.Single(exo);
-        Assert.Equal(8.5m, ligne.Absence);
-        Assert.Equal(0m, ligne.Exo130);
-        Assert.Empty(contexte.Repartition);
-        Assert.Single(contexte.Exo);
+        var ligne = exo.Should().ContainSingle().Which;
+        ligne.Absence.Should().Be(8.5m);
+        ligne.Exo130.Should().Be(0m);
+        contexte.Repartition.Should().BeEmpty();
+        contexte.Exo.Should().ContainSingle();
     }
 
     [Fact]
@@ -306,9 +306,9 @@ public class OvertimeServiceTests
         var exo = await contexte.Service.CalculateExoImpoAsync(
             new PeriodRequest(null, null, Lundi.AddDays(1), new DateTime(2026, 9, 30)));
 
-        var ligne = Assert.Single(exo);
-        Assert.Equal(8m, ligne.Exo130);
-        Assert.Equal(2m, ligne.Exo150);
+        var ligne = exo.Should().ContainSingle().Which;
+        ligne.Exo130.Should().Be(8m);
+        ligne.Exo150.Should().Be(2m);
     }
 
     [Fact]
@@ -323,10 +323,10 @@ public class OvertimeServiceTests
         var septembre = await contexte.Service.CalculateExoImpoAsync(
             new PeriodRequest(null, null, new DateTime(2026, 9, 1), new DateTime(2026, 9, 30)));
 
-        Assert.Empty(aout);
-        var ligne = Assert.Single(septembre);
-        Assert.Equal(8m, ligne.Exo130);
-        Assert.Equal(2m, ligne.Exo150);
+        aout.Should().BeEmpty();
+        var ligne = septembre.Should().ContainSingle().Which;
+        ligne.Exo130.Should().Be(8m);
+        ligne.Exo150.Should().Be(2m);
     }
 
     [Fact]
@@ -348,7 +348,7 @@ public class OvertimeServiceTests
 
         var exo = await contexte.Service.CalculateExoImpoAsync(new PeriodRequest(null, null, Lundi, Dimanche));
 
-        Assert.Equal(8.5m, Assert.Single(exo).Absence);
+        exo.Should().ContainSingle().Which.Absence.Should().Be(8.5m);
     }
 
     [Fact]
@@ -360,12 +360,10 @@ public class OvertimeServiceTests
             new PeriodRequest(null, null, new DateTime(2026, 9, 1), new DateTime(2026, 9, 30)));
 
         var annulation = new WeeklyValidationRequest(null, null, Lundi, Dimanche, new[] { "001" });
-        await Assert.ThrowsAsync<ConflictException>(
-            () => contexte.Service.ValidateWeekAsync(annulation, false));
-        await Assert.ThrowsAsync<ConflictException>(
-            () => contexte.Service.PurgeValidationAsync(new PeriodRequest(null, null, Lundi, Dimanche)));
+        await FluentActions.Awaiting(() => contexte.Service.ValidateWeekAsync(annulation, false)).Should().ThrowExactlyAsync<ConflictException>();
+        await FluentActions.Awaiting(() => contexte.Service.PurgeValidationAsync(new PeriodRequest(null, null, Lundi, Dimanche))).Should().ThrowExactlyAsync<ConflictException>();
 
-        Assert.True(Assert.Single(contexte.Semaines).ValidationHs);
+        contexte.Semaines.Should().ContainSingle().Which.ValidationHs.Should().BeTrue();
     }
 
     // ------------------------------------------------------------------ détail
@@ -385,16 +383,16 @@ public class OvertimeServiceTests
 
         var detail = await contexte.Service.DetailAsync("001", debutPeriode, finPeriode);
 
-        Assert.Equal(2, detail.Semaines.Count);
-        Assert.Equal(1, detail.Semaines[0].Semaine!.Value);
-        Assert.Equal(semaine1, detail.Semaines[0].Debut!.Value);
-        Assert.Equal(semaine1.AddDays(6), detail.Semaines[0].Fin!.Value);
-        Assert.Equal(2, detail.Semaines[1].Semaine!.Value);
-        Assert.Equal(semaine2, detail.Semaines[1].Debut!.Value);
-        Assert.Equal(semaine2.AddDays(6), detail.Semaines[1].Fin!.Value);
-        Assert.Equal(11.21m, detail.Semaines[1].Hs);
-        Assert.Equal(8m, detail.Semaines[1].Hs1);
-        Assert.Equal(3.21m, detail.Semaines[1].Hs2);
+        detail.Semaines.Count.Should().Be(2);
+        detail.Semaines[0].Semaine!.Value.Should().Be(1);
+        detail.Semaines[0].Debut!.Value.Should().Be(semaine1);
+        detail.Semaines[0].Fin!.Value.Should().Be(semaine1.AddDays(6));
+        detail.Semaines[1].Semaine!.Value.Should().Be(2);
+        detail.Semaines[1].Debut!.Value.Should().Be(semaine2);
+        detail.Semaines[1].Fin!.Value.Should().Be(semaine2.AddDays(6));
+        detail.Semaines[1].Hs.Should().Be(11.21m);
+        detail.Semaines[1].Hs1.Should().Be(8m);
+        detail.Semaines[1].Hs2.Should().Be(3.21m);
     }
 
     [Fact]
@@ -419,9 +417,9 @@ public class OvertimeServiceTests
 
         var detail = await contexte.Service.DetailAsync("001", debut, fin);
 
-        var semaine = Assert.Single(detail.Semaines);
-        Assert.Equal(2, semaine.Semaine!.Value);
-        Assert.Equal(debut, semaine.Debut!.Value);
-        Assert.Equal(fin, semaine.Fin!.Value);
+        var semaine = detail.Semaines.Should().ContainSingle().Which;
+        semaine.Semaine!.Value.Should().Be(2);
+        semaine.Debut!.Value.Should().Be(debut);
+        semaine.Fin!.Value.Should().Be(fin);
     }
 }

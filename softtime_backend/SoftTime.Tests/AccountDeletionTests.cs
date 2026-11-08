@@ -47,10 +47,10 @@ public class AccountDeletionTests
     {
         await _auth.DeleteUserAsync(1, 2);
 
-        Assert.DoesNotContain(_store.Get<Responsable>().Items, u => u.IdResponsable == 2);
-        Assert.Equal(0, Rows(2));
-        Assert.Equal(3, Rows(3));                                   // lignes des autres comptes intactes
-        Assert.Single(_store.Get<AuditDroit>().Items);        // journal d'audit conservé
+        _store.Get<Responsable>().Items.Should().NotContain(u => u.IdResponsable == 2);
+        Rows(2).Should().Be(0);
+        Rows(3).Should().Be(3);                                   // lignes des autres comptes intactes
+        _store.Get<AuditDroit>().Items.Should().ContainSingle();        // journal d'audit conservé
     }
 
     [Fact]
@@ -58,27 +58,27 @@ public class AccountDeletionTests
     {
         await _auth.DeleteUserAsync(1, 2);
 
-        Assert.Equal(1, _uow.SaveCount);
+        _uow.SaveCount.Should().Be(1);
         // Au moment de l'unique sauvegarde, le compte et toutes ses lignes étaient déjà retirés : une seule transaction.
-        Assert.Equal((false, 0), _uow.StateAtSave);
+        _uow.StateAtSave.Should().Be((false, 0));
     }
 
     [Fact]
     public async Task A_failed_save_is_the_only_save_attempted_by_the_service()
     {
         _uow.FailOnSave = true;
-        await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.DeleteUserAsync(1, 2));
+        await FluentActions.Awaiting(() => _auth.DeleteUserAsync(1, 2)).Should().ThrowExactlyAsync<InvalidOperationException>();
         // Une seule sauvegarde (échouée) : avec une base réelle, la transaction annule toutes les suppressions ensemble.
-        Assert.Equal(1, _uow.SaveCount);
+        _uow.SaveCount.Should().Be(1);
     }
 
     [Fact]
     public async Task Self_deletion_is_refused_and_no_row_is_removed()
     {
         var before = _store.Snapshot();
-        await Assert.ThrowsAsync<DomainException>(() => _auth.DeleteUserAsync(1, 1));
-        Assert.Equal(before, _store.Snapshot());
-        Assert.Equal(0, _uow.SaveCount);
+        await FluentActions.Awaiting(() => _auth.DeleteUserAsync(1, 1)).Should().ThrowExactlyAsync<DomainException>();
+        _store.Snapshot().Should().Be(before);
+        _uow.SaveCount.Should().Be(0);
     }
 
     [Fact]
@@ -86,9 +86,9 @@ public class AccountDeletionTests
     {
         _store.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 1, PermissionCode = "PROC:SHIFTS", IsGranted = true });
         var before = _store.Snapshot();
-        var ex = await Assert.ThrowsAsync<ConflictException>(() => _auth.DeleteUserAsync(1));   // surcharge sans appelant
-        Assert.Equal("Impossible de supprimer le dernier administrateur.", ex.Message);
-        Assert.Equal(before, _store.Snapshot());
+        var ex = (await FluentActions.Awaiting(() => _auth.DeleteUserAsync(1)).Should().ThrowExactlyAsync<ConflictException>()).Which;   // surcharge sans appelant
+        ex.Message.Should().Be("Impossible de supprimer le dernier administrateur.");
+        _store.Snapshot().Should().Be(before);
     }
 
     [Fact]
@@ -97,15 +97,15 @@ public class AccountDeletionTests
         _store.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 9, IdRole = 1, Login = "admin2" });
         _store.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 9, PermissionCode = "PROC:SHIFTS", IsGranted = true });
         await _auth.DeleteUserAsync(1, 9);
-        Assert.Equal(0, Rows(9));
+        Rows(9).Should().Be(0);
     }
 
     [Fact]
     public async Task Unknown_account_deletes_nothing()
     {
         var before = _store.Snapshot();
-        await Assert.ThrowsAsync<NotFoundException>(() => _auth.DeleteUserAsync(1, 999));
-        Assert.Equal(before, _store.Snapshot());
+        await FluentActions.Awaiting(() => _auth.DeleteUserAsync(1, 999)).Should().ThrowExactlyAsync<NotFoundException>();
+        _store.Snapshot().Should().Be(before);
     }
 
     /// <summary>Délègue au magasin en mémoire et mémorise l'état au moment de la sauvegarde.</summary>

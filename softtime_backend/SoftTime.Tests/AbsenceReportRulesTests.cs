@@ -43,7 +43,7 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
             new ReportPeriod(new DateTime(2025, 11, 1), new DateTime(2025, 11, 15), Today));
 
-        Assert.Empty(result);
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -58,7 +58,7 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
             new ReportPeriod(new DateTime(2025, 11, 22), new DateTime(2025, 11, 30), Today)); // hier = 2025-11-19
 
-        Assert.Empty(result);
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -74,16 +74,16 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        var row = Assert.Single(result);
-        Assert.Equal("001", row.Matricule);
-        Assert.Equal("Martin", row.Nom);
-        Assert.Equal("Paul", row.Prenom);
-        Assert.Equal("RH", row.Departement);
-        Assert.Equal(date, row.Date);
-        Assert.Equal("Journée", row.Periode);
-        Assert.Equal(8m, row.DureeHeures);
-        Assert.Equal("Non justifiée", row.Type);
-        Assert.Null(row.Motif);
+        var row = result.Should().ContainSingle().Which;
+        row.Matricule.Should().Be("001");
+        row.Nom.Should().Be("Martin");
+        row.Prenom.Should().Be("Paul");
+        row.Departement.Should().Be("RH");
+        row.Date.Should().Be(date);
+        row.Periode.Should().Be("Journée");
+        row.DureeHeures.Should().Be(8m);
+        row.Type.Should().Be("Non justifiée");
+        row.Motif.Should().BeNull();
     }
 
     [Fact]
@@ -98,7 +98,7 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        Assert.Empty(result);
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -132,7 +132,7 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(conges, new HashSet<DateTime> { ferie }),
             new ReportPeriod(new DateTime(2025, 11, 8), new DateTime(2025, 11, 12), Today));
 
-        Assert.Empty(result);
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -151,7 +151,7 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
             new ReportPeriod(Today, Today.AddDays(5), Today));
 
-        Assert.Empty(result);
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -174,10 +174,10 @@ public class AbsenceReportRulesTests
             new ReportPeriod(j1, j2, Today));
 
         // j1 a une correction donc pas non justifiée ; j2 n'a aucun pointage -> non justifiée.
-        var row = Assert.Single(result);
-        Assert.Equal(j2, row.Date);
-        Assert.Equal("Non justifiée", row.Type);
-        Assert.Equal(8m, row.DureeHeures);
+        var row = result.Should().ContainSingle().Which;
+        row.Date.Should().Be(j2);
+        row.Type.Should().Be("Non justifiée");
+        row.DureeHeures.Should().Be(8m);
     }
 
     [Fact]
@@ -196,11 +196,11 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(conges, new HashSet<DateTime>()),
             new ReportPeriod(new DateTime(2025, 11, 10), new DateTime(2025, 11, 18), Today));
 
-        var row = Assert.Single(result);
-        Assert.Equal("Congé SAGE", row.Type);
-        Assert.Equal("0410", row.Motif);
-        Assert.Equal(jConge, row.Date);
-        Assert.Null(row.DureeHeures); // Sans planning -> durée null
+        var row = result.Should().ContainSingle().Which;
+        row.Type.Should().Be("Congé SAGE");
+        row.Motif.Should().Be("0410");
+        row.Date.Should().Be(jConge);
+        row.DureeHeures.Should().BeNull(); // Sans planning -> durée null
     }
 
     [Fact]
@@ -219,11 +219,11 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(conges, new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        var row = Assert.Single(result);
-        Assert.Equal("Congé SAGE", row.Type);
-        Assert.Equal("CP", row.Motif);
-        Assert.Equal("Journée", row.Periode);
-        Assert.Equal(8m, row.DureeHeures);
+        var row = result.Should().ContainSingle().Which;
+        row.Type.Should().Be("Congé SAGE");
+        row.Motif.Should().Be("CP");
+        row.Periode.Should().Be("Journée");
+        row.DureeHeures.Should().Be(8m);
     }
 
     [Fact]
@@ -242,11 +242,11 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(conges, new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        var row = Assert.Single(result);
-        Assert.Equal("Congé SAGE", row.Type);
-        Assert.Equal("RTT", row.Motif);
-        Assert.Equal("Demi-journée", row.Periode);
-        Assert.Equal(4m, row.DureeHeures); // 8h * 0.5
+        var row = result.Should().ContainSingle().Which;
+        row.Type.Should().Be("Congé SAGE");
+        row.Motif.Should().Be("RTT");
+        row.Periode.Should().Be("Demi-journée");
+        row.DureeHeures.Should().Be(4m); // 8h * 0.5
     }
 
     [Fact]
@@ -266,11 +266,11 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(conges, new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        var row = Assert.Single(result);
-        Assert.Equal("Congé SAGE", row.Type);
-        Assert.Equal("RTT, CP", row.Motif);
-        Assert.Equal("Journée", row.Periode);
-        Assert.Equal(8m, row.DureeHeures);
+        var row = result.Should().ContainSingle().Which;
+        row.Type.Should().Be("Congé SAGE");
+        row.Motif.Should().Be("RTT, CP");
+        row.Periode.Should().Be("Journée");
+        row.DureeHeures.Should().Be(8m);
     }
 
     [Fact]
@@ -289,11 +289,11 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(conges, new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        var row = Assert.Single(result);
-        Assert.Equal("Congé SAGE", row.Type);
-        Assert.Equal("MALADIE", row.Motif);
-        Assert.Equal("Journée", row.Periode);
-        Assert.Null(row.DureeHeures);
+        var row = result.Should().ContainSingle().Which;
+        row.Type.Should().Be("Congé SAGE");
+        row.Motif.Should().Be("MALADIE");
+        row.Periode.Should().Be("Journée");
+        row.DureeHeures.Should().BeNull();
     }
 
     [Theory]
@@ -313,11 +313,11 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        var row = Assert.Single(result);
-        Assert.Equal("Arbitrée GTA", row.Type);
-        Assert.Equal("Autorisation absence", row.Motif);
-        Assert.Equal(expectedPeriode, row.Periode);
-        Assert.Equal(expectedDuree, row.DureeHeures);
+        var row = result.Should().ContainSingle().Which;
+        row.Type.Should().Be("Arbitrée GTA");
+        row.Motif.Should().Be("Autorisation absence");
+        row.Periode.Should().Be(expectedPeriode);
+        row.DureeHeures.Should().Be(expectedDuree);
     }
 
     [Fact]
@@ -338,9 +338,9 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(conges, new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        var row = Assert.Single(result);
-        Assert.Equal("Congé SAGE", row.Type);
-        Assert.Equal("CP", row.Motif);
+        var row = result.Should().ContainSingle().Which;
+        row.Type.Should().Be("Congé SAGE");
+        row.Motif.Should().Be("CP");
     }
 
     [Fact]
@@ -368,8 +368,8 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        var row = Assert.Single(result);
-        Assert.Equal(9m, row.DureeHeures); // issu du planning ID=50
+        var row = result.Should().ContainSingle().Which;
+        row.DureeHeures.Should().Be(9m); // issu du planning ID=50
     }
 
     [Fact]
@@ -388,9 +388,9 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(conges, new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        var row = Assert.Single(result);
-        Assert.Equal("00369", row.Matricule);
-        Assert.Equal("RECUP", row.Motif);
+        var row = result.Should().ContainSingle().Which;
+        row.Matricule.Should().Be("00369");
+        row.Motif.Should().Be("RECUP");
     }
 
     [Fact]
@@ -409,11 +409,11 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(conges, new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        var row = Assert.Single(result);
-        Assert.Equal("03919", row.Matricule);
-        Assert.Equal("ANDRIANARISOA", row.Nom);
-        Assert.Equal("Jean Eddy", row.Prenom);
-        Assert.Equal("BR730", row.Departement);
+        var row = result.Should().ContainSingle().Which;
+        row.Matricule.Should().Be("03919");
+        row.Nom.Should().Be("ANDRIANARISOA");
+        row.Prenom.Should().Be("Jean Eddy");
+        row.Departement.Should().Be("BR730");
     }
 
     [Fact]
@@ -429,7 +429,7 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        Assert.Empty(result);
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -445,8 +445,8 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        var row = Assert.Single(result);
-        Assert.Equal(7.5m, row.DureeHeures);
+        var row = result.Should().ContainSingle().Which;
+        row.DureeHeures.Should().Be(7.5m);
     }
 
     [Fact]
@@ -463,9 +463,9 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        var row = Assert.Single(result);
-        Assert.Equal("Non justifiée", row.Type);
-        Assert.Equal(9m, row.DureeHeures);
+        var row = result.Should().ContainSingle().Which;
+        row.Type.Should().Be("Non justifiée");
+        row.DureeHeures.Should().Be(9m);
     }
 
     [Fact]
@@ -485,7 +485,7 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(conges, new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        Assert.Empty(result);
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -508,10 +508,10 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
             new ReportPeriod(j1, j3, Today));
 
-        Assert.Equal(3, result.Count);
-        Assert.Equal(j1, result[0].Date);
-        Assert.Equal(j2, result[1].Date);
-        Assert.Equal(j3, result[2].Date);
+        result.Count.Should().Be(3);
+        result[0].Date.Should().Be(j1);
+        result[1].Date.Should().Be(j2);
+        result[2].Date.Should().Be(j3);
     }
 
     [Fact]
@@ -530,8 +530,8 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        var row = Assert.Single(result);
-        Assert.Equal("001", row.Matricule);
+        var row = result.Should().ContainSingle().Which;
+        row.Matricule.Should().Be("001");
     }
 
     private static PlanningSalarie PlanWithShift(int id, int idsal, DateTime date, int noShift, TimeSpan? ha = null, TimeSpan? hd = null, TimeSpan? pause = null, bool offP = false)
@@ -560,7 +560,7 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        Assert.Empty(result);
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -580,10 +580,10 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(conges, new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        var row = Assert.Single(result);
-        Assert.Equal("Congé SAGE", row.Type);
-        Assert.Equal("0410", row.Motif);
-        Assert.Null(row.DureeHeures);
+        var row = result.Should().ContainSingle().Which;
+        row.Type.Should().Be("Congé SAGE");
+        row.Motif.Should().Be("0410");
+        row.DureeHeures.Should().BeNull();
     }
 
     [Fact]
@@ -599,9 +599,9 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        var row = Assert.Single(result);
-        Assert.Equal("Non justifiée", row.Type);
-        Assert.Equal(12m, row.DureeHeures);
+        var row = result.Should().ContainSingle().Which;
+        row.Type.Should().Be("Non justifiée");
+        row.DureeHeures.Should().Be(12m);
     }
 
     [Fact]
@@ -618,7 +618,7 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        Assert.Empty(result);
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -635,7 +635,7 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        Assert.Empty(result);
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -657,10 +657,10 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
             new ReportPeriod(jTravail, jPause, Today));
 
-        var row = Assert.Single(result);
-        Assert.Equal(jTravail, row.Date);
-        Assert.Equal("Non justifiée", row.Type);
-        Assert.Equal(12m, row.DureeHeures);
+        var row = result.Should().ContainSingle().Which;
+        row.Date.Should().Be(jTravail);
+        row.Type.Should().Be("Non justifiée");
+        row.DureeHeures.Should().Be(12m);
     }
 
     [Fact]
@@ -680,7 +680,7 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(conges, new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        Assert.Empty(result);
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -697,7 +697,7 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        Assert.Empty(result);
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -713,7 +713,7 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        Assert.Empty(result);
+        result.Should().BeEmpty();
     }
 
     [Fact]
@@ -733,8 +733,8 @@ public class AbsenceReportRulesTests
             new AbsenceCalendar(new Dictionary<string, List<LeaveDay>>(), new HashSet<DateTime>()),
             new ReportPeriod(date, date, Today));
 
-        var row = Assert.Single(result);
-        Assert.Equal("Non justifiée", row.Type);
-        Assert.Equal(8m, row.DureeHeures);
+        var row = result.Should().ContainSingle().Which;
+        row.Type.Should().Be("Non justifiée");
+        row.DureeHeures.Should().Be(8m);
     }
 }

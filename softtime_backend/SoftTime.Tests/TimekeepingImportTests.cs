@@ -47,10 +47,10 @@ public class TimekeepingImportTests
 
         var resultat = await contexte.Service.ImportPunchesExcelAsync(rows);
 
-        Assert.Equal(1, resultat.Imported);
-        Assert.Equal(1, resultat.Skipped);
-        Assert.Equal("1 pointage(s) importé(s), 1 ligne(s) ignorée(s).", resultat.Message);
-        Assert.Single(contexte.Pointages);
+        resultat.Imported.Should().Be(1);
+        resultat.Skipped.Should().Be(1);
+        resultat.Message.Should().Be("1 pointage(s) importé(s), 1 ligne(s) ignorée(s).");
+        contexte.Pointages.Should().ContainSingle();
     }
 
     [Fact]
@@ -72,9 +72,9 @@ public class TimekeepingImportTests
 
         var resultat = await contexte.Service.ImportPunchesExcelAsync(rows);
 
-        Assert.Equal(0, resultat.Imported);
-        Assert.Equal(1, resultat.Skipped);
-        Assert.Single(contexte.Pointages);
+        resultat.Imported.Should().Be(0);
+        resultat.Skipped.Should().Be(1);
+        contexte.Pointages.Should().ContainSingle();
     }
 
     [Fact]
@@ -88,12 +88,12 @@ public class TimekeepingImportTests
         var premier = await contexte.Service.ImportFromClockAsync(requete);
         var second = await contexte.Service.ImportFromClockAsync(requete);
 
-        Assert.Equal(1, premier.Imported);
-        Assert.Equal(0, second.Imported);
-        Assert.Equal(1, second.Skipped);
-        Assert.Equal("1 pointage(s) importé(s), 0 ignoré(s).", premier.Message);
-        Assert.Equal("0 pointage(s) importé(s), 1 ignoré(s).", second.Message);
-        Assert.Single(contexte.Pointages);
+        premier.Imported.Should().Be(1);
+        second.Imported.Should().Be(0);
+        second.Skipped.Should().Be(1);
+        premier.Message.Should().Be("1 pointage(s) importé(s), 0 ignoré(s).");
+        second.Message.Should().Be("0 pointage(s) importé(s), 1 ignoré(s).");
+        contexte.Pointages.Should().ContainSingle();
     }
 
     // ------------------------------------------------------------------ semaine validée / arbitrage
@@ -141,18 +141,18 @@ public class TimekeepingImportTests
         };
         contexte.Uow.Get<HeureCorrigee>().Items.Add(existante);
 
-        await Assert.ThrowsAsync<ConflictException>(() => contexte.Service.SaveCorrectionAsync(
-            new CorrectedHourDto { Matricule = "001", DateIn = Lundi.AddDays(1), HEntree = new TimeSpan(8, 0, 0), HSortie = new TimeSpan(20, 0, 0) }));
-        await Assert.ThrowsAsync<ConflictException>(() => contexte.Service.DeleteCorrectionAsync(5));
+        await FluentActions.Awaiting(() => contexte.Service.SaveCorrectionAsync(
+            new CorrectedHourDto { Matricule = "001", DateIn = Lundi.AddDays(1), HEntree = new TimeSpan(8, 0, 0), HSortie = new TimeSpan(20, 0, 0) })).Should().ThrowExactlyAsync<ConflictException>();
+        await FluentActions.Awaiting(() => contexte.Service.DeleteCorrectionAsync(5)).Should().ThrowExactlyAsync<ConflictException>();
 
         var import = await contexte.Service.ImportCorrectionsExcelAsync(new List<Dictionary<string, string>>
         {
             new() { ["Matricule"] = "001", ["DateEntree"] = "2026-09-01", ["HeureEntree"] = "08:00", ["HeureSortie"] = "20:00" }
         });
 
-        Assert.Equal(0, import.Imported);
-        Assert.Equal(1, import.Skipped);
-        Assert.Same(existante, Assert.Single(contexte.Uow.Get<HeureCorrigee>().Items));
+        import.Imported.Should().Be(0);
+        import.Skipped.Should().Be(1);
+        contexte.Uow.Get<HeureCorrigee>().Items.Should().ContainSingle().Which.Should().BeSameAs(existante);
     }
 
     [Fact]
@@ -163,12 +163,12 @@ public class TimekeepingImportTests
 
         await contexte.Service.ValidateAnomaliesAsync(new[] { anomalie.Id });
 
-        var correction = Assert.Single(contexte.Uow.Get<HeureCorrigee>().Items);
-        Assert.True(correction.AbsenceAm);
-        Assert.True(correction.AbsencePm);
-        Assert.Null(correction.HEntree);
-        Assert.Null(correction.HSortie);
-        Assert.Empty(contexte.Uow.Get<HeureAnomalie>().Items);
+        var correction = contexte.Uow.Get<HeureCorrigee>().Items.Should().ContainSingle().Which;
+        correction.AbsenceAm.Should().BeTrue();
+        correction.AbsencePm.Should().BeTrue();
+        correction.HEntree.Should().BeNull();
+        correction.HSortie.Should().BeNull();
+        contexte.Uow.Get<HeureAnomalie>().Items.Should().BeEmpty();
     }
 
     [Fact]
@@ -178,9 +178,8 @@ public class TimekeepingImportTests
         ValiderSemaine(contexte, Lundi);
         var anomalie = AnomalieAbsence(contexte, Lundi.AddDays(2));
 
-        await Assert.ThrowsAsync<ConflictException>(
-            () => contexte.Service.ValidateAnomaliesAsync(new[] { anomalie.Id }));
+        await FluentActions.Awaiting(() => contexte.Service.ValidateAnomaliesAsync(new[] { anomalie.Id })).Should().ThrowExactlyAsync<ConflictException>();
 
-        Assert.Empty(contexte.Uow.Get<HeureCorrigee>().Items);
+        contexte.Uow.Get<HeureCorrigee>().Items.Should().BeEmpty();
     }
 }

@@ -47,17 +47,17 @@ public class RolePermissionsTests
     [Fact]
     public async Task SaveRoleDetailedPermissionsAsync_NonAdmin_ThrowsDomainException()
     {
-        var ex = await Assert.ThrowsAsync<DomainException>(() =>
-            _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 2, targetRoleId: 3, new[] { "PARAMS:USERS" }));
-        Assert.Equal("Seul un administrateur peut modifier les permissions d'un rôle.", ex.Message);
+        var ex = (await FluentActions.Awaiting(() =>
+            _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 2, targetRoleId: 3, new[] { "PARAMS:USERS" })).Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().Be("Seul un administrateur peut modifier les permissions d'un rôle.");
     }
 
     [Fact]
     public async Task SaveRoleDetailedPermissionsAsync_UnknownCaller_ThrowsDomainException()
     {
-        var ex = await Assert.ThrowsAsync<DomainException>(() =>
-            _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 999, targetRoleId: 3, new[] { "PARAMS:USERS" }));
-        Assert.Equal("Utilisateur appelant introuvable.", ex.Message);
+        var ex = (await FluentActions.Awaiting(() =>
+            _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 999, targetRoleId: 3, new[] { "PARAMS:USERS" })).Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().Be("Utilisateur appelant introuvable.");
     }
 
     [Fact]
@@ -65,32 +65,32 @@ public class RolePermissionsTests
     {
         _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 10, IdRole = 999, Login = "orphan", NomResponsable = "Orphan" });
 
-        var ex = await Assert.ThrowsAsync<DomainException>(() =>
-            _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 10, targetRoleId: 3, new[] { "PARAMS:USERS" }));
-        Assert.Equal("Utilisateur appelant introuvable.", ex.Message);
+        var ex = (await FluentActions.Awaiting(() =>
+            _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 10, targetRoleId: 3, new[] { "PARAMS:USERS" })).Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().Be("Utilisateur appelant introuvable.");
     }
 
     [Fact]
     public async Task SaveRoleDetailedPermissionsAsync_TargetRole1_ThrowsDomainException()
     {
-        var ex = await Assert.ThrowsAsync<DomainException>(() =>
-            _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 1, new[] { "PARAMS:USERS" }));
-        Assert.Equal("Les privilèges du rôle Administrateur ne sont pas modifiables.", ex.Message);
+        var ex = (await FluentActions.Awaiting(() =>
+            _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 1, new[] { "PARAMS:USERS" })).Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().Be("Les privilèges du rôle Administrateur ne sont pas modifiables.");
     }
 
     [Fact]
     public async Task SaveRoleDetailedPermissionsAsync_TargetRoleNotFound_ThrowsNotFoundException()
     {
-        await Assert.ThrowsAsync<NotFoundException>(() =>
-            _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 888, new[] { "PARAMS:USERS" }));
+        await FluentActions.Awaiting(() =>
+            _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 888, new[] { "PARAMS:USERS" })).Should().ThrowExactlyAsync<NotFoundException>();
     }
 
     [Fact]
     public async Task SaveRoleDetailedPermissionsAsync_UnknownCode_ThrowsDomainException()
     {
-        var ex = await Assert.ThrowsAsync<DomainException>(() =>
-            _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { "INVALID:HACK:CODE" }));
-        Assert.Contains("Codes de permission inconnus", ex.Message);
+        var ex = (await FluentActions.Awaiting(() =>
+            _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { "INVALID:HACK:CODE" })).Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().Contain("Codes de permission inconnus");
     }
 
     [Fact]
@@ -99,8 +99,8 @@ public class RolePermissionsTests
         await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { "SAGE:DATABASE_TEST:READ" });
 
         var perms = await _auth.GetRoleDetailedPermissionsAsync(3);
-        Assert.True(perms.IsConfigured);
-        Assert.Contains("SAGE:DATABASE_TEST:READ", perms.GrantedPermissions);
+        perms.IsConfigured.Should().BeTrue();
+        perms.GrantedPermissions.Should().Contain("SAGE:DATABASE_TEST:READ");
     }
 
     [Fact]
@@ -110,17 +110,17 @@ public class RolePermissionsTests
         _uow.Get<Role>().Items.Add(new Role { IdRole = 4, NomRole = "Admin Paie" });
         _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 30, IdRole = 4, Login = "adminpaie", NomResponsable = "Admin Paie User" });
 
-        var ex = await Assert.ThrowsAsync<DomainException>(() =>
-            _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 30, targetRoleId: 3, new[] { "PARAMS:USERS" }));
-        Assert.Equal("Seul un administrateur peut modifier les permissions d'un rôle.", ex.Message);
+        var ex = (await FluentActions.Awaiting(() =>
+            _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 30, targetRoleId: 3, new[] { "PARAMS:USERS" })).Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().Be("Seul un administrateur peut modifier les permissions d'un rôle.");
     }
 
     [Fact]
     public async Task SaveRoleDetailedPermissionsAsync_NullList_ThrowsDomainException()
     {
-        var ex = await Assert.ThrowsAsync<DomainException>(() =>
-            _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, null!));
-        Assert.Equal("La liste des permissions ne peut pas être nulle.", ex.Message);
+        var ex = (await FluentActions.Awaiting(() =>
+            _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, null!)).Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().Be("La liste des permissions ne peut pas être nulle.");
     }
 
     [Fact]
@@ -129,8 +129,8 @@ public class RolePermissionsTests
         await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { "params:users", "PARAMS:USERS" });
 
         var perms = await _uow.Get<RolePermission>().ListAsync(p => p.IdRole == 3);
-        Assert.Single(perms);
-        Assert.Equal("PARAMS:USERS", perms[0].PermissionCode);
+        perms.Should().ContainSingle();
+        perms[0].PermissionCode.Should().Be("PARAMS:USERS");
     }
 
     [Fact]
@@ -139,34 +139,34 @@ public class RolePermissionsTests
         await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { "  params:users  " });
 
         var perms = await _uow.Get<RolePermission>().ListAsync(p => p.IdRole == 3);
-        Assert.Single(perms);
-        Assert.Equal("PARAMS:USERS", perms[0].PermissionCode);
+        perms.Should().ContainSingle();
+        perms[0].PermissionCode.Should().Be("PARAMS:USERS");
     }
 
     [Fact]
     public async Task SaveRoleDetailedPermissionsAsync_CodeLongerThan128Chars_ThrowsDomainException()
     {
         var longCode = "SAGE:" + new string('A', 124);
-        Assert.Equal(129, longCode.Length);
+        longCode.Length.Should().Be(129);
 
-        var ex = await Assert.ThrowsAsync<DomainException>(() =>
-            _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { longCode }));
+        var ex = (await FluentActions.Awaiting(() =>
+            _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { longCode })).Should().ThrowExactlyAsync<DomainException>()).Which;
 
-        Assert.Contains("128", ex.Message);
-        Assert.Contains("caractères", ex.Message);
+        ex.Message.Should().Contain("128");
+        ex.Message.Should().Contain("caractères");
     }
 
     [Fact]
     public async Task SaveRoleDetailedPermissionsAsync_CodeExactly128Chars_IsAccepted()
     {
         var validCode = "SAGE:" + new string('A', 123);
-        Assert.Equal(128, validCode.Length);
+        validCode.Length.Should().Be(128);
 
         await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { validCode });
 
         var perms = await _uow.Get<RolePermission>().ListAsync(p => p.IdRole == 3);
-        Assert.Single(perms);
-        Assert.Equal(validCode, perms[0].PermissionCode);
+        perms.Should().ContainSingle();
+        perms[0].PermissionCode.Should().Be(validCode);
     }
 
     #endregion
@@ -185,8 +185,8 @@ public class RolePermissionsTests
         await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { "PARAMS:USERS", "PARAMS:ROLES" });
 
         var droits = await _uow.Get<DroitRole>().ListAsync(d => d.IdRole == 3);
-        Assert.Single(droits);
-        Assert.Equal(Rights.Parameters, (int)droits[0].IdDroit);
+        droits.Should().ContainSingle();
+        ((int)droits[0].IdDroit).Should().Be(Rights.Parameters);
     }
 
     [Fact]
@@ -199,9 +199,9 @@ public class RolePermissionsTests
         await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { "PROC:SHIFTS" });
 
         var droits = await _uow.Get<DroitRole>().ListAsync(d => d.IdRole == 3);
-        Assert.Single(droits);
-        Assert.Equal(Rights.Processing, (int)droits[0].IdDroit);
-        Assert.DoesNotContain(droits, d => (int)d.IdDroit == Rights.Parameters);
+        droits.Should().ContainSingle();
+        ((int)droits[0].IdDroit).Should().Be(Rights.Processing);
+        droits.Should().NotContain(d => (int)d.IdDroit == Rights.Parameters);
     }
 
     [Fact]
@@ -212,15 +212,15 @@ public class RolePermissionsTests
         await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, Array.Empty<string>());
 
         var rolePerms = await _uow.Get<RolePermission>().ListAsync(p => p.IdRole == 3);
-        Assert.Single(rolePerms);
-        Assert.Equal("__SOFTTIME_EMPTY_ROLE_PERMISSIONS__", rolePerms[0].PermissionCode);
+        rolePerms.Should().ContainSingle();
+        rolePerms[0].PermissionCode.Should().Be("__SOFTTIME_EMPTY_ROLE_PERMISSIONS__");
 
         var droits = await _uow.Get<DroitRole>().ListAsync(d => d.IdRole == 3);
-        Assert.Empty(droits);
+        droits.Should().BeEmpty();
 
         var res = await _auth.GetRoleDetailedPermissionsAsync(3);
-        Assert.True(res.IsConfigured);
-        Assert.Empty(res.GrantedPermissions);
+        res.IsConfigured.Should().BeTrue();
+        res.GrantedPermissions.Should().BeEmpty();
     }
 
     [Fact]
@@ -230,10 +230,10 @@ public class RolePermissionsTests
         _uow.Get<DroitRole>().Items.Add(new DroitRole { IdRole = 3, IdDroit = Rights.Parameters });
 
         var res = await _auth.GetRoleDetailedPermissionsAsync(3);
-        Assert.False(res.IsConfigured);
-        Assert.Contains("PARAMS:USERS", res.GrantedPermissions);
-        Assert.Contains("PARAMS:ROLES", res.GrantedPermissions);
-        Assert.DoesNotContain("PROC:SHIFTS", res.GrantedPermissions);
+        res.IsConfigured.Should().BeFalse();
+        res.GrantedPermissions.Should().Contain("PARAMS:USERS");
+        res.GrantedPermissions.Should().Contain("PARAMS:ROLES");
+        res.GrantedPermissions.Should().NotContain("PROC:SHIFTS");
     }
 
     [Fact]
@@ -244,9 +244,9 @@ public class RolePermissionsTests
         _uow.Get<RolePermission>().Items.Add(new RolePermission { IdRole = 3, PermissionCode = "PROC:SHIFTS", IsGranted = true });
 
         var res = await _auth.GetRoleDetailedPermissionsAsync(3);
-        Assert.True(res.IsConfigured);
-        Assert.Single(res.GrantedPermissions);
-        Assert.Contains("PROC:SHIFTS", res.GrantedPermissions);
+        res.IsConfigured.Should().BeTrue();
+        res.GrantedPermissions.Should().ContainSingle();
+        res.GrantedPermissions.Should().Contain("PROC:SHIFTS");
     }
 
     [Fact]
@@ -256,14 +256,14 @@ public class RolePermissionsTests
         _uow.Get<DroitRole>().Items.Add(new DroitRole { IdRole = 3, IdDroit = Rights.Parameters });
 
         var initial = await _auth.GetRoleDetailedPermissionsAsync(3);
-        Assert.False(initial.IsConfigured);
-        Assert.NotEmpty(initial.GrantedPermissions);
+        initial.IsConfigured.Should().BeFalse();
+        initial.GrantedPermissions.Should().NotBeEmpty();
 
         await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, initial.GrantedPermissions);
 
         var portesApres = await _uow.Get<DroitRole>().ListAsync(d => d.IdRole == 3);
-        Assert.Single(portesApres);
-        Assert.Equal(Rights.Parameters, (int)portesApres[0].IdDroit);
+        portesApres.Should().ContainSingle();
+        ((int)portesApres[0].IdDroit).Should().Be(Rights.Parameters);
     }
 
     [Fact]
@@ -279,15 +279,15 @@ public class RolePermissionsTests
         _uow.Get<DroitRole>().Items.Add(new DroitRole { IdRole = 3, IdDroit = Rights.Reports });
 
         var initial = await _auth.GetRoleDetailedPermissionsAsync(3);
-        Assert.False(initial.IsConfigured);
-        Assert.NotEmpty(initial.GrantedPermissions);
+        initial.IsConfigured.Should().BeFalse();
+        initial.GrantedPermissions.Should().NotBeEmpty();
 
         await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, initial.GrantedPermissions);
 
         var portesApres = await _uow.Get<DroitRole>().ListAsync(d => d.IdRole == 3);
         var gateIds = portesApres.Select(p => (int)p.IdDroit).OrderBy(x => x).ToList();
         var expectedGates = new[] { Rights.Databases, Rights.Processing, Rights.Reports }.OrderBy(x => x).ToList();
-        Assert.Equal(expectedGates, gateIds);
+        gateIds.Should().Equal(expectedGates);
     }
 
     #endregion
@@ -301,13 +301,13 @@ public class RolePermissionsTests
 
         await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { "PARAMS:USERS" });
 
-        Assert.Equal(1, _uow.SaveChangesCount);
+        _uow.SaveChangesCount.Should().Be(1);
 
         var audit = await _uow.Get<AuditDroit>().ListAsync(a => a.TypeCible == "ROLE" && a.IdCible == 3);
-        Assert.Single(audit);
-        Assert.Equal("UPDATE_ROLE_PERMS", audit[0].Action);
-        Assert.Equal("admin", audit[0].LoginOperateur);
-        Assert.Equal("PARAMS:USERS", audit[0].PermsApres);
+        audit.Should().ContainSingle();
+        audit[0].Action.Should().Be("UPDATE_ROLE_PERMS");
+        audit[0].LoginOperateur.Should().Be("admin");
+        audit[0].PermsApres.Should().Be("PARAMS:USERS");
     }
 
     [Fact]
@@ -321,9 +321,9 @@ public class RolePermissionsTests
         await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 40, targetRoleId: 5, new[] { "PARAMS:USERS" });
 
         var audit = await _uow.Get<AuditDroit>().ListAsync(a => a.TypeCible == "ROLE" && a.IdCible == 5);
-        Assert.Single(audit);
-        Assert.Equal(100, audit[0].LoginOperateur.Length);
-        Assert.Equal(100, audit[0].NomCible?.Length);
+        audit.Should().ContainSingle();
+        audit[0].LoginOperateur.Length.Should().Be(100);
+        (audit[0].NomCible?.Length).Should().Be(100);
     }
 
     [Fact]
@@ -348,23 +348,23 @@ public class RolePermissionsTests
         await _auth.SaveUserAsync(currentUserId: 1, dto);
 
         // M3 : un seul SaveChangesAsync
-        Assert.Equal(1, _uow.SaveChangesCount);
+        _uow.SaveChangesCount.Should().Be(1);
 
         // L'audit RESET_USER_PERMS est bien présent
         var audits = await _uow.Get<AuditDroit>().ListAsync(
             a => a.TypeCible == "USER" && a.IdCible == 2 && a.Action == "RESET_USER_PERMS");
-        Assert.Single(audits);
-        Assert.Equal("admin", audits[0].LoginOperateur);
-        Assert.Equal("PARAMS:USERS", audits[0].PermsAvant);
-        Assert.Null(audits[0].PermsApres);
+        audits.Should().ContainSingle();
+        audits[0].LoginOperateur.Should().Be("admin");
+        audits[0].PermsAvant.Should().Be("PARAMS:USERS");
+        audits[0].PermsApres.Should().BeNull();
 
         // Vérification que les permissions ont été nettoyées
         var permsAfter = await _uow.Get<UserPermission>().ListAsync(p => p.IdResponsable == 2);
-        Assert.Empty(permsAfter);
+        permsAfter.Should().BeEmpty();
 
         // Vérification que le rôle a bien été mis à jour
         var userAfter = await _uow.Get<Responsable>().GetByIdAsync(2);
-        Assert.Equal(3, userAfter!.IdRole);
+        userAfter!.IdRole.Should().Be(3);
     }
 
     #endregion
@@ -381,9 +381,9 @@ public class RolePermissionsTests
         _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 3, IdRole = 3, Login = "user3" });
 
         var perms = await _auth.GetUserDetailedPermissionsAsync(3);
-        Assert.False(perms.IsCustomized);
-        Assert.Single(perms.GrantedPermissions);
-        Assert.Contains("PROC:SHIFTS", perms.GrantedPermissions);
+        perms.IsCustomized.Should().BeFalse();
+        perms.GrantedPermissions.Should().ContainSingle();
+        perms.GrantedPermissions.Should().Contain("PROC:SHIFTS");
     }
 
     [Fact]
@@ -397,10 +397,10 @@ public class RolePermissionsTests
         _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 3, PermissionCode = "PARAMS:USERS", IsGranted = true });
 
         var perms = await _auth.GetUserDetailedPermissionsAsync(3);
-        Assert.True(perms.IsCustomized);
-        Assert.Single(perms.GrantedPermissions);
-        Assert.Contains("PARAMS:USERS", perms.GrantedPermissions);
-        Assert.DoesNotContain("PROC:SHIFTS", perms.GrantedPermissions);
+        perms.IsCustomized.Should().BeTrue();
+        perms.GrantedPermissions.Should().ContainSingle();
+        perms.GrantedPermissions.Should().Contain("PARAMS:USERS");
+        perms.GrantedPermissions.Should().NotContain("PROC:SHIFTS");
     }
 
     [Fact]
@@ -413,8 +413,8 @@ public class RolePermissionsTests
         _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 3, IdRole = 3, Login = "user3" });
 
         var perms = await _auth.GetUserDetailedPermissionsAsync(3);
-        Assert.False(perms.IsCustomized);
-        Assert.Contains("TRACE:AUDIT", perms.GrantedPermissions);
+        perms.IsCustomized.Should().BeFalse();
+        perms.GrantedPermissions.Should().Contain("TRACE:AUDIT");
     }
 
     #endregion
@@ -436,26 +436,26 @@ public class RolePermissionsTests
 
         // T_USER_PERMISSION est vidé
         var userPerms = await _uow.Get<UserPermission>().ListAsync(p => p.IdResponsable == 3);
-        Assert.Empty(userPerms);
+        userPerms.Should().BeEmpty();
 
         // L'utilisateur n'est plus personnalisé et hérite du rôle
         var perms = await _auth.GetUserDetailedPermissionsAsync(3);
-        Assert.False(perms.IsCustomized);
-        Assert.Contains("PROC:SHIFTS", perms.GrantedPermissions);
+        perms.IsCustomized.Should().BeFalse();
+        perms.GrantedPermissions.Should().Contain("PROC:SHIFTS");
 
         // Journal d'audit créé
         var audit = await _uow.Get<AuditDroit>().ListAsync(a => a.TypeCible == "USER" && a.IdCible == 3);
-        Assert.Single(audit);
-        Assert.Equal("RESET_USER_PERMS", audit[0].Action);
-        Assert.Equal("PARAMS:USERS", audit[0].PermsAvant);
+        audit.Should().ContainSingle();
+        audit[0].Action.Should().Be("RESET_USER_PERMS");
+        audit[0].PermsAvant.Should().Be("PARAMS:USERS");
     }
 
     [Fact]
     public async Task ResetUserPermissions_NonAdminSelf_ThrowsDomainException()
     {
-        var ex = await Assert.ThrowsAsync<DomainException>(() =>
-            _auth.ResetUserDetailedPermissionsAsync(currentUserId: 2, targetUserId: 2));
-        Assert.Equal("Un utilisateur ne peut pas modifier ses propres privilèges sans droit d'administration.", ex.Message);
+        var ex = (await FluentActions.Awaiting(() =>
+            _auth.ResetUserDetailedPermissionsAsync(currentUserId: 2, targetUserId: 2)).Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().Be("Un utilisateur ne peut pas modifier ses propres privilèges sans droit d'administration.");
     }
 
     #endregion
@@ -471,11 +471,11 @@ public class RolePermissionsTests
 
         await _auth.DeleteRoleAsync(4);
 
-        Assert.Null(await _uow.Get<Role>().GetByIdAsync(4));
+        (await _uow.Get<Role>().GetByIdAsync(4)).Should().BeNull();
         var remainingPerms = await _uow.Get<RolePermission>().ListAsync(p => p.IdRole == 4);
-        Assert.Empty(remainingPerms);
+        remainingPerms.Should().BeEmpty();
         var remainingDroits = await _uow.Get<DroitRole>().ListAsync(d => d.IdRole == 4);
-        Assert.Empty(remainingDroits);
+        remainingDroits.Should().BeEmpty();
     }
 
     #endregion
@@ -495,11 +495,11 @@ public class RolePermissionsTests
 
         // Permissions personnalisées purgées
         var userPerms = await _uow.Get<UserPermission>().ListAsync(p => p.IdResponsable == 3);
-        Assert.Empty(userPerms);
+        userPerms.Should().BeEmpty();
 
         // Audit de réinitialisation créé
         var audit = await _uow.Get<AuditDroit>().ListAsync(a => a.TypeCible == "USER" && a.IdCible == 3 && a.Action == "RESET_USER_PERMS");
-        Assert.Single(audit);
+        audit.Should().ContainSingle();
     }
 
     [Fact]
@@ -515,11 +515,11 @@ public class RolePermissionsTests
 
         // Permissions personnalisées NON purgées (car le rôle n'a pas changé)
         var userPerms = await _uow.Get<UserPermission>().ListAsync(p => p.IdResponsable == 3);
-        Assert.Single(userPerms);
+        userPerms.Should().ContainSingle();
 
         // Aucun audit RESET_USER_PERMS
         var audit = await _uow.Get<AuditDroit>().ListAsync(a => a.TypeCible == "USER" && a.IdCible == 3 && a.Action == "RESET_USER_PERMS");
-        Assert.Empty(audit);
+        audit.Should().BeEmpty();
     }
 
     #endregion

@@ -23,16 +23,14 @@ public class ImportTemplateTests
     {
         var cles = Modeles().Select(m => m.Key).ToList();
 
-        Assert.Equal(
-            new[]
+        cles.Should().Equal(new[]
             {
                 "shifts", "punches", "corrections",
                 "planning-matricule", "planning-categorie",
                 "planning-generate-category", "planning-generate-matricule",
                 "affectations", "correspondences"
-            },
-            cles);
-        Assert.Equal(cles.Count, cles.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+            });
+        cles.Distinct(StringComparer.OrdinalIgnoreCase).Count().Should().Be(cles.Count);
     }
 
     [Fact]
@@ -40,13 +38,13 @@ public class ImportTemplateTests
     {
         foreach (var modele in Modeles())
         {
-            Assert.Contains(modele.Format, new[] { ImportTemplateCatalog.FormatXlsx, ImportTemplateCatalog.FormatCsv });
-            Assert.EndsWith("." + modele.Format, modele.FileName, StringComparison.OrdinalIgnoreCase);
-            Assert.NotEmpty(modele.Columns);
-            Assert.NotEmpty(modele.ExampleRows);
-            Assert.NotEmpty(modele.Notes);
-            Assert.All(modele.ExampleRows, ligne => Assert.Equal(modele.Columns.Count, ligne.Count));
-            Assert.Equal(modele.Columns.Select(c => c.Header).ToList(), modele.Headers.ToList());
+            new[] { ImportTemplateCatalog.FormatXlsx, ImportTemplateCatalog.FormatCsv }.Should().Contain(modele.Format);
+            modele.FileName.Should().EndWithEquivalentOf("." + modele.Format);
+            modele.Columns.Should().NotBeEmpty();
+            modele.ExampleRows.Should().NotBeEmpty();
+            modele.Notes.Should().NotBeEmpty();
+            modele.ExampleRows.Should().AllSatisfy(ligne => ligne.Count.Should().Be(modele.Columns.Count));
+            modele.Headers.ToList().Should().Equal(modele.Columns.Select(c => c.Header).ToList());
         }
     }
 
@@ -57,16 +55,16 @@ public class ImportTemplateTests
             .Select(i => LundiReference.AddDays(i).ToString("yyyy-MM-dd"))
             .ToList();
 
-        var parMatricule = Assert.Single(Modeles(), m => m.Key == "planning-matricule");
-        var parCategorie = Assert.Single(Modeles(), m => m.Key == "planning-categorie");
+        var parMatricule = Modeles().Should().ContainSingle(m => m.Key == "planning-matricule").Which;
+        var parCategorie = Modeles().Should().ContainSingle(m => m.Key == "planning-categorie").Which;
 
-        Assert.Equal("MATRICULE", parMatricule.Columns[0].Header);
-        Assert.Equal("CATEGORIE", parCategorie.Columns[0].Header);
+        parMatricule.Columns[0].Header.Should().Be("MATRICULE");
+        parCategorie.Columns[0].Header.Should().Be("CATEGORIE");
         foreach (var modele in new[] { parMatricule, parCategorie })
         {
-            Assert.Equal(8, modele.Columns.Count);
-            Assert.Equal(dates, modele.Columns.Skip(1).Select(c => c.Header).ToList());
-            Assert.All(modele.ExampleRows, ligne => Assert.Equal(8, ligne.Count));
+            modele.Columns.Count.Should().Be(8);
+            modele.Columns.Skip(1).Select(c => c.Header).ToList().Should().Equal(dates);
+            modele.ExampleRows.Should().AllSatisfy(ligne => ligne.Count.Should().Be(8));
         }
     }
 
@@ -78,17 +76,15 @@ public class ImportTemplateTests
             using var flux = new MemoryStream(ImportTemplateFile.Build(modele, new ExcelWorkbook()));
             var lignes = new ExcelWorkbook().ReadFirstSheet(flux);
 
-            Assert.Equal(modele.ExampleRows.Count, lignes.Count);
-            Assert.Equal(modele.Headers.ToList(), lignes[0].Keys.ToList());
+            lignes.Count.Should().Be(modele.ExampleRows.Count);
+            lignes[0].Keys.ToList().Should().Equal(modele.Headers.ToList());
 
             for (var i = 0; i < modele.ExampleRows.Count; i++)
             {
                 for (var c = 0; c < modele.Columns.Count; c++)
                 {
                     var entete = modele.Headers[c];
-                    Assert.Equal(
-                        Normaliser(modele.ExampleRows[i][c]),
-                        Normaliser(lignes[i][entete]));
+                    Normaliser(lignes[i][entete]).Should().Be(Normaliser(modele.ExampleRows[i][c]));
                 }
             }
         }
@@ -104,16 +100,14 @@ public class ImportTemplateTests
                 .TrimStart('\uFEFF');
             var lignes = texte.Split(new[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries);
 
-            Assert.Equal(modele.Headers.ToArray(), lignes[0].Split(';'));
-            Assert.Equal(modele.ExampleRows.Count, lignes.Length - 1);
+            lignes[0].Split(';').Should().Equal(modele.Headers.ToArray());
+            (lignes.Length - 1).Should().Be(modele.ExampleRows.Count);
 
             for (var i = 0; i < modele.ExampleRows.Count; i++)
             {
                 var cellules = lignes[i + 1].Split(';');
-                Assert.Equal(modele.ExampleRows[i].Count, cellules.Length);
-                Assert.Equal(
-                    modele.ExampleRows[i].Select(Normaliser).ToArray(),
-                    cellules.Select(Normaliser).ToArray());
+                cellules.Length.Should().Be(modele.ExampleRows[i].Count);
+                cellules.Select(Normaliser).ToArray().Should().Equal(modele.ExampleRows[i].Select(Normaliser).ToArray());
             }
         }
     }

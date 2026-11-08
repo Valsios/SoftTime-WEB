@@ -23,8 +23,8 @@ public class SystemExecutionTests : IClassFixture<ApiFactory>
         scope.ServiceProvider.GetRequiredService<ICompanyContext>().Set(ApiFactory.SageName, null);
 
         var user = scope.ServiceProvider.GetRequiredService<ICurrentUser>();
-        Assert.Equal(AdminRules.AdminRoleId, user.RoleId);
-        Assert.Equal(SystemExecution.Login, user.Login);
+        user.RoleId.Should().Be(AdminRules.AdminRoleId);
+        user.Login.Should().Be(SystemExecution.Login);
 
         await scope.ServiceProvider.GetRequiredService<ITenantConnectionService>().EnsureAuthorizedAsync();
     }
@@ -36,10 +36,9 @@ public class SystemExecutionTests : IClassFixture<ApiFactory>
         scope.ServiceProvider.GetRequiredService<ICompanyContext>().Set(ApiFactory.SageName, null);
 
         var user = scope.ServiceProvider.GetRequiredService<ICurrentUser>();
-        Assert.Null(user.UserId);
-        Assert.Null(user.RoleId);
+        user.UserId.Should().BeNull();
+        user.RoleId.Should().BeNull();
 
-        await Assert.ThrowsAsync<ForbiddenException>(
-            () => scope.ServiceProvider.GetRequiredService<ITenantConnectionService>().EnsureAuthorizedAsync());
+        await FluentActions.Awaiting(() => scope.ServiceProvider.GetRequiredService<ITenantConnectionService>().EnsureAuthorizedAsync()).Should().ThrowExactlyAsync<ForbiddenException>();
     }
 }

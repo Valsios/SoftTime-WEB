@@ -112,10 +112,10 @@ public class ImportTemplateImportTests
 
         var resultat = await contexte.Timekeeping.ImportPunchesExcelAsync(rows);
 
-        Assert.Equal(rows.Count, resultat.Imported);
-        Assert.Equal(0, resultat.Skipped);
-        Assert.Contains($"{rows.Count} pointage(s) importé(s), 0 ligne(s) ignorée(s).", resultat.Message);
-        Assert.Equal(rows.Count, contexte.Pointages.Count);
+        resultat.Imported.Should().Be(rows.Count);
+        resultat.Skipped.Should().Be(0);
+        resultat.Message.Should().Contain($"{rows.Count} pointage(s) importé(s), 0 ligne(s) ignorée(s).");
+        contexte.Pointages.Count.Should().Be(rows.Count);
     }
 
     [Fact]
@@ -126,13 +126,13 @@ public class ImportTemplateImportTests
 
         var resultat = await contexte.Timekeeping.ImportCorrectionsExcelAsync(rows);
 
-        Assert.Equal(rows.Count, resultat.Imported);
-        Assert.Contains($"{rows.Count} correction(s) importée(s), 0 ligne(s) ignorée(s).", resultat.Message);
-        Assert.Equal(rows.Count, contexte.Corrections.Count);
-        Assert.All(contexte.Corrections, c =>
+        resultat.Imported.Should().Be(rows.Count);
+        resultat.Message.Should().Contain($"{rows.Count} correction(s) importée(s), 0 ligne(s) ignorée(s).");
+        contexte.Corrections.Count.Should().Be(rows.Count);
+        contexte.Corrections.Should().AllSatisfy(c =>
         {
-            Assert.True(c.ValiderCorrection);
-            Assert.Equal(PunchProcessingConfiguration.OrigineManuel, c.Origine);
+            c.ValiderCorrection.Should().BeTrue();
+            c.Origine.Should().Be(PunchProcessingConfiguration.OrigineManuel);
         });
     }
 
@@ -144,9 +144,9 @@ public class ImportTemplateImportTests
 
         var resultat = await contexte.Planning.ImportShiftsExcelAsync(rows);
 
-        Assert.Equal(2, resultat.Imported);
-        Assert.Equal(0, resultat.Skipped);
-        Assert.Contains("2 shift(s) importé(s), 0 ligne(s) ignorée(s).", resultat.Message);
+        resultat.Imported.Should().Be(2);
+        resultat.Skipped.Should().Be(0);
+        resultat.Message.Should().Contain("2 shift(s) importé(s), 0 ligne(s) ignorée(s).");
     }
 
     [Fact]
@@ -157,10 +157,10 @@ public class ImportTemplateImportTests
 
         var resultat = await contexte.Planning.ImportExcelAsync(rows, headers);
 
-        Assert.Equal(14, resultat.Imported);
-        Assert.Equal(0, resultat.Skipped);
-        Assert.Contains("14 ligne(s) de planning importée(s), 0 élément(s) ignoré(s).", resultat.Message);
-        Assert.Equal(14, contexte.PlanningSalaries.Count);
+        resultat.Imported.Should().Be(14);
+        resultat.Skipped.Should().Be(0);
+        resultat.Message.Should().Contain("14 ligne(s) de planning importée(s), 0 élément(s) ignoré(s).");
+        contexte.PlanningSalaries.Count.Should().Be(14);
     }
 
     [Fact]
@@ -171,10 +171,10 @@ public class ImportTemplateImportTests
 
         var resultat = await contexte.Planning.ImportExcelAsync(rows, headers);
 
-        Assert.Equal(7, resultat.Imported);
-        Assert.Equal(0, resultat.Skipped);
-        Assert.Contains("7 ligne(s) de planning importée(s), 0 élément(s) ignoré(s).", resultat.Message);
-        Assert.All(contexte.PlanningSalaries, p => Assert.Equal(1, p.IdSal));
+        resultat.Imported.Should().Be(7);
+        resultat.Skipped.Should().Be(0);
+        resultat.Message.Should().Contain("7 ligne(s) de planning importée(s), 0 élément(s) ignoré(s).");
+        contexte.PlanningSalaries.Should().AllSatisfy(p => p.IdSal.Should().Be(1));
     }
 
     [Fact]
@@ -185,8 +185,8 @@ public class ImportTemplateImportTests
 
         var resultat = await contexte.Planning.GenerateFromCategoryCsvAsync(lignes);
 
-        Assert.Equal(7, resultat.Imported);
-        Assert.Equal(0, resultat.Skipped);
+        resultat.Imported.Should().Be(7);
+        resultat.Skipped.Should().Be(0);
     }
 
     [Fact]
@@ -197,8 +197,8 @@ public class ImportTemplateImportTests
 
         var resultat = await contexte.Planning.GenerateFromMatriculeCsvAsync(lignes);
 
-        Assert.Equal(7, resultat.Imported);
-        Assert.Equal(0, resultat.Skipped);
+        resultat.Imported.Should().Be(7);
+        resultat.Skipped.Should().Be(0);
     }
 
     [Fact]
@@ -209,9 +209,9 @@ public class ImportTemplateImportTests
 
         var resultat = await contexte.Catalog.AffectationImports.ImportAffectationsExcelAsync(rows);
 
-        Assert.Equal(1, resultat.Imported);
-        Assert.Equal(0, resultat.Skipped);
-        Assert.Equal("1 affectation(s) importée(s), 0 ligne(s) ignorée(s).", resultat.Message);
+        resultat.Imported.Should().Be(1);
+        resultat.Skipped.Should().Be(0);
+        resultat.Message.Should().Be("1 affectation(s) importée(s), 0 ligne(s) ignorée(s).");
     }
 
     [Fact]
@@ -223,10 +223,10 @@ public class ImportTemplateImportTests
         var resultat = await contexte.Catalog.Cards.ImportCorrespondencesCsvAsync(lignes);
 
         // La ligne d'en-tête est reconnue et ignorée : elle n'est pas comptée comme ligne ignorée.
-        Assert.Equal(2, resultat.Imported);
-        Assert.Equal(0, resultat.Skipped);
-        Assert.Contains("2 correspondance(s) importée(s), 0 ligne(s) ignorée(s).", resultat.Message);
-        Assert.Equal("00123", contexte.Cards.Single(c => c.SageMatricule == "04285").PointeuseNumero);
-        Assert.Equal("00124", contexte.Cards.Single(c => c.SageMatricule == "04301").PointeuseNumero);
+        resultat.Imported.Should().Be(2);
+        resultat.Skipped.Should().Be(0);
+        resultat.Message.Should().Contain("2 correspondance(s) importée(s), 0 ligne(s) ignorée(s).");
+        contexte.Cards.Single(c => c.SageMatricule == "04285").PointeuseNumero.Should().Be("00123");
+        contexte.Cards.Single(c => c.SageMatricule == "04301").PointeuseNumero.Should().Be("00124");
     }
 }

@@ -27,25 +27,25 @@ public class PayrollClosingOptionsTests
     [Fact]
     public void IgnoreValidatedWeeks_DefaultIsTrue()
     {
-        Assert.True(ClosingRulesOptions.Default.IgnorerSemainesValidees);
-        Assert.True(new ClosingRulesOptions().IgnorerSemainesValidees);
+        ClosingRulesOptions.Default.IgnorerSemainesValidees.Should().BeTrue();
+        new ClosingRulesOptions().IgnorerSemainesValidees.Should().BeTrue();
     }
 
     [Fact]
     public void IgnoreValidatedWeeks_True_KeepsCurrentBehaviour()
     {
-        Assert.Empty(Incomplets(options: null));
-        Assert.Empty(Incomplets(new ClosingRulesOptions { IgnorerSemainesValidees = true }));
+        Incomplets(options: null).Should().BeEmpty();
+        Incomplets(new ClosingRulesOptions { IgnorerSemainesValidees = true }).Should().BeEmpty();
     }
 
     [Fact]
     public void IgnoreValidatedWeeks_False_ReportsDaysOfValidatedWeek()
     {
-        var anomalie = Assert.Single(Incomplets(new ClosingRulesOptions { IgnorerSemainesValidees = false }));
+        var anomalie = Incomplets(new ClosingRulesOptions { IgnorerSemainesValidees = false }).Should().ContainSingle().Which;
 
-        Assert.Equal(ClosingAnomalyType.PointageIncomplet, anomalie.Type);
-        Assert.Equal("369", anomalie.Matricule);
-        Assert.Equal(Mercredi, anomalie.Date);
+        anomalie.Type.Should().Be(ClosingAnomalyType.PointageIncomplet);
+        anomalie.Matricule.Should().Be("369");
+        anomalie.Date.Should().Be(Mercredi);
     }
 
     [Fact]
@@ -53,6 +53,6 @@ public class PayrollClosingOptionsTests
     {
         var manuelle = new HeureCorrigee { MatriculeSage = "369", DatePointageIn = Mercredi, Origine = "MANUEL" };
 
-        Assert.Empty(Incomplets(new ClosingRulesOptions { IgnorerSemainesValidees = false }, new[] { manuelle }));
+        Incomplets(new ClosingRulesOptions { IgnorerSemainesValidees = false }, new[] { manuelle }).Should().BeEmpty();
     }
 }

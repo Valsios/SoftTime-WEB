@@ -114,12 +114,12 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
         var (code, texte) = await Envoyer(_http, Requete(profil, HttpMethod.Get, $"{Url}?{Semaine}"));
         ApiFactory.Report($"CLOSE|{profil}|{(int)code}|{(texte.Length > 90 ? texte[..90] : texte)}");
 
-        Assert.Equal(attendu, code);
+        code.Should().Be(attendu);
         if (profil is "closenobase" or "closenopte")
-            Assert.Contains("accès à cette base", texte);       // la base (SAGE puis pointeuse) est contrôlée en premier
+            texte.Should().Contain("accès à cette base");       // la base (SAGE puis pointeuse) est contrôlée en premier
         else if (attendu == HttpStatusCode.Forbidden)
-            Assert.Contains(Denied, texte);
-        Assert.Equal(before, _f.Snapshot());                     // lecture seule
+            texte.Should().Contain(Denied);
+        _f.Snapshot().Should().Be(before);                     // lecture seule
     }
 
     [Fact]
@@ -127,25 +127,25 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     {
         var (code, texte) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}&includeComparison=true"));
 
-        Assert.Equal(HttpStatusCode.OK, code);
+        code.Should().Be(HttpStatusCode.OK);
         using var json = JsonDocument.Parse(texte);
         var r = json.RootElement.GetProperty("data");
-        Assert.Equal("Bloquant", r.GetProperty("statut").GetString());      // 1 critique sur 1 jour contrôlé
-        Assert.Equal("Bloquant", r.GetProperty("statutLibelle").GetString());
-        Assert.Equal(0.05m, r.GetProperty("seuilBloquant").GetDecimal());
-        Assert.Equal(0, r.GetProperty("score").GetInt32());
-        Assert.Contains("poids maximum", r.GetProperty("formule").GetString());
-        Assert.Equal(1, r.GetProperty("joursEmployeControles").GetInt32());
-        Assert.True(r.GetProperty("nomsAffiches").GetBoolean());
-        Assert.Equal(JsonValueKind.Null, r.GetProperty("comparaison").ValueKind);   // période précédente sans donnée
-        Assert.Equal("DEP1", r.GetProperty("parDepartement")[0].GetProperty("departement").GetString());
+        r.GetProperty("statut").GetString().Should().Be("Bloquant");      // 1 critique sur 1 jour contrôlé
+        r.GetProperty("statutLibelle").GetString().Should().Be("Bloquant");
+        r.GetProperty("seuilBloquant").GetDecimal().Should().Be(0.05m);
+        r.GetProperty("score").GetInt32().Should().Be(0);
+        r.GetProperty("formule").GetString().Should().Contain("poids maximum");
+        r.GetProperty("joursEmployeControles").GetInt32().Should().Be(1);
+        r.GetProperty("nomsAffiches").GetBoolean().Should().BeTrue();
+        r.GetProperty("comparaison").ValueKind.Should().Be(JsonValueKind.Null);   // période précédente sans donnée
+        r.GetProperty("parDepartement")[0].GetProperty("departement").GetString().Should().Be("DEP1");
 
         var anomalie = r.GetProperty("anomalies").GetProperty("items")[0];
-        Assert.Equal("PointageManquant", anomalie.GetProperty("type").GetString());
-        Assert.Equal("777", anomalie.GetProperty("matricule").GetString());
-        Assert.Equal("Testnom", anomalie.GetProperty("nom").GetString());
-        Assert.Equal("Testprenom", anomalie.GetProperty("prenom").GetString());
-        Assert.Equal("DEP1", anomalie.GetProperty("departement").GetString());
+        anomalie.GetProperty("type").GetString().Should().Be("PointageManquant");
+        anomalie.GetProperty("matricule").GetString().Should().Be("777");
+        anomalie.GetProperty("nom").GetString().Should().Be("Testnom");
+        anomalie.GetProperty("prenom").GetString().Should().Be("Testprenom");
+        anomalie.GetProperty("departement").GetString().Should().Be("DEP1");
     }
 
     [Fact]
@@ -153,12 +153,12 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     {
         var (code, texte) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}&includeInformation=true"));
 
-        Assert.Equal(HttpStatusCode.OK, code);
+        code.Should().Be(HttpStatusCode.OK);
         using var json = JsonDocument.Parse(texte);
         var r = json.RootElement.GetProperty("data");
-        Assert.Equal(0, r.GetProperty("salariesSansPlanningExclus").GetInt32());
-        Assert.Contains(r.GetProperty("parGravite").EnumerateArray(), g => g.GetProperty("cle").GetString() == "Information");
-        Assert.True(r.GetProperty("anomalies").GetProperty("items")[0].TryGetProperty("pointageExiste", out _));
+        r.GetProperty("salariesSansPlanningExclus").GetInt32().Should().Be(0);
+        r.GetProperty("parGravite").EnumerateArray().Should().Contain(g => g.GetProperty("cle").GetString() == "Information");
+        r.GetProperty("anomalies").GetProperty("items")[0].TryGetProperty("pointageExiste", out _).Should().BeTrue();
     }
 
     [Fact]
@@ -167,15 +167,15 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
         using var factory = AvecReglages(("Closing:ShowNames", "false"));
         var (code, texte) = await Envoyer(factory.CreateClient(), Requete("admin", HttpMethod.Get, $"{Url}?{Semaine}"));
 
-        Assert.Equal(HttpStatusCode.OK, code);
+        code.Should().Be(HttpStatusCode.OK);
         using var json = JsonDocument.Parse(texte);
-        Assert.False(json.RootElement.GetProperty("data").GetProperty("nomsAffiches").GetBoolean());
+        json.RootElement.GetProperty("data").GetProperty("nomsAffiches").GetBoolean().Should().BeFalse();
         var anomalie = json.RootElement.GetProperty("data").GetProperty("anomalies").GetProperty("items")[0];
-        Assert.Equal("777", anomalie.GetProperty("matricule").GetString());
-        Assert.Equal(JsonValueKind.Null, anomalie.GetProperty("nom").ValueKind);
-        Assert.Equal(JsonValueKind.Null, anomalie.GetProperty("prenom").ValueKind);
-        Assert.DoesNotContain("Testnom", texte);
-        Assert.DoesNotContain("Testprenom", texte);
+        anomalie.GetProperty("matricule").GetString().Should().Be("777");
+        anomalie.GetProperty("nom").ValueKind.Should().Be(JsonValueKind.Null);
+        anomalie.GetProperty("prenom").ValueKind.Should().Be(JsonValueKind.Null);
+        texte.Should().NotContain("Testnom");
+        texte.Should().NotContain("Testprenom");
     }
 
     // ---------- Validation ----------
@@ -191,8 +191,8 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     {
         var (code, texte) = await Envoyer(_http, Requete("admin", HttpMethod.Get, $"{Url}?{query}"));
 
-        Assert.Equal(HttpStatusCode.BadRequest, code);
-        Assert.DoesNotContain("Exception", texte);
+        code.Should().Be(HttpStatusCode.BadRequest);
+        texte.Should().NotContain("Exception");
     }
 
     [Fact]
@@ -200,9 +200,9 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     {
         var (code, texte) = await Envoyer(_http, Requete("admin", HttpMethod.Get, $"{Url}?{Semaine}&page=1&pageSize=5000"));
 
-        Assert.Equal(HttpStatusCode.OK, code);
+        code.Should().Be(HttpStatusCode.OK);
         using var json = JsonDocument.Parse(texte);
-        Assert.Equal(200, json.RootElement.GetProperty("data").GetProperty("anomalies").GetProperty("pageSize").GetInt32());
+        json.RootElement.GetProperty("data").GetProperty("anomalies").GetProperty("pageSize").GetInt32().Should().Be(200);
     }
 
     [Fact]
@@ -210,10 +210,10 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     {
         var (code, texte) = await Envoyer(_http, Requete("admin", HttpMethod.Get, $"{Url}?from=2025-11-03T00:00:00Z&to=2025-11-07T00:00:00Z"));
 
-        Assert.Equal(HttpStatusCode.OK, code);
+        code.Should().Be(HttpStatusCode.OK);
         using var json = JsonDocument.Parse(texte);
-        Assert.StartsWith("2025-11-03", json.RootElement.GetProperty("data").GetProperty("from").GetString());
-        Assert.StartsWith("2025-11-07", json.RootElement.GetProperty("data").GetProperty("to").GetString());
+        json.RootElement.GetProperty("data").GetProperty("from").GetString().Should().StartWith("2025-11-03");
+        json.RootElement.GetProperty("data").GetProperty("to").GetString().Should().StartWith("2025-11-07");
     }
 
     // ---------- Lecture seule et désactivation ----------
@@ -228,8 +228,8 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
         var before = _f.Snapshot();
         var (code, _) = await Envoyer(_http, Requete("admin", new HttpMethod(methode), $"{Url}?{Semaine}"));
 
-        Assert.Equal(HttpStatusCode.MethodNotAllowed, code);
-        Assert.Equal(before, _f.Snapshot());
+        code.Should().Be(HttpStatusCode.MethodNotAllowed);
+        _f.Snapshot().Should().Be(before);
     }
 
     [Fact]
@@ -238,8 +238,8 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
         using var factory = AvecReglages(("Closing:Enabled", "false"));
         var (code, texte) = await Envoyer(factory.CreateClient(), Requete("admin", HttpMethod.Get, $"{Url}?{Semaine}"));
 
-        Assert.Equal(HttpStatusCode.NotFound, code);
-        Assert.Contains("désactivée", texte);
+        code.Should().Be(HttpStatusCode.NotFound);
+        texte.Should().Contain("désactivée");
     }
 
     [Fact]
@@ -248,7 +248,7 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
         using var factory = AvecReglages(("Closing:Enabled", "false"));
         var (code, _) = await Envoyer(factory.CreateClient(), Requete("gate6only", HttpMethod.Get, $"{Url}?{Semaine}"));
 
-        Assert.Equal(HttpStatusCode.Forbidden, code);
+        code.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
@@ -256,11 +256,11 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     {
         using var factory = AvecReglages(("Closing:CriticalRatioBlocking", "2"));
 
-        var erreur = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
+        var erreur = FluentActions.Invoking(() => factory.CreateClient()).Should().Throw<Exception>().Which;
         var validation = erreur as OptionsValidationException ?? erreur.InnerException as OptionsValidationException;
-        Assert.NotNull(validation);
-        Assert.Contains("Closing:CriticalRatioBlocking doit être compris entre 0 et 1", validation!.Message);
-        Assert.DoesNotContain(ApiFactory.TestKey, validation.Message);
+        validation.Should().NotBeNull();
+        validation!.Message.Should().Contain("Closing:CriticalRatioBlocking doit être compris entre 0 et 1");
+        validation.Message.Should().NotContain(ApiFactory.TestKey);
     }
 
     private WebApplicationFactory<Program> AvecReglages(params (string Cle, string Valeur)[] reglages)
