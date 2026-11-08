@@ -100,10 +100,9 @@ public class AuditService : IAuditService
     /// Journal d'audit paginé. Contrairement à <see cref="ListEventsAsync"/> (plafond 500 pour
     /// l'export), le total et la page sont calculés en SQL sur le filtre complet.
     /// </summary>
-    public async Task<PagedResult<AuditEventDto>> ListEventsPagedAsync(
-        DateTime? from, DateTime? to, string? table, string? action, string? search,
-        int? page, int? pageSize, CancellationToken ct = default)
+    public async Task<PagedResult<AuditEventDto>> ListEventsPagedAsync(AuditEventsQuery query, CancellationToken ct = default)
     {
+        var (from, to, table, action, search, page, pageSize) = query;
         var fromDate = from ?? DateTime.Today.AddDays(-30);
         var toDate = to ?? DateTime.Today.AddDays(1);
         var tableFiltre = string.IsNullOrWhiteSpace(table) ? null : table;

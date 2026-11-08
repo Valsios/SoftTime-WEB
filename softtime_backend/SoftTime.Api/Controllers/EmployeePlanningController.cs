@@ -38,15 +38,8 @@ public class EmployeePlanningController : ControllerBase
 
     /// <summary>Même liste que <c>GET /api/employee-planning</c>, paginée.</summary>
     [HttpGet("paged")]
-    public async Task<IActionResult> GetPaged(
-        [FromQuery] DateTime from,
-        [FromQuery] DateTime to,
-        [FromQuery] int? cardId,
-        [FromQuery] int? page,
-        [FromQuery] int? pageSize,
-        [FromQuery] string? search,
-        CancellationToken ct)
-        => Ok(await _planning.ListEmployeePlanningPagedAsync(from, to, cardId, page, pageSize, search, ct));
+    public async Task<IActionResult> GetPaged([FromQuery] EmployeePlanningQuery query, CancellationToken ct)
+        => Ok(await _planning.ListEmployeePlanningPagedAsync(query, ct));
 
     /// <summary>Salariés + nombre de jours planifiés (complet, pour l'export).</summary>
     [HttpGet("employees/stats")]
@@ -58,14 +51,8 @@ public class EmployeePlanningController : ControllerBase
 
     /// <summary>Salariés + nombre de jours planifiés, paginé.</summary>
     [HttpGet("employees/paged")]
-    public async Task<IActionResult> EmployeesPaged(
-        [FromQuery] DateTime from,
-        [FromQuery] DateTime to,
-        [FromQuery] int? page,
-        [FromQuery] int? pageSize,
-        [FromQuery] string? search,
-        CancellationToken ct)
-        => Ok(await _planning.ListEmployeeStatsPagedAsync(from, to, page, pageSize, search, ct));
+    public async Task<IActionResult> EmployeesPaged([FromQuery] EmployeePlanningQuery query, CancellationToken ct)
+        => Ok(await _planning.ListEmployeeStatsPagedAsync(query, ct));
 
     [HttpPost]
     public Task<IActionResult> Create([FromBody] List<EmployeePlanningDto> rows, CancellationToken ct)

@@ -31,10 +31,9 @@ public sealed class AffectationService : IAffectationService
     /// puis enrichie (carte + département/service) pour les seuls matricules de la page. Avec un
     /// filtre, le jeu complet est enrichi avant le découpage, comme pour une liste calculée.
     /// </summary>
-    public async Task<PagedResult<AffectationRowDto>> ListAffectationsPagedAsync(
-        int? categoryId, string? departement, string? service, int? page, int? pageSize,
-        string? search = null, CancellationToken ct = default)
+    public async Task<PagedResult<AffectationRowDto>> ListAffectationsPagedAsync(AffectationsQuery query, CancellationToken ct = default)
     {
+        var (categoryId, departement, service, page, pageSize, search) = query;
         await _tenant.EnsureAuthorizedAsync(ct);
         // Département, service et recherche ne sont connus qu'après lecture SAGE : filtrage en mémoire.
         if (!string.IsNullOrWhiteSpace(departement)

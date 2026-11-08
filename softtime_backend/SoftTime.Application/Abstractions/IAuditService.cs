@@ -21,7 +21,7 @@ public interface IAuditService
     /// Journal d'audit paginé. Contrairement à <see cref="ListEventsAsync"/> (plafond 500 pour
     /// l'export), le total et la page sont calculés en SQL sur le filtre complet.
     /// </summary>
-    Task<PagedResult<AuditEventDto>> ListEventsPagedAsync(DateTime? from, DateTime? to, string? table, string? action, string? search, int? page, int? pageSize, CancellationToken ct = default);
+    Task<PagedResult<AuditEventDto>> ListEventsPagedAsync(AuditEventsQuery query, CancellationToken ct = default);
 
     Task<IReadOnlyList<object>> ListDiscoveredSchemaAsync(CancellationToken ct = default);
 }

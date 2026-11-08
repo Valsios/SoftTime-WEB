@@ -21,20 +21,8 @@ public class DashboardController : ControllerBase
     public DashboardController(IDashboardService svc) => _svc = svc;
 
     [HttpGet("stats")]
-    public async Task<IActionResult> Stats(
-        [FromQuery] DateTime from,
-        [FromQuery] DateTime to,
-        [FromQuery] string? matriculeFrom,
-        [FromQuery] string? matriculeTo,
-        [FromQuery] string? departement,
-        [FromQuery] string? categorie,
-        [FromQuery] string? periode,
-        CancellationToken ct)
-        => Ok(await _svc.GetStatsAsync(
-            new PeriodRequest(matriculeFrom, matriculeTo, from, to, departement),
-            categorie,
-            string.IsNullOrWhiteSpace(periode) ? "mensuelle" : periode,
-            ct));
+    public async Task<IActionResult> Stats([FromQuery] DashboardStatsQuery query, CancellationToken ct)
+        => Ok(await _svc.GetStatsAsync(query.ToPeriodRequest(), query.Categorie, query.Granularite, ct));
 
     /// <summary>Valeurs proposées par les filtres (départements, catégories de personnel).</summary>
     [HttpGet("filters")]

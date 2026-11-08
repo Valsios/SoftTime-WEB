@@ -9,7 +9,7 @@ public interface IAffectationService
     /// puis enrichie (carte + département/service) pour les seuls matricules de la page. Avec un
     /// filtre, le jeu complet est enrichi avant le découpage, comme pour une liste calculée.
     /// </summary>
-    Task<PagedResult<AffectationRowDto>> ListAffectationsPagedAsync(int? categoryId, string? departement, string? service, int? page, int? pageSize, string? search = null, CancellationToken ct = default);
+    Task<PagedResult<AffectationRowDto>> ListAffectationsPagedAsync(AffectationsQuery query, CancellationToken ct = default);
 
     /// <summary>Jeu complet enrichi, pour l'export Excel (jamais la page affichée).</summary>
     Task<IReadOnlyList<AffectationRowDto>> ListAllAffectationsAsync(int? categoryId, string? departement, string? service, CancellationToken ct = default);

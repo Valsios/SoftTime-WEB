@@ -56,24 +56,16 @@ public class ClosingController : ControllerBase
     /// <c>reuseCache=true</c> (changement de page seulement) réutilise, jusqu'à 60 s, l'analyse déjà calculée pour la même période.
     /// </summary>
     [HttpGet("analysis")]
-    public async Task<IActionResult> Analysis(
-        [FromQuery] DateTime? from,
-        [FromQuery] DateTime? to,
-        [FromQuery] string? departement,
-        [FromQuery] bool? includeComparison,
-        [FromQuery] bool? includeInformation,
-        [FromQuery] int? page,
-        [FromQuery] int? pageSize,
-        [FromQuery] bool? reuseCache,
-        CancellationToken ct)
+    public async Task<IActionResult> Analysis([FromQuery] ClosingAnalysisQuery query, CancellationToken ct)
     {
         await FineReadAccess.EnsureAsync(_user, _rights, Rights.Reports, Permission, ct);
         if (!_reglages.Enabled)
             return ApiErrors.Result(StatusCodes.Status404NotFound, Desactivee);
 
         var request = new ClosingAnalysisRequest(
-            Jour(from), Jour(to), departement, page, pageSize, Options: null, IncludeComparison: includeComparison == true,
-            IncludeInformation: includeInformation == true, ReuseCached: reuseCache == true);
+            Jour(query.From), Jour(query.To), query.Departement, query.Page, query.PageSize, Options: null,
+            IncludeComparison: query.IncludeComparison == true, IncludeInformation: query.IncludeInformation == true,
+            ReuseCached: query.ReuseCache == true);
         var analyse = await _closing.AnalyserAsync(request, ct);
         var rapport = await _presentation.PresenterAsync(analyse, ct);
 

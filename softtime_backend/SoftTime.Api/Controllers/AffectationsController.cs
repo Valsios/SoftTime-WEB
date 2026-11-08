@@ -29,15 +29,8 @@ public class AffectationsController : ControllerBase
         => Ok(await _svc.ListAffectationsAsync(categoryId, ct));
 
     [HttpGet("paged")]
-    public async Task<IActionResult> GetPaged(
-        [FromQuery] int? categoryId,
-        [FromQuery] string? departement,
-        [FromQuery] string? service,
-        [FromQuery] int? page,
-        [FromQuery] int? pageSize,
-        [FromQuery] string? search,
-        CancellationToken ct)
-        => Ok(await _svc.ListAffectationsPagedAsync(categoryId, departement, service, page, pageSize, search, ct));
+    public async Task<IActionResult> GetPaged([FromQuery] AffectationsQuery query, CancellationToken ct)
+        => Ok(await _svc.ListAffectationsPagedAsync(query, ct));
 
     [HttpGet("options")]
     public async Task<IActionResult> GetOptions(CancellationToken ct)

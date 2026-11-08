@@ -25,32 +25,13 @@ public class OvertimeController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> List(
-        [FromQuery] DateTime from,
-        [FromQuery] DateTime to,
-        [FromQuery] string? matriculeFrom,
-        [FromQuery] string? matriculeTo,
-        [FromQuery] string? departement,
-        CancellationToken ct)
-        => Ok(await _exoImpo.ListExoAsync(new PeriodRequest(matriculeFrom, matriculeTo, from, to, departement), ct));
+    public async Task<IActionResult> List([FromQuery] OvertimeListQuery query, CancellationToken ct)
+        => Ok(await _exoImpo.ListExoAsync(query.ToPeriodRequest(withSearch: false), ct));
 
     /// <summary>Même liste que <c>GET /api/overtime</c>, paginée (page bornée, total serveur).</summary>
     [HttpGet("paged")]
-    public async Task<IActionResult> ListPaged(
-        [FromQuery] DateTime from,
-        [FromQuery] DateTime to,
-        [FromQuery] string? matriculeFrom,
-        [FromQuery] string? matriculeTo,
-        [FromQuery] string? departement,
-        [FromQuery] int? page,
-        [FromQuery] int? pageSize,
-        [FromQuery] string? search,
-        CancellationToken ct)
-        => Ok(await _exoImpo.ListExoPagedAsync(
-            new PeriodRequest(matriculeFrom, matriculeTo, from, to, departement, search),
-            page,
-            pageSize,
-            ct));
+    public async Task<IActionResult> ListPaged([FromQuery] OvertimeListQuery query, CancellationToken ct)
+        => Ok(await _exoImpo.ListExoPagedAsync(query.ToPeriodRequest(withSearch: true), query.Page, query.PageSize, ct));
 
     [HttpPost("calculate")]
     public async Task<IActionResult> Calculate([FromBody] PeriodRequest request, CancellationToken ct)

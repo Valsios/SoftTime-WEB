@@ -76,10 +76,9 @@ public sealed class EmployeePlanningService : IEmployeePlanningService
     /// Liste paginée des lignes de planning. Le filtre date/carte est traduit en SQL ; les cartes
     /// (petite table) sont chargées une fois pour exposer matricule/nom/prénom.
     /// </summary>
-    public async Task<PagedResult<EmployeePlanningDto>> ListEmployeePlanningPagedAsync(
-        DateTime from, DateTime to, int? cardId, int? page, int? pageSize,
-        string? search = null, CancellationToken ct = default)
+    public async Task<PagedResult<EmployeePlanningDto>> ListEmployeePlanningPagedAsync(EmployeePlanningQuery query, CancellationToken ct = default)
     {
+        var (from, to, cardId, page, pageSize, search) = query;
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageDb = _tenant.SageDb;
         var start = from.Date;
@@ -128,10 +127,9 @@ public sealed class EmployeePlanningService : IEmployeePlanningService
     }
 
     /// <summary>Grille paginée des salariés avec leur nombre de jours planifiés.</summary>
-    public async Task<PagedResult<PlanningEmployeeStatDto>> ListEmployeeStatsPagedAsync(
-        DateTime from, DateTime to, int? page, int? pageSize,
-        string? search = null, CancellationToken ct = default)
+    public async Task<PagedResult<PlanningEmployeeStatDto>> ListEmployeeStatsPagedAsync(EmployeePlanningQuery query, CancellationToken ct = default)
     {
+        var (from, to, _, page, pageSize, search) = query;
         await _tenant.EnsureAuthorizedAsync(ct);
         var sageDb = _tenant.SageDb;
         var counts = (await _planningStats.CountPlannedDaysAsync(sageDb, from, to, ct))

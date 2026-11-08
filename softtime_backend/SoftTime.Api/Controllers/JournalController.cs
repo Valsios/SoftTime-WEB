@@ -24,20 +24,8 @@ public class JournalController : ControllerBase
 
     /// <summary>Lignes du journal, les plus récentes d'abord (pagination SQL, 50 par défaut, 200 au plus).</summary>
     [HttpGet]
-    public async Task<IActionResult> List(
-        [FromQuery] DateTime? from,
-        [FromQuery] DateTime? to,
-        [FromQuery] string? user,
-        [FromQuery] string? action,
-        [FromQuery] string? table,
-        [FromQuery] string? key,
-        [FromQuery] Guid? correlation,
-        [FromQuery] string? sageDatabase,
-        [FromQuery] int? page,
-        [FromQuery] int? pageSize,
-        CancellationToken ct)
-        => Ok(await _journal.ListAsync(
-            new JournalQuery(from, to, user, action, table, key, correlation, sageDatabase, page, pageSize), ct));
+    public async Task<IActionResult> List([FromQuery] JournalQuery query, CancellationToken ct)
+        => Ok(await _journal.ListAsync(query, ct));
 
     /// <summary>Valeurs distinctes (tables, actions, utilisateurs) de la période, plafonnées.</summary>
     [HttpGet("facets")]

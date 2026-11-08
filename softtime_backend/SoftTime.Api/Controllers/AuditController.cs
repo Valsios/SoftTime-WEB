@@ -66,16 +66,8 @@ public class AuditController : ControllerBase
 
     /// <summary>Journal d'audit paginé (count + OFFSET/FETCH SQL sur le filtre complet).</summary>
     [HttpGet("events/paged")]
-    public async Task<IActionResult> GetEventsPaged(
-        [FromQuery] DateTime? from,
-        [FromQuery] DateTime? to,
-        [FromQuery] string? table,
-        [FromQuery] string? action,
-        [FromQuery] string? search,
-        [FromQuery] int? page,
-        [FromQuery] int? pageSize,
-        CancellationToken ct)
-        => Ok(await _svc.ListEventsPagedAsync(from, to, table, action, search, page, pageSize, ct));
+    public async Task<IActionResult> GetEventsPaged([FromQuery] AuditEventsQuery query, CancellationToken ct)
+        => Ok(await _svc.ListEventsPagedAsync(query, ct));
 
     [HttpGet("schema")]
     public async Task<IActionResult> GetSchema(CancellationToken ct)

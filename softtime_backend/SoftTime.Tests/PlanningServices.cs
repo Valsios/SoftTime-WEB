@@ -47,14 +47,14 @@ internal sealed class PlanningServices
     public Task<IReadOnlyList<EmployeePlanningDto>> ListEmployeePlanningAsync(DateTime from, DateTime to, int? cardId, CancellationToken ct = default)
         => EmployeePlanning.ListEmployeePlanningAsync(from, to, cardId, ct);
 
-    public Task<PagedResult<EmployeePlanningDto>> ListEmployeePlanningPagedAsync(DateTime from, DateTime to, int? cardId, int? page, int? pageSize, string? search = null, CancellationToken ct = default)
-        => EmployeePlanning.ListEmployeePlanningPagedAsync(from, to, cardId, page, pageSize, search, ct);
+    public Task<PagedResult<EmployeePlanningDto>> ListEmployeePlanningPagedAsync(EmployeePlanningQuery query, CancellationToken ct = default)
+        => EmployeePlanning.ListEmployeePlanningPagedAsync(query, ct);
 
     public Task<IReadOnlyList<PlanningEmployeeStatDto>> ListEmployeeStatsAsync(DateTime from, DateTime to, CancellationToken ct = default)
         => EmployeePlanning.ListEmployeeStatsAsync(from, to, ct);
 
-    public Task<PagedResult<PlanningEmployeeStatDto>> ListEmployeeStatsPagedAsync(DateTime from, DateTime to, int? page, int? pageSize, string? search = null, CancellationToken ct = default)
-        => EmployeePlanning.ListEmployeeStatsPagedAsync(from, to, page, pageSize, search, ct);
+    public Task<PagedResult<PlanningEmployeeStatDto>> ListEmployeeStatsPagedAsync(EmployeePlanningQuery query, CancellationToken ct = default)
+        => EmployeePlanning.ListEmployeeStatsPagedAsync(query, ct);
 
     public Task SaveEmployeePlanningAsync(IReadOnlyCollection<EmployeePlanningDto> rows, CancellationToken ct = default)
         => EmployeePlanning.SaveEmployeePlanningAsync(rows, ct);
