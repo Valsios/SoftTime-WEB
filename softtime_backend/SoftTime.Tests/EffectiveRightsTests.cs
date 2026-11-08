@@ -8,7 +8,6 @@ using SoftTime.Application.Security;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
-using SoftTime.Tests.Http;
 
 using static SoftTime.Application.Security.EffectiveRightsCalculator;
 
@@ -386,23 +385,23 @@ public class EffectiveRightsTests
 
     private sealed class OldWorld
     {
-        public readonly SnapshotInMemoryUnitOfWork Uow = new();
+        public readonly InMemoryUnitOfWork Uow = new();
         public readonly AuthServices Auth;
 
         public OldWorld()
         {
             var mapper = new MapperConfiguration(c => c.AddProfile<MappingProfile>()).CreateMapper();
             Auth = new AuthServices(Uow, new Token(), mapper, new Mail(), new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), new PasswordHasher<Responsable>());
-            Uow.GetRepo<BddSage>().Items.AddRange(new[] { new BddSage { Id = 1, NomBd = "BASE1" }, new BddSage { Id = 2, NomBd = "BASE2" } });
-            Uow.GetRepo<BddPointeuse>().Items.Add(new BddPointeuse { Id = 1, NomBd = "PTG" });
+            Uow.Get<BddSage>().Items.AddRange(new[] { new BddSage { Id = 1, NomBd = "BASE1" }, new BddSage { Id = 2, NomBd = "BASE2" } });
+            Uow.Get<BddPointeuse>().Items.Add(new BddPointeuse { Id = 1, NomBd = "PTG" });
         }
 
         public async Task<HashSet<string>> OldAsync(decimal roleId, string[]? roleRows, int[] gates)
         {
-            Uow.GetRepo<Role>().Items.Add(new Role { IdRole = roleId, NomRole = $"R{roleId}" });
-            Uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 100 + roleId, IdRole = roleId, Login = "u" });
-            foreach (var g in gates) Uow.GetRepo<DroitRole>().Items.Add(new DroitRole { IdRole = roleId, IdDroit = g });
-            foreach (var c in roleRows ?? Array.Empty<string>()) Uow.GetRepo<RolePermission>().Items.Add(new RolePermission { IdRole = roleId, PermissionCode = c, IsGranted = true });
+            Uow.Get<Role>().Items.Add(new Role { IdRole = roleId, NomRole = $"R{roleId}" });
+            Uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 100 + roleId, IdRole = roleId, Login = "u" });
+            foreach (var g in gates) Uow.Get<DroitRole>().Items.Add(new DroitRole { IdRole = roleId, IdDroit = g });
+            foreach (var c in roleRows ?? Array.Empty<string>()) Uow.Get<RolePermission>().Items.Add(new RolePermission { IdRole = roleId, PermissionCode = c, IsGranted = true });
             return (await Auth.GetUserDetailedPermissionsAsync(100 + roleId)).GrantedPermissions.ToHashSet();
         }
     }

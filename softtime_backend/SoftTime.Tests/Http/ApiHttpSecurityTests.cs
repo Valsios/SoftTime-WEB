@@ -175,12 +175,12 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task FormerGap_Activate_with_gate_1_refuses_a_base_missing_from_BDD_AUTORISE()
     {
-        Assert.DoesNotContain(_f.Store.GetRepo<BddAutorisee>().Items, a => a.IdResponsable == 10034 && a.IdBdd == 3034);
+        Assert.DoesNotContain(_f.Store.Get<BddAutorisee>().Items, a => a.IdResponsable == 10034 && a.IdBdd == 3034);
         var (resp, text) = await Send("joel", "POST", "/api/v1/sage-databases/activate", null, ApiFactory.OtherSageName);
         ApiFactory.Report($"V3|activate base non attribuée|joel|{(int)resp.StatusCode}|{Format(resp, text)}|{Trunc(text)}");
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
         Assert.Contains("Vous n'avez pas accès à cette base.", text);
-        Assert.DoesNotContain(_f.Store.GetRepo<BddAutorisee>().Items, a => a.IdResponsable == 10034 && a.IdBdd == 3034);
+        Assert.DoesNotContain(_f.Store.Get<BddAutorisee>().Items, a => a.IdResponsable == 10034 && a.IdBdd == 3034);
     }
 
 

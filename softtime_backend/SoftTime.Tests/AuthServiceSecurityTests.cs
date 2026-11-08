@@ -1,5 +1,3 @@
-using System.Linq.Expressions;
-
 using AutoMapper;
 
 using Microsoft.AspNetCore.Identity;
@@ -10,35 +8,33 @@ using SoftTime.Application.Mapping;
 using SoftTime.Application.Security;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
-using SoftTime.Domain.Models;
-using SoftTime.Domain.Repositories;
 
 namespace SoftTime.Tests;
 
 public class AuthServiceSecurityTests
 {
     private readonly InMemoryUnitOfWork _uow;
-    private readonly FakeTokenService _tokens;
+    private readonly ITokenService _tokens;
     private readonly IMapper _mapper;
-    private readonly FakeEmailService _email;
+    private readonly IEmailService _email;
     private readonly PasswordHasher<Responsable> _hasher;
     private readonly AuthServices _auth;
 
     public AuthServiceSecurityTests()
     {
         _uow = new InMemoryUnitOfWork();
-        _tokens = new FakeTokenService();
+        _tokens = ServiceMocks.TokenService().Object;
 
         var config = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>());
         _mapper = config.CreateMapper();
 
-        _email = new FakeEmailService();
+        _email = ServiceMocks.EmailService().Object;
         _hasher = new PasswordHasher<Responsable>();
         _auth = new AuthServices(_uow, _tokens, _mapper, _email, new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), _hasher);
 
         // Seed default role
-        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
-        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 2, NomRole = "Utilisateur" });
+        _uow.Get<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
+        _uow.Get<Role>().Items.Add(new Role { IdRole = 2, NomRole = "Utilisateur" });
     }
 
     [Fact]
@@ -46,7 +42,7 @@ public class AuthServiceSecurityTests
     {
         var result = await _auth.CreateAdminAsync(new AdminSetupDto("Admin User", "admin", "AdminSecret123!", "admin@softtime.local"));
 
-        var adminUser = _uow.GetRepo<Responsable>().Items.Single(u => u.Login == "admin");
+        var adminUser = _uow.Get<Responsable>().Items.Single(u => u.Login == "admin");
 
         Assert.NotNull(adminUser.Password);
         Assert.NotEqual("AdminSecret123!", adminUser.Password);
@@ -66,7 +62,7 @@ public class AuthServiceSecurityTests
 
         var createdDto = await _auth.SaveUserAsync(userDto);
 
-        var savedEntity = _uow.GetRepo<Responsable>().Items.Single(u => u.Login == "testuser");
+        var savedEntity = _uow.Get<Responsable>().Items.Single(u => u.Login == "testuser");
         Assert.NotNull(savedEntity.Password);
         Assert.NotEqual("UserPassword456!", savedEntity.Password);
         Assert.True(PasswordHashClassifier.IsHashedPassword(savedEntity.Password));
@@ -83,7 +79,7 @@ public class AuthServiceSecurityTests
         var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(userDto));
 
         Assert.Equal("password", ex.Field);
-        Assert.Empty(_uow.GetRepo<Responsable>().Items);
+        Assert.Empty(_uow.Get<Responsable>().Items);
     }
 
     [Fact]
@@ -95,7 +91,7 @@ public class AuthServiceSecurityTests
 
         Assert.Equal("password", ex.Field);
         Assert.Contains("règles de sécurité", ex.Message);
-        Assert.Empty(_uow.GetRepo<Responsable>().Items.Where(u => u.Login == "weakuser"));
+        Assert.Empty(_uow.Get<Responsable>().Items.Where(u => u.Login == "weakuser"));
     }
 
     [Fact]
@@ -106,7 +102,7 @@ public class AuthServiceSecurityTests
         var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(userDto));
 
         Assert.Equal("nom", ex.Field);
-        Assert.Empty(_uow.GetRepo<Responsable>().Items);
+        Assert.Empty(_uow.Get<Responsable>().Items);
     }
 
     [Fact]
@@ -117,7 +113,7 @@ public class AuthServiceSecurityTests
         var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(userDto));
 
         Assert.Equal("login", ex.Field);
-        Assert.Empty(_uow.GetRepo<Responsable>().Items);
+        Assert.Empty(_uow.Get<Responsable>().Items);
     }
 
     [Fact]
@@ -128,13 +124,13 @@ public class AuthServiceSecurityTests
         var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(userDto));
 
         Assert.Equal("roleId", ex.Field);
-        Assert.Empty(_uow.GetRepo<Responsable>().Items);
+        Assert.Empty(_uow.Get<Responsable>().Items);
     }
 
     [Fact]
     public async Task SaveUserAsync_NewUser_WithDuplicateLogin_ThrowsFieldValidation()
     {
-        _uow.GetRepo<Responsable>().Items.Add(new Responsable
+        _uow.Get<Responsable>().Items.Add(new Responsable
         {
             IdResponsable = 50,
             IdRole = 2,
@@ -148,14 +144,14 @@ public class AuthServiceSecurityTests
         var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(userDto));
 
         Assert.Equal("login", ex.Field);
-        Assert.Single(_uow.GetRepo<Responsable>().Items);
+        Assert.Single(_uow.Get<Responsable>().Items);
     }
 
     [Fact]
     public async Task SaveUserAsync_ExistingLogin_AllowsProfileUpdateEvenIfLoginIsAlreadyDuplicated()
     {
         var hash = _hasher.HashPassword(new Responsable(), "Secret123!");
-        _uow.GetRepo<Responsable>().Items.AddRange(new[]
+        _uow.Get<Responsable>().Items.AddRange(new[]
         {
             new Responsable { IdResponsable = 60, IdRole = 2, NomResponsable = "Premier", Login = "shared", Password = hash },
             new Responsable { IdResponsable = 61, IdRole = 2, NomResponsable = "Second", Login = "shared", Password = hash },
@@ -166,7 +162,7 @@ public class AuthServiceSecurityTests
         var result = await _auth.SaveUserAsync(updateDto);
 
         Assert.Equal("Premier Renommé", result.Nom);
-        Assert.Equal(hash, _uow.GetRepo<Responsable>().Items.Single(u => u.IdResponsable == 60).Password);
+        Assert.Equal(hash, _uow.Get<Responsable>().Items.Single(u => u.IdResponsable == 60).Password);
     }
 
     [Fact]
@@ -176,7 +172,7 @@ public class AuthServiceSecurityTests
             _auth.CreateAdminAsync(new AdminSetupDto("Admin User", "admin", "weakpass", null)));
 
         Assert.Contains("règles de sécurité", ex.Message);
-        Assert.Empty(_uow.GetRepo<Responsable>().Items);
+        Assert.Empty(_uow.Get<Responsable>().Items);
     }
 
     [Fact]
@@ -191,14 +187,14 @@ public class AuthServiceSecurityTests
             Login = "weakupdate",
             Password = initialHash
         };
-        _uow.GetRepo<Responsable>().Items.Add(user);
+        _uow.Get<Responsable>().Items.Add(user);
 
         var updateDto = new UserDto(12, 2, "User To Update", "weakupdate", "M011", "azerty");
 
         var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(updateDto));
 
         Assert.Equal("password", ex.Field);
-        var unchanged = _uow.GetRepo<Responsable>().Items.Single(u => u.IdResponsable == 12);
+        var unchanged = _uow.Get<Responsable>().Items.Single(u => u.IdResponsable == 12);
         Assert.Equal(initialHash, unchanged.Password);
     }
 
@@ -214,13 +210,13 @@ public class AuthServiceSecurityTests
             Login = "existing",
             Password = initialHash
         };
-        _uow.GetRepo<Responsable>().Items.Add(user);
+        _uow.Get<Responsable>().Items.Add(user);
 
         // Update profile with null / empty password
         var updateDto = new UserDto(10, 2, "Existing User Renamed", "existing", "M003", null);
         var resultDto = await _auth.SaveUserAsync(updateDto);
 
-        var updatedEntity = _uow.GetRepo<Responsable>().Items.Single(u => u.IdResponsable == 10);
+        var updatedEntity = _uow.Get<Responsable>().Items.Single(u => u.IdResponsable == 10);
         Assert.Equal("Existing User Renamed", updatedEntity.NomResponsable);
         Assert.Equal(initialHash, updatedEntity.Password);
         Assert.Null(resultDto.Password);
@@ -238,12 +234,12 @@ public class AuthServiceSecurityTests
             Login = "toupdate",
             Password = initialHash
         };
-        _uow.GetRepo<Responsable>().Items.Add(user);
+        _uow.Get<Responsable>().Items.Add(user);
 
         var updateDto = new UserDto(11, 2, "User To Update", "toupdate", "M004", "BrandNewSecret789!");
         var resultDto = await _auth.SaveUserAsync(updateDto);
 
-        var updatedEntity = _uow.GetRepo<Responsable>().Items.Single(u => u.IdResponsable == 11);
+        var updatedEntity = _uow.Get<Responsable>().Items.Single(u => u.IdResponsable == 11);
         Assert.NotEqual(initialHash, updatedEntity.Password);
         Assert.True(PasswordHashClassifier.IsHashedPassword(updatedEntity.Password));
 
@@ -263,7 +259,7 @@ public class AuthServiceSecurityTests
             Login = "admin",
             Password = _hasher.HashPassword(new Responsable(), "CorrectPassword123")
         };
-        _uow.GetRepo<Responsable>().Items.Add(user);
+        _uow.Get<Responsable>().Items.Add(user);
 
         var response = await _auth.LoginAsync(new LoginRequest("admin", "CorrectPassword123"));
 
@@ -282,7 +278,7 @@ public class AuthServiceSecurityTests
             Login = "admin",
             Password = _hasher.HashPassword(new Responsable(), "CorrectPassword123")
         };
-        _uow.GetRepo<Responsable>().Items.Add(user);
+        _uow.Get<Responsable>().Items.Add(user);
 
         var ex = await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _auth.LoginAsync(new LoginRequest("admin", "WrongPassword!")));
@@ -323,7 +319,7 @@ public class AuthServiceSecurityTests
             Login = "admin",
             Password = _hasher.HashPassword(new Responsable(), "Secret")
         };
-        _uow.GetRepo<Responsable>().Items.Add(user);
+        _uow.Get<Responsable>().Items.Add(user);
 
         await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _auth.LoginAsync(new LoginRequest(injectionLogin, "Secret")));
@@ -340,7 +336,7 @@ public class AuthServiceSecurityTests
             Login = "legacy_admin",
             Password = "plain_text_password"
         };
-        _uow.GetRepo<Responsable>().Items.Add(legacyUser);
+        _uow.Get<Responsable>().Items.Add(legacyUser);
 
         Assert.False(PasswordHashClassifier.IsHashedPassword(legacyUser.Password));
 
@@ -371,7 +367,7 @@ public class AuthServiceSecurityTests
             Login = "v2user",
             Password = v2Hash
         };
-        _uow.GetRepo<Responsable>().Items.Add(user);
+        _uow.Get<Responsable>().Items.Add(user);
 
         Assert.True(PasswordHashClassifier.IsIdentityV2(user.Password));
         Assert.False(PasswordHashClassifier.IsIdentityV3(user.Password));
@@ -402,7 +398,7 @@ public class AuthServiceSecurityTests
             Login = "v2user_wrong",
             Password = v2Hash
         };
-        _uow.GetRepo<Responsable>().Items.Add(user);
+        _uow.Get<Responsable>().Items.Add(user);
 
         await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _auth.LoginAsync(new LoginRequest("v2user_wrong", "completely_wrong_pwd")));
@@ -424,7 +420,7 @@ public class AuthServiceSecurityTests
             Login = "v3user",
             Password = v3Hash
         };
-        _uow.GetRepo<Responsable>().Items.Add(user);
+        _uow.Get<Responsable>().Items.Add(user);
 
         var response = await _auth.LoginAsync(new LoginRequest("v3user", "v3_password"));
         Assert.NotNull(response);
@@ -444,7 +440,7 @@ public class AuthServiceSecurityTests
             Login = "corrupt",
             Password = "NOT_A_VALID_BASE64_HASH!#@$%"
         };
-        _uow.GetRepo<Responsable>().Items.Add(user);
+        _uow.Get<Responsable>().Items.Add(user);
 
         var ex = await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _auth.LoginAsync(new LoginRequest("corrupt", "some_guess")));
@@ -466,7 +462,7 @@ public class AuthServiceSecurityTests
         var userV3 = new Responsable { IdResponsable = 104, Login = "v3_user", Password = v3Hash };
         var userEmpty = new Responsable { IdResponsable = 105, Login = "empty_user", Password = "" };
 
-        _uow.GetRepo<Responsable>().Items.AddRange(new[] { userPlain1, userPlain2, userV2, userV3, userEmpty });
+        _uow.Get<Responsable>().Items.AddRange(new[] { userPlain1, userPlain2, userV2, userV3, userEmpty });
 
         // First run: only userPlain1 and userPlain2 must be migrated
         var migratedCount = await UserAccountConfiguration.MigrateLegacyPasswordsAsync(_uow, _hasher);
@@ -496,7 +492,7 @@ public class AuthServiceSecurityTests
     public async Task MigrateLegacyPasswordsAsync_AuthenticationAfterMigration_SucceedsWithOriginalPasswords()
     {
         var user = new Responsable { IdResponsable = 201, IdRole = 1, Login = "migrated_admin", Password = "InitialPassword123" };
-        _uow.GetRepo<Responsable>().Items.Add(user);
+        _uow.Get<Responsable>().Items.Add(user);
 
         // Run migration
         await UserAccountConfiguration.MigrateLegacyPasswordsAsync(_uow, _hasher);
@@ -515,7 +511,7 @@ public class AuthServiceSecurityTests
     public async Task MigrateLegacyPasswordsAsync_WhenCancelled_PreservesExistingData()
     {
         var user = new Responsable { IdResponsable = 301, Login = "cancel_test", Password = "initial_plain" };
-        _uow.GetRepo<Responsable>().Items.Add(user);
+        _uow.Get<Responsable>().Items.Add(user);
 
         using var cts = new CancellationTokenSource();
         cts.Cancel(); // cancelled before execution
@@ -548,7 +544,7 @@ public class AuthServiceSecurityTests
         var userCorrupt = new Responsable { IdResponsable = 408, Login = "corrupt_user", Password = corruptedV3 };
         var userEmpty = new Responsable { IdResponsable = 409, Login = "empty_user", Password = "" };
 
-        _uow.GetRepo<Responsable>().Items.AddRange(new[]
+        _uow.Get<Responsable>().Items.AddRange(new[]
         {
             userPlain, userV2, userV3Std, userV3Sha512, userV3Sha512_32b, userMd5, userBcrypt, userCorrupt, userEmpty
         });
@@ -600,7 +596,7 @@ public class AuthServiceSecurityTests
             Login = "v2_login_user",
             Password = v2Hash
         };
-        _uow.GetRepo<Responsable>().Items.Add(user);
+        _uow.Get<Responsable>().Items.Add(user);
 
         var loginResult = await _auth.LoginAsync(new LoginRequest("v2_login_user", "v2_secret_password"));
         Assert.NotNull(loginResult);
@@ -622,7 +618,7 @@ public class AuthServiceSecurityTests
             Login = "sha512_user",
             Password = hash512
         };
-        _uow.GetRepo<Responsable>().Items.Add(user);
+        _uow.Get<Responsable>().Items.Add(user);
 
         var loginResult = await _auth.LoginAsync(new LoginRequest("sha512_user", "sha512_secret_pwd"));
         Assert.NotNull(loginResult);
@@ -640,7 +636,7 @@ public class AuthServiceSecurityTests
             Login = "md5_locked_user",
             Password = md5Hash
         };
-        _uow.GetRepo<Responsable>().Items.Add(user);
+        _uow.Get<Responsable>().Items.Add(user);
 
         // Attempting to log in by submitting the raw MD5 hash must fail
         await Assert.ThrowsAsync<UnauthorizedException>(() =>
@@ -657,7 +653,7 @@ public class AuthServiceSecurityTests
     [Fact]
     public async Task GetUsersPagedAsync_ReturnsRequestedPageOrderedByName()
     {
-        _uow.GetRepo<Responsable>().Items.AddRange(new[]
+        _uow.Get<Responsable>().Items.AddRange(new[]
         {
             new Responsable { IdResponsable = 1, IdRole = 1, NomResponsable = "Zoe", Login = "zoe" },
             new Responsable { IdResponsable = 2, IdRole = 2, NomResponsable = "Alice", Login = "alice" },
@@ -688,101 +684,6 @@ public class AuthServiceSecurityTests
     }
 
     #region In-Memory Test Doubles
-
-    private sealed class InMemoryRepository<T> : IRepository<T> where T : class
-    {
-        public List<T> Items { get; } = new();
-
-        public IQueryable<T> Query() => Items.AsQueryable();
-
-        public Task<T?> GetByIdAsync(object id, CancellationToken cancellationToken = default)
-        {
-            var decId = Convert.ToDecimal(id);
-            var match = Items.FirstOrDefault(i =>
-            {
-                if (i is Responsable r && r.IdResponsable == decId) return true;
-                if (i is Role ro && ro.IdRole == decId) return true;
-                return false;
-            });
-            return Task.FromResult(match);
-        }
-
-        public Task<List<T>> ListAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default)
-        {
-            var func = predicate.Compile();
-            return Task.FromResult(Items.Where(func).ToList());
-        }
-
-        public Task<List<T>> ListLatestAsync(
-            Expression<Func<T, bool>> predicate,
-            Expression<Func<T, DateTime?>> orderByDescending,
-            int take,
-            CancellationToken cancellationToken = default)
-        {
-            var func = predicate.Compile();
-            var orderFunc = orderByDescending.Compile();
-            return Task.FromResult(Items.Where(func).OrderByDescending(orderFunc).Take(take).ToList());
-        }
-
-        public Task AddAsync(T entity, CancellationToken cancellationToken = default)
-        {
-            if (entity is Responsable r && r.IdResponsable == 0)
-            {
-                r.IdResponsable = Items.Count == 0 ? 1 : Items.OfType<Responsable>().Max(x => x.IdResponsable) + 1;
-            }
-            Items.Add(entity);
-            return Task.CompletedTask;
-        }
-
-        public Task AddRangeAsync(IEnumerable<T> entities, CancellationToken cancellationToken = default)
-        {
-            foreach (var e in entities)
-                AddAsync(e, cancellationToken);
-            return Task.CompletedTask;
-        }
-
-        public void Update(T entity) { }
-        public void Remove(T entity) => Items.Remove(entity);
-        public void RemoveRange(IEnumerable<T> entities)
-        {
-            foreach (var e in entities.ToList())
-                Items.Remove(e);
-        }
-    }
-
-    private sealed class InMemoryUnitOfWork : IUnitOfWork
-    {
-        private readonly Dictionary<Type, object> _repos = new();
-
-        public InMemoryRepository<T> GetRepo<T>() where T : class
-        {
-            if (!_repos.TryGetValue(typeof(T), out var r))
-            {
-                r = new InMemoryRepository<T>();
-                _repos[typeof(T)] = r;
-            }
-            return (InMemoryRepository<T>)r;
-        }
-
-        public IRepository<T> Repository<T>() where T : class => GetRepo<T>();
-
-        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) => Task.FromResult(1);
-        public Task ExecuteSqlAsync(string sql, CancellationToken cancellationToken = default) => Task.CompletedTask;
-    }
-
-    private sealed class FakeTokenService : ITokenService
-    {
-        public string CreateToken(TokenSubject subject)
-            => $"FAKE_JWT_TOKEN_{subject.UserId}_{subject.Login}";
-    }
-
-    private sealed class FakeEmailService : IEmailService
-    {
-        public bool EstConfigure => true;
-        public Task<bool> EnvoyerAsync(EmailMessage message, CancellationToken cancellationToken = default) => Task.FromResult(true);
-        public Task<bool> SendUserCredentialsAsync(AccountMailRecipient destinataire, string? password, CancellationToken cancellationToken = default) => Task.FromResult(true);
-        public Task<bool> SendUserUpdateAsync(AccountMailRecipient destinataire, string? newPassword, bool pseudoChanged, bool passwordChanged, CancellationToken cancellationToken = default) => Task.FromResult(true);
-    }
 
     #endregion
 }

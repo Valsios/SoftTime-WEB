@@ -30,7 +30,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
 
     public static readonly string ReportPath = Path.Combine(Path.GetTempPath(), "softtime-http-report.txt");
 
-    public SnapshotInMemoryUnitOfWork Store { get; } = new();
+    public InMemoryUnitOfWork Store { get; } = new();
 
     static ApiFactory()
     {
@@ -72,7 +72,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
 
     private void Seed()
     {
-        var roles = Store.GetRepo<Role>().Items;
+        var roles = Store.Get<Role>().Items;
         roles.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
         roles.Add(new Role { IdRole = 29, NomRole = "Consultation" });
         roles.Add(new Role { IdRole = 40, NomRole = "Gestionnaire" });
@@ -80,7 +80,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         roles.Add(new Role { IdRole = 91, NomRole = "Cible" });
         roles.Add(new Role { IdRole = 10034, NomRole = "Utilisateur ordinaire" });
 
-        var users = Store.GetRepo<Responsable>().Items;
+        var users = Store.Get<Responsable>().Items;
         users.Add(new Responsable { IdResponsable = 14, IdRole = 1, Login = "admin", NomResponsable = "Admin" });
         users.Add(new Responsable { IdResponsable = 10034, IdRole = 10034, Login = "joel", NomResponsable = "Joel" });
         users.Add(new Responsable { IdResponsable = 10030, IdRole = 29, Login = "user1", NomResponsable = "User1" });
@@ -91,33 +91,33 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         users.Add(new Responsable { IdResponsable = 10053, IdRole = 91, Login = "supprimable", NomResponsable = "Supprimable" });
 
         // Profil « comme joel » : portes 1 et 3 via le jeton, permissions fines de lecture seulement.
-        var perms = Store.GetRepo<UserPermission>().Items;
+        var perms = Store.Get<UserPermission>().Items;
         foreach (var code in new[] { $"SAGE:{SageName}:READ", "POINTEUSE:PTG:READ", "PROC:SHIFTS", "PROC:EMPLOYEE_PLANNING" })
             perms.Add(new UserPermission { IdResponsable = 10034, PermissionCode = code, IsGranted = true });
-        Store.GetRepo<RolePermission>().Items.Add(new RolePermission { IdRole = 29, PermissionCode = "REPORTS:REPORTS", IsGranted = true });
+        Store.Get<RolePermission>().Items.Add(new RolePermission { IdRole = 29, PermissionCode = "REPORTS:REPORTS", IsGranted = true });
 
-        var sages = Store.GetRepo<BddSage>().Items;
+        var sages = Store.Get<BddSage>().Items;
         sages.Add(new BddSage { Id = 3033, NomBd = SageName, Serveur = "invalid.host.test", TLogin = "x", TMdp = FakeSagePassword, TypeAuth = true });
         sages.Add(new BddSage { Id = 3034, NomBd = OtherSageName, Serveur = "invalid.host.test", TLogin = "x", TMdp = FakeSagePassword, TypeAuth = true });
         sages.Add(new BddSage { Id = 3036, NomBd = "MODIF_SAGE", Serveur = "invalid.host.test", TLogin = "x", TMdp = FakeSagePassword, TypeAuth = true });
         sages.Add(new BddSage { Id = 3035, NomBd = "JETABLE_SAGE", Serveur = "invalid.host.test", TLogin = "x", TMdp = FakeSagePassword, TypeAuth = true });
-        var pointeuses = Store.GetRepo<BddPointeuse>().Items;
+        var pointeuses = Store.Get<BddPointeuse>().Items;
         pointeuses.Add(new BddPointeuse { Id = 1, NomBd = "PTG", Serveur = "invalid.host.test", TLogin = "x", TMdp = FakePointeusePassword, TypeAuth = true, Active = true });
         pointeuses.Add(new BddPointeuse { Id = 3, NomBd = "MODIF_PTG", Serveur = "invalid.host.test", TLogin = "x", TMdp = FakePointeusePassword, TypeAuth = true });
         pointeuses.Add(new BddPointeuse { Id = 2, NomBd = "JETABLE_PTG", Serveur = "invalid.host.test", TLogin = "x", TMdp = FakePointeusePassword, TypeAuth = true });
 
         // Portes du rôle « Utilisateur ordinaire » (1 et 3), comme le jeton de test de joel.
-        Store.GetRepo<DroitRole>().Items.Add(new DroitRole { IdDroitRole = 1, IdRole = 10034, IdDroit = 1 });
-        Store.GetRepo<DroitRole>().Items.Add(new DroitRole { IdDroitRole = 2, IdRole = 10034, IdDroit = 3 });
-        Store.GetRepo<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = 1, IdResponsable = 14, IdBdd = 3033 });
-        Store.GetRepo<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = 2, IdResponsable = 10053, IdBdd = 3033 });
+        Store.Get<DroitRole>().Items.Add(new DroitRole { IdDroitRole = 1, IdRole = 10034, IdDroit = 1 });
+        Store.Get<DroitRole>().Items.Add(new DroitRole { IdDroitRole = 2, IdRole = 10034, IdDroit = 3 });
+        Store.Get<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = 1, IdResponsable = 14, IdBdd = 3033 });
+        Store.Get<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = 2, IdResponsable = 10053, IdBdd = 3033 });
         foreach (var code in new[] { "PROC:SHIFTS", "SAGE:SFOI_PAIE2025:READ" })
             perms.Add(new UserPermission { IdResponsable = 10053, PermissionCode = code, IsGranted = true });
 
         // Étape 4b-5 : usage d'une base. joel a sa base cochée dans « Accès bases » (comme après la migration des données).
-        var access = Store.GetRepo<BddAutorisee>().Items;
+        var access = Store.Get<BddAutorisee>().Items;
         access.Add(new BddAutorisee { IdBddAutorise = 3, IdResponsable = 10034, IdBdd = 3033 });
-        Store.GetRepo<ParametrePointeuse>().Items.Add(new ParametrePointeuse { IdPoint = 1 });
+        Store.Get<ParametrePointeuse>().Items.Add(new ParametrePointeuse { IdPoint = 1 });
         void Account(decimal id, decimal role, string login, bool linked, params string[] codes)
         {
             users.Add(new Responsable { IdResponsable = id, IdRole = role, Login = login, NomResponsable = login });

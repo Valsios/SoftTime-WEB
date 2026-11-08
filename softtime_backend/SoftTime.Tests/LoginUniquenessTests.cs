@@ -30,8 +30,8 @@ public class LoginUniquenessTests
 
     public LoginUniquenessTests()
     {
-        _uow.Inner.GetRepo<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
-        _uow.Inner.GetRepo<Role>().Items.Add(new Role { IdRole = 2, NomRole = "Utilisateur" });
+        _uow.Inner.Get<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
+        _uow.Inner.Get<Role>().Items.Add(new Role { IdRole = 2, NomRole = "Utilisateur" });
     }
 
     // ---------- Clé de login ----------
@@ -96,7 +96,7 @@ public class LoginUniquenessTests
 
         // Assert
         Assert.Equal("Identifiants invalides.", ex.Message);
-        Assert.Empty(_uow.Inner.GetRepo<RefreshTokenRecord>().Items);
+        Assert.Empty(_uow.Inner.Get<RefreshTokenRecord>().Items);
     }
 
     // ---------- Unicité à l'enregistrement ----------
@@ -117,7 +117,7 @@ public class LoginUniquenessTests
         // Assert
         Assert.Equal("login", ex.Field);
         Assert.Equal(LoginKey.TakenMessage, ex.Message);
-        Assert.Single(_uow.Inner.GetRepo<Responsable>().Items);
+        Assert.Single(_uow.Inner.Get<Responsable>().Items);
     }
 
     [Fact]
@@ -147,7 +147,7 @@ public class LoginUniquenessTests
 
         // Assert
         Assert.Equal(new[] { "SoftTime.CreateAdmin" }, _uow.LockedResources);
-        Assert.Single(_uow.Inner.GetRepo<Responsable>().Items);
+        Assert.Single(_uow.Inner.Get<Responsable>().Items);
     }
 
     [Fact]
@@ -163,7 +163,7 @@ public class LoginUniquenessTests
 
         // Assert
         Assert.StartsWith("Des comptes existent déjà", ex.Message);
-        var only = Assert.Single(_uow.Inner.GetRepo<Responsable>().Items);
+        var only = Assert.Single(_uow.Inner.Get<Responsable>().Items);
         Assert.Equal("intrus", only.Login);
     }
 
@@ -180,7 +180,7 @@ public class LoginUniquenessTests
             Capture(() => second.CreateAdminAsync(new AdminSetupDto("Admin B", "admin-b", AdminPassword, null))));
 
         // Assert
-        Assert.Single(_uow.Inner.GetRepo<Responsable>().Items);
+        Assert.Single(_uow.Inner.Get<Responsable>().Items);
         Assert.Single(results, r => r is null);
         Assert.Single(results, r => r is DomainException);
     }
@@ -210,7 +210,7 @@ public class LoginUniquenessTests
     {
         var user = new Responsable { IdResponsable = id, IdRole = role, Login = login, NomResponsable = login };
         user.Password = _hasher.HashPassword(user, Password);
-        _uow.Inner.GetRepo<Responsable>().Items.Add(user);
+        _uow.Inner.Get<Responsable>().Items.Add(user);
     }
 
     /// <summary>Unité de travail en mémoire dont le verrou exclusif sérialise réellement les appels.</summary>
@@ -218,7 +218,7 @@ public class LoginUniquenessTests
     {
         private readonly SemaphoreSlim _lock = new(1, 1);
 
-        public SnapshotInMemoryUnitOfWork Inner { get; } = new();
+        public InMemoryUnitOfWork Inner { get; } = new();
         public List<string> LockedResources { get; } = new();
         public Action? BeforeLockedAction { get; set; }
 

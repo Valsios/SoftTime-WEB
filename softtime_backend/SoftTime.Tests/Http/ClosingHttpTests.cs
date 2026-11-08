@@ -39,22 +39,22 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     /// Deux comptes (rôle 91 sans droits) et un salarié planifié le lundi 3 novembre 2025, sans pointage :
     /// une anomalie « pointage manquant » à présenter avec ses nom et prénom.
     /// </summary>
-    private static void Seed(SnapshotInMemoryUnitOfWork store)
+    private static void Seed(InMemoryUnitOfWork store)
     {
-        var users = store.GetRepo<Responsable>().Items;
+        var users = store.Get<Responsable>().Items;
         if (users.Any(u => u.IdResponsable == LecteurId))
             return;
 
-        var perms = store.GetRepo<UserPermission>().Items;
+        var perms = store.Get<UserPermission>().Items;
         users.Add(new Responsable { IdResponsable = LecteurId, IdRole = 91, Login = "closereader", NomResponsable = "closereader" });
-        store.GetRepo<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = (int)LecteurId, IdResponsable = LecteurId, IdBdd = 3033 });
+        store.Get<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = (int)LecteurId, IdResponsable = LecteurId, IdBdd = 3033 });
         perms.Add(new UserPermission { IdResponsable = LecteurId, PermissionCode = "REPORTS:CLOSING", IsGranted = true });
         perms.Add(new UserPermission { IdResponsable = LecteurId, PermissionCode = $"SAGE:{ApiFactory.SageName}:READ", IsGranted = true });
         // L'analyse lit les pointages : la base pointeuse active doit aussi être lisible (comme le pré-traitement).
         perms.Add(new UserPermission { IdResponsable = LecteurId, PermissionCode = "POINTEUSE:PTG:READ", IsGranted = true });
         // Base SAGE cochée et lisible, mais sans lecture de la base pointeuse.
         users.Add(new Responsable { IdResponsable = SansPointeuseId, IdRole = 91, Login = "closenopte", NomResponsable = "closenopte" });
-        store.GetRepo<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = (int)SansPointeuseId, IdResponsable = SansPointeuseId, IdBdd = 3033 });
+        store.Get<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = (int)SansPointeuseId, IdResponsable = SansPointeuseId, IdBdd = 3033 });
         perms.Add(new UserPermission { IdResponsable = SansPointeuseId, PermissionCode = "REPORTS:CLOSING", IsGranted = true });
         perms.Add(new UserPermission { IdResponsable = SansPointeuseId, PermissionCode = $"SAGE:{ApiFactory.SageName}:READ", IsGranted = true });
         // Permission fine de clôture, mais base non cochée dans « Accès bases ».
@@ -62,12 +62,12 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
         perms.Add(new UserPermission { IdResponsable = SansBaseId, PermissionCode = "REPORTS:CLOSING", IsGranted = true });
 
         var lundi = new DateTime(2025, 11, 3);
-        store.GetRepo<CardPaie>().Items.Add(new CardPaie
+        store.Get<CardPaie>().Items.Add(new CardPaie
         {
             Id = 70777, SageMatricule = "00777", SageNom = "Testnom", SagePrenom = "Testprenom",
             Departement = "DEP1", SageBdd = ApiFactory.SageName
         });
-        store.GetRepo<PlanningSalarie>().Items.Add(new PlanningSalarie
+        store.Get<PlanningSalarie>().Items.Add(new PlanningSalarie
         {
             Id = 70777, IdSal = 70777, DateP = lundi, Ha = lundi.AddHours(8), Hd = lundi.AddHours(17), OffP = false,
             BddSage = ApiFactory.SageName

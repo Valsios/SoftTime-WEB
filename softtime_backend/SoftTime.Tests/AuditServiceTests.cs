@@ -1,8 +1,5 @@
-using System.Linq.Expressions;
-
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
-using SoftTime.Domain.Repositories;
 using SoftTime.Infrastructure.Services;
 
 namespace SoftTime.Tests;
@@ -33,7 +30,7 @@ public class AuditServiceTests
 
         await _service.SaveConfigAsync(dto);
 
-        var repo = _uow.GetRepo<SuiviConfiguration>();
+        var repo = _uow.Get<SuiviConfiguration>();
         Assert.Single(repo.Items);
         var added = repo.Items[0];
         Assert.Equal("T_EMPLOYEE", added.Tables);
@@ -56,14 +53,14 @@ public class AuditServiceTests
 
         await Assert.ThrowsAsync<DomainException>(() => _service.SaveConfigAsync(dto));
 
-        var repo = _uow.GetRepo<SuiviConfiguration>();
+        var repo = _uow.Get<SuiviConfiguration>();
         Assert.Empty(repo.Items);
     }
 
     [Fact]
     public async Task SaveConfigAsync_Update_WithUnchangedLegacyType_DoesNotThrowAndPreservesValue()
     {
-        var repo = _uow.GetRepo<SuiviConfiguration>();
+        var repo = _uow.Get<SuiviConfiguration>();
         var existing = new SuiviConfiguration
         {
             Id = 42,
@@ -87,7 +84,7 @@ public class AuditServiceTests
     [Fact]
     public async Task SaveConfigAsync_Update_WithModifiedValidType_ValidatesAndNormalizes()
     {
-        var repo = _uow.GetRepo<SuiviConfiguration>();
+        var repo = _uow.Get<SuiviConfiguration>();
         var existing = new SuiviConfiguration
         {
             Id = 10,
@@ -109,7 +106,7 @@ public class AuditServiceTests
     [Fact]
     public async Task SaveConfigAsync_Update_WithModifiedInvalidType_ThrowsDomainExceptionAndLeavesOriginal()
     {
-        var repo = _uow.GetRepo<SuiviConfiguration>();
+        var repo = _uow.Get<SuiviConfiguration>();
         var existing = new SuiviConfiguration
         {
             Id = 10,
@@ -137,86 +134,6 @@ public class AuditServiceTests
     }
 
     #region In-Memory Test Doubles
-
-    private sealed class InMemoryRepository<T> : IRepository<T> where T : class
-    {
-        public List<T> Items { get; } = new();
-
-        public IQueryable<T> Query() => Items.AsQueryable();
-
-        public Task<T?> GetByIdAsync(object id, CancellationToken cancellationToken = default)
-        {
-            var intId = Convert.ToInt32(id);
-            var match = Items.FirstOrDefault(i =>
-            {
-                if (i is SuiviConfiguration c && c.Id == intId) return true;
-                return false;
-            });
-            return Task.FromResult(match);
-        }
-
-        public Task<List<T>> ListAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default)
-        {
-            var func = predicate.Compile();
-            return Task.FromResult(Items.Where(func).ToList());
-        }
-
-        public Task<List<T>> ListLatestAsync(
-            Expression<Func<T, bool>> predicate,
-            Expression<Func<T, DateTime?>> orderByDescending,
-            int take,
-            CancellationToken cancellationToken = default)
-        {
-            var func = predicate.Compile();
-            var orderFunc = orderByDescending.Compile();
-            return Task.FromResult(Items.Where(func).OrderByDescending(orderFunc).Take(take).ToList());
-        }
-
-        public Task AddAsync(T entity, CancellationToken cancellationToken = default)
-        {
-            if (entity is SuiviConfiguration c && c.Id == 0)
-            {
-                c.Id = Items.Count == 0 ? 1 : Items.OfType<SuiviConfiguration>().Max(x => x.Id) + 1;
-            }
-            Items.Add(entity);
-            return Task.CompletedTask;
-        }
-
-        public Task AddRangeAsync(IEnumerable<T> entities, CancellationToken cancellationToken = default)
-        {
-            foreach (var e in entities)
-                AddAsync(e, cancellationToken);
-            return Task.CompletedTask;
-        }
-
-        public void Update(T entity) { }
-        public void Remove(T entity) => Items.Remove(entity);
-        public void RemoveRange(IEnumerable<T> entities)
-        {
-            foreach (var e in entities.ToList())
-                Items.Remove(e);
-        }
-    }
-
-    private sealed class InMemoryUnitOfWork : IUnitOfWork
-    {
-        private readonly Dictionary<Type, object> _repos = new();
-
-        public InMemoryRepository<T> GetRepo<T>() where T : class
-        {
-            if (!_repos.TryGetValue(typeof(T), out var r))
-            {
-                r = new InMemoryRepository<T>();
-                _repos[typeof(T)] = r;
-            }
-            return (InMemoryRepository<T>)r;
-        }
-
-        public IRepository<T> Repository<T>() where T : class => GetRepo<T>();
-
-        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) => Task.FromResult(1);
-        public Task ExecuteSqlAsync(string sql, CancellationToken cancellationToken = default) => Task.CompletedTask;
-    }
 
     #endregion
 }

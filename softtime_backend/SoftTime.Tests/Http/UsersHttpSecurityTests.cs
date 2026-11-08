@@ -65,15 +65,15 @@ public class UsersHttpSecurityTests : IClassFixture<ApiFactory>
     {
         var (created, _) = await Send("admin", "POST", "/api/v1/users", NewUser);
         Assert.True(created.IsSuccessStatusCode, created.StatusCode.ToString());
-        Assert.Contains(_f.Store.GetRepo<Responsable>().Items, u => u.Login == "nouveau");
+        Assert.Contains(_f.Store.Get<Responsable>().Items, u => u.Login == "nouveau");
 
         var (updated, _) = await Send("admin", "PUT", "/api/v1/users/10052", Promote);
         Assert.True(updated.IsSuccessStatusCode, updated.StatusCode.ToString());
-        Assert.Equal(40, _f.Store.GetRepo<Responsable>().Items.Single(u => u.IdResponsable == 10052).IdRole);
+        Assert.Equal(40, _f.Store.Get<Responsable>().Items.Single(u => u.IdResponsable == 10052).IdRole);
 
         var (deleted, _) = await Send("admin", "DELETE", "/api/v1/users/10051", null);
         Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
-        Assert.DoesNotContain(_f.Store.GetRepo<Responsable>().Items, u => u.IdResponsable == 10051);
+        Assert.DoesNotContain(_f.Store.Get<Responsable>().Items, u => u.IdResponsable == 10051);
     }
 
     [Fact]

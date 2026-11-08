@@ -18,7 +18,7 @@ namespace SoftTime.Tests;
 /// <summary>Étape 4b-5 : cache de 30 secondes des droits effectifs, invalidation immédiate, échec fermé.</summary>
 public class EffectiveRightsCacheTests
 {
-    private readonly SnapshotInMemoryUnitOfWork _store = new();
+    private readonly InMemoryUnitOfWork _store = new();
     private readonly FakeTime _time = new();
     private readonly EffectiveRightsCache _cache;
     private readonly EffectiveRightsService _rights;
@@ -31,14 +31,14 @@ public class EffectiveRightsCacheTests
         var mapper = new MapperConfiguration(c => c.AddProfile<MappingProfile>()).CreateMapper();
         _auth = new AuthServices(_store, new Token(), mapper, new Mail(), new AdminCurrentUser(), _rights, new PasswordHasher<Responsable>());
 
-        _store.GetRepo<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
-        _store.GetRepo<Role>().Items.Add(new Role { IdRole = 2, NomRole = "Utilisateur" });
-        _store.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 1, IdRole = 1, Login = "admin" });
-        _store.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 5, IdRole = 2, Login = "u5" });
-        _store.GetRepo<BddSage>().Items.Add(new BddSage { Id = 7, NomBd = "BASE1" });
-        _store.GetRepo<DroitRole>().Items.Add(new DroitRole { IdRole = 2, IdDroit = 1 });
-        _store.GetRepo<RolePermission>().Items.Add(new RolePermission { IdRole = 2, PermissionCode = "SAGE:BASE1:READ", IsGranted = true });
-        _store.GetRepo<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = 1, IdResponsable = 5, IdBdd = 7 });
+        _store.Get<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
+        _store.Get<Role>().Items.Add(new Role { IdRole = 2, NomRole = "Utilisateur" });
+        _store.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 1, IdRole = 1, Login = "admin" });
+        _store.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 5, IdRole = 2, Login = "u5" });
+        _store.Get<BddSage>().Items.Add(new BddSage { Id = 7, NomBd = "BASE1" });
+        _store.Get<DroitRole>().Items.Add(new DroitRole { IdRole = 2, IdDroit = 1 });
+        _store.Get<RolePermission>().Items.Add(new RolePermission { IdRole = 2, PermissionCode = "SAGE:BASE1:READ", IsGranted = true });
+        _store.Get<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = 1, IdResponsable = 5, IdBdd = 7 });
     }
 
     private async Task<bool> CanUse() => (await _rights.GetAsync(5)).CanUseDatabase(DatabaseKind.Sage, "BASE1");
@@ -47,7 +47,7 @@ public class EffectiveRightsCacheTests
     public async Task Rights_are_read_once_then_served_from_cache()
     {
         Assert.True(await CanUse());
-        _store.GetRepo<BddAutorisee>().Items.Clear();        // changement direct en base, sans invalidation
+        _store.Get<BddAutorisee>().Items.Clear();        // changement direct en base, sans invalidation
         Assert.True(await CanUse());                            // toujours servi par le cache
     }
 
@@ -55,7 +55,7 @@ public class EffectiveRightsCacheTests
     public async Task Cache_expires_after_30_seconds()
     {
         Assert.True(await CanUse());
-        _store.GetRepo<BddAutorisee>().Items.Clear();
+        _store.Get<BddAutorisee>().Items.Clear();
         _time.Advance(TimeSpan.FromSeconds(29));
         Assert.True(await CanUse());
         _time.Advance(TimeSpan.FromSeconds(2));
@@ -93,7 +93,7 @@ public class EffectiveRightsCacheTests
     public async Task Changing_the_role_of_an_account_invalidates_it()
     {
         Assert.True(await CanUse());
-        _store.GetRepo<Role>().Items.Add(new Role { IdRole = 3, NomRole = "Sans droit" });
+        _store.Get<Role>().Items.Add(new Role { IdRole = 3, NomRole = "Sans droit" });
         await _auth.SaveUserAsync(1, new SoftTime.Application.DTOs.UserDto(5, 3, "u5", "u5", null, null));
         Assert.False(await CanUse());
     }
@@ -104,7 +104,7 @@ public class EffectiveRightsCacheTests
         Assert.True(await CanUse());
         await _auth.DeleteUserAsync(1, 5);
         Assert.False(await CanUse());                           // compte disparu : plus aucun droit
-        Assert.DoesNotContain(_store.GetRepo<BddAutorisee>().Items, a => a.IdResponsable == 5);
+        Assert.DoesNotContain(_store.Get<BddAutorisee>().Items, a => a.IdResponsable == 5);
     }
 
     [Fact]
@@ -135,7 +135,7 @@ public class EffectiveRightsCacheTests
     {
         var tenant = new TenantConnectionService(_store, new Company("BASE1"), new NoUser(), _rights,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
-        _store.GetRepo<BddSage>().Items.Single().NomBd = "BASE1";
+        _store.Get<BddSage>().Items.Single().NomBd = "BASE1";
         await Assert.ThrowsAsync<ForbiddenException>(() => tenant.EnsureAuthorizedAsync());
     }
 
@@ -167,8 +167,8 @@ public class EffectiveRightsCacheTests
     /// <summary>Unité de travail qui échoue à la lecture des comptes quand Fail est vrai (message volontairement sensible).</summary>
     private sealed class FailingUnitOfWork : IUnitOfWork
     {
-        private readonly SnapshotInMemoryUnitOfWork _inner;
-        public FailingUnitOfWork(SnapshotInMemoryUnitOfWork inner) => _inner = inner;
+        private readonly InMemoryUnitOfWork _inner;
+        public FailingUnitOfWork(InMemoryUnitOfWork inner) => _inner = inner;
         public bool Fail { get; set; }
 
         public IRepository<T> Repository<T>() where T : class

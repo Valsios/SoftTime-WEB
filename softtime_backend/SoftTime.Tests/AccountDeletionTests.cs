@@ -14,7 +14,7 @@ namespace SoftTime.Tests;
 /// <summary>Supprimer un compte efface ses droits personnels et ses accès aux bases, dans la même sauvegarde.</summary>
 public class AccountDeletionTests
 {
-    private readonly SnapshotInMemoryUnitOfWork _store = new();
+    private readonly InMemoryUnitOfWork _store = new();
     private readonly RecordingUnitOfWork _uow;
     private readonly AuthServices _auth;
 
@@ -24,33 +24,33 @@ public class AccountDeletionTests
         var mapper = new MapperConfiguration(c => c.AddProfile<MappingProfile>()).CreateMapper();
         _auth = new AuthServices(_uow, new Token(), mapper, new Mail(), new AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<Responsable>());
 
-        _store.GetRepo<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
-        _store.GetRepo<Role>().Items.Add(new Role { IdRole = 2, NomRole = "Utilisateur" });
-        _store.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 1, IdRole = 1, Login = "admin" });
-        _store.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 2, IdRole = 2, Login = "cible" });
-        _store.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 3, IdRole = 2, Login = "autre" });
+        _store.Get<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
+        _store.Get<Role>().Items.Add(new Role { IdRole = 2, NomRole = "Utilisateur" });
+        _store.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 1, IdRole = 1, Login = "admin" });
+        _store.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 2, IdRole = 2, Login = "cible" });
+        _store.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 3, IdRole = 2, Login = "autre" });
         foreach (var id in new decimal[] { 2, 3 })
         {
-            _store.GetRepo<UserPermission>().Items.Add(new UserPermission { IdResponsable = id, PermissionCode = "PROC:SHIFTS", IsGranted = true });
-            _store.GetRepo<UserPermission>().Items.Add(new UserPermission { IdResponsable = id, PermissionCode = "REPORTS:REPORTS", IsGranted = false });
-            _store.GetRepo<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = (int)id, IdResponsable = id, IdBdd = 7 });
+            _store.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = id, PermissionCode = "PROC:SHIFTS", IsGranted = true });
+            _store.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = id, PermissionCode = "REPORTS:REPORTS", IsGranted = false });
+            _store.Get<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = (int)id, IdResponsable = id, IdBdd = 7 });
         }
-        _store.GetRepo<AuditDroit>().Items.Add(new AuditDroit { IdCible = 2, LoginOperateur = "admin" });
+        _store.Get<AuditDroit>().Items.Add(new AuditDroit { IdCible = 2, LoginOperateur = "admin" });
     }
 
     private int Rows(decimal id) =>
-        _store.GetRepo<UserPermission>().Items.Count(p => p.IdResponsable == id)
-        + _store.GetRepo<BddAutorisee>().Items.Count(a => a.IdResponsable == id);
+        _store.Get<UserPermission>().Items.Count(p => p.IdResponsable == id)
+        + _store.Get<BddAutorisee>().Items.Count(a => a.IdResponsable == id);
 
     [Fact]
     public async Task Deleting_an_account_removes_its_permissions_and_database_access_only()
     {
         await _auth.DeleteUserAsync(1, 2);
 
-        Assert.DoesNotContain(_store.GetRepo<Responsable>().Items, u => u.IdResponsable == 2);
+        Assert.DoesNotContain(_store.Get<Responsable>().Items, u => u.IdResponsable == 2);
         Assert.Equal(0, Rows(2));
         Assert.Equal(3, Rows(3));                                   // lignes des autres comptes intactes
-        Assert.Single(_store.GetRepo<AuditDroit>().Items);        // journal d'audit conservé
+        Assert.Single(_store.Get<AuditDroit>().Items);        // journal d'audit conservé
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public class AccountDeletionTests
     [Fact]
     public async Task Last_administrator_deletion_is_refused_and_no_row_is_removed()
     {
-        _store.GetRepo<UserPermission>().Items.Add(new UserPermission { IdResponsable = 1, PermissionCode = "PROC:SHIFTS", IsGranted = true });
+        _store.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 1, PermissionCode = "PROC:SHIFTS", IsGranted = true });
         var before = _store.Snapshot();
         var ex = await Assert.ThrowsAsync<ConflictException>(() => _auth.DeleteUserAsync(1));   // surcharge sans appelant
         Assert.Equal("Impossible de supprimer le dernier administrateur.", ex.Message);
@@ -94,8 +94,8 @@ public class AccountDeletionTests
     [Fact]
     public async Task Another_administrator_can_be_deleted_with_its_rows()
     {
-        _store.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = 9, IdRole = 1, Login = "admin2" });
-        _store.GetRepo<UserPermission>().Items.Add(new UserPermission { IdResponsable = 9, PermissionCode = "PROC:SHIFTS", IsGranted = true });
+        _store.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 9, IdRole = 1, Login = "admin2" });
+        _store.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 9, PermissionCode = "PROC:SHIFTS", IsGranted = true });
         await _auth.DeleteUserAsync(1, 9);
         Assert.Equal(0, Rows(9));
     }
@@ -111,8 +111,8 @@ public class AccountDeletionTests
     /// <summary>Délègue au magasin en mémoire et mémorise l'état au moment de la sauvegarde.</summary>
     private sealed class RecordingUnitOfWork : IUnitOfWork
     {
-        private readonly SnapshotInMemoryUnitOfWork _inner;
-        public RecordingUnitOfWork(SnapshotInMemoryUnitOfWork inner) => _inner = inner;
+        private readonly InMemoryUnitOfWork _inner;
+        public RecordingUnitOfWork(InMemoryUnitOfWork inner) => _inner = inner;
         public int SaveCount { get; private set; }
         public bool FailOnSave { get; set; }
         public (bool UserStillThere, int RowsLeft)? StateAtSave { get; private set; }
@@ -123,9 +123,9 @@ public class AccountDeletionTests
         public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         {
             SaveCount++;
-            StateAtSave = (_inner.GetRepo<Responsable>().Items.Any(u => u.IdResponsable == 2),
-                _inner.GetRepo<UserPermission>().Items.Count(p => p.IdResponsable == 2)
-                + _inner.GetRepo<BddAutorisee>().Items.Count(a => a.IdResponsable == 2));
+            StateAtSave = (_inner.Get<Responsable>().Items.Any(u => u.IdResponsable == 2),
+                _inner.Get<UserPermission>().Items.Count(p => p.IdResponsable == 2)
+                + _inner.Get<BddAutorisee>().Items.Count(a => a.IdResponsable == 2));
             if (FailOnSave) throw new InvalidOperationException("Échec simulé de la sauvegarde.");
             return Task.FromResult(1);
         }

@@ -25,14 +25,14 @@ public class AccountSecurityTests
     private const string Password = "FAKE-Pwd-123!";
     private const string OtherPassword = "FAKE-Other-456!";
 
-    private readonly SnapshotInMemoryUnitOfWork _uow = new();
+    private readonly InMemoryUnitOfWork _uow = new();
     private readonly AccountSecurityOptions _options = new() { MaxFailedLoginAttempts = 3, LockoutMinutes = 15, RefreshTokenDays = 7 };
     private readonly AuthServices _sut;
 
     public AccountSecurityTests()
     {
-        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
-        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 2, NomRole = "Utilisateur" });
+        _uow.Get<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
+        _uow.Get<Role>().Items.Add(new Role { IdRole = 2, NomRole = "Utilisateur" });
         AddUser(1, 1, "admin", new PasswordHasher<Responsable>());
         AddUser(2, 2, "agent", new PasswordHasher<Responsable>());
         _sut = CreateAuth(new PasswordHasher<Responsable>());
@@ -353,12 +353,12 @@ public class AccountSecurityTests
     {
         var user = new Responsable { IdResponsable = id, IdRole = role, Login = login, NomResponsable = login };
         user.Password = hasher.HashPassword(user, Password);
-        _uow.GetRepo<Responsable>().Items.Add(user);
+        _uow.Get<Responsable>().Items.Add(user);
     }
 
-    private Responsable User(decimal id) => _uow.GetRepo<Responsable>().Items.Single(u => u.IdResponsable == id);
+    private Responsable User(decimal id) => _uow.Get<Responsable>().Items.Single(u => u.IdResponsable == id);
 
-    private List<RefreshTokenRecord> Tokens() => _uow.GetRepo<RefreshTokenRecord>().Items;
+    private List<RefreshTokenRecord> Tokens() => _uow.Get<RefreshTokenRecord>().Items;
 
     private RefreshTokenRecord StoredToken(string refreshToken)
         => Tokens().Single(t => t.TokenHash == RefreshTokenService.Hash(refreshToken));

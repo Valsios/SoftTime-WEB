@@ -1,17 +1,12 @@
-using System.Linq.Expressions;
-
 using AutoMapper;
 
 using Microsoft.AspNetCore.Identity;
 
-using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
 using SoftTime.Application.Services;
 using SoftTime.Domain;
 using SoftTime.Domain.Entities.SoftTime;
-using SoftTime.Domain.Models;
-using SoftTime.Domain.Repositories;
 using SoftTime.Infrastructure.Services;
 
 namespace SoftTime.Tests;
@@ -26,30 +21,30 @@ public class DatabaseConfigurationSecurityTests
 
     public DatabaseConfigurationSecurityTests()
     {
-        _auth = new AuthServices(_uow, new FakeTokenService(), _mapper, new FakeEmailService(), new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<Responsable>());
-        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
-        _uow.GetRepo<Role>().Items.Add(new Role { IdRole = 5, NomRole = "Gestionnaire" });
-        _uow.GetRepo<BddSage>().Items.Add(new BddSage { Id = 7, NomBd = Base, Serveur = "srv" });
-        _uow.GetRepo<BddPointeuse>().Items.Add(new BddPointeuse { Id = 8, NomBd = "PTG", Serveur = "srv" });
+        _auth = new AuthServices(_uow, ServiceMocks.TokenService().Object, _mapper, ServiceMocks.EmailService().Object, new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<Responsable>());
+        _uow.Get<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
+        _uow.Get<Role>().Items.Add(new Role { IdRole = 5, NomRole = "Gestionnaire" });
+        _uow.Get<BddSage>().Items.Add(new BddSage { Id = 7, NomBd = Base, Serveur = "srv" });
+        _uow.Get<BddPointeuse>().Items.Add(new BddPointeuse { Id = 8, NomBd = "PTG", Serveur = "srv" });
     }
 
     private DatabaseConfigurationAuthorizer AuthorizerFor(decimal userId, decimal roleId, params int[] rights)
     {
-        if (!_uow.GetRepo<Responsable>().Items.Any(u => u.IdResponsable == userId))
-            _uow.GetRepo<Responsable>().Items.Add(new Responsable { IdResponsable = userId, IdRole = roleId, Login = $"u{userId}" });
-        return new DatabaseConfigurationAuthorizer(new FakeCurrentUser(userId, roleId, rights), _auth);
+        if (!_uow.Get<Responsable>().Items.Any(u => u.IdResponsable == userId))
+            _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = userId, IdRole = roleId, Login = $"u{userId}" });
+        return new DatabaseConfigurationAuthorizer(new TestCurrentUser(userId, roleId, rights), _auth);
     }
 
     private void GrantUser(decimal userId, params string[] codes)
     {
         foreach (var c in codes)
-            _uow.GetRepo<UserPermission>().Items.Add(new UserPermission { IdResponsable = userId, PermissionCode = c, IsGranted = true });
+            _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = userId, PermissionCode = c, IsGranted = true });
     }
 
     private void GrantRole(decimal roleId, params string[] codes)
     {
         foreach (var c in codes)
-            _uow.GetRepo<RolePermission>().Items.Add(new RolePermission { IdRole = roleId, PermissionCode = c, IsGranted = true });
+            _uow.Get<RolePermission>().Items.Add(new RolePermission { IdRole = roleId, PermissionCode = c, IsGranted = true });
     }
 
     private static Task<ForbiddenException> Refused(Func<Task> act) => Assert.ThrowsAsync<ForbiddenException>(act);
@@ -59,10 +54,10 @@ public class DatabaseConfigurationSecurityTests
     [Fact]
     public void AdminAccess_OnlyRoleOneIsAdmin()
     {
-        Assert.True(AdminAccess.IsAdmin(new FakeCurrentUser(1, 1)));
-        Assert.False(AdminAccess.IsAdmin(new FakeCurrentUser(2, 5, Rights.Parameters)));
-        Assert.Throws<ForbiddenException>(() => AdminAccess.Require(new FakeCurrentUser(2, 5, Rights.Parameters)));
-        AdminAccess.Require(new FakeCurrentUser(1, 1));
+        Assert.True(AdminAccess.IsAdmin(new TestCurrentUser(1, 1)));
+        Assert.False(AdminAccess.IsAdmin(new TestCurrentUser(2, 5, Rights.Parameters)));
+        Assert.Throws<ForbiddenException>(() => AdminAccess.Require(new TestCurrentUser(2, 5, Rights.Parameters)));
+        AdminAccess.Require(new TestCurrentUser(1, 1));
     }
 
     #endregion
@@ -152,7 +147,7 @@ public class DatabaseConfigurationSecurityTests
     [Fact]
     public async Task UnknownUser_IsRefused()
     {
-        var a = new DatabaseConfigurationAuthorizer(new FakeCurrentUser(999, 5, Rights.Databases), _auth);
+        var a = new DatabaseConfigurationAuthorizer(new TestCurrentUser(999, 5, Rights.Databases), _auth);
         await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, "X"));
     }
 
@@ -169,17 +164,17 @@ public class DatabaseConfigurationSecurityTests
         var svc = CatalogFor(AuthorizerFor(30, 5, Rights.Databases));
         GrantUser(30, $"SAGE:{Base}:READ");
         await Refused(() => svc.Sage.DeleteSageAsync(7));
-        Assert.Single(_uow.GetRepo<BddSage>().Items);
+        Assert.Single(_uow.Get<BddSage>().Items);
     }
 
     [Fact]
     public async Task CatalogService_DeleteSage_EmptyName_IsRefused()
     {
-        _uow.GetRepo<BddSage>().Items.Add(new BddSage { Id = 9, NomBd = "", Serveur = "srv" });
+        _uow.Get<BddSage>().Items.Add(new BddSage { Id = 9, NomBd = "", Serveur = "srv" });
         GrantUser(31, "SAGE:CREATE", "SAGE::DELETE");
         var svc = CatalogFor(AuthorizerFor(31, 5, Rights.Databases));
         await Refused(() => svc.Sage.DeleteSageAsync(9));
-        Assert.Equal(2, _uow.GetRepo<BddSage>().Items.Count);
+        Assert.Equal(2, _uow.Get<BddSage>().Items.Count);
     }
 
     [Fact]
@@ -189,7 +184,7 @@ public class DatabaseConfigurationSecurityTests
         var dto = new SageDbDto(0, "srv", null, null, true, "NOUVELLE");
         await Refused(() => svc.Sage.SaveSageAsync(dto));
         await Refused(() => svc.Sage.SaveSageAsync(dto with { Id = 7 }));
-        Assert.Single(_uow.GetRepo<BddSage>().Items);
+        Assert.Single(_uow.Get<BddSage>().Items);
     }
 
     [Fact]
@@ -198,7 +193,7 @@ public class DatabaseConfigurationSecurityTests
         var svc = CatalogFor(AuthorizerFor(33, 5, Rights.Reports));
         await Refused(() => svc.Pointeuse.DeletePointeuseAsync(8));
         await Refused(() => svc.Pointeuse.SavePointeuseAsync(new PointeuseDbDto(0, "srv", null, null, true, "NEW", null, false)));
-        Assert.Single(_uow.GetRepo<BddPointeuse>().Items);
+        Assert.Single(_uow.Get<BddPointeuse>().Items);
     }
 
     #endregion
@@ -211,124 +206,23 @@ public class DatabaseConfigurationSecurityTests
         await Assert.ThrowsAsync<DomainException>(() => _auth.SaveRoleAsync(new RoleDto(1, "Autre")));
         await Assert.ThrowsAsync<DomainException>(() => _auth.DeleteRoleAsync(1));
         await Assert.ThrowsAsync<DomainException>(() => _auth.SetPrivilegesAsync(1, new List<decimal> { Rights.Reports }));
-        Assert.Equal("Administrateur", _uow.GetRepo<Role>().Items.First(r => r.IdRole == 1).NomRole);
+        Assert.Equal("Administrateur", _uow.Get<Role>().Items.First(r => r.IdRole == 1).NomRole);
     }
 
     [Fact]
     public async Task OtherRoles_RemainEditable()
     {
         await _auth.SetPrivilegesAsync(5, new List<decimal> { Rights.Reports });
-        Assert.Single(_uow.GetRepo<DroitRole>().Items.Where(d => d.IdRole == 5));
+        Assert.Single(_uow.Get<DroitRole>().Items.Where(d => d.IdRole == 5));
         await _auth.SaveRoleAsync(new RoleDto(5, "Gestionnaire paie"));
-        Assert.Equal("Gestionnaire paie", _uow.GetRepo<Role>().Items.First(r => r.IdRole == 5).NomRole);
+        Assert.Equal("Gestionnaire paie", _uow.Get<Role>().Items.First(r => r.IdRole == 5).NomRole);
         await _auth.DeleteRoleAsync(5);
-        Assert.DoesNotContain(_uow.GetRepo<Role>().Items, r => r.IdRole == 5);
+        Assert.DoesNotContain(_uow.Get<Role>().Items, r => r.IdRole == 5);
     }
 
     #endregion
 
     #region Doubles de test
-
-    private sealed class FakeCurrentUser : ICurrentUser
-    {
-        public FakeCurrentUser(decimal userId, decimal roleId, params int[] rights)
-        {
-            UserId = userId;
-            RoleId = roleId;
-            Rights = rights;
-        }
-        public decimal? UserId { get; }
-        public string? Login => $"u{UserId}";
-        public decimal? RoleId { get; }
-        public string? Matricule => null;
-        public IReadOnlyCollection<int> Rights { get; }
-        public bool HasRight(int droit) => RoleId == 1 || Rights.Contains(droit);
-    }
-
-    private sealed class InMemoryRepository<T> : IRepository<T> where T : class
-    {
-        public List<T> Items { get; } = new();
-
-        public IQueryable<T> Query() => Items.AsQueryable();
-
-        public Task<T?> GetByIdAsync(object id, CancellationToken cancellationToken = default)
-        {
-            var decId = Convert.ToDecimal(id);
-            var match = Items.FirstOrDefault(i => i switch
-            {
-                Responsable r => r.IdResponsable == decId,
-                Role ro => ro.IdRole == decId,
-                BddSage s => s.Id == decId,
-                BddPointeuse p => p.Id == decId,
-                _ => false
-            });
-            return Task.FromResult(match);
-        }
-
-        public Task<List<T>> ListAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default)
-            => Task.FromResult(Items.Where(predicate.Compile()).ToList());
-
-        public Task<List<T>> ListLatestAsync(
-            Expression<Func<T, bool>> predicate,
-            Expression<Func<T, DateTime?>> orderByDescending,
-            int take,
-            CancellationToken cancellationToken = default)
-            => Task.FromResult(Items.Where(predicate.Compile()).OrderByDescending(orderByDescending.Compile()).Take(take).ToList());
-
-        public Task AddAsync(T entity, CancellationToken cancellationToken = default)
-        {
-            Items.Add(entity);
-            return Task.CompletedTask;
-        }
-
-        public Task AddRangeAsync(IEnumerable<T> entities, CancellationToken cancellationToken = default)
-        {
-            Items.AddRange(entities);
-            return Task.CompletedTask;
-        }
-
-        public void Update(T entity) { }
-        public void Remove(T entity) => Items.Remove(entity);
-        public void RemoveRange(IEnumerable<T> entities)
-        {
-            foreach (var e in entities.ToList())
-                Items.Remove(e);
-        }
-    }
-
-    private sealed class InMemoryUnitOfWork : IUnitOfWork
-    {
-        private readonly Dictionary<Type, object> _repos = new();
-
-        public InMemoryRepository<T> GetRepo<T>() where T : class
-        {
-            if (!_repos.TryGetValue(typeof(T), out var r))
-            {
-                r = new InMemoryRepository<T>();
-                _repos[typeof(T)] = r;
-            }
-            return (InMemoryRepository<T>)r;
-        }
-
-        public IRepository<T> Repository<T>() where T : class => GetRepo<T>();
-
-        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) => Task.FromResult(1);
-        public Task ExecuteSqlAsync(string sql, CancellationToken cancellationToken = default) => Task.CompletedTask;
-    }
-
-    private sealed class FakeTokenService : ITokenService
-    {
-        public string CreateToken(TokenSubject subject)
-            => $"FAKE_JWT_TOKEN_{subject.UserId}_{subject.Login}";
-    }
-
-    private sealed class FakeEmailService : IEmailService
-    {
-        public bool EstConfigure => true;
-        public Task<bool> EnvoyerAsync(EmailMessage message, CancellationToken cancellationToken = default) => Task.FromResult(true);
-        public Task<bool> SendUserCredentialsAsync(AccountMailRecipient destinataire, string? password, CancellationToken cancellationToken = default) => Task.FromResult(true);
-        public Task<bool> SendUserUpdateAsync(AccountMailRecipient destinataire, string? newPassword, bool pseudoChanged, bool passwordChanged, CancellationToken cancellationToken = default) => Task.FromResult(true);
-    }
 
     #endregion
 }

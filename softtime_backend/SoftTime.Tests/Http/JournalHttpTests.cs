@@ -40,16 +40,16 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
 
     private static void Seed(ApiFactory f)
     {
-        var users = f.Store.GetRepo<Responsable>().Items;
+        var users = f.Store.Get<Responsable>().Items;
         if (users.Any(u => u.IdResponsable == 10100))
             return;
         users.Add(new Responsable { IdResponsable = 10100, IdRole = 91, Login = "tracereader", NomResponsable = "tracereader" });
         users.Add(new Responsable { IdResponsable = 10101, IdRole = 91, Login = "gate5only", NomResponsable = "gate5only" });
-        var perms = f.Store.GetRepo<UserPermission>().Items;
+        var perms = f.Store.Get<UserPermission>().Items;
         perms.Add(new UserPermission { IdResponsable = 10100, PermissionCode = "TRACE:AUDIT", IsGranted = true });
         perms.Add(new UserPermission { IdResponsable = 10101, PermissionCode = "PROC:SHIFTS", IsGranted = true });
 
-        var journal = f.Store.GetRepo<JournalAudit>().Items;
+        var journal = f.Store.Get<JournalAudit>().Items;
         journal.Add(Row(1, Base, "T_FERIE", "Insertion", "agent1", "INTITULE", null, "Noel"));
         journal.Add(Row(2, Base.AddDays(1), "T_FERIE", "Modification", "agent2", "INTITULE", "Noel", "Noël"));
         journal.Add(Row(3, Base.AddDays(2), "T_RESPONSABLE", "Suppression", "agent1", "EMAIL", "a@exemple.test", null));
@@ -125,7 +125,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
         Assert.Equal(AuditMaskingPolicy.Mask, doc.RootElement.GetProperty("data").GetProperty("before").GetString());
         Assert.Equal(AuditMaskingPolicy.Mask, doc.RootElement.GetProperty("data").GetProperty("after").GetString());
         // Le stockage n'est pas modifié par la lecture (aucune purge implicite).
-        Assert.Equal(InjectedClearValue, _f.Store.GetRepo<JournalAudit>().Items.Single(e => e.Id == ClearRowId).Nouveaux);
+        Assert.Equal(InjectedClearValue, _f.Store.Get<JournalAudit>().Items.Single(e => e.Id == ClearRowId).Nouveaux);
     }
 
     [Fact]
@@ -245,7 +245,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     {
         var (status, _) = await Send("admin", HttpMethod.Post, "/api/v1/audit/config", ConfigBody);
         Assert.Equal(HttpStatusCode.NoContent, status);
-        Assert.Contains(_f.Store.GetRepo<SuiviConfiguration>().Items, c => c.Tables == "T_JOURNAL_TEST");
+        Assert.Contains(_f.Store.Get<SuiviConfiguration>().Items, c => c.Tables == "T_JOURNAL_TEST");
     }
 
     [Fact]
