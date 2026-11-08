@@ -16,7 +16,7 @@ namespace SoftTime.Api.Controllers;
 /// </summary>
 [ApiController]
 [Authorize]
-[Route("api/predictions")]
+[Route("api/v1/predictions")]
 [Tags("Prévisions")]
 public class PredictionsController : ControllerBase
 {

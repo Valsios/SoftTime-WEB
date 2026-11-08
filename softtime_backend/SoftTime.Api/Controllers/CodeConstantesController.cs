@@ -10,7 +10,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Parameters)]
-[Route("api/code-constantes")]
+[Route("api/v1/code-constantes")]
 [Tags("CodeConstantes")]
 public class CodeConstantesController : ControllerBase
 {

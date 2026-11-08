@@ -11,7 +11,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Processing)]
-[Route("api/punches")]
+[Route("api/v1/punches")]
 [Tags("Punches")]
 public class PunchesController : ControllerBase
 {

@@ -10,7 +10,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Parameters)]
-[Route("api/holidays")]
+[Route("api/v1/holidays")]
 [Tags("Holidays")]
 public class HolidaysController : ControllerBase
 {

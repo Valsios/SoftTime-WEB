@@ -6,7 +6,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 // Authentification exigée : la liste des routes et des numéros de droits est une carte de l'API pour un attaquant.
 [Authorize]
-[Route("api/meta")]
+[Route("api/v1/meta")]
 [Tags("Meta")]
 public class MetaController : ControllerBase
 {

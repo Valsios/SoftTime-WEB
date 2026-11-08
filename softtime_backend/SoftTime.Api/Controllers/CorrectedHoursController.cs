@@ -11,7 +11,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Processing)]
-[Route("api/corrected-hours")]
+[Route("api/v1/corrected-hours")]
 [Tags("CorrectedHours")]
 public class CorrectedHoursController : ControllerBase
 {

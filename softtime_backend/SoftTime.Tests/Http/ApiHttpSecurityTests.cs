@@ -34,25 +34,25 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     // Kind : admin = [RequireAdmin] ; db = contrôle de service par base ; dbany = test de connexion / découverte.
     private static readonly Dictionary<string, (string Method, string Url, string? Body, string Kind)> Routes = new()
     {
-        ["PUT privileges/{roleId}"] = ("PUT", "/api/privileges/91", "[1]", "admin"),
-        ["PUT privileges/user/{id}"] = ("PUT", "/api/privileges/user/10050", """{"grantedPermissions":["PROC:SHIFTS"]}""", "admin"),
-        ["POST privileges/user/{id}/reset"] = ("POST", "/api/privileges/user/10050/reset", null, "admin"),
-        ["PUT db-access/{userId}"] = ("PUT", "/api/db-access/10050", "[3033]", "admin"),
-        ["POST roles"] = ("POST", "/api/roles", """{"id":0,"nom":"NouveauRole"}""", "admin"),
-        ["PUT roles/{id}"] = ("PUT", "/api/roles/91", """{"id":91,"nom":"CibleRenomme"}""", "admin"),
-        ["DELETE roles/{id}"] = ("DELETE", "/api/roles/90", null, "admin"),
-        ["POST sage-databases"] = ("POST", "/api/sage-databases", SageBody, "db"),
-        ["PUT sage-databases/{id}"] = ("PUT", "/api/sage-databases/3036", SageUpdateBody, "db"),
-        ["DELETE sage-databases/{id}"] = ("DELETE", "/api/sage-databases/3035", null, "db"),
-        ["POST pointeuse-databases"] = ("POST", "/api/pointeuse-databases", PointeuseBody, "db"),
-        ["PUT pointeuse-databases/{id}"] = ("PUT", "/api/pointeuse-databases/3", PointeuseUpdateBody, "db"),
-        ["DELETE pointeuse-databases/{id}"] = ("DELETE", "/api/pointeuse-databases/2", null, "db"),
-        ["POST sage-databases/test-connection"] = ("POST", "/api/sage-databases/test-connection", TestConnBody, "dbany"),
-        ["POST pointeuse-databases/test-connection"] = ("POST", "/api/pointeuse-databases/test-connection", TestConnBody, "dbany"),
-        ["GET discovery/servers"] = ("GET", "/api/discovery/servers", null, "dbany"),
-        ["POST discovery/databases"] = ("POST", "/api/discovery/databases", """{"serveur":"h","sqlAuth":true,"login":"l","password":"p"}""", "dbany"),
-        ["POST discovery/tables"] = ("POST", "/api/discovery/tables", """{"serveur":"h","base":"B","sqlAuth":true,"login":"l","password":"p"}""", "dbany"),
-        ["POST discovery/columns"] = ("POST", "/api/discovery/columns", """{"serveur":"h","base":"B","table":"T","sqlAuth":true,"login":"l","password":"p"}""", "dbany"),
+        ["PUT privileges/{roleId}"] = ("PUT", "/api/v1/privileges/91", "[1]", "admin"),
+        ["PUT privileges/user/{id}"] = ("PUT", "/api/v1/privileges/user/10050", """{"grantedPermissions":["PROC:SHIFTS"]}""", "admin"),
+        ["POST privileges/user/{id}/reset"] = ("POST", "/api/v1/privileges/user/10050/reset", null, "admin"),
+        ["PUT db-access/{userId}"] = ("PUT", "/api/v1/db-access/10050", "[3033]", "admin"),
+        ["POST roles"] = ("POST", "/api/v1/roles", """{"id":0,"nom":"NouveauRole"}""", "admin"),
+        ["PUT roles/{id}"] = ("PUT", "/api/v1/roles/91", """{"id":91,"nom":"CibleRenomme"}""", "admin"),
+        ["DELETE roles/{id}"] = ("DELETE", "/api/v1/roles/90", null, "admin"),
+        ["POST sage-databases"] = ("POST", "/api/v1/sage-databases", SageBody, "db"),
+        ["PUT sage-databases/{id}"] = ("PUT", "/api/v1/sage-databases/3036", SageUpdateBody, "db"),
+        ["DELETE sage-databases/{id}"] = ("DELETE", "/api/v1/sage-databases/3035", null, "db"),
+        ["POST pointeuse-databases"] = ("POST", "/api/v1/pointeuse-databases", PointeuseBody, "db"),
+        ["PUT pointeuse-databases/{id}"] = ("PUT", "/api/v1/pointeuse-databases/3", PointeuseUpdateBody, "db"),
+        ["DELETE pointeuse-databases/{id}"] = ("DELETE", "/api/v1/pointeuse-databases/2", null, "db"),
+        ["POST sage-databases/test-connection"] = ("POST", "/api/v1/sage-databases/test-connection", TestConnBody, "dbany"),
+        ["POST pointeuse-databases/test-connection"] = ("POST", "/api/v1/pointeuse-databases/test-connection", TestConnBody, "dbany"),
+        ["GET discovery/servers"] = ("GET", "/api/v1/discovery/servers", null, "dbany"),
+        ["POST discovery/databases"] = ("POST", "/api/v1/discovery/databases", """{"serveur":"h","sqlAuth":true,"login":"l","password":"p"}""", "dbany"),
+        ["POST discovery/tables"] = ("POST", "/api/v1/discovery/tables", """{"serveur":"h","base":"B","sqlAuth":true,"login":"l","password":"p"}""", "dbany"),
+        ["POST discovery/columns"] = ("POST", "/api/v1/discovery/columns", """{"serveur":"h","base":"B","table":"T","sqlAuth":true,"login":"l","password":"p"}""", "dbany"),
     };
 
     public static IEnumerable<object[]> RefusedCases()
@@ -115,15 +115,15 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
 
     private static readonly (string Name, string Method, string Url, string? Body, bool NeedsTenant)[] UsageRoutes =
     {
-        ("activate", "POST", "/api/sage-databases/activate", null, true),
-        ("lookup", "GET", "/api/sage-databases/lookup/1", null, true),
-        ("lookup-batch", "POST", "/api/sage-databases/lookup-batch", """["1"]""", true),
-        ("departement-service-options", "GET", "/api/sage-databases/departement-service-options", null, true),
-        ("cardpaie GET", "GET", "/api/cardpaie", null, true),
-        ("sage-databases GET", "GET", "/api/sage-databases", null, false),
-        ("sage-databases GET paged", "GET", "/api/sage-databases/paged", null, false),
-        ("pointeuse-databases GET", "GET", "/api/pointeuse-databases", null, false),
-        ("pointeuse-databases GET paged", "GET", "/api/pointeuse-databases/paged", null, false),
+        ("activate", "POST", "/api/v1/sage-databases/activate", null, true),
+        ("lookup", "GET", "/api/v1/sage-databases/lookup/1", null, true),
+        ("lookup-batch", "POST", "/api/v1/sage-databases/lookup-batch", """["1"]""", true),
+        ("departement-service-options", "GET", "/api/v1/sage-databases/departement-service-options", null, true),
+        ("cardpaie GET", "GET", "/api/v1/card-paie", null, true),
+        ("sage-databases GET", "GET", "/api/v1/sage-databases", null, false),
+        ("sage-databases GET paged", "GET", "/api/v1/sage-databases/paged", null, false),
+        ("pointeuse-databases GET", "GET", "/api/v1/pointeuse-databases", null, false),
+        ("pointeuse-databases GET paged", "GET", "/api/v1/pointeuse-databases/paged", null, false),
     };
 
     public static IEnumerable<object[]> UsageNames() => new[] { "activate", "lookup", "lookup-batch", "departement-service-options", "cardpaie GET",
@@ -161,7 +161,7 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     [InlineData("user1")]
     public async Task Activate_by_account_without_access_to_the_base_gives_403_with_message(string profile)
     {
-        var (resp, text) = await Send(profile, "POST", "/api/sage-databases/activate", null, ApiFactory.SageName);
+        var (resp, text) = await Send(profile, "POST", "/api/v1/sage-databases/activate", null, ApiFactory.SageName);
         ApiFactory.Report($"V3|activate sans accès|{profile}|{(int)resp.StatusCode}|{Format(resp, text)}|{Trunc(text)}");
         // Étape 4b-5 : un refus d'usage est un 403 (un 401 déconnectait le client). Avant : 401 « Base SAGE non autorisée pour cet utilisateur. »
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
@@ -176,7 +176,7 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     public async Task FormerGap_Activate_with_gate_1_refuses_a_base_missing_from_BDD_AUTORISE()
     {
         Assert.DoesNotContain(_f.Store.GetRepo<BddAutorisee>().Items, a => a.IdResponsable == 10034 && a.IdBdd == 3034);
-        var (resp, text) = await Send("joel", "POST", "/api/sage-databases/activate", null, ApiFactory.OtherSageName);
+        var (resp, text) = await Send("joel", "POST", "/api/v1/sage-databases/activate", null, ApiFactory.OtherSageName);
         ApiFactory.Report($"V3|activate base non attribuée|joel|{(int)resp.StatusCode}|{Format(resp, text)}|{Trunc(text)}");
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
         Assert.Contains("Vous n'avez pas accès à cette base.", text);
@@ -231,14 +231,14 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     #region V6 : mots de passe de base
 
     [Theory]
-    [InlineData("admin", "/api/sage-databases")]
-    [InlineData("joel", "/api/sage-databases")]
-    [InlineData("user1", "/api/sage-databases")]
-    [InlineData("joel", "/api/sage-databases/paged")]
-    [InlineData("joel", "/api/pointeuse-databases")]
-    [InlineData("joel", "/api/pointeuse-databases/paged")]
-    [InlineData("joel", "/api/auth/me")]
-    [InlineData("admin", "/api/auth/me")]
+    [InlineData("admin", "/api/v1/sage-databases")]
+    [InlineData("joel", "/api/v1/sage-databases")]
+    [InlineData("user1", "/api/v1/sage-databases")]
+    [InlineData("joel", "/api/v1/sage-databases/paged")]
+    [InlineData("joel", "/api/v1/pointeuse-databases")]
+    [InlineData("joel", "/api/v1/pointeuse-databases/paged")]
+    [InlineData("joel", "/api/v1/auth/me")]
+    [InlineData("admin", "/api/v1/auth/me")]
     public async Task V6_Responses_never_contain_a_database_password(string profile, string url)
     {
         var (resp, text) = await Send(profile, "GET", url, null);
@@ -250,8 +250,8 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task V6_Create_and_update_responses_never_contain_the_submitted_password()
     {
-        var (resp, text) = await Send("admin", "POST", "/api/sage-databases", SageBody.Replace("NEWBASE", "V6BASE"));
-        ApiFactory.Report($"V6|admin|POST /api/sage-databases|{(int)resp.StatusCode}|fuite={(text.Contains(ApiFactory.FakeSagePassword) ? ApiFactory.FakeSagePassword : "non")}");
+        var (resp, text) = await Send("admin", "POST", "/api/v1/sage-databases", SageBody.Replace("NEWBASE", "V6BASE"));
+        ApiFactory.Report($"V6|admin|POST /api/v1/sage-databases|{(int)resp.StatusCode}|fuite={(text.Contains(ApiFactory.FakeSagePassword) ? ApiFactory.FakeSagePassword : "non")}");
         Assert.True(resp.IsSuccessStatusCode);
         Assert.DoesNotContain(ApiFactory.FakeSagePassword, text);
     }

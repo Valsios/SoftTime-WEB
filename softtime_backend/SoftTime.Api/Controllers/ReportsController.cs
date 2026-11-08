@@ -10,7 +10,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Reports)]
-[Route("api/reports")]
+[Route("api/v1/reports")]
 [Tags("Reports")]
 public class ReportsController : ControllerBase
 {

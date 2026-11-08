@@ -15,14 +15,14 @@ public class TenantMiddleware
             company.Set(sage, pte);
 
         var path = context.Request.Path.Value ?? string.Empty;
-        var skip = path.Contains("/api/auth", StringComparison.OrdinalIgnoreCase)
-                   || path.Contains("/api/users", StringComparison.OrdinalIgnoreCase)
-                   || path.Contains("/api/roles", StringComparison.OrdinalIgnoreCase)
-                   || path.Contains("/api/privileges", StringComparison.OrdinalIgnoreCase)
-                   || path.Contains("/api/db-access", StringComparison.OrdinalIgnoreCase)
-                   || path.Contains("/api/sage-databases", StringComparison.OrdinalIgnoreCase)
-                   || path.Contains("/api/pointeuse-databases", StringComparison.OrdinalIgnoreCase)
-                   || path.Contains("/api/meta", StringComparison.OrdinalIgnoreCase)
+        var skip = path.Contains("/api/v1/auth", StringComparison.OrdinalIgnoreCase)
+                   || path.Contains("/api/v1/users", StringComparison.OrdinalIgnoreCase)
+                   || path.Contains("/api/v1/roles", StringComparison.OrdinalIgnoreCase)
+                   || path.Contains("/api/v1/privileges", StringComparison.OrdinalIgnoreCase)
+                   || path.Contains("/api/v1/db-access", StringComparison.OrdinalIgnoreCase)
+                   || path.Contains("/api/v1/sage-databases", StringComparison.OrdinalIgnoreCase)
+                   || path.Contains("/api/v1/pointeuse-databases", StringComparison.OrdinalIgnoreCase)
+                   || path.Contains("/api/v1/meta", StringComparison.OrdinalIgnoreCase)
                    || path.Contains("/swagger", StringComparison.OrdinalIgnoreCase)
                    || path.Contains("/health", StringComparison.OrdinalIgnoreCase);
         if (!skip && context.User.Identity?.IsAuthenticated == true && !string.IsNullOrWhiteSpace(sage))

@@ -8,7 +8,7 @@ namespace SoftTime.Api.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("api/excel")]
+[Route("api/v1/excel")]
 [Tags("Excel")]
 public class ExcelExportController : ControllerBase
 {

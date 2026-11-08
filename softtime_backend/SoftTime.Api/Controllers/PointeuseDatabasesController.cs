@@ -10,7 +10,7 @@ namespace SoftTime.Api.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("api/pointeuse-databases")]
+[Route("api/v1/pointeuse-databases")]
 [Tags("PointeuseDatabases")]
 public class PointeuseDatabasesController : ControllerBase
 {

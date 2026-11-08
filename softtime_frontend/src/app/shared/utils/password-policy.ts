@@ -6,7 +6,7 @@ export interface PasswordRuleCheck extends PasswordPolicyRule {
 }
 
 /**
- * Repli utilisé uniquement si `GET /api/auth/password-policy` est injoignable.
+ * Repli utilisé uniquement si `GET /api/v1/auth/password-policy` est injoignable.
  * En fonctionnement normal, les règles et libellés viennent du serveur.
  */
 export const FALLBACK_PASSWORD_POLICY: PasswordPolicy = {

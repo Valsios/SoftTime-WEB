@@ -46,7 +46,7 @@ export interface User {
   confirmClearAdjustments?: boolean;
 }
 
-/** Droits détaillés d'un rôle (`GET /api/privileges/role/{roleId}`). */
+/** Droits détaillés d'un rôle (`GET /api/v1/privileges/role/{roleId}`). */
 export interface RoleDetailedPermissions {
   roleId: number;
   grantedPermissions: string[];
@@ -76,7 +76,7 @@ export interface PasswordPolicyRule {
 }
 
 /**
- * Politique de mot de passe renvoyée par `GET /api/auth/password-policy`.
+ * Politique de mot de passe renvoyée par `GET /api/v1/auth/password-policy`.
  * Elle est la source de vérité : le client affiche et applique exactement les règles du serveur.
  */
 export interface PasswordPolicy {

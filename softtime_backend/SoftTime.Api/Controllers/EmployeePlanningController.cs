@@ -11,7 +11,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Processing)]
-[Route("api/employee-planning")]
+[Route("api/v1/employee-planning")]
 [Tags("EmployeePlanning")]
 public class EmployeePlanningController : ControllerBase
 {

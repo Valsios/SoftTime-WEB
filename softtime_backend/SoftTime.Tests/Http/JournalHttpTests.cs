@@ -84,7 +84,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
 
     public static IEnumerable<object[]> Reads()
     {
-        foreach (var url in new[] { "/api/journal", $"/api/journal/{ClearRowId}", "/api/journal/facets" })
+        foreach (var url in new[] { "/api/v1/journal", $"/api/v1/journal/{ClearRowId}", "/api/v1/journal/facets" })
             foreach (var profile in new[] { "admin", "tracereader", "gate5only", "user1", "param2", "joel", "anonyme" })
                 yield return new object[] { url, profile };
     }
@@ -112,14 +112,14 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Clear_value_stored_before_masking_never_leaves_the_api()
     {
-        foreach (var url in new[] { "/api/journal", $"/api/journal/{ClearRowId}", "/api/journal?table=T_BDD_SAGE" })
+        foreach (var url in new[] { "/api/v1/journal", $"/api/v1/journal/{ClearRowId}", "/api/v1/journal?table=T_BDD_SAGE" })
         {
             var (status, text) = await Send("tracereader", HttpMethod.Get, url);
             Assert.Equal(HttpStatusCode.OK, status);
             Assert.DoesNotContain(InjectedClearValue, text);
         }
 
-        var (_, detail) = await Send("admin", HttpMethod.Get, $"/api/journal/{ClearRowId}");
+        var (_, detail) = await Send("admin", HttpMethod.Get, $"/api/v1/journal/{ClearRowId}");
         using var doc = JsonDocument.Parse(detail);
         Assert.Equal("TMDP", doc.RootElement.GetProperty("column").GetString());
         Assert.Equal(AuditMaskingPolicy.Mask, doc.RootElement.GetProperty("before").GetString());
@@ -131,7 +131,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Email_stays_visible()
     {
-        var (_, text) = await Send("admin", HttpMethod.Get, "/api/journal/3");
+        var (_, text) = await Send("admin", HttpMethod.Get, "/api/v1/journal/3");
         Assert.Contains("a@exemple.test", text);
     }
 
@@ -141,44 +141,44 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
         var from = Base.ToString("O");
         var to = Base.AddDays(5).ToString("O");
 
-        var period = await Page($"/api/journal?from={from}&to={to}");
+        var period = await Page($"/api/v1/journal?from={from}&to={to}");
         Assert.Equal(5, period.Total);
         Assert.Equal(new long[] { ClearRowId, 4, 3, 2, 1 }, period.Ids);   // DATE_UTC décroissante
 
-        Assert.Equal(new long[] { ClearRowId, 3, 1 }, (await Page($"/api/journal?from={from}&to={to}&user=agent1")).Ids);
-        Assert.Equal(new long[] { 4 }, (await Page($"/api/journal?from={from}&action=SYNC_PAIE")).Ids);
-        Assert.Equal(new long[] { 2, 1 }, (await Page($"/api/journal?from={from}&table=T_FERIE")).Ids);
-        Assert.Equal(new long[] { 2 }, (await Page($"/api/journal?from={from}&table=T_FERIE&action=Modification")).Ids);
-        Assert.Equal(new long[] { 3 }, (await Page("/api/journal?key=ID%3D3")).Ids);
-        Assert.Equal(new long[] { 2 }, (await Page($"/api/journal?correlation={new Guid(2, 0, 0, new byte[8])}")).Ids);
-        Assert.Equal(0, (await Page($"/api/journal?sageDatabase={ApiFactory.OtherSageName}")).Total);
+        Assert.Equal(new long[] { ClearRowId, 3, 1 }, (await Page($"/api/v1/journal?from={from}&to={to}&user=agent1")).Ids);
+        Assert.Equal(new long[] { 4 }, (await Page($"/api/v1/journal?from={from}&action=SYNC_PAIE")).Ids);
+        Assert.Equal(new long[] { 2, 1 }, (await Page($"/api/v1/journal?from={from}&table=T_FERIE")).Ids);
+        Assert.Equal(new long[] { 2 }, (await Page($"/api/v1/journal?from={from}&table=T_FERIE&action=Modification")).Ids);
+        Assert.Equal(new long[] { 3 }, (await Page("/api/v1/journal?key=ID%3D3")).Ids);
+        Assert.Equal(new long[] { 2 }, (await Page($"/api/v1/journal?correlation={new Guid(2, 0, 0, new byte[8])}")).Ids);
+        Assert.Equal(0, (await Page($"/api/v1/journal?sageDatabase={ApiFactory.OtherSageName}")).Total);
     }
 
     [Fact]
     public async Task Pagination_defaults_to_50_and_caps_the_page_size_at_200()
     {
-        var first = await Page("/api/journal?table=T_VOLUME");
+        var first = await Page("/api/v1/journal?table=T_VOLUME");
         Assert.Equal(230, first.Total);
         Assert.Equal(50, first.PageSize);
         Assert.Equal(50, first.Ids.Length);
         Assert.Equal(1229, first.Ids[0]);
 
-        var capped = await Page("/api/journal?table=T_VOLUME&pageSize=5000");
+        var capped = await Page("/api/v1/journal?table=T_VOLUME&pageSize=5000");
         Assert.Equal(200, capped.PageSize);
         Assert.Equal(200, capped.Ids.Length);
 
-        var last = await Page("/api/journal?table=T_VOLUME&page=2&pageSize=200");
+        var last = await Page("/api/v1/journal?table=T_VOLUME&page=2&pageSize=200");
         Assert.Equal(30, last.Ids.Length);
         Assert.Equal(1000, last.Ids[^1]);
 
-        Assert.Empty((await Page("/api/journal?table=T_VOLUME&page=99&pageSize=200")).Ids);
+        Assert.Empty((await Page("/api/v1/journal?table=T_VOLUME&page=99&pageSize=200")).Ids);
     }
 
     [Fact]
     public async Task Facets_list_distinct_values_of_the_period()
     {
         var (status, text) = await Send("tracereader", HttpMethod.Get,
-            $"/api/journal/facets?from={Base:O}&to={Base.AddDays(5):O}");
+            $"/api/v1/journal/facets?from={Base:O}&to={Base.AddDays(5):O}");
         Assert.Equal(HttpStatusCode.OK, status);
         using var doc = JsonDocument.Parse(text);
         // L'ordre suit la collation de la source : on compare les ensembles.
@@ -192,19 +192,19 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Unknown_journal_line_is_404_for_an_authorized_reader()
     {
-        var (status, _) = await Send("admin", HttpMethod.Get, "/api/journal/424242");
+        var (status, _) = await Send("admin", HttpMethod.Get, "/api/v1/journal/424242");
         Assert.Equal(HttpStatusCode.NotFound, status);
     }
 
     [Theory]
-    [InlineData("POST", "/api/journal")]
-    [InlineData("PUT", "/api/journal")]
-    [InlineData("DELETE", "/api/journal")]
-    [InlineData("PATCH", "/api/journal")]
-    [InlineData("PUT", "/api/journal/1")]
-    [InlineData("DELETE", "/api/journal/1")]
-    [InlineData("PATCH", "/api/journal/1")]
-    [InlineData("POST", "/api/journal/facets")]
+    [InlineData("POST", "/api/v1/journal")]
+    [InlineData("PUT", "/api/v1/journal")]
+    [InlineData("DELETE", "/api/v1/journal")]
+    [InlineData("PATCH", "/api/v1/journal")]
+    [InlineData("PUT", "/api/v1/journal/1")]
+    [InlineData("DELETE", "/api/v1/journal/1")]
+    [InlineData("PATCH", "/api/v1/journal/1")]
+    [InlineData("POST", "/api/v1/journal/facets")]
     public async Task Journal_has_no_write_route(string method, string url)
     {
         var before = _f.Snapshot();
@@ -216,7 +216,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
 
     public static IEnumerable<object[]> ConfigWrites()
     {
-        foreach (var (method, url) in new[] { ("POST", "/api/audit/config"), ("PUT", "/api/audit/config/1") })
+        foreach (var (method, url) in new[] { ("POST", "/api/v1/audit/config"), ("PUT", "/api/v1/audit/config/1") })
             foreach (var profile in new[] { "tracereader", "gate5only", "user1", "param2", "joel", "anonyme" })
                 yield return new object[] { method, url, profile };
     }
@@ -243,7 +243,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Administrator_can_create_audit_configuration()
     {
-        var (status, _) = await Send("admin", HttpMethod.Post, "/api/audit/config", ConfigBody);
+        var (status, _) = await Send("admin", HttpMethod.Post, "/api/v1/audit/config", ConfigBody);
         Assert.Equal(HttpStatusCode.NoContent, status);
         Assert.Contains(_f.Store.GetRepo<SuiviConfiguration>().Items, c => c.Tables == "T_JOURNAL_TEST");
     }
@@ -252,8 +252,8 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     public async Task Administrator_update_of_audit_configuration_passes_authorization()
     {
         // Le double en mémoire ne retrouve pas suivi_TBLCLN par identifiant : 404 attendu, jamais 401 ni 403.
-        var (status, text) = await Send("admin", HttpMethod.Put, "/api/audit/config/1", ConfigBody);
-        ApiFactory.Report($"AUDIT-CONFIG|PUT /api/audit/config/1|admin|{(int)status}");
+        var (status, text) = await Send("admin", HttpMethod.Put, "/api/v1/audit/config/1", ConfigBody);
+        ApiFactory.Report($"AUDIT-CONFIG|PUT /api/v1/audit/config/1|admin|{(int)status}");
         Assert.NotEqual(HttpStatusCode.Unauthorized, status);
         Assert.NotEqual(HttpStatusCode.Forbidden, status);
         Assert.DoesNotContain(AdminOnly, text);

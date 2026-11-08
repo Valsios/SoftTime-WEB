@@ -7,14 +7,14 @@ import { JournalEntry, JournalFacets, JournalPage, JournalQueryParams } from '..
 @Injectable({ providedIn: 'root' })
 export class JournalService extends ApiService {
   list(query: JournalQueryParams): Observable<JournalPage> {
-    return this.http.get<JournalPage>(this.url('/api/journal'), { params: this.params({ ...query }) });
+    return this.http.get<JournalPage>(this.url('/api/v1/journal'), { params: this.params({ ...query }) });
   }
 
   get(id: number): Observable<JournalEntry> {
-    return this.http.get<JournalEntry>(this.url(`/api/journal/${id}`));
+    return this.http.get<JournalEntry>(this.url(`/api/v1/journal/${id}`));
   }
 
   facets(from?: string, to?: string): Observable<JournalFacets> {
-    return this.http.get<JournalFacets>(this.url('/api/journal/facets'), { params: this.params({ from, to }) });
+    return this.http.get<JournalFacets>(this.url('/api/v1/journal/facets'), { params: this.params({ from, to }) });
   }
 }

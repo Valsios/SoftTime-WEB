@@ -10,7 +10,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Parameters)]
-[Route("api/categories")]
+[Route("api/v1/categories")]
 [Tags("Categories")]
 public class CategoriesController : ControllerBase
 {

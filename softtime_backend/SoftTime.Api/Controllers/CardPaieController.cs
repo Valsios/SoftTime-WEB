@@ -9,7 +9,7 @@ namespace SoftTime.Api.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("api/cardpaie")]
+[Route("api/v1/card-paie")]
 [Tags("CardPaie")]
 public class CardPaieController : ControllerBase
 {

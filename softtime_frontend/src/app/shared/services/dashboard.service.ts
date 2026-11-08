@@ -13,13 +13,13 @@ export interface DashboardQuery extends PeriodRequest {
 @Injectable({ providedIn: 'root' })
 export class DashboardService extends ApiService {
   stats(req: DashboardQuery): Observable<DashboardStats> {
-    return this.http.get<DashboardStats>(this.url('/api/dashboard/stats'), {
+    return this.http.get<DashboardStats>(this.url('/api/v1/dashboard/stats'), {
       params: this.params({ ...req }),
     });
   }
 
   /** Valeurs des filtres (départements, catégories de personnel). */
   filters(): Observable<DashboardFilters> {
-    return this.http.get<DashboardFilters>(this.url('/api/dashboard/filters'));
+    return this.http.get<DashboardFilters>(this.url('/api/v1/dashboard/filters'));
   }
 }

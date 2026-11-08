@@ -9,7 +9,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Parameters)]
-[Route("api/departement-service")]
+[Route("api/v1/departement-service")]
 [Tags("DepartementService")]
 public class DepartementServiceController : ControllerBase
 {

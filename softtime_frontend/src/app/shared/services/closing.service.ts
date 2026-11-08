@@ -17,7 +17,7 @@ export class ClosingService extends ApiService {
   private readonly silentHttp = new HttpClient(inject(HttpBackend));
 
   analysis(query: ClosingQuery): Observable<ClosingReport> {
-    return this.http.get<ClosingReport>(this.url('/api/closing/analysis'), { params: this.params(toParams(query)) });
+    return this.http.get<ClosingReport>(this.url('/api/v1/closing/analysis'), { params: this.params(toParams(query)) });
   }
 
   /**
@@ -32,7 +32,7 @@ export class ClosingService extends ApiService {
     if (token) headers = headers.set('Authorization', `Bearer ${token}`);
     if (sage) headers = headers.set('X-Sage-Database', sage);
     if (pointeuse) headers = headers.set('X-Pointeuse-Database', pointeuse);
-    return this.silentHttp.get<ClosingReport>(this.url('/api/closing/analysis'), {
+    return this.silentHttp.get<ClosingReport>(this.url('/api/v1/closing/analysis'), {
       headers,
       params: this.params(toParams(query)),
     });

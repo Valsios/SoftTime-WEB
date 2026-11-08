@@ -10,7 +10,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Processing)]
-[Route("api/weekly-validation")]
+[Route("api/v1/weekly-validation")]
 [Tags("WeeklyValidation")]
 public class WeeklyValidationController : ControllerBase
 {

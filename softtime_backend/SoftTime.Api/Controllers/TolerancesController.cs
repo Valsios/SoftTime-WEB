@@ -10,7 +10,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Parameters)]
-[Route("api/tolerances")]
+[Route("api/v1/tolerances")]
 [Tags("Tolerances")]
 public class TolerancesController : ControllerBase
 {

@@ -22,7 +22,7 @@ public class AccountDeletionHttpTests : IClassFixture<ApiFactory>
         Assert.Contains(_f.Store.GetRepo<UserPermission>().Items, p => p.IdResponsable == 10053);
         Assert.Contains(_f.Store.GetRepo<BddAutorisee>().Items, a => a.IdResponsable == 10053);
 
-        var resp = await _http.SendAsync(_f.Request("admin", HttpMethod.Delete, "/api/users/10053"));
+        var resp = await _http.SendAsync(_f.Request("admin", HttpMethod.Delete, "/api/v1/users/10053"));
 
         Assert.Equal(HttpStatusCode.NoContent, resp.StatusCode);
         Assert.DoesNotContain(_f.Store.GetRepo<Responsable>().Items, u => u.IdResponsable == 10053);
@@ -37,7 +37,7 @@ public class AccountDeletionHttpTests : IClassFixture<ApiFactory>
     {
         var before = _f.Snapshot();
         // L'administrateur ne peut pas supprimer son propre compte (14).
-        var resp = await _http.SendAsync(_f.Request("admin", HttpMethod.Delete, "/api/users/14"));
+        var resp = await _http.SendAsync(_f.Request("admin", HttpMethod.Delete, "/api/v1/users/14"));
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
         Assert.Equal(before, _f.Snapshot());
     }

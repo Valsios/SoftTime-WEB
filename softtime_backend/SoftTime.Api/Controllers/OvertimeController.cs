@@ -10,7 +10,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Processing)]
-[Route("api/overtime")]
+[Route("api/v1/overtime")]
 [Tags("Overtime")]
 public class OvertimeController : ControllerBase
 {

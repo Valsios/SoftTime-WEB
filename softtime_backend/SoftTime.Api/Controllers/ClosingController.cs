@@ -18,7 +18,7 @@ namespace SoftTime.Api.Controllers;
 /// </summary>
 [ApiController]
 [Authorize]
-[Route("api/closing")]
+[Route("api/v1/closing")]
 [Tags("Clôture")]
 public class ClosingController : ControllerBase
 {

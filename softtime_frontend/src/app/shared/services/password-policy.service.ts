@@ -14,7 +14,7 @@ export class PasswordPolicyService extends ApiService {
   private cached$?: Observable<PasswordPolicy>;
 
   get(): Observable<PasswordPolicy> {
-    this.cached$ ??= this.http.get<PasswordPolicy>(this.url('/api/auth/password-policy')).pipe(
+    this.cached$ ??= this.http.get<PasswordPolicy>(this.url('/api/v1/auth/password-policy')).pipe(
       map((policy) => this.withFallback(policy)),
       catchError(() => of(FALLBACK_PASSWORD_POLICY)),
       shareReplay(1),

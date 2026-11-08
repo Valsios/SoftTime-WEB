@@ -30,7 +30,7 @@ public class SecurityPipelineHttpTests : IClassFixture<ApiFactory>
     public async Task Preflight_UnknownOrigin_IsNotAllowed()
     {
         // Arrange
-        var request = new HttpRequestMessage(HttpMethod.Options, "/api/auth/login");
+        var request = new HttpRequestMessage(HttpMethod.Options, "/api/v1/auth/login");
         request.Headers.Add("Origin", "https://evil.example");
         request.Headers.Add("Access-Control-Request-Method", "POST");
 
@@ -55,7 +55,7 @@ public class SecurityPipelineHttpTests : IClassFixture<ApiFactory>
     public async Task Logout_UnknownToken_ReturnsNoContent()
     {
         // Act
-        var response = await _http.PostAsync("/api/auth/logout", Json("""{"refreshToken":"jeton-inconnu"}"""));
+        var response = await _http.PostAsync("/api/v1/auth/logout", Json("""{"refreshToken":"jeton-inconnu"}"""));
 
         // Assert
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);

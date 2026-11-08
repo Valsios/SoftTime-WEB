@@ -10,7 +10,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Parameters)]
-[Route("api/clock-params")]
+[Route("api/v1/clock-params")]
 [Tags("ClockParams")]
 public class ClockParamsController : ControllerBase
 {

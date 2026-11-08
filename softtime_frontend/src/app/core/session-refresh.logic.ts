@@ -5,7 +5,7 @@
  */
 
 /** Routes appelées sans jeton d'accès (le serveur les accepte anonymes). */
-export const ANONYMOUS_AUTH_PATHS = ['/api/auth/login', '/api/auth/refresh', '/api/auth/logout'] as const;
+export const ANONYMOUS_AUTH_PATHS = ['/api/v1/auth/login', '/api/v1/auth/refresh', '/api/v1/auth/logout'] as const;
 
 export function isAnonymousAuthRequest(url: string): boolean {
   return ANONYMOUS_AUTH_PATHS.some((path) => url.includes(path));

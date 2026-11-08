@@ -15,7 +15,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Traceability)]
-[Route("api/history")]
+[Route("api/v1/history")]
 [Tags("History")]
 public class HistoryController : ControllerBase
 {

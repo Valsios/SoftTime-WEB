@@ -24,16 +24,16 @@ public class SensitiveReadsHttpTests : IClassFixture<ApiFactory>
     // Route → profils (porte 2 + bonne permission) qui y accèdent. Tous les autres comptes à porte 2 sont refusés.
     private static readonly Dictionary<string, (string Url, string[] Allowed)> Routes = new()
     {
-        ["GET users"] = ("/api/users", new[] { U, P, D }),
-        ["GET users/paged"] = ("/api/users/paged", new[] { U }),
-        ["GET users/{id}"] = ("/api/users/10052", new[] { U }),
-        ["GET roles"] = ("/api/roles", new[] { U, P }),
-        ["GET roles/paged"] = ("/api/roles/paged", new[] { R }),
-        ["GET privileges/droits"] = ("/api/privileges/droits", new[] { P, R }),
-        ["GET privileges?roleId"] = ("/api/privileges?roleId=91", new[] { P, R }),
-        ["GET privileges/user/{id}"] = ("/api/privileges/user/10052", new[] { P }),
-        ["GET privileges/role/{id}"] = ("/api/privileges/role/91", new[] { P }),
-        ["GET db-access"] = ("/api/db-access", new[] { D }),
+        ["GET users"] = ("/api/v1/users", new[] { U, P, D }),
+        ["GET users/paged"] = ("/api/v1/users/paged", new[] { U }),
+        ["GET users/{id}"] = ("/api/v1/users/10052", new[] { U }),
+        ["GET roles"] = ("/api/v1/roles", new[] { U, P }),
+        ["GET roles/paged"] = ("/api/v1/roles/paged", new[] { R }),
+        ["GET privileges/droits"] = ("/api/v1/privileges/droits", new[] { P, R }),
+        ["GET privileges?roleId"] = ("/api/v1/privileges?roleId=91", new[] { P, R }),
+        ["GET privileges/user/{id}"] = ("/api/v1/privileges/user/10052", new[] { P }),
+        ["GET privileges/role/{id}"] = ("/api/v1/privileges/role/91", new[] { P }),
+        ["GET db-access"] = ("/api/v1/db-access", new[] { D }),
     };
 
     private static readonly string[] Gate2Profiles = { U, R, P, D, "paramsother", "param2" };
@@ -70,15 +70,15 @@ public class SensitiveReadsHttpTests : IClassFixture<ApiFactory>
     public async Task Own_detailed_permissions_stay_readable_through_the_login_response_not_this_route()
     {
         // GET privileges/user/{id} est réservé à PARAMS:PRIVILEGES ; un compte lit les siens via /auth/me.
-        var me = await _http.SendAsync(_f.Request("param2", HttpMethod.Get, "/api/auth/me"));
+        var me = await _http.SendAsync(_f.Request("param2", HttpMethod.Get, "/api/v1/auth/me"));
         Assert.Equal(HttpStatusCode.OK, me.StatusCode);
-        var route = await _http.SendAsync(_f.Request("param2", HttpMethod.Get, "/api/privileges/user/10040"));
+        var route = await _http.SendAsync(_f.Request("param2", HttpMethod.Get, "/api/v1/privileges/user/10040"));
         Assert.Equal(HttpStatusCode.Forbidden, route.StatusCode);
     }
 
     // Routes volontairement NON protégées par cette étape : elles documentent le comportement actuel.
     [Theory]
-    [InlineData("/api/privileges/audit", "admin")]            // porte Traçabilité (5), pas Paramètres
+    [InlineData("/api/v1/privileges/audit", "admin")]            // porte Traçabilité (5), pas Paramètres
     public async Task Audit_of_rights_is_governed_by_the_traceability_gate(string url, string profile)
     {
         var ok = await _http.SendAsync(_f.Request(profile, HttpMethod.Get, url));
@@ -88,9 +88,9 @@ public class SensitiveReadsHttpTests : IClassFixture<ApiFactory>
     }
 
     [Theory]
-    [InlineData("/api/sage-databases")]
-    [InlineData("/api/pointeuse-databases")]
-    [InlineData("/api/field-roles")]
+    [InlineData("/api/v1/sage-databases")]
+    [InlineData("/api/v1/pointeuse-databases")]
+    [InlineData("/api/v1/field-roles")]
     public async Task Lists_used_by_other_screens_stay_open_to_any_authenticated_account(string url)
     {
         var resp = await _http.SendAsync(_f.Request("paramsother", HttpMethod.Get, url));

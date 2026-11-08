@@ -10,7 +10,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Processing)]
-[Route("api/anomalies")]
+[Route("api/v1/anomalies")]
 [Tags("Anomalies")]
 public class AnomaliesController : ControllerBase
 {

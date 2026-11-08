@@ -12,7 +12,7 @@ using SoftTime.Application.Security;
 namespace SoftTime.Api.Controllers;
 
 [ApiController]
-[Route("api/auth")]
+[Route("api/v1/auth")]
 [Tags("Auth")]
 public class AuthController : ControllerBase
 {

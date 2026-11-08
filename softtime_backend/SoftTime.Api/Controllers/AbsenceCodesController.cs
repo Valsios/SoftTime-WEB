@@ -10,7 +10,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Parameters)]
-[Route("api/absence-codes")]
+[Route("api/v1/absence-codes")]
 [Tags("AbsenceCodes")]
 public class AbsenceCodesController : ControllerBase
 {

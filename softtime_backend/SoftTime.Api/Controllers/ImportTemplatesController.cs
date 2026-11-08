@@ -13,7 +13,7 @@ namespace SoftTime.Api.Controllers;
 /// </summary>
 [ApiController]
 [Authorize]
-[Route("api/import-templates")]
+[Route("api/v1/import-templates")]
 [Tags("ImportTemplates")]
 public class ImportTemplatesController : ControllerBase
 {

@@ -22,7 +22,7 @@ public class PredictionsHttpTests : IClassFixture<ApiFactory>
     // Lectures de prévisions (celles qui lisent des données par personne, plus l'état du moteur).
     public static IEnumerable<object[]> Reads()
     {
-        foreach (var url in new[] { "/api/predictions/status", "/api/predictions/job", "/api/predictions/overtime", "/api/predictions/overtime/horizon", "/api/predictions/overtime/accuracy" })
+        foreach (var url in new[] { "/api/v1/predictions/status", "/api/v1/predictions/job", "/api/v1/predictions/overtime", "/api/v1/predictions/overtime/horizon", "/api/v1/predictions/overtime/accuracy" })
             foreach (var profile in new[] { "admin", "predreader", "prednobase", "gate6only", "user1", "param2", "joel", "anonyme" })
                 yield return new object[] { url, profile };
     }
@@ -59,7 +59,7 @@ public class PredictionsHttpTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Gate_6_alone_without_the_prediction_permission_is_refused_even_on_the_job_state()
     {
-        var resp = await _http.SendAsync(_f.Request("gate6only", HttpMethod.Get, "/api/predictions/job"));
+        var resp = await _http.SendAsync(_f.Request("gate6only", HttpMethod.Get, "/api/v1/predictions/job"));
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
     }
 
@@ -67,14 +67,14 @@ public class PredictionsHttpTests : IClassFixture<ApiFactory>
     public async Task A_refused_read_writes_nothing()
     {
         var before = _f.Snapshot();
-        await _http.SendAsync(_f.Request("gate6only", HttpMethod.Get, "/api/predictions/overtime", sageHeader: ApiFactory.SageName));
+        await _http.SendAsync(_f.Request("gate6only", HttpMethod.Get, "/api/v1/predictions/overtime", sageHeader: ApiFactory.SageName));
         Assert.Equal(before, _f.Snapshot());
     }
 
     // Étape 4b-11 : déclencher un traitement (entraînement, recalcul) est réservé aux administrateurs.
     public static IEnumerable<object[]> Triggers()
     {
-        foreach (var url in new[] { "/api/predictions/refresh", "/api/predictions/train", "/api/predictions/backfill" })
+        foreach (var url in new[] { "/api/v1/predictions/refresh", "/api/v1/predictions/train", "/api/v1/predictions/backfill" })
             foreach (var profile in new[] { "admin", "param2", "predreader", "gate6only", "joel", "anonyme" })
                 yield return new object[] { url, profile };
     }

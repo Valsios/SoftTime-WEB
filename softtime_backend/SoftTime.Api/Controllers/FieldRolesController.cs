@@ -7,7 +7,7 @@ namespace SoftTime.Api.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("api/field-roles")]
+[Route("api/v1/field-roles")]
 [Tags("FieldRoles")]
 public class FieldRolesController : ControllerBase
 {

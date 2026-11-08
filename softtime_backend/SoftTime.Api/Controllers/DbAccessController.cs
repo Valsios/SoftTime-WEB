@@ -9,7 +9,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Parameters)]
-[Route("api/db-access")]
+[Route("api/v1/db-access")]
 [Tags("DbAccess")]
 public class DbAccessController : ControllerBase
 {

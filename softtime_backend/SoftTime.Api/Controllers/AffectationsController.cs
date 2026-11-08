@@ -11,7 +11,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Parameters)]
-[Route("api/affectations")]
+[Route("api/v1/affectations")]
 [Tags("Affectations")]
 public class AffectationsController : ControllerBase
 {

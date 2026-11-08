@@ -10,7 +10,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Parameters)]
-[Route("api/payroll-write-config")]
+[Route("api/v1/payroll-write-config")]
 [Tags("PayrollWriteConfiguration")]
 public class PayrollWriteConfigurationController : ControllerBase
 {

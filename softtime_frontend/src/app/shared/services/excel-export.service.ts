@@ -31,7 +31,7 @@ export class ExcelExportService extends ApiService {
     const name = this.xlsxName(fileName);
     this.http
       .post(
-        this.url('/api/excel/export'),
+        this.url('/api/v1/excel/export'),
         { fileName: name, sheetName, headers, rows: data },
         { responseType: 'blob' },
       )
@@ -46,7 +46,7 @@ export class ExcelExportService extends ApiService {
     const name = this.xlsxName(fileName);
     this.http
       .post(
-        this.url('/api/excel/export-workbook'),
+        this.url('/api/v1/excel/export-workbook'),
         { fileName: name, sheets },
         { responseType: 'blob' },
       )

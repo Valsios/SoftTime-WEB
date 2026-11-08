@@ -10,7 +10,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Parameters)]
-[Route("api/correspondence-mode")]
+[Route("api/v1/correspondence-mode")]
 [Tags("CorrespondenceMode")]
 public class CorrespondenceModeController : ControllerBase
 {

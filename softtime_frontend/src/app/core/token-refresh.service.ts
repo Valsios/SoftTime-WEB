@@ -20,7 +20,7 @@ export class TokenRefreshService {
   /** Nouveau jeton d'accès ; échoue si la session ne peut pas être prolongée (reconnexion nécessaire). */
   refresh(): Observable<string> {
     this.inFlight ??= this.http
-      .post<LoginResponse>(`${environment.apiBaseUrl}/api/auth/refresh`, {}, { withCredentials: true })
+      .post<LoginResponse>(`${environment.apiBaseUrl}/api/v1/auth/refresh`, {}, { withCredentials: true })
       .pipe(
         tap((res) => this.session.setSession(res)),
         map((res) => res.token),
@@ -33,7 +33,7 @@ export class TokenRefreshService {
   /** Révoque le jeton de rafraîchissement côté serveur et efface le cookie ; une erreur réseau n'empêche pas la déconnexion locale. */
   revoke(): void {
     this.http
-      .post(`${environment.apiBaseUrl}/api/auth/logout`, {}, { withCredentials: true })
+      .post(`${environment.apiBaseUrl}/api/v1/auth/logout`, {}, { withCredentials: true })
       .subscribe({ error: () => undefined });
   }
 }

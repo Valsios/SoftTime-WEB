@@ -10,7 +10,7 @@ namespace SoftTime.Api.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("api/sage-databases")]
+[Route("api/v1/sage-databases")]
 [Tags("SageDatabases")]
 public class SageDatabasesController : ControllerBase
 {

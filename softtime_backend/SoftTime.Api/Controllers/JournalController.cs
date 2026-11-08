@@ -14,7 +14,7 @@ namespace SoftTime.Api.Controllers;
 /// </summary>
 [ApiController]
 [Authorize]
-[Route("api/journal")]
+[Route("api/v1/journal")]
 [Tags("Audit")]
 public class JournalController : ControllerBase
 {

@@ -11,7 +11,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Processing)]
-[Route("api/shifts")]
+[Route("api/v1/shifts")]
 [Tags("Shifts")]
 public class ShiftsController : ControllerBase
 {

@@ -105,7 +105,7 @@ public class SecurityHardeningHttpTests : IClassFixture<ApiFactory>
     public async Task MetaEndpoints_Anonymous_Returns401()
     {
         // Act
-        var response = await _http.GetAsync("/api/meta/endpoints");
+        var response = await _http.GetAsync("/api/v1/meta/endpoints");
 
         // Assert
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
@@ -120,7 +120,7 @@ public class SecurityHardeningHttpTests : IClassFixture<ApiFactory>
         var body = JsonSerializer.Serialize(new { login = new string('a', 500), password = "FAKE-Pwd-123!" });
 
         // Act
-        var response = await _http.PostAsync("/api/auth/login", new StringContent(body, Encoding.UTF8, "application/json"));
+        var response = await _http.PostAsync("/api/v1/auth/login", new StringContent(body, Encoding.UTF8, "application/json"));
 
         // Assert
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -132,7 +132,7 @@ public class SecurityHardeningHttpTests : IClassFixture<ApiFactory>
     public async Task Login_EmptyCredentials_StaysAnOrdinaryLoginFailure()
     {
         // Act
-        var response = await _http.PostAsync("/api/auth/login",
+        var response = await _http.PostAsync("/api/v1/auth/login",
             new StringContent("""{"login":"","password":""}""", Encoding.UTF8, "application/json"));
 
         // Assert
@@ -193,7 +193,7 @@ public class SecurityHardeningHttpTests : IClassFixture<ApiFactory>
     public async Task Logout_ClearsTheRefreshCookie()
     {
         // Act
-        var response = await _http.PostAsync("/api/auth/logout", new StringContent("{}", Encoding.UTF8, "application/json"));
+        var response = await _http.PostAsync("/api/v1/auth/logout", new StringContent("{}", Encoding.UTF8, "application/json"));
 
         // Assert
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);

@@ -30,10 +30,10 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
 
   const handle = (err: HttpErrorResponse): Observable<never> => {
     // La politique de mot de passe a un repli local : inutile d'alerter l'utilisateur.
-    if (req.url.includes('/api/auth/password-policy')) {
+    if (req.url.includes('/api/v1/auth/password-policy')) {
       return throwError(() => err);
     }
-    const isLogin = req.url.includes('/api/auth/login');
+    const isLogin = req.url.includes('/api/v1/auth/login');
     if (err.status === 401) {
       if (isLogin) {
         const msg = errorMessage(err);

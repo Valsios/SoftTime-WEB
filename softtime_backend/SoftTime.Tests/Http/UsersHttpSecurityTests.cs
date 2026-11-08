@@ -29,9 +29,9 @@ public class UsersHttpSecurityTests : IClassFixture<ApiFactory>
 
     private static readonly Dictionary<string, (string Method, string Url, string? Body)> Routes = new()
     {
-        ["POST users"] = ("POST", "/api/users", NewUser),
-        ["PUT users/{id} (rôle + mot de passe)"] = ("PUT", "/api/users/10052", Promote),
-        ["DELETE users/{id}"] = ("DELETE", "/api/users/10051", null),
+        ["POST users"] = ("POST", "/api/v1/users", NewUser),
+        ["PUT users/{id} (rôle + mot de passe)"] = ("PUT", "/api/v1/users/10052", Promote),
+        ["DELETE users/{id}"] = ("DELETE", "/api/v1/users/10051", null),
     };
 
     public static IEnumerable<object[]> RefusedCases()
@@ -63,15 +63,15 @@ public class UsersHttpSecurityTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task Administrator_can_create_modify_change_role_and_password_and_delete()
     {
-        var (created, _) = await Send("admin", "POST", "/api/users", NewUser);
+        var (created, _) = await Send("admin", "POST", "/api/v1/users", NewUser);
         Assert.True(created.IsSuccessStatusCode, created.StatusCode.ToString());
         Assert.Contains(_f.Store.GetRepo<Responsable>().Items, u => u.Login == "nouveau");
 
-        var (updated, _) = await Send("admin", "PUT", "/api/users/10052", Promote);
+        var (updated, _) = await Send("admin", "PUT", "/api/v1/users/10052", Promote);
         Assert.True(updated.IsSuccessStatusCode, updated.StatusCode.ToString());
         Assert.Equal(40, _f.Store.GetRepo<Responsable>().Items.Single(u => u.IdResponsable == 10052).IdRole);
 
-        var (deleted, _) = await Send("admin", "DELETE", "/api/users/10051", null);
+        var (deleted, _) = await Send("admin", "DELETE", "/api/v1/users/10051", null);
         Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
         Assert.DoesNotContain(_f.Store.GetRepo<Responsable>().Items, u => u.IdResponsable == 10051);
     }
@@ -89,7 +89,7 @@ public class UsersHttpSecurityTests : IClassFixture<ApiFactory>
     public async Task Reading_users_needs_the_fine_permission_since_step_4b_9()
     {
         // Avant 4b-9 : la porte 2 seule suffisait (param2 lisait les comptes en 200). Maintenant : porte 2 ET PARAMS:USERS.
-        foreach (var url in new[] { "/api/users", "/api/users/10052" })
+        foreach (var url in new[] { "/api/v1/users", "/api/v1/users/10052" })
         {
             var (ok, _) = await Send("usersreader", "GET", url, null);
             Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
@@ -97,7 +97,7 @@ public class UsersHttpSecurityTests : IClassFixture<ApiFactory>
             Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
         }
         // Sans la porte 2, la lecture reste refusée comme avant.
-        var (denied, _) = await Send("joel", "GET", "/api/users", null);
+        var (denied, _) = await Send("joel", "GET", "/api/v1/users", null);
         Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
     }
 }

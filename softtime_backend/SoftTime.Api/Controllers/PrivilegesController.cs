@@ -11,7 +11,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Parameters)]
-[Route("api/privileges")]
+[Route("api/v1/privileges")]
 [Tags("Privileges")]
 public class PrivilegesController : ControllerBase
 {

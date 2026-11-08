@@ -9,7 +9,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Databases)]
-[Route("api/discovery")]
+[Route("api/v1/discovery")]
 [Tags("Discovery")]
 public class DiscoveryController : ControllerBase
 {

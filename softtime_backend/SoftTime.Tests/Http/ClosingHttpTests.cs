@@ -17,7 +17,7 @@ namespace SoftTime.Tests.Http;
 public class ClosingHttpTests : IClassFixture<ApiFactory>
 {
     private const string Denied = "Vous n'avez pas la permission requise pour cette consultation.";
-    private const string Url = "/api/closing/analysis";
+    private const string Url = "/api/v1/closing/analysis";
     private const string Semaine = "from=2025-11-03&to=2025-11-07";
 
     private const decimal LecteurId = 10094;

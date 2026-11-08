@@ -10,7 +10,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Parameters)]
-[Route("api/majorations")]
+[Route("api/v1/majorations")]
 [Tags("Majorations")]
 public class MajorationsController : ControllerBase
 {

@@ -10,7 +10,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Parameters)]
-[Route("api/roles")]
+[Route("api/v1/roles")]
 [Tags("Roles")]
 public class RolesController : ControllerBase
 {

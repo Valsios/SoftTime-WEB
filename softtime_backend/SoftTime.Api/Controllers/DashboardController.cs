@@ -12,7 +12,7 @@ namespace SoftTime.Api.Controllers;
 /// </summary>
 [ApiController]
 [Authorize]
-[Route("api/dashboard")]
+[Route("api/v1/dashboard")]
 [Tags("Dashboard")]
 public class DashboardController : ControllerBase
 {
