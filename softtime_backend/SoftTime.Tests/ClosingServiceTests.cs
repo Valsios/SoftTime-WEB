@@ -252,7 +252,7 @@ public class ClosingServiceTests
     }
 
     [Fact]
-    public async Task Analyse_ExposesMatriculeAndDepartmentOnly()
+    public async Task AnalyserAsync_Result_ExposesMatriculeAndDepartmentOnly()
     {
         // Arrange
         var ctx = new Contexte();
@@ -578,7 +578,7 @@ public class ClosingServiceTests
     [InlineData(2025, 12, 31, 2025, 11, 1, 2025, 11, 30)]
     [InlineData(2026, 1, 15, 2025, 12, 1, 2025, 12, 31)]
     [InlineData(2024, 3, 10, 2024, 2, 1, 2024, 2, 29)]
-    public void DefaultPeriod_IsPreviousCalendarMonth(int a, int m, int j, int a1, int m1, int j1, int a2, int m2, int j2)
+    public void AvecPeriodeParDefaut_NoPeriod_UsesPreviousCalendarMonth(int a, int m, int j, int a1, int m1, int j1, int a2, int m2, int j2)
     {
         // Act
         var request = ClosingComputation.AvecPeriodeParDefaut(new ClosingAnalysisRequest(default, default), new DateTime(a, m, j));
@@ -602,7 +602,7 @@ public class ClosingServiceTests
     }
 
     [Fact]
-    public async Task Analyse_NeverWrites()
+    public async Task AnalyserAsync_AnyPeriod_NeverWrites()
     {
         // Arrange
         var ctx = new Contexte();
@@ -689,7 +689,7 @@ public class ClosingServiceTests
     }
 
     [Fact]
-    public async Task Cache_KeyIncludesDepartmentComparisonAndRules()
+    public async Task AnalyserAsync_CachedAnalysis_KeyIncludesDepartmentComparisonAndRules()
     {
         // Arrange
         var ctx = new Contexte();

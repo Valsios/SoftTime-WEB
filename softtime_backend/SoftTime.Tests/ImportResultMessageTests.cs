@@ -68,7 +68,7 @@ public class ImportResultMessageTests
     }
 
     [Fact]
-    public async Task Affectations_MessageDetailleImportesIgnoresEtRaisons()
+    public async Task ImportAffectationsExcelAsync_LignesMixtes_DetailleImportesIgnoresEtRaisons()
     {
         // Arrange
         var contexte = new Contexte();
@@ -91,7 +91,7 @@ public class ImportResultMessageTests
     }
 
     [Fact]
-    public async Task Correspondances_EnteteNonCompteEtMessageChiffre()
+    public async Task ImportCorrespondencesCsvAsync_AvecEntete_NeComptePasLEnteteEtChiffreLeMessage()
     {
         // Arrange
         var contexte = new Contexte();
@@ -111,7 +111,7 @@ public class ImportResultMessageTests
     }
 
     [Fact]
-    public async Task Shifts_MessageIndiqueImportesEtIgnores()
+    public async Task ImportShiftsExcelAsync_LignesMixtes_IndiqueImportesEtIgnores()
     {
         // Arrange
         var contexte = new Contexte();
@@ -135,7 +135,7 @@ public class ImportResultMessageTests
     }
 
     [Fact]
-    public async Task PointagesExcel_MessageIndiqueImportesEtIgnores()
+    public async Task ImportPunchesExcelAsync_LignesMixtes_IndiqueImportesEtIgnores()
     {
         // Arrange
         var contexte = new Contexte();
@@ -175,7 +175,7 @@ public class ImportResultMessageTests
     }
 
     [Fact]
-    public async Task Corrections_CompteLesLignesSansMatricule()
+    public async Task ImportCorrectionsExcelAsync_LignesSansMatricule_SontComptees()
     {
         // Arrange
         var contexte = new Contexte();
@@ -198,7 +198,7 @@ public class ImportResultMessageTests
     }
 
     [Fact]
-    public async Task Planning_MessageIndiqueImportesEtIgnores()
+    public async Task ImportExcelAsync_LignesMixtes_IndiqueImportesEtIgnores()
     {
         // Arrange
         var contexte = new Contexte();

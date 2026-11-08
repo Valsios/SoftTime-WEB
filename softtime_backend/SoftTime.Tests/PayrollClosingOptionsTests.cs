@@ -25,7 +25,7 @@ public class PayrollClosingOptionsTests
             new ClosingScope(From, To, false, options));
 
     [Fact]
-    public void IgnoreValidatedWeeks_DefaultIsTrue()
+    public void IgnoreValidatedWeeks_Default_IsTrue()
     {
         ClosingRulesOptions.Default.IgnorerSemainesValidees.Should().BeTrue();
         new ClosingRulesOptions().IgnorerSemainesValidees.Should().BeTrue();

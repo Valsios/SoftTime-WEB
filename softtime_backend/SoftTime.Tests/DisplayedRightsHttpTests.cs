@@ -15,7 +15,7 @@ public class DisplayedRightsHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Role_route_of_a_role_with_the_database_gate_and_no_rows_has_no_configuration()
+    public async Task GetRolePermissions_DatabaseGateWithoutRows_ShowsNoConfiguration()
     {
         // Act
         // Rôle 10034 du jeu de test : portes 1 et 3, aucune ligne détaillée.

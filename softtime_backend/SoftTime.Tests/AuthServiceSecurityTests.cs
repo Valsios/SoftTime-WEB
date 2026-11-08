@@ -730,7 +730,7 @@ public class AuthServiceSecurityTests
     }
 
     [Fact]
-    public async Task GetUsersPagedAsync_ReturnsRequestedPageOrderedByName()
+    public async Task GetUsersPagedAsync_SecondPage_ReturnsRequestedPageOrderedByName()
     {
         // Arrange
         _uow.Get<Responsable>().Items.AddRange(new[]
@@ -754,7 +754,7 @@ public class AuthServiceSecurityTests
     }
 
     [Fact]
-    public async Task GetRolesPagedAsync_ReturnsRequestedPage()
+    public async Task GetRolesPagedAsync_SecondPage_ReturnsRequestedPage()
     {
         // Act
         var result = await _auth.GetRolesPagedAsync(1, 1);

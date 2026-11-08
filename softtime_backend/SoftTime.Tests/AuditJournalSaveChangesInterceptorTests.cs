@@ -11,7 +11,7 @@ namespace SoftTime.Tests;
 public class AuditJournalSaveChangesInterceptorTests
 {
     [Fact]
-    public void Insertion_creates_detail_entries()
+    public void CaptureChanges_Insertion_CreatesDetailEntries()
     {
         // Arrange
         using var db = CreateContext();
@@ -25,7 +25,7 @@ public class AuditJournalSaveChangesInterceptorTests
     }
 
     [Fact]
-    public void Modification_of_two_columns_creates_two_entries_with_one_correlation()
+    public void CaptureChanges_TwoColumnsModified_CreatesTwoEntriesWithOneCorrelation()
     {
         // Arrange
         using var db = CreateContext();
@@ -52,7 +52,7 @@ public class AuditJournalSaveChangesInterceptorTests
     }
 
     [Fact]
-    public void Modification_of_one_column_creates_one_entry()
+    public void CaptureChanges_OneColumnModified_CreatesOneEntry()
     {
         // Arrange
         using var db = CreateContext();
@@ -72,7 +72,7 @@ public class AuditJournalSaveChangesInterceptorTests
     }
 
     [Fact]
-    public void Fully_marked_entity_with_no_value_change_creates_no_entry()
+    public void CaptureChanges_FullyMarkedEntityWithoutValueChange_CreatesNoEntry()
     {
         // Arrange
         using var db = CreateContext();
@@ -88,7 +88,7 @@ public class AuditJournalSaveChangesInterceptorTests
     }
 
     [Fact]
-    public void Fully_marked_entity_with_one_value_change_creates_one_entry()
+    public void CaptureChanges_FullyMarkedEntityWithOneValueChange_CreatesOneEntry()
     {
         // Arrange
         using var db = CreateContext();
@@ -109,7 +109,7 @@ public class AuditJournalSaveChangesInterceptorTests
     [InlineData(DateTimeKind.Unspecified)]
     [InlineData(DateTimeKind.Local)]
     [InlineData(DateTimeKind.Utc)]
-    public void Date_values_preserve_stored_clock_time_without_utc_conversion(DateTimeKind kind)
+    public void CaptureChanges_DateValue_KeepsStoredClockTimeWithoutUtcConversion(DateTimeKind kind)
     {
         // Arrange
         using var db = CreateContext();
@@ -132,7 +132,7 @@ public class AuditJournalSaveChangesInterceptorTests
     }
 
     [Fact]
-    public void Suppression_creates_delete_entries()
+    public void CaptureChanges_Deletion_CreatesDeleteEntries()
     {
         // Arrange
         using var db = CreateContext();
@@ -148,7 +148,7 @@ public class AuditJournalSaveChangesInterceptorTests
     }
 
     [Fact]
-    public void Rollback_keeps_journal_in_the_same_pending_unit_of_work()
+    public void CaptureChanges_Rollback_KeepsJournalInTheSamePendingUnitOfWork()
     {
         // Arrange
         using var db = CreateContext();
@@ -163,7 +163,7 @@ public class AuditJournalSaveChangesInterceptorTests
     }
 
     [Fact]
-    public void Sensitive_columns_are_masked()
+    public void CaptureChanges_SensitiveColumns_MasksValues()
     {
         // Arrange
         using var db = CreateContext();
@@ -186,7 +186,7 @@ public class AuditJournalSaveChangesInterceptorTests
     [InlineData(typeof(HistoriquePointage))]
     [InlineData(typeof(HistoriqueAnomalie))]
     [InlineData(typeof(HistoriqueHs))]
-    public void Technical_and_history_tables_are_excluded(Type type)
+    public void CaptureChanges_TechnicalAndHistoryTables_AreExcluded(Type type)
     {
         // Arrange
         using var db = CreateContext();
@@ -200,7 +200,7 @@ public class AuditJournalSaveChangesInterceptorTests
     }
 
     [Fact]
-    public void Capturing_twice_does_not_create_recursive_or_duplicate_entries()
+    public void CaptureChanges_CalledTwice_CreatesNoRecursiveOrDuplicateEntries()
     {
         // Arrange
         using var db = CreateContext();
@@ -216,7 +216,7 @@ public class AuditJournalSaveChangesInterceptorTests
     }
 
     [Fact]
-    public void Over_threshold_creates_one_summary()
+    public void CaptureChanges_OverThreshold_CreatesOneSummary()
     {
         // Arrange
         using var db = CreateContext();
@@ -233,7 +233,7 @@ public class AuditJournalSaveChangesInterceptorTests
     }
 
     [Fact]
-    public void Missing_user_uses_system_identity()
+    public void CaptureChanges_MissingUser_UsesSystemIdentity()
     {
         // Arrange
         using var db = CreateContext();

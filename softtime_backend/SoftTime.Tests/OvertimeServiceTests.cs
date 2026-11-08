@@ -193,7 +193,7 @@ public class OvertimeServiceTests
     }
 
     [Fact]
-    public async Task Apercu_UneLigneParSalarieMemeSansPointage()
+    public async Task PreviewWeekAsync_SalarieSansPointage_DonneUneLigneParSalarie()
     {
         // Arrange
         var sut = new Contexte();
@@ -234,7 +234,7 @@ public class OvertimeServiceTests
     }
 
     [Fact]
-    public async Task Validation_SansSelectionNeFaitRien()
+    public async Task ValidateWeekAsync_SansSelection_NeFaitRien()
     {
         // Arrange
         var contexte = new Contexte();
@@ -252,7 +252,7 @@ public class OvertimeServiceTests
     // ------------------------------------------------------------------ ventilation / exonération
 
     [Fact]
-    public async Task ExoImpo_NeRegroupeQueLesSemainesValideesEtReconstruitLaRepartition()
+    public async Task CalculateExoImpoAsync_SemainesMixtes_NeRegroupeQueLesValideesEtReconstruitLaRepartition()
     {
         // Arrange
         var contexte = new Contexte();
@@ -282,7 +282,7 @@ public class OvertimeServiceTests
     }
 
     [Fact]
-    public async Task ExoImpo_ReconstruitLaRepartitionAUneReexecution()
+    public async Task CalculateExoImpoAsync_Reexecution_ReconstruitLaRepartition()
     {
         // Arrange
         var contexte = new Contexte();
@@ -301,7 +301,7 @@ public class OvertimeServiceTests
     }
 
     [Fact]
-    public async Task ExoImpo_ReporteLabsenceDeLaPeriode()
+    public async Task CalculateExoImpoAsync_AbsenceSurLaPeriode_LaReporte()
     {
         // Arrange
         var contexte = new Contexte();
@@ -401,7 +401,7 @@ public class OvertimeServiceTests
     // ------------------------------------------------------------------ détail
 
     [Fact]
-    public async Task Detail_ExposeLesBornesReellesDesSemaines()
+    public async Task DetailAsync_SemainesValidees_ExposeLeursBornesReelles()
     {
         // Arrange
         // Période 01/05 → 31/05/2025 : la première semaine validée commence avant le mois (28/04).
@@ -431,7 +431,7 @@ public class OvertimeServiceTests
     }
 
     [Fact]
-    public async Task Detail_RepliSurLaPeriodeSiLesSemainesNeConcordentPas()
+    public async Task DetailAsync_SemainesNonConcordantes_SeReplieSurLaPeriode()
     {
         // Arrange
         // Ligne héritée (aucune semaine validée correspondante) : on affiche la période stockée.

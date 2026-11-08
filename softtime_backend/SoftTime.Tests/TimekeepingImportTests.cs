@@ -36,7 +36,7 @@ public class TimekeepingImportTests
     }
 
     [Fact]
-    public async Task ImportPunchesExcel_DedoublonneLesLignesIdentiquesDuFichier()
+    public async Task ImportPunchesExcelAsync_LignesIdentiquesDuFichier_LesDedoublonne()
     {
         // Arrange
         var contexte = new Contexte();
@@ -57,7 +57,7 @@ public class TimekeepingImportTests
     }
 
     [Fact]
-    public async Task ImportPunchesExcel_DedoublonneContreLaBase()
+    public async Task ImportPunchesExcelAsync_LignesDejaEnBase_LesDedoublonne()
     {
         // Arrange
         var contexte = new Contexte();

@@ -50,7 +50,7 @@ public class AnomalyDtoBindingTests
     }
 
     [Fact]
-    public void AnomalyUpdateDto_BindsFlagsAndDates()
+    public void Deserialize_AnomalyUpdateDto_BindsFlagsAndDates()
     {
         // Act
         var dto = JsonSerializer.Deserialize<AnomalyUpdateDto>(
@@ -67,7 +67,7 @@ public class AnomalyDtoBindingTests
     }
 
     [Fact]
-    public void AnomalyValidationRequest_BindsIds()
+    public void Deserialize_AnomalyValidationRequest_BindsIds()
     {
         // Act
         var request = JsonSerializer.Deserialize<AnomalyValidationRequest>("""{"ids":[1,2,3]}""", Options);

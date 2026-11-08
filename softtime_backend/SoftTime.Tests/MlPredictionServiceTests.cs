@@ -20,7 +20,7 @@ public class MlPredictionServiceTests
     private static readonly DateTime Lundi = MondayOf(DateTime.Today);
 
     [Fact]
-    public async Task L_horizon_totalise_chaque_semaine_et_signale_les_semaines_sans_prevision()
+    public async Task GetHsHorizonAsync_SemainesMixtes_TotaliseEtSignaleLesSemainesSansPrevision()
     {
         // Arrange
         var store = new FakeMlStore();
@@ -46,7 +46,7 @@ public class MlPredictionServiceTests
     }
 
     [Fact]
-    public async Task Le_suivi_compare_la_prevision_aux_hs_reelles_des_semaines_terminees()
+    public async Task GetHsAccuracyAsync_SemainesTerminees_ComparePrevisionEtHsReelles()
     {
         // Arrange
         var store = new FakeMlStore();
@@ -72,7 +72,7 @@ public class MlPredictionServiceTests
     }
 
     [Fact]
-    public async Task Sans_historique_le_suivi_est_vide()
+    public async Task GetHsAccuracyAsync_SansHistorique_RetourneVide()
     {
         // Act
         var suivi = await Service(new FakeMlStore()).GetHsAccuracyAsync(8);

@@ -91,7 +91,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
 
     [Theory]
     [MemberData(nameof(Reads))]
-    public async Task Journal_read_needs_admin_or_gate_5_with_trace_audit(string url, string profile)
+    public async Task GetJournal_WithoutAdminOrGate5TraceAudit_IsRefused(string url, string profile)
     {
         // Arrange
         var before = _f.Snapshot();
@@ -114,7 +114,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Clear_value_stored_before_masking_never_leaves_the_api()
+    public async Task GetJournal_ClearValueStoredBeforeMasking_IsNeverReturned()
     {
         foreach (var url in new[] { "/api/v1/journal", $"/api/v1/journal/{ClearRowId}", "/api/v1/journal?table=T_BDD_SAGE" })
         {
@@ -133,7 +133,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Email_stays_visible()
+    public async Task GetJournal_EmailColumn_StaysVisible()
     {
         // Act
         var (_, text) = await Send("admin", HttpMethod.Get, "/api/v1/journal/3");
@@ -143,7 +143,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Filters_on_period_user_action_and_table_apply()
+    public async Task GetJournal_PeriodUserActionAndTableFilters_Apply()
     {
         // Arrange
         var from = Base.ToString("O");
@@ -165,7 +165,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Pagination_defaults_to_50_and_caps_the_page_size_at_200()
+    public async Task GetJournal_Pagination_DefaultsTo50AndCapsAt200()
     {
         // Act
         var first = await Page("/api/v1/journal?table=T_VOLUME");
@@ -185,7 +185,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Facets_list_distinct_values_of_the_period()
+    public async Task GetFacets_Period_ListsDistinctValues()
     {
         // Act
         var (status, text) = await Send("tracereader", HttpMethod.Get,
@@ -203,7 +203,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Unknown_journal_line_is_404_for_an_authorized_reader()
+    public async Task GetJournalLine_UnknownLine_Returns404()
     {
         // Act
         var (status, _) = await Send("admin", HttpMethod.Get, "/api/v1/journal/424242");
@@ -221,7 +221,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     [InlineData("DELETE", "/api/v1/journal/1")]
     [InlineData("PATCH", "/api/v1/journal/1")]
     [InlineData("POST", "/api/v1/journal/facets")]
-    public async Task Journal_has_no_write_route(string method, string url)
+    public async Task Journal_WriteMethods_HaveNoRoute(string method, string url)
     {
         // Arrange
         var before = _f.Snapshot();
@@ -244,7 +244,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
 
     [Theory]
     [MemberData(nameof(ConfigWrites))]
-    public async Task Audit_configuration_writes_are_refused_to_non_administrators(string method, string url, string profile)
+    public async Task AuditConfiguration_NonAdministratorWrites_AreRefused(string method, string url, string profile)
     {
         // Arrange
         var before = _f.Snapshot();
@@ -266,7 +266,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Administrator_can_create_audit_configuration()
+    public async Task AuditConfiguration_AdministratorCreate_Succeeds()
     {
         // Act
         var (status, _) = await Send("admin", HttpMethod.Post, "/api/v1/audit/config", ConfigBody);
@@ -277,7 +277,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Administrator_update_of_audit_configuration_passes_authorization()
+    public async Task AuditConfiguration_AdministratorUpdate_PassesAuthorization()
     {
         // Arrange
         // Le double en mémoire ne retrouve pas suivi_TBLCLN par identifiant : 404 attendu, jamais 401 ni 403.

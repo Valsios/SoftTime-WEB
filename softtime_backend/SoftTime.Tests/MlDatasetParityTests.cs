@@ -93,7 +93,7 @@ public class MlDatasetParityTests
     }
 
     [Fact]
-    public async Task Les_absences_non_justifiees_sont_identiques_a_l_etat_des_absences()
+    public async Task Dataset_AbsencesNonJustifiees_IdentiquesALEtatDesAbsences()
     {
         // Arrange
         var ctx = new Contexte();
@@ -142,7 +142,7 @@ public class MlDatasetParityTests
     }
 
     [Fact]
-    public async Task Les_retards_sont_identiques_a_l_etat_des_retards_sans_valeur_saisie()
+    public async Task Dataset_Retards_IdentiquesALEtatDesRetardsSansValeurSaisie()
     {
         // Arrange
         var ctx = new Contexte();
@@ -174,7 +174,7 @@ public class MlDatasetParityTests
     }
 
     [Fact]
-    public async Task Les_heures_sup_sont_identiques_a_l_ecran_HS()
+    public async Task Dataset_HeuresSup_IdentiquesALEcranHs()
     {
         // Arrange
         var sut = new Contexte();
@@ -206,7 +206,7 @@ public class MlDatasetParityTests
     }
 
     [Fact]
-    public async Task Les_jours_futurs_ne_sont_ni_des_absences_ni_de_l_historique()
+    public async Task Dataset_JoursFuturs_NiAbsencesNiHistorique()
     {
         // Arrange
         var sut = new Contexte();
@@ -231,7 +231,7 @@ public class MlDatasetParityTests
     }
 
     [Fact]
-    public void Un_jour_ou_la_majorite_n_a_pas_pointe_est_un_trou_de_donnees()
+    public void JoursSansPointage_MajoriteSansPointage_EstUnTrouDeDonnees()
     {
         // Arrange
         var options = new MlOptions { MissingPunchDayAbsenceRate = 0.5, MissingPunchDayMinPlanned = 5 };
@@ -250,7 +250,7 @@ public class MlDatasetParityTests
     }
 
     [Fact]
-    public void Les_tranches_du_backfill_couvrent_des_semaines_completes()
+    public void Chunks_Backfill_CouvreDesSemainesCompletes()
     {
         // Arrange
         var from = new DateTime(2025, 7, 30);

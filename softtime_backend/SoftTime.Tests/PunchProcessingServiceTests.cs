@@ -325,7 +325,7 @@ public class PunchProcessingServiceTests
     }
 
     [Fact]
-    public async Task CorrectionManuelle_EstProtegee()
+    public async Task ProcessAsync_CorrectionManuelle_EstProtegee()
     {
         // Arrange
         var sut = new Contexte();
@@ -354,7 +354,7 @@ public class PunchProcessingServiceTests
     }
 
     [Fact]
-    public async Task SemaineValidee_EstProtegee()
+    public async Task ProcessAsync_SemaineValidee_EstProtegee()
     {
         // Arrange
         var sut = new Contexte();

@@ -8,7 +8,7 @@ namespace SoftTime.Tests;
 public class PaginationRulesTests
 {
     [Fact]
-    public void Normaliser_FallsBackOnDefaults()
+    public void Normaliser_NoValues_UsesDefaults()
     {
         // Act
         var result = PaginationRules.Normaliser(null, null);
@@ -20,7 +20,7 @@ public class PaginationRulesTests
     [Theory]
     [InlineData(0)]
     [InlineData(-4)]
-    public void Normaliser_RejectsInvalidPage(int page)
+    public void Normaliser_InvalidPage_IsRefused(int page)
     {
         // Act
         var (pageNormalisee, taille) = PaginationRules.Normaliser(page, 20);
@@ -33,7 +33,7 @@ public class PaginationRulesTests
     [Theory]
     [InlineData(0)]
     [InlineData(-10)]
-    public void Normaliser_RejectsInvalidPageSize(int taille)
+    public void Normaliser_InvalidPageSize_IsRefused(int taille)
     {
         // Act
         var result = PaginationRules.Normaliser(2, taille);
@@ -45,11 +45,11 @@ public class PaginationRulesTests
     [Theory]
     [InlineData(101)]
     [InlineData(5000)]
-    public void Normaliser_CapsPageSizeAtMaximum(int taille)
+    public void Normaliser_PageSizeAboveMaximum_IsCapped(int taille)
         => PaginationRules.Normaliser(1, taille).Taille.Should().Be(PaginationRules.TailleMax);
 
     [Fact]
-    public void Normaliser_KeepsValidValues()
+    public void Normaliser_ValidValues_KeepsThem()
     {
         // Act & Assert
         PaginationRules.Normaliser(3, 100).Should().Be((3, 100));
@@ -103,7 +103,7 @@ public class PaginationRulesTests
     [InlineData(1, 50, 0)]
     [InlineData(2, 50, 50)]
     [InlineData(3, 25, 50)]
-    public void Decalage_ComputesTheSkipOffset(int page, int taille, int attendu)
+    public void Decalage_PageAndSize_ReturnsSkipOffset(int page, int taille, int attendu)
     {
         // Act
         var result = PaginationRules.Decalage(page, taille);
@@ -119,7 +119,7 @@ public class PaginationRulesTests
     [InlineData(51, 50, 2)]
     [InlineData(100, 50, 2)]
     [InlineData(101, 50, 3)]
-    public void NombreDePages_AlwaysReturnsAtLeastOnePage(int total, int taille, int attendu)
+    public void NombreDePages_NoItem_ReturnsOnePage(int total, int taille, int attendu)
     {
         // Act
         var result = PaginationRules.NombreDePages(total, taille);

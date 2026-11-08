@@ -12,7 +12,7 @@ public class EmailTemplatesTests
     // ---- Échappement HTML ----
 
     [Fact]
-    public void EchapperHtml_NeutralizesMarkupCharacters()
+    public void EchapperHtml_MarkupCharacters_AreNeutralized()
     {
         // Act & Assert
         EmailTemplates.EchapperHtml("<script>").Should().Be("&lt;script&gt;");
@@ -21,7 +21,7 @@ public class EmailTemplatesTests
     }
 
     [Fact]
-    public void EchapperHtml_NullBecomesEmpty()
+    public void EchapperHtml_Null_ReturnsEmpty()
     {
         // Act
         var result = EmailTemplates.EchapperHtml(null);
@@ -31,7 +31,7 @@ public class EmailTemplatesTests
     }
 
     [Fact]
-    public void Identifiants_EscapesInjectedMarkup()
+    public void Identifiants_InjectedMarkup_IsEscaped()
     {
         // Act
         // Un nom saisi librement ne doit pas pouvoir casser le message ni y injecter de balise.
@@ -45,7 +45,7 @@ public class EmailTemplatesTests
     // ---- Identifiants ----
 
     [Fact]
-    public void Identifiants_ContainsLoginAndPassword()
+    public void Identifiants_Credentials_ContainsLoginAndPassword()
     {
         // Act
         var corps = EmailTemplates.Identifiants("Rakoto", "Ines", "irakoto", "MotDePasse!42");
@@ -58,11 +58,11 @@ public class EmailTemplatesTests
     }
 
     [Fact]
-    public void Identifiants_UsesTheCredentialsSubject()
+    public void Identifiants_Credentials_UsesTheCredentialsSubject()
         => EmailTemplates.SujetIdentifiants.Should().Be("Vos identifiants SoftTime");
 
     [Fact]
-    public void Identifiants_ToleratesMissingValues()
+    public void Identifiants_MissingValues_AreTolerated()
     {
         // Act
         var corps = EmailTemplates.Identifiants(null, null, null, null);
@@ -75,7 +75,7 @@ public class EmailTemplatesTests
     // ---- Mise à jour ----
 
     [Fact]
-    public void MiseAJour_MentionsOnlyWhatChanged()
+    public void MiseAJour_PartialChange_MentionsOnlyWhatChanged()
     {
         // Act
         var corps = EmailTemplates.MiseAJour(new AccountMailRecipient(null, "nouveau.login", "Rakoto", "Ines"), null, true, false);
@@ -86,7 +86,7 @@ public class EmailTemplatesTests
     }
 
     [Fact]
-    public void MiseAJour_ShowsTheNewPasswordOnlyWhenItChanged()
+    public void MiseAJour_PasswordChanged_ShowsNewPasswordOnlyThen()
     {
         // Act
         var corps = EmailTemplates.MiseAJour(new AccountMailRecipient(null, "login", "Rakoto", "Ines"), "NouveauMotDePasse!1", false, true);
@@ -97,6 +97,6 @@ public class EmailTemplatesTests
     }
 
     [Fact]
-    public void MiseAJour_UsesTheUpdateSubject()
+    public void MiseAJour_AnyChange_UsesTheUpdateSubject()
         => EmailTemplates.SujetMiseAJour.Should().Be("Mise à jour de vos identifiants SoftTime");
 }

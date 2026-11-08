@@ -28,7 +28,7 @@ public class PagedListsTests
     }
 
     [Fact]
-    public void Page_ClampsPageToLastPage()
+    public void Page_PageBeyondLast_ClampsToLastPage()
     {
         // Act
         var result = PagedLists.Page(Enumerable.Range(1, 25).ToList(), page: 10, pageSize: 10);
@@ -45,7 +45,7 @@ public class PagedListsTests
     [InlineData(0, 1)]
     [InlineData(-4, 1)]
     [InlineData(2, 2)]
-    public void Page_NormalizesPage(int demandee, int attendue)
+    public void Page_InvalidPage_IsNormalized(int demandee, int attendue)
     {
         // Act
         var result = PagedLists.Page(Enumerable.Range(1, 100).ToList(), demandee, 10);
@@ -55,7 +55,7 @@ public class PagedListsTests
     }
 
     [Fact]
-    public void Page_CapsPageSizeAtMaximum()
+    public void Page_PageSizeAboveMaximum_IsCapped()
     {
         // Act
         var result = PagedLists.Page(Enumerable.Range(1, 200).ToList(), page: 1, pageSize: 5000);
@@ -67,7 +67,7 @@ public class PagedListsTests
     }
 
     [Fact]
-    public void Page_FallsBackOnDefaultPageSize()
+    public void Page_NoPageSize_UsesDefault()
     {
         // Act
         var result = PagedLists.Page(Enumerable.Range(1, 120).ToList(), page: null, pageSize: null);
@@ -79,7 +79,7 @@ public class PagedListsTests
     }
 
     [Fact]
-    public void Page_PreservesOrder()
+    public void Page_OrderedSource_PreservesOrder()
     {
         // Arrange
         var source = new[] { "c", "a", "b" };
@@ -92,7 +92,7 @@ public class PagedListsTests
     }
 
     [Fact]
-    public async Task PageAsync_CountsAndPages()
+    public async Task PageAsync_RepositorySource_CountsAndPages()
     {
         // Arrange
         var repository = new FakeRepository<Item>(
@@ -128,7 +128,7 @@ public class PagedListsTests
     }
 
     [Fact]
-    public async Task PageAsync_AppliesPredicateAndClampsPage()
+    public async Task PageAsync_PredicateAndPageBeyondLast_FiltersAndClamps()
     {
         // Arrange
         var repository = new FakeRepository<Item>(

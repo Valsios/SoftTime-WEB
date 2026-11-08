@@ -30,7 +30,7 @@ public class PermissionCatalogCharacterizationTests
             .Invoke(null, new object[] { rights, sages, pointeuses })!;
 
     [Fact]
-    public void AuthService_entry_points_still_give_the_same_result_as_the_helper()
+    public void BuildDefaultPermissionsList_AuthServiceEntryPoints_MatchTheHelper()
     {
         // Arrange
         var all = new HashSet<int> { 1, 2, 3, 4, 5, 6 };
@@ -45,7 +45,7 @@ public class PermissionCatalogCharacterizationTests
     }
 
     [Fact]
-    public void Known_static_permissions_are_the_same_set_as_in_AuthService()
+    public void KnownStaticPermissions_Catalog_MatchesAuthServiceSet()
     {
         // Arrange
         var legacy = (HashSet<string>)typeof(RolePermissionService).GetField("KnownStaticPermissions", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
@@ -101,7 +101,7 @@ public class PermissionCatalogCharacterizationTests
     #region BuildDefaultPermissionsList
 
     [Fact]
-    public void Defaults_without_gate_and_without_database_are_empty()
+    public void Build_NoGateNoDatabase_ReturnsEmpty()
     {
         // Act
         var result = Build(Array.Empty<int>());
@@ -111,7 +111,7 @@ public class PermissionCatalogCharacterizationTests
     }
 
     [Fact]
-    public void Defaults_gate_1_without_database_gives_the_two_create_codes()
+    public void Build_Gate1WithoutDatabase_GivesTheTwoCreateCodes()
     {
         // Act
         var result = Build(new[] { Rights.Databases });
@@ -121,7 +121,7 @@ public class PermissionCatalogCharacterizationTests
     }
 
     [Fact]
-    public void Defaults_gate_1_with_databases_gives_create_then_read_update_delete_per_database()
+    public void Build_Gate1WithDatabases_GivesCreateThenCrudPerDatabase()
     {
         // Act
         var result = Build(new[] { Rights.Databases }, new[] { "A", "B" }, new[] { "P" });
@@ -138,7 +138,7 @@ public class PermissionCatalogCharacterizationTests
     }
 
     [Fact]
-    public void Defaults_without_gate_1_but_with_sage_list_still_gives_sage_codes_and_no_pointeuse()
+    public void Build_SageListWithoutGate1_GivesSageCodesWithoutPointeuse()
     {
         // Act
         var result = Build(new[] { Rights.Processing }, new[] { "A" }, new[] { "P" });
@@ -148,7 +148,7 @@ public class PermissionCatalogCharacterizationTests
     }
 
     [Fact]
-    public void Defaults_skip_blank_database_names()
+    public void Build_BlankDatabaseNames_AreSkipped()
     {
         // Act
         var result = Build(new[] { Rights.Databases }, new[] { "A", "", " " }, new[] { "" });
@@ -158,7 +158,7 @@ public class PermissionCatalogCharacterizationTests
     }
 
     [Fact]
-    public void Defaults_single_gates_give_their_fixed_lists()
+    public void Build_SingleGate_GivesItsFixedList()
     {
         // Act & Assert
         Build(new[] { Rights.Parameters }).Should().Equal(Params);
@@ -169,7 +169,7 @@ public class PermissionCatalogCharacterizationTests
     }
 
     [Fact]
-    public void Defaults_all_gates_are_concatenated_in_gate_order()
+    public void Build_AllGates_ConcatenatesInGateOrder()
     {
         // Arrange
         var all = new[] { Rights.Databases, Rights.Parameters, Rights.Processing, Rights.Other, Rights.Traceability, Rights.Reports };
@@ -187,7 +187,7 @@ public class PermissionCatalogCharacterizationTests
     #region DeduirePortes
 
     [Fact]
-    public void Gates_from_each_prefix()
+    public void Gates_EachPrefix_GivesItsGate()
     {
         // Act & Assert
         Gates(new[] { "SAGE:A:READ" }).Should().Equal(new decimal[] { 1 });
@@ -202,7 +202,7 @@ public class PermissionCatalogCharacterizationTests
     }
 
     [Fact]
-    public void Gates_ignore_case_unknown_prefixes_and_duplicates()
+    public void Gates_MixedCaseUnknownOrDuplicatedPrefixes_AreHandled()
     {
         // Act
         var result = Gates(new[] { "sage:a:read", "proc:shifts", "PROC:SHIFTS", "INCONNU:X", "" }).OrderBy(x => x);
@@ -214,7 +214,7 @@ public class PermissionCatalogCharacterizationTests
     }
 
     [Fact]
-    public void Gates_from_a_full_default_list_give_all_six()
+    public void Gates_FullDefaultList_GivesAllSix()
     {
         // Arrange
         var all = new[] { Rights.Databases, Rights.Parameters, Rights.Processing, Rights.Other, Rights.Traceability, Rights.Reports };

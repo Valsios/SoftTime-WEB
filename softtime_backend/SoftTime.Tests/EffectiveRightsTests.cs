@@ -35,7 +35,7 @@ public class EffectiveRightsTests
     #region Matrice de base
 
     [Fact]
-    public void Role_only_gives_exactly_the_role_rights_and_deduced_gates()
+    public void Compute_RoleOnly_GivesRoleRightsAndDeducedGates()
     {
         // Arrange
         var r = Compute(Role(5, SalesRole, Databases, Processing, Reports));
@@ -52,7 +52,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public void Addition_grants_the_right_and_its_gate()
+    public void Compute_Addition_GrantsRightAndItsGate()
     {
         // Arrange
         var sut = Compute(Role(5, SalesRole, Databases, Processing, Reports), Add("PARAMS:USERS"));
@@ -68,7 +68,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public void Removal_takes_the_right_away_and_the_gate_when_nothing_is_left()
+    public void Compute_Removal_RemovesRightAndEmptyGate()
     {
         // Arrange
         var sut = Compute(Role(5, SalesRole, Databases, Processing, Reports), Remove("PROC:SHIFTS", "PROC:PUNCHES"));
@@ -84,7 +84,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public void Addition_and_removal_together()
+    public void Compute_AdditionAndRemoval_AppliesBoth()
     {
         // Arrange
         var sut = Compute(Role(5, SalesRole, Databases, Processing, Reports), Add("OTHER:CANTEEN").Concat(Remove("REPORTS:REPORTS")).ToArray());
@@ -96,7 +96,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public void Administrator_has_everything_and_is_not_modifiable()
+    public void Compute_Administrator_HasEverythingAndIsNotModifiable()
     {
         // Arrange
         var withRows = Compute(Role(1, new[] { "REPORTS:REPORTS" }), Remove("PARAMS:USERS", "SAGE:BASE1:READ").Concat(Add("INCONNU:X")).ToArray());
@@ -121,7 +121,7 @@ public class EffectiveRightsTests
     #region Rôle sans lignes (comme 10032) et marqueurs
 
     [Fact]
-    public void Role_with_gates_but_no_rows_gets_the_old_defaults_minus_database_configuration()
+    public void Compute_RoleWithGatesWithoutRows_GetsOldDefaultsMinusDatabaseConfiguration()
     {
         // Arrange
         var gates = new[] { Databases, Processing, Other, Traceability, Reports };
@@ -148,7 +148,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public void Database_gate_without_any_database_is_kept()
+    public void Compute_DatabaseGateWithoutDatabase_KeepsGate()
     {
         // Arrange
         var sut = Compute(Role(7, null, Databases), None, DatabaseCatalog.Empty);
@@ -162,7 +162,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public void Role_marker_means_no_rights_and_no_defaults()
+    public void Compute_RoleMarker_GivesNoRightsAndNoDefaults()
     {
         // Act
         var r = Compute(Role(8, new[] { PermissionCatalog.EmptyRoleMarker }, Databases, Processing));
@@ -173,7 +173,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public void User_marker_removes_every_role_right_and_additions_still_apply()
+    public void Compute_UserMarker_RemovesRoleRightsButKeepsAdditions()
     {
         // Arrange
         var role = Role(5, SalesRole, Databases, Processing, Reports);
@@ -195,7 +195,7 @@ public class EffectiveRightsTests
     #region Changement de rôle, portes, droits sensibles
 
     [Fact]
-    public void Role_change_keeps_the_same_deviations_on_the_new_role()
+    public void Compute_RoleChange_KeepsDeviationsOnNewRole()
     {
         // Arrange
         var user = Add("PARAMS:USERS").Concat(Remove("PROC:SHIFTS")).ToArray();
@@ -211,7 +211,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public void Gates_are_deduced_from_effective_rights_only()
+    public void Compute_AnyRights_DeducesGatesFromEffectiveRightsOnly()
     {
         // Arrange
         var r = Compute(Role(9, new[] { "SAGE:BASE1:READ", "PARAMS:ROLES", "PROC:SHIFTS", "OTHER:CANTEEN", "TRACE:AUDIT", "REPORTS:REPORTS" }));
@@ -226,7 +226,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public void Sensitive_rights_lists_the_four_rights_that_change_rights()
+    public void Compute_SensitiveRights_ListsTheFourRightsChangingRights()
     {
         // Act
         var r = Compute(Role(9, new[] { "PARAMS:DB_ACCESS", "PARAMS:USERS", "PARAMS:CARDPAIE" }), Add("PARAMS:PRIVILEGES", "PARAMS:ROLES"));
@@ -243,7 +243,7 @@ public class EffectiveRightsTests
     [InlineData(Processing, "PROC:SHIFTS")]
     [InlineData(Other, "OTHER:CANTEEN")]
     [InlineData(Reports, "REPORTS:REPORTS")]
-    public void Work_gate_without_database_access_is_reported_but_not_blocked(int gate, string code)
+    public void Compute_WorkGateWithoutDatabaseAccess_IsReportedNotBlocked(int gate, string code)
     {
         // Act
         // Aucune base cochée dans « Accès bases ».
@@ -260,7 +260,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public void Non_work_gates_and_administrator_are_never_inconsistent()
+    public void Compute_NonWorkGatesOrAdministrator_AreNeverInconsistent()
     {
         var noAccess = new DatabaseCatalog(Dbs.Sage, Dbs.Pointeuse, Array.Empty<string>());
         Compute(Role(5, new[] { "PARAMS:USERS", "TRACE:AUDIT" }), None, noAccess).Inconsistencies.Should().BeEmpty();
@@ -268,7 +268,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public void Several_work_gates_give_one_inconsistency_each()
+    public void Compute_SeveralWorkGates_GiveOneInconsistencyEach()
     {
         // Arrange
         var r = Compute(Role(5, new[] { "PROC:SHIFTS", "REPORTS:REPORTS" }), None, DatabaseCatalog.Empty);
@@ -285,7 +285,7 @@ public class EffectiveRightsTests
     #region Utiliser / configurer une base (R4)
 
     [Fact]
-    public void Using_a_sage_database_needs_gate_1_checked_database_and_read()
+    public void CanUseDatabase_Sage_NeedsGate1CheckedDatabaseAndRead()
     {
         // Arrange
         var sut = Compute(Role(5, new[] { "SAGE:BASE1:READ" }, Databases));
@@ -300,7 +300,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public void Pointeuse_use_needs_gate_1_and_read_only_rule_to_be_decided()
+    public void CanUseDatabase_Pointeuse_NeedsGate1AndRead()
     {
         // Arrange
         var sut = Compute(Role(5, new[] { "POINTEUSE:PTG:READ" }, Databases));
@@ -311,7 +311,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public void Administrator_uses_any_known_database_even_unchecked()
+    public void CanUseDatabase_Administrator_UsesAnyKnownDatabase()
     {
         // Arrange
         var sut = Compute(Role(1));
@@ -323,7 +323,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public void Configuring_needs_gate_1_and_a_configuration_permission_for_every_account()
+    public void CanConfigureDatabase_AnyAccount_NeedsGate1AndConfigurationPermission()
     {
         // Arrange
         var sut = Compute(Role(5, new[] { "SAGE:BASE1:READ" }, Databases));
@@ -346,7 +346,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public void Working_never_requires_configuration()
+    public void CanUseDatabase_WithoutConfigurationPermission_IsAllowed()
     {
         // Arrange
         var sut = Compute(Role(5, new[] { "SAGE:BASE1:READ", "PROC:SHIFTS" }, Databases, Processing));
@@ -365,7 +365,7 @@ public class EffectiveRightsTests
     #region ConvertLegacyList (C4)
 
     [Fact]
-    public void Legacy_list_of_a_user_like_joel_gives_37_additions_and_no_removal()
+    public void ConvertLegacyList_JoelLikeList_Gives37AdditionsAndNoRemoval()
     {
         // Arrange
         var roleRights = new[] { "SAGE:BASE1:READ", "POINTEUSE:PTG:READ" }
@@ -388,7 +388,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public void Legacy_empty_list_or_marker_removes_every_role_right()
+    public void ConvertLegacyList_EmptyListOrMarker_RemovesEveryRoleRight()
     {
         // Arrange
         var role = new[] { "PROC:SHIFTS", "REPORTS:REPORTS" };
@@ -405,7 +405,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public void Legacy_conversion_handles_mixed_lists_duplicates_and_unknown_codes()
+    public void ConvertLegacyList_MixedDuplicatedOrUnknownCodes_AreHandled()
     {
         // Act
         var result = ConvertLegacyList(new[] { "PROC:SHIFTS", "PROC:PUNCHES" }, new[] { "PROC:SHIFTS", "PROC:SHIFTS", "OTHER:CANTEEN", "INCONNU:X" });
@@ -421,7 +421,7 @@ public class EffectiveRightsTests
     #region Anomalies connues (C5)
 
     [Fact]
-    public void User_without_role_or_with_unknown_role_has_no_right_even_with_additions()
+    public void Compute_NoOrUnknownRole_HasNoRightEvenWithAdditions()
     {
         foreach (var role in new[] { new RoleDefinition(null, false, None, Array.Empty<int>()), new RoleDefinition(404, false, None, new[] { 1, 3 }) })
         {
@@ -433,7 +433,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public void Unknown_permissions_are_ignored_and_reported_never_accepted()
+    public void Compute_UnknownPermissions_AreIgnoredAndReported()
     {
         // Act
         var r = Compute(Role(5, new[] { "PROC:SHIFTS", "FOO:BAR" }), Add("BAZ:QUX", "OTHER:CANTEEN"));
@@ -445,7 +445,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public void Duplicates_are_merged_silently()
+    public void Compute_DuplicatedPermissions_AreMergedSilently()
     {
         // Act
         var r = Compute(Role(5, new[] { "PROC:SHIFTS", "PROC:SHIFTS", "proc:shifts" }), Add("OTHER:CANTEEN", "OTHER:CANTEEN"));
@@ -455,7 +455,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public void Removing_a_right_the_role_lacks_has_no_effect_and_is_listed()
+    public void Compute_RemovingRightTheRoleLacks_HasNoEffectAndIsListed()
     {
         // Arrange
         var role = Role(5, new[] { "PROC:SHIFTS" }, Processing);
@@ -471,7 +471,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public void Adding_a_right_the_role_already_has_has_no_effect_and_is_listed()
+    public void Compute_AddingRightTheRoleHas_HasNoEffectAndIsListed()
     {
         // Act
         var r = Compute(Role(5, new[] { "PROC:SHIFTS" }, Processing), Add("PROC:SHIFTS"));
@@ -482,7 +482,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public void Same_code_added_and_removed_is_removed()
+    public void Compute_SameCodeAddedAndRemoved_IsRemoved()
     {
         // Arrange
         var sut = Compute(Role(5, new[] { "PROC:SHIFTS" }), Add("OTHER:CANTEEN").Concat(Remove("OTHER:CANTEEN")).ToArray());
@@ -523,7 +523,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public async Task Equivalent_to_the_current_calculation_for_a_role_with_detail_rows()
+    public async Task Compute_RoleWithDetailRows_MatchesCurrentCalculation()
     {
         // Arrange
         var world = new OldWorld();
@@ -539,7 +539,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public async Task Equivalent_to_the_current_calculation_for_the_administrator()
+    public async Task Compute_Administrator_MatchesCurrentCalculation()
     {
         // Arrange
         var world = new OldWorld();
@@ -554,7 +554,7 @@ public class EffectiveRightsTests
     }
 
     [Fact]
-    public async Task Role_with_gates_and_no_rows_now_shows_the_same_rights_as_the_calculator()
+    public async Task GetRoleDetailedPermissionsAsync_RoleWithGatesWithoutRows_MatchesCalculator()
     {
         // Arrange
         // Étape 4b-10 : avant, la lecture actuelle ajoutait la configuration des bases (SAGE:CREATE, UPDATE, DELETE et pointeuse)

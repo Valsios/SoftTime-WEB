@@ -43,7 +43,7 @@ public class AccountDeletionTests
         + _store.Get<BddAutorisee>().Items.Count(a => a.IdResponsable == id);
 
     [Fact]
-    public async Task Deleting_an_account_removes_its_permissions_and_database_access_only()
+    public async Task DeleteUserAsync_ExistingAccount_RemovesOnlyItsPermissionsAndDatabaseAccess()
     {
         // Act
         await _auth.DeleteUserAsync(1, 2);
@@ -56,7 +56,7 @@ public class AccountDeletionTests
     }
 
     [Fact]
-    public async Task Everything_is_staged_before_one_single_save()
+    public async Task DeleteUserAsync_ExistingAccount_StagesEverythingBeforeOneSave()
     {
         // Act
         await _auth.DeleteUserAsync(1, 2);
@@ -68,7 +68,7 @@ public class AccountDeletionTests
     }
 
     [Fact]
-    public async Task A_failed_save_is_the_only_save_attempted_by_the_service()
+    public async Task DeleteUserAsync_SaveFails_AttemptsNoOtherSave()
     {
         // Arrange
         _uow.FailOnSave = true;
@@ -83,7 +83,7 @@ public class AccountDeletionTests
     }
 
     [Fact]
-    public async Task Self_deletion_is_refused_and_no_row_is_removed()
+    public async Task DeleteUserAsync_OwnAccount_IsRefusedAndRemovesNothing()
     {
         // Arrange
         var before = _store.Snapshot();
@@ -98,7 +98,7 @@ public class AccountDeletionTests
     }
 
     [Fact]
-    public async Task Last_administrator_deletion_is_refused_and_no_row_is_removed()
+    public async Task DeleteUserAsync_LastAdministrator_IsRefusedAndRemovesNothing()
     {
         // Arrange
         _store.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 1, PermissionCode = "PROC:SHIFTS", IsGranted = true });
@@ -114,7 +114,7 @@ public class AccountDeletionTests
     }
 
     [Fact]
-    public async Task Another_administrator_can_be_deleted_with_its_rows()
+    public async Task DeleteUserAsync_AnotherAdministrator_RemovesItWithItsRows()
     {
         // Arrange
         _store.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 9, IdRole = 1, Login = "admin2" });
@@ -128,7 +128,7 @@ public class AccountDeletionTests
     }
 
     [Fact]
-    public async Task Unknown_account_deletes_nothing()
+    public async Task DeleteUserAsync_UnknownAccount_RemovesNothing()
     {
         // Arrange
         var before = _store.Snapshot();

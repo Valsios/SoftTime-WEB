@@ -19,7 +19,7 @@ public class MlTrainingServiceTests
     private static readonly string Sage = "SAGE_TEST";
 
     [Fact]
-    public async Task Donnees_insuffisantes_restent_en_baseline()
+    public async Task TrainAsync_DonneesInsuffisantes_ResteEnBaseline()
     {
         // Arrange
         var store = new FakeMlStore();
@@ -37,7 +37,7 @@ public class MlTrainingServiceTests
     }
 
     [Fact]
-    public async Task Modele_au_dessus_de_la_baseline_est_active()
+    public async Task TrainAsync_ModeleAuDessusDeLaBaseline_EstActive()
     {
         // Arrange
         var store = new FakeMlStore();
@@ -62,7 +62,7 @@ public class MlTrainingServiceTests
     }
 
     [Fact]
-    public async Task Modele_sous_la_baseline_est_rejete_et_ancien_modele_conserve()
+    public async Task TrainAsync_ModeleSousLaBaseline_EstRejeteEtAncienConserve()
     {
         // Arrange
         var store = new FakeMlStore();

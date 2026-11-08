@@ -142,7 +142,7 @@ public class SecurityHardeningHttpTests : IClassFixture<ApiFactory>
     [Theory]
     [InlineData("""{"serveur":"srv","nomBd":"base","typeBase":"INCONNU"}""", "typeBase")]
     [InlineData("""{"serveur":"srv\u0000;Password=x","nomBd":"base","typeBase":"STANDARD"}""", "serveur")]
-    public void SageDbValidator_RejectsUnknownTypeOrControlCharacters(string json, string field)
+    public void SageDbDtoValidator_UnknownTypeOrControlCharacters_IsInvalid(string json, string field)
     {
         // Arrange
         var dto = JsonSerializer.Deserialize<SageDbDto>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
@@ -178,7 +178,7 @@ public class SecurityHardeningHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public void Read_PrefersTheCookieOverTheBody()
+    public void Read_CookieAndBody_PrefersTheCookie()
     {
         // Arrange
         var context = new DefaultHttpContext();
@@ -190,7 +190,7 @@ public class SecurityHardeningHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Logout_ClearsTheRefreshCookie()
+    public async Task Logout_AuthenticatedClient_ClearsTheRefreshCookie()
     {
         // Act
         var response = await _http.PostAsync("/api/v1/auth/logout", new StringContent("{}", Encoding.UTF8, "application/json"));
@@ -206,14 +206,14 @@ public class SecurityHardeningHttpTests : IClassFixture<ApiFactory>
     [Theory]
     [InlineData("agent", "agent")]
     [InlineData("faux\r\nINFO connexion réussie", "fauxINFO connexion réussie")]
-    public void LogSafe_RemovesControlCharacters(string typed, string expected)
+    public void LogSafe_ControlCharacters_AreRemoved(string typed, string expected)
     {
         // Act + Assert
         AuthenticationService.LogSafe(typed).Should().Be(expected);
     }
 
     [Fact]
-    public void LogSafe_TruncatesLongValues()
+    public void LogSafe_LongValue_IsTruncated()
     {
         // Act
         var logged = AuthenticationService.LogSafe(new string('x', 100));

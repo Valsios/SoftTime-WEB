@@ -5,7 +5,7 @@ namespace SoftTime.Tests;
 public class DashboardRulesTests
 {
     [Fact]
-    public void TauxAbsenteisme_IsAbsenceDaysOverPlannedDays()
+    public void TauxAbsenteisme_AbsenceAndPlannedDays_ReturnsTheirRatio()
     {
         // Act & Assert
         DashboardRules.TauxAbsenteisme(1, 20).Should().Be(5m);
@@ -23,7 +23,7 @@ public class DashboardRulesTests
     }
 
     [Fact]
-    public void CompteDansPresenceTheorique_ExcludesHolidaysAndSageLeaves()
+    public void CompteDansPresenceTheorique_HolidayOrSageLeave_ReturnsFalse()
     {
         // Act & Assert
         // Seul un jour réellement planifié et attendu alimente le dénominateur du taux d'absentéisme.
@@ -34,7 +34,7 @@ public class DashboardRulesTests
     }
 
     [Fact]
-    public void TauxPonctualite_IsWorkedDaysWithoutLateOverWorkedDays()
+    public void TauxPonctualite_WorkedAndLateDays_ReturnsOnTimeRatio()
     {
         // Act & Assert
         // 20 jours travaillés dont 1 en retard ⇒ 19/20 = 95 %.
@@ -53,7 +53,7 @@ public class DashboardRulesTests
     }
 
     [Fact]
-    public void Pourcentage_IsRoundedTo1Decimal()
+    public void Pourcentage_AnyRatio_IsRoundedToOneDecimal()
     {
         // Act & Assert
         // 1/3 = 33.333… ⇒ 33.3 (et non 33.3 % tronqué).
@@ -62,7 +62,7 @@ public class DashboardRulesTests
     }
 
     [Fact]
-    public void Taux_IsClampedBetweenZeroAndHundred()
+    public void TauxPonctualite_OutOfRangeInputs_IsClampedBetweenZeroAndHundred()
     {
         // Act
         var result = DashboardRules.TauxPonctualite(5, 9);

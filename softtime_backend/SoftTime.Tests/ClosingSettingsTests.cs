@@ -29,7 +29,7 @@ public class ClosingSettingsTests
     // ---------- Valeurs par défaut ----------
 
     [Fact]
-    public void Defaults_AreDefinedInCode()
+    public void ClosingOptions_NoSection_UsesDefaultsDefinedInCode()
     {
         // Act
         var o = Lus();
@@ -52,7 +52,7 @@ public class ClosingSettingsTests
     }
 
     [Fact]
-    public void Section_OverridesEveryKey()
+    public void ReglesParDefaut_ConfiguredSection_OverridesEveryKey()
     {
         // Arrange
         var sut = Lus(
@@ -95,7 +95,7 @@ public class ClosingSettingsTests
     [InlineData("Closing:Gravites:QuasiDoublon", "5", "Gravites:QuasiDoublon")]
     [InlineData("Closing:Poids:Mineure", "-2", "Poids:Mineure")]
     [InlineData("Closing:Poids:Enorme", "2", "Poids:Enorme")]
-    public void InvalidValue_IsRefusedWithClearMessageWithoutTheValue(string cle, string valeur, string attendu)
+    public void Validate_InvalidValue_IsRefusedWithClearMessageWithoutTheValue(string cle, string valeur, string attendu)
     {
         // Arrange
         var o = Lus((cle, valeur));
@@ -112,7 +112,7 @@ public class ClosingSettingsTests
     }
 
     [Fact]
-    public void AllWeightsZero_IsRefused()
+    public void Erreurs_AllWeightsZero_IsRefused()
     {
         // Arrange
         var sut = Lus(("Closing:Poids:Mineure", "0"), ("Closing:Poids:Importante", "0"), ("Closing:Poids:Critique", "0"));
@@ -125,7 +125,7 @@ public class ClosingSettingsTests
     }
 
     [Fact]
-    public void Validator_IsRegisteredAndBlocksResolution()
+    public void ClosingOptionsValidator_InvalidOptions_BlocksResolution()
     {
         // Arrange
         var services = new ServiceCollection();
@@ -152,7 +152,7 @@ public class ClosingSettingsTests
     [InlineData(3, 100, "Bloquant")]
     [InlineData(1, 51, "ACorriger")]
     [InlineData(1, 50, "Bloquant")]
-    public void Status_FromCriticalRatio(int critiques, int jours, string attendu)
+    public void Statut_CriticalRatio_ReturnsExpectedStatus(int critiques, int jours, string attendu)
     {
         (ClosingStatusRules.Statut(critiques, jours, 0.02m)?.ToString()).Should().Be(attendu);
     }
@@ -205,7 +205,7 @@ public class ClosingSettingsTests
     }
 
     [Fact]
-    public async Task ConfiguredSeverity_ChangesListScoreAndStatus()
+    public async Task AnalyserAsync_ConfiguredSeverity_ChangesListScoreAndStatus()
     {
         // Arrange
         var request = new ClosingAnalysisRequest(Lundi, Lundi);
@@ -230,7 +230,7 @@ public class ClosingSettingsTests
     }
 
     [Fact]
-    public async Task ConfiguredMaxPeriod_IsEnforced()
+    public async Task AnalyserAsync_PeriodAboveConfiguredMaximum_IsRefused()
     {
         // Arrange
         var sut = Service(Lus(("Closing:MaxPeriodDays", "7")));

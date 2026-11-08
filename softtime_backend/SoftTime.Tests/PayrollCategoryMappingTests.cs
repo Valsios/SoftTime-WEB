@@ -16,7 +16,7 @@ public class PayrollCategoryMappingTests
     [InlineData("Ferie", 3)]
     [InlineData("Dimanche", 2.5)]
     [InlineData("Nuit", 4)]
-    public void MapsEachPayrollCategoryToItsOwnHsValue(string category, decimal expected)
+    public void ValueFor_KnownCategory_ReturnsItsHsValue(string category, decimal expected)
     {
         // Act
         var result = OvertimePayrollCategoryMapper.ValueFor(category, Row);
@@ -26,7 +26,7 @@ public class PayrollCategoryMappingTests
     }
 
     [Fact]
-    public void UnknownCategoryIsRejected()
+    public void ValueFor_UnknownCategory_ThrowsDomainException()
     {
         // Act
         var act = () => OvertimePayrollCategoryMapper.ValueFor("Other", Row);
@@ -36,7 +36,7 @@ public class PayrollCategoryMappingTests
     }
 
     [Fact]
-    public void SqlIdentifiersRejectDangerousCharacters()
+    public void ValidateIdentifier_DangerousCharacters_ThrowsDomainException()
     {
         // Act
         var act = () => PayrollWritingConfiguration.ValidateIdentifier("PAIE;DROP TABLE", "table");
@@ -46,11 +46,11 @@ public class PayrollCategoryMappingTests
     }
 
     [Fact]
-    public void CompleteConfigurationIsAccepted()
+    public void ValidateConfigurationRows_CompleteConfiguration_IsAccepted()
         => PayrollWritingConfiguration.ValidateConfigurationRows(Configuration());
 
     [Fact]
-    public void MissingCategoryIsRejected()
+    public void ValidateConfigurationRows_MissingCategory_ThrowsDomainException()
     {
         // Arrange
         var configuration = Configuration();
@@ -64,7 +64,7 @@ public class PayrollCategoryMappingTests
     }
 
     [Fact]
-    public void DuplicateCategoryIsRejected()
+    public void ValidateConfigurationRows_DuplicateCategory_ThrowsDomainException()
     {
         // Arrange
         var configuration = Configuration();

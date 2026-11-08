@@ -13,7 +13,7 @@ public class PunchDayGroupingTests
         => fenetres.ToDictionary(f => f.Jour);
 
     [Fact]
-    public void SansPlanning_GardeLesPointagesDeChaqueJour()
+    public void Build_SansPlanning_GardeLesPointagesDeChaqueJour()
     {
         // Arrange
         var mardi = Lundi.AddDays(1);
@@ -30,7 +30,7 @@ public class PunchDayGroupingTests
     }
 
     [Fact]
-    public void JourneeSimple_UtiliseTousLesPointagesDuJour()
+    public void Build_JourneeSimple_UtiliseTousLesPointagesDuJour()
     {
         // Arrange
         var fenetres = Planifier(new PunchPlanningWindow(
@@ -45,7 +45,7 @@ public class PunchDayGroupingTests
     }
 
     [Fact]
-    public void Nuit_RattacheLaSortieAuJourDEntree()
+    public void Build_Nuit_RattacheLaSortieAuJourDEntree()
     {
         // Arrange
         var mardi = Lundi.AddDays(1);
@@ -62,7 +62,7 @@ public class PunchDayGroupingTests
     }
 
     [Fact]
-    public void Nuit_LePlanningDuLendemainBorneLaSortie()
+    public void Build_Nuit_LePlanningDuLendemainBorneLaSortie()
     {
         // Arrange
         var mardi = Lundi.AddDays(1);
@@ -125,7 +125,7 @@ public class PunchDayGroupingTests
     }
 
     [Fact]
-    public void OffP_NeRegroupePasLaNuit()
+    public void Build_OffP_NeRegroupePasLaNuit()
     {
         // Arrange
         var mardi = Lundi.AddDays(1);
@@ -142,7 +142,7 @@ public class PunchDayGroupingTests
     }
 
     [Fact]
-    public void PointagesNonTries_SontTriesParDateEtHeure()
+    public void Build_PointagesNonTries_SontTriesParDateEtHeure()
     {
         // Arrange
         var pointages = new[] { M(Lundi, 17), M(Lundi, 8), M(Lundi, 12) };

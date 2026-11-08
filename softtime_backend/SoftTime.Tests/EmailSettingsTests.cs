@@ -6,7 +6,7 @@ namespace SoftTime.Tests;
 public class EmailSettingsTests
 {
     [Fact]
-    public void EstConfigure_RequiresHostAndFromAddress()
+    public void EstConfigure_MissingHostOrFromAddress_ReturnsFalse()
     {
         new EmailSettings(null, 587, true, null, null, null, null).EstConfigure.Should().BeFalse();
         new EmailSettings("smtp.exemple.com", 587, true, null, null, null, null).EstConfigure.Should().BeFalse();
@@ -18,15 +18,15 @@ public class EmailSettingsTests
     [InlineData(0)]
     [InlineData(-1)]
     [InlineData(70000)]
-    public void PortEffectif_FallsBackOnDefaultPort(int port)
+    public void PortEffectif_InvalidPort_FallsBackOnDefaultPort(int port)
         => new EmailSettings("smtp.exemple.com", port, true, null, null, "a@b.c", null).PortEffectif.Should().Be(EmailSettings.PortDefaut);
 
     [Fact]
-    public void PortEffectif_KeepsAValidPort()
+    public void PortEffectif_ValidPort_KeepsIt()
         => new EmailSettings("smtp.exemple.com", 25, false, null, null, "a@b.c", null).PortEffectif.Should().Be(25);
 
     [Fact]
-    public void NomExpediteur_FallsBackOnTheAddress()
+    public void NomExpediteur_NoName_FallsBackOnTheAddress()
     {
         new EmailSettings("h", 587, true, null, null, "a@b.c", "SoftTime").NomExpediteur.Should().Be("SoftTime");
         new EmailSettings("h", 587, true, null, null, "a@b.c", null).NomExpediteur.Should().Be("a@b.c");

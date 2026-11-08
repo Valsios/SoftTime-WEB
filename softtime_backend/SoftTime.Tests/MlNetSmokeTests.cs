@@ -10,7 +10,7 @@ namespace SoftTime.Tests;
 public class MlNetSmokeTests
 {
     [Fact]
-    public void Le_modele_absence_s_entraine_et_predit()
+    public void TrainAbsence_DonneesSynthetiques_EntraineEtPredit()
     {
         // Arrange
         var random = new Random(42);
@@ -53,7 +53,7 @@ public class MlNetSmokeTests
     }
 
     [Fact]
-    public void Les_modeles_hs_s_entrainent_et_predisent()
+    public void TrainHsAmount_DonneesSynthetiques_EntraineEtPredit()
     {
         // Arrange
         var samples = Enumerable.Range(0, 240).Select(i =>

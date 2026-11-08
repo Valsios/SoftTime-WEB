@@ -16,7 +16,7 @@ public class SystemExecutionTests : IClassFixture<ApiFactory>
     public SystemExecutionTests(ApiFactory factory) => _f = factory;
 
     [Fact]
-    public async Task Background_scope_runs_as_system_administrator_and_can_use_the_sage_database()
+    public async Task BackgroundScope_SystemExecution_RunsAsAdministratorWithSageAccess()
     {
         // Arrange
         using var scope = _f.Services.CreateScope();
@@ -33,7 +33,7 @@ public class SystemExecutionTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Background_scope_without_system_execution_stays_anonymous_and_is_denied()
+    public async Task BackgroundScope_WithoutSystemExecution_StaysAnonymousAndIsDenied()
     {
         // Arrange
         using var scope = _f.Services.CreateScope();

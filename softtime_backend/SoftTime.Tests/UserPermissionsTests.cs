@@ -15,7 +15,7 @@ public class UserPermissionsTests
     }
 
     [Fact]
-    public void UserDetailedPermissionsDto_StoresPermissions()
+    public void UserDetailedPermissionsDto_Constructor_StoresPermissions()
     {
         var perms = new List<string> { "SAGE:DB1:READ", "PARAMS:USERS" };
         var dto = new UserDetailedPermissionsDto(5, perms, true);

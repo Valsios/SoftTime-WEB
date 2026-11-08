@@ -341,7 +341,7 @@ public class AdminRulesAndSafeguardsTests
     }
 
     [Fact]
-    public async Task SuperAdmin_CanAssignRole1()
+    public async Task SaveUserAsync_SuperAdminAssigningRole1_Succeeds()
     {
         // Arrange
         var superAdmin = new Responsable { IdResponsable = 1, IdRole = 1, Login = "admin", NomResponsable = "Admin" };

@@ -114,7 +114,7 @@ public class PlanningServiceTests
     }
 
     [Fact]
-    public async Task SaveEmployeePlanning_HeuresPersonnaliseesNuit()
+    public async Task SaveEmployeePlanningAsync_HeuresPersonnaliseesNuit_EnregistreLaSortieLeLendemain()
     {
         // Arrange
         var contexte = new Contexte();
@@ -225,7 +225,7 @@ public class PlanningServiceTests
     }
 
     [Fact]
-    public async Task ImportExcel_ShiftNuit()
+    public async Task ImportExcelAsync_ShiftNuit_EnregistreLaSortieLeLendemain()
     {
         // Arrange
         var contexte = new Contexte();
@@ -249,7 +249,7 @@ public class PlanningServiceTests
     }
 
     [Fact]
-    public async Task ImportExcel_Off()
+    public async Task ImportExcelAsync_JourOff_EnregistreUnJourOff()
     {
         // Arrange
         var contexte = new Contexte();

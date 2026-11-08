@@ -18,6 +18,13 @@ public sealed class InMemoryUnitOfWork : IUnitOfWork
 
     public void ResetSaveChangesCount() => SaveChangesCount = 0;
 
+    /// <summary>Vide tous les dépôts.</summary>
+    public void Clear()
+    {
+        lock (_gate)
+            _repos.Clear();
+    }
+
     public InMemoryRepository<T> Get<T>() where T : class
     {
         lock (_gate)

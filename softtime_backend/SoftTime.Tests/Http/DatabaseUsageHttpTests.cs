@@ -50,7 +50,7 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
 
     [Theory]
     [MemberData(nameof(AllowedCases))]
-    public async Task Administrator_and_a_checked_account_with_read_use_the_base(string profile, string route)
+    public async Task SageRoutes_AdministratorOrCheckedAccountWithRead_UseTheBase(string profile, string route)
     {
         // Act
         var (resp, _) = await Send(profile, route);
@@ -62,7 +62,7 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
 
     [Theory]
     [MemberData(nameof(DeniedCases))]
-    public async Task Unchecked_base_missing_read_or_no_gate_is_refused_with_403_and_the_message(string profile, string route)
+    public async Task SageRoutes_UncheckedBaseMissingReadOrGate_Return403WithMessage(string profile, string route)
     {
         // Act
         var (resp, text) = await Send(profile, route);
@@ -76,7 +76,7 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
     [InlineData("traitements (GET shifts)")]
     [InlineData("catalogue (GET cardpaie)")]
     [InlineData("activation (POST sage-databases/activate)")]
-    public async Task Account_like_user1_without_any_base_gets_403_not_401(string route)
+    public async Task SageRoutes_AccountWithoutAnyBase_Returns403(string route)
     {
         // Act
         var (resp, _) = await Send("user1", route);
@@ -87,7 +87,7 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Account_like_user1_without_the_sage_header_still_gets_400()
+    public async Task SageRoutes_WithoutSageHeader_Returns400()
     {
         // Act
         var (resp, text) = await Send("user1", "catalogue (GET cardpaie)", withSage: false);
@@ -98,7 +98,7 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Pointeuse_is_allowed_with_read_and_refused_without()
+    public async Task PointeuseRoutes_WithOrWithoutRead_AllowsOrRefuses()
     {
         // Act
         var (allowed, _) = await Send("joel", "pointeuse (POST punches/import-clock)");
@@ -115,7 +115,7 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Stale_pointeuse_header_does_not_break_routes_that_do_not_use_the_pointeuse()
+    public async Task SageRoutes_StalePointeuseHeader_DoesNotBreak()
     {
         // Arrange
         var req = _f.Request("ptenone", HttpMethod.Get, "/api/v1/card-paie", null, ApiFactory.SageName, "PTG");
@@ -128,7 +128,7 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Login_and_me_propose_only_the_bases_the_account_can_use()
+    public async Task LoginAndMe_AnyAccount_ProposeOnlyUsableBases()
     {
         // R4 : la liste proposée est exactement celle que le serveur accepte.
         foreach (var (profile, expected) in new[] { ("joel", 1), ("nolink", 0), ("noread", 0), ("nogate", 0), ("ptenone", 1) })

@@ -120,7 +120,7 @@ public class PasswordPolicyTests
     }
 
     [Fact]
-    public void Validate_ReportsAllBrokenRulesAtOnce()
+    public void Validate_SeveralBrokenRules_ReportsAllAtOnce()
     {
         // Act
         var result = PasswordPolicy.Validate("abc");
@@ -134,7 +134,7 @@ public class PasswordPolicyTests
     }
 
     [Fact]
-    public void ErrorMessage_IsReadableAndListsViolations()
+    public void Validate_WeakPassword_ErrorMessageListsViolations()
     {
         // Act
         var result = PasswordPolicy.Validate("abc");
@@ -159,7 +159,7 @@ public class PasswordPolicyTests
     // ---------- Descripteur exposé au frontend ----------
 
     [Fact]
-    public void Describe_ExposesRulesAndLimitsUsedByTheClient()
+    public void Describe_Always_ExposesRulesAndLimitsUsedByClient()
     {
         // Act
         var policy = PasswordPolicy.Describe();

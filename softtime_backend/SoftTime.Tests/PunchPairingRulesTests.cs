@@ -152,7 +152,7 @@ public class PunchPairingRulesTests
     }
 
     [Fact]
-    public void MultiPunchGap_IsFifteenMinutes()
+    public void MultiPunchGap_Default_IsFifteenMinutes()
     {
         PunchPairingRules.MultiPunchGap.Should().Be(new TimeSpan(0, 15, 0));
     }

@@ -13,7 +13,7 @@ public class MatriculeIdentityTests
     [InlineData("000", "0")]
     [InlineData("369", " 369 ")]
     [InlineData("ab12", "AB12")]
-    public void Cle_ProducesSameKeyForEquivalentMatricules(string gauche, string droite)
+    public void Cle_EquivalentMatricules_ProduceSameKey(string gauche, string droite)
     {
         // Act
         var result = MatriculeIdentity.Cle(droite);
@@ -26,7 +26,7 @@ public class MatriculeIdentityTests
     [InlineData("369")]
     [InlineData("0369")]
     [InlineData(" 00369 ")]
-    public void Cle_NormalizesNumericMatricules(string matricule)
+    public void Cle_NumericMatricule_IsNormalized(string matricule)
     {
         // Act
         var result = MatriculeIdentity.Cle(matricule);
@@ -36,7 +36,7 @@ public class MatriculeIdentityTests
     }
 
     [Fact]
-    public void Cle_KeepsLeadingZerosOnNonNumericMatricules()
+    public void Cle_NonNumericMatricule_KeepsLeadingZeros()
     {
         // Act
         var result = MatriculeIdentity.Cle("a0369");
@@ -46,7 +46,7 @@ public class MatriculeIdentityTests
     }
 
     [Fact]
-    public void Cle_NullOrEmptyYieldsEmpty()
+    public void Cle_NullOrEmpty_ReturnsEmpty()
     {
         // Act & Assert
         MatriculeIdentity.Cle(null).Should().Be(string.Empty);
@@ -54,7 +54,7 @@ public class MatriculeIdentityTests
     }
 
     [Fact]
-    public void MemeSalarie_MatchesPaddedAndUnpadded()
+    public void MemeSalarie_PaddedAndUnpadded_ReturnsTrue()
     {
         // Act
         var result = MatriculeIdentity.MemeSalarie("00369", "369");
@@ -64,7 +64,7 @@ public class MatriculeIdentityTests
     }
 
     [Fact]
-    public void MemeSalarie_RejectsDistinctOrEmpty()
+    public void MemeSalarie_DistinctOrEmpty_ReturnsFalse()
     {
         // Act & Assert
         MatriculeIdentity.MemeSalarie("369", "412").Should().BeFalse();

@@ -115,7 +115,7 @@ public class PayrollClosingRulesTests
     [InlineData(ClosingAnomalyType.FerieNonApplique, ClosingSeverity.Information)]
     [InlineData(ClosingAnomalyType.DoublonExact, ClosingSeverity.Mineure)]
     [InlineData(ClosingAnomalyType.QuasiDoublon, ClosingSeverity.Mineure)]
-    public void DefaultSeverity_MatchesSpecification(ClosingAnomalyType type, ClosingSeverity attendu)
+    public void GraviteParDefaut_EachAnomalyType_MatchesSpecification(ClosingAnomalyType type, ClosingSeverity attendu)
     {
         // Act
         var result = PayrollClosingRules.GraviteParDefaut(type);
@@ -392,7 +392,7 @@ public class PayrollClosingRulesTests
     // ---------- 3.4 PointageSansPlanning ----------
 
     [Fact]
-    public void PunchWithoutPlanning_IsImportantAnomaly()
+    public void PointagesSansPlanning_PunchWithoutPlanning_IsImportantAnomaly()
     {
         // Act
         // Salarié planifié un autre jour de la période : il est contrôlé, le jour pointé sans planning est signalé.
@@ -496,7 +496,7 @@ public class PayrollClosingRulesTests
     }
 
     [Fact]
-    public void ExactDuplicate_IsNotCountedAsNearDuplicate()
+    public void QuasiDoublons_ExactDuplicate_IsNotCounted()
     {
         // Arrange
         var pointages = new[] { Punch("369", Lundi, H8), Punch("369", Lundi, H8), Punch("369", Lundi, H17) };
@@ -636,7 +636,7 @@ public class PayrollClosingRulesTests
     }
 
     [Fact]
-    public void Score_IsRoundedToNearestInteger()
+    public void Score_FractionalResult_IsRoundedToNearestInteger()
     {
         // Act
         var result = PayrollClosingRules.Score(new[] { A(ClosingSeverity.Importante) }, 7);
@@ -647,7 +647,7 @@ public class PayrollClosingRulesTests
     }
 
     [Fact]
-    public void Score_IsBoundedAtZero()
+    public void Score_ManyAnomalies_IsBoundedAtZero()
     {
         // Act
         var anomalies = Enumerable.Range(0, 10).Select(_ => A(ClosingSeverity.Critique)).ToList();

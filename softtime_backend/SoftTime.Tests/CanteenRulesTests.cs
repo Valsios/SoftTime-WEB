@@ -17,7 +17,7 @@ public class CanteenRulesTests
     [InlineData(11, 0)]
     [InlineData(12, 30)]
     [InlineData(14, 30)]
-    public void DansFenetre_AcceptsHoursWithinMealWindow(int h, int m)
+    public void DansFenetre_HourWithinMealWindow_ReturnsTrue(int h, int m)
     {
         // Act
         var result = CanteenRules.DansFenetre(new TimeSpan(h, m, 0));
@@ -31,7 +31,7 @@ public class CanteenRulesTests
     [InlineData(14, 31)]
     [InlineData(7, 0)]
     [InlineData(23, 0)]
-    public void DansFenetre_RejectsHoursOutsideMealWindow(int h, int m)
+    public void DansFenetre_HourOutsideMealWindow_ReturnsFalse(int h, int m)
     {
         // Act
         var result = CanteenRules.DansFenetre(new TimeSpan(h, m, 0));
@@ -43,7 +43,7 @@ public class CanteenRulesTests
     // ---- Absence complète (règle du desktop : AbsenceAm && AbsencePm) ----
 
     [Fact]
-    public void EstAbsenceComplete_RequiresBothHalves()
+    public void EstAbsenceComplete_BothHalves_ReturnsTrue()
     {
         // Act
         var result = CanteenRules.EstAbsenceComplete(true, true);
@@ -56,7 +56,7 @@ public class CanteenRulesTests
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(false, false)]
-    public void EstAbsenceComplete_RejectsPartialOrNoAbsence(bool am, bool pm)
+    public void EstAbsenceComplete_PartialOrNoAbsence_ReturnsFalse(bool am, bool pm)
     {
         // Act
         var result = CanteenRules.EstAbsenceComplete(am, pm);
@@ -69,7 +69,7 @@ public class CanteenRulesTests
     [InlineData(null, null)]
     [InlineData(true, null)]
     [InlineData(null, true)]
-    public void EstAbsenceComplete_RejectsMissingFlags(bool? am, bool? pm)
+    public void EstAbsenceComplete_MissingFlags_ReturnsFalse(bool? am, bool? pm)
     {
         // Act
         var result = CanteenRules.EstAbsenceComplete(am, pm);
@@ -81,7 +81,7 @@ public class CanteenRulesTests
     // ---- Détection d'anomalies ----
 
     [Fact]
-    public void DetecterAnomalies_FlagsPunchOnFullDayAbsence()
+    public void DetecterAnomalies_PunchOnFullDayAbsence_FlagsAnomaly()
     {
         // Arrange
         var pointes = new[] { new CanteenDay("369", Lundi) };
@@ -98,7 +98,7 @@ public class CanteenRulesTests
     }
 
     [Fact]
-    public void DetecterAnomalies_NoPunchMeansNoAnomaly()
+    public void DetecterAnomalies_NoPunch_ReturnsNoAnomaly()
     {
         // Act
         // Une absence complète sans pointage est une journée normale : elle ne doit pas remonter.
@@ -110,7 +110,7 @@ public class CanteenRulesTests
     }
 
     [Fact]
-    public void DetecterAnomalies_IgnoresOtherEmployees()
+    public void DetecterAnomalies_OtherEmployee_IsIgnored()
     {
         // Arrange
         var pointes = new[] { new CanteenDay("369", Lundi) };
@@ -124,7 +124,7 @@ public class CanteenRulesTests
     }
 
     [Fact]
-    public void DetecterAnomalies_IgnoresDifferentDays()
+    public void DetecterAnomalies_DifferentDay_IsIgnored()
     {
         // Arrange
         var pointes = new[] { new CanteenDay("369", Lundi) };
@@ -138,7 +138,7 @@ public class CanteenRulesTests
     }
 
     [Fact]
-    public void DetecterAnomalies_IgnoresTimePart()
+    public void DetecterAnomalies_PunchWithTimePart_MatchesTheDay()
     {
         var pointes = new[] { new CanteenDay("369", Lundi.AddHours(12)) };
         var absences = new[] { new CanteenDay("369", Lundi) };
@@ -148,7 +148,7 @@ public class CanteenRulesTests
     }
 
     [Fact]
-    public void DetecterAnomalies_DeduplicatesAndSorts()
+    public void DetecterAnomalies_DuplicatedUnsortedPunches_DeduplicatesAndSorts()
     {
         // Arrange
         var pointes = new[]
@@ -177,7 +177,7 @@ public class CanteenRulesTests
     }
 
     [Fact]
-    public void DetecterAnomalies_EmptyInputsYieldNothing()
+    public void DetecterAnomalies_EmptyInputs_ReturnsNothing()
     {
         // Act
         var result = CanteenRules.DetecterAnomalies(Array.Empty<CanteenDay>(), Array.Empty<CanteenDay>());

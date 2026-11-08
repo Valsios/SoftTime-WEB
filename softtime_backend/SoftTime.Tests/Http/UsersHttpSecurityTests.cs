@@ -47,7 +47,7 @@ public class UsersHttpSecurityTests : IClassFixture<ApiFactory>
 
     [Theory]
     [MemberData(nameof(RefusedCases))]
-    public async Task Non_administrators_cannot_write_other_accounts_and_nothing_is_written(string route, string profile)
+    public async Task UserWrites_NonAdministrator_AreRefusedAndWriteNothing(string route, string profile)
     {
         // Arrange
         var (method, url, body) = Routes[route];
@@ -65,7 +65,7 @@ public class UsersHttpSecurityTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Administrator_can_create_modify_change_role_and_password_and_delete()
+    public async Task UserWrites_Administrator_CanCreateModifyAndDelete()
     {
         // Act
         var (created, _) = await Send("admin", "POST", "/api/v1/users", NewUser);
@@ -82,7 +82,7 @@ public class UsersHttpSecurityTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public void Production_container_provides_ICurrentUser_to_AuthService()
+    public void AuthService_ProductionContainer_ReceivesCurrentUser()
     {
         // Act
         // ICurrentUser est obligatoire dans AuthService : si l'enregistrement de production disparaît, ce test échoue.
@@ -94,7 +94,7 @@ public class UsersHttpSecurityTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Reading_users_needs_the_fine_permission_since_step_4b_9()
+    public async Task GetUsers_WithoutFinePermission_IsRefused()
     {
         // Avant 4b-9 : la porte 2 seule suffisait (param2 lisait les comptes en 200). Maintenant : porte 2 ET PARAMS:USERS.
         foreach (var url in new[] { "/api/v1/users", "/api/v1/users/10052" })

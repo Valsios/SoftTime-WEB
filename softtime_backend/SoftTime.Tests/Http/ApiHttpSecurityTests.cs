@@ -22,6 +22,8 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     public ApiHttpSecurityTests(ApiFactory factory)
     {
         _f = factory;
+        // Les routes d'écriture modifient le magasin partagé : chaque test repart des données initiales.
+        _f.ResetStore();
         _http = factory.CreateClient();
     }
 
@@ -81,18 +83,18 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
 
     [Theory]
     [MemberData(nameof(RefusedCases))]
-    public async Task Refused_profiles_get_401_or_403_and_nothing_is_written(string route, string profile)
+    public async Task ProtectedRoutes_RefusedProfiles_Get401Or403AndWriteNothing(string route, string profile)
     {
         // Arrange
         var (method, url, body, kind) = Routes[route];
         var before = _f.Snapshot();
+
+        // Act
         var (resp, text) = await Send(profile, method, url, body);
         var after = _f.Snapshot();
 
-        // Act
-        ApiFactory.Report($"V2|{route}|{profile}|{(int)resp.StatusCode}|{Format(resp, text)}|{Trunc(text)}");
-
         // Assert
+        ApiFactory.Report($"V2|{route}|{profile}|{(int)resp.StatusCode}|{Format(resp, text)}|{Trunc(text)}");
         resp.StatusCode.Should().Be(profile == "anonyme" ? HttpStatusCode.Unauthorized : HttpStatusCode.Forbidden);
         after.Should().Be(before);
         if (profile == "param2" && kind == "admin")
@@ -105,16 +107,16 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
 
     [Theory]
     [MemberData(nameof(AdminCases))]
-    public async Task Admin_is_not_refused(string route)
+    public async Task ProtectedRoutes_Administrator_IsNotRefused(string route)
     {
         // Arrange
         var (method, url, body, _) = Routes[route];
-        var (resp, text) = await Send("admin", method, url, body);
 
         // Act
-        ApiFactory.Report($"V2|{route}|admin|{(int)resp.StatusCode}|{Format(resp, text)}|{Trunc(text)}");
+        var (resp, text) = await Send("admin", method, url, body);
 
         // Assert
+        ApiFactory.Report($"V2|{route}|admin|{(int)resp.StatusCode}|{Format(resp, text)}|{Trunc(text)}");
         resp.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
         resp.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
     }
@@ -139,7 +141,7 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
 
     [Theory]
     [MemberData(nameof(UsageNames))]
-    public async Task Usage_routes_are_open_to_joel(string name)
+    public async Task UsageRoutes_JoelLikeAccount_AreOpen(string name)
     {
         // Arrange
         var r = UsageRoutes.Single(x => x.Name == name);
@@ -155,7 +157,7 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
 
     [Theory]
     [MemberData(nameof(UsageNames))]
-    public async Task Usage_routes_without_sage_header_give_400_to_user1(string name)
+    public async Task UsageRoutes_WithoutSageHeader_Give400(string name)
     {
         // Arrange
         var r = UsageRoutes.Single(x => x.Name == name);
@@ -177,7 +179,7 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     [Theory]
     [InlineData("param2")]
     [InlineData("user1")]
-    public async Task Activate_by_account_without_access_to_the_base_gives_403_with_message(string profile)
+    public async Task ActivateDatabase_AccountWithoutAccess_Gives403WithMessage(string profile)
     {
         // Arrange
         var (resp, text) = await Send(profile, "POST", "/api/v1/sage-databases/activate", null, ApiFactory.SageName);
@@ -196,7 +198,7 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     /// (avant : 200, la porte 1 contournait T_BDD_AUTORISE).
     /// </summary>
     [Fact]
-    public async Task FormerGap_Activate_with_gate_1_refuses_a_base_missing_from_BDD_AUTORISE()
+    public async Task ActivateDatabase_Gate1WithUnauthorizedBase_IsRefused()
     {
         _f.Store.Get<BddAutorisee>().Items.Should().NotContain(a => a.IdResponsable == 10034 && a.IdBdd == 3034);
         var (resp, text) = await Send("joel", "POST", "/api/v1/sage-databases/activate", null, ApiFactory.OtherSageName);
@@ -212,7 +214,7 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     #region V5 : endpoints sans garde
 
     [Fact]
-    public void V5_Endpoints_without_Authorize_in_touched_controllers_are_only_the_anonymous_auth_routes()
+    public void Endpoints_WithoutAuthorize_AreOnlyAnonymousAuthRoutes()
     {
         // Arrange
         var actions = _f.Services.GetRequiredService<EndpointDataSource>().Endpoints
@@ -262,7 +264,7 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     [InlineData("joel", "/api/v1/pointeuse-databases/paged")]
     [InlineData("joel", "/api/v1/auth/me")]
     [InlineData("admin", "/api/v1/auth/me")]
-    public async Task V6_Responses_never_contain_a_database_password(string profile, string url)
+    public async Task DatabaseRoutes_AnyResponse_NeverContainsPassword(string profile, string url)
     {
         // Arrange
         var (resp, text) = await Send(profile, "GET", url, null);
@@ -276,7 +278,7 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task V6_Create_and_update_responses_never_contain_the_submitted_password()
+    public async Task DatabaseRoutes_CreateOrUpdate_NeverReturnSubmittedPassword()
     {
         // Arrange
         var (resp, text) = await Send("admin", "POST", "/api/v1/sage-databases", SageBody.Replace("NEWBASE", "V6BASE"));

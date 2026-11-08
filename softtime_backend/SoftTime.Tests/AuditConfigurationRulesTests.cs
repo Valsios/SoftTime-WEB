@@ -70,7 +70,7 @@ public class AuditConfigurationRulesTests
     }
 
     [Fact]
-    public void Normalize_TrimsAndLowercases()
+    public void Normalize_PaddedMixedCaseType_TrimsAndLowercases()
     {
         // Act & Assert
         AuditConfigurationRules.Normalize("  NVARCHAR  ").Should().Be("nvarchar");
@@ -136,7 +136,7 @@ public class AuditConfigurationRulesTests
     }
 
     [Fact]
-    public void AllowedTypeOptions_HasExpectedItemsWithoutDuplicatesOrExcludedTypes()
+    public void AllowedTypeOptions_Catalog_HasExpectedItemsWithoutDuplicatesOrExcludedTypes()
     {
         // Act
         var options = AuditConfigurationRules.AllowedTypeOptions;

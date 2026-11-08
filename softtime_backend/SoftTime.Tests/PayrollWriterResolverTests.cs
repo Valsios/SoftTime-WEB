@@ -10,7 +10,7 @@ public class PayrollWriterResolverTests
     [Theory]
     [InlineData("STANDARD", "STANDARD")]
     [InlineData("AUTRE", "AUTRE")]
-    public void SelectsWriterForConfiguredDatabaseType(string typeBase, string expected)
+    public void Resolve_ConfiguredDatabaseType_SelectsMatchingWriter(string typeBase, string expected)
     {
         // Arrange
         var sut = new PayrollWriterResolver(new IPayrollWriter[] { new StubWriter("STANDARD"), new StubWriter("AUTRE") });

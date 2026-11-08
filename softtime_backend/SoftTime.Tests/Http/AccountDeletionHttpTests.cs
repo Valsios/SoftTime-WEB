@@ -16,7 +16,7 @@ public class AccountDeletionHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Deleting_an_account_over_http_removes_its_rights_and_database_access_but_not_others()
+    public async Task DeleteUser_ExistingAccount_RemovesItsRightsAndDatabaseAccessOnly()
     {
         // Act
         var joelRows = _f.Store.Get<UserPermission>().Items.Count(p => p.IdResponsable == 10034);
@@ -34,7 +34,7 @@ public class AccountDeletionHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task A_refused_deletion_over_http_removes_no_row()
+    public async Task DeleteUser_RefusedDeletion_RemovesNoRow()
     {
         // Arrange
         var before = _f.Snapshot();

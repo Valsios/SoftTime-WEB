@@ -29,7 +29,7 @@ public class PredictionsHttpTests : IClassFixture<ApiFactory>
 
     [Theory]
     [MemberData(nameof(Reads))]
-    public async Task Prediction_read_needs_gate_6_and_the_fine_permission(string url, string profile)
+    public async Task Predictions_WithoutGate6OrPermission_IsRefused(string url, string profile)
     {
         // Arrange
         var sage = url.EndsWith("/job", StringComparison.Ordinal) ? null : ApiFactory.SageName;
@@ -61,7 +61,7 @@ public class PredictionsHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Gate_6_alone_without_the_prediction_permission_is_refused_even_on_the_job_state()
+    public async Task Predictions_Gate6WithoutPermission_IsRefusedEvenOnJobState()
     {
         // Act
         var resp = await _http.SendAsync(_f.Request("gate6only", HttpMethod.Get, "/api/v1/predictions/job"));
@@ -71,7 +71,7 @@ public class PredictionsHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task A_refused_read_writes_nothing()
+    public async Task Predictions_RefusedRead_WritesNothing()
     {
         // Arrange
         var before = _f.Snapshot();
@@ -93,7 +93,7 @@ public class PredictionsHttpTests : IClassFixture<ApiFactory>
 
     [Theory]
     [MemberData(nameof(Triggers))]
-    public async Task Training_actions_are_reserved_to_administrators(string url, string profile)
+    public async Task PredictionTraining_NonAdministrator_IsRefused(string url, string profile)
     {
         // Arrange
         var before = _f.Snapshot();

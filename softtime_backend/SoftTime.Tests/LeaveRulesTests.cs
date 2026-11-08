@@ -21,7 +21,7 @@ public class LeaveRulesTests
     [InlineData("0100")]
     [InlineData("CP")]
     [InlineData(" 0100 ")]
-    public void EstCodeConge_AcceptsRegularCodes(string code)
+    public void EstCodeConge_RegularCode_ReturnsTrue(string code)
     {
         // Act
         var result = LeaveRules.EstCodeConge(code);
@@ -36,7 +36,7 @@ public class LeaveRulesTests
     [InlineData(" 0200 ")]
     [InlineData("")]
     [InlineData(null)]
-    public void EstCodeConge_RejectsExcludedOrEmptyCodes(string? code)
+    public void EstCodeConge_ExcludedOrEmptyCode_ReturnsFalse(string? code)
     {
         // Act
         var result = LeaveRules.EstCodeConge(code);
@@ -86,7 +86,7 @@ public class LeaveRulesTests
     }
 
     [Fact]
-    public void Expandre_NeverCountsSundays()
+    public void Expandre_PeriodWithSunday_SkipsSundays()
     {
         // Act
         // Lundi → dimanche inclus : le dimanche est exclu, il reste 6 jours.
@@ -142,7 +142,7 @@ public class LeaveRulesTests
     }
 
     [Fact]
-    public void Expandre_EmptyInputYieldsNothing()
+    public void Expandre_EmptyInput_ReturnsNothing()
     {
         // Act
         var result = LeaveRules.Expandre(Array.Empty<LeavePeriod>());
@@ -154,7 +154,7 @@ public class LeaveRulesTests
     // ---- Interrogation ----
 
     [Fact]
-    public void EstConge_MatchesTheDayWhateverTheTimePart()
+    public void EstConge_DateWithTimePart_MatchesTheDay()
     {
         // Act
         var jours = LeaveRules.Expandre(new[] { Periode(Lundi, Lundi) });
@@ -166,7 +166,7 @@ public class LeaveRulesTests
     }
 
     [Fact]
-    public void Valeur_ReturnsTheHalfDayOnBoundariesAndZeroOutside()
+    public void Valeur_BoundaryOrOutsideDay_ReturnsHalfDayOrZero()
     {
         // Act
         var jours = LeaveRules.Expandre(new[] { Periode(Lundi, Lundi.AddDays(2), apresMidi: true) });
@@ -178,7 +178,7 @@ public class LeaveRulesTests
     }
 
     [Fact]
-    public void Valeur_KeepsTheStrongestValueOnOverlap()
+    public void Valeur_OverlappingLeaves_KeepsStrongestValue()
     {
         // Act
         // Deux périodes se chevauchent le mardi : une demi-journée et une journée pleine.

@@ -43,7 +43,7 @@ public class SensitiveReadsHttpTests : IClassFixture<ApiFactory>
 
     [Theory]
     [MemberData(nameof(Cases))]
-    public async Task Sensitive_read_is_allowed_only_with_gate_2_and_a_matching_permission(string route, string profile)
+    public async Task SensitiveReads_WithoutGate2OrPermission_AreRefused(string route, string profile)
     {
         // Arrange
         var (url, allowed) = Routes[route];
@@ -71,7 +71,7 @@ public class SensitiveReadsHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Own_detailed_permissions_stay_readable_through_the_login_response_not_this_route()
+    public async Task UserPermissions_OwnAccount_ReadableThroughLoginOnly()
     {
         // Act
         // GET privileges/user/{id} est réservé à PARAMS:PRIVILEGES ; un compte lit les siens via /auth/me.
@@ -101,7 +101,7 @@ public class SensitiveReadsHttpTests : IClassFixture<ApiFactory>
     [InlineData("/api/v1/sage-databases")]
     [InlineData("/api/v1/pointeuse-databases")]
     [InlineData("/api/v1/field-roles")]
-    public async Task Lists_used_by_other_screens_stay_open_to_any_authenticated_account(string url)
+    public async Task SharedLists_AnyAuthenticatedAccount_StayOpen(string url)
     {
         // Act
         var resp = await _http.SendAsync(_f.Request("paramsother", HttpMethod.Get, url));

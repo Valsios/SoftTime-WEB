@@ -28,7 +28,7 @@ public class CreateAdminFirstRunTests
     private static AdminSetupDto Dto => new("Admin Test", "admin", "ValidP@ss123!", null);
 
     [Fact]
-    public async Task Fresh_database_with_role_1_creates_an_account_with_IDROLE_1()
+    public async Task CreateAdminAsync_FreshDatabaseWithRole1_CreatesAccountWithRole1()
     {
         // Arrange
         _uow.Get<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
@@ -45,7 +45,7 @@ public class CreateAdminFirstRunTests
     }
 
     [Fact]
-    public async Task Administrator_role_with_another_identifier_is_refused_and_no_account_is_created()
+    public async Task CreateAdminAsync_AdministratorRoleWithAnotherId_IsRefusedAndCreatesNothing()
     {
         // Arrange
         _uow.Get<Role>().Items.Add(new Role { IdRole = 2, NomRole = "Administrateur" });
@@ -61,7 +61,7 @@ public class CreateAdminFirstRunTests
     }
 
     [Fact]
-    public async Task Existing_account_is_still_refused()
+    public async Task CreateAdminAsync_ExistingAccount_IsRefused()
     {
         // Arrange
         _uow.Get<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
@@ -77,7 +77,7 @@ public class CreateAdminFirstRunTests
     }
 
     [Fact]
-    public async Task Database_without_any_role_is_refused()
+    public async Task CreateAdminAsync_NoRole_IsRefused()
     {
         // Act
         Func<Task> act = () => _auth.CreateAdminAsync(Dto);
@@ -89,7 +89,7 @@ public class CreateAdminFirstRunTests
     }
 
     [Fact]
-    public async Task Weak_password_is_still_refused_before_any_role_lookup()
+    public async Task CreateAdminAsync_WeakPassword_IsRefusedBeforeRoleLookup()
     {
         // Arrange
         _uow.Get<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });

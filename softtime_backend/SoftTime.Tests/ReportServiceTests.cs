@@ -117,7 +117,7 @@ public class ReportServiceTests
     }
 
     [Fact]
-    public async Task AbsencesAsync_NAfficheQueLesNonJustifiees()
+    public async Task AbsencesAsync_AbsencesMixtes_NAfficheQueLesNonJustifiees()
     {
         // Arrange
         var ctx = new Contexte();
@@ -165,7 +165,7 @@ public class ReportServiceTests
     }
 
     [Fact]
-    public async Task AbsencesAsync_FiltreParDepartement()
+    public async Task AbsencesAsync_FiltreDepartement_NeGardeQueCeDepartement()
     {
         // Arrange
         var ctx = new Contexte();
@@ -183,7 +183,7 @@ public class ReportServiceTests
     }
 
     [Fact]
-    public async Task AbsencesPagedAsync_FiltreAvantPagination()
+    public async Task AbsencesPagedAsync_FiltreEtPagination_FiltreAvantDePaginer()
     {
         // Arrange
         var ctx = new Contexte();

@@ -44,7 +44,7 @@ public class EffectiveRightsCacheTests
     private async Task<bool> CanUse() => (await _rights.GetAsync(5)).CanUseDatabase(DatabaseKind.Sage, "BASE1");
 
     [Fact]
-    public async Task Rights_are_read_once_then_served_from_cache()
+    public async Task CanUse_RepeatedCalls_ReadsRightsOnceThenUsesCache()
     {
         // Act & Assert
         (await CanUse()).Should().BeTrue();
@@ -53,7 +53,7 @@ public class EffectiveRightsCacheTests
     }
 
     [Fact]
-    public async Task Cache_expires_after_30_seconds()
+    public async Task CanUse_After30Seconds_ReloadsRights()
     {
         // Act & Assert
         (await CanUse()).Should().BeTrue();
@@ -65,7 +65,7 @@ public class EffectiveRightsCacheTests
     }
 
     [Fact]
-    public async Task Saving_database_access_invalidates_the_account_immediately()
+    public async Task CanUse_DatabaseAccessSaved_InvalidatesAccountImmediately()
     {
         // Act & Assert
         (await CanUse()).Should().BeTrue();
@@ -74,7 +74,7 @@ public class EffectiveRightsCacheTests
     }
 
     [Fact]
-    public async Task Saving_user_rights_invalidates_the_account_immediately()
+    public async Task CanUse_UserRightsSaved_InvalidatesAccountImmediately()
     {
         // Act & Assert
         (await CanUse()).Should().BeTrue();
@@ -86,7 +86,7 @@ public class EffectiveRightsCacheTests
     }
 
     [Fact]
-    public async Task Saving_role_rights_invalidates_every_account()
+    public async Task CanUse_RoleRightsSaved_InvalidatesEveryAccount()
     {
         // Act & Assert
         (await CanUse()).Should().BeTrue();
@@ -95,7 +95,7 @@ public class EffectiveRightsCacheTests
     }
 
     [Fact]
-    public async Task Changing_the_role_of_an_account_invalidates_it()
+    public async Task CanUse_AccountRoleChanged_InvalidatesAccount()
     {
         // Act & Assert
         (await CanUse()).Should().BeTrue();
@@ -105,7 +105,7 @@ public class EffectiveRightsCacheTests
     }
 
     [Fact]
-    public async Task Deleting_an_account_invalidates_it_and_removes_its_access()
+    public async Task CanUse_AccountDeleted_InvalidatesAndRemovesAccess()
     {
         // Act & Assert
         (await CanUse()).Should().BeTrue();
@@ -115,7 +115,7 @@ public class EffectiveRightsCacheTests
     }
 
     [Fact]
-    public async Task Fail_closed_when_rights_cannot_be_read_and_nothing_sensitive_is_logged()
+    public async Task EnsureAuthorizedAsync_RightsUnreadable_FailsClosedWithoutLoggingSecrets()
     {
         // Arrange
         var logger = new CapturingLogger<EffectiveRightsService>();
@@ -141,7 +141,7 @@ public class EffectiveRightsCacheTests
     }
 
     [Fact]
-    public async Task Anonymous_account_is_refused()
+    public async Task EnsureAuthorizedAsync_AnonymousAccount_IsRefused()
     {
         // Arrange
         var sut = new TenantConnectionService(_store, new Company("BASE1"), new NoUser(), _rights,

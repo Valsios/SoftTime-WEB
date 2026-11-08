@@ -32,7 +32,7 @@ public class UserAdministrationGuardTests
     private static readonly UserDto NewUserDto = new(0, 2, "Nouveau", "nouveau", null, "ValidP@ss123!");
 
     [Fact]
-    public async Task Non_administrator_is_refused_on_every_write_and_nothing_changes()
+    public async Task SaveUserAsync_NonAdministrator_IsRefusedOnEveryWriteAndChangesNothing()
     {
         // Arrange
         var svc = Service(2, 3);
@@ -51,7 +51,7 @@ public class UserAdministrationGuardTests
     }
 
     [Fact]
-    public async Task Administrator_keeps_every_existing_ability()
+    public async Task SaveUserAsync_Administrator_KeepsEveryExistingAbility()
     {
         // Arrange
         var sut = Service(1, 1);
@@ -69,7 +69,7 @@ public class UserAdministrationGuardTests
     }
 
     [Fact]
-    public async Task Existing_protections_still_apply_to_an_administrator()
+    public async Task SaveUserAsync_Administrator_ExistingProtectionsStillApply()
     {
         // Arrange
         var svc = Service(1, 1);
@@ -82,7 +82,7 @@ public class UserAdministrationGuardTests
 
 
     [Fact]
-    public async Task Role_named_admin_but_not_role_1_is_refused_by_the_guard_on_role_1_assignment_and_on_rights_changes()
+    public async Task SaveUserAsync_RoleNamedAdminButNotRole1_IsRefusedOnRole1AndRightsChanges()
     {
         // Arrange
         _uow.Get<Role>().Items.Add(new Role { IdRole = 4, NomRole = "ROLE_ADMIN_CUSTOM" });
@@ -104,7 +104,7 @@ public class UserAdministrationGuardTests
     }
 
     [Fact]
-    public async Task Role_4_is_refused_on_every_guarded_overload_and_state_is_unchanged()
+    public async Task SaveUserAsync_Role4_IsRefusedOnEveryGuardedOverload()
     {
         // Arrange
         _uow.Get<Role>().Items.Add(new Role { IdRole = 4, NomRole = "ROLE_ADMIN_CUSTOM" });
@@ -130,7 +130,7 @@ public class UserAdministrationGuardTests
     }
 
     [Fact]
-    public async Task Role_4_changing_its_own_role_is_refused_the_same_way()
+    public async Task SaveUserAsync_Role4ChangingOwnRole_IsRefused()
     {
         // Arrange
         _uow.Get<Role>().Items.Add(new Role { IdRole = 4, NomRole = "ROLE_ADMIN_CUSTOM" });
@@ -149,7 +149,7 @@ public class UserAdministrationGuardTests
     }
 
     [Fact]
-    public async Task Role_1_stays_protected_against_deleting_itself_and_removing_the_last_administrator()
+    public async Task DeleteUserAsync_Role1_CannotDeleteItselfOrTheLastAdministrator()
     {
         // Arrange
         var svc = Service(1, 1);
@@ -166,7 +166,7 @@ public class UserAdministrationGuardTests
     }
 
     [Fact]
-    public async Task Role_1_cannot_modify_or_delete_another_administrator_without_keeping_one()
+    public async Task DeleteUserAsync_Role1_MustKeepOneAdministrator()
     {
         // Arrange
         _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 5, IdRole = 1, Login = "admin2" });

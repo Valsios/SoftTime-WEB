@@ -15,7 +15,7 @@ namespace SoftTime.Tests;
 public class AuditTrailTests
 {
     [Fact]
-    public async Task Writes_a_non_sensitive_payroll_summary_with_counts()
+    public async Task WritePayrollSyncAsync_Success_WritesNonSensitiveSummaryWithCounts()
     {
         // Arrange
         var uow = new InMemoryUnitOfWork();
@@ -43,7 +43,7 @@ public class AuditTrailTests
     }
 
     [Fact]
-    public async Task Writes_failure_summary_without_individual_data()
+    public async Task WritePayrollSyncAsync_Failure_WritesSummaryWithoutIndividualData()
     {
         // Arrange
         var uow = new InMemoryUnitOfWork();
@@ -60,7 +60,7 @@ public class AuditTrailTests
     }
 
     [Fact]
-    public async Task Disabled_audit_writes_nothing()
+    public async Task WritePayrollSyncAsync_AuditDisabled_WritesNothing()
     {
         // Arrange
         var uow = new InMemoryUnitOfWork();
@@ -74,7 +74,7 @@ public class AuditTrailTests
     }
 
     [Fact]
-    public async Task Journal_failure_is_logged_and_does_not_throw()
+    public async Task WritePayrollSyncAsync_JournalFails_LogsAndDoesNotThrow()
     {
         // Arrange
         var logger = new RecordingLogger<AuditTrail>();
@@ -93,7 +93,7 @@ public class AuditTrailTests
             categories.Values.Sum(), 0, categories, status, "admin", "SYNC_PAIE:STANDARD", Guid.NewGuid());
 
     [Fact]
-    public async Task Writes_company_databases_when_the_audit_has_no_sage_database()
+    public async Task WritePayrollSyncAsync_NoSageDatabase_WritesCompanyDatabases()
     {
         // Arrange
         var uow = new InMemoryUnitOfWork();
@@ -111,7 +111,7 @@ public class AuditTrailTests
     }
 
     [Fact]
-    public async Task Standard_writer_writes_success_summary_with_exact_counts()
+    public async Task WriteAsync_Success_WritesSummaryWithExactCounts()
     {
         // Arrange
         var audit = new CapturingAuditTrail();
@@ -129,7 +129,7 @@ public class AuditTrailTests
     }
 
     [Fact]
-    public async Task Standard_writer_writes_exact_partial_failure_and_rethrows_original_exception()
+    public async Task WriteAsync_PartialFailure_WritesExactCountsAndRethrows()
     {
         // Arrange
         var original = new InvalidOperationException("missing operand");
@@ -148,7 +148,7 @@ public class AuditTrailTests
     }
 
     [Fact]
-    public async Task Standard_writer_writes_failure_even_when_request_is_cancelled()
+    public async Task WriteAsync_CancelledRequest_StillWritesFailure()
     {
         // Arrange
         var audit = new CapturingAuditTrail();
@@ -166,7 +166,7 @@ public class AuditTrailTests
     }
 
     [Fact]
-    public async Task Standard_writer_is_not_masked_when_the_journal_write_fails()
+    public async Task WriteAsync_JournalWriteFails_KeepsOriginalOutcome()
     {
         // Arrange
         var logger = new RecordingLogger<AuditTrail>();
@@ -183,7 +183,7 @@ public class AuditTrailTests
     }
 
     [Fact]
-    public async Task Standard_writer_records_zero_updates_when_a_sage_constant_is_missing()
+    public async Task WriteAsync_MissingSageConstant_RecordsZeroUpdates()
     {
         // Arrange
         var audit = new CapturingAuditTrail();
@@ -201,7 +201,7 @@ public class AuditTrailTests
     }
 
     [Fact]
-    public async Task Standard_writer_writes_success_even_if_the_request_is_cancelled_after_payroll()
+    public async Task WriteAsync_CancelledAfterPayroll_StillWritesSuccess()
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();

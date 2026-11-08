@@ -99,7 +99,7 @@ public class ClosingPunchIndexTests
     }
 
     [Fact]
-    public void Rules_ProduceExpectedAnomaliesOnMixedSet()
+    public void ClosingRules_MixedPunchSet_ProduceExpectedAnomalies()
     {
         // Arrange
         var exacts = DuplicatePunchRules.DoublonsExacts(Index, new ClosingScope(From, To));
@@ -114,7 +114,7 @@ public class ClosingPunchIndexTests
     }
 
     [Fact]
-    public void Index_GroupsByCanonicalMatriculeSortedAndCountsPerDay()
+    public void Moments_MixedMatricules_GroupsByCanonicalMatriculeSortedWithDailyCounts()
     {
         // Act
         var result = Index.Moments("369").Where(m => m.Date == Lundi).Select(m => m.Heure);

@@ -72,7 +72,7 @@ public class TokenGatesTests
     }
 
     [Fact]
-    public async Task Administrator_has_gates_1_to_6()
+    public async Task GatesOf_Administrator_HasGates1To6()
     {
         // Arrange
         Account(14, 1, "admin");
@@ -86,7 +86,7 @@ public class TokenGatesTests
     }
 
     [Fact]
-    public async Task Account_with_the_no_right_marker_has_no_gate()
+    public async Task GatesOf_NoRightMarker_HasNoGate()
     {
         // Arrange
         Account(10028, 10034, "user", PermissionCatalogMarker);
@@ -101,7 +101,7 @@ public class TokenGatesTests
     }
 
     [Fact]
-    public async Task Consultation_account_has_gate_6_only()
+    public async Task GatesOf_ConsultationAccount_HasGate6Only()
     {
         // Act
         Account(10030, 29, "user1");
@@ -111,7 +111,7 @@ public class TokenGatesTests
     }
 
     [Fact]
-    public async Task Account_like_joel_with_role_only_has_gates_1_and_3_and_keeps_its_databases()
+    public async Task GatesOf_JoelLikeRoleOnly_HasGates1And3AndKeepsDatabases()
     {
         // Arrange
         Account(10034, 10034, "joel");
@@ -126,7 +126,7 @@ public class TokenGatesTests
     }
 
     [Fact]
-    public async Task Account_like_joel_with_PARAMS_additions_gets_gate_2_too()
+    public async Task GatesOf_JoelLikeWithParamsAdditions_AlsoHasGate2()
     {
         // Arrange
         // Stockage actuel : liste complète = droits du rôle + ajouts (convertie en écarts à la lecture).
@@ -140,7 +140,7 @@ public class TokenGatesTests
     }
 
     [Fact]
-    public async Task Removing_every_work_right_removes_gate_3()
+    public async Task GatesOf_EveryWorkRightRemoved_LosesGate3()
     {
         // Act
         Account(10034, 10034, "joel", "SAGE:BASE1:READ");
@@ -150,7 +150,7 @@ public class TokenGatesTests
     }
 
     [Fact]
-    public async Task Account_whose_role_does_not_exist_has_no_gate()
+    public async Task GatesOf_UnknownRole_HasNoGate()
     {
         // Arrange
         Account(10099, 999, "orphan");
@@ -165,7 +165,7 @@ public class TokenGatesTests
     }
 
     [Fact]
-    public async Task A_rights_change_is_visible_at_the_next_login()
+    public async Task LoginAsync_AfterRightsChange_ShowsNewGates()
     {
         // Arrange
         Account(14, 1, "admin");
@@ -181,7 +181,7 @@ public class TokenGatesTests
 
     // S2 : PUT privileges/{role} ne doit pas contredire les portes déduites des droits détaillés d'un rôle.
     [Fact]
-    public async Task SetPrivileges_is_refused_for_a_role_with_detailed_rights_and_still_works_without()
+    public async Task SetPrivilegesAsync_RoleWithDetailedRights_IsRefusedOtherwiseWorks()
     {
         // Act
         Func<Task> act = () => _auth.SetPrivilegesAsync(10034, new List<decimal> { 6 });

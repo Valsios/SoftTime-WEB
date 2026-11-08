@@ -5,7 +5,7 @@ namespace SoftTime.Tests;
 public class PeriodGroupingTests
 {
     [Fact]
-    public void Quotidienne_LabelIsIsoDate()
+    public void Grouper_Quotidienne_LabelIsIsoDate()
     {
         // Act
         var (cle, libelle) = PeriodGrouping.Grouper(new DateTime(2025, 7, 1, 8, 30, 0), PeriodGrouping.Quotidienne);
@@ -16,7 +16,7 @@ public class PeriodGroupingTests
     }
 
     [Fact]
-    public void Mensuelle_LabelIsMonthYear()
+    public void Grouper_Mensuelle_LabelIsMonthYear()
     {
         // Act
         var (cle, libelle) = PeriodGrouping.Grouper(new DateTime(2025, 7, 1), PeriodGrouping.Mensuelle);
@@ -27,7 +27,7 @@ public class PeriodGroupingTests
     }
 
     [Fact]
-    public void Hebdomadaire_LabelIsReadableWeekRange()
+    public void Grouper_Hebdomadaire_LabelIsReadableWeekRange()
     {
         // Act
         // Le 1er juillet 2025 (mardi) appartient à la semaine ISO 27 : lundi 30/06 → dimanche 06/07.
@@ -39,7 +39,7 @@ public class PeriodGroupingTests
     }
 
     [Fact]
-    public void Hebdomadaire_AllDaysOfWeekShareTheSameGroup()
+    public void Grouper_HebdomadaireDaysOfOneWeek_ShareTheSameGroup()
     {
         // Arrange
         var lundi = new DateTime(2025, 6, 30);
@@ -65,7 +65,7 @@ public class PeriodGroupingTests
     }
 
     [Fact]
-    public void Hebdomadaire_KeysSortChronologicallyAcrossYearBoundary()
+    public void Grouper_HebdomadaireAcrossYearBoundary_KeysSortChronologically()
     {
         // Arrange
         var decembre = PeriodGrouping.Grouper(new DateTime(2025, 12, 30), PeriodGrouping.Hebdomadaire);
@@ -78,7 +78,7 @@ public class PeriodGroupingTests
     }
 
     [Fact]
-    public void UnknownPeriode_FallsBackToMonthly()
+    public void Grouper_UnknownPeriode_FallsBackToMonthly()
     {
         // Act
         var (cle, libelle) = PeriodGrouping.Grouper(new DateTime(2025, 7, 15), "inconnue");

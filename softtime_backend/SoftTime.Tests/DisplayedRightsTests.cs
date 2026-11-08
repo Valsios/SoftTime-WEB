@@ -52,7 +52,7 @@ public class DisplayedRightsTests
     }
 
     [Fact]
-    public async Task Role_without_rows_shows_database_read_but_no_configuration()
+    public async Task GetRoleDetailedPermissionsAsync_RoleWithoutRows_ShowsReadButNoConfiguration()
     {
         // Act
         var role = await _auth.GetRoleDetailedPermissionsAsync(5);
@@ -66,7 +66,7 @@ public class DisplayedRightsTests
     }
 
     [Fact]
-    public async Task Account_of_that_role_without_adjustment_shows_the_same_rights()
+    public async Task GetUserDetailedPermissionsAsync_AccountWithoutAdjustment_ShowsRoleRights()
     {
         // Arrange
         var role = await _auth.GetRoleDetailedPermissionsAsync(5);
@@ -81,7 +81,7 @@ public class DisplayedRightsTests
     }
 
     [Fact]
-    public async Task Role_with_rows_is_unchanged()
+    public async Task GetRoleDetailedPermissionsAsync_RoleWithRows_IsUnchanged()
     {
         // Act
         var role = await _auth.GetRoleDetailedPermissionsAsync(6);
@@ -94,7 +94,7 @@ public class DisplayedRightsTests
     }
 
     [Fact]
-    public async Task Account_with_personal_rows_keeps_its_list()
+    public async Task GetUserDetailedPermissionsAsync_AccountWithPersonalRows_KeepsItsList()
     {
         // Act
         var user = await _auth.GetUserDetailedPermissionsAsync(17);
@@ -105,7 +105,7 @@ public class DisplayedRightsTests
     }
 
     [Fact]
-    public async Task Administrator_keeps_every_right_including_configuration()
+    public async Task GetRoleDetailedPermissionsAsync_Administrator_KeepsEveryRightIncludingConfiguration()
     {
         // Arrange
         var user = await _auth.GetUserDetailedPermissionsAsync(1);
@@ -119,7 +119,7 @@ public class DisplayedRightsTests
     }
 
     [Fact]
-    public async Task Unknown_role_shows_no_right()
+    public async Task GetRoleDetailedPermissionsAsync_UnknownRole_ShowsNoRight()
     {
         // Act
         var role = await _auth.GetRoleDetailedPermissionsAsync(999);
@@ -130,7 +130,7 @@ public class DisplayedRightsTests
     }
 
     [Fact]
-    public async Task Database_gate_without_any_database_is_not_carried_by_the_displayed_rights()
+    public async Task GetRoleDetailedPermissionsAsync_DatabaseGateWithoutDatabase_IsNotDisplayed()
     {
         // Arrange
         // Cas limite documenté : sans base, aucun droit SAGE/POINTEUSE n'est affiché, donc réenregistrer ces droits

@@ -33,7 +33,7 @@ public class AuditMaskingPolicyTests
     [InlineData("T_QUELCONQUE", "CLIENT_SECRET")]
     [InlineData("T_QUELCONQUE", "CONNECTIONSTRING")]
     [InlineData("T_QUELCONQUE", "PRIVATE_KEY")]
-    public void Listed_and_pattern_columns_are_sensitive(string table, string column)
+    public void IsSensitive_ListedOrPatternColumn_ReturnsTrue(string table, string column)
     {
         // Act
         var result = AuditMaskingPolicy.IsSensitive(table, column);
@@ -49,7 +49,7 @@ public class AuditMaskingPolicyTests
     [InlineData("T_BDD_SAGE", "NOM_BD")]
     [InlineData("T_FERIE", "SERVEUR")]
     [InlineData("T_FERIE", null)]
-    public void Email_matricule_and_ordinary_columns_stay_visible(string table, string? column)
+    public void IsSensitive_EmailMatriculeOrOrdinaryColumn_ReturnsFalse(string table, string? column)
     {
         // Act
         var result = AuditMaskingPolicy.IsSensitive(table, column);
@@ -59,7 +59,7 @@ public class AuditMaskingPolicyTests
     }
 
     [Fact]
-    public void Mask_value_keeps_null_and_masks_sensitive_values_only()
+    public void MaskValue_NullOrSensitiveValue_KeepsNullAndMasksOnlySensitive()
     {
         // Act & Assert
         AuditMaskingPolicy.MaskValue("T_BDD_SAGE", "TMDP", null).Should().BeNull();
@@ -68,7 +68,7 @@ public class AuditMaskingPolicyTests
     }
 
     [Fact]
-    public void Mask_key_masks_only_sensitive_key_columns()
+    public void MaskKey_MixedKeyColumns_MasksOnlySensitiveOnes()
     {
         // Act & Assert
         AuditMaskingPolicy.MaskKey("T_BDD_SAGE", "ID=3;TMDP=clair").Should().Be("ID=3;TMDP=********");
@@ -77,7 +77,7 @@ public class AuditMaskingPolicyTests
     }
 
     [Fact]
-    public void Every_secret_like_column_of_the_application_context_is_masked()
+    public void IsSensitive_EverySecretLikeColumnOfTheContext_ReturnsTrue()
     {
         // Arrange
         using var db = CreateContext();
@@ -103,7 +103,7 @@ public class AuditMaskingPolicyTests
     }
 
     [Fact]
-    public void Database_credentials_are_masked_but_the_changed_column_stays_visible()
+    public void CaptureChanges_DatabaseCredentials_MasksValueButKeepsColumnName()
     {
         // Arrange
         using var db = CreateContext();
@@ -128,7 +128,7 @@ public class AuditMaskingPolicyTests
     }
 
     [Fact]
-    public void Pointeuse_password_is_masked_and_email_stays_visible()
+    public void CaptureChanges_PointeusePassword_MasksPasswordAndKeepsEmail()
     {
         // Arrange
         using var db = CreateContext();
@@ -147,7 +147,7 @@ public class AuditMaskingPolicyTests
     }
 
     [Fact]
-    public void Rights_audit_table_is_excluded_from_the_central_journal()
+    public void CaptureChanges_RightsAuditTable_IsExcludedFromCentralJournal()
     {
         // Arrange
         using var db = CreateContext();

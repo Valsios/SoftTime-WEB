@@ -10,7 +10,7 @@ namespace SoftTime.Tests;
 public class OvertimeDetailRulesTests
 {
     [Fact]
-    public void HeuresSupJournalieres_KeepsTheDesktopEightHourThreshold()
+    public void HeuresSupJournalieres_DefaultThreshold_KeepsTheDesktopEightHours()
     {
         // Act & Assert
         // Desktop : Math.Max(0, totalHeures - 8).
@@ -20,7 +20,7 @@ public class OvertimeDetailRulesTests
     }
 
     [Fact]
-    public void HeuresSupJournalieres_AcceptsAnExplicitThreshold()
+    public void HeuresSupJournalieres_ExplicitThreshold_UsesIt()
     {
         // Act
         var result = OvertimeRules.HeuresSupJournalieres(new TimeSpan(10, 0, 0), seuil: 8);
@@ -30,7 +30,7 @@ public class OvertimeDetailRulesTests
     }
 
     [Fact]
-    public void HeuresSupJournalieres_NeverReturnsNegative()
+    public void HeuresSupJournalieres_BelowThreshold_ReturnsZero()
     {
         // Act
         var result = OvertimeRules.HeuresSupJournalieres(TimeSpan.Zero);

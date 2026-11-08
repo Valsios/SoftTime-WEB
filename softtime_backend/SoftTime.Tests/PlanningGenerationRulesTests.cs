@@ -37,7 +37,7 @@ public class PlanningGenerationRulesTests
     }
 
     [Fact]
-    public void TryLundi_AcceptsMonday()
+    public void TryLundi_Monday_ReturnsTrue()
     {
         // Act
         var result = PlanningGenerationRules.TryLundi("2026-08-31", out var lundi);
@@ -48,7 +48,7 @@ public class PlanningGenerationRulesTests
     }
 
     [Fact]
-    public void TryLundi_RejectsAnyOtherWeekday()
+    public void TryLundi_OtherWeekday_ReturnsFalse()
     {
         // Act
         var result = PlanningGenerationRules.TryLundi("2026-09-02", out _);
@@ -59,7 +59,7 @@ public class PlanningGenerationRulesTests
     }
 
     [Fact]
-    public void TryLundi_IgnoresTimePart()
+    public void TryLundi_MondayWithTimePart_ReturnsTheDate()
     {
         // Act
         var result = PlanningGenerationRules.TryLundi("2026-08-31 00:00:00", out var lundi);
@@ -74,7 +74,7 @@ public class PlanningGenerationRulesTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("lundi")]
-    public void TryLundi_RejectsEmptyOrInvalid(string? value)
+    public void TryLundi_EmptyOrInvalid_ReturnsFalse(string? value)
     {
         // Act
         var result = PlanningGenerationRules.TryLundi(value, out _);
@@ -84,7 +84,7 @@ public class PlanningGenerationRulesTests
     }
 
     [Fact]
-    public void TryHeure_ParsesHourAndMinute()
+    public void TryHeure_HourAndMinute_ParsesThem()
     {
         // Act
         var result = PlanningGenerationRules.TryHeure("08:30", out var heure);
@@ -95,7 +95,7 @@ public class PlanningGenerationRulesTests
     }
 
     [Fact]
-    public void TryIntervalle_BuildsSameDayRange()
+    public void TryIntervalle_StartAndEnd_BuildsSameDayRange()
     {
         // Act
         var result = PlanningGenerationRules.TryIntervalle(Lundi, "08:00", "17:00", out var ha, out var hd);
@@ -216,7 +216,7 @@ public class PlanningGenerationRulesTests
     }
 
     [Fact]
-    public void Cellule_ToleratesShortLines()
+    public void Cellule_ShortLine_ReturnsEmpty()
     {
         // Arrange
         var cells = new[] { "CAT A", "2026-08-31", "08:00" };
@@ -227,7 +227,7 @@ public class PlanningGenerationRulesTests
     }
 
     [Fact]
-    public void CategoryCsv_GeneratesAWholeWeek()
+    public void GenerateFromCategoryCsvAsync_ValidLine_GeneratesAWholeWeek()
     {
         // Arrange
         var cells = new[]

@@ -19,7 +19,7 @@ public class ImportTemplateTests
         => ImportTemplateCatalog.All(LundiReference);
 
     [Fact]
-    public void Catalogue_ContientLesNeufModelesAttendus()
+    public void All_Catalogue_ContientLesNeufModelesAttendus()
     {
         // Act
         var cles = Modeles().Select(m => m.Key).ToList();
@@ -36,7 +36,7 @@ public class ImportTemplateTests
     }
 
     [Fact]
-    public void ChaqueModele_EstCoherent()
+    public void All_ChaqueModele_EstCoherent()
     {
         foreach (var modele in Modeles())
         {
@@ -51,7 +51,7 @@ public class ImportTemplateTests
     }
 
     [Fact]
-    public void ModelesPlanning_OntUneColonneParJour()
+    public void All_ModelesPlanning_OntUneColonneParJour()
     {
         // Act
         var dates = Enumerable.Range(0, 7)
@@ -94,7 +94,7 @@ public class ImportTemplateTests
     }
 
     [Fact]
-    public void FichiersCsv_RedonnentLesEnTetesEtLesExemples()
+    public void Build_ModelesCsv_RedonnentLesEnTetesEtLesExemples()
     {
         foreach (var modele in Modeles().Where(m => m.Format == ImportTemplateCatalog.FormatCsv))
         {

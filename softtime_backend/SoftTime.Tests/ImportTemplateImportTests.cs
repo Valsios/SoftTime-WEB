@@ -105,7 +105,7 @@ public class ImportTemplateImportTests
             .ToList();
 
     [Fact]
-    public async Task ModelePointages_EstImportable()
+    public async Task ImportPunchesExcelAsync_ModelePointages_EstImportable()
     {
         // Arrange
         var contexte = new Contexte();
@@ -122,7 +122,7 @@ public class ImportTemplateImportTests
     }
 
     [Fact]
-    public async Task ModeleCorrections_EstImportable()
+    public async Task ImportCorrectionsExcelAsync_ModeleCorrections_EstImportable()
     {
         // Arrange
         var contexte = new Contexte();
@@ -143,7 +143,7 @@ public class ImportTemplateImportTests
     }
 
     [Fact]
-    public async Task ModeleShifts_EstImportable()
+    public async Task ImportShiftsExcelAsync_ModeleShifts_EstImportable()
     {
         // Arrange
         var contexte = new Contexte();
@@ -159,7 +159,7 @@ public class ImportTemplateImportTests
     }
 
     [Fact]
-    public async Task ModelePlanningMatricule_EstImportable()
+    public async Task ImportExcelAsync_ModelePlanningMatricule_EstImportable()
     {
         // Arrange
         var contexte = new Contexte();
@@ -176,7 +176,7 @@ public class ImportTemplateImportTests
     }
 
     [Fact]
-    public async Task ModelePlanningCategorie_EstImportable()
+    public async Task ImportExcelAsync_ModelePlanningCategorie_EstImportable()
     {
         // Arrange
         var contexte = new Contexte();
@@ -193,7 +193,7 @@ public class ImportTemplateImportTests
     }
 
     [Fact]
-    public async Task ModeleGenerationCategorie_EstImportable()
+    public async Task GenerateFromCategoryCsvAsync_ModeleGenerationCategorie_EstImportable()
     {
         // Arrange
         var contexte = new Contexte();
@@ -208,7 +208,7 @@ public class ImportTemplateImportTests
     }
 
     [Fact]
-    public async Task ModeleGenerationMatricule_EstImportable()
+    public async Task GenerateFromMatriculeCsvAsync_ModeleGenerationMatricule_EstImportable()
     {
         // Arrange
         var contexte = new Contexte();
@@ -223,7 +223,7 @@ public class ImportTemplateImportTests
     }
 
     [Fact]
-    public async Task ModeleAffectations_EstImportable()
+    public async Task ImportAffectationsExcelAsync_ModeleAffectations_EstImportable()
     {
         // Arrange
         var contexte = new Contexte();
@@ -239,7 +239,7 @@ public class ImportTemplateImportTests
     }
 
     [Fact]
-    public async Task ModeleCorrespondances_EstImportable()
+    public async Task ImportCorrespondencesCsvAsync_ModeleCorrespondances_EstImportable()
     {
         // Arrange
         var contexte = new Contexte();

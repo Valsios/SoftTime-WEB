@@ -284,7 +284,7 @@ public class OvertimeCalculatorTests
     }
 
     [Fact]
-    public void CasN_SortieArrondieAuPasDeTolerance()
+    public void CalculerJour_CasN_ArronditLaSortieAuPasDeTolerance()
     {
         // Arrange
         var config = Multi(pasSortie: 15);
@@ -315,7 +315,7 @@ public class OvertimeCalculatorTests
     }
 
     [Fact]
-    public void PauseManquantePartielle_EstDeduite()
+    public void CalculerJour_PauseManquantePartielle_EstDeduite()
     {
         // Arrange
         var config = Multi();
@@ -347,7 +347,7 @@ public class OvertimeCalculatorTests
     // ------------------------------------------------------------------ règles complémentaires (multi)
 
     [Fact]
-    public void FerieSansTravail_CrediteLaJourneeSansMajoration()
+    public void CalculerJour_FerieSansTravail_CrediteLaJourneeSansMajoration()
     {
         // Arrange
         var config = Multi();
@@ -393,7 +393,7 @@ public class OvertimeCalculatorTests
     }
 
     [Fact]
-    public void FerieEtDimanche_LeFeriePrimed()
+    public void CalculerJour_FerieEtDimanche_LeFeriePrime()
     {
         // Arrange
         var jour = Jour(Dimanche, new[] { P(Dimanche, "08:00", "12:00") }, ferie: true);
@@ -407,7 +407,7 @@ public class OvertimeCalculatorTests
     }
 
     [Fact]
-    public void SemaineVide_ProduitDesZeros()
+    public void CalculerSemaine_SemaineVide_ProduitDesZeros()
     {
         // Act
         var resultat = OvertimeCalculator.CalculerSemaine(Multi(), Array.Empty<OvertimeDayInput>());
@@ -474,7 +474,7 @@ public class OvertimeCalculatorTests
     }
 
     [Fact]
-    public void Mono_SortieArrondieALaDemiHeureInferieure()
+    public void CalculerJour_Mono_ArronditLaSortieALaDemiHeureInferieure()
     {
         // Arrange
         var config = Mono();

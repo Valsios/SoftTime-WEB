@@ -140,7 +140,7 @@ public class ClosingInformationTests
     // ---------- Étape 1 : niveau Information ----------
 
     [Fact]
-    public void Information_HasWeightZeroAndOtherSeveritiesKeepTheirValues()
+    public void ClosingSeverity_Information_HasWeightZeroAndOthersKeepTheirValues()
     {
         ((int)ClosingSeverity.Information).Should().Be(0);
         new[] { (int)ClosingSeverity.Mineure, (int)ClosingSeverity.Importante, (int)ClosingSeverity.Critique }.Should().Equal(new[] { 1, 3, 5 });
@@ -149,7 +149,7 @@ public class ClosingInformationTests
     }
 
     [Fact]
-    public void Information_NeverEntersScore()
+    public void Score_InformationAnomalies_AreIgnored()
     {
         // Arrange
         var information = Enumerable.Range(0, 40)
@@ -166,7 +166,7 @@ public class ClosingInformationTests
     }
 
     [Fact]
-    public void Information_NeverEntersStatus()
+    public void Statut_InformationAnomalies_AreIgnored()
     {
         // Act
         var information = Enumerable.Range(0, 50)
@@ -178,7 +178,7 @@ public class ClosingInformationTests
     }
 
     [Fact]
-    public async Task Information_IsCountedSeparatelyInSeverityCounts()
+    public async Task AnalyserAsync_InformationAnomalies_AreCountedSeparately()
     {
         // Arrange
         var ctx = new Contexte(multiPointage: false);
@@ -196,7 +196,7 @@ public class ClosingInformationTests
     }
 
     [Fact]
-    public void InformationWeight_IsAdjustableButNegativeIsRefused()
+    public void Erreurs_InformationWeight_AcceptsPositiveAndRefusesNegative()
     {
         // Arrange
         var sut = Lus(("Closing:Poids:Information", "2"));
@@ -288,7 +288,7 @@ public class ClosingInformationTests
     }
 
     [Fact]
-    public void Duplicates_DetailTextStatesTheEffectOnPayroll()
+    public void DoublonsExacts_Duplicate_DetailStatesThePayrollEffect()
     {
         // Act & Assert
         var exactMulti = DuplicatePunchRules.DoublonsExacts(Doublons, new ClosingScope(Lundi, Vendredi, true)).Should().ContainSingle().Which;
@@ -307,7 +307,7 @@ public class ClosingInformationTests
     [InlineData(29, 1)]
     [InlineData(30, 0)]
     [InlineData(31, 0)]
-    public void NearDuplicate_DefaultToleranceIs30Seconds(int secondes, int attendu)
+    public void QuasiDoublons_DefaultTolerance_Is30Seconds(int secondes, int attendu)
     {
         var pointages = new[] { Punch("369", Lundi, H8), Punch("369", Lundi, Plus(H8, secondes)) };
 
@@ -374,7 +374,7 @@ public class ClosingInformationTests
     }
 
     [Fact]
-    public void WithoutPlanning_PlanningOutsideThePeriodDoesNotCount()
+    public void SalariesSansPlanningSurPeriode_PlanningOutsideThePeriod_DoesNotCount()
     {
         // Arrange
         var plannings = new[] { Planning(1, 1, Lundi), Planning(2, 2, Lundi.AddDays(-14)), Planning(3, 3, Mardi) };
@@ -390,7 +390,7 @@ public class ClosingInformationTests
     }
 
     [Fact]
-    public async Task WithoutPlanning_AnalysisExposesTheNumberOfExcludedEmployees()
+    public async Task AnalyserAsync_EmployeesWithoutPlanning_ExposesExcludedCount()
     {
         // Arrange
         var ctx = new Contexte(multiPointage: false);
@@ -460,7 +460,7 @@ public class ClosingInformationTests
     // ---------- Étape 5 : seuil ----------
 
     [Fact]
-    public void BlockingThreshold_DefaultIsFivePercent()
+    public void CriticalRatioBlocking_Default_IsFivePercent()
     {
         ClosingStatusRules.DefaultCriticalRatioBlocking.Should().Be(0.05m);
         ClosingRulesOptions.Default.CriticalRatioBlocking.Should().Be(0.05m);
@@ -515,7 +515,7 @@ public class ClosingInformationTests
     }
 
     [Fact]
-    public async Task IncludeInformation_PaginationTotalFollowsTheDisplayedList()
+    public async Task AnalyserAsync_IncludeInformation_PaginationTotalFollowsDisplayedList()
     {
         // Arrange
         var ctx = new Contexte(multiPointage: false);
@@ -531,7 +531,7 @@ public class ClosingInformationTests
     }
 
     [Fact]
-    public async Task Presentation_CarriesPunchFlagAndExcludedCount()
+    public async Task PresenterAsync_Analysis_CarriesPunchFlagAndExcludedCount()
     {
         // Arrange
         var reglages = Lus(("Closing:ShowNames", "false"));
@@ -553,7 +553,7 @@ public class ClosingInformationTests
     // ---------- Réglages ----------
 
     [Fact]
-    public void Settings_NewKeysAreReadAndPassedToTheRules()
+    public void ReglesParDefaut_NewSettingKeys_AreReadAndPassedToRules()
     {
         // Arrange
         var sut = Lus(("Closing:DoublonsMonoGravite", "importante"), ("Closing:ExclureSansPlanningSurPeriode", "false"),
@@ -577,7 +577,7 @@ public class ClosingInformationTests
     [InlineData("Closing:DoublonsMonoGravite", "3", "DoublonsMonoGravite")]
     [InlineData("Closing:ExclureSansPlanningSurPeriode", "oui", "ExclureSansPlanningSurPeriode")]
     [InlineData("Closing:Poids:Information", "abc", "Poids:Information")]
-    public void Settings_InvalidNewValuesAreRefusedWithoutEchoingTheValue(string cle, string valeur, string attendu)
+    public void Validate_InvalidNewSettingValues_AreRefusedWithoutEchoingValue(string cle, string valeur, string attendu)
     {
         // Act
         var resultat = new ClosingOptionsValidator().Validate(null, Lus((cle, valeur)));
@@ -592,7 +592,7 @@ public class ClosingInformationTests
     // ---------- Non-régression : anciens réglages ----------
 
     [Fact]
-    public async Task OldSettings_ReproduceThePreviousBehaviourExactly()
+    public async Task AnalyserAsync_OldSettings_ReproducePreviousBehaviourExactly()
     {
         // Arrange
         var ctx = new Contexte(multiPointage: false);
@@ -624,7 +624,7 @@ public class ClosingInformationTests
     }
 
     [Fact]
-    public async Task OldSettings_ListIsIdenticalWhetherInformationIsRequestedOrNot()
+    public async Task AnalyserAsync_OldSettings_ListIsIdenticalWithOrWithoutInformation()
     {
         // Arrange
         var ctx = new Contexte(multiPointage: false);
@@ -639,7 +639,7 @@ public class ClosingInformationTests
     }
 
     [Fact]
-    public async Task NewDefaults_ChangeOnlyWhatThePhaseDecided()
+    public async Task AnalyserAsync_NewDefaults_ChangeOnlyDecidedBehaviour()
     {
         // Arrange
         var ctx = new Contexte(multiPointage: false);

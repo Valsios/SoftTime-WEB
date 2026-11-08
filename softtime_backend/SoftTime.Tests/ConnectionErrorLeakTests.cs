@@ -46,7 +46,7 @@ public class ConnectionErrorLeakTests
 
     // Les cinq échecs sont lancés en parallèle : chacun attend le délai de connexion (60 s) de la fabrique de chaînes.
     [Fact]
-    public async Task Failed_connections_leak_neither_password_login_nor_connection_string()
+    public async Task TestConnection_Failure_LeaksNeitherPasswordLoginNorConnectionString()
     {
         // Arrange
         var svc = Catalog();

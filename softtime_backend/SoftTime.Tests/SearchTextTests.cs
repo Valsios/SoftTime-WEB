@@ -8,7 +8,7 @@ public class SearchTextTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public void EmptySearchMatchesEverything(string? search)
+    public void Matches_EmptySearch_MatchesEverything(string? search)
     {
         // Act
         var result = SearchText.Matches(search, "Dupont", "Jean");
@@ -18,7 +18,7 @@ public class SearchTextTests
     }
 
     [Fact]
-    public void MatchesIsCaseAndAccentInsensitive()
+    public void Matches_DifferentCaseOrAccents_Matches()
     {
         // Act & Assert
         SearchText.Matches("rene", "René Dupont").Should().BeTrue();
@@ -27,7 +27,7 @@ public class SearchTextTests
     }
 
     [Fact]
-    public void MatchesRequiresEveryWord()
+    public void Matches_SeveralWords_RequiresEveryWord()
     {
         // Act & Assert
         SearchText.Matches("rene dupont", "René", "Dupont").Should().BeTrue();
@@ -35,7 +35,7 @@ public class SearchTextTests
     }
 
     [Fact]
-    public void RawTermsPreserveAccentsForSql()
+    public void RawTerms_AccentedSearch_PreservesAccents()
     {
         // Act
         var result = SearchText.RawTerms(" René ");
@@ -46,7 +46,7 @@ public class SearchTextTests
     }
 
     [Fact]
-    public void MatchesObjectSearchesPublicValuesButIgnoresTechnicalId()
+    public void MatchesObject_AnyObject_SearchesPublicValuesButIgnoresTechnicalId()
     {
         // Arrange
         var row = new SearchRow(42, "Dupont", "Rene");
@@ -57,7 +57,7 @@ public class SearchTextTests
     }
 
     [Fact]
-    public void NormalizeCapsLength()
+    public void Normalize_LongSearch_CapsLength()
     {
         // Act
         var normalized = SearchText.Normalize(new string('a', SearchText.MaxLength + 20));

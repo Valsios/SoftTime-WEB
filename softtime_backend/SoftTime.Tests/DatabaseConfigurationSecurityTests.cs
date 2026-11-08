@@ -52,7 +52,7 @@ public class DatabaseConfigurationSecurityTests
     #region AdminAccess
 
     [Fact]
-    public void AdminAccess_OnlyRoleOneIsAdmin()
+    public void IsAdmin_Role1OrOtherRole_OnlyRole1IsAdmin()
     {
         // Act & Assert
         AdminAccess.IsAdmin(new TestCurrentUser(1, 1)).Should().BeTrue();
@@ -66,7 +66,7 @@ public class DatabaseConfigurationSecurityTests
     #region Configuration des bases
 
     [Fact]
-    public async Task Admin_CanCreateUpdateDelete()
+    public async Task EnsureCanConfigureAsync_Administrator_CanCreateUpdateDelete()
     {
         var a = AuthorizerFor(1, 1);
         await a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, "X");
@@ -76,7 +76,7 @@ public class DatabaseConfigurationSecurityTests
     }
 
     [Fact]
-    public async Task RoleWithoutRight_IsRefused()
+    public async Task EnsureCanConfigureAsync_RoleWithoutRight_IsRefused()
     {
         var a = AuthorizerFor(20, 5, Rights.Reports);
         await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, "X"));
@@ -86,7 +86,7 @@ public class DatabaseConfigurationSecurityTests
     }
 
     [Fact]
-    public async Task RoleWithPermission_IsAllowedOnlyForGrantedAction()
+    public async Task EnsureCanConfigureAsync_RoleWithPermission_IsAllowedOnlyForGrantedAction()
     {
         GrantRole(5, $"SAGE:{Base}:UPDATE", $"SAGE:{Base}:READ");
         var a = AuthorizerFor(21, 5, Rights.Databases);
@@ -99,7 +99,7 @@ public class DatabaseConfigurationSecurityTests
     }
 
     [Fact]
-    public async Task CustomizedAccountWithPermissionAndRight_IsAllowed()
+    public async Task EnsureCanConfigureAsync_CustomizedAccountWithPermissionAndRight_IsAllowed()
     {
         GrantUser(22, "SAGE:CREATE", $"SAGE:{Base}:DELETE");
         var a = AuthorizerFor(22, 5, Rights.Databases);
@@ -109,7 +109,7 @@ public class DatabaseConfigurationSecurityTests
     }
 
     [Fact]
-    public async Task CustomizedAccountWithPermissionButWithoutRight_IsRefused()
+    public async Task EnsureCanConfigureAsync_CustomizedAccountWithoutRight_IsRefused()
     {
         GrantUser(23, "SAGE:CREATE", $"SAGE:{Base}:UPDATE", $"SAGE:{Base}:DELETE");
         var a = AuthorizerFor(23, 5, Rights.Processing);
@@ -118,7 +118,7 @@ public class DatabaseConfigurationSecurityTests
     }
 
     [Fact]
-    public async Task CustomizedAccountWithReadOnly_IsRefused()
+    public async Task EnsureCanConfigureAsync_CustomizedAccountWithReadOnly_IsRefused()
     {
         GrantUser(24, $"SAGE:{Base}:READ", "POINTEUSE:PTG:READ");
         var a = AuthorizerFor(24, 5, Rights.Databases);
@@ -129,14 +129,14 @@ public class DatabaseConfigurationSecurityTests
     }
 
     [Fact]
-    public async Task NonCustomizedAccountWithoutRight_IsRefused()
+    public async Task EnsureCanConfigureAsync_NonCustomizedAccountWithoutRight_IsRefused()
     {
         var a = AuthorizerFor(25, 5, Rights.Reports);
         await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Delete, Base));
     }
 
     [Fact]
-    public async Task EmptyDatabaseName_IsRefusedForUpdateAndDelete()
+    public async Task EnsureCanConfigureAsync_EmptyDatabaseName_IsRefusedForUpdateAndDelete()
     {
         GrantUser(26, "SAGE:CREATE", $"SAGE:{Base}:UPDATE", $"SAGE:{Base}:DELETE");
         var a = AuthorizerFor(26, 5, Rights.Databases);
@@ -146,7 +146,7 @@ public class DatabaseConfigurationSecurityTests
     }
 
     [Fact]
-    public async Task UnknownUser_IsRefused()
+    public async Task EnsureCanConfigureAsync_UnknownUser_IsRefused()
     {
         var a = new DatabaseConfigurationAuthorizer(new TestCurrentUser(999, 5, Rights.Databases), _auth);
         await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, "X"));
@@ -222,7 +222,7 @@ public class DatabaseConfigurationSecurityTests
     #region Rôle Administrateur intact
 
     [Fact]
-    public async Task AdminRole_CannotBeRenamedDeletedOrHaveItsPrivilegesReplaced()
+    public async Task SaveRoleAsync_AdministratorRole_CannotBeRenamedDeletedOrHavePrivilegesReplaced()
     {
         // Act & Assert
         await FluentActions.Awaiting(() => _auth.SaveRoleAsync(new RoleDto(1, "Autre"))).Should().ThrowExactlyAsync<DomainException>();
@@ -232,7 +232,7 @@ public class DatabaseConfigurationSecurityTests
     }
 
     [Fact]
-    public async Task OtherRoles_RemainEditable()
+    public async Task SetPrivilegesAsync_OtherRole_RemainsEditable()
     {
         // Act
         await _auth.SetPrivilegesAsync(5, new List<decimal> { Rights.Reports });

@@ -29,7 +29,7 @@ public class OvertimeRulesTests
     }
 
     [Fact]
-    public void AllocateExempt_CapsAt20Hours()
+    public void AllocateExempt_MoreThan20Hours_CapsExemptAt20()
     {
         // Arrange
         var weeks = new List<HsWeekSplit>
@@ -97,7 +97,7 @@ public class OvertimeRulesTests
     }
 
     [Fact]
-    public void IsMondayToSundayWeek_RequiresExactSpan()
+    public void IsMondayToSundayWeek_InexactSpan_ReturnsFalse()
     {
         // Arrange
         var monday = new DateTime(2026, 8, 31);
@@ -109,7 +109,7 @@ public class OvertimeRulesTests
     }
 
     [Fact]
-    public void GetMinuteSortie_RoundsByTolerance()
+    public void GetMinuteSortie_AnyMinute_RoundsByTolerance()
     {
         // Act & Assert
         OvertimeRules.GetMinuteSortie(35, 30).Should().Be(30);
@@ -124,7 +124,7 @@ public class OvertimeRulesTests
     }
 
     [Fact]
-    public void IsMaxOneMonth_AcceptsWithinMonth()
+    public void IsMaxOneMonth_WithinMonth_ReturnsTrue()
     {
         // Arrange
         var start = new DateTime(2026, 1, 15);
@@ -136,7 +136,7 @@ public class OvertimeRulesTests
     }
 
     [Fact]
-    public void IsMaxOneMonth_RejectsExceedingMonth()
+    public void IsMaxOneMonth_ExceedingMonth_ReturnsFalse()
     {
         // Arrange
         var start = new DateTime(2026, 1, 15);

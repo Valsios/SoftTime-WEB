@@ -21,7 +21,7 @@ public class AuditJournalTransactionalTests
     private static readonly Lazy<bool> DatabaseInitialized = new(EnsureDatabase);
 
     [Fact]
-    public void Generated_identity_is_written_to_the_journal_after_the_business_insert()
+    public void SaveChanges_GeneratedIdentity_IsWrittenToJournalAfterBusinessInsert()
     {
         // Arrange
         EnsureInitialized();
@@ -43,7 +43,7 @@ public class AuditJournalTransactionalTests
     }
 
     [Fact]
-    public void Non_generated_key_is_preserved_in_the_journal()
+    public void SaveChanges_NonGeneratedKey_IsPreservedInJournal()
     {
         // Arrange
         EnsureInitialized();
@@ -63,7 +63,7 @@ public class AuditJournalTransactionalTests
     }
 
     [Fact]
-    public void Audit_write_failure_rolls_back_the_business_insert()
+    public void SaveChanges_AuditWriteFails_RollsBackBusinessInsert()
     {
         EnsureInitialized();
         var label = $"rollback-{Guid.NewGuid():N}";
@@ -78,7 +78,7 @@ public class AuditJournalTransactionalTests
     }
 
     [Fact]
-    public void Existing_transaction_is_reused_without_being_committed()
+    public void SaveChanges_ExistingTransaction_IsReusedWithoutCommit()
     {
         // Arrange
         EnsureInitialized();
@@ -96,7 +96,7 @@ public class AuditJournalTransactionalTests
     }
 
     [Fact]
-    public void Disabled_audit_writes_no_journal_entry()
+    public void SaveChanges_AuditDisabled_WritesNoJournalEntry()
     {
         // Arrange
         EnsureInitialized();

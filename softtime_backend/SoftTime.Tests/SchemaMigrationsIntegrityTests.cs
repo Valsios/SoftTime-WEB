@@ -109,7 +109,7 @@ public class SchemaMigrationsIntegrityTests
     // ---------- Journal de démarrage ----------
 
     [Fact]
-    public async Task RunIfEnabled_LogsHowManyScriptsWereAppliedAndHowManyWereUpToDate()
+    public async Task RunIfEnabledAsync_MixedScripts_LogsAppliedAndUpToDateCounts()
     {
         // Arrange
         var logger = new ListLogger();

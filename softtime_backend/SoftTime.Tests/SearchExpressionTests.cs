@@ -11,7 +11,7 @@ public class SearchExpressionTests
     }
 
     [Fact]
-    public void EmptySearchReturnsNull()
+    public void For_EmptySearch_ReturnsNull()
     {
         // Act
         var result = SearchExpression.For<Row>("  ", row => row.Nom);
@@ -21,7 +21,7 @@ public class SearchExpressionTests
     }
 
     [Fact]
-    public void BuildsOrAcrossFieldsAndAndAcrossWords()
+    public void For_SeveralWordsAndFields_BuildsOrAcrossFieldsAndAndAcrossWords()
     {
         // Arrange
         var rows = new[]
@@ -42,7 +42,7 @@ public class SearchExpressionTests
     }
 
     [Fact]
-    public void NullFieldDoesNotMatch()
+    public void For_NullField_DoesNotMatch()
     {
         // Arrange
         var rows = new[] { new Row { Nom = null, Code = "X" } }.AsQueryable();
@@ -56,7 +56,7 @@ public class SearchExpressionTests
     }
 
     [Fact]
-    public void AndAlsoCombinesPredicates()
+    public void AndAlso_TwoPredicates_CombinesThem()
     {
         // Arrange
         var rows = new[]

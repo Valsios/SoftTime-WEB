@@ -291,7 +291,7 @@ public class RetardReportRulesTests
     }
 
     [Fact]
-    public void Calculer_ToleranceParCategorie()
+    public void Calculer_ToleranceParCategorie_AppliqueLaToleranceDeLaCategorie()
     {
         // Arrange
         // Sans tolérance : 08:05 -> 5 minutes. Avec 10 minutes : aucune ligne.
@@ -344,7 +344,7 @@ public class RetardReportRulesTests
     }
 
     [Fact]
-    public void MinutesRetard_JamaisNegatif()
+    public void MinutesRetard_EntreeEnAvance_RetourneZero()
     {
         // Act & Assert
         RetardReportRules.MinutesRetard(TimeSpan.Parse("07:55"), TimeSpan.Parse("08:00"), 10).Should().Be(0);

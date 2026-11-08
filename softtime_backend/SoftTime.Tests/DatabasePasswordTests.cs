@@ -43,7 +43,7 @@ public class DatabasePasswordTests
     private CatalogServices Admin() => Catalog(1, 1);
 
     [Fact]
-    public void Mapped_dto_has_no_password_and_serializes_without_it()
+    public void Map_DatabaseEntity_DtoHasNoPasswordAndSerializesWithoutIt()
     {
         // Arrange
         var sage = _mapper.Map<SageDbDto>(_uow.Get<BddSage>().Items[0]);
@@ -65,7 +65,7 @@ public class DatabasePasswordTests
     }
 
     [Fact]
-    public void PasswordDefined_is_false_when_no_password_is_stored()
+    public void Map_NoStoredPassword_PasswordDefinedIsFalse()
     {
         // Act
         var dto = _mapper.Map<SageDbDto>(new BddSage { Id = 1, NomBd = "X", TMdp = "" });
@@ -75,7 +75,7 @@ public class DatabasePasswordTests
     }
 
     [Fact]
-    public void Password_sent_by_the_client_still_deserializes_as_input()
+    public void Deserialize_PasswordSentByClient_IsReadAsInput()
     {
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         var dto = JsonSerializer.Deserialize<SageDbDto>("""{"id":0,"serveur":"s","login":"l","password":"FAKE-INPUT-PWD","nomBd":"B"}""", options)!;
@@ -83,7 +83,7 @@ public class DatabasePasswordTests
     }
 
     [Fact]
-    public async Task Save_without_password_keeps_the_stored_one()
+    public async Task SaveSageAsync_WithoutPassword_KeepsStoredPassword()
     {
         // Act
         var result = await Admin().Sage.SaveSageAsync(new SageDbDto(7, "srv", "sa", null, true, "BASE1"));
@@ -97,7 +97,7 @@ public class DatabasePasswordTests
     }
 
     [Fact]
-    public async Task Save_with_password_replaces_the_stored_one()
+    public async Task SaveSageAsync_WithPassword_ReplacesStoredPassword()
     {
         // Act
         var result = await Admin().Sage.SaveSageAsync(new SageDbDto(7, "srv", "sa", Typed, true, "BASE1"));
@@ -110,7 +110,7 @@ public class DatabasePasswordTests
     }
 
     [Fact]
-    public async Task Create_stores_the_password_and_does_not_return_it()
+    public async Task SaveSageAsync_NewDatabase_StoresPasswordWithoutReturningIt()
     {
         // Act
         var result = await Admin().Sage.SaveSageAsync(new SageDbDto(0, "srv2", "sa", Typed, true, "NOUVELLE"));
@@ -122,7 +122,7 @@ public class DatabasePasswordTests
     }
 
     [Fact]
-    public async Task Connection_test_of_an_existing_base_uses_the_stored_password()
+    public async Task TestSageConnectionAsync_ExistingDatabase_UsesStoredPassword()
     {
         // Act
         await Admin().Sage.TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "sa", null, "BASE1", "STANDARD", null, 7));
@@ -134,7 +134,7 @@ public class DatabasePasswordTests
     }
 
     [Fact]
-    public async Task Connection_test_prefers_a_typed_password()
+    public async Task TestSageConnectionAsync_TypedPassword_IsPreferred()
     {
         // Act
         await Admin().Sage.TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "sa", Typed, "BASE1", "STANDARD", null, 7));
@@ -144,7 +144,7 @@ public class DatabasePasswordTests
     }
 
     [Fact]
-    public async Task Connection_test_of_a_new_base_without_password_sends_none()
+    public async Task TestSageConnectionAsync_NewDatabaseWithoutPassword_SendsNone()
     {
         // Act
         await Admin().Sage.TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "sa", null, "BASE1", "STANDARD", null, null));
@@ -154,7 +154,7 @@ public class DatabasePasswordTests
     }
 
     [Fact]
-    public async Task Stored_password_is_never_sent_to_another_server_or_login()
+    public async Task TestSageConnectionAsync_OtherServerOrLogin_NeverSendsStoredPassword()
     {
         // Act & Assert
         await FluentActions.Awaiting(() =>
@@ -165,7 +165,7 @@ public class DatabasePasswordTests
     }
 
     [Fact]
-    public async Task Discovery_of_an_existing_base_uses_the_stored_password()
+    public async Task DiscoverTablesAsync_ExistingDatabase_UsesStoredPassword()
     {
         // Act
         await Admin().Discovery.DiscoverTablesAsync(new DiscoverTablesDto("srv", "BASE1", true, "sa", null, 7, "SAGE"));
@@ -179,7 +179,7 @@ public class DatabasePasswordTests
     }
 
     [Fact]
-    public async Task Stored_password_requires_the_update_permission_on_that_base()
+    public async Task TestSageConnectionAsync_WithoutUpdatePermission_DoesNotUseStoredPassword()
     {
         // Arrange
         // Compte avec la porte Bases mais seulement la lecture : l'usage du mot de passe stocké est refusé.
@@ -199,7 +199,7 @@ public class DatabasePasswordTests
     }
 
     [Fact]
-    public async Task Login_and_me_responses_carry_no_password()
+    public async Task GetMeAsync_LoginAndMeResponses_CarryNoPassword()
     {
         // Arrange
         _uow.Get<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });

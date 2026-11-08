@@ -35,7 +35,7 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
     private int Rows(decimal id) => _f.Store.Get<UserPermission>().Items.Count(p => p.IdResponsable == id);
 
     [Fact]
-    public async Task Preview_for_an_administrator_lists_the_adjustments_that_would_be_cleared()
+    public async Task RoleChangePreview_Administrator_ListsAdjustmentsToClear()
     {
         // Arrange
         var before = _f.Snapshot();
@@ -58,7 +58,7 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
     [InlineData("usersreader")]
     [InlineData("joel")]
     [InlineData("user1")]
-    public async Task Preview_is_refused_to_non_administrators(string profile)
+    public async Task RoleChangePreview_NonAdministrator_IsRefused(string profile)
     {
         // Act
         var (resp, _) = await Send(profile, HttpMethod.Post, "/api/v1/users/10080/role-change-preview", """{"newRoleId":40}""");
@@ -68,7 +68,7 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Preview_is_refused_to_anonymous()
+    public async Task RoleChangePreview_Anonymous_IsRefused()
     {
         // Act
         var (resp, _) = await Send("anonyme", HttpMethod.Post, "/api/v1/users/10080/role-change-preview", """{"newRoleId":40}""");
@@ -78,7 +78,7 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Preview_has_count_zero_without_adjustments_or_when_the_role_does_not_change()
+    public async Task RoleChangePreview_NoAdjustmentOrSameRole_HasCountZero()
     {
         // Act
         var (withoutAdjustments, text1) = await Send("admin", HttpMethod.Post, "/api/v1/users/10050/role-change-preview", """{"newRoleId":40}""");
@@ -94,7 +94,7 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Put_without_confirmation_gives_409_with_the_preview_body_and_writes_nothing()
+    public async Task PutUser_RoleChangeWithoutConfirmation_Returns409WithPreview()
     {
         // Arrange
         var before = _f.Snapshot();
@@ -112,7 +112,7 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Put_with_confirmation_changes_the_role_clears_the_adjustments_and_invalidates_the_cache()
+    public async Task PutUser_RoleChangeConfirmed_ChangesRoleClearsAdjustmentsAndCache()
     {
         using (var scope = _f.Services.CreateScope())
         {
@@ -135,7 +135,7 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Put_changing_the_role_of_an_account_without_adjustments_needs_no_confirmation()
+    public async Task PutUser_RoleChangeWithoutAdjustments_NeedsNoConfirmation()
     {
         // Act
         var (resp, _) = await Send("admin", HttpMethod.Put, "/api/v1/users/10050", Put(10050, 40, "cible"));
@@ -146,7 +146,7 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Put_keeping_the_same_role_keeps_the_adjustments_without_confirmation()
+    public async Task PutUser_SameRole_KeepsAdjustmentsWithoutConfirmation()
     {
         // Arrange
         var rows = Rows(10083);
@@ -162,7 +162,7 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
     [Theory]
     [InlineData("param2")]
     [InlineData("joel")]
-    public async Task Put_is_still_refused_to_non_administrators(string profile)
+    public async Task PutUser_NonAdministrator_IsRefused(string profile)
     {
         // Arrange
         var before = _f.Snapshot();

@@ -21,7 +21,7 @@ public class SchemaMigratorTests
     }
 
     [Fact]
-    public void Split_KeepsGoInsideIdentifiersAndBlockComments()
+    public void Split_GoInsideIdentifiersOrComments_IsKept()
     {
         // Arrange
         var script = "SELECT 1 AS GOAL;\nGO\n/* commentaire\nGO\nfin */\nSELECT 2;\nGO";
@@ -46,7 +46,7 @@ public class SchemaMigratorTests
     }
 
     [Fact]
-    public void EmbeddedInitialSchema_IsLoadedAndContainsNoDestructiveStatement()
+    public void EmbeddedMigrationScriptSource_InitialSchema_LoadsWithoutDestructiveStatement()
     {
         // Act
         var scripts = new EmbeddedMigrationScriptSource().Load();
@@ -62,7 +62,7 @@ public class SchemaMigratorTests
     // ---------- Ordre numérique ----------
 
     [Fact]
-    public async Task Run_AppliesPendingScriptsInNumericOrder()
+    public async Task RunAsync_PendingScripts_AppliesInNumericOrder()
     {
         // Arrange
         var connection = new FakeConnection();
@@ -80,7 +80,7 @@ public class SchemaMigratorTests
     }
 
     [Fact]
-    public async Task Run_SkipsAlreadyAppliedScripts()
+    public async Task RunAsync_AlreadyAppliedScripts_AreSkipped()
     {
         // Arrange
         var first = Script(1, "001_a.sql");
@@ -112,7 +112,7 @@ public class SchemaMigratorTests
     [InlineData("1_court.sql", false, 0)]
     [InlineData("001-tiret.sql", false, 0)]
     [InlineData("000_zero.sql", false, 0)]
-    public void TryParseVersion_FollowsNamingConvention(string name, bool valid, int version)
+    public void TryParseVersion_ScriptFileNames_FollowNamingConvention(string name, bool valid, int version)
     {
         // Act
         var result = MigrationScriptNames.TryParseVersion(name, out var parsed);
@@ -142,7 +142,7 @@ public class SchemaMigratorTests
     }
 
     [Fact]
-    public void Checksum_IsSha256AndIgnoresLineEndings()
+    public void ComputeChecksum_DifferentLineEndings_GivesSameSha256()
     {
         // Act
         var lf = MigrationScript.ComputeChecksum("SELECT 1;\nGO\n");
@@ -254,7 +254,7 @@ public class SchemaMigratorTests
     }
 
     [Fact]
-    public void GuardedSql_KeepsOriginalStatementAfterTheCheck()
+    public void GuardedSql_AnyStatement_KeepsItAfterTheCheck()
     {
         // Act
         var sql = SchemaPresenceGuard.GuardedSql("T_ROLE", "SELECT 1;");

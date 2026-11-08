@@ -16,7 +16,7 @@ public class AuditServiceTests
     }
 
     [Fact]
-    public void ListAllowedTypes_ReturnsNonEmptyOptions()
+    public void ListAllowedTypes_Always_ReturnsNonEmptyOptions()
     {
         // Act
         var types = _service.ListAllowedTypes();

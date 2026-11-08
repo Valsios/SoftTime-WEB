@@ -108,7 +108,7 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     [InlineData("gate6only", HttpStatusCode.Forbidden)]
     [InlineData("joel", HttpStatusCode.Forbidden)]
     [InlineData("anonyme", HttpStatusCode.Unauthorized)]
-    public async Task Analysis_needs_the_database_then_gate_6_and_REPORTS_CLOSING(string profil, HttpStatusCode attendu)
+    public async Task Analysis_MissingDatabaseGateOrPermission_IsRefused(string profil, HttpStatusCode attendu)
     {
         // Arrange
         var before = _f.Snapshot();
@@ -127,7 +127,7 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Analysis_returns_status_score_formula_counts_and_named_anomalies()
+    public async Task Analysis_AuthorizedReader_ReturnsStatusScoreCountsAndAnomalies()
     {
         // Act
         var (code, texte) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}&includeComparison=true"));
@@ -154,7 +154,7 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Analysis_accepts_includeInformation_and_exposes_the_excluded_employee_count()
+    public async Task Analysis_IncludeInformation_ExposesExcludedEmployeeCount()
     {
         // Act
         var (code, texte) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}&includeInformation=true"));
@@ -169,7 +169,7 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task ShowNames_false_returns_the_matricule_only_without_error()
+    public async Task Analysis_ShowNamesFalse_ReturnsMatriculeOnly()
     {
         // Arrange
         using var sut = AvecReglages(("Closing:ShowNames", "false"));
@@ -209,7 +209,7 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task PageSize_above_200_is_capped_to_200()
+    public async Task Analysis_PageSizeAbove200_IsCappedTo200()
     {
         // Act
         var (code, texte) = await Envoyer(_http, Requete("admin", HttpMethod.Get, $"{Url}?{Semaine}&page=1&pageSize=5000"));
@@ -221,7 +221,7 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Utc_dates_keep_the_requested_day()
+    public async Task Analysis_UtcDates_KeepTheRequestedDay()
     {
         // Act
         var (code, texte) = await Envoyer(_http, Requete("admin", HttpMethod.Get, $"{Url}?from=2025-11-03T00:00:00Z&to=2025-11-07T00:00:00Z"));
@@ -240,7 +240,7 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     [InlineData("PUT")]
     [InlineData("PATCH")]
     [InlineData("DELETE")]
-    public async Task Write_methods_are_405_and_write_nothing(string methode)
+    public async Task Analysis_WriteMethods_Return405AndWriteNothing(string methode)
     {
         // Arrange
         var before = _f.Snapshot();
@@ -254,7 +254,7 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Disabled_feature_is_an_explicit_404_not_a_500()
+    public async Task Analysis_FeatureDisabled_Returns404()
     {
         // Arrange
         using var sut = AvecReglages(("Closing:Enabled", "false"));
@@ -268,7 +268,7 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task Disabled_feature_still_refuses_an_account_without_the_permission()
+    public async Task Analysis_FeatureDisabledWithoutPermission_IsRefused()
     {
         // Arrange
         using var sut = AvecReglages(("Closing:Enabled", "false"));
@@ -281,7 +281,7 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public void Invalid_setting_refuses_startup_with_a_clear_message()
+    public void Startup_InvalidClosingSetting_FailsWithClearMessage()
     {
         // Arrange
         using var sut = AvecReglages(("Closing:CriticalRatioBlocking", "2"));

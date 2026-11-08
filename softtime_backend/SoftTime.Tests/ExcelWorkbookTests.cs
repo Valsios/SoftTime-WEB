@@ -14,7 +14,7 @@ namespace SoftTime.Tests;
 public class ExcelWorkbookTests
 {
     [Fact]
-    public void WriteWorkbook_EcritPlusieursFeuillesEtConserveLesTypes()
+    public void WriteWorkbook_PlusieursFeuilles_EcritChaqueFeuilleEtConserveLesTypes()
     {
         // Arrange
         var bytes = new ExcelWorkbook().WriteWorkbook(new[]
@@ -54,7 +54,7 @@ public class ExcelWorkbookTests
     }
 
     [Fact]
-    public void WriteWorkbook_NettoieEtDedupliqueLesNomsDeFeuilles()
+    public void WriteWorkbook_NomsInvalidesOuDoublons_NettoieEtDeduplique()
     {
         // Arrange
         var bytes = new ExcelWorkbook().WriteWorkbook(new[]
@@ -78,7 +78,7 @@ public class ExcelWorkbookTests
     }
 
     [Fact]
-    public void WriteWorkbook_ConvertitLesValeursJsonEnCellulesTypees()
+    public void WriteWorkbook_ValeursJson_ConvertitEnCellulesTypees()
     {
         // Arrange
         using var doc = JsonDocument.Parse(

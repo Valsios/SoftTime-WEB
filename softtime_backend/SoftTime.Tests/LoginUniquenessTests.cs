@@ -40,7 +40,7 @@ public class LoginUniquenessTests
     [InlineData("agent", "AGENT")]
     [InlineData("  Agent ", "AGENT")]
     [InlineData(null, "")]
-    public void Normalize_TrimsAndUppercases(string? login, string expected)
+    public void Normalize_PaddedMixedCaseLogin_TrimsAndUppercases(string? login, string expected)
     {
         // Act
         var key = LoginKey.Normalize(login);
@@ -137,7 +137,7 @@ public class LoginUniquenessTests
     // ---------- Création initiale de l'administrateur ----------
 
     [Fact]
-    public async Task CreateAdminAsync_RunsUnderExclusiveLock()
+    public async Task CreateAdminAsync_ConcurrentCreation_RunsUnderExclusiveLock()
     {
         // Arrange
         var sut = CreateAuth();

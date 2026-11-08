@@ -13,7 +13,7 @@ namespace SoftTime.Tests;
 public class CardPaieMappingTests
 {
     [Fact]
-    public void Departement_IsMappedToCardPaieEntity()
+    public void Map_DtoWithDepartement_SetsCardPaieDepartement()
     {
         // Arrange
         var sut = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();

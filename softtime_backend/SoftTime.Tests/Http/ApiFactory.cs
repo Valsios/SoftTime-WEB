@@ -209,4 +209,11 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
 
     /// <summary>Instantané sérialisé de toutes les données en mémoire, pour prouver l'absence d'écriture.</summary>
     public string Snapshot() => Store.Snapshot();
+
+    /// <summary>Vide le magasin en mémoire et rejoue les données initiales.</summary>
+    public void ResetStore()
+    {
+        Store.Clear();
+        Seed();
+    }
 }

@@ -499,7 +499,7 @@ public class RolePermissionsTests
     #region B5, C1, C4 — Réinitialisation des permissions utilisateur
 
     [Fact]
-    public async Task ResetUserPermissions_ClearsCustomizationAndReturnsToRolePermissions()
+    public async Task ResetUserDetailedPermissionsAsync_CustomizedAccount_ReturnsToRolePermissions()
     {
         // Arrange
         // Rôle 3 avec PROC:SHIFTS
@@ -544,7 +544,7 @@ public class RolePermissionsTests
     #region C5 — Nettoyage à la suppression d'un rôle
 
     [Fact]
-    public async Task DeleteRole_CleansRolePermissionsAndDroitsRole()
+    public async Task DeleteRoleAsync_RoleWithRows_CleansRolePermissionsAndDroitsRole()
     {
         // Arrange
         _uow.Get<Role>().Items.Add(new Role { IdRole = 4, NomRole = "RoleToDelete" });
