@@ -40,24 +40,31 @@ public class AuditService : IAuditService
         }
         else
         {
-            var e = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
-            e.Tables = dto.Table;
-            e.Colonnes = dto.Column;
-
-            // Si le type a été modifié par rapport à l'existant (comparaison insensible)
-            var typeInchange = string.Equals(e.Types, dto.Type, StringComparison.OrdinalIgnoreCase);
-            if (!typeInchange)
-            {
-                AuditConfigurationRules.Valider(dto.Type);
-                e.Types = AuditConfigurationRules.Normalize(dto.Type!);
-            }
-            // Si le type est inchangé, on préserve la valeur existante en base sans la réécrire ni la normaliser
-
-            e.Etats = dto.Enabled;
-            e.Bases = dto.Base;
-            repo.Update(e);
+            await ModifierAsync(dto, repo, ct);
         }
         await _uow.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Met à jour une règle de suivi ; un type inchangé (sans tenir compte de la casse) est conservé tel quel.</summary>
+    private static async Task ModifierAsync(
+        AuditConfigDto dto, IRepository<SuiviConfiguration> repo, CancellationToken ct)
+    {
+        var e = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
+        e.Tables = dto.Table;
+        e.Colonnes = dto.Column;
+
+        // Si le type a été modifié par rapport à l'existant (comparaison insensible)
+        var typeInchange = string.Equals(e.Types, dto.Type, StringComparison.OrdinalIgnoreCase);
+        if (!typeInchange)
+        {
+            AuditConfigurationRules.Valider(dto.Type);
+            e.Types = AuditConfigurationRules.Normalize(dto.Type!);
+        }
+        // Si le type est inchangé, on préserve la valeur existante en base sans la réécrire ni la normaliser
+
+        e.Etats = dto.Enabled;
+        e.Bases = dto.Base;
+        repo.Update(e);
     }
 
     public async Task<IReadOnlyList<AuditEventDto>> ListEventsAsync(DateTime? from, DateTime? to, string? table, string? action, CancellationToken ct = default)

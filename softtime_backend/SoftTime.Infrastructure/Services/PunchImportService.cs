@@ -26,13 +26,7 @@ public sealed class PunchImportService : IPunchImportService
     public async Task<ImportResultDto> ImportFromClockAsync(ImportPunchesRequest request, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
-        if (request.From == default || request.To == default)
-            throw new DomainException("La période (from/to) est requise pour importer les pointages.");
-        if (request.To.Date < request.From.Date)
-            throw new DomainException("La date de fin doit être postérieure ou égale à la date de début.");
-
-        _ = (await _uow.Repository<ParametrePointeuse>().ListAsync(_ => true, ct)).FirstOrDefault()
-            ?? throw new DomainException("Paramètre pointeuse (T_CLOCK) manquant.");
+        await ValiderAsync(request, ct);
         var pteRow = await _tenant.GetPointeuseRowAsync(ct);
         var (badgeMap, ambiguousBadges) = BadgeMap(await LoadCardsAsync(request, ct));
         var users = await _externalSource.GetPunchUsersAsync(pteRow, ct);
@@ -61,6 +55,18 @@ public sealed class PunchImportService : IPunchImportService
         return new ImportResultDto(imported, skipped, ClockImportMessage(imported, skipped, ambiguousBadges));
     }
 
+    /// <summary>Période explicite et paramètre pointeuse (T_CLOCK) présent.</summary>
+    private async Task ValiderAsync(ImportPunchesRequest request, CancellationToken ct)
+    {
+        if (request.From == default || request.To == default)
+            throw new DomainException("La période (from/to) est requise pour importer les pointages.");
+        if (request.To.Date < request.From.Date)
+            throw new DomainException("La date de fin doit être postérieure ou égale à la date de début.");
+
+        _ = (await _uow.Repository<ParametrePointeuse>().ListAsync(_ => true, ct)).FirstOrDefault()
+            ?? throw new DomainException("Paramètre pointeuse (T_CLOCK) manquant.");
+    }
+
     public async Task<ImportResultDto> ImportPunchesExcelAsync(IReadOnlyList<Dictionary<string, string>> rows, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
@@ -82,21 +88,27 @@ public sealed class PunchImportService : IPunchImportService
                 skipped++;
                 continue;
             }
-            await _uow.Repository<Pointage>().AddAsync(new Pointage
-            {
-                MatriculeSage = row.Matricule,
-                DatePointage = row.Jour,
-                HeurePointage = row.Heure,
-                DateImportation = DateTime.Now,
-                NomBddSage = _tenant.SageDb,
-                NomBddPointeuse = _tenant.PointeuseDb,
-                TypePointage = "IO"
-            }, ct);
+            await AjouterAsync(row, ct);
             imported++;
         }
         await _uow.SaveChangesAsync(ct);
         return new ImportResultDto(imported, skipped,
             $"{imported} pointage(s) importé(s), {skipped} ligne(s) ignorée(s).");
+    }
+
+    /// <summary>Pointage importé d'une ligne Excel (type IO).</summary>
+    private async Task AjouterAsync((string Matricule, DateTime Jour, TimeSpan Heure) row, CancellationToken ct)
+    {
+        await _uow.Repository<Pointage>().AddAsync(new Pointage
+        {
+            MatriculeSage = row.Matricule,
+            DatePointage = row.Jour,
+            HeurePointage = row.Heure,
+            DateImportation = DateTime.Now,
+            NomBddSage = _tenant.SageDb,
+            NomBddPointeuse = _tenant.PointeuseDb,
+            TypePointage = "IO"
+        }, ct);
     }
 
     private async Task<List<CardPaie>> LoadCardsAsync(ImportPunchesRequest request, CancellationToken ct)

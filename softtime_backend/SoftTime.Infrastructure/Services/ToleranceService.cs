@@ -53,15 +53,7 @@ public sealed class ToleranceService : IToleranceService
 
     public async Task<ToleranceDto> SaveToleranceAsync(ToleranceDto dto, CancellationToken ct = default)
     {
-        var categoryExists = await _uow.Repository<Categorie>().GetByIdAsync(dto.CategoryId, ct);
-        if (categoryExists == null)
-            throw new NotFoundException($"Catégorie introuvable (ID={dto.CategoryId}).");
-
-        if (dto.Tolerance < 0)
-            throw new DomainException("La tolérance d'entrée ne peut pas être négative.");
-
-        if (dto.Sortie < 0)
-            throw new DomainException("La tolérance de sortie ne peut pas être négative.");
+        await ValiderAsync(dto, ct);
 
         var repo = _uow.Repository<ToleranceRetard>();
         ToleranceRetard entity;
@@ -87,6 +79,20 @@ public sealed class ToleranceService : IToleranceService
         }
         await _uow.SaveChangesAsync(ct);
         return new ToleranceDto(entity.Id, entity.IdCategorie, entity.Tolerance, entity.TypesTol, entity.Sortie);
+    }
+
+    /// <summary>Catégorie existante et tolérances positives ou nulles.</summary>
+    private async Task ValiderAsync(ToleranceDto dto, CancellationToken ct)
+    {
+        var categoryExists = await _uow.Repository<Categorie>().GetByIdAsync(dto.CategoryId, ct);
+        if (categoryExists == null)
+            throw new NotFoundException($"Catégorie introuvable (ID={dto.CategoryId}).");
+
+        if (dto.Tolerance < 0)
+            throw new DomainException("La tolérance d'entrée ne peut pas être négative.");
+
+        if (dto.Sortie < 0)
+            throw new DomainException("La tolérance de sortie ne peut pas être négative.");
     }
 
     public async Task DeleteToleranceAsync(int id, CancellationToken ct = default)

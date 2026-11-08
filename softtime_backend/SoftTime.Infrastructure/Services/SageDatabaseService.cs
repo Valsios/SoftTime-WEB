@@ -166,6 +166,13 @@ public sealed class SageDatabaseService : ISageDatabaseService
         if (entity is null || string.IsNullOrWhiteSpace(entity.SourceTable))
             return new DepartementServiceOptionsDto(Array.Empty<string>(), Array.Empty<string>());
 
+        return await OptionsAsync(database, entity, ct);
+    }
+
+    /// <summary>Valeurs distinctes des colonnes département et service mappées, lues dans la base SAGE.</summary>
+    private async Task<DepartementServiceOptionsDto> OptionsAsync(
+        BddSage database, SourceEntityMapping entity, CancellationToken ct)
+    {
         var fields = await _uow.Repository<SourceFieldMapping>()
             .ListReadOnlyAsync(f => f.EntityMappingId == entity.Id, ct);
         string? ColumnOf(string role) => fields

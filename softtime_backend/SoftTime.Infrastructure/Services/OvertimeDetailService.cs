@@ -194,15 +194,7 @@ public sealed class OvertimeDetailService : IOvertimeDetailService
         foreach (var groupe in lignes.GroupBy(h => (Debut: h.PeriodeDebut?.Date, Fin: h.PeriodeFin?.Date)))
         {
             var lignesGroupe = groupe.ToList();
-            var candidates = groupe.Key.Debut.HasValue && groupe.Key.Fin.HasValue
-                ? semainesValidees
-                    .Where(v => v.DateDeb.HasValue
-                                && SemaineRattachee(v.DateDeb.Value, groupe.Key.Debut, groupe.Key.Fin))
-                    .ToList()
-                : new List<HsValidee>();
-
-            var coherent = candidates.Count == lignesGroupe.Count
-                           && lignesGroupe.All(h => h.Semaine is int rang && rang >= 1 && rang <= candidates.Count);
+            var (candidates, coherent) = SemainesCandidates(semainesValidees, groupe, lignesGroupe);
 
             foreach (var ligne in lignesGroupe)
             {
@@ -222,6 +214,22 @@ public sealed class OvertimeDetailService : IOvertimeDetailService
         }
 
         return resultat;
+    }
+
+    /// <summary>Semaines validées rattachées à la période du groupe, et cohérence de leur nombre avec les rangs des lignes.</summary>
+    private static (List<HsValidee> Candidates, bool Coherent) SemainesCandidates(
+        IReadOnlyList<HsValidee> semainesValidees, IGrouping<(DateTime? Debut, DateTime? Fin), HsSemaine> groupe, List<HsSemaine> lignesGroupe)
+    {
+        var candidates = groupe.Key.Debut.HasValue && groupe.Key.Fin.HasValue
+            ? semainesValidees
+                .Where(v => v.DateDeb.HasValue
+                            && SemaineRattachee(v.DateDeb.Value, groupe.Key.Debut, groupe.Key.Fin))
+                .ToList()
+            : new List<HsValidee>();
+
+        var coherent = candidates.Count == lignesGroupe.Count
+                       && lignesGroupe.All(h => h.Semaine is int rang && rang >= 1 && rang <= candidates.Count);
+        return (candidates, coherent);
     }
 
     /// <summary>La semaine qui commence ce lundi est-elle rattachée à cette période EXO/IMPO ?</summary>

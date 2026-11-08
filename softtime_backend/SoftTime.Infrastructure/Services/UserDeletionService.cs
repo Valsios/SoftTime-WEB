@@ -47,6 +47,18 @@ public sealed class UserDeletionService : IUserDeletionService
 
         var entity = await repo.GetByIdAsync(id, cancellationToken) ?? throw new NotFoundException();
 
+        await EnsureAdminDeletableAsync(repo, callerIsSuperAdmin, entity, cancellationToken);
+
+        await RemoveAccountRightsAsync(entity.IdResponsable, cancellationToken);
+        repo.Remove(entity);
+        await _uow.SaveChangesAsync(cancellationToken);
+        _effectiveRights.Invalidate(id);
+    }
+
+    /// <summary>Un compte administrateur ne peut être supprimé que par un super-administrateur, et jamais s'il est le dernier.</summary>
+    private static async Task EnsureAdminDeletableAsync(
+        IRepository<Responsable> repo, bool callerIsSuperAdmin, Responsable entity, CancellationToken cancellationToken)
+    {
         if (entity.IdRole == AdminRules.AdminRoleId)
         {
             if (!callerIsSuperAdmin)
@@ -59,11 +71,6 @@ public sealed class UserDeletionService : IUserDeletionService
             if (otherAdmins.Count == 0)
                 throw new DomainException("Impossible de supprimer le dernier administrateur.");
         }
-
-        await RemoveAccountRightsAsync(entity.IdResponsable, cancellationToken);
-        repo.Remove(entity);
-        await _uow.SaveChangesAsync(cancellationToken);
-        _effectiveRights.Invalidate(id);
     }
 
     /// <summary>Réservé aux tests (internal, sans garde) : le code de production doit transmettre l'identité de l'appelant.</summary>

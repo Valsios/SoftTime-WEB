@@ -74,14 +74,7 @@ public sealed class SourceMappingStore : ISourceMappingStore
         var entRepo = _uow.Repository<SourceEntityMapping>();
         var fldRepo = _uow.Repository<SourceFieldMapping>();
         var existing = await entRepo.ListAsync(m => isSage ? m.SageDbId == connectionId : m.PointeuseDbId == connectionId, ct);
-        if (existing.Count > 0)
-        {
-            var ids = existing.Select(e => e.Id).ToHashSet();
-            var existingFields = await fldRepo.ListAsync(f => ids.Contains(f.EntityMappingId), ct);
-            fldRepo.RemoveRange(existingFields);
-            entRepo.RemoveRange(existing);
-            await _uow.SaveChangesAsync(ct);
-        }
+        await SupprimerAsync(entRepo, fldRepo, existing, ct);
         foreach (var m in mappings.Where(x => !string.IsNullOrWhiteSpace(x.EntityKind)))
         {
             var ent = new SourceEntityMapping
@@ -94,17 +87,38 @@ public sealed class SourceMappingStore : ISourceMappingStore
             };
             await entRepo.AddAsync(ent, ct);
             await _uow.SaveChangesAsync(ct);
-            foreach (var f in (m.Fields ?? Array.Empty<SourceFieldMappingDto>()).Where(x => !string.IsNullOrWhiteSpace(x.FieldRoleCode)))
-            {
-                await fldRepo.AddAsync(new SourceFieldMapping
-                {
-                    EntityMappingId = ent.Id,
-                    FieldRoleCode = f.FieldRoleCode.Trim(),
-                    SourceColumn = string.IsNullOrWhiteSpace(f.SourceColumn) ? null : f.SourceColumn!.Trim()
-                }, ct);
-            }
+            await AjouterChampsAsync(fldRepo, m, ent, ct);
         }
         await _uow.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Supprime les mappings existants de la base et leurs champs.</summary>
+    private async Task SupprimerAsync(
+        IRepository<SourceEntityMapping> entRepo, IRepository<SourceFieldMapping> fldRepo, List<SourceEntityMapping> existing, CancellationToken ct)
+    {
+        if (existing.Count > 0)
+        {
+            var ids = existing.Select(e => e.Id).ToHashSet();
+            var existingFields = await fldRepo.ListAsync(f => ids.Contains(f.EntityMappingId), ct);
+            fldRepo.RemoveRange(existingFields);
+            entRepo.RemoveRange(existing);
+            await _uow.SaveChangesAsync(ct);
+        }
+    }
+
+    /// <summary>Champs renseignés du mapping d'entité.</summary>
+    private static async Task AjouterChampsAsync(
+        IRepository<SourceFieldMapping> fldRepo, SourceEntityMappingDto m, SourceEntityMapping ent, CancellationToken ct)
+    {
+        foreach (var f in (m.Fields ?? Array.Empty<SourceFieldMappingDto>()).Where(x => !string.IsNullOrWhiteSpace(x.FieldRoleCode)))
+        {
+            await fldRepo.AddAsync(new SourceFieldMapping
+            {
+                EntityMappingId = ent.Id,
+                FieldRoleCode = f.FieldRoleCode.Trim(),
+                SourceColumn = string.IsNullOrWhiteSpace(f.SourceColumn) ? null : f.SourceColumn!.Trim()
+            }, ct);
+        }
     }
 
     public async Task<IReadOnlyList<SourceEntityMappingDto>> LoadMappingsForAsync(bool isSage, int connectionId, CancellationToken ct)
@@ -123,16 +137,24 @@ public sealed class SourceMappingStore : ISourceMappingStore
         {
             var key = isSage ? e.SageDbId : e.PointeuseDbId;
             if (key is not int id) continue;
-            var dto = _mapper.Map<SourceEntityMappingDto>(e) with
-            {
-                Fields = (fieldsByEntity.TryGetValue(e.Id, out var fs) ? fs : new List<SourceFieldMapping>())
-                    .Select(_mapper.Map<SourceFieldMappingDto>)
-                    .ToList()
-            };
+            var dto = ToDto(fieldsByEntity, e);
             if (!result.TryGetValue(id, out var list)) { list = new List<SourceEntityMappingDto>(); result[id] = list; }
             list.Add(dto);
         }
         return result;
+    }
+
+    /// <summary>Mapping d'entité et ses champs.</summary>
+    private SourceEntityMappingDto ToDto(
+        Dictionary<int, List<SourceFieldMapping>> fieldsByEntity, SourceEntityMapping e)
+    {
+        var dto = _mapper.Map<SourceEntityMappingDto>(e) with
+        {
+            Fields = (fieldsByEntity.TryGetValue(e.Id, out var fs) ? fs : new List<SourceFieldMapping>())
+                .Select(_mapper.Map<SourceFieldMappingDto>)
+                .ToList()
+        };
+        return dto;
     }
 
     /// <summary>

@@ -41,6 +41,23 @@ public sealed class CorrespondenceModeService : ICorrespondenceModeService
         var sageRow = await _tenant.GetSageRowAsync(ct);
         var pteRow = await _tenant.GetPointeuseRowAsync(ct);
         var repo = _uow.Repository<CorrespondanceActive>();
+        var row = await EnregistrerModeAsync(active, sageRow, pteRow, repo, ct);
+        await _uow.SaveChangesAsync(ct);
+        if (!active)
+        {
+            // Desactivation du mode manuel : on relance immediatement l'auto-mapping
+            var result = await SyncCardPaieCoreAsync(sageRow, pteRow, ct);
+            row.DerniereSync = DateTime.Now;
+            repo.Update(row);
+            await _uow.SaveChangesAsync(ct);
+        }
+        return new CorrespondenceModeDto(active);
+    }
+
+    /// <summary>Mode correspondance de la paire SAGE / pointeuse active, créé au premier changement.</summary>
+    private static async Task<CorrespondanceActive?> EnregistrerModeAsync(
+        bool active, BddSage sageRow, BddPointeuse pteRow, IRepository<CorrespondanceActive> repo, CancellationToken ct)
+    {
         var row = (await repo.ListAsync(a =>
             a.SageServeur == sageRow.Serveur && a.SageBdd == sageRow.NomBd &&
             a.PointeuseServeur == pteRow.Serveur && a.PointeuseBdd == pteRow.NomBd, ct)).FirstOrDefault();
@@ -63,16 +80,7 @@ public sealed class CorrespondenceModeService : ICorrespondenceModeService
             row.DateModif = DateTime.Now;
             repo.Update(row);
         }
-        await _uow.SaveChangesAsync(ct);
-        if (!active)
-        {
-            // Desactivation du mode manuel : on relance immediatement l'auto-mapping
-            var result = await SyncCardPaieCoreAsync(sageRow, pteRow, ct);
-            row.DerniereSync = DateTime.Now;
-            repo.Update(row);
-            await _uow.SaveChangesAsync(ct);
-        }
-        return new CorrespondenceModeDto(active);
+        return row;
     }
 
     public async Task<SyncResultDto> SyncCardPaieCoreAsync(BddSage sageRow, BddPointeuse pteRow, CancellationToken ct)

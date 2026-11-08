@@ -176,6 +176,20 @@ public sealed class UserPermissionService : IUserPermissionService
             throw new DomainException("Un utilisateur ne peut pas modifier ses propres privilèges sans droit d'administration.");
         }
 
+        var permsAvant = await SupprimerPermissionsAsync(targetUserId, cancellationToken);
+
+        await _rightsChangeJournal.EcrireAuditDroitAsync(
+            new RightsChange(currentUserId, caller.Login ?? string.Empty, "USER", targetUserId, target.NomResponsable, "RESET_USER_PERMS", permsAvant, null),
+            cancellationToken);
+
+        await _uow.SaveChangesAsync(cancellationToken);
+        _effectiveRights.Invalidate(targetUserId);
+    }
+
+    /// <summary>Supprime les ajustements de l'utilisateur et retourne les permissions d'avant pour le journal.</summary>
+    private async Task<List<string>> SupprimerPermissionsAsync(
+        decimal targetUserId, CancellationToken cancellationToken)
+    {
         var repo = _uow.Repository<UserPermission>();
         var existing = await repo.ListAsync(p => p.IdResponsable == targetUserId, cancellationToken);
         var permsAvant = existing
@@ -184,12 +198,6 @@ public sealed class UserPermissionService : IUserPermissionService
             .ToList();
 
         repo.RemoveRange(existing);
-
-        await _rightsChangeJournal.EcrireAuditDroitAsync(
-            new RightsChange(currentUserId, caller.Login ?? string.Empty, "USER", targetUserId, target.NomResponsable, "RESET_USER_PERMS", permsAvant, null),
-            cancellationToken);
-
-        await _uow.SaveChangesAsync(cancellationToken);
-        _effectiveRights.Invalidate(targetUserId);
+        return permsAvant;
     }
 }
