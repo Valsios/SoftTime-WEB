@@ -2,7 +2,6 @@ import { Injectable } from '@angular/core';
 import { Observable, tap } from 'rxjs';
 import { ApiService } from '../../core/api';
 import { SessionStore } from '../../core/session.store';
-import { TokenRefreshService } from '../../core/token-refresh.service';
 import { AdminSetupRequest, AdminSetupResult, LoginRequest, LoginResponse } from '../models';
 import { PrivilegesDraftService } from './privileges-draft.service';
 import { inject } from '@angular/core';
@@ -11,7 +10,6 @@ import { inject } from '@angular/core';
 export class AuthService extends ApiService {
   private readonly session = inject(SessionStore);
   private readonly draft = inject(PrivilegesDraftService);
-  private readonly refresher = inject(TokenRefreshService);
 
   login(body: LoginRequest): Observable<LoginResponse> {
     return this.http
@@ -46,9 +44,7 @@ export class AuthService extends ApiService {
     return this.http.post<AdminSetupResult>(this.url('/api/auth/create-admin'), body);
   }
 
-  /** Déconnexion : le jeton de rafraîchissement est révoqué côté serveur, puis la session locale est effacée. */
   logout(): void {
-    this.refresher.revoke();
     this.draft.clearAll();
     this.session.clear();
   }

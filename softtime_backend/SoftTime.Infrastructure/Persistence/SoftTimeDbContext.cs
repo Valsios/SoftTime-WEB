@@ -78,7 +78,6 @@ public class SoftTimeDbContext : DbContext
     public DbSet<T_USER_PERMISSION> T_USER_PERMISSION => Set<T_USER_PERMISSION>();
     public DbSet<T_ROLE_PERMISSION> T_ROLE_PERMISSION => Set<T_ROLE_PERMISSION>();
     public DbSet<T_AUDIT_DROIT> T_AUDIT_DROIT => Set<T_AUDIT_DROIT>();
-    public DbSet<T_REFRESH_TOKEN> T_REFRESH_TOKEN => Set<T_REFRESH_TOKEN>();
     public DbSet<T_HISTORIQUE_POINTAGE> T_HISTORIQUE_POINTAGE => Set<T_HISTORIQUE_POINTAGE>();
     public DbSet<T_HISTORIQUE_ANOMALIE> T_HISTORIQUE_ANOMALIE => Set<T_HISTORIQUE_ANOMALIE>();
     public DbSet<T_HISTORIQUE_HS> T_HISTORIQUE_HS => Set<T_HISTORIQUE_HS>();
@@ -177,16 +176,6 @@ public class SoftTimeDbContext : DbContext
             e.Property(x => x.TYPE_CIBLE).HasMaxLength(20);
             e.Property(x => x.NOM_CIBLE).HasMaxLength(100);
             e.Property(x => x.ACTION).HasMaxLength(50);
-        });
-
-        modelBuilder.Entity<T_REFRESH_TOKEN>(e =>
-        {
-            e.ToTable("T_REFRESH_TOKEN");
-            e.HasKey(x => x.ID);
-            e.Property(x => x.IDRESPONSABLE).HasPrecision(18, 0);
-            e.Property(x => x.TOKEN_HASH).HasMaxLength(64).IsFixedLength().IsUnicode(false).IsRequired();
-            e.Property(x => x.REMPLACE_PAR).HasMaxLength(64).IsFixedLength().IsUnicode(false);
-            e.HasIndex(x => x.TOKEN_HASH).IsUnique();
         });
 
         // Longueurs des colonnes de filtre, alignées sur migrations/add_pagination_performance_indexes.sql.

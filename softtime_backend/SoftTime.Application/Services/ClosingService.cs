@@ -25,7 +25,7 @@ namespace SoftTime.Application.Services;
 ///   <item>seuls des matricules (clé canonique) sont manipulés : aucun nom ni prénom.</item>
 /// </list>
 /// </summary>
-public partial class ClosingService
+public class ClosingService
 {
     /// <summary>Longueur maximale par défaut de la période analysée, bornes comprises (réglage Closing:MaxPeriodDays).</summary>
     public const int MaxPeriodDays = ClosingOptions.PlafondPeriodDays;
@@ -74,16 +74,11 @@ public partial class ClosingService
         await _tenant.EnsureAuthorizedAsync(ct);
         var cle = ClosingAnalysisCache.Cle(_tenant.SageDb, _tenant.PointeuseDb, request);
         var maintenant = _horloge.GetUtcNow();
-        // Délai glissant (renouvelé à chaque lecture avec réutilisation) sous un plafond absolu depuis le calcul d'origine.
-        var glissant = TimeSpan.FromSeconds(_reglages.CacheSeconds);
-        // Plafond absolu ; à 0, l'analyse expire après le seul délai glissant. Le délai glissant ne le dépasse jamais.
-        var plafond = TimeSpan.FromSeconds(_reglages.CacheMaxSeconds > 0 ? _reglages.CacheMaxSeconds : _reglages.CacheSeconds);
-        if (request.ReuseCached && _reglages.Cache.TryGet(cle, maintenant, glissant, out var preparee))
+        if (request.ReuseCached && _reglages.Cache.TryGet(cle, maintenant, out var preparee))
             return Assembler(preparee, request);
 
-        // Sans réutilisation (ou entrée expirée) : calcul à neuf, qui remplace l'entrée avec un plafond neuf.
         preparee = Preparer(await ChargerAsync(request, ct), request);
-        _reglages.Cache.Set(cle, preparee, maintenant, glissant, plafond);
+        _reglages.Cache.Set(cle, preparee, maintenant, TimeSpan.FromSeconds(_reglages.CacheSeconds));
         return Assembler(preparee, request);
     }
 
@@ -300,15 +295,9 @@ public partial class ClosingService
         var page = Math.Max(1, request.Page ?? 1);
         var taille = Math.Clamp(request.PageSize ?? DefaultPageSize, 1, MaxPageSize);
         // Les comptages incluent toujours les « Information » ; la liste les omet sauf demande.
-        // Un filtre de gravité explicite remplace cette règle ; le tri par gravité est stable (l'ordre de départ,
-        // déterministe, départage les égalités). Dans tous les cas, seule la liste change : comptages, score et statut non.
-        IReadOnlyList<ClosingAnomaly> affichees = request.Gravites is { Count: > 0 } filtre
-            ? actuel.Anomalies.Where(a => filtre.Contains(a.Severity)).ToList()
-            : request.IncludeInformation
-                ? actuel.Anomalies
-                : actuel.Anomalies.Where(a => a.Severity != ClosingSeverity.Information).ToList();
-        if (request.TriParGravite)
-            affichees = affichees.OrderByDescending(a => (int)a.Severity).ToList();
+        var affichees = request.IncludeInformation
+            ? actuel.Anomalies
+            : actuel.Anomalies.Where(a => a.Severity != ClosingSeverity.Information).ToList();
         var total = affichees.Count;
         var items = affichees
             .Skip(PaginationRules.Decalage(page, taille))

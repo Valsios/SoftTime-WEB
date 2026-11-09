@@ -2,9 +2,7 @@ using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using SoftTime.Api.HostedServices;
@@ -12,7 +10,6 @@ using SoftTime.Api.Middleware;
 using SoftTime.Api.Security;
 using SoftTime.Application;
 using SoftTime.Application.Abstractions;
-using SoftTime.Application.Security;
 using SoftTime.Application.Serialization;
 using SoftTime.Application.Services;
 using SoftTime.Infrastructure;
@@ -23,7 +20,7 @@ using SoftTime.Domain.Entities.SoftTime;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers(o => o.Filters.Add<SoftTime.Api.Validation.FluentValidationFilter>())
+builder.Services.AddControllers()
     .AddJsonOptions(o => SoftTimeJsonOptions.Configure(o.JsonSerializerOptions));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -112,20 +109,9 @@ builder.Services.AddScoped<ICurrentUser>(sp =>
     };
 });
 
-// Secrets hors du dépôt : user-secrets en développement, variables d'environnement ailleurs.
-if (string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("SoftTime")))
-    throw new InvalidOperationException(
-        "Chaîne de connexion absente : définissez ConnectionStrings:SoftTime avec « dotnet user-secrets set \"ConnectionStrings:SoftTime\" \"<valeur>\" » "
-        + "en développement, ou la variable d'environnement ConnectionStrings__SoftTime.");
-
-builder.Services.AddOptions<JwtOptions>().Bind(builder.Configuration.GetSection(JwtOptions.Section)).ValidateOnStart();
-builder.Services.AddSingleton<IValidateOptions<JwtOptions>, JwtOptionsValidator>();
-builder.Services.AddOptions<AccountSecurityOptions>().Bind(builder.Configuration.GetSection(AccountSecurityOptions.Section)).ValidateOnStart();
-builder.Services.AddSingleton<IValidateOptions<AccountSecurityOptions>, AccountSecurityOptionsValidator>();
-
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
-builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
-    .Configure<IOptions<JwtOptions>>((options, jwt) =>
+var jwtKey = builder.Configuration["Jwt:Key"] ?? "SoftTime_Dev_ChangeMe_32chars_minimum!!";
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
     {
         options.MapInboundClaims = true;
         options.TokenValidationParameters = new TokenValidationParameters
@@ -133,39 +119,17 @@ builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSc
             ValidateIssuer = true,
             ValidateAudience = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = jwt.Value.Issuer,
-            ValidAudience = jwt.Value.Audience,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Value.Key)),
-            // Aucune marge : un jeton d'accès expiré est refusé à la seconde près (le client le rafraîchit).
-            ClockSkew = TimeSpan.Zero,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
             NameClaimType = ClaimTypes.Name,
             RoleClaimType = ClaimTypes.Role
         };
     });
 builder.Services.AddAuthorization();
-
-// Origines explicites seulement (Cors:AllowedOrigins) ; liste vide : appels de même origine uniquement.
-var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
-builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod()));
-
-builder.Services.AddRateLimiter(o =>
-{
-    o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    o.OnRejected = (context, ct) => new ValueTask(context.HttpContext.Response.WriteAsJsonAsync(
-        new { error = "Trop de tentatives. Patientez une minute avant de réessayer." }, ct));
-    o.AddPolicy(AuthRateLimit.Policy, context =>
-    {
-        var permits = context.RequestServices.GetRequiredService<IOptions<AccountSecurityOptions>>().Value.AuthRequestsPerMinute;
-        return RateLimitPartition.GetFixedWindowLimiter(
-            context.Connection.RemoteIpAddress?.ToString() ?? "inconnue",
-            _ => new FixedWindowRateLimiterOptions { PermitLimit = permits, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 });
-    });
-});
+builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
 var app = builder.Build();
-// Clé JWT et réglages de sécurité contrôlés avant toute migration : message clair plutôt qu'un échec à la première requête.
-_ = app.Services.GetRequiredService<IOptions<JwtOptions>>().Value;
-_ = app.Services.GetRequiredService<IOptions<AccountSecurityOptions>>().Value;
 using (var scope = app.Services.CreateScope())
 {
     // Scripts SQL versionnés (migrations/versions) : uniquement si Database:AutoMigrate = true (faux par défaut),
@@ -179,8 +143,6 @@ using (var scope = app.Services.CreateScope())
     if (scope.ServiceProvider.GetRequiredService<AuditJournalOptions>().Enabled)
         await SchemaPresenceGuard.EnsureAuditJournalAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
     await UserAccountConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
-    // Jetons de rafraîchissement et verrouillage des comptes : migration 004, sinon arrêt avec un message clair.
-    await SchemaPresenceGuard.EnsureAccountSecurityAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
     await RolePermissionConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
 
     // Base analytique du moteur prédictif : applique les migrations EF versionnées (schéma ml).
@@ -206,23 +168,12 @@ using (var scope = app.Services.CreateScope())
             CancellationToken.None);
     }
 }
-// Ordre de la convention (§5.7) : erreurs, HSTS, HTTPS, CORS, authentification, autorisation, limitation.
 app.UseMiddleware<ExceptionHandlingMiddleware>();
-if (!app.Environment.IsDevelopment())
-{
-    app.UseHsts();
-    app.UseHttpsRedirection();
-}
-app.UseMiddleware<SecurityHeadersMiddleware>();
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+app.UseSwagger();
+app.UseSwaggerUI();
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseRateLimiter();
 app.UseMiddleware<TenantMiddleware>();
 app.MapControllers();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));

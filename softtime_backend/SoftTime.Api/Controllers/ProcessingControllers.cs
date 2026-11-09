@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SoftTime.Api.Authorization;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Security;
 using SoftTime.Application.Services;
 using SoftTime.Infrastructure.Excel;
 
@@ -123,9 +122,8 @@ public class EmployeePlanningController : ControllerBase
             await _svc.SaveEmployeePlanningAsync(rows, ct);
             return NoContent();
         }
-        catch (InvalidOperationException ex) when (ExceptionOrigin.IsApplication(ex))
+        catch (InvalidOperationException ex)
         {
-            // Règle métier : message lisible. Une erreur technique (EF, SqlClient) remonte au middleware (500 journalisé).
             return BadRequest(ex.Message);
         }
     }

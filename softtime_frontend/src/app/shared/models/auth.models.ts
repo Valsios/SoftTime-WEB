@@ -29,8 +29,6 @@ export interface LoginResponse {
   authorizedDatabases: SageDb[];
   permissions?: string[];
   permissionsCustomized?: boolean;
-  /** Jeton de rafraîchissement : renvoyé par la connexion et le rafraîchissement seulement. */
-  refreshToken?: string | null;
 }
 
 export interface User {
