@@ -26,39 +26,6 @@ public sealed class RolePermissionService : IRolePermissionService
         _rightsChangeJournal = rightsChangeJournal;
     }
 
-    private static readonly HashSet<string> KnownStaticPermissions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "PARAMS:USERS", "PARAMS:USERS:CREATE", "PARAMS:USERS:UPDATE", "PARAMS:USERS:DELETE",
-        "PARAMS:ROLES", "PARAMS:ROLES:CREATE", "PARAMS:ROLES:UPDATE", "PARAMS:ROLES:DELETE",
-        "PARAMS:PRIVILEGES", "PARAMS:DB_ACCESS", "PARAMS:CLOCK_PARAMS", "PARAMS:CORRESPONDENCE",
-        "PARAMS:CARDPAIE", "PARAMS:CARDPAIE:CREATE", "PARAMS:CARDPAIE:UPDATE", "PARAMS:CARDPAIE:DELETE",
-        "PARAMS:CATEGORIES", "PARAMS:CATEGORIES:CREATE", "PARAMS:CATEGORIES:UPDATE", "PARAMS:CATEGORIES:DELETE",
-        "PARAMS:AFFECTATIONS", "PARAMS:AFFECTATIONS:CREATE", "PARAMS:AFFECTATIONS:UPDATE", "PARAMS:AFFECTATIONS:DELETE",
-        "PARAMS:TOLERANCES", "PARAMS:TOLERANCES:CREATE", "PARAMS:TOLERANCES:UPDATE",
-        "PARAMS:HOLIDAYS", "PARAMS:HOLIDAYS:CREATE", "PARAMS:HOLIDAYS:UPDATE", "PARAMS:HOLIDAYS:DELETE",
-        "PARAMS:MAJORATIONS", "PARAMS:MAJORATIONS:UPDATE",
-        "PARAMS:CODE_CONSTANTES",
-        "PARAMS:ABSENCE_CODES", "PARAMS:ABSENCE_CODES:CREATE", "PARAMS:ABSENCE_CODES:UPDATE",
-        "PROC:SHIFTS", "PROC:SHIFTS:CREATE", "PROC:SHIFTS:UPDATE", "PROC:SHIFTS:DELETE",
-        "PROC:EMPLOYEE_PLANNING", "PROC:EMPLOYEE_PLANNING:CREATE", "PROC:EMPLOYEE_PLANNING:UPDATE", "PROC:EMPLOYEE_PLANNING:DELETE",
-        "PROC:PUNCHES",
-        "PROC:ANOMALIES", "PROC:ANOMALIES:DELETE",
-        "PROC:CORRECTED_HOURS", "PROC:CORRECTED_HOURS:CREATE", "PROC:CORRECTED_HOURS:UPDATE", "PROC:CORRECTED_HOURS:DELETE",
-        "PROC:WEEKLY_VALIDATION", "PROC:OVERTIME",
-        "OTHER:CANTEEN", "OTHER:TRAVEL_EXPENSES",
-        "TRACE:AUDIT",
-        "REPORTS:REPORTS", "REPORTS:PREDICTIONS", "REPORTS:CLOSING"
-    };
-
-    private static bool IsKnownPermissionCode(string code)
-    {
-        if (string.IsNullOrWhiteSpace(code)) return false;
-        if (code.StartsWith("SAGE:", StringComparison.OrdinalIgnoreCase) ||
-            code.StartsWith("POINTEUSE:", StringComparison.OrdinalIgnoreCase))
-            return true;
-        return KnownStaticPermissions.Contains(code);
-    }
-
     private static HashSet<decimal> DeduirePortes(IEnumerable<string> permCodes)
         => PermissionCatalog.DeduirePortes(permCodes);
 
@@ -139,7 +106,7 @@ public sealed class RolePermissionService : IRolePermissionService
         if (tooLongCodes.Count > 0)
             throw new DomainException($"Code de permission trop long (128 caractères maximum) : {string.Join(", ", tooLongCodes)}.");
 
-        var invalidCodes = normalized.Where(p => !IsKnownPermissionCode(p)).ToList();
+        var invalidCodes = normalized.Where(p => !PermissionCatalog.IsKnown(p)).ToList();
         if (invalidCodes.Count > 0)
             throw new DomainException($"Codes de permission inconnus : {string.Join(", ", invalidCodes)}.");
         return normalized;

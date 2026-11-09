@@ -46,17 +46,19 @@ public class PermissionCatalogCharacterizationTests
     }
 
     [Fact]
-    public void KnownStaticPermissions_Catalog_MatchesAuthServiceSet()
+    public void IsKnown_CatalogCodes_SingleSourceForRolesAndUsers()
     {
         // Arrange
-        var legacy = (HashSet<string>)typeof(RolePermissionService).GetField("KnownStaticPermissions", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
+        // La liste privée de RolePermissionService (sans SELF:READ) a été supprimée : le catalogue est la seule source.
+        var field = typeof(RolePermissionService).GetField("KnownStaticPermissions", BindingFlags.NonPublic | BindingFlags.Static);
 
         // Act
-        // SELF:READ : permission de Mon espace, hors du catalogue historique des rôles.
-        var result = legacy.SetEquals(PermissionCatalog.KnownStatic.Where(c => c != PermissionCatalog.SelfRead));
+        var allKnown = PermissionCatalog.KnownStatic.All(PermissionCatalog.IsKnown);
 
         // Assert
-        result.Should().BeTrue();
+        field.Should().BeNull();
+        allKnown.Should().BeTrue();
+        PermissionCatalog.IsKnown(PermissionCatalog.SelfRead).Should().BeTrue();
         PermissionCatalog.IsKnown("SAGE:X:READ").Should().BeTrue();
         PermissionCatalog.IsKnown("proc:shifts").Should().BeTrue();
         PermissionCatalog.IsKnown("N'IMPORTE:QUOI").Should().BeFalse();

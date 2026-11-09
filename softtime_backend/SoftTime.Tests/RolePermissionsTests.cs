@@ -6,6 +6,7 @@ using SoftTime.Application.Abstractions.Authentication;
 using SoftTime.Application.Abstractions.Notifications;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
+using SoftTime.Application.Security;
 using SoftTime.Domain;
 using SoftTime.Domain.Entities.SoftTime;
 
@@ -214,6 +215,37 @@ public class RolePermissionsTests
         var perms = await _uow.Get<RolePermission>().ListAsync(p => p.IdRole == 3);
         perms.Should().ContainSingle();
         perms[0].PermissionCode.Should().Be(validCode);
+    }
+
+    public static IEnumerable<object[]> CatalogCodes()
+        => PermissionCatalog.KnownStatic.Select(code => new object[] { code });
+
+    [Theory]
+    [MemberData(nameof(CatalogCodes))]
+    public async Task SaveRoleDetailedPermissionsAsync_EveryCatalogCode_IsAccepted(string code)
+    {
+        // Act
+        await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { code });
+
+        // Assert
+        var perms = await _uow.Get<RolePermission>().ListAsync(p => p.IdRole == 3);
+        perms.Should().ContainSingle().Which.PermissionCode.Should().Be(code);
+    }
+
+    [Fact]
+    public async Task SaveRoleDetailedPermissionsAsync_EmployeeRoleWithSelfRead_IsSavedAndReadBack()
+    {
+        // Arrange
+        _uow.Get<Role>().Items.Add(new Role { IdRole = 6, NomRole = "Salarié" });
+
+        // Act
+        await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 6, new[] { PermissionCatalog.SelfRead });
+
+        // Assert
+        var perms = await _auth.GetRoleDetailedPermissionsAsync(6);
+        perms.IsConfigured.Should().BeTrue();
+        perms.GrantedPermissions.Should().Equal(PermissionCatalog.SelfRead);
+        (await _uow.Get<DroitRole>().ListAsync(d => d.IdRole == 6)).Should().BeEmpty("SELF:READ n'ouvre aucune porte");
     }
 
     #endregion
