@@ -2,7 +2,8 @@ using System.Text.RegularExpressions;
 
 using Microsoft.Data.SqlClient;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.DataSources;
+using SoftTime.Application.Abstractions.ExternalData;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 

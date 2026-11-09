@@ -1,6 +1,6 @@
 using Microsoft.ML;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Ml;
 using SoftTime.Domain.Models.Ml;
 
 namespace SoftTime.Infrastructure.MachineLearning;

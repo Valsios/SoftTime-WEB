@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 
 using Microsoft.Data.SqlClient;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.ExternalData;
 
 namespace SoftTime.Infrastructure.Integrations;
 

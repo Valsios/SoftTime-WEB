@@ -4,7 +4,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Ml;
 using SoftTime.Domain.Entities.Ml;
 using SoftTime.Domain.Models.Ml;
 

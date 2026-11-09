@@ -6,7 +6,7 @@ using System.Text;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Authentication;
 
 namespace SoftTime.Api.Security;
 

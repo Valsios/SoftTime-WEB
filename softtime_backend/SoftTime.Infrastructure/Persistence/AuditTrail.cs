@@ -2,7 +2,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Audit;
+using SoftTime.Application.Abstractions.Payroll;
+using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;

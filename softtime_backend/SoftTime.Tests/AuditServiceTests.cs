@@ -1,6 +1,6 @@
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
-using SoftTime.Infrastructure.Services;
+using SoftTime.Infrastructure.Services.Audit;
 
 namespace SoftTime.Tests;
 

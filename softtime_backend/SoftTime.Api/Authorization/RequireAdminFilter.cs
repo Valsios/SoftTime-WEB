@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 
 using SoftTime.Api.Responses;
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.Services;
 
 namespace SoftTime.Api.Authorization;

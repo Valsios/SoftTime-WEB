@@ -2,7 +2,8 @@ using System.Net;
 
 using Microsoft.Extensions.DependencyInjection;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.RequestContext;
+using SoftTime.Application.Abstractions.Users;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 
@@ -89,7 +90,7 @@ public class UsersHttpSecurityTests : IClassFixture<ApiFactory>
         using var scope = _f.Services.CreateScope();
 
         // Assert
-        scope.ServiceProvider.GetRequiredService<SoftTime.Application.Abstractions.ICurrentUser>().Should().NotBeNull();
+        scope.ServiceProvider.GetRequiredService<ICurrentUser>().Should().NotBeNull();
         scope.ServiceProvider.GetRequiredService<IUserAdministrationService>().Should().NotBeNull();
     }
 

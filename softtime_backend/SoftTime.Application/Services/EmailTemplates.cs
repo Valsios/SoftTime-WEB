@@ -1,4 +1,4 @@
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Notifications;
 
 namespace SoftTime.Application.Services;
 

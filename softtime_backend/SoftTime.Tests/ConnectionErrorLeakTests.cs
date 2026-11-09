@@ -2,13 +2,15 @@ using AutoMapper;
 
 using Microsoft.AspNetCore.Identity;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Authentication;
+using SoftTime.Application.Abstractions.Notifications;
+using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
 using SoftTime.Infrastructure.Integrations;
-using SoftTime.Infrastructure.Services;
+using SoftTime.Infrastructure.Services.DataSources;
 
 namespace SoftTime.Tests;
 

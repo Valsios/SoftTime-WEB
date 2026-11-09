@@ -1,8 +1,13 @@
 using AutoMapper;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.DataSources;
+using SoftTime.Application.Abstractions.ExternalData;
+using SoftTime.Application.Abstractions.Permissions;
+using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Domain.Repositories;
-using SoftTime.Infrastructure.Services;
+using SoftTime.Infrastructure.Services.DataSources;
+using SoftTime.Infrastructure.Services.Employees;
+using SoftTime.Infrastructure.Services.Settings;
 
 namespace SoftTime.Tests;
 

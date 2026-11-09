@@ -2,7 +2,8 @@ using AutoMapper;
 
 using Microsoft.AspNetCore.Identity;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Authentication;
+using SoftTime.Application.Abstractions.Notifications;
 using SoftTime.Application.Mapping;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;

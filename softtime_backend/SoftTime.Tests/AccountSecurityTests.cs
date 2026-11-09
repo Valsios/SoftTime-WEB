@@ -4,14 +4,15 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 
 using SoftTime.Api.Security;
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Authentication;
+using SoftTime.Application.Abstractions.Notifications;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
 using SoftTime.Application.Security;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
 using SoftTime.Infrastructure.Security;
-using SoftTime.Infrastructure.Services;
+using SoftTime.Infrastructure.Services.Authentication;
 using SoftTime.Tests.Http;
 
 namespace SoftTime.Tests;

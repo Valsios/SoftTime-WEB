@@ -3,7 +3,7 @@ using System.Text.Json;
 
 using Microsoft.Extensions.DependencyInjection;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Permissions;
 using SoftTime.Domain.Entities.SoftTime;
 
 namespace SoftTime.Tests.Http;

@@ -1,4 +1,6 @@
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.EmployeePlanning;
+using SoftTime.Application.Abstractions.ExternalData;
+using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Domain.Entities.SoftTime;
 
 namespace SoftTime.Tests;

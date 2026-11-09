@@ -2,7 +2,7 @@
 
 using System.Text;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Excel;
 using SoftTime.Application.ImportTemplates;
 
 namespace SoftTime.Infrastructure.Excel;

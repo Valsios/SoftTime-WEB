@@ -7,12 +7,13 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 using SoftTime.Application;
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Employees;
+using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Models;
 using SoftTime.Domain.Services;
 using SoftTime.Infrastructure;
-using SoftTime.Infrastructure.Services;
+using SoftTime.Infrastructure.Services.Closing;
 
 using Xunit.Abstractions;
 

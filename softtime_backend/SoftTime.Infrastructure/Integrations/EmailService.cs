@@ -4,7 +4,7 @@ using System.Net.Mail;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Notifications;
 using SoftTime.Application.Services;
 
 namespace SoftTime.Infrastructure.Integrations;

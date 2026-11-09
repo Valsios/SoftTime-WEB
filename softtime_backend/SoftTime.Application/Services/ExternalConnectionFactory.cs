@@ -1,6 +1,6 @@
 using System.Data.Common;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.DataSources;
 
 namespace SoftTime.Application.Services;
 

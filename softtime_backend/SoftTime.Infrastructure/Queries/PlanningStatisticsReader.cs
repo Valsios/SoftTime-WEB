@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.EmployeePlanning;
 using SoftTime.Infrastructure.Persistence;
 
 namespace SoftTime.Infrastructure.Queries;

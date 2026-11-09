@@ -1,6 +1,6 @@
 using Microsoft.Data.SqlClient;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Payroll;
 
 namespace SoftTime.Infrastructure.Integrations;
 

@@ -5,7 +5,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.DataSources;
 using SoftTime.Application.Services;
 
 namespace SoftTime.Infrastructure.Integrations;

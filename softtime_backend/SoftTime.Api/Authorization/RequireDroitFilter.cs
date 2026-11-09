@@ -1,13 +1,15 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 
+using SoftTime.Application.Abstractions.RequestContext;
+
 namespace SoftTime.Api.Authorization;
 
 public class RequireDroitFilter : IAuthorizationFilter
 {
     private readonly int _droit;
-    private readonly Application.Abstractions.ICurrentUser _user;
-    public RequireDroitFilter(int droit, Application.Abstractions.ICurrentUser user)
+    private readonly ICurrentUser _user;
+    public RequireDroitFilter(int droit, ICurrentUser user)
     {
         _droit = droit;
         _user = user;

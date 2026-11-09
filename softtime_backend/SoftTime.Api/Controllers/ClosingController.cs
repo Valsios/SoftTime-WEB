@@ -3,7 +3,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
 using SoftTime.Api.Responses;
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Closing;
+using SoftTime.Application.Abstractions.Permissions;
+using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Security;
 using SoftTime.Application.Services;

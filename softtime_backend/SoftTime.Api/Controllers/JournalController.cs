@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Audit;
 using SoftTime.Application.DTOs;
 
 namespace SoftTime.Api.Controllers;

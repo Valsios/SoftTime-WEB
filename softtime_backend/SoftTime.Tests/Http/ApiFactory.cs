@@ -8,7 +8,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.DataSources;
+using SoftTime.Application.Abstractions.ExternalData;
+using SoftTime.Application.Abstractions.Ml;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
 
@@ -63,8 +65,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
             services.AddSingleton<IUnitOfWork>(Store);
             services.RemoveAll<IExternalDiscoveryService>();
             services.AddSingleton(NullObject.Create<IExternalDiscoveryService>());
-            services.RemoveAll<SoftTime.Application.Abstractions.IMlStore>();
-            services.AddSingleton(NullObject.Create<SoftTime.Application.Abstractions.IMlStore>());
+            services.RemoveAll<IMlStore>();
+            services.AddSingleton(NullObject.Create<IMlStore>());
             services.RemoveAll<IExternalSourceService>();
             services.AddSingleton(NullObject.Create<IExternalSourceService>());
         });

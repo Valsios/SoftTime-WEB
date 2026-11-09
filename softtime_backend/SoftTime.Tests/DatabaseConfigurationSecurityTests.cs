@@ -7,7 +7,7 @@ using SoftTime.Application.Mapping;
 using SoftTime.Application.Services;
 using SoftTime.Domain;
 using SoftTime.Domain.Entities.SoftTime;
-using SoftTime.Infrastructure.Services;
+using SoftTime.Infrastructure.Services.DataSources;
 
 namespace SoftTime.Tests;
 

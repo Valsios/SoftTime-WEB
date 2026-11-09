@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.Ml;
 using SoftTime.Domain.Models.Ml;
-using SoftTime.Infrastructure.Services;
+using SoftTime.Infrastructure.Services.Ml;
 
 namespace SoftTime.Tests;
 

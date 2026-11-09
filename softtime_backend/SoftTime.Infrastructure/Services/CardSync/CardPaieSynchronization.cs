@@ -1,4 +1,4 @@
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.ExternalData;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;

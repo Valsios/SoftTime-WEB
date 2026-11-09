@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
 using SoftTime.Api.Responses;
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Reports;
 using SoftTime.Application.DTOs;
 
 namespace SoftTime.Api.Controllers;

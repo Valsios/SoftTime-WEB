@@ -5,7 +5,7 @@ using AutoMapper;
 using Microsoft.AspNetCore.Identity;
 
 using SoftTime.Api.Security;
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Notifications;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
 using SoftTime.Domain.Entities.SoftTime;

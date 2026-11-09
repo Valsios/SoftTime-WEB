@@ -9,7 +9,7 @@ using SoftTime.Api.Middleware;
 using SoftTime.Api.Security;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Security;
-using SoftTime.Infrastructure.Services;
+using SoftTime.Infrastructure.Services.Authentication;
 
 namespace SoftTime.Tests.Http;
 

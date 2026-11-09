@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Employees;
 
 namespace SoftTime.Api.Controllers;
 

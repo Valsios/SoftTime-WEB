@@ -4,13 +4,19 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Authentication;
+using SoftTime.Application.Abstractions.Notifications;
+using SoftTime.Application.Abstractions.Permissions;
+using SoftTime.Application.Abstractions.RequestContext;
+using SoftTime.Application.Abstractions.Users;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Security;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
-using SoftTime.Infrastructure.Services;
+using SoftTime.Infrastructure.Services.Authentication;
+using SoftTime.Infrastructure.Services.Permissions;
+using SoftTime.Infrastructure.Services.Users;
 
 namespace SoftTime.Tests;
 

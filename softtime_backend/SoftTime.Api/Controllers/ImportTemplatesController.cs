@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Responses;
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Excel;
 using SoftTime.Application.ImportTemplates;
 using SoftTime.Infrastructure.Excel;
 

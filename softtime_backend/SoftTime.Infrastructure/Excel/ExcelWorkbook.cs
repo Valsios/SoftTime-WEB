@@ -3,7 +3,7 @@ using System.Text.Json;
 
 using ClosedXML.Excel;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Excel;
 using SoftTime.Application.DTOs;
 
 namespace SoftTime.Infrastructure.Excel;

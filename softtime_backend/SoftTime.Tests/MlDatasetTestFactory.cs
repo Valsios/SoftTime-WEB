@@ -1,10 +1,13 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Employees;
+using SoftTime.Application.Abstractions.ExternalData;
+using SoftTime.Application.Abstractions.Ml;
+using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Repositories;
-using SoftTime.Infrastructure.Services;
+using SoftTime.Infrastructure.Services.Ml;
 
 namespace SoftTime.Tests;
 

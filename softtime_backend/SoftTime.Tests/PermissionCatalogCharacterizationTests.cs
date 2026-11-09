@@ -3,7 +3,8 @@ using System.Reflection;
 using SoftTime.Application.Security;
 using SoftTime.Domain;
 using SoftTime.Domain.Entities.SoftTime;
-using SoftTime.Infrastructure.Services;
+using SoftTime.Infrastructure.Services.Permissions;
+using SoftTime.Infrastructure.Services.Users;
 
 namespace SoftTime.Tests;
 

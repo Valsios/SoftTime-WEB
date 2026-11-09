@@ -1,0 +1,8 @@
+﻿namespace SoftTime.Infrastructure.Services.Ml;
+
+internal static class MlWeeks
+{
+
+    internal static DateTime MondayOf(DateTime date)
+        => date.Date.AddDays(-(((int)date.Date.DayOfWeek + 6) % 7));
+}

@@ -1,6 +1,7 @@
 using Moq;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Authentication;
+using SoftTime.Application.Abstractions.Notifications;
 using SoftTime.Domain.Models;
 
 namespace SoftTime.Tests;

@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Ml;
 
 namespace SoftTime.Application.Services;
 

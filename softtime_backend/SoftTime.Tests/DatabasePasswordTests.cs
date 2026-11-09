@@ -4,13 +4,13 @@ using AutoMapper;
 
 using Microsoft.AspNetCore.Identity;
 
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.DataSources;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
 using SoftTime.Application.Serialization;
 using SoftTime.Domain;
 using SoftTime.Domain.Entities.SoftTime;
-using SoftTime.Infrastructure.Services;
+using SoftTime.Infrastructure.Services.DataSources;
 
 namespace SoftTime.Tests;
 

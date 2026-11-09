@@ -1,8 +1,10 @@
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.ExternalData;
+using SoftTime.Application.Abstractions.History;
+using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
-using SoftTime.Infrastructure.Services;
+using SoftTime.Infrastructure.Services.Punches;
 
 namespace SoftTime.Tests;
 
