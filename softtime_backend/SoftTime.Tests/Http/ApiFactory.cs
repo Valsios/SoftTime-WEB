@@ -97,6 +97,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         foreach (var code in new[] { $"SAGE:{SageName}:READ", "POINTEUSE:PTG:READ", "PROC:SHIFTS", "PROC:EMPLOYEE_PLANNING" })
             perms.Add(new UserPermission { IdResponsable = 10034, PermissionCode = code, IsGranted = true });
         Store.Get<RolePermission>().Items.Add(new RolePermission { IdRole = 29, PermissionCode = "REPORTS:REPORTS", IsGranted = true });
+        // Lot 5 : param2 (jeton porte 2) a la porte 2 en base grâce à une permission sans rapport avec les écrans sensibles.
+        perms.Add(new UserPermission { IdResponsable = 10040, PermissionCode = "PARAMS:CLOCK_PARAMS", IsGranted = true });
 
         var sages = Store.Get<BddSage>().Items;
         sages.Add(new BddSage { Id = 3033, NomBd = SageName, Serveur = "invalid.host.test", TLogin = "x", TMdp = FakeSagePassword, TypeAuth = true });

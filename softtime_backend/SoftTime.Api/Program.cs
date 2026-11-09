@@ -96,7 +96,7 @@ builder.Services.AddScoped<ICurrentUser>(sp =>
     var http = sp.GetRequiredService<IHttpContextAccessor>().HttpContext;
     // Scope d'arrière-plan (jobs ML) : identité système administratrice, jamais pour une requête HTTP.
     if (http is null && sp.GetRequiredService<SystemExecution>().Active)
-        return new CurrentUser { Login = SystemExecution.Login, RoleId = SoftTime.Domain.Services.AdminRules.AdminRoleId };
+        return new CurrentUser { Login = SystemExecution.Login, TokenRoleId = SoftTime.Domain.Services.AdminRules.AdminRoleId };
     var principal = http?.User;
     if (principal?.Identity?.IsAuthenticated != true)
         return new CurrentUser();
@@ -115,9 +115,13 @@ builder.Services.AddScoped<ICurrentUser>(sp =>
     {
         UserId = uid == 0 ? null : uid,
         Login = principal.Identity?.Name,
-        RoleId = role == 0 ? null : role,
+        TokenRoleId = role == 0 ? null : role,
         Matricule = principal.FindFirstValue("matricule"),
-        Rights = rights
+        TokenRights = rights,
+        // Lot 5 : rôle et portes lus en base (ServerRightsMiddleware) ; aucun droit tant qu'ils ne sont pas posés.
+        Server = () => http!.Items.TryGetValue(ServerRights.ItemKey, out var value) && value is ServerRights server
+            ? server
+            : ServerRights.None,
     };
 });
 
@@ -230,6 +234,7 @@ if (app.Environment.IsDevelopment())
 }
 app.UseCors();
 app.UseAuthentication();
+app.UseMiddleware<ServerRightsMiddleware>();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.UseMiddleware<TenantMiddleware>();

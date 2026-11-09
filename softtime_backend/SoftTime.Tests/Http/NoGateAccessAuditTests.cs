@@ -48,6 +48,15 @@ public class NoGateAccessAuditTests : IClassFixture<ApiFactory>
             // Base cochée dans « Accès bases », sans aucune permission : une permission SAGE: ou POINTEUSE: donnerait
             // la porte 1 (PermissionCatalog.DeduirePortes).
             factory.Store.Get<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = (int)BaseCocheeId, IdResponsable = BaseCocheeId, IdBdd = 3033 });
+            // Lot 5 : les portes sont lues en base, plus dans le jeton. Chaque profil « porte N » a un rôle hérité qui a
+            // cette seule porte et aucune permission fine, comme un vrai compte dont le jeton a été calculé à la connexion.
+            foreach (var (id, gate) in new[] { (Porte1Id, 1), (Porte2Id, 2), (Porte3Id, 3), (Porte6Id, 6) })
+            {
+                var roleId = 92000 + gate;
+                factory.Store.Get<Role>().Items.Add(new Role { IdRole = roleId, NomRole = $"audit-porte{gate}" });
+                factory.Store.Get<DroitRole>().Items.Add(new DroitRole { IdDroitRole = roleId, IdRole = roleId, IdDroit = gate });
+                users.Single(u => u.IdResponsable == id).IdRole = roleId;
+            }
         }
     }
 
