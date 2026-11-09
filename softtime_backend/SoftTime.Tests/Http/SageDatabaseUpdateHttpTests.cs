@@ -59,4 +59,21 @@ public class SageDatabaseUpdateHttpTests : IClassFixture<ApiFactory>
         (await reponse.Content.ReadAsStringAsync()).Should().Contain("déjà enregistrée");
         Row(3036).NomBd.Should().NotBe(existante);
     }
+
+    [Fact]
+    public async Task UpdateAsync_Rename_UserRightsFollowTheNewName()
+    {
+        // Arrange
+        // Lot 6 : un compte avec des droits sur la base MODIF_SAGE (3036).
+        _f.Store.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 10052, PermissionCode = "SAGE:MODIF_SAGE:READ", IsGranted = true });
+
+        // Act
+        var reponse = await PutAsync(3036, """{"id":3036,"serveur":"invalid.host.test","sqlAuth":true,"nomBd":"MODIF_RENOMMEE","typeBase":"STANDARD"}""");
+
+        // Assert
+        reponse.StatusCode.Should().Be(HttpStatusCode.OK, await reponse.Content.ReadAsStringAsync());
+        var codes = _f.Store.Get<UserPermission>().Items.Where(p => p.IdResponsable == 10052).Select(p => p.PermissionCode).ToList();
+        codes.Should().Contain("SAGE:MODIF_RENOMMEE:READ");
+        codes.Should().NotContain(c => c.StartsWith("SAGE:MODIF_SAGE:"));
+    }
 }

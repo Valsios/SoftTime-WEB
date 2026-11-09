@@ -7,6 +7,7 @@ using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Domain.Repositories;
 using SoftTime.Infrastructure.Services.DataSources;
 using SoftTime.Infrastructure.Services.Employees;
+using SoftTime.Infrastructure.Services.Permissions;
 using SoftTime.Infrastructure.Services.Settings;
 
 namespace SoftTime.Tests;
@@ -43,7 +44,7 @@ internal sealed class CatalogServices
             uow, mapper, discovery, configAuth, effectiveRights, mappingStore, mappingMigrator, mappingValidator);
         Sage = new SageDatabaseService(
             uow, mapper, tenant, discovery, configAuth, effectiveRights, Holidays, CodeConstantes, Cards,
-            mappingStore, mappingMigrator, mappingValidator);
+            mappingStore, mappingMigrator, mappingValidator, new DatabasePermissionCodeMigrator(uow));
     }
 
     public AffectationService Affectations { get; }
