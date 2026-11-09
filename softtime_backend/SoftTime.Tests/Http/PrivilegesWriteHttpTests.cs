@@ -37,4 +37,35 @@ public class PrivilegesWriteHttpTests : IClassFixture<ApiFactory>
             .Select(p => p.PermissionCode)
             .Should().Equal(PermissionCatalog.SelfRead);
     }
+
+    [Fact]
+    public async Task SaveUserPermissions_UnknownCode_Returns400AndChangesNothing()
+    {
+        // Arrange
+        var before = _f.Snapshot();
+
+        // Act
+        var resp = await _http.SendAsync(_f.Request("admin", HttpMethod.Put, "/api/v1/privileges/user/10052",
+            """{"grantedPermissions":["PROC:SHIFTS","INVALID:HACK:CODE"]}"""));
+
+        // Assert
+        resp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await resp.Content.ReadAsStringAsync()).Should().Contain("Codes de permission inconnus : INVALID:HACK:CODE.");
+        _f.Snapshot().Should().Be(before);
+    }
+
+    [Fact]
+    public async Task SaveUserPermissions_ValidCodes_AreNormalizedAndSaved()
+    {
+        // Act
+        var resp = await _http.SendAsync(_f.Request("admin", HttpMethod.Put, "/api/v1/privileges/user/10052",
+            """{"grantedPermissions":["proc:shifts","sage:SFOI_PAIE2025:read"]}"""));
+
+        // Assert
+        resp.StatusCode.Should().Be(HttpStatusCode.NoContent, await resp.Content.ReadAsStringAsync());
+        _f.Store.Get<UserPermission>().Items
+            .Where(p => p.IdResponsable == 10052)
+            .Select(p => p.PermissionCode)
+            .Should().BeEquivalentTo("PROC:SHIFTS", "SAGE:SFOI_PAIE2025:READ");
+    }
 }

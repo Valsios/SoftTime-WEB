@@ -50,7 +50,8 @@ public sealed class UserPermissionService : IUserPermissionService
         {
             var perms = customList
                 .Where(p => p.PermissionCode != PermissionMarkers.EmptyPermissionsMarker)
-                .Select(p => p.PermissionCode);
+                .Select(p => p.PermissionCode)
+                .Where(PermissionCodeValidator.IsValid);
             return new UserDetailedPermissionsDto(userId, WithAdminDefaults(perms, isAdmin, defaults), true);
         }
 
@@ -61,7 +62,8 @@ public sealed class UserPermissionService : IUserPermissionService
         {
             var rolePerms = roleCustomPerms
                 .Where(p => p.PermissionCode != PermissionMarkers.EmptyRolePermissionsMarker)
-                .Select(p => p.PermissionCode);
+                .Select(p => p.PermissionCode)
+                .Where(PermissionCodeValidator.IsValid);
             return new UserDetailedPermissionsDto(userId, WithAdminDefaults(rolePerms, isAdmin, defaults), false);
         }
 
@@ -107,11 +109,10 @@ public sealed class UserPermissionService : IUserPermissionService
         if (currentUserId == targetUserId && !AdminRules.IsSuperAdmin(caller.IdRole))
             throw new DomainException("Un utilisateur ne peut pas modifier ses propres privilèges sans droit d'administration.");
 
-        var toSaveList = permissions
-            .Where(p => !string.IsNullOrWhiteSpace(p) && p != PermissionMarkers.EmptyPermissionsMarker)
-            .ToList();
-        if (target.IdRole == 1)
-            toSaveList.AddRange(await AdminMandatoryPermissionsAsync(cancellationToken));
+        var toSaveList = PermissionCodeValidator.Normalize(permissions, PermissionMarkers.EmptyPermissionsMarker);
+        if (target.IdRole == AdminRules.AdminRoleId)
+            toSaveList = PermissionCodeValidator.Normalize(
+                toSaveList.Concat(await AdminMandatoryPermissionsAsync(cancellationToken)), PermissionMarkers.EmptyPermissionsMarker);
 
         var permsAvant = await ReplaceUserPermissionsAsync(targetUserId, toSaveList, cancellationToken);
         await _rightsChangeJournal.EcrireAuditDroitAsync(
@@ -156,7 +157,7 @@ public sealed class UserPermissionService : IUserPermissionService
 
         var codes = permissions.Count == 0
             ? new List<string> { PermissionMarkers.EmptyPermissionsMarker }
-            : permissions.Distinct().Select(p => p.Trim());
+            : permissions;
         foreach (var code in codes)
             await repo.AddAsync(new UserPermission { IdResponsable = userId, PermissionCode = code, IsGranted = true }, ct);
         return permsAvant;

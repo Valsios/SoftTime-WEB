@@ -44,6 +44,7 @@ public sealed class RolePermissionService : IRolePermissionService
         var perms = roleList
             .Where(p => p.PermissionCode != PermissionMarkers.EmptyRolePermissionsMarker)
             .Select(p => p.PermissionCode)
+            .Where(PermissionCodeValidator.IsValid)
             .Distinct()
             .ToList();
 
@@ -52,16 +53,13 @@ public sealed class RolePermissionService : IRolePermissionService
 
     public async Task SaveRoleDetailedPermissionsAsync(decimal currentUserId, decimal targetRoleId, IReadOnlyCollection<string> permissions, CancellationToken cancellationToken = default)
     {
-        if (permissions == null)
-            throw new DomainException("La liste des permissions ne peut pas être nulle.");
-
         var caller = await RequireAdministratorCallerAsync(currentUserId, cancellationToken);
         if (targetRoleId == AdminRules.AdminRoleId)
             throw new DomainException("Les privilèges du rôle Administrateur ne sont pas modifiables.");
         var targetRole = await _uow.Repository<Role>().GetByIdAsync(targetRoleId, cancellationToken)
             ?? throw new NotFoundException("Rôle cible introuvable.");
 
-        var normalizedPermissions = NormalizePermissions(permissions);
+        var normalizedPermissions = PermissionCodeValidator.Normalize(permissions, PermissionMarkers.EmptyRolePermissionsMarker);
         var permsAvant = await ReplaceRolePermissionsAsync(targetRoleId, normalizedPermissions, cancellationToken);
         await ReplaceDroitsAsync(targetRoleId, normalizedPermissions, cancellationToken);
 
@@ -82,34 +80,6 @@ public sealed class RolePermissionService : IRolePermissionService
         if (!AdminRules.IsSuperAdmin(caller.IdRole))
             throw new DomainException("Seul un administrateur peut modifier les permissions d'un rôle.");
         return caller;
-    }
-
-    /// <summary>
-    /// Codes nettoyés et dédoublonnés : majuscules sauf les codes de base (SAGE:/POINTEUSE:, dont le
-    /// nom de base est conservé), marqueur « aucune permission » retiré, codes trop longs ou
-    /// inconnus refusés.
-    /// </summary>
-    private static List<string> NormalizePermissions(IReadOnlyCollection<string> permissions)
-    {
-        var normalized = permissions
-            .Where(p => !string.IsNullOrWhiteSpace(p))
-            .Select(p => p.Trim())
-            .Select(p => p.StartsWith("SAGE:", StringComparison.OrdinalIgnoreCase)
-                         || p.StartsWith("POINTEUSE:", StringComparison.OrdinalIgnoreCase)
-                ? p
-                : p.ToUpperInvariant())
-            .Where(p => p != PermissionMarkers.EmptyRolePermissionsMarker)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        var tooLongCodes = normalized.Where(p => p.Length > 128).ToList();
-        if (tooLongCodes.Count > 0)
-            throw new DomainException($"Code de permission trop long (128 caractères maximum) : {string.Join(", ", tooLongCodes)}.");
-
-        var invalidCodes = normalized.Where(p => !PermissionCatalog.IsKnown(p)).ToList();
-        if (invalidCodes.Count > 0)
-            throw new DomainException($"Codes de permission inconnus : {string.Join(", ", invalidCodes)}.");
-        return normalized;
     }
 
     /// <summary>

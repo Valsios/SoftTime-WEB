@@ -207,7 +207,8 @@ public class RolePermissionsTests
     [Fact]
     public async Task SaveRoleDetailedPermissionsAsync_CodeExactly128Chars_IsAccepted()
     {
-        var validCode = "SAGE:" + new string('A', 123);
+        // Motif SAGE:<base>:<action> : 5 + 118 + 5 = 128 caractères.
+        var validCode = "SAGE:" + new string('A', 118) + ":READ";
         validCode.Length.Should().Be(128);
 
         await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { validCode });
@@ -525,6 +526,96 @@ public class RolePermissionsTests
         // Assert
         perms.IsCustomized.Should().BeFalse();
         perms.GrantedPermissions.Should().Contain("TRACE:AUDIT");
+    }
+
+    #endregion
+
+    #region Lot 2 — Validation des droits d'un utilisateur (même validateur que les rôles)
+
+    private List<string> UserCodes(decimal userId)
+        => _uow.Get<UserPermission>().Items.Where(p => p.IdResponsable == userId).Select(p => p.PermissionCode).ToList();
+
+    [Fact]
+    public async Task SaveUserDetailedPermissionsAsync_ValidCodes_AreNormalizedAndSaved()
+    {
+        // Act
+        await _auth.SaveUserDetailedPermissionsAsync(1, 2, new[] { "proc:shifts", " sage:Base_1:read ", "PROC:SHIFTS", PermissionCatalog.SelfRead });
+
+        // Assert
+        UserCodes(2).Should().BeEquivalentTo("PROC:SHIFTS", "SAGE:Base_1:READ", "SELF:READ");
+    }
+
+    [Fact]
+    public async Task SaveUserDetailedPermissionsAsync_UnknownCode_ThrowsAndChangesNothing()
+    {
+        // Arrange
+        _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 2, PermissionCode = "PROC:SHIFTS", IsGranted = true });
+        var before = _uow.Snapshot();
+
+        // Act
+        Func<Task> act = () => _auth.SaveUserDetailedPermissionsAsync(1, 2, new[] { "PROC:SHIFTS", "INVALID:HACK:CODE" });
+
+        // Assert
+        var ex = (await act.Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().Be("Codes de permission inconnus : INVALID:HACK:CODE.");
+        _uow.Snapshot().Should().Be(before);
+    }
+
+    [Fact]
+    public async Task SaveUserDetailedPermissionsAsync_CodeLongerThan128Chars_Throws()
+    {
+        // Arrange
+        var longCode = "SAGE:" + new string('A', 119) + ":READ";
+
+        // Act
+        Func<Task> act = () => _auth.SaveUserDetailedPermissionsAsync(1, 2, new[] { longCode });
+
+        // Assert
+        var ex = (await act.Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().StartWith("Code de permission trop long (128 caractères maximum)");
+        UserCodes(2).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SaveUserDetailedPermissionsAsync_NullList_ThrowsDomainException()
+    {
+        // Act
+        Func<Task> act = () => _auth.SaveUserDetailedPermissionsAsync(1, 2, null!);
+
+        // Assert
+        (await act.Should().ThrowExactlyAsync<DomainException>()).Which.Message
+            .Should().Be("La liste des permissions ne peut pas être nulle.");
+    }
+
+    [Fact]
+    public async Task SaveUserDetailedPermissionsAsync_UnchangedRoundTrip_KeepsSameRows()
+    {
+        // Arrange
+        foreach (var code in new[] { "PROC:SHIFTS", "SAGE:BASE1:READ" })
+            _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 2, PermissionCode = code, IsGranted = true });
+        var shown = await _auth.GetUserDetailedPermissionsAsync(2);
+
+        // Act
+        await _auth.SaveUserDetailedPermissionsAsync(1, 2, shown.GrantedPermissions);
+
+        // Assert
+        UserCodes(2).Should().BeEquivalentTo("PROC:SHIFTS", "SAGE:BASE1:READ");
+    }
+
+    [Fact]
+    public async Task GetUserDetailedPermissionsAsync_LegacyUnknownCodeInDatabase_IsHiddenSoTheScreenCanSave()
+    {
+        // Arrange
+        foreach (var code in new[] { "PROC:SHIFTS", "OBSOLETE:CODE" })
+            _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 2, PermissionCode = code, IsGranted = true });
+
+        // Act
+        var shown = await _auth.GetUserDetailedPermissionsAsync(2);
+        await _auth.SaveUserDetailedPermissionsAsync(1, 2, shown.GrantedPermissions);
+
+        // Assert
+        shown.GrantedPermissions.Should().Equal("PROC:SHIFTS");
+        UserCodes(2).Should().Equal("PROC:SHIFTS");
     }
 
     #endregion
