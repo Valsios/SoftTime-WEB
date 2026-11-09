@@ -19,9 +19,12 @@ public class FinePermissionsHttpTests : IClassFixture<ApiFactory>
     {
         (10100, 91, new[] { 3 }, new[] { "PROC:SHIFTS", "PROC:SHIFTS:CREATE", "PROC:SHIFTS:UPDATE" }),
         (10101, 91, new[] { 3 }, new[] { "PROC:SHIFTS", "PROC:SHIFTS:DELETE" }),
-        (10102, LegacyRoleId, new[] { 2, 3 }, Array.Empty<string>()),
+        (10102, LegacyRoleId, new[] { 2, 3, 4, 5, 6 }, Array.Empty<string>()),
         (10103, 91, new[] { 2 }, new[] { "PARAMS:HOLIDAYS", "PARAMS:HOLIDAYS:UPDATE", "PARAMS:CATEGORIES" }),
         (10104, 91, new[] { 2 }, new[] { "PARAMS:HOLIDAYS", "PARAMS:HOLIDAYS:CREATE", "PARAMS:CARDPAIE" }),
+        // Lot 4c : jeton avec les portes 4, 5 et 6 ; droits effectifs limités à la cantine et aux prévisions.
+        (10105, 91, new[] { 4, 5, 6 }, new[] { "OTHER:CANTEEN", "REPORTS:PREDICTIONS" }),
+        (10106, 91, new[] { 4, 5, 6 }, new[] { "OTHER:TRAVEL_EXPENSES", "TRACE:AUDIT", "REPORTS:REPORTS" }),
     };
 
     private readonly ApiFactory _f;
@@ -39,10 +42,10 @@ public class FinePermissionsHttpTests : IClassFixture<ApiFactory>
         lock (_f.Store)
         {
             if (_f.Store.Get<Role>().Items.Any(r => r.IdRole == LegacyRoleId)) return;
-            // Rôle hérité : portes 2 et 3, aucune ligne de permission fine (ni sur le rôle ni sur ses comptes).
+            // Rôle hérité : portes 2 à 6, aucune ligne de permission fine (ni sur le rôle ni sur ses comptes).
             _f.Store.Get<Role>().Items.Add(new Role { IdRole = LegacyRoleId, NomRole = "Hérité" });
-            _f.Store.Get<DroitRole>().Items.Add(new DroitRole { IdDroitRole = 9501, IdRole = LegacyRoleId, IdDroit = 2 });
-            _f.Store.Get<DroitRole>().Items.Add(new DroitRole { IdDroitRole = 9502, IdRole = LegacyRoleId, IdDroit = 3 });
+            foreach (var gate in new[] { 2, 3, 4, 5, 6 })
+                _f.Store.Get<DroitRole>().Items.Add(new DroitRole { IdDroitRole = 9500 + gate, IdRole = LegacyRoleId, IdDroit = gate });
             foreach (var (id, role, _, codes) in Accounts)
             {
                 _f.Store.Get<Responsable>().Items.Add(new Responsable { IdResponsable = id, IdRole = role, Login = $"fine{id}" });
@@ -198,5 +201,48 @@ public class FinePermissionsHttpTests : IClassFixture<ApiFactory>
 
         // Assert
         resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    /// <summary>Lot 4c : une route par écran ; tout l'écran (lectures et écritures) exige son code.</summary>
+    public static TheoryData<string, string> ScreenRoutes() => new()
+    {
+        { "GET", "/api/v1/reports/pointage" },
+        { "GET", "/api/v1/travel-expenses" },
+        { "POST", "/api/v1/travel-expenses/compute" },
+        { "GET", "/api/v1/history/pointages" },
+        { "DELETE", "/api/v1/history/hs" },
+        { "GET", "/api/v1/audit/types" },
+        { "GET", "/api/v1/privileges/audit" },
+    };
+
+    [Theory]
+    [MemberData(nameof(ScreenRoutes))]
+    public async Task OtherTraceReportsScreens_GateWithoutScreenPermission_Return403(string method, string url)
+    {
+        // Arrange
+        var before = _f.Snapshot();
+
+        // Act
+        var resp = await Send(10105, new HttpMethod(method), url, "{}");
+
+        // Assert
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        _f.Snapshot().Should().Be(before);
+    }
+
+    [Theory]
+    [MemberData(nameof(ScreenRoutes))]
+    public async Task OtherTraceReportsScreens_ScreenPermissionAdministratorOrLegacy_PassTheCheck(string method, string url)
+    {
+        foreach (var userId in new[] { 10106, 14, 10102 })
+        {
+            // Act
+            // Le service peut ensuite échouer faute de base SAGE réelle : seul le contrôle des droits est vérifié ici.
+            var resp = await Send(userId, new HttpMethod(method), url, "{}");
+
+            // Assert
+            resp.StatusCode.Should().NotBe(HttpStatusCode.Forbidden, $"compte {userId} sur {method} {url}");
+            resp.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
+        }
     }
 }

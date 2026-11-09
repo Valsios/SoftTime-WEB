@@ -259,8 +259,10 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
         else
         {
             status.Should().Be(HttpStatusCode.Forbidden);
-            // Avec la porte 5 dans le jeton, c'est la règle administrateur qui refuse (sans porte 5, le filtre de porte refuse avant).
-            if (profile is "tracereader" or "gate5only") text.Should().Contain(AdminOnly);
+            // Avec la porte 5 et TRACE:AUDIT, c'est la règle administrateur qui refuse. Sans TRACE:AUDIT effectif (gate5only),
+            // la permission fine de l'écran refuse avant (lot 4c) ; sans porte 5, le filtre de porte refuse avant.
+            if (profile == "tracereader") text.Should().Contain(AdminOnly);
+            if (profile == "gate5only") text.Should().Contain("Vous n'avez pas la permission requise pour cette action.");
         }
         _f.Snapshot().Should().Be(before);
     }

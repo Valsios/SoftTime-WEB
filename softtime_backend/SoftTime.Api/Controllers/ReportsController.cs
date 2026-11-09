@@ -11,6 +11,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Reports)]
+[RequirePermission(Droit.Reports, "REPORTS:REPORTS")]
 [Route("api/v1/reports")]
 [Tags("Reports")]
 public class ReportsController : ApiControllerBase

@@ -9,6 +9,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Traceability)]
+[RequirePermission(Droit.Traceability, "TRACE:AUDIT")]
 [Route("api/v1/privileges/audit")]
 [Tags("Privileges")]
 public class AuditDroitController : ApiControllerBase
