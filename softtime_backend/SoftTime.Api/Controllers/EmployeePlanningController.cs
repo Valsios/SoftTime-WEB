@@ -57,10 +57,12 @@ public class EmployeePlanningController : ApiControllerBase
     public async Task<IActionResult> EmployeesPagedAsync([FromQuery] EmployeePlanningQuery query, CancellationToken ct)
         => Ok(await _planning.ListEmployeeStatsPagedAsync(query, ct));
 
+    [RequirePermission(Droit.Processing, "PROC:EMPLOYEE_PLANNING:CREATE")]
     [HttpPost]
     public Task<IActionResult> CreateAsync([FromBody] List<EmployeePlanningDto> rows, CancellationToken ct)
         => SavePlanningAsync(rows, ct);
 
+    [RequirePermission(Droit.Processing, "PROC:EMPLOYEE_PLANNING:UPDATE")]
     [HttpPut]
     public Task<IActionResult> UpdateAsync([FromBody] List<EmployeePlanningDto> rows, CancellationToken ct)
         => SavePlanningAsync(rows, ct);
@@ -75,6 +77,7 @@ public class EmployeePlanningController : ApiControllerBase
         return NoContent();
     }
 
+    [RequirePermission(Droit.Processing, "PROC:EMPLOYEE_PLANNING:DELETE")]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> DeleteAsync(int id, CancellationToken ct)
     {
@@ -82,6 +85,7 @@ public class EmployeePlanningController : ApiControllerBase
         return NoContent();
     }
 
+    [RequirePermission(Droit.Processing, "PROC:EMPLOYEE_PLANNING:CREATE")]
     [HttpPost("import-excel")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> ImportExcelAsync(IFormFile file, CancellationToken ct)
@@ -98,6 +102,7 @@ public class EmployeePlanningController : ApiControllerBase
     /// Génère le planning d'une semaine pour toute une catégorie.
     /// CSV « catégorie ; lundi ; (début ; fin) × 7 », « OFF » pour un jour non travaillé.
     /// </summary>
+    [RequirePermission(Droit.Processing, "PROC:EMPLOYEE_PLANNING:CREATE")]
     [HttpPost("generate-from-category")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> GenerateFromCategoryAsync(IFormFile file, CancellationToken ct)
@@ -107,6 +112,7 @@ public class EmployeePlanningController : ApiControllerBase
     /// Génère le planning d'une semaine pour un ou plusieurs salariés.
     /// CSV « matricule ; lundi ; (début ; pause ; fin) × 7 », « OFF » pour un jour non travaillé.
     /// </summary>
+    [RequirePermission(Droit.Processing, "PROC:EMPLOYEE_PLANNING:CREATE")]
     [HttpPost("generate")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> GenerateAsync(IFormFile file, CancellationToken ct)

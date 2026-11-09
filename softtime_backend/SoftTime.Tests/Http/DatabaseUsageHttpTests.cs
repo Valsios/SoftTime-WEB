@@ -1,5 +1,7 @@
 using System.Net;
 
+using SoftTime.Domain.Entities.SoftTime;
+
 namespace SoftTime.Tests.Http;
 
 /// <summary>
@@ -17,6 +19,13 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
     {
         _f = factory;
         _http = factory.CreateClient();
+        // Lot 4a : l'import de pointages exige aussi PROC:PUNCHES ; ces tests portent sur l'usage de la base.
+        lock (_f.Store)
+        {
+            var perms = _f.Store.Get<UserPermission>().Items;
+            foreach (var id in new[] { 10034m, 10063m }.Where(id => !perms.Any(p => p.IdResponsable == id && p.PermissionCode == "PROC:PUNCHES")))
+                perms.Add(new UserPermission { IdResponsable = id, PermissionCode = "PROC:PUNCHES", IsGranted = true });
+        }
     }
 
     // Une route d'usage par famille : catalogue, traitements, activation (exemptée du middleware), pointeuse.

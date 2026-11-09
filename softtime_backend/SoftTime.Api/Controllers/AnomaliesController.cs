@@ -34,15 +34,18 @@ public class AnomaliesController : ApiControllerBase
     }
 
     /// <summary>Arbitrage : heures retenues + drapeaux d'absence / férié.</summary>
+    [RequirePermission(Droit.Processing, "PROC:ANOMALIES")]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateAsync(decimal id, [FromBody] AnomalyUpdateDto dto, CancellationToken ct)
         => Ok(await _svc.UpdateAnomalyAsync(id, dto, ct));
 
     /// <summary>Validation en masse : les anomalies deviennent des heures corrigées puis sont supprimées.</summary>
+    [RequirePermission(Droit.Processing, "PROC:ANOMALIES")]
     [HttpPost("validate")]
     public async Task<IActionResult> ValidateAsync([FromBody] AnomalyValidationRequest request, CancellationToken ct)
         => Ok(await _svc.ValidateAnomaliesAsync(request.Ids, ct));
 
+    [RequirePermission(Droit.Processing, "PROC:ANOMALIES:DELETE")]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteAsync(decimal id, CancellationToken ct)
     {
