@@ -66,6 +66,8 @@ export class SageDatabasesPage implements OnInit {
   readonly saving = signal(false);
   readonly modal = signal(false);
   readonly editId = signal<number | null>(null);
+  /** Nom de la base à l'ouverture de la modification : le droit se vérifie sur ce nom, pas sur le nom saisi (renommage). */
+  readonly editOriginalName = signal<string | null>(null);
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly page = signal(1);
   pageSize = 50;
@@ -143,6 +145,7 @@ export class SageDatabasesPage implements OnInit {
       return;
     }
     this.editId.set(null);
+    this.editOriginalName.set(null);
     this.form.set({ sqlAuth: true, typeBase: 'STANDARD' });
     this.modal.set(true);
   }
@@ -153,17 +156,20 @@ export class SageDatabasesPage implements OnInit {
       return;
     }
     this.editId.set(row['id'] as number);
+    this.editOriginalName.set((row['nomBd'] as string) ?? null);
     this.form.set({ ...(row as unknown as SageDb) });
     this.modal.set(true);
   }
 
   closeModal(): void {
     this.modal.set(false);
+    this.editOriginalName.set(null);
   }
 
   onSaved(dto: Record<string, unknown>): void {
     const id = this.editId();
-    if (id && !this.canUpdate(dto)) {
+    // Modification : droit sur le nom d'origine (comme le serveur), pour permettre le renommage vers un nouveau nom.
+    if (id && !this.canUpdate({ ...dto, nomBd: this.editOriginalName() ?? '' })) {
       this.toast.error("Vous n'avez pas la permission de modifier cette base SAGE.");
       return;
     }
