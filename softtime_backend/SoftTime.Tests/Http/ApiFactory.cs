@@ -42,8 +42,6 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("Jwt__Audience", TestAudience);
         // Moteur prédictif : pas de tâche de fond ni de base analytique dans les tests HTTP.
         Environment.SetEnvironmentVariable("Ml__Enabled", "false");
-        // Aucune migration de schéma : la base est simulée en mémoire, quel que soit le appsettings.json local du poste.
-        Environment.SetEnvironmentVariable("Database__AutoMigrate", "false");
         Environment.SetEnvironmentVariable("ConnectionStrings__SoftTime",
             "Data Source=invalid.host.test;Initial Catalog=INVALID;User ID=none;Password=none;Connect Timeout=1");
     }

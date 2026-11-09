@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using AutoMapper;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Configuration;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
@@ -25,14 +26,14 @@ public class TokenGatesTests
 
     public TokenGatesTests()
     {
-        var jwt = Microsoft.Extensions.Options.Options.Create(new JwtOptions
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
-            Key = "test-only-signing-key-0123456789-abcdefghijklmnop",
-            Issuer = "SoftTime.Tests",
-            Audience = "SoftTime.Tests.Web",
-        });
+            ["Jwt:Key"] = "test-only-signing-key-0123456789-abcdefghijklmnop",
+            ["Jwt:Issuer"] = "SoftTime.Tests",
+            ["Jwt:Audience"] = "SoftTime.Tests.Web",
+        }).Build();
         var mapper = new MapperConfiguration(c => c.AddProfile<MappingProfile>()).CreateMapper();
-        _auth = new AuthService(_uow, new JwtTokenService(jwt), mapper, new Mail(), new AdminCurrentUser(), TestRights.Service(_uow), new PasswordHasher<T_RESPONSABLE>());
+        _auth = new AuthService(_uow, new JwtTokenService(config), mapper, new Mail(), new AdminCurrentUser(), TestRights.Service(_uow), new PasswordHasher<T_RESPONSABLE>());
 
         _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });
         _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 29, NOMROLE = "Consultation" });

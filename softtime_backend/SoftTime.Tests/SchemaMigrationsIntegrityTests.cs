@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using SoftTime.Application.Security;
 using SoftTime.Infrastructure.SchemaMigrations;
 
 namespace SoftTime.Tests;
@@ -36,7 +35,7 @@ public class SchemaMigrationsIntegrityTests
     public void Script003_IsEmbeddedAfter002_AndIsReplayableAndNonDestructive()
     {
         var scripts = new EmbeddedMigrationScriptSource().Load();
-        Assert.Equal(new[] { 1, 2, 3, 4, 5 }, scripts.Select(s => s.Version).ToArray());
+        Assert.Equal(new[] { 1, 2, 3 }, scripts.Select(s => s.Version).ToArray());
         var journal = Assert.Single(scripts, s => s.Version == 3);
 
         Assert.Equal("003_journal_central.sql", journal.Name);
@@ -54,48 +53,6 @@ public class SchemaMigrationsIntegrityTests
         foreach (var other in new[] { "suivi_SUIVI", "suivi_TBLCLN", "T_AUDIT_DROIT", "TRIGGER" })
             Assert.DoesNotContain(other, code, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Password", journal.Content, StringComparison.OrdinalIgnoreCase);
-    }
-
-    // ---------- Script 004 ----------
-
-    [Fact]
-    public void Script004_AddsAccountSecurityStorage_OnlyByAdditions()
-    {
-        var scripts = new EmbeddedMigrationScriptSource().Load();
-        var security = Assert.Single(scripts, s => s.Version == 4);
-
-        Assert.Equal("004_securite_comptes.sql", security.Name);
-        foreach (var forbidden in new[] { "DROP ", "DELETE", "TRUNCATE", "ALTER COLUMN", "USE [", "CREATE DATABASE", "UPDATE ", "INSERT " })
-            Assert.DoesNotContain(forbidden, security.Content, StringComparison.OrdinalIgnoreCase);
-        // Rejouable : chaque objet est testé avant création.
-        Assert.Contains("OBJECT_ID(N'dbo.T_REFRESH_TOKEN', N'U') IS NULL", security.Content);
-        Assert.Contains("COL_LENGTH(N'dbo.T_RESPONSABLE', N'TENTATIVES_ECHOUEES') IS NULL", security.Content);
-        Assert.Contains("COL_LENGTH(N'dbo.T_RESPONSABLE', N'VERROUILLE_JUSQUA') IS NULL", security.Content);
-        Assert.Contains("name = N'UX_T_REFRESH_TOKEN_Hash'", security.Content);
-        // Seule l'empreinte du jeton est stockée.
-        Assert.Contains("TOKEN_HASH        char(64)", security.Content);
-        Assert.DoesNotContain("Password", security.Content, StringComparison.OrdinalIgnoreCase);
-    }
-
-    // ---------- Script 005 ----------
-
-    [Fact]
-    public void Script005_LoginUniqueness_OnlyByAdditions_AndSkipsIndexWhenDuplicatesExist()
-    {
-        var scripts = new EmbeddedMigrationScriptSource().Load();
-        var unicity = Assert.Single(scripts, s => s.Version == 5);
-
-        Assert.Equal("005_unicite_login.sql", unicity.Name);
-        foreach (var forbidden in new[] { "DROP ", "DELETE", "TRUNCATE", "ALTER COLUMN", "USE [", "CREATE DATABASE", "UPDATE ", "INSERT ", "STRING_AGG" })
-            Assert.DoesNotContain(forbidden, unicity.Content, StringComparison.OrdinalIgnoreCase);
-        // Rejouable : colonne et index testés avant création.
-        Assert.Contains("COL_LENGTH(N'dbo.T_RESPONSABLE', N'LOGIN_CLE') IS NULL", unicity.Content);
-        Assert.Contains($"name = N'{LoginKey.UniqueIndexName}'", unicity.Content);
-        // Même expression que LoginKey : sans espaces en bordure, en majuscules.
-        Assert.Contains("UPPER(LTRIM(RTRIM(LOGIN)))", unicity.Content);
-        // Des doublons existants n'arrêtent pas le démarrage : l'index est seulement ignoré, avec un message.
-        Assert.Contains("IF @doublons IS NULL", unicity.Content);
-        Assert.Contains("index unique NON créé", unicity.Content);
     }
 
     // ---------- Journal de démarrage ----------

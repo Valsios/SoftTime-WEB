@@ -5,7 +5,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
     <PackageReference Include="ClosedXML" Version="0.104.2" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.11" />
@@ -18,7 +17,9 @@
 
   <!-- Scripts versionnés appliqués par SchemaMigrator (voir migrations/versions/README.md). -->
   <ItemGroup>
-    <EmbeddedResource Include="..\migrations\versions\*.sql" LogicalName="SoftTime.Migrations.Versions.%(Filename)%(Extension)" Link="SchemaMigrations\Scripts\%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\migrations\versions\*.sql"
+                      LogicalName="SoftTime.Migrations.Versions.%(Filename)%(Extension)"
+                      Link="SchemaMigrations\Scripts\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <PropertyGroup>

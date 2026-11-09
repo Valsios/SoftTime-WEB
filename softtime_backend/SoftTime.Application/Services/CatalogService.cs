@@ -110,9 +110,8 @@ public class CatalogService
         {
             tables = await _discovery.ListTablesAsync(dto.Serveur, dto.NomBd, dto.SqlAuth ?? true, dto.Login, password, ct);
         }
-        catch (ExternalConnectionException ex)
+        catch (Exception ex)
         {
-            // Message lisible, sans texte SQL (voir ExternalDiscoveryService.Describe) ; toute autre erreur va au middleware (500 journalisé).
             return new ConnectionTestResultDto(false, $"Connexion impossible : {ex.Message}");
         }
         if (dto.TypeBase == "AUTRE")
@@ -254,9 +253,8 @@ public class CatalogService
         {
             tables = await _discovery.ListTablesAsync(dto.Serveur, dto.NomBd, dto.SqlAuth ?? true, dto.Login, password, ct);
         }
-        catch (ExternalConnectionException ex)
+        catch (Exception ex)
         {
-            // Message lisible, sans texte SQL (voir ExternalDiscoveryService.Describe) ; toute autre erreur va au middleware (500 journalisé).
             return new ConnectionTestResultDto(false, $"Connexion impossible : {ex.Message}");
         }
         if (dto.TypeBase == "AUTRE")
@@ -520,9 +518,8 @@ public class CatalogService
                 ? new ConnectionTestResultDto(true, "Configuration d'écriture valide.")
                 : new ConnectionTestResultDto(false, $"La colonne {missingColumn} n'existe pas.");
         }
-        catch (InvalidOperationException ex) when (ex is ExternalConnectionException || ExceptionOrigin.IsApplication(ex))
+        catch (Exception ex)
         {
-            // Erreur SQL traduite ou règle de configuration : message lisible. Une erreur technique va au middleware.
             return new ConnectionTestResultDto(false, $"Validation impossible : {ex.Message}");
         }
     }

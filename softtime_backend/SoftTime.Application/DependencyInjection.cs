@@ -18,7 +18,6 @@ public static class DependencyInjection
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
         services.AddScoped<IPasswordHasher<T_RESPONSABLE>, PasswordHasher<T_RESPONSABLE>>();
         services.AddScoped<TenantConnectionService>();
-        services.AddScoped<RefreshTokenService>();
         services.AddScoped<AuthService>();
         services.AddSingleton<EffectiveRightsCache>();
         services.AddScoped<EffectiveRightsService>();
