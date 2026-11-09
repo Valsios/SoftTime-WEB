@@ -38,6 +38,53 @@ public class PrivilegesWriteHttpTests : IClassFixture<ApiFactory>
             .Should().Equal(PermissionCatalog.SelfRead);
     }
 
+    /// <summary>Toutes les écritures de l'écran Privilèges, avec un corps valide.</summary>
+    public static TheoryData<string, string, string?> Writes() => new()
+    {
+        { "PUT", "/api/v1/privileges/role/91", """{"grantedPermissions":["PROC:SHIFTS"]}""" },
+        { "PUT", "/api/v1/privileges/91", "[3]" },
+        { "PUT", "/api/v1/privileges/user/10050", """{"grantedPermissions":["PROC:SHIFTS"]}""" },
+        { "POST", "/api/v1/privileges/user/10050/reset", null },
+    };
+
+    [Theory]
+    [MemberData(nameof(Writes))]
+    public async Task PrivilegesWrite_Anonymous_Returns401(string method, string url, string? body)
+    {
+        // Act
+        var resp = await _http.SendAsync(_f.Request("anonyme", new HttpMethod(method), url, body));
+
+        // Assert
+        resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Theory]
+    [MemberData(nameof(Writes))]
+    public async Task PrivilegesWrite_NonAdministratorWithPrivilegesScreen_Returns403AndChangesNothing(string method, string url, string? body)
+    {
+        // Arrange
+        var before = _f.Snapshot();
+
+        // Act
+        var resp = await _http.SendAsync(_f.Request("privreader", new HttpMethod(method), url, body));
+
+        // Assert
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await resp.Content.ReadAsStringAsync()).Should().Contain("Cette opération est réservée aux administrateurs.");
+        _f.Snapshot().Should().Be(before);
+    }
+
+    [Theory]
+    [MemberData(nameof(Writes))]
+    public async Task PrivilegesWrite_Administrator_Succeeds(string method, string url, string? body)
+    {
+        // Act
+        var resp = await _http.SendAsync(_f.Request("admin", new HttpMethod(method), url, body));
+
+        // Assert
+        resp.IsSuccessStatusCode.Should().BeTrue(await resp.Content.ReadAsStringAsync());
+    }
+
     [Fact]
     public async Task SaveUserPermissions_UnknownCode_Returns400AndChangesNothing()
     {

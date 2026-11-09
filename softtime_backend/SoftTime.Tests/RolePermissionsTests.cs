@@ -652,15 +652,34 @@ public class RolePermissionsTests
     }
 
     [Fact]
-    public async Task ResetUserPermissions_NonAdminSelf_ThrowsDomainException()
+    public async Task ResetUserPermissions_TokenAdminDemotedInDatabase_Self_ThrowsForbidden()
     {
         // Act
+        // Le service de test a un jeton administrateur ; le compte 2 n'est pas administrateur en base.
         Func<Task> act = () =>
             _auth.ResetUserDetailedPermissionsAsync(currentUserId: 2, targetUserId: 2);
 
         // Assert
-        var ex = (await act.Should().ThrowExactlyAsync<DomainException>()).Which;
-        ex.Message.Should().Be("Un utilisateur ne peut pas modifier ses propres privilèges sans droit d'administration.");
+        var ex = (await act.Should().ThrowExactlyAsync<ForbiddenException>()).Which;
+        ex.Message.Should().Be("Cette opération est réservée aux administrateurs.");
+    }
+
+    [Fact]
+    public async Task UserPermissionWrites_TokenAdminDemotedInDatabase_OtherAccount_ThrowForbiddenAndChangeNothing()
+    {
+        // Arrange
+        _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 3, IdRole = 3, Login = "user3", NomResponsable = "User 3" });
+        _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 3, PermissionCode = "PROC:SHIFTS", IsGranted = true });
+        var before = _uow.Snapshot();
+
+        // Act
+        Func<Task> save = () => _auth.SaveUserDetailedPermissionsAsync(currentUserId: 2, targetUserId: 3, new[] { "PARAMS:USERS" });
+        Func<Task> reset = () => _auth.ResetUserDetailedPermissionsAsync(currentUserId: 2, targetUserId: 3);
+
+        // Assert
+        await save.Should().ThrowExactlyAsync<ForbiddenException>();
+        await reset.Should().ThrowExactlyAsync<ForbiddenException>();
+        _uow.Snapshot().Should().Be(before);
     }
 
     #endregion

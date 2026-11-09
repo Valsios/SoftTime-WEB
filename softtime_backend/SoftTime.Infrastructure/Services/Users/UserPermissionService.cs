@@ -2,6 +2,7 @@
 using SoftTime.Application.Abstractions.Users;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Security;
+using SoftTime.Application.Services;
 using SoftTime.Domain;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
@@ -100,14 +101,9 @@ public sealed class UserPermissionService : IUserPermissionService
 
     public async Task SaveUserDetailedPermissionsAsync(decimal currentUserId, decimal targetUserId, IReadOnlyCollection<string> permissions, CancellationToken cancellationToken = default)
     {
-        _parametersAccessGuard.RequireAdministrator();
-        var caller = await _uow.Repository<Responsable>().GetByIdAsync(currentUserId, cancellationToken)
-            ?? throw new UnauthorizedException("Utilisateur connecté introuvable.");
+        var caller = await RequireAdministratorCallerAsync(currentUserId, cancellationToken);
         var target = await _uow.Repository<Responsable>().GetByIdAsync(targetUserId, cancellationToken)
             ?? throw new NotFoundException("Utilisateur cible introuvable.");
-
-        if (currentUserId == targetUserId && !AdminRules.IsSuperAdmin(caller.IdRole))
-            throw new DomainException("Un utilisateur ne peut pas modifier ses propres privilèges sans droit d'administration.");
 
         var toSaveList = PermissionCodeValidator.Normalize(permissions, PermissionMarkers.EmptyPermissionsMarker);
         if (target.IdRole == AdminRules.AdminRoleId)
@@ -165,19 +161,9 @@ public sealed class UserPermissionService : IUserPermissionService
 
     public async Task ResetUserDetailedPermissionsAsync(decimal currentUserId, decimal targetUserId, CancellationToken cancellationToken = default)
     {
-        _parametersAccessGuard.RequireAdministrator();
-        var caller = await _uow.Repository<Responsable>().GetByIdAsync(currentUserId, cancellationToken)
-            ?? throw new UnauthorizedException("Utilisateur connecté introuvable.");
-
+        var caller = await RequireAdministratorCallerAsync(currentUserId, cancellationToken);
         var target = await _uow.Repository<Responsable>().GetByIdAsync(targetUserId, cancellationToken)
             ?? throw new NotFoundException("Utilisateur cible introuvable.");
-
-        var callerIsAdmin = AdminRules.IsSuperAdmin(caller.IdRole);
-
-        if (currentUserId == targetUserId && !callerIsAdmin)
-        {
-            throw new DomainException("Un utilisateur ne peut pas modifier ses propres privilèges sans droit d'administration.");
-        }
 
         var permsAvant = await SupprimerPermissionsAsync(targetUserId, cancellationToken);
 
@@ -187,6 +173,20 @@ public sealed class UserPermissionService : IUserPermissionService
 
         await _uow.SaveChangesAsync(cancellationToken);
         _effectiveRights.Invalidate(targetUserId);
+    }
+
+    /// <summary>
+    /// L'appelant doit être administrateur dans le jeton ET encore administrateur en base : un compte rétrogradé
+    /// dont le jeton n'a pas encore expiré est refusé, quel que soit le compte visé (lui-même ou un autre).
+    /// </summary>
+    private async Task<Responsable> RequireAdministratorCallerAsync(decimal currentUserId, CancellationToken ct)
+    {
+        _parametersAccessGuard.RequireAdministrator();
+        var caller = await _uow.Repository<Responsable>().GetByIdAsync(currentUserId, ct)
+            ?? throw new UnauthorizedException("Utilisateur connecté introuvable.");
+        if (!AdminRules.IsSuperAdmin(caller.IdRole))
+            throw new ForbiddenException(AdminAccess.ReservedMessage);
+        return caller;
     }
 
     /// <summary>Supprime les ajustements de l'utilisateur et retourne les permissions d'avant pour le journal.</summary>
