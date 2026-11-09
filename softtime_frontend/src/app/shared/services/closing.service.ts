@@ -1,7 +1,8 @@
 import { HttpBackend, HttpClient, HttpHeaders } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { ApiService } from '../../core/api';
+import { unwrapApiBody } from '../../core/api-envelope';
 import { SessionStore } from '../../core/session.store';
 import { ClosingChecklist, ClosingQuery, ClosingReport } from '../models';
 
@@ -39,10 +40,10 @@ export class ClosingService extends ApiService {
     if (token) headers = headers.set('Authorization', `Bearer ${token}`);
     if (sage) headers = headers.set('X-Sage-Database', sage);
     if (pointeuse) headers = headers.set('X-Pointeuse-Database', pointeuse);
-    return this.silentHttp.get<ClosingReport>(this.url('/api/v1/closing/analysis'), {
-      headers,
-      params: this.params(toParams(query)),
-    });
+    // HttpBackend contourne l'intercepteur qui déballe l'enveloppe { success, message, data } : on la déballe ici.
+    return this.silentHttp
+      .get<unknown>(this.url('/api/v1/closing/analysis'), { headers, params: this.params(toParams(query)) })
+      .pipe(map((body) => unwrapApiBody(body) as ClosingReport));
   }
 }
 
