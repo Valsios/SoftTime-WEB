@@ -258,4 +258,109 @@ public class ClosingSettingsTests
         // Assert
         resultat.Anomalies.Items.Should().ContainSingle().Which.Gravite.Should().Be("Critique");
     }
+
+    // ---------- Cache de l'analyse : plafond absolu ----------
+
+    [Fact]
+    public void ClosingOptions_NoCacheKey_DefaultsTo120SlidingAnd600Ceiling()
+    {
+        // Act
+        var sut = Lus();
+
+        // Assert
+        sut.CacheMaxSeconds.Should().Be(600);
+        sut.CacheSeconds.Should().Be(120);
+        ClosingOptions.DefautCacheSeconds.Should().Be(120);
+        sut.Erreurs().Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("300", 300)]
+    [InlineData("0", 0)]       // 0 : l'analyse expire après le délai glissant seul
+    [InlineData("3600", 3600)]
+    public void ClosingOptions_CacheMaxSecondsKey_IsRead(string valeur, int attendu)
+    {
+        // Act
+        var sut = Lus(("Closing:CacheMaxSeconds", valeur));
+
+        // Assert
+        sut.CacheMaxSeconds.Should().Be(attendu);
+        sut.CacheSeconds.Should().Be(120);
+        sut.Erreurs().Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("-1")]
+    [InlineData("3601")]
+    [InlineData("dix")]
+    public void ClosingOptions_InvalidCacheMaxSeconds_IsRefusedWithoutEchoingValue(string valeur)
+    {
+        // Act
+        var erreurs = Lus(("Closing:CacheMaxSeconds", valeur)).Erreurs();
+
+        // Assert
+        erreurs.Should().Contain(e => e.Contains("CacheMaxSeconds"));
+        erreurs.Should().NotContain(e => e.Contains(valeur));
+    }
+
+    // ---------- Délai glissant : Closing:CacheSeconds ----------
+
+    [Theory]
+    [InlineData("90", 90)]
+    [InlineData("0", 0)]       // 0 : aucun cache
+    public void ClosingOptions_CacheSecondsKey_IsRead(string valeur, int attendu)
+    {
+        // Act
+        var sut = Lus(("Closing:CacheSeconds", valeur));
+
+        // Assert
+        sut.CacheSeconds.Should().Be(attendu);
+        sut.Erreurs().Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("600", "600")]
+    [InlineData("120", "0")]   // plafond à 0 : délai glissant seul
+    public void ClosingOptions_SlidingDelayWithinCeiling_IsValid(string glissant, string plafond)
+    {
+        // Act
+        var erreurs = Lus(("Closing:CacheSeconds", glissant), ("Closing:CacheMaxSeconds", plafond)).Erreurs();
+
+        // Assert
+        erreurs.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("-1")]
+    [InlineData("3601")]
+    [InlineData("deux")]
+    public void ClosingOptions_InvalidCacheSeconds_IsRefusedWithoutEchoingValue(string valeur)
+    {
+        // Act
+        var erreurs = Lus(("Closing:CacheSeconds", valeur)).Erreurs();
+
+        // Assert
+        erreurs.Should().Contain(e => e.Contains("CacheSeconds"));
+        erreurs.Should().NotContain(e => e.Contains(valeur));
+    }
+
+    [Fact]
+    public void ClosingOptions_UnreadableCacheSeconds_KeepsDefault()
+    {
+        // Act
+        var sut = Lus(("Closing:CacheSeconds", "deux"));
+
+        // Assert
+        sut.CacheSeconds.Should().Be(120);
+    }
+
+    [Fact]
+    public void ClosingOptions_SlidingDelayAboveCeiling_IsRefused()
+    {
+        // Act
+        var erreurs = Lus(("Closing:CacheSeconds", "400"), ("Closing:CacheMaxSeconds", "300")).Erreurs();
+
+        // Assert
+        erreurs.Should().Contain(e => e.Contains("CacheSeconds") && e.Contains("CacheMaxSeconds"));
+    }
 }

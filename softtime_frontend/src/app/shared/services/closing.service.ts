@@ -3,10 +3,10 @@ import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '../../core/api';
 import { SessionStore } from '../../core/session.store';
-import { ClosingQuery, ClosingReport } from '../models';
+import { ClosingChecklist, ClosingQuery, ClosingReport } from '../models';
 
 /**
- * Clôture de paie assistée : un seul appel en LECTURE (GET api/closing/analysis), aucune écriture.
+ * Clôture de paie assistée : un seul appel en LECTURE (GET api/v1/closing/analysis), aucune écriture.
  * Les jours sont envoyés en UTC avec « Z » (minuit UTC du jour choisi) : le serveur garde ainsi
  * le jour demandé quel que soit le fuseau du navigateur.
  */
@@ -18,6 +18,13 @@ export class ClosingService extends ApiService {
 
   analysis(query: ClosingQuery): Observable<ClosingReport> {
     return this.http.get<ClosingReport>(this.url('/api/v1/closing/analysis'), { params: this.params(toParams(query)) });
+  }
+
+  /** Checklist d'avancement de la paie (GET api/v1/closing/checklist) : même période et même département que l'analyse. */
+  checklist(query: Pick<ClosingQuery, 'from' | 'to' | 'departement'>): Observable<ClosingChecklist> {
+    return this.http.get<ClosingChecklist>(this.url('/api/v1/closing/checklist'), {
+      params: this.params({ from: dayToUtcIso(query.from), to: dayToUtcIso(query.to), departement: query.departement }),
+    });
   }
 
   /**
@@ -54,5 +61,7 @@ function toParams(query: ClosingQuery): Record<string, unknown> {
     page: query.page,
     pageSize: query.pageSize,
     reuseCache: query.reuseCache ? true : undefined,
+    gravites: query.gravites?.length ? query.gravites.join(',') : undefined,
+    tri: query.tri === 'gravite' ? 'gravite' : undefined,
   };
 }

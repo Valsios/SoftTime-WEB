@@ -53,11 +53,13 @@ public sealed class ClosingService : IClosingService
         await _tenant.EnsureAuthorizedAsync(ct);
         var cle = ClosingAnalysisCache.Cle(_tenant.SageDb, _tenant.PointeuseDb, request);
         var maintenant = _horloge.GetUtcNow();
-        if (request.ReuseCached && _cache.TryGet(cle, maintenant, out var preparee))
+        var fenetre = ClosingCacheWindow.Depuis(_reglages.CacheSeconds, _reglages.CacheMaxSeconds);
+        if (request.ReuseCached && _cache.TryGet(cle, maintenant, fenetre.Glissant, out var preparee))
             return ClosingComputation.Assembler(preparee, request);
 
+        // Sans réutilisation (ou entrée expirée) : calcul à neuf, qui remplace l'entrée avec un plafond neuf.
         preparee = ClosingComputation.Preparer(await ChargerAsync(request, ct), request);
-        _cache.Set(cle, preparee, maintenant, TimeSpan.FromSeconds(_reglages.CacheSeconds));
+        _cache.Set(cle, preparee, maintenant, fenetre);
         return ClosingComputation.Assembler(preparee, request);
     }
 
@@ -74,7 +76,7 @@ public sealed class ClosingService : IClosingService
 
         var clock = (await _uow.Repository<ParametrePointeuse>().ListAsync(_ => true, ct)).FirstOrDefault()
             ?? throw new DomainException("Paramètre pointeuse (T_CLOCK) manquant.");
-        var cartes = await ChargerCartesAsync(request.Departement, ct);
+        var cartes = await ClosingDataQueries.CartesAsync(_uow, _tenant, request.Departement, ct);
         var feries = await ChargerFeriesAsync(ct);
         if (cartes.Count == 0)
             return new ClosingData(clock.MultiPoint == true, cartes,
@@ -93,18 +95,6 @@ public sealed class ClosingService : IClosingService
             feries,
             await ChargerCongesAsync(scope.Cles, ct),
             Today());
-    }
-
-    private async Task<List<CardPaie>> ChargerCartesAsync(string? departement, CancellationToken ct)
-    {
-        var sageDb = _tenant.SageDb;
-        var pointeuseDb = _tenant.PointeuseDb;
-        return (await _uow.Repository<CardPaie>().ListAsync(c => c.SageBdd == sageDb, ct))
-            .Where(c => ClosingDataQueries.CorrespondPointeuse(c.PointeuseBdd, pointeuseDb))
-            .Where(c => !string.IsNullOrWhiteSpace(c.SageMatricule))
-            .Where(c => string.IsNullOrWhiteSpace(departement)
-                        || string.Equals(c.Departement?.Trim(), departement.Trim(), StringComparison.OrdinalIgnoreCase))
-            .ToList();
     }
 
     private async Task<HashSet<DateTime>> ChargerFeriesAsync(CancellationToken ct)

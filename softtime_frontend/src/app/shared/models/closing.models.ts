@@ -1,4 +1,4 @@
-/** Clôture de paie assistée : types alignés sur la réponse de GET api/closing/analysis (lecture seule). */
+/** Clôture de paie assistée : types alignés sur la réponse de GET api/v1/closing/analysis (lecture seule). */
 
 export type ClosingAnomalyType =
   | 'PointageIncomplet'
@@ -87,6 +87,23 @@ export interface ClosingReport {
   salariesSansPlanningExclus?: number;
 }
 
+/** Une étape de la préparation de paie : Fait, AFaire, Information ou NonDeterminable (jamais deviné). */
+export interface ClosingChecklistLine {
+  code: string;
+  libelle: string;
+  etat: 'Fait' | 'AFaire' | 'Information' | 'NonDeterminable' | string;
+  detail: string;
+  nombre?: number | null;
+}
+
+/** Réponse de GET api/v1/closing/checklist : séparée de l'analyse, sans effet sur le score ni le statut. */
+export interface ClosingChecklist {
+  from: string;
+  to: string;
+  departement: string | null;
+  lignes: ClosingChecklistLine[];
+}
+
 export interface ClosingQuery {
   /** Jour de début, AAAA-MM-JJ (envoyé en UTC avec Z). */
   from?: string | null;
@@ -97,6 +114,10 @@ export interface ClosingQuery {
   includeInformation?: boolean;
   page?: number;
   pageSize?: number;
-  /** Changement de page seulement : le serveur peut réutiliser, 60 s au plus, l'analyse déjà calculée. */
+  /** Changement de page seulement : le serveur peut réutiliser l'analyse déjà calculée (délai glissant sous un plafond). */
   reuseCache?: boolean;
+  /** Restreint la LISTE à ces niveaux (Information, Mineure, Importante, Critique) ; comptages, score et statut ne changent pas. */
+  gravites?: readonly string[];
+  /** « gravite » : liste du plus grave au moins grave, puis ordre habituel. */
+  tri?: 'gravite';
 }

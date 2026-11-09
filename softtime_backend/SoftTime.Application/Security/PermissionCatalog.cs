@@ -13,6 +13,9 @@ public static class PermissionCatalog
     public const string EmptyUserMarker = "__SOFTTIME_EMPTY_CUSTOM_PERMISSIONS__";
     public const string EmptyRoleMarker = "__SOFTTIME_EMPTY_ROLE_PERMISSIONS__";
 
+    /// <summary>Mon espace : lire ses propres données, sans aucune porte.</summary>
+    public const string SelfRead = "SELF:READ";
+
     /// <summary>Permissions accordées par défaut avec chaque droit (porte) du rôle, dans l'ordre d'affichage.</summary>
     private static readonly (int Droit, string[] Codes)[] PermissionsParDroit =
     {
@@ -48,9 +51,12 @@ public static class PermissionCatalog
         (Rights.Reports, new[] { "REPORTS:REPORTS", "REPORTS:PREDICTIONS", "REPORTS:CLOSING" })
     };
 
+    /// <summary>Permissions sans porte : connues du catalogue, jamais accordées par défaut avec un droit.</summary>
+    private static readonly string[] PermissionsSansPorte = { SelfRead };
+
     /// <summary>Permissions statiques connues ; les codes SAGE: et POINTEUSE: dépendent des bases et sont acceptés par préfixe.</summary>
-    public static readonly HashSet<string> KnownStatic =
-        new(PermissionsParDroit.SelectMany(p => p.Codes), StringComparer.OrdinalIgnoreCase);
+    public static readonly HashSet<string> KnownStatic = new(
+        PermissionsParDroit.SelectMany(p => p.Codes).Concat(PermissionsSansPorte), StringComparer.OrdinalIgnoreCase);
 
     public static bool IsKnown(string code)
     {

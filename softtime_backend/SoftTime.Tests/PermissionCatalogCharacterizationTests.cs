@@ -52,7 +52,8 @@ public class PermissionCatalogCharacterizationTests
         var legacy = (HashSet<string>)typeof(RolePermissionService).GetField("KnownStaticPermissions", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
 
         // Act
-        var result = legacy.SetEquals(PermissionCatalog.KnownStatic);
+        // SELF:READ : permission de Mon espace, hors du catalogue historique des rôles.
+        var result = legacy.SetEquals(PermissionCatalog.KnownStatic.Where(c => c != PermissionCatalog.SelfRead));
 
         // Assert
         result.Should().BeTrue();

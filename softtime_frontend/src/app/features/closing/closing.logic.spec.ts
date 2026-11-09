@@ -4,6 +4,16 @@ import { readDeepLink } from '../../shared/utils/deep-link';
 import {
   correctionLink,
   CORRECTION_TARGETS,
+  EXPORT_HEADERS,
+  exportFileName,
+  exportRows,
+  checklistLink,
+  checklistStateView,
+  analysisAgeText,
+  resultBannerText,
+  severityFilterText,
+  toggleSeverity,
+  sameFilter,
   dashboardCardView,
   defaultPeriod,
   excludedEmployeesText,
@@ -328,5 +338,99 @@ describe('fonction désactivée et carte du tableau de bord', () => {
       score: NO_CONTROLLED_DAY,
       critiques: '',
     });
+  });
+});
+
+describe('filtre conservé : comparaison et bandeau', () => {
+  const base = { from: '2025-11-01', to: '2025-11-30', departement: null, includeComparison: false };
+
+  it('sameFilter : département vide = tous, tout autre écart = filtre modifié', () => {
+    expect(sameFilter(base, { ...base, departement: '' as unknown as null })).toBe(true);
+    expect(sameFilter(base, { ...base, departement: 'D1' })).toBe(false);
+    expect(sameFilter(base, { ...base, from: '2025-11-02' })).toBe(false);
+    expect(sameFilter(base, { ...base, includeComparison: true })).toBe(false);
+    expect(sameFilter(base, null)).toBe(false);
+  });
+
+  it('resultBannerText : JJ/MM à HH:mm, période et département', () => {
+    const quand = new Date(2026, 0, 5, 9, 7);
+    expect(resultBannerText(quand, base)).toBe('Résultat du 05/01 à 09:07, période du 01/11/2025 au 30/11/2025, département tous.');
+    expect(resultBannerText(quand, { ...base, departement: 'Atelier' })).toContain('département Atelier.');
+  });
+});
+
+describe('export de la liste', () => {
+  const ligne = (n: number) => ({
+    type: 'PointageManquant', gravite: 'Critique', poids: 5, matricule: `M${n}`, nom: null, prenom: null,
+    departement: null, date: '2025-11-03T00:00:00', detail: `ligne ${n}`, heures: null, pointageExiste: null,
+  });
+
+  it('même nombre de lignes et même ordre que la liste, une cellule par en-tête, sans colonne de lien', () => {
+    const items = [ligne(2), ligne(1), ligne(3)];
+    const rows = exportRows(items);
+    expect(rows).toHaveLength(3);
+    expect(rows.map((r) => r[6])).toEqual(['ligne 2', 'ligne 1', 'ligne 3']);
+    expect(rows.every((r) => r.length === EXPORT_HEADERS.length)).toBe(true);
+    expect(EXPORT_HEADERS).not.toContain('Correction');
+  });
+
+  it('libellés lisibles : gravité, type, jour JJ/MM/AAAA, département vide', () => {
+    const [r] = exportRows([ligne(1)]);
+    expect(r[0]).toBe('Critique');
+    expect(r[1]).toBe('Pointage manquant');
+    expect(r[5]).toBe('03/11/2025');
+    expect(r[4]).toBe('');
+  });
+
+  it('nom de fichier : période incluse', () => {
+    expect(exportFileName({ from: '2025-11-01', to: '2025-11-30', departement: null, includeComparison: false }))
+      .toBe('controle-avant-paie_2025-11-01_2025-11-30');
+  });
+});
+
+describe('filtre de gravité : bascules', () => {
+  it('toggleSeverity : ajoute et retire, toujours du plus grave au moins grave', () => {
+    expect(toggleSeverity([], 'Mineure')).toEqual(['Mineure']);
+    expect(toggleSeverity(['Mineure'], 'Critique')).toEqual(['Critique', 'Mineure']);
+    expect(toggleSeverity(['Critique', 'Mineure'], 'Critique')).toEqual(['Mineure']);
+    expect(toggleSeverity(['Mineure'], 'Mineure')).toEqual([]);
+  });
+
+  it('severityFilterText : vide sans filtre, sinon les libellés des niveaux', () => {
+    expect(severityFilterText([])).toBe('');
+    expect(severityFilterText(['Critique', 'Importante'])).toBe('Filtre de gravité : Critique, Importante');
+  });
+});
+
+describe('checklist d’avancement : états et liens', () => {
+  it('états en clair, jamais seulement une couleur', () => {
+    expect(checklistStateView('Fait')).toEqual({ label: 'Fait', tone: 'success' });
+    expect(checklistStateView('AFaire')).toEqual({ label: 'À faire', tone: 'warning' });
+    expect(checklistStateView('Information')).toEqual({ label: 'Information', tone: 'info' });
+    expect(checklistStateView('NonDeterminable')).toEqual({ label: 'Non déterminable', tone: 'muted' });
+    expect(checklistStateView('autre').label).toBe('Non déterminable');
+  });
+
+  it('lien : écran existant ; période transmise seulement aux écrans qui la lisent', () => {
+    const periode = { from: '2025-11-01', to: '2025-11-30' };
+    expect(checklistLink({ code: 'Pointages' }, periode)).toMatchObject({ path: '/punches', queryParams: { du: '2025-11-01', au: '2025-11-30' } });
+    expect(checklistLink({ code: 'Anomalies' }, periode)).toMatchObject({ path: '/anomalies', queryParams: { du: '2025-11-01', au: '2025-11-30' } });
+    expect(checklistLink({ code: 'Semaines' }, periode)).toMatchObject({ path: '/weekly-validation', queryParams: null });
+    expect(checklistLink({ code: 'ExoImpo' }, periode)).toMatchObject({ path: '/overtime', queryParams: null });
+    expect(checklistLink({ code: 'Inconnue' }, periode)).toBeNull();
+  });
+});
+
+describe('âge de l’analyse', () => {
+  const t0 = new Date(2026, 0, 5, 9, 0, 0);
+  const apres = (minutes: number, secondes = 0) => new Date(t0.getTime() + minutes * 60_000 + secondes * 1000);
+
+  it('minutes, puis heures et minutes ; jamais de valeur négative', () => {
+    expect(analysisAgeText(t0, apres(0, 59))).toBe('Analyse faite il y a moins d’une minute.');
+    expect(analysisAgeText(t0, apres(1))).toBe('Analyse faite il y a 1 min.');
+    expect(analysisAgeText(t0, apres(59, 59))).toBe('Analyse faite il y a 59 min.');
+    expect(analysisAgeText(t0, apres(60))).toBe('Analyse faite il y a 1 h.');
+    expect(analysisAgeText(t0, apres(125))).toBe('Analyse faite il y a 2 h 5 min.');
+    expect(analysisAgeText(t0, apres(-5))).toBe('Analyse faite il y a moins d’une minute.');
   });
 });

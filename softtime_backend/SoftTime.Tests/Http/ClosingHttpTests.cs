@@ -18,6 +18,7 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
 {
     private const string Denied = "Vous n'avez pas la permission requise pour cette consultation.";
     private const string Url = "/api/v1/closing/analysis";
+    private const string ChecklistUrl = "/api/v1/closing/checklist";
     private const string Semaine = "from=2025-11-03&to=2025-11-07";
 
     private const decimal LecteurId = 10094;
@@ -98,6 +99,13 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
         return (resp.StatusCode, await resp.Content.ReadAsStringAsync());
     }
 
+    /// <summary>Champ <c>data</c> de l'enveloppe, sans l'horodatage qui change à chaque réponse.</summary>
+    private static string Donnees(string texte)
+    {
+        using var json = JsonDocument.Parse(texte);
+        return json.RootElement.GetProperty("data").GetRawText();
+    }
+
     // ---------- Accès ----------
 
     [Theory]
@@ -166,6 +174,115 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
         r.GetProperty("salariesSansPlanningExclus").GetInt32().Should().Be(0);
         r.GetProperty("parGravite").EnumerateArray().Should().Contain(g => g.GetProperty("cle").GetString() == "Information");
         r.GetProperty("anomalies").GetProperty("items")[0].TryGetProperty("pointageExiste", out _).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Analysis_WithoutGravityParameters_IsIdenticalToEmptyOnes()
+    {
+        // Act
+        var (c1, sans) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}"));
+        var (c2, vides) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}&gravites=&tri="));
+
+        // Assert
+        c1.Should().Be(HttpStatusCode.OK);
+        c2.Should().Be(HttpStatusCode.OK);
+        Donnees(vides).Should().Be(Donnees(sans));
+    }
+
+    [Fact]
+    public async Task Analysis_GravityFilter_ChangesListOnlyNeverStatusScoreOrCounts()
+    {
+        // Arrange
+        var (_, complet) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}"));
+
+        // Act
+        var (code, mineures) = await Envoyer(_http,
+            Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}&gravites=Mineure,Information&tri=gravite"));
+        var (codeCritique, critiques) = await Envoyer(_http,
+            Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}&gravites=critique&tri=gravite"));
+
+        // Assert
+        code.Should().Be(HttpStatusCode.OK);
+        codeCritique.Should().Be(HttpStatusCode.OK);
+        using var a = JsonDocument.Parse(complet);
+        using var b = JsonDocument.Parse(mineures);
+        using var c = JsonDocument.Parse(critiques);
+        var (ra, rb, rc) = (a.RootElement.GetProperty("data"), b.RootElement.GetProperty("data"), c.RootElement.GetProperty("data"));
+        foreach (var champ in new[] { "statut", "score", "nombreAnomalies", "joursEmployeControles" })
+        {
+            rb.GetProperty(champ).ToString().Should().Be(ra.GetProperty(champ).ToString());
+            rc.GetProperty(champ).ToString().Should().Be(ra.GetProperty(champ).ToString());
+        }
+        rb.GetProperty("parGravite").ToString().Should().Be(ra.GetProperty("parGravite").ToString());
+        rb.GetProperty("anomalies").GetProperty("total").GetInt32().Should().Be(0);   // l'anomalie du jeu est Critique
+        rc.GetProperty("anomalies").GetProperty("total").GetInt32().Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData("gravites=Grave")]
+    [InlineData("gravites=Critique,Urgent")]
+    [InlineData("tri=date")]
+    public async Task Analysis_InvalidGravityOrSortValue_IsRefusedWithClearMessage(string requete)
+    {
+        // Arrange
+        var before = _f.Snapshot();
+
+        // Act
+        var (code, texte) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}&{requete}"));
+
+        // Assert
+        code.Should().Be(HttpStatusCode.BadRequest);
+        texte.Should().ContainEquivalentOf("gravite");
+        _f.Snapshot().Should().Be(before);
+    }
+
+    // ---------- Checklist d'avancement ----------
+
+    [Theory]
+    [InlineData("admin", HttpStatusCode.OK)]
+    [InlineData("closereader", HttpStatusCode.OK)]
+    [InlineData("closenobase", HttpStatusCode.Forbidden)]
+    [InlineData("closenopte", HttpStatusCode.Forbidden)]
+    [InlineData("gate6only", HttpStatusCode.Forbidden)]
+    [InlineData("joel", HttpStatusCode.Forbidden)]
+    [InlineData("anonyme", HttpStatusCode.Unauthorized)]
+    public async Task Checklist_AnyProfile_HasSameAccessRulesAsAnalysis(string profil, HttpStatusCode attendu)
+    {
+        // Arrange
+        var before = _f.Snapshot();
+
+        // Act
+        var (code, texte) = await Envoyer(_http, Requete(profil, HttpMethod.Get, $"{ChecklistUrl}?{Semaine}"));
+
+        // Assert
+        code.Should().Be(attendu);
+        if (attendu == HttpStatusCode.Forbidden && profil is not ("closenobase" or "closenopte"))
+            texte.Should().Contain(Denied);
+        _f.Snapshot().Should().Be(before);                       // lecture seule
+    }
+
+    [Fact]
+    public async Task Checklist_AuthorizedReader_ReturnsOneLinePerStepWithCountsOnly()
+    {
+        // Arrange
+        var (_, analyseAvant) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}"));
+
+        // Act
+        var (code, texte) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{ChecklistUrl}?{Semaine}"));
+        var (_, analyseApres) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}"));
+
+        // Assert
+        code.Should().Be(HttpStatusCode.OK);
+        using var json = JsonDocument.Parse(texte);
+        var lignes = json.RootElement.GetProperty("data").GetProperty("lignes").EnumerateArray().ToList();
+        // Pas de calcul EXO/IMPO : pas de ligne « heures imposables ».
+        lignes.Select(l => l.GetProperty("code").GetString())
+            .Should().Equal("Pointages", "Anomalies", "Semaines", "ExoImpo", "SynchroPaie");
+        lignes.Select(l => l.GetProperty("etat").GetString())
+            .Should().OnlyContain(e => e == "Fait" || e == "AFaire" || e == "Information" || e == "NonDeterminable");
+        texte.Should().NotContain("777");                        // aucun matricule ni nom
+        texte.Should().NotContain("Testnom");
+        Donnees(analyseApres).Should().Be(Donnees(analyseAvant)); // l'analyse est inchangée
     }
 
     [Fact]

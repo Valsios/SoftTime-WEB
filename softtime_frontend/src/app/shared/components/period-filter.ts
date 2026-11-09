@@ -24,17 +24,18 @@ import { CardPaieService, DepartementServiceService } from '../services/catalog.
     <div class="soft-toolbar">
       <label class="soft-field">
         <span class="soft-field__label">Du</span>
-        <input class="soft-input" type="date" [(ngModel)]="from" name="from" />
+        <input class="soft-input" type="date" [(ngModel)]="from" (ngModelChange)="changed.emit()" name="from" />
       </label>
       <label class="soft-field">
         <span class="soft-field__label">Au</span>
-        <input class="soft-input" type="date" [(ngModel)]="to" name="to" />
+        <input class="soft-input" type="date" [(ngModel)]="to" (ngModelChange)="changed.emit()" name="to" />
       </label>
       @if (showMatricule()) {
         <soft-select
           label="Matricule début"
           placeholder="Tous"
           [(ngModel)]="matriculeFrom"
+          (ngModelChange)="changed.emit()"
           name="matriculeFrom"
           [options]="matriculeOptions()"
         ></soft-select>
@@ -42,6 +43,7 @@ import { CardPaieService, DepartementServiceService } from '../services/catalog.
           label="Matricule fin"
           placeholder="Tous"
           [(ngModel)]="matriculeTo"
+          (ngModelChange)="changed.emit()"
           name="matriculeTo"
           [options]="matriculeOptions()"
         ></soft-select>
@@ -51,11 +53,12 @@ import { CardPaieService, DepartementServiceService } from '../services/catalog.
           label="Département"
           placeholder="Tous"
           [(ngModel)]="departement"
+          (ngModelChange)="changed.emit()"
           name="departement"
           [options]="departementOptions()"
         ></soft-select>
       }
-      <soft-button (click)="emit()">{{ searchLabel() }}</soft-button>
+      <soft-button [loading]="busy()" [attr.aria-busy]="busy() || null" (click)="emit()">{{ searchLabel() }}</soft-button>
     </div>
   `,
 })
@@ -70,6 +73,8 @@ export class PeriodFilter implements OnInit {
   readonly searchLabel = input('Rechercher');
   /** Filtre issu d'un lien profond (déjà validé par readDeepLink) ; null : comportement habituel. */
   readonly initial = input<DeepLinkFilter | null>(null);
+  /** Recherche en cours : le bouton est désactivé (avec son indicateur) ; faux par défaut, sans effet pour les autres écrans. */
+  readonly busy = input(false);
 
   from = monthStart();
   to = today();
@@ -80,6 +85,8 @@ export class PeriodFilter implements OnInit {
   readonly matriculeOptions = signal<{ value: string; label: string }[]>([]);
   readonly departementOptions = signal<{ value: string; label: string }[]>([]);
   readonly search = output<PeriodRequest>();
+  /** Émise quand l'utilisateur modifie un champ du filtre (jamais pour un remplissage programmatique). */
+  readonly changed = output<void>();
 
   ngOnInit(): void {
     if (this.mondaySundayWeek()) {

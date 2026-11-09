@@ -37,9 +37,15 @@ public class SageDatabasesController : ApiControllerBase
         _configAuth = configAuth;
     }
 
+    /// <summary>
+    /// Les listes de bases servent aux écrans des portes 1 (Bases) et 2 (Utilisateurs, Privilèges, Accès bases) et à la
+    /// barre du haut. Un compte sans l'une de ces portes (ex. salarié) reçoit une liste vide (200), jamais une erreur.
+    /// </summary>
     [HttpGet]
     public async Task<IActionResult> GetAllAsync(CancellationToken ct)
     {
+        if (!DatabaseListAccess.PeutLire(_user))
+            return Ok(Array.Empty<SageDbDto>());
         var list = await _svc.ListSageAsync(ct);
         if (_user.UserId is decimal uid)
         {
@@ -56,6 +62,8 @@ public class SageDatabasesController : ApiControllerBase
     public async Task<IActionResult> GetPagedAsync(
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
     {
+        if (!DatabaseListAccess.PeutLire(_user))
+            return Ok(DatabaseListAccess.PageVide<SageDbDto>(page, pageSize));
         IReadOnlyCollection<string>? allowed = null;
         if (_user.UserId is decimal uid)
         {
@@ -96,11 +104,14 @@ public class SageDatabasesController : ApiControllerBase
     public async Task<IActionResult> ActivateAsync(CancellationToken ct)
         => Ok(await _svc.ActivateSagePairAsync(ct));
 
+    /// <summary>Département et service d'un salarié : portes 1 (Bases) ou 2 (Paramètres).</summary>
     [HttpGet("lookup/{matricule}")]
+    [RequireAnyDroit(Droit.Databases, Droit.Parameters)]
     public async Task<IActionResult> LookupAsync(string matricule, CancellationToken ct)
         => Ok(await _departements.GetDepartementServiceAsync(matricule, ct));
 
     [HttpPost("lookup-batch")]
+    [RequireAnyDroit(Droit.Databases, Droit.Parameters)]
     public async Task<IActionResult> LookupBatchAsync([FromBody] string[] matricules, CancellationToken ct)
         => Ok(await _departements.GetDepartementServiceBatchAsync(matricules ?? Array.Empty<string>(), ct));
 

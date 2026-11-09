@@ -46,6 +46,8 @@ public sealed class ClosingOptionsSetup : IConfigureOptions<ClosingOptions>
                     $"{Section}:{nameof(ClosingOptions.DoublonsMonoGravite)} doit valoir Information, Mineure, Importante ou Critique.");
         }
         Entier(section, nameof(ClosingOptions.MaxPeriodDays), options, v => options.MaxPeriodDays = v);
+        Entier(section, nameof(ClosingOptions.CacheSeconds), options, v => options.CacheSeconds = v);
+        Entier(section, nameof(ClosingOptions.CacheMaxSeconds), options, v => options.CacheMaxSeconds = v);
         LireRatio(section, options);
     }
 

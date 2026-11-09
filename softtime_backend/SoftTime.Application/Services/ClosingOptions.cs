@@ -9,7 +9,7 @@ namespace SoftTime.Application.Services;
 /// <see cref="ReglesParDefaut"/> lui transmet ces valeurs.
 /// <code>
 /// "Closing": {
-///   "Enabled": true, "ShowNames": true,
+///   "Enabled": true, "ShowNames": true, "CacheSeconds": 120, "CacheMaxSeconds": 600,
 ///   "DuplicateToleranceSeconds": 30, "IgnorerSemainesValidees": true, "MaxPeriodDays": 366,
 ///   "CriticalRatioBlocking": 0.05,
 ///   "ExclureSansPlanningSurPeriode": true, "DoublonsMonoGravite": "Mineure",
@@ -24,6 +24,12 @@ public sealed class ClosingOptions
 
     /// <summary>Plafond absolu de la période analysée (performance), bornes comprises.</summary>
     public const int PlafondPeriodDays = 366;
+
+    /// <summary>Délai glissant par défaut (« Closing:CacheSeconds »).</summary>
+    public const int DefautCacheSeconds = 120;
+
+    /// <summary>Borne haute de <see cref="CacheMaxSeconds"/> (une heure) : au-delà, données trop anciennes.</summary>
+    public const int PlafondCacheMaxSeconds = 3600;
 
     /// <summary>Fonction active (route d'analyse disponible).</summary>
     public bool Enabled { get; set; } = true;
@@ -58,8 +64,19 @@ public sealed class ClosingOptions
         [ClosingSeverity.Critique] = (int)ClosingSeverity.Critique
     };
 
-    /// <summary>Durée de réutilisation de l'analyse pour les changements de page (0 : aucun cache). Non lue en configuration.</summary>
-    public int CacheSeconds { get; set; } = 60;
+    /// <summary>
+    /// Durée GLISSANTE de réutilisation de l'analyse (changements de page, de filtre, de tri, d'onglet) : chaque
+    /// lecture avec réutilisation la renouvelle, sans dépasser <see cref="CacheMaxSeconds"/> (« Closing:CacheSeconds »,
+    /// 120 s par défaut, 0 à 3600 ; 0 : aucun cache). Une clé absente garde la valeur par défaut.
+    /// </summary>
+    public int CacheSeconds { get; set; } = DefautCacheSeconds;
+
+    /// <summary>
+    /// Plafond ABSOLU de réutilisation, mesuré depuis le calcul d'origine (« Closing:CacheMaxSeconds », 600 s par
+    /// défaut) : au-delà, la prochaine lecture recalcule, même si l'analyse est consultée sans interruption. Le délai
+    /// glissant <see cref="CacheSeconds"/> ne le dépasse jamais ; à 0, l'analyse expire après le seul délai glissant.
+    /// </summary>
+    public int CacheMaxSeconds { get; set; } = 600;
 
     /// <summary>Clés illisibles rencontrées à la lecture de la section (signalées par le validateur).</summary>
     internal List<string> ErreursLecture { get; } = new();
@@ -87,6 +104,12 @@ public sealed class ClosingOptions
             erreurs.Add($"{Section}:{nameof(DuplicateToleranceSeconds)} ne peut pas être négatif.");
         if (MaxPeriodDays < 1 || MaxPeriodDays > PlafondPeriodDays)
             erreurs.Add($"{Section}:{nameof(MaxPeriodDays)} doit être compris entre 1 et {PlafondPeriodDays}.");
+        if (CacheSeconds < 0 || CacheSeconds > PlafondCacheMaxSeconds)
+            erreurs.Add($"{Section}:{nameof(CacheSeconds)} doit être compris entre 0 et {PlafondCacheMaxSeconds}.");
+        else if (CacheMaxSeconds > 0 && CacheSeconds > CacheMaxSeconds)
+            erreurs.Add($"{Section}:{nameof(CacheSeconds)} ne peut pas dépasser {Section}:{nameof(CacheMaxSeconds)}.");
+        if (CacheMaxSeconds < 0 || CacheMaxSeconds > PlafondCacheMaxSeconds)
+            erreurs.Add($"{Section}:{nameof(CacheMaxSeconds)} doit être compris entre 0 et {PlafondCacheMaxSeconds}.");
         if (CriticalRatioBlocking < 0m || CriticalRatioBlocking > 1m)
             erreurs.Add($"{Section}:{nameof(CriticalRatioBlocking)} doit être compris entre 0 et 1.");
         foreach (var (gravite, poids) in Poids.OrderBy(p => p.Key))

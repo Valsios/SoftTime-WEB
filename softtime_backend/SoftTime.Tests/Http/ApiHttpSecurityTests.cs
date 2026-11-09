@@ -167,6 +167,13 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
         ApiFactory.Report($"V3|{name}|user1 sans en-tête|{(int)resp.StatusCode}|{Format(resp, text)}|{Trunc(text)}");
 
         // Assert
+        if (name is "lookup" or "lookup-batch")
+        {
+            // Porte 6 seule : refusé avant le contrôle de l'en-tête (portes 1 ou 2 requises).
+            // Le 400 reste couvert pour les portes 1 et 2 par NoGateAccessAuditTests.
+            resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            return;
+        }
         if (!r.NeedsTenant)
         {
             resp.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);

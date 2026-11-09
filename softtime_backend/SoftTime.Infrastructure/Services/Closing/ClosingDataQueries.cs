@@ -1,3 +1,4 @@
+using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
@@ -15,6 +16,20 @@ internal static class ClosingDataQueries
     internal static bool CorrespondPointeuse(string? valeur, string pointeuseDb) =>
         string.IsNullOrWhiteSpace(valeur)
         || string.Equals(valeur.Trim(), pointeuseDb.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Cartes de la clôture : base SAGE et pointeuse actives, matricule renseigné, département
+    /// demandé.</summary>
+    internal static async Task<List<CardPaie>> CartesAsync(
+        IUnitOfWork uow, ITenantConnectionService tenant, string? departement, CancellationToken ct)
+    {
+        var (sageDb, pointeuseDb) = (tenant.SageDb, tenant.PointeuseDb);
+        return (await uow.Repository<CardPaie>().ListAsync(c => c.SageBdd == sageDb, ct))
+            .Where(c => CorrespondPointeuse(c.PointeuseBdd, pointeuseDb))
+            .Where(c => !string.IsNullOrWhiteSpace(c.SageMatricule))
+            .Where(c => string.IsNullOrWhiteSpace(departement)
+                        || string.Equals(c.Departement?.Trim(), departement.Trim(), StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
 
     /// <summary>Marge d'un jour de planning de chaque côté (postes de nuit), comme le pré-traitement.</summary>
     internal static async Task<List<PlanningSalarie>> PlanningsAsync(IUnitOfWork uow, ClosingLoadScope scope, CancellationToken ct)

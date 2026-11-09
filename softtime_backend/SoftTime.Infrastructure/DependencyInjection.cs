@@ -25,6 +25,7 @@ using SoftTime.Application.Abstractions.Punches;
 using SoftTime.Application.Abstractions.PunchProcessing;
 using SoftTime.Application.Abstractions.Reports;
 using SoftTime.Application.Abstractions.RequestContext;
+using SoftTime.Application.Abstractions.SelfService;
 using SoftTime.Application.Abstractions.Settings;
 using SoftTime.Application.Abstractions.Users;
 using SoftTime.Application.Services;
@@ -56,6 +57,7 @@ using SoftTime.Infrastructure.Services.Punches;
 using SoftTime.Infrastructure.Services.PunchProcessing;
 using SoftTime.Infrastructure.Services.Reports;
 using SoftTime.Infrastructure.Services.RequestContext;
+using SoftTime.Infrastructure.Services.SelfService;
 using SoftTime.Infrastructure.Services.Settings;
 using SoftTime.Infrastructure.Services.Users;
 
@@ -64,7 +66,7 @@ namespace SoftTime.Infrastructure;
 public static class DependencyInjection
 {
     /// <summary>
-    /// Options liées à la configuration (§5.6) : sections « AuditJournal », « Database » et « Email ».
+    /// Options liées à la configuration (§5.6) : sections « AuditJournal », « Database », « Email » et « SelfService ».
     /// Les valeurs absentes gardent leur défaut ; une valeur hors bornes est ramenée au défaut.
     /// </summary>
     public static IServiceCollection AddInfrastructureOptions(this IServiceCollection services, IConfiguration configuration)
@@ -76,6 +78,8 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(SchemaMigrationOptions.Section))
             .PostConfigure(options => options.Normalize());
         services.AddOptions<EmailOptions>().Bind(configuration.GetSection(EmailOptions.Section));
+        // Mon espace salarié (lecture seule) : désactivé par défaut (SelfService:Enabled = false).
+        services.AddOptions<SelfServiceOptions>().Bind(configuration.GetSection(SelfServiceOptions.Section));
         return services;
     }
 
@@ -89,6 +93,7 @@ public static class DependencyInjection
         services.AddReportingServices();
         services.AddMachineLearningServices();
         services.AddClosingServices();
+        services.AddSelfServices();
         return services;
     }
 
@@ -202,9 +207,21 @@ public static class DependencyInjection
     /// <summary>Clôture de paie assistée.</summary>
     private static void AddClosingServices(this IServiceCollection services)
     {
+        services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<ClosingAnalysisCache>();
+        services.AddSingleton<IClosingChecklistCache, ClosingChecklistCache>();
         services.AddScoped<IClosingService, ClosingService>();
         services.AddScoped<IClosingPresentationService, ClosingPresentationService>();
+        services.AddScoped<IClosingChecklistService, ClosingChecklistService>();
+    }
+
+    /// <summary>Mon espace salarié : lecture seule des données du salarié connecté.</summary>
+    private static void AddSelfServices(this IServiceCollection services)
+    {
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<ISelfLeaveCache, SelfLeaveCache>();
+        services.AddScoped<ISelfServiceGuard, SelfServiceGuard>();
+        services.AddScoped<ISelfSpaceService, SelfSpaceService>();
     }
 
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)

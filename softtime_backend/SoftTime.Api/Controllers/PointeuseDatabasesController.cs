@@ -29,9 +29,12 @@ public class PointeuseDatabasesController : ApiControllerBase
         _configAuth = configAuth;
     }
 
+    /// <summary>Comme les bases SAGE : un compte sans porte 1 ni porte 2 reçoit une liste vide (200).</summary>
     [HttpGet]
     public async Task<IActionResult> GetAllAsync(CancellationToken ct)
     {
+        if (!DatabaseListAccess.PeutLire(_user))
+            return Ok(Array.Empty<PointeuseDbDto>());
         var list = await _svc.ListPointeuseAsync(ct);
         if (_user.UserId is decimal uid)
         {
@@ -48,6 +51,8 @@ public class PointeuseDatabasesController : ApiControllerBase
     public async Task<IActionResult> GetPagedAsync(
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
     {
+        if (!DatabaseListAccess.PeutLire(_user))
+            return Ok(DatabaseListAccess.PageVide<PointeuseDbDto>(page, pageSize));
         IReadOnlyCollection<string>? allowed = null;
         if (_user.UserId is decimal uid)
         {

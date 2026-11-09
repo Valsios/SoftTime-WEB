@@ -1,8 +1,9 @@
 /**
  * Clôture de paie assistée : logique pure de l'écran (sans Angular), testée par closing.logic.spec.ts.
- * L'écran n'invente rien : il met en forme la réponse de GET api/closing/analysis.
+ * L'écran n'invente rien : il met en forme la réponse de GET api/v1/closing/analysis.
  */
-import { ClosingComparison, ClosingCount, ClosingReport, ClosingStatus } from '../../shared/models';
+import { ClosingAnomalyView, ClosingChecklistLine, ClosingComparison, ClosingCount, ClosingReport, ClosingStatus } from '../../shared/models';
+import type { ExcelSheet } from '../../shared/services/excel-export.service';
 
 export const DEFAULT_PAGE_SIZE = 50;
 export const NO_CONTROLLED_DAY = 'Aucun jour contrôlé sur cette période';
@@ -275,6 +276,124 @@ export function formatDay(value: string | null | undefined): string {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : value;
 }
 
+/** Filtre d'une analyse : période, département et option de comparaison (l'onglet et la page n'en font pas partie). */
+export interface ClosingFilter {
+  from: string;
+  to: string;
+  departement: string | null;
+  includeComparison: boolean;
+}
+
+export const ANALYSING_TEXT = 'Analyse en cours…';
+export const NOT_ANALYSED_TEXT = 'Choisissez la période puis cliquez sur « Analyser » : aucune analyse ne se lance toute seule.';
+export const FILTER_CHANGED_TEXT = 'Filtre modifié, réanalyser : le résultat affiché correspond encore à l’ancien filtre.';
+
+/** Libellé et teinte de l'état d'une étape de la checklist. */
+export function checklistStateView(etat: string): { label: string; tone: BadgeTone } {
+  switch (etat) {
+    case 'Fait':
+      return { label: 'Fait', tone: 'success' };
+    case 'AFaire':
+      return { label: 'À faire', tone: 'warning' };
+    case 'Information':
+      return { label: 'Information', tone: 'info' };
+    default:
+      return { label: 'Non déterminable', tone: 'muted' };
+  }
+}
+
+/** Badge de la barre du haut : nombre d'anomalies critiques du dernier résultat, avec un libellé lisible. */
+export function closingBadgeView(report: Pick<ClosingReport, 'parGravite'>): { count: number; label: string } {
+  const count = countOf(report.parGravite, 'Critique');
+  const texte = count === 0 ? 'aucune anomalie critique' : count === 1 ? '1 anomalie critique' : `${count} anomalies critiques`;
+  return { count, label: `Contrôle avant paie : ${texte}` };
+}
+
+export const CHECKLIST_TITLE = 'Avancement de la paie';
+export const CHECKLIST_LOADING = 'Avancement de la paie en cours de chargement…';
+export const CHECKLIST_ERROR = 'L’avancement de la paie n’a pas pu être chargé. L’analyse reste valable.';
+export const CHECKLIST_NOTE = 'Repères de préparation, sans effet sur le score ni sur le statut.';
+
+export interface ChecklistLink extends CorrectionTarget {
+  queryParams: Record<string, string> | null;
+}
+
+/** Écran existant de chaque étape ; la période n'est transmise qu'aux écrans qui la lisent (du, au). */
+const CHECKLIST_TARGETS: Record<string, CorrectionTarget> = {
+  Pointages: { path: '/punches', label: 'Pointages', permission: 'PROC:PUNCHES', droit: DROIT_PROCESSING },
+  Anomalies: { path: '/anomalies', label: 'Anomalies', permission: 'PROC:ANOMALIES', droit: DROIT_PROCESSING },
+  Semaines: { path: '/weekly-validation', label: 'Validation semaine', permission: 'PROC:WEEKLY_VALIDATION', droit: DROIT_PROCESSING },
+  ExoImpo: { path: '/overtime', label: 'Heures supp.', permission: 'PROC:OVERTIME', droit: DROIT_PROCESSING },
+  HeuresImposables: { path: '/overtime', label: 'Heures supp.', permission: 'PROC:OVERTIME', droit: DROIT_PROCESSING },
+  SynchroPaie: { path: '/overtime', label: 'Heures supp.', permission: 'PROC:OVERTIME', droit: DROIT_PROCESSING },
+};
+
+export function checklistLink(line: Pick<ClosingChecklistLine, 'code'>, filter: { from: string; to: string }): ChecklistLink | null {
+  const target = CHECKLIST_TARGETS[line.code];
+  if (!target) return null;
+  return {
+    ...target,
+    queryParams: PAGES_WITH_QUERY_PARAMS.has(target.path) ? { du: filter.from, au: filter.to } : null,
+  };
+}
+
+/** Tri de la liste : ordre habituel (date, matricule, type) ou gravité décroissante. */
+export type ClosingSort = 'date' | 'gravite';
+
+/** Ce que montre la liste : niveaux retenus (vide : aucun filtre), tri et présence des « Information » (onglet). */
+export interface ClosingListView {
+  gravites: readonly string[];
+  tri: ClosingSort;
+  includeInformation: boolean;
+}
+
+/** Ajoute ou retire un niveau ; le résultat suit toujours l'ordre d'affichage des cartes (du plus grave au moins grave). */
+export function toggleSeverity(current: readonly string[], severity: string): string[] {
+  const next = current.includes(severity) ? current.filter((s) => s !== severity) : [...current, severity];
+  return SEVERITIES.filter((s) => next.includes(s));
+}
+
+/** « Filtre de gravité : Critique, Importante » ; vide sans filtre. */
+export function severityFilterText(gravites: readonly string[]): string {
+  return gravites.length ? `Filtre de gravité : ${gravites.map(severityLabel).join(', ')}` : '';
+}
+
+export const NO_ANOMALY_FOR_FILTER = 'Aucune anomalie pour ce filtre de gravité.';
+
+/** Deux filtres équivalents (département vide = tous). */
+export function sameFilter(a: ClosingFilter | null | undefined, b: ClosingFilter | null | undefined): boolean {
+  if (!a || !b) return false;
+  return a.from === b.from
+    && a.to === b.to
+    && (a.departement || null) === (b.departement || null)
+    && a.includeComparison === b.includeComparison;
+}
+
+/** « JJ/MM à HH:mm » (heure locale). */
+export function formatStamp(date: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(date.getDate())}/${p(date.getMonth() + 1)} à ${p(date.getHours())}:${p(date.getMinutes())}`;
+}
+
+/**
+ * Âge de l'analyse en texte seul : « Analyse faite il y a 3 min ». Calculé depuis l'heure conservée en session,
+ * sans aucune requête ; de 1 h à 59 min 59 s, les minutes ; au-delà, les heures puis les minutes restantes.
+ */
+export function analysisAgeText(analysedAt: Date, now: Date): string {
+  const minutes = Math.max(0, Math.floor((now.getTime() - analysedAt.getTime()) / 60000));
+  if (minutes < 1) return 'Analyse faite il y a moins d’une minute.';
+  if (minutes < 60) return `Analyse faite il y a ${minutes} min.`;
+  const heures = Math.floor(minutes / 60);
+  const reste = minutes % 60;
+  return `Analyse faite il y a ${heures} h${reste ? ` ${reste} min` : ''}.`;
+}
+
+/** Bandeau du dernier résultat : quand, pour quelle période et quel département. */
+export function resultBannerText(analysedAt: Date, filter: ClosingFilter): string {
+  const departement = filter.departement ? filter.departement : 'tous';
+  return `Résultat du ${formatStamp(analysedAt)}, période du ${formatDay(filter.from)} au ${formatDay(filter.to)}, département ${departement}.`;
+}
+
 /** Nom affiché : « Nom Prénom », ou le matricule seul quand les noms ne sont pas renvoyés. */
 export function personLabel(a: { matricule: string; nom: string | null; prenom: string | null }): string {
   const nom = [a.nom, a.prenom].filter((x) => !!x && x.trim()).join(' ');
@@ -301,4 +420,67 @@ export function dashboardCardView(report: Pick<ClosingReport, 'statut' | 'score'
     score: scoreText(report.score),
     critiques: report.joursEmployeControles > 0 ? severitySentence('Critique', countOf(report.parGravite, 'Critique')) : '',
   };
+}
+
+/** Taille de page utilisée pour rassembler toute la liste à exporter (maximum accepté par le serveur). */
+export const EXPORT_PAGE_SIZE = 200;
+export const EXPORT_STALE_MESSAGE = 'Les données ont changé depuis l’analyse : réanalysez avant d’exporter.';
+
+/** Colonnes de la feuille « Anomalies » : celles de la liste affichée, sans la colonne de lien « Correction ». */
+export const EXPORT_HEADERS = ['Gravité', 'Type', 'Matricule', 'Salarié', 'Département', 'Date', 'Détail'];
+
+export function exportFileName(filter: ClosingFilter): string {
+  return `controle-avant-paie_${filter.from}_${filter.to}`;
+}
+
+/** Lignes de la feuille « Anomalies », dans l'ordre de la liste (aucun tri ni filtre ajouté). */
+export function exportRows(items: readonly ClosingAnomalyView[]): (string | number | boolean | null)[][] {
+  return items.map((a) => [
+    severityLabel(a.gravite),
+    typeLabel(a.type),
+    a.matricule,
+    personLabel(a),
+    a.departement ?? '',
+    formatDay(a.date),
+    a.detail,
+  ]);
+}
+
+/** Feuille de synthèse : filtre analysé, statut, score, comptages et nombre de lignes exportées. */
+export function exportSummary(
+  report: ClosingReport,
+  filter: ClosingFilter,
+  analysedAt: Date,
+  exportedRows: number,
+  view: ClosingListView = { gravites: [], tri: 'date', includeInformation: false },
+): ExcelSheet {
+  const rows: (string | number | boolean | null)[][] = [
+    ['Période', `du ${formatDay(filter.from)} au ${formatDay(filter.to)}`],
+    ['Département', filter.departement ? filter.departement : 'Tous'],
+    ['Comparaison avec la période précédente', filter.includeComparison ? 'Oui' : 'Non'],
+    ['Analyse du', formatStamp(analysedAt)],
+    ['Statut', report.statutLibelle ?? statusView(report.statut).label],
+    ['Score', report.score === null ? 'Aucun jour contrôlé' : report.score],
+    ['Jours-employé contrôlés', report.joursEmployeControles],
+    ['Anomalies (toutes gravités)', report.nombreAnomalies],
+    ['Filtre de gravité', view.gravites.length ? view.gravites.map(severityLabel).join(', ') : view.includeInformation ? 'Aucun (toutes gravités)' : 'Aucun (hors « Information »)'],
+    ['Tri de la liste', view.tri === 'gravite' ? 'Gravité décroissante, puis date' : 'Date, matricule, type'],
+    ['Lignes de la feuille « Anomalies »', exportedRows],
+  ];
+  for (const s of SEVERITIES) rows.push([`Gravité : ${severityLabel(s)}`, countOf(report.parGravite, s)]);
+  for (const t of report.parType) rows.push([`Type : ${typeLabel(t.cle)}`, t.nombre]);
+  return { sheetName: 'Synthèse', headers: ['Information', 'Valeur'], rows };
+}
+
+export function exportSheets(
+  report: ClosingReport,
+  items: readonly ClosingAnomalyView[],
+  filter: ClosingFilter,
+  analysedAt: Date,
+  view: ClosingListView = { gravites: [], tri: 'date', includeInformation: false },
+): ExcelSheet[] {
+  return [
+    exportSummary(report, filter, analysedAt, items.length, view),
+    { sheetName: 'Anomalies', headers: EXPORT_HEADERS, rows: exportRows(items) },
+  ];
 }

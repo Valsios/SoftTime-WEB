@@ -148,14 +148,12 @@ internal static class ClosingComputation
             actuel.SalariesSansPlanningExclus);
     }
 
-    /// <summary>Page d'anomalies demandée ; les « Information » sont comptées mais omises de la liste sauf demande.</summary>
+    /// <summary>Page d'anomalies demandée, filtrée et triée par <see cref="AnomaliesAffichees"/>.</summary>
     private static PagedResult<ClosingAnomalyDto> PageAnomalies(AnalysePreparee prep, ClosingAnalysisRequest request)
     {
         var page = Math.Max(1, request.Page ?? 1);
         var taille = Math.Clamp(request.PageSize ?? DefaultPageSize, 1, MaxPageSize);
-        var affichees = request.IncludeInformation
-            ? prep.Actuel.Anomalies
-            : prep.Actuel.Anomalies.Where(a => a.Severity != ClosingSeverity.Information).ToList();
+        var affichees = AnomaliesAffichees(prep.Actuel.Anomalies, request);
         var total = affichees.Count;
         var items = affichees
             .Skip(PaginationRules.Decalage(page, taille))
@@ -173,6 +171,24 @@ internal static class ClosingComputation
             .ToList();
         return new PagedResult<ClosingAnomalyDto>(
             items, total, PaginationRules.PageEffective(total, page), taille, PaginationRules.NombreDePages(total, taille));
+    }
+
+    /// <summary>
+    /// Anomalies de la LISTE. Les « Information » sont comptées mais omises sauf demande ; un filtre de gravité
+    /// explicite remplace cette règle. Le tri par gravité est stable : l'ordre de départ, déterministe, départage les
+    /// égalités. Seule la liste change : comptages, score et statut sont toujours calculés sur l'analyse complète.
+    /// </summary>
+    internal static IReadOnlyList<ClosingAnomaly> AnomaliesAffichees(
+        IReadOnlyList<ClosingAnomaly> anomalies, ClosingAnalysisRequest request)
+    {
+        IReadOnlyList<ClosingAnomaly> affichees = request.Gravites is { Count: > 0 } filtre
+            ? anomalies.Where(a => filtre.Contains(a.Severity)).ToList()
+            : request.IncludeInformation
+                ? anomalies
+                : anomalies.Where(a => a.Severity != ClosingSeverity.Information).ToList();
+        return request.TriParGravite
+            ? affichees.OrderByDescending(a => (int)a.Severity).ToList()
+            : affichees;
     }
 
     /// <summary>Toutes les règles de clôture sur une période plafonnée à la veille.</summary>
