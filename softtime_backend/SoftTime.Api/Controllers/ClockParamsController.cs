@@ -20,6 +20,7 @@ public class ClockParamsController : ApiControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAsync(CancellationToken ct) => Ok(await _svc.GetClockAsync(ct));
 
+    [RequirePermission(Droit.Parameters, "PARAMS:CLOCK_PARAMS")]
     [HttpPut]
     public async Task<IActionResult> UpdateAsync([FromBody] ClockParamDto dto, CancellationToken ct)
         => Ok(await _svc.SaveClockAsync(dto, ct));

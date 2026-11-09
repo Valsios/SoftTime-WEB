@@ -31,7 +31,7 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
     // Une route d'usage par famille : catalogue, traitements, activation (exemptée du middleware), pointeuse.
     private static readonly Dictionary<string, (string Method, string Url, string? Body, bool NeedsPointeuse)> Routes = new()
     {
-        ["catalogue (GET cardpaie)"] = ("GET", "/api/v1/card-paie", null, false),
+        ["catalogue (GET departement-service-options)"] = ("GET", "/api/v1/sage-databases/departement-service-options", null, false),
         ["traitements (GET shifts)"] = ("GET", "/api/v1/shifts", null, false),
         ["activation (POST sage-databases/activate)"] = ("POST", "/api/v1/sage-databases/activate", null, false),
         ["pointeuse (POST punches/import-clock)"] = ("POST", "/api/v1/punches/import-clock", """{"matriculeFrom":null,"matriculeTo":null,"from":"2026-01-01T00:00:00","to":"2026-01-02T00:00:00"}""", true),
@@ -83,7 +83,7 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
 
     [Theory]
     [InlineData("traitements (GET shifts)")]
-    [InlineData("catalogue (GET cardpaie)")]
+    [InlineData("catalogue (GET departement-service-options)")]
     [InlineData("activation (POST sage-databases/activate)")]
     public async Task SageRoutes_AccountWithoutAnyBase_Returns403(string route)
     {
@@ -99,7 +99,7 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
     public async Task SageRoutes_WithoutSageHeader_Returns400()
     {
         // Act
-        var (resp, text) = await Send("user1", "catalogue (GET cardpaie)", withSage: false);
+        var (resp, text) = await Send("user1", "catalogue (GET departement-service-options)", withSage: false);
 
         // Assert
         resp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -116,7 +116,7 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
         allowed.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
         allowed.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
         // Même base SAGE autorisée, mais aucun droit sur la pointeuse.
-        var (sageOnly, _) = await Send("ptenone", "catalogue (GET cardpaie)");
+        var (sageOnly, _) = await Send("ptenone", "catalogue (GET departement-service-options)");
         sageOnly.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
         var (refused, text) = await Send("ptenone", "pointeuse (POST punches/import-clock)");
         refused.StatusCode.Should().Be(HttpStatusCode.Forbidden);
@@ -127,7 +127,7 @@ public class DatabaseUsageHttpTests : IClassFixture<ApiFactory>
     public async Task SageRoutes_StalePointeuseHeader_DoesNotBreak()
     {
         // Arrange
-        var req = _f.Request("ptenone", HttpMethod.Get, "/api/v1/card-paie", null, ApiFactory.SageName, "PTG");
+        var req = _f.Request("ptenone", HttpMethod.Get, "/api/v1/sage-databases/departement-service-options", null, ApiFactory.SageName, "PTG");
 
         // Act
         var resp = await _http.SendAsync(req);

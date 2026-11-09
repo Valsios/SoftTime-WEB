@@ -9,6 +9,7 @@ namespace SoftTime.Api.Controllers;
 
 [ApiController]
 [Authorize]
+[RequireDroit(Droit.Parameters)]
 [Route("api/v1/card-paie")]
 [Tags("CardPaie")]
 public class CardPaieController : ApiControllerBase
@@ -24,18 +25,18 @@ public class CardPaieController : ApiControllerBase
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
         => Ok(await _svc.ListCardsPagedAsync(page, pageSize, search, ct));
 
+    [RequirePermission(Droit.Parameters, "PARAMS:CARDPAIE:CREATE")]
     [HttpPost]
-    [RequireDroit(Droit.Parameters)]
     public async Task<IActionResult> CreateAsync([FromBody] CardPaieDto dto, CancellationToken ct)
         => Ok(await _svc.SaveCardAsync(dto with { Id = 0 }, ct));
 
+    [RequirePermission(Droit.Parameters, "PARAMS:CARDPAIE:UPDATE")]
     [HttpPut("{id:int}")]
-    [RequireDroit(Droit.Parameters)]
     public async Task<IActionResult> UpdateAsync(int id, [FromBody] CardPaieDto dto, CancellationToken ct)
         => Ok(await _svc.SaveCardAsync(dto with { Id = id }, ct));
 
+    [RequirePermission(Droit.Parameters, "PARAMS:CARDPAIE:DELETE")]
     [HttpDelete("{id:int}")]
-    [RequireDroit(Droit.Parameters)]
     public async Task<IActionResult> DeleteAsync(int id, CancellationToken ct)
     {
         await _svc.DeleteCardAsync(id, ct);
@@ -46,8 +47,8 @@ public class CardPaieController : ApiControllerBase
     /// Supprime la correspondance SAGE ↔ badge identifiée par le couple de matricules
     /// (portage de <c>SupprimerParCorrespondance</c> du desktop).
     /// </summary>
+    [RequirePermission(Droit.Parameters, "PARAMS:CARDPAIE:DELETE")]
     [HttpDelete("by-correspondence")]
-    [RequireDroit(Droit.Parameters)]
     public async Task<IActionResult> DeleteByCorrespondenceAsync(
         [FromQuery] string matriculeSage,
         [FromQuery] string? matriculePointeuse,
@@ -57,13 +58,13 @@ public class CardPaieController : ApiControllerBase
         return NoContent();
     }
 
+    [RequirePermission(Droit.Parameters, "PARAMS:CARDPAIE:CREATE")]
     [HttpPost("auto-map")]
-    [RequireDroit(Droit.Parameters)]
     public async Task<IActionResult> AutoMapAsync(CancellationToken ct)
         => Ok(await _svc.AutoMapCardsAsync(ct));
 
+    [RequirePermission(Droit.Parameters, "PARAMS:CARDPAIE:CREATE")]
     [HttpPost("import-csv")]
-    [RequireDroit(Droit.Parameters)]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> ImportCsvAsync(IFormFile file, CancellationToken ct)
     {

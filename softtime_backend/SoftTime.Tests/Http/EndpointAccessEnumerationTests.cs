@@ -77,8 +77,6 @@ public class EndpointAccessEnumerationTests : IClassFixture<ApiFactory>
     {
         ["GET api/v1/auth/me"] = "profil du compte connecté (jeton) ; voir OuvertesJustifiees",
         ["GET api/v1/meta/endpoints"] = "catalogue d'API pour le frontend ; voir OuvertesJustifiees",
-        ["GET api/v1/card-paie"] = "CatalogService.ListCardsAsync -> EnsureAuthorizedAsync (porte 1)",
-        ["GET api/v1/card-paie/paged"] = "CatalogService.ListCardsPagedAsync -> EnsureAuthorizedAsync (porte 1)",
         ["GET api/v1/dashboard/stats"] = "DashboardService.GetStatsAsync -> EnsureAuthorizedAsync (porte 1)",
         ["GET api/v1/dashboard/filters"] = "DashboardService.GetFiltersAsync -> EnsureAuthorizedAsync (porte 1)",
         ["GET api/v1/field-roles"] = "référentiel de champs sans donnée de salarié (balayage : refusé ou vide)",

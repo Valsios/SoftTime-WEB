@@ -20,6 +20,8 @@ public class FinePermissionsHttpTests : IClassFixture<ApiFactory>
         (10100, 91, new[] { 3 }, new[] { "PROC:SHIFTS", "PROC:SHIFTS:CREATE", "PROC:SHIFTS:UPDATE" }),
         (10101, 91, new[] { 3 }, new[] { "PROC:SHIFTS", "PROC:SHIFTS:DELETE" }),
         (10102, LegacyRoleId, new[] { 2, 3 }, Array.Empty<string>()),
+        (10103, 91, new[] { 2 }, new[] { "PARAMS:HOLIDAYS", "PARAMS:HOLIDAYS:UPDATE", "PARAMS:CATEGORIES" }),
+        (10104, 91, new[] { 2 }, new[] { "PARAMS:HOLIDAYS", "PARAMS:HOLIDAYS:CREATE", "PARAMS:CARDPAIE" }),
     };
 
     private readonly ApiFactory _f;
@@ -122,5 +124,79 @@ public class FinePermissionsHttpTests : IClassFixture<ApiFactory>
 
         // Assert
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    private static string Holiday(int userId) => $$"""{"id":0,"intitule":"Férié {{userId}}","date":"2030-01-{{userId % 28 + 1:00}}T00:00:00"}""";
+
+    [Fact]
+    public async Task CreateHoliday_GateWithoutFinePermission_Returns403AndChangesNothing()
+    {
+        // Arrange
+        var before = _f.Snapshot();
+
+        // Act
+        var resp = await Send(10103, HttpMethod.Post, "/api/v1/holidays", Holiday(10103));
+
+        // Assert
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await resp.Content.ReadAsStringAsync()).Should().Contain("Vous n'avez pas la permission requise pour cette action.");
+        _f.Snapshot().Should().Be(before);
+    }
+
+    [Theory]
+    [InlineData(10104)]
+    [InlineData(14)]
+    [InlineData(10102)]
+    public async Task CreateHoliday_FinePermissionAdministratorOrLegacyAccount_Succeeds(int userId)
+    {
+        // Act
+        var resp = await Send(userId, HttpMethod.Post, "/api/v1/holidays", Holiday(userId));
+
+        // Assert
+        resp.StatusCode.Should().Be(HttpStatusCode.OK, await resp.Content.ReadAsStringAsync());
+    }
+
+    [Theory]
+    [InlineData("PUT", "/api/v1/categories/1")]
+    [InlineData("DELETE", "/api/v1/tolerances/1")]
+    [InlineData("PUT", "/api/v1/majorations/1")]
+    [InlineData("POST", "/api/v1/absence-codes/sync-sage")]
+    [InlineData("POST", "/api/v1/card-paie/auto-map")]
+    [InlineData("PUT", "/api/v1/clock-params")]
+    [InlineData("PUT", "/api/v1/correspondence-mode")]
+    [InlineData("PUT", "/api/v1/code-constantes/1")]
+    [InlineData("POST", "/api/v1/departement-service/lookup-batch")]
+    public async Task ParametersWrites_GateWithoutFinePermission_Return403(string method, string url)
+    {
+        // Act
+        // Le compte 10103 a la porte Paramètres, et seulement les jours fériés (lecture, modification) et les catégories.
+        var resp = await Send(10103, new HttpMethod(method), url, "{}");
+
+        // Assert
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Theory]
+    [InlineData("POST", "/api/v1/payroll-write-config")]
+    [InlineData("DELETE", "/api/v1/payroll-write-config/1")]
+    [InlineData("POST", "/api/v1/payroll-write-config/test")]
+    public async Task PayrollWriteConfiguration_NonAdministratorWithParametersGate_Returns403(string method, string url)
+    {
+        // Act
+        var resp = await Send(10102, new HttpMethod(method), url, "{}");
+
+        // Assert
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await resp.Content.ReadAsStringAsync()).Should().Contain("Cette opération est réservée aux administrateurs.");
+    }
+
+    [Fact]
+    public async Task CardPaieRead_WithoutParametersGate_Returns403()
+    {
+        // Act
+        var resp = await Send(10101, HttpMethod.Get, "/api/v1/card-paie");
+
+        // Assert
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 }

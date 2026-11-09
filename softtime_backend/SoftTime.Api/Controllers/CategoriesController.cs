@@ -25,14 +25,17 @@ public class CategoriesController : ApiControllerBase
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
         => Ok(await _svc.ListCategoriesPagedAsync(page, pageSize, search, ct));
 
+    [RequirePermission(Droit.Parameters, "PARAMS:CATEGORIES:CREATE")]
     [HttpPost]
     public async Task<IActionResult> CreateAsync([FromBody] CategoryDto dto, CancellationToken ct)
         => Ok(await _svc.SaveCategoryAsync(dto with { Id = 0 }, ct));
 
+    [RequirePermission(Droit.Parameters, "PARAMS:CATEGORIES:UPDATE")]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> UpdateAsync(int id, [FromBody] CategoryDto dto, CancellationToken ct)
         => Ok(await _svc.SaveCategoryAsync(dto with { Id = id }, ct));
 
+    [RequirePermission(Droit.Parameters, "PARAMS:CATEGORIES:DELETE")]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> DeleteAsync(int id, CancellationToken ct)
     {

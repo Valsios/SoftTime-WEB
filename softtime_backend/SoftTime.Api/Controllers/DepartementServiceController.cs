@@ -16,10 +16,12 @@ public class DepartementServiceController : ApiControllerBase
     private readonly IDepartementServiceLookup _svc;
     public DepartementServiceController(IDepartementServiceLookup svc) => _svc = svc;
 
+    [RequirePermission(Droit.Parameters, "PARAMS:CARDPAIE")]
     [HttpGet("lookup/{matricule}")]
     public async Task<IActionResult> LookupAsync(string matricule, CancellationToken ct)
         => Ok(await _svc.GetDepartementServiceAsync(matricule, ct));
 
+    [RequirePermission(Droit.Parameters, "PARAMS:CARDPAIE")]
     [HttpPost("lookup-batch")]
     public async Task<IActionResult> LookupBatchAsync([FromBody] string[] matricules, CancellationToken ct)
         => Ok(await _svc.GetDepartementServiceBatchAsync(matricules ?? Array.Empty<string>(), ct));

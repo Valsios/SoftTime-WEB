@@ -35,6 +35,7 @@ public class CodeConstantesController : ApiControllerBase
     public async Task<IActionResult> OtherValuesAsync([FromQuery] string table, CancellationToken ct)
         => Ok(await _svc.ListOtherCodeConstantValuesAsync(table, ct));
 
+    [RequirePermission(Droit.Parameters, "PARAMS:CODE_CONSTANTES")]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> UpdateAsync(int id, [FromBody] CodeConstanteDto dto, CancellationToken ct)
         => Ok(await _svc.SaveCodeConstanteAsync(dto with { Id = id }, ct));

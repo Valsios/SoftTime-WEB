@@ -129,14 +129,13 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
         ("lookup", "GET", "/api/v1/sage-databases/lookup/1", null, true),
         ("lookup-batch", "POST", "/api/v1/sage-databases/lookup-batch", """["1"]""", true),
         ("departement-service-options", "GET", "/api/v1/sage-databases/departement-service-options", null, true),
-        ("cardpaie GET", "GET", "/api/v1/card-paie", null, true),
         ("sage-databases GET", "GET", "/api/v1/sage-databases", null, false),
         ("sage-databases GET paged", "GET", "/api/v1/sage-databases/paged", null, false),
         ("pointeuse-databases GET", "GET", "/api/v1/pointeuse-databases", null, false),
         ("pointeuse-databases GET paged", "GET", "/api/v1/pointeuse-databases/paged", null, false),
     };
 
-    public static IEnumerable<object[]> UsageNames() => new[] { "activate", "lookup", "lookup-batch", "departement-service-options", "cardpaie GET",
+    public static IEnumerable<object[]> UsageNames() => new[] { "activate", "lookup", "lookup-batch", "departement-service-options",
         "sage-databases GET", "sage-databases GET paged", "pointeuse-databases GET", "pointeuse-databases GET paged" }.Select(n => new object[] { n });
 
     [Theory]
