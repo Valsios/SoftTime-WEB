@@ -1,7 +1,6 @@
 import { Routes } from '@angular/router';
 import { authGuard, databaseGuard, droitGuard, privilegesLeaveGuard } from './core/guards';
 import { Droit } from './core/rights';
-import { selfSpaceGuard } from './features/self-space/self-space.guard';
 
 export const routes: Routes = [
   {
@@ -19,12 +18,6 @@ export const routes: Routes = [
     canActivate: [authGuard],
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
-      {
-        // Mon espace salarié : aucune base ni porte requises ; le serveur est la vraie barrière (SelfService:Enabled, SELF:READ, matricule du jeton).
-        path: 'mon-espace',
-        canActivate: [selfSpaceGuard],
-        loadComponent: () => import('./features/self-space/self-space').then((m) => m.SelfSpacePage),
-      },
       {
         path: 'no-database',
         loadComponent: () => import('./features/no-database/no-database').then((m) => m.NoDatabasePage),

@@ -1,12 +1,5 @@
-using System.Collections.Concurrent;
-using System.Globalization;
-using System.Security.Cryptography;
-using System.Text;
 using AutoMapper;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Security;
@@ -104,16 +97,6 @@ public class AuthService
     // Appelant HTTP, obligatoire : aucune écriture sur un autre compte sans contrôle d'administrateur.
     private readonly ICurrentUser _currentUser;
     private readonly EffectiveRightsService _effectiveRights;
-    private readonly RefreshTokenService _refreshTokens;
-    private readonly AccountSecurityOptions _security;
-    private readonly ILogger<AuthService> _logger;
-
-    public const string InvalidCredentialsMessage = "Identifiants invalides.";
-    public const string LockedAccountMessage =
-        "Compte temporairement verrouillé après plusieurs tentatives échouées. Réessayez dans {0} minute(s).";
-
-    // Empreinte factice vérifiée quand le login est inconnu : même coût de calcul qu'un compte existant (pas d'énumération par la durée).
-    private static readonly ConcurrentDictionary<Type, string> s_dummyHashes = new();
 
     public const string ReadDenied = "Vous n'avez pas la permission requise pour cette consultation.";
 
@@ -162,12 +145,8 @@ public class AuthService
         IEmailService email,
         ICurrentUser currentUser,
         EffectiveRightsService effectiveRights,
-        IPasswordHasher<T_RESPONSABLE>? passwordHasher = null,
-        RefreshTokenService? refreshTokens = null,
-        IOptions<AccountSecurityOptions>? securityOptions = null,
-        ILogger<AuthService>? logger = null)
+        IPasswordHasher<T_RESPONSABLE>? passwordHasher = null)
     {
-        _logger = logger ?? NullLogger<AuthService>.Instance;
         _uow = uow;
         _tokens = tokens;
         _mapper = mapper;
@@ -175,8 +154,6 @@ public class AuthService
         _passwordHasher = passwordHasher ?? new PasswordHasher<T_RESPONSABLE>();
         _currentUser = currentUser;
         _effectiveRights = effectiveRights;
-        _security = securityOptions?.Value ?? new AccountSecurityOptions();
-        _refreshTokens = refreshTokens ?? new RefreshTokenService(uow, securityOptions);
     }
 
     public async Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
@@ -185,147 +162,64 @@ public class AuthService
         var password = request.Password ?? string.Empty;
 
         if (string.IsNullOrWhiteSpace(login) || string.IsNullOrEmpty(password))
-            throw new UnauthorizedAccessException(InvalidCredentialsMessage);
+            throw new UnauthorizedAccessException("Identifiants invalides.");
 
-        var user = await FindByLoginAsync(login, cancellationToken);
-        if (user is null)
+        var users = await _uow.Repository<T_RESPONSABLE>().ListAsync(
+            u => u.LOGIN == login, cancellationToken);
+        if (users.Count == 0)
         {
-            _passwordHasher.VerifyHashedPassword(new T_RESPONSABLE(), DummyHash(), password);
-            _logger.LogWarning("Connexion refusée : login inconnu ou ambigu « {Login} ».", LogSafe(login));
-            throw new UnauthorizedAccessException(InvalidCredentialsMessage);
+            users = (await _uow.Repository<T_RESPONSABLE>().ListAsync(_ => true, cancellationToken))
+                .Where(u => string.Equals((u.LOGIN ?? string.Empty).Trim(), login, StringComparison.OrdinalIgnoreCase))
+                .ToList();
         }
-        if (IsLocked(user))
-            _logger.LogWarning("Connexion refusée : compte {UserId} verrouillé jusqu'à {LockedUntil:o}.", user.IDRESPONSABLE, user.VERROUILLE_JUSQUA);
-        EnsureNotLocked(user);
+        var user = users.FirstOrDefault() ?? throw new UnauthorizedAccessException("Identifiants invalides.");
 
-        var (passwordVerified, needsUpgrade) = VerifyPassword(user, password);
+        var passwordVerified = false;
+        var needsUpgrade = false;
+
+        if (!string.IsNullOrEmpty(user.PASSWORD))
+        {
+            try
+            {
+                var verifyResult = _passwordHasher.VerifyHashedPassword(user, user.PASSWORD, password);
+                if (verifyResult == PasswordVerificationResult.Success)
+                {
+                    passwordVerified = true;
+                }
+                else if (verifyResult == PasswordVerificationResult.SuccessRehashNeeded)
+                {
+                    passwordVerified = true;
+                    needsUpgrade = true;
+                }
+            }
+            catch
+            {
+                // FormatException if stored string is not valid Base64
+            }
+
+            if (!passwordVerified && PasswordSecurityHelper.IsPlainText(user.PASSWORD) && string.Equals(user.PASSWORD, password, StringComparison.Ordinal))
+            {
+                passwordVerified = true;
+                needsUpgrade = true;
+            }
+        }
+
         if (!passwordVerified)
-        {
-            _logger.LogWarning("Connexion refusée : mot de passe incorrect pour le compte {UserId}.", user.IDRESPONSABLE);
-            await RegisterFailedLoginAsync(user, cancellationToken);
-            throw new UnauthorizedAccessException(InvalidCredentialsMessage);
-        }
+            throw new UnauthorizedAccessException("Identifiants invalides.");
 
         if (needsUpgrade)
-            user.PASSWORD = _passwordHasher.HashPassword(user, password);
-        if (needsUpgrade || user.TENTATIVES_ECHOUEES != 0 || user.VERROUILLE_JUSQUA is not null)
         {
-            user.TENTATIVES_ECHOUEES = 0;
-            user.VERROUILLE_JUSQUA = null;
+            user.PASSWORD = _passwordHasher.HashPassword(user, password);
             _uow.Repository<T_RESPONSABLE>().Update(user);
+            await _uow.SaveChangesAsync(cancellationToken);
         }
 
-        var refreshToken = await _refreshTokens.IssueAsync(user.IDRESPONSABLE, cancellationToken: cancellationToken);
-        await _uow.SaveChangesAsync(cancellationToken);
-        return await BuildSessionAsync(user, refreshToken, cancellationToken);
-    }
-
-    /// <summary>
-    /// Rafraîchit la session : le jeton présenté est échangé contre un nouveau (rotation) et le jeton d'accès
-    /// est réémis avec les droits effectifs actuels (un droit retiré disparaît au plus tard au rafraîchissement suivant).
-    /// </summary>
-    public async Task<LoginResponse> RefreshAsync(string? refreshToken, CancellationToken cancellationToken = default)
-    {
-        var rotation = await _refreshTokens.RotateAsync(refreshToken, cancellationToken);
-        var user = await _uow.Repository<T_RESPONSABLE>().GetByIdAsync(rotation.UserId, cancellationToken);
-        if (user is null || IsLocked(user))
-            throw new UnauthorizedAccessException(RefreshTokenService.InvalidTokenMessage);
-        await _uow.SaveChangesAsync(cancellationToken);
-        return await BuildSessionAsync(user, rotation.RefreshToken, cancellationToken);
-    }
-
-    /// <summary>Déconnexion : le jeton de rafraîchissement présenté ne peut plus servir.</summary>
-    public async Task LogoutAsync(string? refreshToken, CancellationToken cancellationToken = default)
-    {
-        await _refreshTokens.RevokeAsync(refreshToken, cancellationToken);
-        await _uow.SaveChangesAsync(cancellationToken);
-    }
-
-    private async Task<LoginResponse> BuildSessionAsync(T_RESPONSABLE user, string refreshToken, CancellationToken cancellationToken)
-    {
-        var login = user.LOGIN ?? string.Empty;
         var (rights, effective) = await TokenGatesAsync(user, cancellationToken);
-        var token = _tokens.CreateToken(user.IDRESPONSABLE, login, user.IDROLE, user.MATRICULE, rights);
+        var token = _tokens.CreateToken(user.IDRESPONSABLE, user.LOGIN ?? login, user.IDROLE, user.MATRICULE, rights);
         var detailed = await GetUserDetailedPermissionsAsync(user.IDRESPONSABLE, cancellationToken);
         var authorizedSages = await UsableSageDatabasesAsync(user, effective, cancellationToken);
-        return new LoginResponse(token, user.IDRESPONSABLE, login, user.NOMRESPONSABLE ?? login, user.IDROLE, user.MATRICULE, rights,
-            authorizedSages.Select(_mapper.Map<SageDbDto>).ToList(), detailed.GrantedPermissions, detailed.IsCustomized, refreshToken);
+        return new LoginResponse(token, user.IDRESPONSABLE, user.LOGIN ?? login, user.NOMRESPONSABLE ?? login, user.IDROLE, user.MATRICULE, rights, authorizedSages.Select(_mapper.Map<SageDbDto>).ToList(), detailed.GrantedPermissions, detailed.IsCustomized);
     }
-
-    /// <summary>
-    /// Une seule requête, sans casse ni espaces en bordure (voir <see cref="LoginKey"/>). Si une ancienne base
-    /// contient encore des doublons (index unique de la migration 005 non posé), le compte dont le login est
-    /// exactement celui saisi l'emporte ; sinon la connexion est refusée plutôt que d'ouvrir un compte au hasard.
-    /// </summary>
-    private async Task<T_RESPONSABLE?> FindByLoginAsync(string login, CancellationToken cancellationToken)
-    {
-        var users = await _uow.Repository<T_RESPONSABLE>().ListAsync(LoginKey.Matches(LoginKey.Normalize(login)), cancellationToken);
-        if (users.Count <= 1)
-            return users.FirstOrDefault();
-        var exact = users.Where(u => string.Equals((u.LOGIN ?? string.Empty).Trim(), login, StringComparison.Ordinal)).ToList();
-        return exact.Count == 1 ? exact[0] : null;
-    }
-
-    private (bool Verified, bool NeedsUpgrade) VerifyPassword(T_RESPONSABLE user, string password)
-    {
-        if (string.IsNullOrEmpty(user.PASSWORD))
-            return (false, false);
-        try
-        {
-            var result = _passwordHasher.VerifyHashedPassword(user, user.PASSWORD, password);
-            if (result == PasswordVerificationResult.Success)
-                return (true, false);
-            if (result == PasswordVerificationResult.SuccessRehashNeeded)
-                return (true, true);
-        }
-        catch (FormatException)
-        {
-            // Valeur stockée qui n'est pas un hachage connu : seul le cas « mot de passe historique en clair » reste possible.
-        }
-        // Mot de passe historique en clair : comparaison à temps constant, puis hachage immédiat.
-        var legacyMatch = PasswordSecurityHelper.IsPlainText(user.PASSWORD)
-            && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(user.PASSWORD), Encoding.UTF8.GetBytes(password));
-        return (legacyMatch, legacyMatch);
-    }
-
-    private static bool IsLocked(T_RESPONSABLE user)
-        => user.VERROUILLE_JUSQUA is DateTime until && until > DateTime.UtcNow;
-
-    private static void EnsureNotLocked(T_RESPONSABLE user)
-    {
-        if (!IsLocked(user))
-            return;
-        var minutes = Math.Max(1, (int)Math.Ceiling((user.VERROUILLE_JUSQUA!.Value - DateTime.UtcNow).TotalMinutes));
-        throw new ForbiddenOperationException(string.Format(CultureInfo.InvariantCulture, LockedAccountMessage, minutes));
-    }
-
-    /// <summary>Compte un échec ; au seuil, verrouille le compte et remet le compteur à zéro pour la période suivante.</summary>
-    private async Task RegisterFailedLoginAsync(T_RESPONSABLE user, CancellationToken cancellationToken)
-    {
-        user.TENTATIVES_ECHOUEES++;
-        if (user.TENTATIVES_ECHOUEES >= _security.MaxFailedLoginAttempts)
-        {
-            user.TENTATIVES_ECHOUEES = 0;
-            user.VERROUILLE_JUSQUA = DateTime.UtcNow.AddMinutes(_security.LockoutMinutes);
-            _logger.LogWarning("Compte {UserId} verrouillé {Minutes} min après {Attempts} échecs de connexion.",
-                user.IDRESPONSABLE, _security.LockoutMinutes, _security.MaxFailedLoginAttempts);
-        }
-        _uow.Repository<T_RESPONSABLE>().Update(user);
-        await _uow.SaveChangesAsync(cancellationToken);
-    }
-
-    /// <summary>
-    /// Login saisi, tel qu'il peut être journalisé : sans caractère de contrôle (pas de fausse ligne injectée dans le
-    /// journal) et tronqué (un mot de passe tapé par erreur dans le champ login n'y apparaît pas en entier).
-    /// </summary>
-    internal static string LogSafe(string value)
-    {
-        var clean = new string(value.Where(c => !char.IsControl(c)).ToArray());
-        return clean.Length <= 32 ? clean : clean[..32] + "…";
-    }
-
-    private string DummyHash()
-        => s_dummyHashes.GetOrAdd(_passwordHasher.GetType(), _ => _passwordHasher.HashPassword(new T_RESPONSABLE(), Guid.NewGuid().ToString("N")));
 
     /// <summary>
     /// Portes du claim « rights » : celles des droits effectifs du compte (rôle + ajouts − retraits), lues à la connexion.
@@ -423,13 +317,7 @@ public class AuthService
     /// reste vrai après la suppression du dernier compte (seul moyen de sortir d'un verrouillage total).
     /// </summary>
     public async Task<bool> IsFirstRunAsync(CancellationToken cancellationToken = default)
-    {
-        var repo = _uow.Repository<T_RESPONSABLE>();
-        return await repo.CountAsync(repo.Query().Take(1), cancellationToken) == 0;
-    }
-
-    /// <summary>Verrou applicatif de la création initiale : deux appels simultanés passent l'un après l'autre.</summary>
-    internal const string CreateAdminLockResource = "SoftTime.CreateAdmin";
+        => (await _uow.Repository<T_RESPONSABLE>().ListAsync(_ => true, cancellationToken)).Count == 0;
 
     /// <summary>
     /// Crée le premier compte administrateur. Refusé dès qu'un compte existe, et le rôle
@@ -450,34 +338,23 @@ public class AuthService
         if (string.IsNullOrWhiteSpace(motDePasse))
             throw new InvalidOperationException("Le mot de passe est requis.");
         PasswordPolicy.EnsureValid(motDePasse);
-        var passwordHash = _passwordHasher.HashPassword(null!, motDePasse);
 
-        // La vérification ci-dessus ne suffit pas : deux requêtes simultanées sur une base vide la passeraient
-        // toutes les deux. Sous le verrou, la seconde attend la fin de la première, puis voit le compte créé.
-        var entity = await _uow.RunExclusiveAsync(CreateAdminLockResource, async ct =>
+        // Le premier compte reçoit toujours le rôle d'identifiant 1 : seul ce rôle est administrateur.
+        var role = await _uow.Repository<T_ROLE>().GetByIdAsync(AdminRules.AdminRoleId, cancellationToken)
+            ?? throw new InvalidOperationException(
+                "Le rôle Administrateur (identifiant 1) est introuvable : exécutez le script de création de la base.");
+
+        var entity = new T_RESPONSABLE
         {
-            if (!await IsFirstRunAsync(ct))
-                throw new InvalidOperationException(
-                    "Des comptes existent déjà : la création initiale n'est plus possible. Utilisez l'écran Utilisateurs.");
-
-            // Le premier compte reçoit toujours le rôle d'identifiant 1 : seul ce rôle est administrateur.
-            var role = await _uow.Repository<T_ROLE>().GetByIdAsync(AdminRules.AdminRoleId, ct)
-                ?? throw new InvalidOperationException(
-                    "Le rôle Administrateur (identifiant 1) est introuvable : exécutez le script de création de la base.");
-
-            var created = new T_RESPONSABLE
-            {
-                IDROLE = role.IDROLE,
-                NOMRESPONSABLE = dto.Nom.Trim(),
-                LOGIN = login,
-                PASSWORD = passwordHash,
-                EMAIL = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim()
-            };
-            await _uow.Repository<T_RESPONSABLE>().AddAsync(created, ct);
-            await EnsureRoleHasAllRightsAsync(role.IDROLE, ct);
-            await _uow.SaveChangesAsync(ct);
-            return created;
-        }, cancellationToken);
+            IDROLE = role.IDROLE,
+            NOMRESPONSABLE = dto.Nom.Trim(),
+            LOGIN = login,
+            PASSWORD = _passwordHasher.HashPassword(null!, motDePasse),
+            EMAIL = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim()
+        };
+        await _uow.Repository<T_RESPONSABLE>().AddAsync(entity, cancellationToken);
+        await EnsureRoleHasAllRightsAsync(role.IDROLE, cancellationToken);
+        await _uow.SaveChangesAsync(cancellationToken);
 
         var envoye = await _email.SendUserCredentialsAsync(entity.EMAIL, entity.LOGIN, motDePasse, entity.NOMRESPONSABLE, null, cancellationToken);
         var message = envoye
@@ -653,19 +530,18 @@ public class AuthService
             if (!string.IsNullOrWhiteSpace(dto.Password))
             {
                 var isSame = false;
-                var rehashNeeded = false;
                 if (!string.IsNullOrEmpty(entity.PASSWORD))
                 {
                     try
                     {
                         var res = _passwordHasher.VerifyHashedPassword(entity, entity.PASSWORD, dto.Password);
-                        isSame = res != PasswordVerificationResult.Failed;
-                        rehashNeeded = res == PasswordVerificationResult.SuccessRehashNeeded;
+                        if (res == PasswordVerificationResult.Success)
+                            isSame = true;
                     }
-                    catch (FormatException)
+                    catch
                     {
-                        // Valeur historique en clair : comparaison à temps constant.
-                        isSame = CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(entity.PASSWORD), Encoding.UTF8.GetBytes(dto.Password));
+                        if (string.Equals(entity.PASSWORD, dto.Password, StringComparison.Ordinal))
+                            isSame = true;
                     }
                 }
 
@@ -674,14 +550,10 @@ public class AuthService
                     EnsurePasswordPolicy(dto.Password);
                     motDePasseModifie = true;
                     entity.PASSWORD = _passwordHasher.HashPassword(entity, dto.Password);
-                    // Nouveau mot de passe : le compte est déverrouillé et les sessions ouvertes avec l'ancien sont fermées.
-                    entity.TENTATIVES_ECHOUEES = 0;
-                    entity.VERROUILLE_JUSQUA = null;
-                    await _refreshTokens.RevokeAllAsync(entity.IDRESPONSABLE, cancellationToken);
                 }
-                else if (rehashNeeded || PasswordSecurityHelper.IsPlainText(entity.PASSWORD))
+                else if (!PasswordSecurityHelper.IsHashedPassword(entity.PASSWORD))
                 {
-                    // Même mot de passe stocké en clair ou dans un ancien format : hachage au format courant.
+                    // Plain-text legacy password matching the same password: upgrade to hash!
                     entity.PASSWORD = _passwordHasher.HashPassword(entity, dto.Password);
                 }
             }
@@ -751,7 +623,6 @@ public class AuthService
     private async Task RemoveAccountRightsAsync(decimal userId, CancellationToken cancellationToken)
     {
         _effectiveRights.Invalidate(userId);
-        await _refreshTokens.RemoveAllAsync(userId, cancellationToken);
         var permissions = _uow.Repository<T_USER_PERMISSION>();
         permissions.RemoveRange(await permissions.ListAsync(p => p.IDRESPONSABLE == userId, cancellationToken));
         var access = _uow.Repository<T_BDD_AUTORISE>();
@@ -788,9 +659,9 @@ public class AuthService
         decimal id,
         CancellationToken cancellationToken)
     {
-        var autres = await repo.ListAsync(LoginKey.MatchesOther(LoginKey.Normalize(login), id), cancellationToken);
-        if (autres.Count > 0)
-            throw new FieldValidationException("login", LoginKey.TakenMessage);
+        var autres = await repo.ListAsync(u => u.IDRESPONSABLE != id, cancellationToken);
+        if (autres.Any(u => string.Equals((u.LOGIN ?? string.Empty).Trim(), login, StringComparison.OrdinalIgnoreCase)))
+            throw new FieldValidationException("login", "Ce login est déjà utilisé. Choisissez-en un autre.");
     }
 
     /// <summary>Réservé aux tests (internal, sans garde) : le code de production doit transmettre l'identité de l'appelant.</summary>

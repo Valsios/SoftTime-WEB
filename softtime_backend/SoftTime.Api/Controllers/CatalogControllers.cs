@@ -4,8 +4,6 @@ using SoftTime.Api.Authorization;
 using SoftTime.Application.Abstractions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Services;
-using SoftTime.Domain.Models;
-using SoftTime.Domain.Services;
 using SoftTime.Infrastructure.Excel;
 
 namespace SoftTime.Api.Controllers;
@@ -29,18 +27,9 @@ public class SageDatabasesController : ControllerBase
         _configAuth = configAuth;
     }
 
-
-    /// <summary>
-    /// Les listes de bases servent aux écrans des portes 1 (Bases) et 2 (Utilisateurs, Privilèges, Accès bases) et à la barre du haut.
-    /// Un compte sans l'une de ces portes (ex. salarié) reçoit une liste vide (200), jamais une erreur.
-    /// </summary>
-    private bool PeutLireLesBases() => _user.HasRight(Droit.Databases) || _user.HasRight(Droit.Parameters);
-
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct)
     {
-        if (!PeutLireLesBases())
-            return Ok(Array.Empty<SageDbDto>());
         var list = await _svc.ListSageAsync(ct);
         if (_user.UserId is decimal uid)
         {
@@ -57,8 +46,6 @@ public class SageDatabasesController : ControllerBase
     public async Task<IActionResult> GetPaged(
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
     {
-        if (!PeutLireLesBases())
-            return Ok(new PagedResult<SageDbDto>(Array.Empty<SageDbDto>(), 0, 1, PaginationRules.Normaliser(page, pageSize).Taille, 1));
         IReadOnlyCollection<string>? allowed = null;
         if (_user.UserId is decimal uid)
         {
@@ -100,12 +87,10 @@ public class SageDatabasesController : ControllerBase
         => Ok(await _svc.ActivateSagePairAsync(ct));
 
     [HttpGet("lookup/{matricule}")]
-    [RequireAnyDroit(Droit.Databases, Droit.Parameters)]
     public async Task<IActionResult> Lookup(string matricule, CancellationToken ct)
         => Ok(await _svc.GetDepartementServiceAsync(matricule, ct));
 
     [HttpPost("lookup-batch")]
-    [RequireAnyDroit(Droit.Databases, Droit.Parameters)]
     public async Task<IActionResult> LookupBatch([FromBody] string[] matricules, CancellationToken ct)
         => Ok(await _svc.GetDepartementServiceBatchAsync(matricules ?? Array.Empty<string>(), ct));
 
@@ -165,18 +150,9 @@ public class PointeuseDatabasesController : ControllerBase
         _configAuth = configAuth;
     }
 
-
-    /// <summary>
-    /// Les listes de bases servent aux écrans des portes 1 (Bases) et 2 (Utilisateurs, Privilèges, Accès bases) et à la barre du haut.
-    /// Un compte sans l'une de ces portes (ex. salarié) reçoit une liste vide (200), jamais une erreur.
-    /// </summary>
-    private bool PeutLireLesBases() => _user.HasRight(Droit.Databases) || _user.HasRight(Droit.Parameters);
-
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken ct)
     {
-        if (!PeutLireLesBases())
-            return Ok(Array.Empty<PointeuseDbDto>());
         var list = await _svc.ListPointeuseAsync(ct);
         if (_user.UserId is decimal uid)
         {
@@ -193,8 +169,6 @@ public class PointeuseDatabasesController : ControllerBase
     public async Task<IActionResult> GetPaged(
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
     {
-        if (!PeutLireLesBases())
-            return Ok(new PagedResult<PointeuseDbDto>(Array.Empty<PointeuseDbDto>(), 0, 1, PaginationRules.Normaliser(page, pageSize).Taille, 1));
         IReadOnlyCollection<string>? allowed = null;
         if (_user.UserId is decimal uid)
         {

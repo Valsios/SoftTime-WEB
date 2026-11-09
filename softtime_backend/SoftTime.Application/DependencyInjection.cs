@@ -18,7 +18,6 @@ public static class DependencyInjection
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
         services.AddScoped<IPasswordHasher<T_RESPONSABLE>, PasswordHasher<T_RESPONSABLE>>();
         services.AddScoped<TenantConnectionService>();
-        services.AddScoped<RefreshTokenService>();
         services.AddScoped<AuthService>();
         services.AddSingleton<EffectiveRightsCache>();
         services.AddScoped<EffectiveRightsService>();
@@ -56,18 +55,6 @@ public static class DependencyInjection
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<ClosingOptions>>().Value);
         services.AddScoped<ClosingService>();
         services.AddScoped<ClosingPresentationService>();
-
-        // Mon espace salarié (lecture seule) : désactivé par défaut (SelfService:Enabled = false).
-        services.AddOptions<SoftTime.Application.SelfService.SelfServiceOptions>()
-            .Configure<Microsoft.Extensions.Configuration.IConfiguration>((o, configuration) =>
-            {
-                if (bool.TryParse(configuration[SoftTime.Application.SelfService.SelfServiceOptions.Section + ":Enabled"], out var actif))
-                    o.Enabled = actif;
-            });
-        services.AddSingleton(sp => sp.GetRequiredService<IOptions<SoftTime.Application.SelfService.SelfServiceOptions>>().Value);
-        services.AddSingleton<SoftTime.Application.SelfService.SelfLeaveCache>();
-        services.AddScoped<SoftTime.Application.SelfService.SelfServiceGuard>();
-        services.AddScoped<SoftTime.Application.SelfService.SelfSpaceService>();
         return services;
     }
 }

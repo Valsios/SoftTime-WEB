@@ -66,15 +66,12 @@ public class ExceptionHandlingMiddleware
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             await context.Response.WriteAsJsonAsync(new { error = ex.Message });
         }
-        // Les trois types ci-dessous servent aussi aux erreurs techniques de .NET, d'EF Core et de SqlClient (fichier
-        // inaccessible, clé absente d'un dictionnaire, requête invalide…), dont le message peut révéler le schéma, un
-        // chemin ou un compte : leur message n'est renvoyé que s'ils viennent du code SoftTime.
-        catch (UnauthorizedAccessException ex) when (ExceptionOrigin.IsApplication(ex))
+        catch (UnauthorizedAccessException ex)
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             await context.Response.WriteAsJsonAsync(new { error = ex.Message });
         }
-        catch (KeyNotFoundException ex) when (ExceptionOrigin.IsApplication(ex))
+        catch (KeyNotFoundException ex)
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             await context.Response.WriteAsJsonAsync(new { error = ex.Message });
@@ -84,20 +81,14 @@ public class ExceptionHandlingMiddleware
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             await context.Response.WriteAsJsonAsync(new { error = ex.Message, field = ex.Field });
         }
-        catch (InvalidOperationException ex) when (ExceptionOrigin.IsApplication(ex))
+        catch (InvalidOperationException ex)
         {
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             await context.Response.WriteAsJsonAsync(new { error = ex.Message });
         }
-        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
-        {
-            // Client parti en cours de requête : rien à répondre ni à journaliser comme une erreur.
-        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Erreur non gérée sur {Method} {Path}.", context.Request.Method, context.Request.Path.Value);
-            if (context.Response.HasStarted)
-                throw;
+            _logger.LogError(ex, "Unhandled");
             context.Response.StatusCode = StatusCodes.Status500InternalServerError;
             await context.Response.WriteAsJsonAsync(new { error = "Erreur interne." });
         }

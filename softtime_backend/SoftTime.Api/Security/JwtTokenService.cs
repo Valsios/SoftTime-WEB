@@ -2,7 +2,6 @@ using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using SoftTime.Application.Abstractions;
 
@@ -10,12 +9,12 @@ namespace SoftTime.Api.Security;
 
 public class JwtTokenService : ITokenService
 {
-    private readonly JwtOptions _options;
-    public JwtTokenService(IOptions<JwtOptions> options) => _options = options.Value;
+    private readonly IConfiguration _configuration;
+    public JwtTokenService(IConfiguration configuration) => _configuration = configuration;
 
     public string CreateToken(decimal userId, string login, decimal roleId, string? matricule, IEnumerable<int> rights)
     {
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.Key));
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]!));
         var uid = ((long)userId).ToString(CultureInfo.InvariantCulture);
         var rid = ((long)roleId).ToString(CultureInfo.InvariantCulture);
         var claims = new List<Claim>
@@ -29,10 +28,10 @@ public class JwtTokenService : ITokenService
             new("rights", string.Join(",", rights))
         };
         var token = new JwtSecurityToken(
-            issuer: _options.Issuer,
-            audience: _options.Audience,
+            issuer: _configuration["Jwt:Issuer"],
+            audience: _configuration["Jwt:Audience"],
             claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(_options.AccessTokenMinutes),
+            expires: DateTime.UtcNow.AddHours(12),
             signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256));
         return new JwtSecurityTokenHandler().WriteToken(token);
     }

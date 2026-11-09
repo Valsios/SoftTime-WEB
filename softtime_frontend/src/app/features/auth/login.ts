@@ -5,7 +5,6 @@ import { AuthService } from '../../shared/services/auth.service';
 import { SessionStore } from '../../core/session.store';
 import { SoftButton } from '../../shared/components/soft-button';
 import { SoftInput } from '../../shared/components/soft-input';
-import { homeRoute } from '../self-space/self-space.logic';
 
 @Component({
   selector: 'app-login',
@@ -192,8 +191,7 @@ export class LoginPage implements OnInit {
     this.auth.login({ login: this.login().trim(), password: this.password() }).subscribe({
       next: () => {
         this.loading.set(false);
-        // Profil Salarié (SELF:READ sans aucune porte) : Mon espace ; tous les autres comptes : tableau de bord, comme avant.
-        this.router.navigate([homeRoute(this.session.permissions(), this.session.gates())]);
+        this.router.navigate(['/dashboard']);
       },
       error: () => this.loading.set(false),
     });

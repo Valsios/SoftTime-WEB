@@ -5,7 +5,6 @@ using SoftTime.Application.DTOs;
 using SoftTime.Application.Security;
 using SoftTime.Application.Services;
 using SoftTime.Domain;
-using SoftTime.Domain.Models;
 
 namespace SoftTime.Api.Controllers;
 
@@ -51,9 +50,7 @@ public class ClosingController : ControllerBase
     /// Analyse de clôture d'une période (mois civil précédent sans dates) : statut, score, formule,
     /// comptages, départements, page d'anomalies (50 par défaut, 200 au plus) et comparaison si demandée.
     /// La liste omet les anomalies « Information » sauf <c>includeInformation=true</c> ; les comptages les incluent toujours.
-    /// <c>reuseCache=true</c> (changement de page seulement) réutilise l'analyse déjà calculée pour la même période (délai glissant de 120 s sous un plafond de 600 s, par défaut).
-    /// <c>gravites=Critique,Importante</c> restreint la liste à ces niveaux (Information, Mineure, Importante, Critique) ;
-    /// <c>tri=gravite</c> range la liste du plus grave au moins grave. Les comptages, le score et le statut ne dépendent jamais de ces deux paramètres.
+    /// <c>reuseCache=true</c> (changement de page seulement) réutilise, jusqu'à 60 s, l'analyse déjà calculée pour la même période.
     /// </summary>
     [HttpGet("analysis")]
     public async Task<IActionResult> Analysis(
@@ -65,24 +62,15 @@ public class ClosingController : ControllerBase
         [FromQuery] int? page,
         [FromQuery] int? pageSize,
         [FromQuery] bool? reuseCache,
-        [FromQuery] string? gravites,
-        [FromQuery] string? tri,
         CancellationToken ct)
     {
         await FineReadAccess.EnsureAsync(_user, _rights, Rights.Reports, Permission, ct);
         if (!_reglages.Enabled)
             return NotFound(new { error = Desactivee });
 
-        if (!TryLireGravites(gravites, out var niveaux))
-            return BadRequest(new { error = "Le paramètre gravites doit lister des niveaux parmi Information, Mineure, Importante, Critique." });
-        if (!string.IsNullOrWhiteSpace(tri) && !string.Equals(tri.Trim(), "gravite", StringComparison.OrdinalIgnoreCase))
-            return BadRequest(new { error = "Le paramètre tri n'accepte que la valeur « gravite »." });
-
         var request = new ClosingAnalysisRequest(
             Jour(from), Jour(to), departement, page, pageSize, Options: null, IncludeComparison: includeComparison == true,
-            IncludeInformation: includeInformation == true, ReuseCached: reuseCache == true,
-            Gravites: niveaux, TriParGravite: !string.IsNullOrWhiteSpace(tri),
-            Perimetre: PerimetreUtilisateur());
+            IncludeInformation: includeInformation == true, ReuseCached: reuseCache == true);
         var analyse = await _closing.AnalyserAsync(request, ct);
         var rapport = await _presentation.PresenterAsync(analyse, ct);
 
@@ -90,51 +78,6 @@ public class ClosingController : ControllerBase
         _logger.LogInformation("Analyse de clôture {From:yyyy-MM-dd} → {To:yyyy-MM-dd} : {Nombre} anomalie(s), statut {Statut}.",
             rapport.From, rapport.To, rapport.NombreAnomalies, rapport.Statut ?? "aucun");
         return Ok(rapport);
-    }
-
-    /// <summary>
-    /// Checklist d'avancement de la paie (pointages importés, anomalies, semaines validées, calcul EXO/IMPO, heures
-    /// imposables, synchronisation paie) pour la même période et le même département que l'analyse. Séparée de l'analyse :
-    /// n'entre ni dans le score ni dans le statut. Mêmes contrôles d'accès que l'analyse ; cache de 60 s par utilisateur.
-    /// </summary>
-    [HttpGet("checklist")]
-    public async Task<IActionResult> Checklist(
-        [FromQuery] DateTime? from,
-        [FromQuery] DateTime? to,
-        [FromQuery] string? departement,
-        [FromQuery] bool? reuseCache,
-        CancellationToken ct)
-    {
-        await FineReadAccess.EnsureAsync(_user, _rights, Rights.Reports, Permission, ct);
-        if (!_reglages.Enabled)
-            return NotFound(new { error = Desactivee });
-
-        var perimetre = PerimetreUtilisateur();
-        var checklist = await _closing.ChecklistAsync(
-            new ClosingChecklistRequest(Jour(from), Jour(to), departement, reuseCache == true), perimetre, ct);
-        _logger.LogInformation("Checklist de clôture {From:yyyy-MM-dd} → {To:yyyy-MM-dd} : {Lignes} ligne(s).", checklist.From, checklist.To, checklist.Lignes.Count);
-        return Ok(checklist);
-    }
-
-    /// <summary>Périmètre de l'appelant pour la clé des caches : deux utilisateurs ne partagent jamais une entrée.</summary>
-    private string PerimetreUtilisateur() => "u" + (_user.UserId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?");
-
-    /// <summary>Niveaux séparés par des virgules (insensible à la casse) ; absent ou vide : aucun filtre ; valeur inconnue : refus.</summary>
-    private static bool TryLireGravites(string? valeur, out IReadOnlyList<ClosingSeverity>? niveaux)
-    {
-        niveaux = null;
-        if (string.IsNullOrWhiteSpace(valeur))
-            return true;
-        var liste = new List<ClosingSeverity>();
-        foreach (var morceau in valeur.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            if (!Enum.TryParse<ClosingSeverity>(morceau, ignoreCase: true, out var niveau) || !Enum.IsDefined(niveau))
-                return false;
-            if (!liste.Contains(niveau))
-                liste.Add(niveau);
-        }
-        niveaux = liste.Count > 0 ? liste : null;
-        return true;
     }
 
     /// <summary>Date du jour demandé, convertie en UTC si elle est horodatée en local (comme le journal).</summary>
