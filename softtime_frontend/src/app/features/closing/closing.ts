@@ -231,6 +231,7 @@ import {
                   <th scope="col">Jours contrôlés</th>
                   <th scope="col">Anomalies</th>
                   <th scope="col">Critiques</th>
+                  <th scope="col"><span class="closing-sr">Analyser ce département</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -241,6 +242,17 @@ import {
                     <td>{{ d.joursEmployeControles }}</td>
                     <td>{{ d.nombreAnomalies }}</td>
                     <td>{{ countKey(d.parGravite, 'Critique') }}</td>
+                    <td>
+                      @if (d.departement) {
+                        <button
+                          type="button"
+                          class="soft-btn soft-btn--ghost soft-btn--sm"
+                          [disabled]="analysing()"
+                          [attr.aria-label]="'Analyser le département ' + d.departement"
+                          (click)="analyseDepartement(d.departement)"
+                        >Analyser ce département</button>
+                      }
+                    </td>
                   </tr>
                 }
               </tbody>
@@ -680,6 +692,23 @@ export class ClosingPage implements OnInit, OnDestroy {
   /** Écran existant de l'étape, avec la période quand l'écran la lit. */
   stepLink(line: ClosingChecklistLine, c: ClosingChecklist) {
     return checklistLink(line, { from: c.from.slice(0, 10), to: c.to.slice(0, 10) });
+  }
+
+  /**
+   * Ligne du tableau des départements : préremplit le filtre partagé (même période que le résultat
+   * affiché) et relance une analyse complète sur ce seul département — strictement le flux du bouton
+   * « Analyser », donc checklist et dédoublonnage de clics inclus.
+   */
+  analyseDepartement(departement: string): void {
+    const applied = this.applied();
+    if (!applied || this.analysing()) return;
+    if (this.filter) {
+      this.filter.from = applied.from;
+      this.filter.to = applied.to;
+      this.filter.departement = departement;
+    }
+    this.refreshDraft();
+    this.onSearch({ from: applied.from, to: applied.to, matriculeFrom: null, matriculeTo: null, departement });
   }
 
   /** L'option est mémorisée avec le filtre : rien n'est relancé avant le clic sur Analyser. */
