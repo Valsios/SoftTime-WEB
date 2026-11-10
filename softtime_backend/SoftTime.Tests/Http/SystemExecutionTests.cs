@@ -6,7 +6,7 @@ using SoftTime.Domain.Services;
 namespace SoftTime.Tests.Http;
 
 /// <summary>
-/// Jobs du moteur prédictif : le scope d'arrière-plan n'a pas d'utilisateur HTTP. Activé
+/// Traitements d'arrière-plan : le scope d'arrière-plan n'a pas d'utilisateur HTTP. Activé
 /// explicitement, il s'exécute sous l'identité système ; sinon il reste anonyme et refusé.
 /// </summary>
 public class SystemExecutionTests : IClassFixture<ApiFactory>

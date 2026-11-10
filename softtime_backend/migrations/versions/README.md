@@ -18,8 +18,8 @@ Ils sont **embarqués comme ressources** dans `SoftTime.Infrastructure` et appli
   différente), un avertissement est journalisé. Les fins de ligne sont normalisées avant le calcul
   (CRLF et LF donnent la même somme).
 
-Le schéma `ml` (moteur prédictif) reste géré par les migrations EF Core (`EfMlStore.MigrateAsync`)
-et n'est pas concerné.
+L'ancien schéma `ml` (moteur prédictif retiré) n'est plus créé ni utilisé par l'application ; il
+se supprime à la main avec `../DropMlPredictionSchema.sql`.
 
 ## Pour les développeurs après un `git pull`
 
@@ -44,8 +44,8 @@ destructifs, mais seule la sauvegarde permet un retour arrière fiable.
 1. Créer une base vide (`CREATE DATABASE <nom>`) et la renseigner dans la chaîne de connexion locale
    (`ConnectionStrings:SoftTime` en secret utilisateur ou variable d'environnement `ConnectionStrings__SoftTime`,
    jamais dans le dépôt), avec la clé `Jwt:Key`.
-2. Lancer l'API avec `Database:AutoMigrate = true` : elle crée tout le schéma (001 à 005), le schéma `ml` du moteur
-   prédictif, le rôle 1 « Administrateur », les six droits et les données de départ. Aucun compte n'est créé.
+2. Lancer l'API avec `Database:AutoMigrate = true` : elle crée tout le schéma (001 à 005),
+   le rôle 1 « Administrateur », les six droits et les données de départ. Aucun compte n'est créé.
 3. Créer le premier administrateur : `GET /api/auth/is-first-run` répond `true`, puis
    `POST /api/auth/create-admin` (nom, login, mot de passe conforme à la politique). Ensuite `is-first-run` répond `false`.
 4. Se connecter normalement. Les bases SAGE et pointeuse se déclarent ensuite dans l'application.
@@ -176,7 +176,7 @@ Ces scripts du dossier `migrations/` restent à exécuter à la main, après sau
 | `create_softtime_database.sql` | Ancien script de création complète (crée la base et un compte de démarrage) |
 | `add_pagination_performance_indexes.sql` | Borne les colonnes de filtre (ALTER COLUMN) et crée les index de pagination sur une base existante |
 | `add_performance_indexes.sql` | Index de dates sur une base existante |
-| `AddMlPredictionSchema.sql` | Équivalent SQL de la migration EF du schéma `ml` |
+| `DropMlPredictionSchema.sql` | Supprime l'ancien schéma `ml` du moteur prédictif retiré (manuel, destructif) |
 | `audit_and_migrate_passwords.sql` | Audit et migration des mots de passe |
 | `upgrade_password_column_schema.sql` | Élargissement de la colonne PASSWORD |
 | `create_role_permission_table.sql` | Tables des droits par rôle (repris dans 001) |

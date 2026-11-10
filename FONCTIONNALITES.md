@@ -193,52 +193,44 @@ s'affiche « Semaine 27 (30/06 - 06/07/2025) » (année ISO, donc correcte au pa
 
 ---
 
-## 5 ter. Moteur prédictif d'absentéisme et d'heures supplémentaires (ML.NET)
+## 5 ter. Atterrissage de semaine des heures supplémentaires
 
-Le moteur ne lit **jamais** les tables fonctionnelles pour s'entraîner : il s'appuie sur une base
-analytique dédiée au schéma `ml` (ou une base séparée via `ConnectionStrings:SoftTimeMl`), alimentée
-par un ETL qui rejoue les règles existantes (`AbsenceReportRules`, `OvertimeCalculator`).
+Répond à une question : **qui finira la semaine en heures supplémentaires, et peut-on encore
+l'éviter ?** Rien n'est stocké ni précalculé : chaque lecture repart des heures corrigées et du
+planning, et suit donc immédiatement une correction ou un changement de planning.
 
-- **`ml.SalarieJour`** : grain salarié × jour ; features calculées *as-of J-1* (calendrier, salarié,
-  historique 7/30/90 jours, collectif). Elle sert à construire les features hebdomadaires HS et à
-  écarter les jours sans pointage collectif (trous d'import) de l'entraînement.
-- **`ml.SalarieSemaine`** : grain salarié × semaine ISO ; label HS = valeur validée de
-  `T_HS_VALIDER` si elle existe, sinon résultat de `OvertimeCalculator`.
-- **`ml.Modele`** : registre versionné (binaire ML.NET, hash du contrat de features, métriques,
-  statut). Un seul modèle actif par société et par type.
-- **`ml.Prediction`** : prédictions précalculées (HS par semaine) et relues par l'API.
-
-Deux modèles par société : **P(HS > 0)** (classification) et **montant HS**
-(régression). Entraînement `FastTree` (ML.NET, sans dépendance native) sur les 18 derniers mois,
-découpage **chronologique** (dernières semaines en test) et **porte qualité** : un modèle n'est
-activé que s'il bat la baseline statistique ; sinon l'ancien modèle reste actif et l'écran affiche
-« Baseline ».
-
-- **Rafraîchissement** : service d'arrière-plan (quotidien) + jobs admin. Fenêtre glissante de
-  12 semaines pour absorber les corrections tardives ; backfill complet par trimestres au premier
-  déploiement. Les lignes anciennes restent figées (snapshot).
-- **Page `/predictions`** (États, permission `REPORTS:PREDICTIONS`) : état du moteur, **horizon de 4
-  semaines** (total prévu et salariés au-delà de 20 h par semaine, « planning non saisi » quand rien n'est prévisible ; un clic
-  choisit la semaine analysée), HS prévues de la
-  semaine choisie (total et fourchette, salariés au-delà du plafond exonéré de 20 h —
-  `OvertimeRules.ExemptCeilingHours`, au-delà les HS deviennent imposables —, département le plus
-  chargé, précision —
-  constatée dès qu'une semaine est comparable, sinon mesurée à l'entraînement
-  — en heures), vue **par département** (barre, part du total ; un clic filtre la liste) puis détail
-  par salarié avec fourchette et probabilité d'HS, **prévu / réel** des 8 dernières semaines
-  terminées (écart moyen par salarié, part du réel dans la fourchette, biais du total ; la dernière
-  prévision émise pour la semaine est comparée aux HS de `ml.SalarieSemaine`), historique des
-  modèles. Les prévisions passées sont conservées sur `HistoryMonths` : la purge des anciens
-  modèles ne retire que leur binaire tant que des prévisions y renvoient. La prévision d'absence
-  a été retirée (peu exploitable) ; les modèles d'absence déjà entraînés restent en base, ignorés.
-- **API** : `GET /api/predictions/status|job|overtime|overtime/horizon|overtime/accuracy`, `POST /api/predictions/refresh|train|backfill`.
-- **Migrations** : EF Core versionnées (`SoftTime.Infrastructure/Migrations/Ml`,
-  `AddMlPredictionSchema`) et script idempotent `migrations/AddMlPredictionSchema.sql`
-  (voir `migrations/README.md`).
-- **Limites assumées** : historique insuffisant ⇒ baseline ; ancienneté approximée par
-  `T_CARDPAIE.DATE` ; prédictions individuelles réservées à l'aide à la planification (pas de
-  sanction automatique).
-
+- **Calcul** (`WeekLandingRules`, classe pure) : les jours déjà pointés sont pris tels quels ; les
+  jours restants sont rejoués « conformément au planning » dans `OvertimeCalculator`. Congés,
+  fériés, pause, 8 mars et mode de pointage suivent donc exactement les règles de la validation de
+  semaine. S'y ajoute l'**écart habituel** du salarié à son planning : moyenne (réel − planifié)
+  de ses 4 dernières semaines entièrement pointées (`Landing:DriftWeeks`), appliquée au prorata
+  des heures encore planifiées. L'atterrissage ne passe jamais sous les heures déjà acquises.
+- **Premier jour projeté** : aujourd'hui (la journée n'est pas finie), ou le lendemain du dernier
+  pointage traité quand l'import a du retard — un jour pas encore importé n'est jamais compté
+  comme une absence. L'écran affiche jusqu'où les pointages sont traités.
+- **Seuils** : heures supplémentaires (> 0 h), passage à 150 % (> 8 h, `OvertimeRules.WeeklyHs130Cap`),
+  plafond exonéré (> 20 h dans la semaine, `OvertimeRules.ExemptCeilingHours`). Pour chaque salarié
+  au-dessus d'un seuil : **heures à retirer du planning restant** pour repasser dessous, ou
+  « seuil déjà franchi » si les heures faites l'ont déjà dépassé.
+- **Page `/predictions`** (États, permission `REPORTS:PREDICTIONS`) : fraîcheur des pointages,
+  **horizon de 4 semaines** (`Landing:HorizonWeeks` ; « planning non saisi » quand rien n'est
+  planifié ; un clic choisit la semaine), total à l'atterrissage et part déjà acquise, salariés en
+  HS, passages à 150 %, heures encore évitables, alerte « jours sans planning », vue **par
+  département** (un clic filtre la liste), détail **par salarié** (fait / contrat, HS acquises,
+  reste planifié, atterrissage décomposé en planning + écart habituel, alerte et action), filtre
+  « Alertes seulement », lien vers le planning des salariés.
+- **API** : `GET /api/v1/predictions/landing?week=`, `GET /api/v1/predictions/landing/horizon`.
+  Lecture seule. Le calcul reposant sur les pointages, la base SAGE **et** la pointeuse doivent
+  être lisibles par le compte.
+- **Moteur prédictif retiré** : l'ancien moteur ML.NET (modèles entraînés, base analytique `ml`,
+  tâche de fond quotidienne) a été supprimé. Ses prévisions ignoraient les heures déjà pointées
+  dans la semaine et n'étaient activées que si elles battaient une moyenne mobile de 4 semaines.
+  Le schéma `ml` d'une base existante se supprime à la main avec
+  `migrations/DropMlPredictionSchema.sql`.
+- **Limites assumées** : un jour restant sans planning vaut 0 h (signalé) ; le plafond exonéré
+  est comparé à la semaine seule, pas au cumul de la période de paie ; pas d'envoi d'alerte par
+  courriel ; pas d'historique prévu / réel, puisque rien n'est stocké ; aucune sanction
+  automatique, l'écran sert à ajuster le planning.
 ---
 
 ## 5 quater. Contrôle avant paie (`/closing`)
@@ -421,5 +413,5 @@ export ni lien vers un autre écran. Fonction **non validée** : tout est additi
 - Frontend : Angular  
 - Backend : ASP.NET Core 8  
 - Données : SQL Server (SoftTime + SAGE + pointeuse)  
-- Moteur prédictif : ML.NET 5 (`Microsoft.ML`, `Microsoft.ML.FastTree`)
+- Prévisions : atterrissage de semaine calculé à la demande (aucune bibliothèque de machine learning)
 
