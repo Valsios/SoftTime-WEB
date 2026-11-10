@@ -15,14 +15,8 @@ public sealed class DatabasePermissionCodeMigrator : IDatabasePermissionCodeMigr
 
     public DatabasePermissionCodeMigrator(IUnitOfWork uow)
     {
-        _roles = new PermissionTable<RolePermission>(
-            uow.Repository<RolePermission>(), r => r.IdRole, r => r.PermissionCode, (r, c) => r.PermissionCode = c,
-            start => r => r.PermissionCode.StartsWith(start), ids => r => ids.Contains(r.IdRole),
-            id => new RolePermission { IdRole = id, PermissionCode = PermissionMarkers.EmptyRolePermissionsMarker, IsGranted = true });
-        _users = new PermissionTable<UserPermission>(
-            uow.Repository<UserPermission>(), r => r.IdResponsable, r => r.PermissionCode, (r, c) => r.PermissionCode = c,
-            start => r => r.PermissionCode.StartsWith(start), ids => r => ids.Contains(r.IdResponsable),
-            id => new UserPermission { IdResponsable = id, PermissionCode = PermissionMarkers.EmptyPermissionsMarker, IsGranted = true });
+        _roles = new PermissionTable<RolePermission>(uow.Repository<RolePermission>(), RoleRows());
+        _users = new PermissionTable<UserPermission>(uow.Repository<UserPermission>(), UserRows());
     }
 
     public async Task RenameAsync(string prefix, string oldName, string newName, CancellationToken ct = default)
@@ -40,4 +34,30 @@ public sealed class DatabasePermissionCodeMigrator : IDatabasePermissionCodeMigr
         await _roles.RemoveAsync(prefix, name, ct);
         await _users.RemoveAsync(prefix, name, ct);
     }
+
+    private static PermissionRowMap<RolePermission> RoleRows() => new()
+    {
+        Owner = r => r.IdRole,
+        Code = r => r.PermissionCode,
+        SetCode = (r, code) => r.PermissionCode = code,
+        CodeStartsWith = start => r => r.PermissionCode.StartsWith(start),
+        OwnedBy = ids => r => ids.Contains(r.IdRole),
+        EmptyMarker = id => new RolePermission
+        {
+            IdRole = id, PermissionCode = PermissionMarkers.EmptyRolePermissionsMarker, IsGranted = true,
+        },
+    };
+
+    private static PermissionRowMap<UserPermission> UserRows() => new()
+    {
+        Owner = r => r.IdResponsable,
+        Code = r => r.PermissionCode,
+        SetCode = (r, code) => r.PermissionCode = code,
+        CodeStartsWith = start => r => r.PermissionCode.StartsWith(start),
+        OwnedBy = ids => r => ids.Contains(r.IdResponsable),
+        EmptyMarker = id => new UserPermission
+        {
+            IdResponsable = id, PermissionCode = PermissionMarkers.EmptyPermissionsMarker, IsGranted = true,
+        },
+    };
 }

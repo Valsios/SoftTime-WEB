@@ -1,5 +1,3 @@
-using System.Linq.Expressions;
-
 using SoftTime.Domain.Repositories;
 
 namespace SoftTime.Infrastructure.Services.Permissions;
@@ -14,60 +12,58 @@ internal sealed class PermissionTable<TRow> where TRow : class
     private static readonly string[] Actions = { "READ", "UPDATE", "DELETE", "CREATE" };
 
     private readonly IRepository<TRow> _repo;
-    private readonly Func<TRow, decimal> _owner;
-    private readonly Func<TRow, string> _code;
-    private readonly Action<TRow, string> _setCode;
-    private readonly Func<string, Expression<Func<TRow, bool>>> _codeStartsWith;
-    private readonly Func<List<decimal>, Expression<Func<TRow, bool>>> _ownedBy;
-    private readonly Func<decimal, TRow> _emptyMarker;
+    private readonly PermissionRowMap<TRow> _map;
 
-    public PermissionTable(
-        IRepository<TRow> repo, Func<TRow, decimal> owner, Func<TRow, string> code, Action<TRow, string> setCode,
-        Func<string, Expression<Func<TRow, bool>>> codeStartsWith, Func<List<decimal>, Expression<Func<TRow, bool>>> ownedBy,
-        Func<decimal, TRow> emptyMarker)
+    public PermissionTable(IRepository<TRow> repo, PermissionRowMap<TRow> map)
     {
         _repo = repo;
-        _owner = owner;
-        _code = code;
-        _setCode = setCode;
-        _codeStartsWith = codeStartsWith;
-        _ownedBy = ownedBy;
-        _emptyMarker = emptyMarker;
+        _map = map;
     }
 
-    /// <summary>Renomme les codes de la base ; si le propriétaire a déjà le nouveau code, l'ancienne ligne est retirée.</summary>
+    /// <summary>
+    /// Renomme les codes de la base ; si le propriétaire a déjà le nouveau code, l'ancienne ligne est retirée.
+    /// </summary>
     public async Task RenameAsync(string prefix, string oldName, string newName, CancellationToken ct)
     {
-        var rows = await _repo.ListAsync(_codeStartsWith($"{prefix}:"), ct);
-        foreach (var row in rows.Where(r => ActionOf(_code(r), prefix, oldName) is not null).ToList())
+        var rows = await _repo.ListAsync(_map.CodeStartsWith($"{prefix}:"), ct);
+        foreach (var row in rows.Where(r => ActionOf(_map.Code(r), prefix, oldName) is not null).ToList())
         {
-            var renamed = $"{prefix}:{newName}:{ActionOf(_code(row), prefix, oldName)}";
-            if (rows.Any(r => _owner(r) == _owner(row) && string.Equals(_code(r), renamed, StringComparison.OrdinalIgnoreCase)))
+            var renamed = $"{prefix}:{newName}:{ActionOf(_map.Code(row), prefix, oldName)}";
+            var alreadyHeld = rows.Any(r => _map.Owner(r) == _map.Owner(row)
+                && string.Equals(_map.Code(r), renamed, StringComparison.OrdinalIgnoreCase));
+            if (alreadyHeld)
             {
                 _repo.Remove(row);
                 continue;
             }
-            _setCode(row, renamed);
+            _map.SetCode(row, renamed);
             _repo.Update(row);
         }
     }
 
-    /// <summary>Retire les codes de la base ; marqueur « aucun droit » pour un propriétaire qui n'a plus de ligne.</summary>
+    /// <summary>
+    /// Retire les codes de la base ; marqueur « aucun droit » pour un propriétaire qui n'a plus de ligne.
+    /// </summary>
     public async Task RemoveAsync(string prefix, string name, CancellationToken ct)
     {
-        var removed = (await _repo.ListAsync(_codeStartsWith($"{prefix}:"), ct))
-            .Where(r => ActionOf(_code(r), prefix, name) is not null)
+        var removed = (await _repo.ListAsync(_map.CodeStartsWith($"{prefix}:"), ct))
+            .Where(r => ActionOf(_map.Code(r), prefix, name) is not null)
             .ToList();
         if (removed.Count == 0) return;
         _repo.RemoveRange(removed);
 
-        var owners = removed.Select(_owner).Distinct().ToList();
-        var remaining = (await _repo.ListAsync(_ownedBy(owners), ct)).Except(removed).Select(_owner).ToHashSet();
+        var owners = removed.Select(_map.Owner).Distinct().ToList();
+        var remaining = (await _repo.ListAsync(_map.OwnedBy(owners), ct))
+            .Except(removed)
+            .Select(_map.Owner)
+            .ToHashSet();
         foreach (var owner in owners.Where(o => !remaining.Contains(o)))
-            await _repo.AddAsync(_emptyMarker(owner), ct);
+            await _repo.AddAsync(_map.EmptyMarker(owner), ct);
     }
 
-    /// <summary>Action (READ, UPDATE…) si le code vise exactement cette base (nom sans tenir compte de la casse), sinon null.</summary>
+    /// <summary>
+    /// Action (READ, UPDATE…) si le code vise exactement cette base (nom sans tenir compte de la casse), sinon null.
+    /// </summary>
     private static string? ActionOf(string code, string prefix, string name)
     {
         var start = $"{prefix}:{name}:";
