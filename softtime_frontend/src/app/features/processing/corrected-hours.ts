@@ -22,7 +22,7 @@ import { toastImportResult } from '../../shared/utils/import-result';
     <page-header title="Heures corrigées" subtitle="Corrections manuelles">
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
       <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter</soft-button>
-      <label class="file-btn">
+      <label class="file-btn" *ngIf="canCreate()">
         <input #corrFile type="file" accept=".xlsx,.xls" hidden (change)="onFile($event)" />
         <soft-button variant="secondary" (click)="corrFile.click()">Import Excel</soft-button>
       </label>

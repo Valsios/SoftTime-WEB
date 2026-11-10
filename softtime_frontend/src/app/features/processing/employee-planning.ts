@@ -49,15 +49,15 @@ import { readDeepLink } from '../../shared/utils/deep-link';
     <page-header title="Planning salariés" subtitle="Tous les salariés, même sans planning">
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
       <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter un planning</soft-button>
-      <label class="file-btn">
+      <label class="file-btn" *ngIf="canCreate()">
         <input #planningFile type="file" accept=".xlsx,.xls" hidden (change)="onFile($event)" />
         <soft-button variant="secondary" (click)="planningFile.click()">Import Excel</soft-button>
       </label>
-      <label class="file-btn">
+      <label class="file-btn" *ngIf="canCreate()">
         <input #categoryFile type="file" accept=".csv" hidden (change)="onGenerateFromCategoryFile($event)" />
         <soft-button variant="secondary" (click)="categoryFile.click()">Générer par catégorie (CSV)</soft-button>
       </label>
-      <label class="file-btn">
+      <label class="file-btn" *ngIf="canCreate()">
         <input #generateFile type="file" accept=".csv" hidden (change)="onGenerateFile($event)" />
         <soft-button variant="secondary" (click)="generateFile.click()">Générer par matricule (CSV)</soft-button>
       </label>

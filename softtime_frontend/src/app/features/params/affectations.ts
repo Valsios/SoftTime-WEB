@@ -21,7 +21,7 @@ import { cardEmployeeLabel } from '../../shared/utils/labels';
   template: `
     <page-header title="Affectations" subtitle="Salariés par catégorie">
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
-      <label class="file-btn">
+      <label class="file-btn" *ngIf="canCreate()">
         <input #affFile type="file" accept=".xlsx,.xls" hidden (change)="onFile($event)" />
         <soft-button variant="secondary" (click)="affFile.click()">Import Excel</soft-button>
       </label>

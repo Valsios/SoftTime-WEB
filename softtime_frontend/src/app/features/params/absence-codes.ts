@@ -15,7 +15,7 @@ import { asRow } from '../../shared/utils/date';
   imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, SoftToggle],
   template: `
     <page-header title="Codes absence" subtitle="Codes absence">
-      <soft-button variant="secondary" (click)="syncSage()">Sync SAGE</soft-button>
+      <soft-button *ngIf="canCreate()" variant="secondary" (click)="syncSage()">Sync SAGE</soft-button>
       <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter</soft-button>
     </page-header>
     <soft-card>

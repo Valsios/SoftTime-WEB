@@ -232,7 +232,8 @@ export const routes: Routes = [
       {
         path: 'history',
         canActivate: [droitGuard, databaseGuard],
-        data: { droit: Droit.Traceability },
+        // Code d'écran exigé aussi par le serveur (lot 4c) et par le menu.
+        data: { droit: Droit.Traceability, permission: 'TRACE:AUDIT' },
         loadComponent: () => import('./features/reports/history').then((m) => m.HistoryPage),
       },
       {

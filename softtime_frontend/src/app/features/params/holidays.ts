@@ -16,7 +16,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
   imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput],
   template: `
     <page-header title="Jours fériés" subtitle="Calendrier fériés">
-      <soft-button variant="secondary" (click)="importSage()">Importer SAGE</soft-button>
+      <soft-button *ngIf="canCreate()" variant="secondary" (click)="importSage()">Importer SAGE</soft-button>
       <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter</soft-button>
     </page-header>
     <soft-card>

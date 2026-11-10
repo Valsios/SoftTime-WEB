@@ -19,7 +19,7 @@ import { toastImportResult } from '../../shared/utils/import-result';
   template: `
     <page-header title="Shifts" subtitle="Catalogue des shifts">
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
-      <label class="file-btn">
+      <label class="file-btn" *ngIf="canCreate()">
         <input #shiftFile type="file" accept=".xlsx,.xls" hidden (change)="onFile($event)" />
         <soft-button variant="secondary" (click)="shiftFile.click()">Import Excel</soft-button>
       </label>

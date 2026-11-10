@@ -19,12 +19,12 @@ import { toastImportResult } from '../../shared/utils/import-result';
   template: `
     <page-header title="Correspondances paie" subtitle="Cartes SAGE ↔ pointeuse">
       <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
-      <label class="file-btn">
+      <label class="file-btn" *ngIf="canCreate()">
         <input #csvFile type="file" accept=".csv,.txt" hidden (change)="onCsv($event)" />
         <soft-button variant="secondary" (click)="csvFile.click()">Import CSV</soft-button>
       </label>
       <soft-button variant="ghost" (click)="templatesOpen.set(true)">Modèles d'import</soft-button>
-      <soft-button variant="secondary" [loading]="autoMapping()" [disabled]="autoMapping()" (click)="autoMap()">Auto-mapping</soft-button>
+      <soft-button *ngIf="canCreate()" variant="secondary" [loading]="autoMapping()" [disabled]="autoMapping()" (click)="autoMap()">Auto-mapping</soft-button>
       <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter</soft-button>
     </page-header>
     <soft-card>
