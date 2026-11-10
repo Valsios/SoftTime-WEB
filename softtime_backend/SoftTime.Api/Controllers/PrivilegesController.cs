@@ -21,18 +21,21 @@ public class PrivilegesController : ApiControllerBase
     private readonly IParametersAccessGuard _guard;
     private readonly IUserPermissionService _userPermissions;
     private readonly IRolePermissionService _rolePermissions;
+    private readonly IUserRightsDescriber _userRights;
     private readonly ICurrentUser _user;
     public PrivilegesController(
         IPrivilegeService privileges,
         IParametersAccessGuard guard,
         IUserPermissionService userPermissions,
         IRolePermissionService rolePermissions,
+        IUserRightsDescriber userRights,
         ICurrentUser user)
     {
         _privileges = privileges;
         _guard = guard;
         _userPermissions = userPermissions;
         _rolePermissions = rolePermissions;
+        _userRights = userRights;
         _user = user;
     }
 
@@ -56,7 +59,7 @@ public class PrivilegesController : ApiControllerBase
     {
         // GetUserDetailedPermissionsAsync sert aussi en interne (connexion, listes de bases) : le contrôle est donc ici.
         await _guard.EnsureCanReadAsync(ReadPermissions.Privileges, ct);
-        return Ok(await _userPermissions.GetUserDetailedPermissionsAsync(userId, ct));
+        return Ok(await _userRights.DescribeAsync(userId, ct));
     }
 
     [RequireAdmin]
@@ -80,6 +83,18 @@ public class PrivilegesController : ApiControllerBase
         if (_user.UserId is not decimal currentUserId)
             return Unauthorized();
         await _rolePermissions.SaveRoleDetailedPermissionsAsync(currentUserId, roleId, request.GrantedPermissions, ct);
+        return NoContent();
+    }
+
+    /// <summary>Retire des anciens codes de base sans action (« SAGE:X ») d'un compte, après confirmation à l'écran.</summary>
+    [RequireAdmin]
+    [HttpPost("user/{userId}/legacy-permissions/remove")]
+    public async Task<IActionResult> RemoveLegacyPermissionsAsync(
+        decimal userId, [FromBody] RemoveLegacyPermissionsRequest request, CancellationToken ct)
+    {
+        if (_user.UserId is not decimal currentUserId)
+            return Unauthorized();
+        await _userPermissions.RemoveLegacyPermissionsAsync(currentUserId, userId, request.Codes, ct);
         return NoContent();
     }
 

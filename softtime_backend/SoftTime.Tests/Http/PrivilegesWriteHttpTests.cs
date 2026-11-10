@@ -50,6 +50,53 @@ public class PrivilegesWriteHttpTests : IClassFixture<ApiFactory>
         { "POST", "/api/v1/privileges/user/10050/reset", null },
     };
 
+    [Fact]
+    public async Task GetUserPermissions_Administrator_ReturnsEachRightWithItsSource()
+    {
+        // Act
+        var resp = await _http.SendAsync(_f.Request("admin", HttpMethod.Get, "/api/v1/privileges/user/10034"));
+
+        // Assert
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var doc = System.Text.Json.JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+        var rights = doc.RootElement.GetProperty("data").GetProperty("rights").EnumerateArray()
+            .ToDictionary(r => r.GetProperty("code").GetString()!, r => r.GetProperty("source").GetString());
+        rights["PROC:SHIFTS"].Should().Be("ROLE");
+        rights["PROC:PUNCHES"].Should().Be("REMOVED");
+    }
+
+    [Theory]
+    [InlineData("anonyme", HttpStatusCode.Unauthorized)]
+    [InlineData("privreader", HttpStatusCode.Forbidden)]
+    public async Task RemoveLegacyPermissions_NonAdministrator_IsRefused(string profile, HttpStatusCode expected)
+    {
+        // Arrange
+        var before = _f.Snapshot();
+
+        // Act
+        var resp = await _http.SendAsync(_f.Request(profile, HttpMethod.Post, "/api/v1/privileges/user/10050/legacy-permissions/remove",
+            """{"codes":["SAGE:ANCIENNE"]}"""));
+
+        // Assert
+        resp.StatusCode.Should().Be(expected);
+        _f.Snapshot().Should().Be(before);
+    }
+
+    [Fact]
+    public async Task RemoveLegacyPermissions_Administrator_RemovesTheConfirmedCode()
+    {
+        // Arrange
+        _f.Store.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 10051, PermissionCode = "SAGE:ANCIENNE", IsGranted = true });
+
+        // Act
+        var resp = await _http.SendAsync(_f.Request("admin", HttpMethod.Post, "/api/v1/privileges/user/10051/legacy-permissions/remove",
+            """{"codes":["SAGE:ANCIENNE"]}"""));
+
+        // Assert
+        resp.StatusCode.Should().Be(HttpStatusCode.NoContent, await resp.Content.ReadAsStringAsync());
+        _f.Store.Get<UserPermission>().Items.Should().NotContain(p => p.IdResponsable == 10051 && p.PermissionCode == "SAGE:ANCIENNE");
+    }
+
     [Theory]
     [MemberData(nameof(Writes))]
     public async Task PrivilegesWrite_Anonymous_Returns401(string method, string url, string? body)

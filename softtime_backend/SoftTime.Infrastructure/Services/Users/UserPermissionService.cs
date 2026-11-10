@@ -134,6 +134,35 @@ public sealed class UserPermissionService : IUserPermissionService
             await repo.AddAsync(row, ct);
     }
 
+    /// <summary>
+    /// Retire des anciens codes de base sans action (« SAGE:X »), conservés jusque-là à chaque enregistrement pour ne
+    /// retirer aucun accès sans le voir. Chaque code doit être un ancien code enregistré sur ce compte.
+    /// </summary>
+    public async Task RemoveLegacyPermissionsAsync(
+        decimal currentUserId, decimal targetUserId, IReadOnlyCollection<string> codes, CancellationToken cancellationToken = default)
+    {
+        var caller = await RequireAdministratorCallerAsync(currentUserId, cancellationToken);
+        var target = await _uow.Repository<Responsable>().GetByIdAsync(targetUserId, cancellationToken)
+            ?? throw new NotFoundException("Utilisateur cible introuvable.");
+        var repo = _uow.Repository<UserPermission>();
+        var legacyRows = (await repo.ListAsync(p => p.IdResponsable == targetUserId, cancellationToken))
+            .Where(p => PermissionCodeValidator.IsLegacyDatabaseCode(p.PermissionCode))
+            .ToList();
+        var wanted = (codes ?? Array.Empty<string>()).Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).ToList();
+        var missing = wanted.Where(c => !legacyRows.Any(r => string.Equals(r.PermissionCode.Trim(), c, StringComparison.OrdinalIgnoreCase))).ToList();
+        if (wanted.Count == 0 || missing.Count > 0)
+            throw new DomainException($"Ancien code introuvable pour ce compte : {string.Join(", ", missing.DefaultIfEmpty("(aucun)"))}.");
+
+        var removed = legacyRows.Where(r => wanted.Contains(r.PermissionCode.Trim(), StringComparer.OrdinalIgnoreCase)).ToList();
+        repo.RemoveRange(removed);
+        await _rightsChangeJournal.EcrireAuditDroitAsync(
+            new RightsChange(currentUserId, caller.Login ?? string.Empty, "USER", targetUserId, target.NomResponsable,
+                "REMOVE_LEGACY_PERMS", removed.Select(r => r.PermissionCode).ToList(), new List<string>()),
+            cancellationToken);
+        await _uow.SaveChangesAsync(cancellationToken);
+        _effectiveRights.Invalidate(targetUserId);
+    }
+
     public async Task ResetUserDetailedPermissionsAsync(decimal currentUserId, decimal targetUserId, CancellationToken cancellationToken = default)
     {
         var caller = await RequireAdministratorCallerAsync(currentUserId, cancellationToken);

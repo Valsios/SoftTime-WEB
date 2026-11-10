@@ -151,6 +151,9 @@ internal sealed class AuthServices : IUserPermissionService
     public Task ResetUserDetailedPermissionsAsync(decimal currentUserId, decimal targetUserId, CancellationToken cancellationToken = default)
         => UserPermissions.ResetUserDetailedPermissionsAsync(currentUserId, targetUserId, cancellationToken);
 
+    public Task RemoveLegacyPermissionsAsync(decimal currentUserId, decimal targetUserId, IReadOnlyCollection<string> codes, CancellationToken cancellationToken = default)
+        => UserPermissions.RemoveLegacyPermissionsAsync(currentUserId, targetUserId, codes, cancellationToken);
+
     public Task<RoleDetailedPermissionsDto> GetRoleDetailedPermissionsAsync(decimal roleId, CancellationToken cancellationToken = default)
         => RolePermissions.GetRoleDetailedPermissionsAsync(roleId, cancellationToken);
 
