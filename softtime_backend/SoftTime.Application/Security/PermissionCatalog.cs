@@ -58,6 +58,16 @@ public static class PermissionCatalog
     public static readonly HashSet<string> KnownStatic = new(
         PermissionsParDroit.SelectMany(p => p.Codes).Concat(PermissionsSansPorte), StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Codes connus groupés par domaine (préfixe), dans l'ordre d'affichage : un domaine par porte, puis « SELF » (sans
+    /// porte). Les codes de bases (SAGE:, POINTEUSE:) dépendent des bases déclarées et n'en font pas partie.
+    /// </summary>
+    public static IReadOnlyList<(string Key, int Gate, IReadOnlyList<string> Codes)> Domains()
+        => PermissionsParDroit
+            .Select(p => (Key: p.Codes[0][..p.Codes[0].IndexOf(':')], Gate: p.Droit, Codes: (IReadOnlyList<string>)p.Codes))
+            .Append((Key: "SELF", Gate: 0, Codes: (IReadOnlyList<string>)PermissionsSansPorte))
+            .ToList();
+
     public static bool IsKnown(string code)
     {
         if (string.IsNullOrWhiteSpace(code)) return false;
