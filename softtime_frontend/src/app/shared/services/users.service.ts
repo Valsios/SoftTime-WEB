@@ -3,6 +3,7 @@ import { Observable } from 'rxjs';
 import { ApiService } from '../../core/api';
 import { RoleChangePreview } from '../../core/error.logic';
 import {
+  CatalogDomain,
   DbAccess,
   DepartementService,
   DepartementServiceOptions,
@@ -67,6 +68,10 @@ export class RolesService extends ApiService {
 
 @Injectable({ providedIn: 'root' })
 export class PrivilegesService extends ApiService {
+  /** Catalogue des codes connus groupés par domaine (source unique : le serveur). */
+  catalog(): Observable<CatalogDomain[]> {
+    return this.http.get<CatalogDomain[]>(this.url('/api/v1/privileges/catalog'));
+  }
   droits(): Observable<Droit[]> {
     return this.http.get<Droit[]>(this.url('/api/v1/privileges/droits'));
   }

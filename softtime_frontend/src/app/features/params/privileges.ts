@@ -11,6 +11,7 @@ import { PrivilegesDraftService } from '../../shared/services/privileges-draft.s
 import { AuthService } from '../../shared/services/auth.service';
 import { Icon } from '../../shared/components/icon';
 import { PermMark } from './perm-mark';
+import { categoriesFromCatalog } from './privileges.catalog';
 import { PermSearch } from './perm-search';
 import {
   SENSITIVE_RIGHT_HINT,
@@ -1390,7 +1391,8 @@ export class PrivilegesPage implements OnInit {
     });
   });
 
-  readonly featureCategories: FeatureCategory[] = [
+  /** Liste locale : repli si le catalogue du serveur n'est pas disponible, et source des libellés et icônes. */
+  private readonly localCategories: FeatureCategory[] = [
     {
       key: 'PARAMS',
       title: 'Paramètres',
@@ -1461,7 +1463,16 @@ export class PrivilegesPage implements OnInit {
   ];
 
   /** Pages (codes sans action) : cocher une action coche sa page, décocher une page décoche ses actions. */
-  private readonly pageCodes: ReadonlySet<string> = new Set(this.featureCategories.flatMap((c) => c.items.map((i) => i.code)));
+  /** Catégories affichées : catalogue du serveur (GET privileges/catalog), sinon la liste locale. */
+  private readonly categories = signal<FeatureCategory[]>(this.localCategories);
+
+  get featureCategories(): FeatureCategory[] {
+    return this.categories();
+  }
+
+  private get pageCodes(): ReadonlySet<string> {
+    return new Set(this.featureCategories.flatMap((c) => c.items.map((i) => i.code)));
+  }
 
   // Recherche : n'agit que sur l'affichage, jamais sur le brouillon.
   readonly search = signal('');
@@ -1506,6 +1517,11 @@ export class PrivilegesPage implements OnInit {
     }
     this.sageSvc.list().subscribe((dbs) => this.sageDbs.set(dbs));
     this.pointeuseSvc.list().subscribe((dbs) => this.pointeuseDbs.set(dbs));
+    // Codes connus depuis le serveur ; en cas d'échec, la liste locale reste affichée (l'écran ne casse pas).
+    this.privSvc.catalog().subscribe({
+      next: (domains) => this.categories.set(categoriesFromCatalog(domains, this.localCategories)),
+      error: () => undefined,
+    });
 
     this.usersSvc.list().subscribe((users) => {
       this.users.set(users);

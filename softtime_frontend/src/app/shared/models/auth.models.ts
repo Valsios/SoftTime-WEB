@@ -66,6 +66,13 @@ export interface UserDetailedPermissions {
   rights?: EffectivePermission[];
 }
 
+/** Domaine du catalogue des permissions (GET privileges/catalog) : préfixe, porte (0 = aucune) et codes connus. */
+export interface CatalogDomain {
+  key: string;
+  gate: number;
+  codes: string[];
+}
+
 export interface RoleDetailedPermissions {
   roleId: number;
   grantedPermissions: string[];
