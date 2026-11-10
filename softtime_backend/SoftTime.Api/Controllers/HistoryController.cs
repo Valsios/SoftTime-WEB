@@ -33,10 +33,12 @@ public class HistoryController : ApiControllerBase
     public async Task<IActionResult> PointagesAsync([FromQuery] PeriodRequest filter, CancellationToken ct)
         => Ok(await _query.ListPointagesAsync(filter, ct));
 
+    [RequireAdmin]
     [HttpDelete("pointages/{id}")]
     public async Task<IActionResult> DeletePointageAsync(decimal id, CancellationToken ct)
         => await _purge.DeletePointagesAsync(id, ct) == 0 ? NotFound() : NoContent();
 
+    [RequireAdmin]
     [HttpDelete("pointages")]
     public async Task<IActionResult> PurgePointagesAsync(CancellationToken ct)
         => Ok(await _purge.DeleteAllPointagesAsync(ct));
@@ -45,10 +47,12 @@ public class HistoryController : ApiControllerBase
     public async Task<IActionResult> AnomaliesAsync([FromQuery] PeriodRequest filter, CancellationToken ct)
         => Ok(await _query.ListAnomaliesAsync(filter, ct));
 
+    [RequireAdmin]
     [HttpDelete("anomalies/{id}")]
     public async Task<IActionResult> DeleteAnomalieAsync(decimal id, CancellationToken ct)
         => await _purge.DeleteAnomaliesAsync(id, ct) == 0 ? NotFound() : NoContent();
 
+    [RequireAdmin]
     [HttpDelete("anomalies")]
     public async Task<IActionResult> PurgeAnomaliesAsync(CancellationToken ct)
         => Ok(await _purge.DeleteAllAnomaliesAsync(ct));
@@ -57,10 +61,12 @@ public class HistoryController : ApiControllerBase
     public async Task<IActionResult> HsAsync([FromQuery] PeriodRequest filter, CancellationToken ct)
         => Ok(await _query.ListHsAsync(filter, ct));
 
+    [RequireAdmin]
     [HttpDelete("hs/{id}")]
     public async Task<IActionResult> DeleteHsAsync(decimal id, CancellationToken ct)
         => await _purge.DeleteHsAsync(id, ct) == 0 ? NotFound() : NoContent();
 
+    [RequireAdmin]
     [HttpDelete("hs")]
     public async Task<IActionResult> PurgeHsAsync(CancellationToken ct)
         => Ok(await _purge.DeleteAllHsAsync(ct));

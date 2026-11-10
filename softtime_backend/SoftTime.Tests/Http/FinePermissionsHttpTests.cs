@@ -210,7 +210,7 @@ public class FinePermissionsHttpTests : IClassFixture<ApiFactory>
         { "GET", "/api/v1/travel-expenses" },
         { "POST", "/api/v1/travel-expenses/compute" },
         { "GET", "/api/v1/history/pointages" },
-        { "DELETE", "/api/v1/history/hs" },
+        { "GET", "/api/v1/history/hs" }, // suppression et purge : réservées à l'administrateur (HistoryAdminHttpTests)
         { "GET", "/api/v1/audit/types" },
         { "GET", "/api/v1/privileges/audit" },
     };
