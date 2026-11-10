@@ -603,6 +603,54 @@ public class RolePermissionsTests
     }
 
     [Fact]
+    public async Task SaveUserDetailedPermissionsAsync_LegacyDatabaseCodeWithoutAction_IsKeptWithItsGate()
+    {
+        // Arrange
+        // « SAGE:ANCIENNE » (sans action) : masqué à l'écran, mais compté par le calculateur (porte Bases).
+        foreach (var code in new[] { "PROC:SHIFTS", "SAGE:ANCIENNE" })
+            _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 2, PermissionCode = code, IsGranted = true });
+        var shown = await _auth.GetUserDetailedPermissionsAsync(2);
+
+        // Act
+        await _auth.SaveUserDetailedPermissionsAsync(1, 2, shown.GrantedPermissions.Append("PARAMS:USERS").ToList());
+
+        // Assert
+        shown.GrantedPermissions.Should().NotContain("SAGE:ANCIENNE");
+        UserCodes(2).Should().BeEquivalentTo("PROC:SHIFTS", "PARAMS:USERS", "SAGE:ANCIENNE");
+        var rights = await SoftTime.Tests.Http.TestRights.Service(_uow).GetAsync(2, fresh: true);
+        rights.HasGate(Rights.Databases).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SaveUserDetailedPermissionsAsync_NewLegacyDatabaseCodeTyped_IsStillRefused()
+    {
+        // Act
+        Func<Task> act = () => _auth.SaveUserDetailedPermissionsAsync(1, 2, new[] { "SAGE:ANCIENNE" });
+
+        // Assert
+        (await act.Should().ThrowExactlyAsync<DomainException>()).Which.Message.Should().Be("Codes de permission inconnus : SAGE:ANCIENNE.");
+    }
+
+    [Fact]
+    public async Task SaveRoleDetailedPermissionsAsync_LegacyDatabaseCodeWithoutAction_IsKeptWithItsGate()
+    {
+        // Arrange
+        foreach (var code in new[] { "PROC:SHIFTS", "SAGE:ANCIENNE" })
+            _uow.Get<RolePermission>().Items.Add(new RolePermission { IdRole = 3, PermissionCode = code, IsGranted = true });
+        var shown = await _auth.GetRoleDetailedPermissionsAsync(3);
+
+        // Act
+        await _auth.SaveRoleDetailedPermissionsAsync(1, 3, shown.GrantedPermissions);
+
+        // Assert
+        shown.GrantedPermissions.Should().Equal("PROC:SHIFTS");
+        (await _uow.Get<RolePermission>().ListAsync(p => p.IdRole == 3)).Select(p => p.PermissionCode)
+            .Should().BeEquivalentTo("PROC:SHIFTS", "SAGE:ANCIENNE");
+        (await _uow.Get<DroitRole>().ListAsync(d => d.IdRole == 3)).Select(d => (int)d.IdDroit)
+            .Should().BeEquivalentTo(new[] { Rights.Databases, Rights.Processing });
+    }
+
+    [Fact]
     public async Task GetUserDetailedPermissionsAsync_LegacyUnknownCodeInDatabase_IsHiddenSoTheScreenCanSave()
     {
         // Arrange

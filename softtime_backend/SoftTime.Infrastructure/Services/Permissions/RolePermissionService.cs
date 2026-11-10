@@ -59,7 +59,11 @@ public sealed class RolePermissionService : IRolePermissionService
         var targetRole = await _uow.Repository<Role>().GetByIdAsync(targetRoleId, cancellationToken)
             ?? throw new NotFoundException("Rôle cible introuvable.");
 
-        var normalizedPermissions = PermissionCodeValidator.Normalize(permissions, PermissionMarkers.EmptyRolePermissionsMarker);
+        var stored = await _uow.Repository<RolePermission>()
+            .ListReadOnlyAsync(p => p.IdRole == targetRoleId && p.IsGranted, cancellationToken);
+        var normalizedPermissions = PermissionCodeValidator.WithLegacyDatabaseCodes(
+            PermissionCodeValidator.Normalize(permissions, PermissionMarkers.EmptyRolePermissionsMarker),
+            stored.Select(p => p.PermissionCode));
         var permsAvant = await ReplaceRolePermissionsAsync(targetRoleId, normalizedPermissions, cancellationToken);
         await ReplaceDroitsAsync(targetRoleId, normalizedPermissions, cancellationToken);
 

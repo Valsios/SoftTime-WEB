@@ -110,6 +110,9 @@ public sealed class UserPermissionService : IUserPermissionService
             toSaveList = PermissionCodeValidator.Normalize(
                 toSaveList.Concat(await AdminMandatoryPermissionsAsync(cancellationToken)), PermissionMarkers.EmptyPermissionsMarker);
 
+        var stored = await _uow.Repository<UserPermission>()
+            .ListReadOnlyAsync(p => p.IdResponsable == targetUserId && p.IsGranted, cancellationToken);
+        toSaveList = PermissionCodeValidator.WithLegacyDatabaseCodes(toSaveList, stored.Select(p => p.PermissionCode));
         var permsAvant = await ReplaceUserPermissionsAsync(targetUserId, toSaveList, cancellationToken);
         await _rightsChangeJournal.EcrireAuditDroitAsync(
             new RightsChange(currentUserId, caller.Login ?? string.Empty, "USER", targetUserId, target.NomResponsable, "UPDATE_USER_PERMS", permsAvant, toSaveList),

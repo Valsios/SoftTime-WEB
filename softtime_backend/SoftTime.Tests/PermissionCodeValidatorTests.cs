@@ -89,4 +89,34 @@ public class PermissionCodeValidatorTests
         // Assert
         result.Should().Be(expected);
     }
+
+    [Theory]
+    [InlineData("SAGE:ANCIENNE", true)]
+    [InlineData("POINTEUSE:PTG", true)]
+    [InlineData("SAGE:B:READ", false)]
+    [InlineData("SAGE:CREATE", false)]
+    [InlineData("OBSOLETE:CODE", false)]
+    [InlineData("PROC:SHIFTS", false)]
+    public void IsLegacyDatabaseCode_Code_TrueOnlyForDatabaseCodesWithoutKnownAction(string code, bool expected)
+    {
+        // Act
+        var result = PermissionCodeValidator.IsLegacyDatabaseCode(code);
+
+        // Assert
+        result.Should().Be(expected);
+    }
+
+    [Fact]
+    public void WithLegacyDatabaseCodes_StoredRows_KeepsOnlyLegacyDatabaseCodes()
+    {
+        // Arrange
+        var validated = new List<string> { "PROC:SHIFTS" };
+        var stored = new[] { "SAGE:ANCIENNE", "OBSOLETE:CODE", "PARAMS:USERS", "sage:ancienne" };
+
+        // Act
+        var result = PermissionCodeValidator.WithLegacyDatabaseCodes(validated, stored);
+
+        // Assert
+        result.Should().Equal("PROC:SHIFTS", "SAGE:ANCIENNE");
+    }
 }

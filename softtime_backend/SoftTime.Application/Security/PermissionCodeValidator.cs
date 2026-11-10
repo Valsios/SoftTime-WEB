@@ -31,6 +31,22 @@ public static class PermissionCodeValidator
     }
 
     /// <summary>
+    /// Ancien code de base sans action reconnue (ex. « SAGE:X ») : le calculateur des droits effectifs le compte
+    /// (PermissionCatalog.IsKnown accepte tout préfixe SAGE: / POINTEUSE:, et il donne la porte Bases) mais la saisie le
+    /// refuse et l'écran ne l'affiche pas. Les services l'ont déjà en base : ils le conservent tel quel à
+    /// l'enregistrement, pour qu'une sauvegarde de l'écran ne retire aucun accès existant.
+    /// </summary>
+    public static bool IsLegacyDatabaseCode(string? code)
+        => !string.IsNullOrWhiteSpace(code) && PermissionCatalog.IsKnown(code) && !IsValid(code);
+
+    /// <summary>Codes enregistrés : saisie validée, plus les anciens codes de base déjà présents (voir IsLegacyDatabaseCode).</summary>
+    public static List<string> WithLegacyDatabaseCodes(List<string> validated, IEnumerable<string> stored)
+        => validated
+            .Concat(stored.Where(IsLegacyDatabaseCode).Where(c => !validated.Contains(c, StringComparer.OrdinalIgnoreCase)))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    /// <summary>
     /// Codes prêts à enregistrer (marqueur <paramref name="emptyMarker"/> retiré). Lève une <see cref="DomainException"/>
     /// avec la liste des codes refusés : trop longs d'abord, puis inconnus.
     /// </summary>
