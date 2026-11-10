@@ -260,8 +260,10 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
         {
             status.Should().Be(HttpStatusCode.Forbidden);
             // Avec la porte 5 et TRACE:AUDIT, c'est la règle administrateur qui refuse. gate5only n'a la porte 5 que dans
-            // son jeton : depuis le lot 5, les portes sont lues en base et le filtre de porte refuse avant.
+            // son jeton : depuis le lot 5, les portes sont lues en base et le filtre de porte refuse avant, avec son message.
+            // (En base, la porte 5 existe si et seulement si TRACE:AUDIT est accordé : le filtre fin ne peut pas refuser seul.)
             if (profile == "tracereader") text.Should().Contain(AdminOnly);
+            if (profile == "gate5only") text.Should().Contain("Vous n'avez pas accès à cette section.");
         }
         _f.Snapshot().Should().Be(before);
     }

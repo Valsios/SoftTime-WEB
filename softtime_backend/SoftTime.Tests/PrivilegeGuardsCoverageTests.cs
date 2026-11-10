@@ -100,8 +100,16 @@ public class PrivilegeGuardsCoverageTests
         new RequireDroitFilter(Rights.Databases, new TestCurrentUser(2, role, rights)).OnAuthorization(ctx);
 
         // Assert
-        if (refused) ctx.Result.Should().BeOfType<ForbidResult>();
+        if (refused) ShouldBeGateRefusal(ctx.Result);
         else ctx.Result.Should().BeNull();
+    }
+
+    /// <summary>Refus de porte : 403 avec le message de <see cref="GateRefusal"/> (corps vide avant le lot 7).</summary>
+    private static void ShouldBeGateRefusal(IActionResult? result)
+    {
+        var refusal = result.Should().BeOfType<ObjectResult>().Which;
+        refusal.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        refusal.Value.Should().BeEquivalentTo(new { Success = false, Message = GateRefusal.Message });
     }
 
     public static TheoryData<bool, decimal, int[], bool> RequireAnyDroitCases => new()
@@ -123,7 +131,7 @@ public class PrivilegeGuardsCoverageTests
 
         new RequireAnyDroitFilter(new[] { Rights.Databases, Rights.Parameters }, new TestCurrentUser(2, role, rights)).OnAuthorization(ctx);
 
-        if (refused) ctx.Result.Should().BeOfType<ForbidResult>();
+        if (refused) ShouldBeGateRefusal(ctx.Result);
         else ctx.Result.Should().BeNull();
     }
 
@@ -135,7 +143,7 @@ public class PrivilegeGuardsCoverageTests
 
         new RequireAnyDroitFilter(Array.Empty<int>(), new TestCurrentUser(1, 1)).OnAuthorization(ctx);
 
-        ctx.Result.Should().BeOfType<ForbidResult>();
+        ShouldBeGateRefusal(ctx.Result);
     }
 
     [Theory]

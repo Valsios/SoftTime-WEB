@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 
 using SoftTime.Application.Abstractions.RequestContext;
@@ -22,6 +21,6 @@ public class RequireAnyDroitFilter : IAuthorizationFilter
         if (context.HttpContext.User.Identity?.IsAuthenticated != true)
             return;
         if (!_droits.Any(_user.HasRight))
-            context.Result = new ForbidResult();
+            context.Result = GateRefusal.Result();
     }
 }
