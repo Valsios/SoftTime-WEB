@@ -15,7 +15,7 @@ using SoftTime.Application.Abstractions.Excel;
 using SoftTime.Application.Abstractions.ExternalData;
 using SoftTime.Application.Abstractions.Extras;
 using SoftTime.Application.Abstractions.History;
-using SoftTime.Application.Abstractions.Ml;
+using SoftTime.Application.Abstractions.Landing;
 using SoftTime.Application.Abstractions.Notifications;
 using SoftTime.Application.Abstractions.Overtime;
 using SoftTime.Application.Abstractions.Payroll;
@@ -32,7 +32,6 @@ using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
 using SoftTime.Infrastructure.Integrations;
-using SoftTime.Infrastructure.MachineLearning;
 using SoftTime.Infrastructure.Persistence;
 using SoftTime.Infrastructure.Queries;
 using SoftTime.Infrastructure.Repositories;
@@ -48,7 +47,7 @@ using SoftTime.Infrastructure.Services.Employees;
 using SoftTime.Infrastructure.Services.ExternalData;
 using SoftTime.Infrastructure.Services.Extras;
 using SoftTime.Infrastructure.Services.History;
-using SoftTime.Infrastructure.Services.Ml;
+using SoftTime.Infrastructure.Services.Landing;
 using SoftTime.Infrastructure.Services.Overtime;
 using SoftTime.Infrastructure.Services.Payroll;
 using SoftTime.Infrastructure.Services.Permissions;
@@ -80,6 +79,8 @@ public static class DependencyInjection
         services.AddOptions<EmailOptions>().Bind(configuration.GetSection(EmailOptions.Section));
         // Mon espace salarié (lecture seule) : désactivé par défaut (SelfService:Enabled = false).
         services.AddOptions<SelfServiceOptions>().Bind(configuration.GetSection(SelfServiceOptions.Section));
+        // Atterrissage de semaine : les valeurs par défaut conviennent sans section « Landing ».
+        services.AddOptions<LandingOptions>().Bind(configuration.GetSection(LandingOptions.Section));
         return services;
     }
 
@@ -91,7 +92,7 @@ public static class DependencyInjection
         services.AddTimekeepingServices();
         services.AddPayrollServices();
         services.AddReportingServices();
-        services.AddMachineLearningServices();
+        services.AddLandingServices();
         services.AddClosingServices();
         services.AddSelfServices();
         return services;
@@ -193,15 +194,12 @@ public static class DependencyInjection
         services.AddScoped<IJournalService, JournalService>();
     }
 
-    /// <summary>Moteur prédictif.</summary>
-    private static void AddMachineLearningServices(this IServiceCollection services)
+    /// <summary>Atterrissage de semaine des heures supplémentaires.</summary>
+    private static void AddLandingServices(this IServiceCollection services)
     {
-        services.AddScoped<IMlDatasetContextLoader, MlDatasetContextLoader>();
-        services.AddScoped<IMlDatasetService, MlDatasetService>();
-        services.AddScoped<IMlTrainingService, MlTrainingService>();
-        services.AddScoped<IMlPredictionService, MlPredictionService>();
-        services.AddScoped<IMlForecastQueryService, MlForecastQueryService>();
-        services.AddScoped<IMlPipelineService, MlPipelineService>();
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddScoped<ILandingContextLoader, LandingContextLoader>();
+        services.AddScoped<IWeekLandingService, WeekLandingService>();
     }
 
     /// <summary>Clôture de paie assistée.</summary>
@@ -236,7 +234,6 @@ public static class DependencyInjection
         services.AddPersistence(configuration);
         services.AddSchemaMigrations(configuration);
         services.AddIntegrations();
-        services.AddMachineLearningStorage(configuration);
         return services;
     }
 
@@ -286,27 +283,6 @@ public static class DependencyInjection
         services.AddScoped<IEmailService, EmailService>();
         // BCrypt remplace le hacheur Identity enregistré par AddApplication (les anciens hachages migrent à la connexion).
         services.Replace(ServiceDescriptor.Scoped<IPasswordHasher<Responsable>, BcryptPasswordHasher>());
-    }
-
-    /// <summary>Base analytique ML et moteur d'entraînement / prédiction.</summary>
-    private static void AddMachineLearningStorage(this IServiceCollection services, IConfiguration configuration)
-    {
-        // Base analytique « model-ready » : schéma ml dans la base SoftTime par défaut,
-        // ou base dédiée via ConnectionStrings:SoftTimeMl (aucun changement de code).
-        var mlConnection = configuration.GetConnectionString("SoftTimeMl");
-        if (string.IsNullOrWhiteSpace(mlConnection))
-            mlConnection = configuration.GetConnectionString("SoftTime");
-
-        services.AddDbContext<MlDbContext>(options =>
-            options.UseSqlServer(
-                mlConnection,
-                sql => sql
-                    .UseCompatibilityLevel(120)
-                    .EnableRetryOnFailure()
-                    .CommandTimeout(300)));
-        services.AddScoped<IMlStore, EfMlStore>();
-        services.AddSingleton<IMlTrainer, MlNetTrainer>();
-        services.AddSingleton<IMlPredictor, MlNetPredictor>();
     }
 
     private sealed class EmptyCompanyContext : ICompanyContext

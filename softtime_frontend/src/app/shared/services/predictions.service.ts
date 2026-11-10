@@ -1,46 +1,20 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '../../core/api';
-import { MlHsAccuracy, MlHsForecast, MlHsWeek, MlJobState, MlStatus } from '../models';
+import { WeekLanding, WeekLandingWeek } from '../models';
 
-/** Moteur prédictif : état, prévisions et déclenchement des traitements. */
+/** Prévisions d'heures supplémentaires : atterrissage de la semaine, calculé à la demande. */
 @Injectable({ providedIn: 'root' })
 export class PredictionsService extends ApiService {
-  status(): Observable<MlStatus> {
-    return this.http.get<MlStatus>(this.url('/api/v1/predictions/status'));
-  }
-
-  job(): Observable<MlJobState> {
-    return this.http.get<MlJobState>(this.url('/api/v1/predictions/job'));
-  }
-
-  overtime(week?: string): Observable<MlHsForecast[]> {
-    return this.http.get<MlHsForecast[]>(this.url('/api/v1/predictions/overtime'), {
+  /** Atterrissage par salarié de la semaine contenant `week` (semaine en cours par défaut). */
+  landing(week?: string): Observable<WeekLanding> {
+    return this.http.get<WeekLanding>(this.url('/api/v1/predictions/landing'), {
       params: this.params({ week }),
     });
   }
 
-  /** Totaux HS prévus par semaine sur l'horizon (semaine en cours comprise). */
-  horizon(): Observable<MlHsWeek[]> {
-    return this.http.get<MlHsWeek[]>(this.url('/api/v1/predictions/overtime/horizon'));
-  }
-
-  /** Prévu / réel des dernières semaines terminées. */
-  accuracy(weeks = 8): Observable<MlHsAccuracy[]> {
-    return this.http.get<MlHsAccuracy[]>(this.url('/api/v1/predictions/overtime/accuracy'), {
-      params: this.params({ weeks }),
-    });
-  }
-
-  refresh(): Observable<{ message: string }> {
-    return this.http.post<{ message: string }>(this.url('/api/v1/predictions/refresh'), {});
-  }
-
-  train(): Observable<{ message: string }> {
-    return this.http.post<{ message: string }>(this.url('/api/v1/predictions/train'), {});
-  }
-
-  backfill(): Observable<{ message: string }> {
-    return this.http.post<{ message: string }>(this.url('/api/v1/predictions/backfill'), {});
+  /** Totaux d'atterrissage de la semaine en cours et des semaines suivantes. */
+  horizon(): Observable<WeekLandingWeek[]> {
+    return this.http.get<WeekLandingWeek[]>(this.url('/api/v1/predictions/landing/horizon'));
   }
 }

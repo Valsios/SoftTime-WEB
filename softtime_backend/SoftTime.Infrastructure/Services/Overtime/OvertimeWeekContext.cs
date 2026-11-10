@@ -141,7 +141,7 @@ public sealed class OvertimeWeekContext : IOvertimeWeekContext
         var conges = ctx.Conges.GetValueOrDefault(cle) ?? new List<LeaveDay>();
         var jours = new List<OvertimeDayInput>();
 
-        // Construction partagée avec la base analytique du moteur prédictif.
+        // Construction partagée avec l'atterrissage de semaine.
         for (var jour = from.Date; jour <= to.Date; jour = jour.AddDays(1))
         {
             jours.Add(OvertimeDayRules.Construire(

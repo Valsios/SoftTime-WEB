@@ -5,8 +5,8 @@ using SoftTime.Domain.Services;
 namespace SoftTime.Infrastructure.Services.Employees;
 
 /// <summary>
-/// Civilités SAGE par clé matricule (règle du 8 mars), partagées par l'écran HS et la base
-/// analytique du moteur prédictif.
+/// Civilités SAGE par clé matricule (règle du 8 mars), partagées par l'écran HS et
+/// l'atterrissage de semaine.
 /// </summary>
 internal static class SageCivilites
 {

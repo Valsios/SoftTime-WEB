@@ -4,7 +4,7 @@ namespace SoftTime.Infrastructure.Persistence.Configurations;
 
 /// <summary>
 /// Applique les <see cref="IEntityTypeConfiguration{TEntity}"/> d'un seul contexte : chaque DbContext a son dossier
-/// (SoftTimeDb, SageDb, PointeuseDb, MlDb), car les quatre bases partagent cet assembly.
+/// (SoftTimeDb, SageDb, PointeuseDb), car les trois bases partagent cet assembly.
 /// </summary>
 internal static class ModelBuilderConfigurationExtensions
 {
