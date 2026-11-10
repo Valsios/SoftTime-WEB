@@ -1,5 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, HostListener, inject, OnInit, signal } from '@angular/core';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, HostListener, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { filter } from 'rxjs';
+import { RightsRefreshService } from '../core/rights-refresh.service';
 import { SessionStore } from '../core/session.store';
 import { Droit } from '../core/rights';
 import { AuthService } from '../shared/services/auth.service';
@@ -578,6 +581,8 @@ export class Shell implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly closingState = inject(ClosingSessionState);
+  private readonly rightsRefresh = inject(RightsRefreshService);
+  private readonly destroyRef = inject(DestroyRef);
 
   /** Entrée « Mon espace » : seulement avec la permission SELF:READ (un administrateur ne l'a pas implicitement). */
   readonly selfSpaceLink = computed(() => hasSelfPermission(this.session.permissions()));
@@ -627,6 +632,13 @@ export class Shell implements OnInit {
     }
     this.auth.refreshMe().subscribe();
     this.pointeuseApi.refresh().subscribe();
+    // Droits relus à la navigation, au plus une fois toutes les 5 minutes (menus à jour sans attendre le jeton).
+    this.router.events
+      .pipe(
+        filter((e) => e instanceof NavigationEnd),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe(() => this.rightsRefresh.onNavigation());
   }
 
   @HostListener('window:resize')
@@ -677,18 +689,26 @@ export class Shell implements OnInit {
 
   private activateThenReload(): void {
     if (!this.session.activeSageDb()) {
-      window.location.reload();
+      void this.reloadCurrentPage();
       return;
     }
     this.sageApi.activate().subscribe({
-      next: (r) => {
-        if (r.cardsAdded > 0 || r.cardsDeactivated > 0) {
-          sessionStorage.setItem('st_pending_toast', r.message);
-        }
-        window.location.reload();
-      },
-      error: () => window.location.reload(),
+      next: (r) => void this.reloadCurrentPage(r.cardsAdded > 0 || r.cardsDeactivated > 0 ? r.message : undefined),
+      error: () => void this.reloadCurrentPage(),
     });
+  }
+
+  /**
+   * Changement de base sans rechargement complet du navigateur : la session est relue, puis la page courante est
+   * recréée (passage par la page neutre « aucune base », sans changer l'adresse) pour recharger ses données.
+   */
+  private async reloadCurrentPage(message?: string): Promise<void> {
+    const url = this.router.url;
+    this.auth.refreshMe().subscribe();
+    this.pointeuseApi.refresh().subscribe();
+    await this.router.navigateByUrl('/no-database', { skipLocationChange: true });
+    await this.router.navigateByUrl(url);
+    if (message) this.toast.success(message);
   }
 
   async logout(): Promise<void> {
