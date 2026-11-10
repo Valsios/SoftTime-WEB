@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { finalize } from 'rxjs';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
@@ -36,7 +37,7 @@ import { asRow } from '../../shared/utils/date';
               <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
             }
             @if (canDelete(row)) {
-              <soft-button size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
+              <soft-button size="sm" variant="danger" [loading]="removingId() === row['id']" [disabled]="removingId() !== null" (click)="remove(row)">Supprimer</soft-button>
             }
           </div>
         </ng-template>
@@ -56,6 +57,8 @@ import { asRow } from '../../shared/utils/date';
 })
 export class PointeuseDatabasesPage implements OnInit {
   private readonly svc = inject(PointeuseDatabasesService);
+  /** Id de la ligne en cours de suppression (bouton en chargement, autres suppressions bloquées). */
+  protected readonly removingId = signal<number | null>(null);
   private readonly session = inject(SessionStore);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
@@ -193,7 +196,10 @@ export class PointeuseDatabasesPage implements OnInit {
       return;
     }
     if (!(await this.confirm.ask('Supprimer cette base pointeuse ?'))) return;
-    this.svc.remove(row['id'] as number).subscribe({
+    this.removingId.set(row['id'] as number);
+    this.svc.remove(row['id'] as number)
+      .pipe(finalize(() => this.removingId.set(null)))
+      .subscribe({
       next: () => {
         this.toast.success('Supprimé.');
         this.svc.refresh().subscribe();

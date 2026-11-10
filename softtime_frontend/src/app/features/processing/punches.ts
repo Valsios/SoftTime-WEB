@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { finalize } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
@@ -17,13 +18,13 @@ import { toastImportResult } from '../../shared/utils/import-result';
   imports: [FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftInput, SoftModal, PeriodFilter, ImportTemplatesModal],
   template: `
     <page-header title="Pointages" subtitle="Liste, import et traitement des pointages">
-      <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
-      <soft-button variant="secondary" (click)="importClock()">Import pointeuse</soft-button>
+      <soft-button variant="secondary" [loading]="excel.exporting()" (click)="exportExcel()">Export Excel</soft-button>
+      <soft-button variant="secondary" [loading]="importingClock()" [disabled]="processing()" (click)="importClock()">Import pointeuse</soft-button>
       <soft-button [loading]="processing()" (click)="preprocess()">Traiter les pointages</soft-button>
       <soft-button variant="danger" [loading]="busy()" (click)="purge()">Purger la période</soft-button>
       <label class="file-btn">
         <input #punchFile type="file" accept=".xlsx,.xls" hidden (change)="onFile($event)" />
-        <soft-button variant="accent" (click)="punchFile.click()">Import Excel</soft-button>
+        <soft-button variant="accent" [loading]="importing()" (click)="punchFile.click()">Import Excel</soft-button>
       </label>
       <soft-button variant="ghost" (click)="templatesOpen.set(true)">Modèles d'import</soft-button>
     </page-header>
@@ -76,7 +77,9 @@ export class PunchesPage {
   readonly matricule = input<unknown>();
   readonly link = computed(() => readDeepLink({ du: this.du(), au: this.au(), matricule: this.matricule() }));
   private readonly svc = inject(PunchesService);
-  private readonly excel = inject(ExcelExportService);
+  protected readonly importing = signal(false);
+  protected readonly importingClock = signal(false);
+  protected readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
 
@@ -147,12 +150,13 @@ export class PunchesPage {
 
   importClock(): void {
     if (!this.lastFilter) { this.toast.warning('Lancez d\'abord une recherche.'); return; }
+    this.importingClock.set(true);
     this.svc.importClock({
       from: this.lastFilter.from,
       to: this.lastFilter.to,
       matriculeFrom: this.lastFilter.matriculeFrom,
       matriculeTo: this.lastFilter.matriculeTo,
-    }).subscribe({
+    }).pipe(finalize(() => this.importingClock.set(false))).subscribe({
       next: (r) => {
         toastImportResult(this.toast, r, `${r.imported} pointage(s) importé(s), ${r.skipped} ignoré(s).`);
         // Le desktop enchaîne import et pré-traitement : on reproduit ce parcours.
@@ -183,7 +187,10 @@ export class PunchesPage {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
-    this.svc.importExcel(file).subscribe({
+    this.importing.set(true);
+    this.svc.importExcel(file)
+      .pipe(finalize(() => this.importing.set(false)))
+      .subscribe({
       next: (r) => {
         toastImportResult(
           this.toast,
@@ -206,7 +213,7 @@ export class PunchesPage {
       return;
     }
     this.loading.set(true);
-    this.svc.list(this.lastFilter).subscribe({
+    this.excel.track(this.svc.list(this.lastFilter)).subscribe({
       next: (items) => {
         this.loading.set(false);
         this.excel.download('pointages', this.columns, items.map(asRow), 'Données', this.tableSearch());

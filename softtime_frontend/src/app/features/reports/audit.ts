@@ -18,7 +18,7 @@ import { JournalTab } from '../audit/journal-tab';
   template: `
     <page-header title="Audit" subtitle="Configuration et journal">
       @if (activeTab() !== 'journal') {
-        <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
+        <soft-button variant="secondary" [loading]="excel.exporting()" (click)="exportExcel()">Export Excel</soft-button>
       }
       @if (activeTab() === 'config') {
         <soft-button [disabled]="!isAdmin()" (click)="openCreate()">Ajouter config</soft-button>
@@ -108,7 +108,7 @@ import { JournalTab } from '../audit/journal-tab';
 })
 export class AuditPage implements OnInit {
   private readonly svc = inject(AuditService);
-  private readonly excel = inject(ExcelExportService);
+  protected readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly session = inject(SessionStore);
 
@@ -304,7 +304,7 @@ export class AuditPage implements OnInit {
 
   exportExcel(): void {
     if (this.activeTab() === 'config') {
-      this.svc.config().subscribe({
+      this.excel.track(this.svc.config()).subscribe({
         next: (items) => this.excel.download('audit-config', this.configColumns, items.map(asRow), 'Données', this.configSearch()),
       });
     } else {
@@ -312,7 +312,7 @@ export class AuditPage implements OnInit {
       const fromDate = new Date();
       fromDate.setDate(fromDate.getDate() - 30);
       const from = fromDate.toISOString().slice(0, 10);
-      this.svc.events({ from, to }).subscribe({
+      this.excel.track(this.svc.events({ from, to })).subscribe({
         next: (items) => this.excel.download('audit-evenements', this.eventColumns, items.map(asRow), 'Données', this.eventSearch()),
       });
     }

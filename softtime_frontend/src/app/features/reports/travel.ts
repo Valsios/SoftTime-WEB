@@ -13,7 +13,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
   imports: [PageHeader, SoftCard, DataTable, PeriodFilter, SoftButton],
   template: `
     <page-header title="Frais de déplacement" subtitle="Totaux à partir des pointages">
-      <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
+      <soft-button variant="secondary" [loading]="excel.exporting()" (click)="exportExcel()">Export Excel</soft-button>
       <soft-button variant="secondary" [loading]="syncing()" (click)="synchronise()">
         Synchroniser (SAGE)
       </soft-button>
@@ -38,7 +38,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
 })
 export class TravelPage {
   private readonly svc = inject(TravelService);
-  private readonly excel = inject(ExcelExportService);
+  protected readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
 
@@ -130,7 +130,7 @@ export class TravelPage {
       this.excel.download('frais-deplacement', this.columns, this.rows(), 'Données', this.tableSearch());
       return;
     }
-    this.svc.list(this.lastFilter).subscribe({
+    this.excel.track(this.svc.list(this.lastFilter)).subscribe({
       next: (items) => this.excel.download('frais-deplacement', this.columns, items.map(asRow), 'Données', this.tableSearch()),
     });
   }

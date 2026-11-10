@@ -103,7 +103,7 @@ const ENTITY_LABELS: Record<string, string> = {
           } @else {
             <div class="inline-row">
               <soft-input label="Nom de la base" [ngModel]="form.nomBd" name="nomBd" (ngModelChange)="onBaseChange($event)" />
-              <soft-button variant="secondary" size="sm" (click)="loadBases()" [disabled]="!form.serveur">Lister les bases</soft-button>
+              <soft-button variant="secondary" size="sm" [loading]="loadingBases()" (click)="loadBases()" [disabled]="!form.serveur">Lister les bases</soft-button>
             </div>
           }
           @if (systemType() === 'POINTEUSE') {

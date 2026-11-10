@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { finalize } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ToastService } from '../../core/toast.service';
@@ -47,19 +48,19 @@ import { readDeepLink } from '../../shared/utils/deep-link';
   ],
   template: `
     <page-header title="Planning salariés" subtitle="Tous les salariés, même sans planning">
-      <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
+      <soft-button variant="secondary" [loading]="excel.exporting()" (click)="exportExcel()">Export Excel</soft-button>
       <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter un planning</soft-button>
       <label class="file-btn">
         <input #planningFile type="file" accept=".xlsx,.xls" hidden (change)="onFile($event)" />
-        <soft-button variant="secondary" (click)="planningFile.click()">Import Excel</soft-button>
+        <soft-button variant="secondary" [loading]="importing()" (click)="planningFile.click()">Import Excel</soft-button>
       </label>
       <label class="file-btn">
         <input #categoryFile type="file" accept=".csv" hidden (change)="onGenerateFromCategoryFile($event)" />
-        <soft-button variant="secondary" (click)="categoryFile.click()">Générer par catégorie (CSV)</soft-button>
+        <soft-button variant="secondary" [loading]="importing()" (click)="categoryFile.click()">Générer par catégorie (CSV)</soft-button>
       </label>
       <label class="file-btn">
         <input #generateFile type="file" accept=".csv" hidden (change)="onGenerateFile($event)" />
-        <soft-button variant="secondary" (click)="generateFile.click()">Générer par matricule (CSV)</soft-button>
+        <soft-button variant="secondary" [loading]="importing()" (click)="generateFile.click()">Générer par matricule (CSV)</soft-button>
       </label>
       <soft-button variant="ghost" (click)="templatesOpen.set(true)">Modèles d'import</soft-button>
     </page-header>
@@ -104,7 +105,7 @@ import { readDeepLink } from '../../shared/utils/deep-link';
           <ng-template #actions let-row>
             <div class="soft-actions" style="justify-content: end">
               <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
-              <soft-button *ngIf="canDelete()" size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
+              <soft-button *ngIf="canDelete()" size="sm" variant="danger" [loading]="removingId() === row['id']" [disabled]="removingId() !== null" (click)="remove(row)">Supprimer</soft-button>
             </div>
           </ng-template>
         </data-table>
@@ -158,8 +159,11 @@ export class EmployeePlanningPage implements OnInit {
   readonly matricule = input<unknown>();
   readonly link = computed(() => readDeepLink({ du: this.du(), au: this.au(), matricule: this.matricule() }));
   private readonly svc = inject(EmployeePlanningService);
+  protected readonly importing = signal(false);
+  /** Id de la ligne en cours de suppression (bouton en chargement, autres suppressions bloquées). */
+  protected readonly removingId = signal<number | null>(null);
   private readonly shiftsSvc = inject(ShiftsService);
-  private readonly excel = inject(ExcelExportService);
+  protected readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly session = inject(SessionStore);
@@ -373,7 +377,10 @@ export class EmployeePlanningPage implements OnInit {
 
   async remove(row: Record<string, unknown>): Promise<void> {
     if (!(await this.confirm.ask('Supprimer cette ligne de planning ?'))) return;
-    this.svc.remove(row['id'] as number).subscribe({
+    this.removingId.set(row['id'] as number);
+    this.svc.remove(row['id'] as number)
+      .pipe(finalize(() => this.removingId.set(null)))
+      .subscribe({
       next: () => {
         this.toast.success('Supprimé.');
         this.loadPlanning();
@@ -384,11 +391,11 @@ export class EmployeePlanningPage implements OnInit {
 
   exportExcel(): void {
     if (this.activeTab() === 'employees') {
-      this.svc.employeesStats(this.lastFilter.from, this.lastFilter.to).subscribe({
+      this.excel.track(this.svc.employeesStats(this.lastFilter.from, this.lastFilter.to)).subscribe({
         next: (items) => this.excel.download('salaries-planning', this.employeeColumns, items.map(asRow), 'Données', this.employeeSearch()),
       });
     } else {
-      this.svc.list(this.lastFilter.from, this.lastFilter.to).subscribe({
+      this.excel.track(this.svc.list(this.lastFilter.from, this.lastFilter.to)).subscribe({
         next: (items) => this.excel.download('lignes-planning', this.planningColumns, items.map(asRow), 'Données', this.planningSearch()),
       });
     }
@@ -398,7 +405,10 @@ export class EmployeePlanningPage implements OnInit {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
-    this.svc.importExcel(file).subscribe({
+    this.importing.set(true);
+    this.svc.importExcel(file)
+      .pipe(finalize(() => this.importing.set(false)))
+      .subscribe({
       next: (r) => {
         toastImportResult(
           this.toast,
@@ -418,7 +428,10 @@ export class EmployeePlanningPage implements OnInit {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
-    this.svc.generateFromCategory(file).subscribe({
+    this.importing.set(true);
+    this.svc.generateFromCategory(file)
+      .pipe(finalize(() => this.importing.set(false)))
+      .subscribe({
       next: (r) => {
         toastImportResult(this.toast, r, `${r.imported} jour(s) généré(s), ${r.skipped} ignoré(s).`);
         this.activeTab.set('planning');
@@ -434,7 +447,10 @@ export class EmployeePlanningPage implements OnInit {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
-    this.svc.generate(file).subscribe({
+    this.importing.set(true);
+    this.svc.generate(file)
+      .pipe(finalize(() => this.importing.set(false)))
+      .subscribe({
       next: (r) => {
         toastImportResult(this.toast, r, `${r.imported} jour(s) généré(s), ${r.skipped} ignoré(s).`);
         this.activeTab.set('planning');

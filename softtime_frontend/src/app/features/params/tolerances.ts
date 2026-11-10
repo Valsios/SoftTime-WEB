@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { finalize } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
@@ -30,7 +31,7 @@ import { asRow } from '../../shared/utils/date';
         (pageChange)="onPageChange($event)">
         <ng-template #actions let-row>
           <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
-          <soft-button size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
+          <soft-button size="sm" variant="danger" [loading]="removingId() === row['id']" [disabled]="removingId() !== null" (click)="remove(row)">Supprimer</soft-button>
         </ng-template>
       </data-table>
     </soft-card>
@@ -52,6 +53,8 @@ import { asRow } from '../../shared/utils/date';
 })
 export class TolerancesPage implements OnInit {
   private readonly svc = inject(TolerancesService);
+  /** Id de la ligne en cours de suppression (bouton en chargement, autres suppressions bloquées). */
+  protected readonly removingId = signal<number | null>(null);
   private readonly catSvc = inject(CategoriesService);
   private readonly toast = inject(ToastService);
   private readonly session = inject(SessionStore);
@@ -164,7 +167,10 @@ export class TolerancesPage implements OnInit {
 
   async remove(row: Record<string, unknown>): Promise<void> {
     if (!(await this.confirm.ask('Supprimer cette tolérance ?'))) return;
-    this.svc.remove(row['id'] as number).subscribe({
+    this.removingId.set(row['id'] as number);
+    this.svc.remove(row['id'] as number)
+      .pipe(finalize(() => this.removingId.set(null)))
+      .subscribe({
       next: () => { this.toast.success('Supprimé.'); this.loadPage(); },
     });
   }

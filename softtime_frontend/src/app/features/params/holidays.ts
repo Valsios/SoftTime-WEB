@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { finalize } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
@@ -16,7 +17,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
   imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput],
   template: `
     <page-header title="Jours fériés" subtitle="Calendrier fériés">
-      <soft-button variant="secondary" (click)="importSage()">Importer SAGE</soft-button>
+      <soft-button variant="secondary" [loading]="importingSage()" (click)="importSage()">Importer SAGE</soft-button>
       <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter</soft-button>
     </page-header>
     <soft-card>
@@ -27,7 +28,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
         <ng-template #actions let-row>
           <div class="soft-actions" style="justify-content: end">
             <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
-            <soft-button *ngIf="canDelete()" size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
+            <soft-button *ngIf="canDelete()" size="sm" variant="danger" [loading]="removingId() === row['id']" [disabled]="removingId() !== null" (click)="remove(row)">Supprimer</soft-button>
           </div>
         </ng-template>
       </data-table>
@@ -47,6 +48,8 @@ import { asRow, fmtDate } from '../../shared/utils/date';
 })
 export class HolidaysPage implements OnInit {
   private readonly svc = inject(HolidaysService);
+  /** Id de la ligne en cours de suppression (bouton en chargement, autres suppressions bloquées). */
+  protected readonly removingId = signal<number | null>(null);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly session = inject(SessionStore);
@@ -57,6 +60,7 @@ export class HolidaysPage implements OnInit {
 
   readonly loading = signal(true);
   readonly saving = signal(false);
+  readonly importingSage = signal(false);
   readonly modal = signal(false);
   readonly editId = signal<number | null>(null);
   readonly rows = signal<Record<string, unknown>[]>([]);
@@ -109,9 +113,13 @@ export class HolidaysPage implements OnInit {
   }
   async remove(row: Record<string, unknown>): Promise<void> {
     if (!(await this.confirm.ask('Supprimer ce jour férié ?'))) return;
-    this.svc.remove(row['id'] as number).subscribe({ next: () => { this.toast.success('Supprimé.'); this.loadPage(); } });
+    this.removingId.set(row['id'] as number);
+    this.svc.remove(row['id'] as number)
+      .pipe(finalize(() => this.removingId.set(null)))
+      .subscribe({ next: () => { this.toast.success('Supprimé.'); this.loadPage(); } });
   }
   importSage(): void {
-    this.svc.importSage().subscribe({ next: () => { this.toast.success('Import SAGE terminé.'); this.loadPage(); } });
+    this.importingSage.set(true);
+    this.svc.importSage().pipe(finalize(() => this.importingSage.set(false))).subscribe({ next: () => { this.toast.success('Import SAGE terminé.'); this.loadPage(); } });
   }
 }

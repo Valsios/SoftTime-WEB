@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { finalize } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
@@ -40,7 +41,7 @@ import { readDeepLink } from '../../shared/utils/deep-link';
   ],
   template: `
     <page-header title="Anomalies" subtitle="Arbitrage des heures en anomalie">
-      <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
+      <soft-button variant="secondary" [loading]="excel.exporting()" (click)="exportExcel()">Export Excel</soft-button>
       <soft-button [loading]="busy()" (click)="validate()">
         Convertir en heures corrigées
       </soft-button>
@@ -65,7 +66,7 @@ import { readDeepLink } from '../../shared/utils/deep-link';
       >
         <ng-template #actions let-row>
           <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Arbitrer</soft-button>
-          <soft-button *ngIf="canDelete()" size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
+          <soft-button *ngIf="canDelete()" size="sm" variant="danger" [loading]="removingId() === row['id']" [disabled]="removingId() !== null" (click)="remove(row)">Supprimer</soft-button>
         </ng-template>
       </data-table>
     </soft-card>
@@ -106,7 +107,9 @@ export class AnomaliesPage {
   readonly matricule = input<unknown>();
   readonly link = computed(() => readDeepLink({ du: this.du(), au: this.au(), matricule: this.matricule() }));
   private readonly svc = inject(AnomaliesService);
-  private readonly excel = inject(ExcelExportService);
+  /** Id de la ligne en cours de suppression (bouton en chargement, autres suppressions bloquées). */
+  protected readonly removingId = signal<number | null>(null);
+  protected readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly session = inject(SessionStore);
@@ -234,7 +237,10 @@ export class AnomaliesPage {
 
   async remove(row: Record<string, unknown>): Promise<void> {
     if (!(await this.confirm.ask('Supprimer cette anomalie ?'))) return;
-    this.svc.remove(row['id'] as number).subscribe({
+    this.removingId.set(row['id'] as number);
+    this.svc.remove(row['id'] as number)
+      .pipe(finalize(() => this.removingId.set(null)))
+      .subscribe({
       next: () => {
         this.toast.success('Supprimé.');
         this.selectedKeys.update((keys) => keys.filter((k) => k !== String(row['id'])));
@@ -249,7 +255,7 @@ export class AnomaliesPage {
       return;
     }
     this.loading.set(true);
-    this.svc.list(this.lastFilter).subscribe({
+    this.excel.track(this.svc.list(this.lastFilter)).subscribe({
       next: (items) => {
         this.loading.set(false);
         this.excel.download('anomalies', this.columns, items.map(asRow), 'Données', this.tableSearch());
