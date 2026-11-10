@@ -225,6 +225,7 @@ using (var scope = app.Services.CreateScope())
     }
 }
 // Ordre de la convention (§5.7) : erreurs, HSTS, HTTPS, CORS, authentification, autorisation, limitation.
+app.UseMiddleware<ForbiddenAccessLoggingMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 if (!app.Environment.IsDevelopment())
 {

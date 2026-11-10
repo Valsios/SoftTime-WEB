@@ -49,9 +49,10 @@ internal sealed class AuthServices : IUserPermissionService
         Directory = new UserDirectoryService(uow, Guard);
         Administration = new UserAdministrationService(
             uow, email, effectiveRights, Guard, journal, passwordHasher, refreshTokens, securityOptions);
-        Roles = new RoleService(uow, effectiveRights, Guard);
-        Privileges = new PrivilegeService(uow, effectiveRights, Guard);
-        DatabaseAccess = new DatabaseAccessService(uow, effectiveRights, Guard);
+        var operatorJournal = new CurrentOperatorRightsJournal(journal, currentUser);
+        Roles = new RoleService(uow, effectiveRights, Guard, operatorJournal);
+        Privileges = new PrivilegeService(uow, effectiveRights, Guard, operatorJournal);
+        DatabaseAccess = new DatabaseAccessService(uow, effectiveRights, Guard, operatorJournal);
         RightsAudit = new RightsAuditService(uow);
     }
 

@@ -12,15 +12,18 @@ public sealed class DatabaseAccessService : IDatabaseAccessService
     private readonly IUnitOfWork _uow;
     private readonly IEffectiveRightsService _effectiveRights;
     private readonly IParametersAccessGuard _parametersAccessGuard;
+    private readonly ICurrentOperatorRightsJournal _journal;
 
     public DatabaseAccessService(
         IUnitOfWork uow,
         IEffectiveRightsService effectiveRights,
-        IParametersAccessGuard parametersAccessGuard)
+        IParametersAccessGuard parametersAccessGuard,
+        ICurrentOperatorRightsJournal journal)
     {
         _uow = uow;
         _effectiveRights = effectiveRights;
         _parametersAccessGuard = parametersAccessGuard;
+        _journal = journal;
     }
 
     public async Task<IReadOnlyList<DbAccessDto>> GetDbAccessAsync(decimal? userId, CancellationToken cancellationToken = default)
@@ -39,7 +42,20 @@ public sealed class DatabaseAccessService : IDatabaseAccessService
         repo.RemoveRange(existing);
         foreach (var id in sageDbIds.Distinct())
             await repo.AddAsync(new BddAutorisee { IdResponsable = userId, IdBdd = id }, cancellationToken);
+        var user = await _uow.Repository<Responsable>().GetByIdAsync(userId, cancellationToken);
+        await _journal.RecordAsync(new RightsTarget("USER", userId, user?.NomResponsable), "UPDATE_USER_DB_ACCESS",
+            await NamesAsync(existing.Select(a => a.IdBdd), cancellationToken),
+            await NamesAsync(sageDbIds.Distinct(), cancellationToken), cancellationToken);
         await _uow.SaveChangesAsync(cancellationToken);
         _effectiveRights.Invalidate(userId);
+    }
+
+    /// <summary>Bases cochées, par nom (identifiant si la base n'existe plus).</summary>
+    private async Task<List<string>> NamesAsync(IEnumerable<int> ids, CancellationToken ct)
+    {
+        var wanted = ids.ToHashSet();
+        var names = (await _uow.Repository<BddSage>().ListReadOnlyAsync(s => wanted.Contains(s.Id), ct))
+            .ToDictionary(s => s.Id, s => s.NomBd);
+        return wanted.OrderBy(i => i).Select(i => $"BASE:{(names.TryGetValue(i, out var n) && n is not null ? n : i.ToString())}").ToList();
     }
 }
