@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
-import { PointeuseDb, Role, SageDb, User } from '../../shared/models';
+import { EffectivePermission, PointeuseDb, Role, SageDb, User } from '../../shared/models';
 import { PointeuseDatabasesService } from '../../shared/services/catalog.service';
 import { PrivilegesService, RolesService, SageDatabasesService, UsersService } from '../../shared/services/users.service';
 import { PrivilegesDraftService } from '../../shared/services/privileges-draft.service';
@@ -26,12 +26,16 @@ import {
   buildRoleImpactMessage,
   canEditRolePermissions,
   computeSources,
+  countBySource,
   customizedBadgeLabel,
   countUsersOfRole,
   diffPermissions,
   extractErrorMessage,
   isAdminRole,
+  legacyRemovalMessage,
+  readablePrivilegesError,
   resolveRoleLabel,
+  selfRightsRemovalMessage,
 } from './privileges.logic';
 
 type PrivilegesMode = 'user' | 'role';
@@ -254,7 +258,46 @@ interface FeatureCategory {
       <div class="sw-admin-banner" role="status">
         <app-icon name="shield" [size]="16"></app-icon>
         <span>Droits complets garantis par le serveur. Non modifiables.</span>
+        @if (isLastAdmin()) {
+          <span class="sw-badge sw-badge-custom" data-testid="last-admin">Dernier administrateur</span>
+        }
       </div>
+    }
+
+    @if (mode() === 'user' && hasTarget() && !adminLocked() && permissionsLoaded()) {
+      @if (isSelfTarget()) {
+        <div class="sw-admin-banner" role="note" data-testid="self-target">
+          <app-icon name="alert" [size]="16"></app-icon>
+          <span>Vous modifiez vos propres droits : un droit retiré ne vous est plus accordé dès votre prochaine action.</span>
+        </div>
+      }
+      <section class="sw-card" aria-label="Droits effectifs du compte" data-testid="effective-sources">
+        <strong>Droits effectifs (calculés par le serveur)</strong>
+        <span class="sw-badge sw-badge-default">Hérités du rôle : {{ sourceCounts().role }}</span>
+        <span class="sw-badge sw-badge-custom">Ajoutés : {{ sourceCounts().added }}</span>
+        <span class="sw-badge sw-badge-custom">Retirés : {{ sourceCounts().removed }}</span>
+        @if (legacyCodes().length > 0) {
+          <div role="group" aria-label="Anciens codes de base" data-testid="legacy-codes">
+            <p class="sw-empty-hint">
+              Anciens codes de base sans action : ils donnent encore la porte Bases, sans droit sur une base précise.
+            </p>
+            @for (code of legacyCodes(); track code) {
+              <span class="sw-badge sw-badge-role">
+                {{ code }}
+                <button
+                  type="button"
+                  class="sw-btn-sm"
+                  [disabled]="saving()"
+                  [attr.aria-label]="'Retirer ' + code"
+                  (click)="removeLegacy(code)"
+                >
+                  Retirer
+                </button>
+              </span>
+            }
+          </div>
+        }
+      </section>
     }
 
     <!-- Conteneur des permissions par catégorie -->
@@ -1273,6 +1316,21 @@ export class PrivilegesPage implements OnInit {
   readonly grantedPermissions = signal<Set<string>>(new Set());
   readonly isCustomized = signal(false);
 
+  /** Droits du compte choisi avec leur source, calculés par le serveur (rôle, ajouté, retiré). */
+  readonly serverRights = signal<EffectivePermission[]>([]);
+  readonly sourceCounts = computed(() => countBySource(this.serverRights()));
+  /** Anciens codes de base sans action (« SAGE:X ») : visibles pour être retirés en connaissance de cause. */
+  readonly legacyCodes = computed(() => this.serverRights().filter((r) => r.isLegacy).map((r) => r.code));
+  /** Le compte choisi est celui de la session : ses droits changent dès sa prochaine action. */
+  readonly isSelfTarget = computed(
+    () => this.mode() === 'user' && !!this.selectedUserId() && this.session.session()?.userId === this.selectedUserId(),
+  );
+  /** Le compte choisi est le seul administrateur : le serveur refuse de le rétrograder ou de le supprimer. */
+  readonly isLastAdmin = computed(() => {
+    const user = this.selectedUser();
+    return !!user && isAdminRole(user.roleId) && this.users().filter((u) => isAdminRole(u.roleId)).length === 1;
+  });
+
   // Sources des droits (mode « Par utilisateur ») : droits du rôle du compte, chargés une fois par rôle.
   private readonly roleBaseline = signal<{ roleId: number; perms: Set<string> } | null>(null);
   private readonly rolePermsCache = new Map<number, Set<string>>();
@@ -1393,6 +1451,13 @@ export class PrivilegesPage implements OnInit {
         { code: 'REPORTS:PREDICTIONS', label: 'Prévisions' },
         { code: 'REPORTS:CLOSING', label: 'Contrôle avant paie' },
       ],
+    },
+    {
+      // « Mon espace » : le compte lit ses propres pointages (lié à un salarié par son matricule). N'ouvre aucune porte.
+      key: 'SELF',
+      title: 'Mon espace',
+      icon: 'user-check',
+      items: [{ code: 'SELF:READ', label: 'Mon espace (ses propres pointages)' }],
     },
   ];
 
@@ -1543,6 +1608,7 @@ export class PrivilegesPage implements OnInit {
         this.serverChangedWarning.set(r.dirty && r.serverChanged);
         this.loadedTarget.set({ mode: 'user', id: userId });
         this.isCustomized.set(res.isCustomized);
+        this.serverRights.set(res.rights ?? []);
         this.loadRoleBaseline(this.users().find((u) => u.id === userId)?.roleId);
       },
       error: () => {
@@ -1676,7 +1742,7 @@ export class PrivilegesPage implements OnInit {
   }
 
   readonly collapsedSections = signal<Set<string>>(
-    new Set(['SAGE', 'POINTEUSE', 'PARAMS', 'PROC', 'OTHER', 'TRACE', 'REPORTS']),
+    new Set(['SAGE', 'POINTEUSE', 'PARAMS', 'PROC', 'OTHER', 'TRACE', 'REPORTS', 'SELF']),
   );
 
   isCollapsed(key: string): boolean {
@@ -1825,7 +1891,7 @@ export class PrivilegesPage implements OnInit {
     this.grantedPermissions.set(next);
   }
 
-  save(): void {
+  async save(): Promise<void> {
     if (this.permissionsLocked()) return;
     if (this.mode() === 'role') {
       this.saveRole();
@@ -1845,6 +1911,17 @@ export class PrivilegesPage implements OnInit {
       const current = new Set(this.grantedPermissions());
       this.addMandatoryPermissions(current);
       this.grantedPermissions.set(current);
+    }
+
+    // Retirer des droits à son propre compte : ils ne sont plus accordés dès la requête suivante.
+    const removedFromSelf = [...this.baseline()].filter((c) => !this.grantedPermissions().has(c));
+    if (this.isSelfTarget() && removedFromSelf.length > 0) {
+      const ok = await this.confirmService.ask(
+        selfRightsRemovalMessage(removedFromSelf.length),
+        'Retirer vos propres droits',
+        'Retirer',
+      );
+      if (!ok) return;
     }
 
     this.saving.set(true);
@@ -1872,12 +1949,26 @@ export class PrivilegesPage implements OnInit {
       error: (e) => {
         this.saving.set(false);
         if (this.saveTargetChanged('user', userId, requestId)) {
-          this.toast.error(`Échec pour ${targetName} : ${extractErrorMessage(e)}`);
+          this.toast.error(`Échec pour ${targetName} : ${readablePrivilegesError(e)}`);
           return;
         }
-        const err = e?.error?.message || e?.error?.title || e?.error || "Erreur lors de l'enregistrement.";
-        this.toast.error(err);
+        this.toast.error(readablePrivilegesError(e));
       },
+    });
+  }
+
+  /** Retire un ancien code de base sans action, après confirmation, puis relit les droits du compte. */
+  async removeLegacy(code: string): Promise<void> {
+    const userId = this.selectedUserId();
+    if (!userId) return;
+    const ok = await this.confirmService.ask(legacyRemovalMessage(code), 'Retirer un ancien code', 'Retirer');
+    if (!ok) return;
+    this.privSvc.removeLegacyPermissions(userId, [code]).subscribe({
+      next: () => {
+        this.toast.success(`Ancien code « ${code} » retiré.`);
+        this.loadUserPermissions(userId);
+      },
+      error: (e) => this.toast.error(readablePrivilegesError(e)),
     });
   }
 
@@ -1921,10 +2012,10 @@ export class PrivilegesPage implements OnInit {
       error: (err: unknown) => {
         this.saving.set(false);
         if (this.saveTargetChanged('role', roleId, requestId)) {
-          this.toast.error(`Échec pour ${targetName} : ${extractErrorMessage(err)}`);
+          this.toast.error(`Échec pour ${targetName} : ${readablePrivilegesError(err)}`);
           return;
         }
-        this.toast.error(extractErrorMessage(err));
+        this.toast.error(readablePrivilegesError(err));
       },
     });
   }

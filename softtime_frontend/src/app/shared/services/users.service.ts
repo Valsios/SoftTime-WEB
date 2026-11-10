@@ -2,7 +2,19 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '../../core/api';
 import { RoleChangePreview } from '../../core/error.logic';
-import { DbAccess, DepartementService, DepartementServiceOptions, Droit, PagedResult, Privilege, Role, RoleDetailedPermissions, SageDb, User } from '../models';
+import {
+  DbAccess,
+  DepartementService,
+  DepartementServiceOptions,
+  Droit,
+  PagedResult,
+  Privilege,
+  Role,
+  RoleDetailedPermissions,
+  SageDb,
+  User,
+  UserDetailedPermissions,
+} from '../models';
 
 @Injectable({ providedIn: 'root' })
 export class UsersService extends ApiService {
@@ -66,10 +78,12 @@ export class PrivilegesService extends ApiService {
   replace(roleId: number, droitIds: number[]): Observable<void> {
     return this.http.put<void>(this.url(`/api/v1/privileges/${roleId}`), droitIds);
   }
-  byUser(userId: number): Observable<{ userId: number; grantedPermissions: string[]; isCustomized: boolean }> {
-    return this.http.get<{ userId: number; grantedPermissions: string[]; isCustomized: boolean }>(
-      this.url(`/api/v1/privileges/user/${userId}`),
-    );
+  byUser(userId: number): Observable<UserDetailedPermissions> {
+    return this.http.get<UserDetailedPermissions>(this.url(`/api/v1/privileges/user/${userId}`));
+  }
+  /** Retire des anciens codes de base sans action (« SAGE:X »), après confirmation de l'administrateur. */
+  removeLegacyPermissions(userId: number, codes: string[]): Observable<void> {
+    return this.http.post<void>(this.url(`/api/v1/privileges/user/${userId}/legacy-permissions/remove`), { codes });
   }
   saveUserPermissions(userId: number, permissions: string[]): Observable<void> {
     return this.http.put<void>(this.url(`/api/v1/privileges/user/${userId}`), {

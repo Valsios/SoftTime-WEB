@@ -47,6 +47,25 @@ export interface User {
 }
 
 /** Droits détaillés d'un rôle (`GET /api/v1/privileges/role/{roleId}`). */
+/** Source d'un droit d'un compte, calculée par le serveur (droits du rôle, puis écarts du compte). */
+export type PermissionSource = 'ROLE' | 'ADDED' | 'REMOVED';
+
+/** Un droit d'un compte : sa source, s'il est accordé par le serveur, s'il s'agit d'un ancien code sans action. */
+export interface EffectivePermission {
+  code: string;
+  source: PermissionSource;
+  isEffective: boolean;
+  isLegacy: boolean;
+}
+
+/** Droits d'un compte (GET privileges/user/{id}) : liste affichée et, pour l'écran Privilèges, chaque droit avec sa source. */
+export interface UserDetailedPermissions {
+  userId: number;
+  grantedPermissions: string[];
+  isCustomized: boolean;
+  rights?: EffectivePermission[];
+}
+
 export interface RoleDetailedPermissions {
   roleId: number;
   grantedPermissions: string[];
