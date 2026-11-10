@@ -2,7 +2,7 @@
  * Clôture de paie assistée : logique pure de l'écran (sans Angular), testée par closing.logic.spec.ts.
  * L'écran n'invente rien : il met en forme la réponse de GET api/v1/closing/analysis.
  */
-import { ClosingAnomalyView, ClosingChecklistLine, ClosingComparison, ClosingCount, ClosingReport, ClosingStatus } from '../../shared/models';
+import { ClosingAnomalyView, ClosingChecklist, ClosingChecklistLine, ClosingComparison, ClosingCount, ClosingReport, ClosingStatus } from '../../shared/models';
 import type { ExcelSheet } from '../../shared/services/excel-export.service';
 
 export const DEFAULT_PAGE_SIZE = 50;
@@ -492,15 +492,58 @@ export function exportSummary(
   return { sheetName: 'Synthèse', headers: ['Information', 'Valeur'], rows };
 }
 
+/** Feuille « Par département » : les lignes du tableau affiché (vide : aucune feuille). */
+export function exportDepartments(report: Pick<ClosingReport, 'parDepartement'>): ExcelSheet | null {
+  if (!report.parDepartement.length) return null;
+  return {
+    sheetName: 'Par département',
+    headers: ['Département', 'Score', 'Jours contrôlés', 'Anomalies', 'Critiques'],
+    rows: report.parDepartement.map((d) => [
+      d.departement ?? 'Sans département',
+      d.score ?? 'Aucun jour contrôlé',
+      d.joursEmployeControles,
+      d.nombreAnomalies,
+      countOf(d.parGravite, 'Critique'),
+    ]),
+  };
+}
+
+/** Feuille « Comparaison » : score et écarts par type avec la période précédente (absente sans comparaison). */
+export function exportComparison(report: Pick<ClosingReport, 'comparaison' | 'score' | 'joursEmployeControles'>): ExcelSheet | null {
+  const c = report.comparaison;
+  if (!c) return null;
+  const rows: (string | number | boolean | null)[][] = [
+    [`Période précédente (du ${formatDay(c.from)} au ${formatDay(c.to)})`, '', '', ''],
+    ['Score', c.scorePrecedent ?? 'Aucun jour contrôlé', report.score ?? 'Aucun jour contrôlé', c.ecartScore ?? ''],
+    ['Jours-employé contrôlés', c.joursEmployeControlesPrecedent, report.joursEmployeControles, ''],
+  ];
+  for (const t of c.parType) rows.push([typeLabel(t.type, 2), t.precedent, t.actuel, t.ecart]);
+  return { sheetName: 'Comparaison', headers: ['Indicateur ou type', 'Précédent', 'Actuel', 'Écart'], rows };
+}
+
+/** Feuille « Avancement » : la checklist affichée, états en toutes lettres (absente si non chargée). */
+export function exportChecklist(checklist: ClosingChecklist | null): ExcelSheet | null {
+  if (!checklist || !checklist.lignes.length) return null;
+  return {
+    sheetName: 'Avancement',
+    headers: ['Étape', 'État', 'Détail', 'Nombre'],
+    rows: checklist.lignes.map((l) => [l.libelle, checklistStateView(l.etat).label, l.detail, l.nombre ?? '']),
+  };
+}
+
 export function exportSheets(
   report: ClosingReport,
   items: readonly ClosingAnomalyView[],
   filter: ClosingFilter,
   analysedAt: Date,
   view: ClosingListView = { gravites: [], tri: 'date', includeInformation: false },
+  checklist: ClosingChecklist | null = null,
 ): ExcelSheet[] {
-  return [
+  const sheets: ExcelSheet[] = [
     exportSummary(report, filter, analysedAt, items.length, view),
     { sheetName: 'Anomalies', headers: EXPORT_HEADERS, rows: exportRows(items) },
   ];
+  for (const sheet of [exportChecklist(checklist), exportComparison(report), exportDepartments(report)])
+    if (sheet) sheets.push(sheet);
+  return sheets;
 }
