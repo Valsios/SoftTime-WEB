@@ -41,9 +41,12 @@ import {
   exportFileName,
   exportSheets,
   ClosingSort,
+  ANOMALY_TYPES,
+  listFilterText,
   NO_ANOMALY_FOR_FILTER,
-  severityFilterText,
+  NO_ANOMALY_FOR_LIST_FILTER,
   toggleSeverity,
+  toggleType,
   FILTER_CHANGED_TEXT,
   formatDay,
   INFORMATION_RULE,
@@ -249,12 +252,27 @@ import {
           <div class="closing-section-head">
             <h2>Anomalies à corriger</h2>
           </div>
+          @if (typeChips(r); as chips) {
+            @if (chips.length > 1) {
+              <div class="closing-type-chips" role="group" aria-label="Filtrer la liste par type d'anomalie">
+                @for (chip of chips; track chip.type) {
+                  <button
+                    type="button"
+                    class="closing-chip"
+                    [attr.aria-pressed]="isTypeSelected(chip.type)"
+                    (click)="toggleTypeFiltre(chip.type)"
+                  >{{ chip.label }} <span class="closing-chip__count">{{ chip.count }}</span></button>
+                }
+              </div>
+            }
+          }
           @if (gravites().length === 0) {
             <soft-tabs [tabs]="tabs()" [activeTab]="tab()" (activeTabChange)="onTab($event)"></soft-tabs>
-          } @else {
+          }
+          @if (gravites().length || typesFiltre().length) {
             <p class="closing-filter-line" role="status">
               {{ filterText() }} · {{ r.anomalies.total }} ligne(s)
-              <button type="button" class="soft-btn soft-btn--ghost soft-btn--sm" (click)="clearGravites()">Tout afficher</button>
+              <button type="button" class="soft-btn soft-btn--ghost soft-btn--sm" (click)="clearListFilters()">Tout afficher</button>
             </p>
           }
           <label class="closing-sort">
@@ -266,8 +284,8 @@ import {
           </label>
           @if (r.anomalies.total === 0 && r.nombreAnomalies === 0) {
             <div class="closing-state closing-state--success" role="status">{{ noAnomaly }}</div>
-          } @else if (r.anomalies.total === 0 && gravites().length > 0) {
-            <div class="closing-state closing-state--success" role="status">{{ noAnomalyForFilter }}</div>
+          } @else if (r.anomalies.total === 0 && (gravites().length > 0 || typesFiltre().length > 0)) {
+            <div class="closing-state closing-state--success" role="status">{{ noAnomalyForFilter() }}</div>
           } @else if (r.anomalies.total === 0) {
             <div class="closing-state closing-state--success" role="status">{{ hiddenInformationText() }}</div>
           } @else {
@@ -364,6 +382,18 @@ import {
       .closing-checklist li { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 13.5px; }
       .closing-checklist__text { display: inline-flex; flex-direction: column; gap: 2px; flex: 1 1 220px; min-width: 0; }
       .closing-filter-line { margin: 0 8px 8px; font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+      .closing-type-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 8px 10px; }
+      .closing-chip {
+        display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px;
+        border: 1px solid var(--app-border); border-radius: var(--radius-full);
+        background: var(--app-surface); color: var(--text-secondary);
+        font: inherit; font-size: 12.5px; cursor: pointer;
+        transition: border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+      }
+      .closing-chip:hover { border-color: var(--border-hover); }
+      .closing-chip[aria-pressed='true'] { border-color: var(--accent); color: var(--accent); background: var(--info-bg); font-weight: 600; }
+      .closing-chip:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+      .closing-chip__count { font-variant-numeric: tabular-nums; font-weight: 600; }
       .closing-sort { display: inline-flex; align-items: center; gap: 8px; margin: 0 8px 8px; font-size: 13px; color: var(--text-secondary); }
       .closing-count strong { font-size: 22px; font-family: var(--font-heading); color: var(--app-text-strong); }
       .closing-count__text { color: var(--text-secondary); font-size: 12.5px; }
@@ -409,7 +439,9 @@ export class ClosingPage implements OnInit, OnDestroy {
   readonly analysingText = ANALYSING_TEXT;
   readonly staleText = FILTER_CHANGED_TEXT;
   readonly notAnalysedText = NOT_ANALYSED_TEXT;
-  readonly noAnomalyForFilter = NO_ANOMALY_FOR_FILTER;
+  /** Message de liste vide sous filtre : celui de la gravité tant qu'aucun type n'est filtré (texte historique). */
+  readonly noAnomalyForFilter = computed(() =>
+    this.typesFiltre().length ? NO_ANOMALY_FOR_LIST_FILTER : NO_ANOMALY_FOR_FILTER);
   readonly checklistTitle = CHECKLIST_TITLE;
   readonly checklistNote = CHECKLIST_NOTE;
   readonly checklistLoadingText = CHECKLIST_LOADING;
@@ -439,10 +471,11 @@ export class ClosingPage implements OnInit, OnDestroy {
   /** Onglet de la liste : « afix » (par défaut) ou « all » (avec les informations, includeInformation = true). */
   readonly tab = signal<'afix' | 'all'>('afix');
   readonly includeInformation = computed(() => this.tab() === 'all');
-  /** Niveaux retenus dans la liste (vide : aucun filtre) et tri : ne touchent ni l'analyse, ni le score, ni le statut. */
+  /** Niveaux et types retenus dans la liste (vides : aucun filtre) et tri : ne touchent ni l'analyse, ni le score, ni le statut. */
   readonly gravites = signal<string[]>([]);
+  readonly typesFiltre = signal<string[]>([]);
   readonly tri = signal<ClosingSort>('date');
-  readonly filterText = computed(() => severityFilterText(this.gravites()));
+  readonly filterText = computed(() => listFilterText(this.gravites(), this.typesFiltre()));
   readonly page = signal(1);
   readonly pageSize = signal<number>(DEFAULT_PAGE_SIZE);
 
@@ -522,6 +555,7 @@ export class ClosingPage implements OnInit, OnDestroy {
       this.analysedAt.set(kept.analysedAt);
       this.tab.set(this.state.tab());
       this.gravites.set(this.state.gravites());
+      this.typesFiltre.set(this.state.types());
       this.tri.set(this.state.tri());
       this.page.set(kept.report.anomalies.page);
       this.pageSize.set(this.state.pageSize() ?? DEFAULT_PAGE_SIZE);
@@ -549,7 +583,7 @@ export class ClosingPage implements OnInit, OnDestroy {
     if (!filter || !report || !at || this.analysing() || this.exporting()) return;
     this.exporting.set(true);
     this.error.set(null);
-    const vue = { gravites: this.gravites(), tri: this.tri(), includeInformation: this.includeInformation() };
+    const vue = { gravites: this.gravites(), tri: this.tri(), includeInformation: this.includeInformation(), types: this.typesFiltre() };
     const attendu = report.anomalies.total;
     const fetchPage = (page: number) =>
       this.closing.analysis({
@@ -562,6 +596,7 @@ export class ClosingPage implements OnInit, OnDestroy {
         pageSize: EXPORT_PAGE_SIZE,
         reuseCache: true,
         gravites: vue.gravites,
+        types: vue.types,
         tri: vue.tri === 'gravite' ? 'gravite' : undefined,
       });
     this.exportRequest = fetchPage(1)
@@ -683,8 +718,37 @@ export class ClosingPage implements OnInit, OnDestroy {
     this.reloadList();
   }
 
+  /** « Tout afficher » : efface les deux filtres de la liste (gravités et types) en une seule relecture. */
+  clearListFilters(): void {
+    if (!this.gravites().length && !this.typesFiltre().length) return;
+    this.gravites.set([]);
+    this.state.gravites.set([]);
+    this.typesFiltre.set([]);
+    this.state.types.set([]);
+    this.reloadList();
+  }
+
   isSelected(severity: string): boolean {
     return this.gravites().includes(severity);
+  }
+
+  /** Puce de type = bascule de filtre de la liste, servie par l'analyse en cache (comme les cartes de gravité). */
+  toggleTypeFiltre(type: string): void {
+    this.typesFiltre.set(toggleType(this.typesFiltre(), type));
+    this.state.types.set(this.typesFiltre());
+    this.reloadList();
+  }
+
+  isTypeSelected(type: string): boolean {
+    return this.typesFiltre().includes(type);
+  }
+
+  /** Une puce par type présent dans les comptages de l'analyse (libellé au pluriel du nombre). */
+  typeChips(r: ClosingReport): { type: string; label: string; count: number }[] {
+    return ANOMALY_TYPES
+      .map((type) => ({ type: type as string, count: countOf(r.parType, type) }))
+      .filter((c) => c.count > 0)
+      .map((c) => ({ ...c, label: typeLabel(c.type, c.count) }));
   }
 
   onTri(event: Event): void {
@@ -749,6 +813,7 @@ export class ClosingPage implements OnInit, OnDestroy {
         pageSize: this.pageSize(),
         reuseCache: pageOnly,
         gravites: this.gravites(),
+        types: this.typesFiltre(),
         tri: this.tri() === 'gravite' ? 'gravite' : undefined,
       })
       .subscribe({

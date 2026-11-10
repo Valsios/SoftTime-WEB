@@ -340,11 +340,13 @@ export function checklistLink(line: Pick<ClosingChecklistLine, 'code'>, filter: 
 /** Tri de la liste : ordre habituel (date, matricule, type) ou gravité décroissante. */
 export type ClosingSort = 'date' | 'gravite';
 
-/** Ce que montre la liste : niveaux retenus (vide : aucun filtre), tri et présence des « Information » (onglet). */
+/** Ce que montre la liste : niveaux et types retenus (vides : aucun filtre), tri et présence des « Information » (onglet). */
 export interface ClosingListView {
   gravites: readonly string[];
   tri: ClosingSort;
   includeInformation: boolean;
+  /** Types d'anomalie retenus dans la liste (vide : aucun filtre de type). */
+  types?: readonly string[];
 }
 
 /** Ajoute ou retire un niveau ; le résultat suit toujours l'ordre d'affichage des cartes (du plus grave au moins grave). */
@@ -353,12 +355,29 @@ export function toggleSeverity(current: readonly string[], severity: string): st
   return SEVERITIES.filter((s) => next.includes(s));
 }
 
+/** Ajoute ou retire un type ; le résultat suit toujours l'ordre d'affichage des types (celui du serveur). */
+export function toggleType(current: readonly string[], type: string): string[] {
+  const next = current.includes(type) ? current.filter((t) => t !== type) : [...current, type];
+  return ANOMALY_TYPES.filter((t) => next.includes(t));
+}
+
 /** « Filtre de gravité : Critique, Importante » ; vide sans filtre. */
 export function severityFilterText(gravites: readonly string[]): string {
   return gravites.length ? `Filtre de gravité : ${gravites.map(severityLabel).join(', ')}` : '';
 }
 
+/** « Types : Pointages manquants, Quasi-doublons » ; vide sans filtre. */
+export function typeFilterText(types: readonly string[]): string {
+  return types.length ? `Types : ${types.map((t) => typeLabel(t, 2)).join(', ')}` : '';
+}
+
+/** Les deux filtres de la liste en une phrase (« · » entre eux) ; vide sans aucun filtre. */
+export function listFilterText(gravites: readonly string[], types: readonly string[]): string {
+  return [severityFilterText(gravites), typeFilterText(types)].filter((t) => t).join(' · ');
+}
+
 export const NO_ANOMALY_FOR_FILTER = 'Aucune anomalie pour ce filtre de gravité.';
+export const NO_ANOMALY_FOR_LIST_FILTER = 'Aucune anomalie pour ce filtre de la liste.';
 
 /** Deux filtres équivalents (département vide = tous). */
 export function sameFilter(a: ClosingFilter | null | undefined, b: ClosingFilter | null | undefined): boolean {
@@ -464,6 +483,7 @@ export function exportSummary(
     ['Jours-employé contrôlés', report.joursEmployeControles],
     ['Anomalies (toutes gravités)', report.nombreAnomalies],
     ['Filtre de gravité', view.gravites.length ? view.gravites.map(severityLabel).join(', ') : view.includeInformation ? 'Aucun (toutes gravités)' : 'Aucun (hors « Information »)'],
+    ['Filtre de type', view.types?.length ? view.types.map((t) => typeLabel(t, 2)).join(', ') : 'Aucun (tous les types)'],
     ['Tri de la liste', view.tri === 'gravite' ? 'Gravité décroissante, puis date' : 'Date, matricule, type'],
     ['Lignes de la feuille « Anomalies »', exportedRows],
   ];

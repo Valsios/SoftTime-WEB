@@ -175,7 +175,8 @@ internal static class ClosingComputation
 
     /// <summary>
     /// Anomalies de la LISTE. Les « Information » sont comptées mais omises sauf demande ; un filtre de gravité
-    /// explicite remplace cette règle. Le tri par gravité est stable : l'ordre de départ, déterministe, départage les
+    /// explicite remplace cette règle. Le filtre par type restreint ensuite la liste visible, sans rendre visibles
+    /// des « Information » masquées. Le tri par gravité est stable : l'ordre de départ, déterministe, départage les
     /// égalités. Seule la liste change : comptages, score et statut sont toujours calculés sur l'analyse complète.
     /// </summary>
     internal static IReadOnlyList<ClosingAnomaly> AnomaliesAffichees(
@@ -186,6 +187,8 @@ internal static class ClosingComputation
             : request.IncludeInformation
                 ? anomalies
                 : anomalies.Where(a => a.Severity != ClosingSeverity.Information).ToList();
+        if (request.Types is { Count: > 0 } types)
+            affichees = affichees.Where(a => types.Contains(a.Type)).ToList();
         return request.TriParGravite
             ? affichees.OrderByDescending(a => (int)a.Severity).ToList()
             : affichees;

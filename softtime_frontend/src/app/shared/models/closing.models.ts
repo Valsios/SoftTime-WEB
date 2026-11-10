@@ -118,6 +118,8 @@ export interface ClosingQuery {
   reuseCache?: boolean;
   /** Restreint la LISTE à ces niveaux (Information, Mineure, Importante, Critique) ; comptages, score et statut ne changent pas. */
   gravites?: readonly string[];
+  /** Restreint la LISTE à ces types d'anomalie, en plus du filtre de gravité ; comptages, score et statut ne changent pas. */
+  types?: readonly string[];
   /** « gravite » : liste du plus grave au moins grave, puis ordre habituel. */
   tri?: 'gravite';
 }

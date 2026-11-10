@@ -63,6 +63,7 @@ function toParams(query: ClosingQuery): Record<string, unknown> {
     pageSize: query.pageSize,
     reuseCache: query.reuseCache ? true : undefined,
     gravites: query.gravites?.length ? query.gravites.join(',') : undefined,
+    types: query.types?.length ? query.types.join(',') : undefined,
     tri: query.tri === 'gravite' ? 'gravite' : undefined,
   };
 }
