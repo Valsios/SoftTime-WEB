@@ -15,6 +15,7 @@ using SoftTime.Api.Middleware;
 using SoftTime.Api.Security;
 using SoftTime.Application;
 using SoftTime.Application.Abstractions.Authentication;
+using SoftTime.Application.Abstractions.Permissions;
 using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.Security;
 using SoftTime.Application.Serialization;
@@ -195,6 +196,10 @@ using (var scope = app.Services.CreateScope())
     // Jetons de rafraîchissement et verrouillage des comptes : migration 004, sinon arrêt avec un message clair.
     await SchemaPresenceGuard.EnsureAccountSecurityAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
     await RolePermissionConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
+    // Droits des comptes en écarts : migration 006 obligatoire (sinon arrêt), puis reprise des anciennes copies
+    // (rejouable, une seule sauvegarde, droits effectifs inchangés).
+    await SchemaPresenceGuard.EnsureUserPermissionDeviationsAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
+    await scope.ServiceProvider.GetRequiredService<IUserPermissionDeviationMigration>().RunAsync(CancellationToken.None);
 
     // Base analytique du moteur prédictif : applique les migrations EF versionnées (schéma ml).
     // Un échec n'empêche pas l'API de démarrer : la fonctionnalité reste simplement indisponible.

@@ -20,6 +20,9 @@ internal sealed record PermissionRowMap<TRow>
     /// <summary>Filtre traduisible en SQL : lignes des propriétaires donnés.</summary>
     public required Func<List<decimal>, Expression<Func<TRow, bool>>> OwnedBy { get; init; }
 
-    /// <summary>Ligne « aucun droit » d'un propriétaire.</summary>
-    public required Func<decimal, TRow> EmptyMarker { get; init; }
+    /// <summary>
+    /// Ligne « aucun droit » d'un propriétaire qui n'a plus de ligne ; null quand une absence de ligne n'élargit
+    /// pas les droits (comptes : leurs lignes sont des écarts, sans ligne ils ont exactement les droits du rôle).
+    /// </summary>
+    public Func<decimal, TRow>? EmptyMarker { get; init; }
 }

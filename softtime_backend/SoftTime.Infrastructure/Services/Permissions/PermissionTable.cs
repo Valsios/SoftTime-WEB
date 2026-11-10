@@ -51,6 +51,8 @@ internal sealed class PermissionTable<TRow> where TRow : class
             .ToList();
         if (removed.Count == 0) return;
         _repo.RemoveRange(removed);
+        var emptyMarker = _map.EmptyMarker;
+        if (emptyMarker is null) return;
 
         var owners = removed.Select(_map.Owner).Distinct().ToList();
         var remaining = (await _repo.ListAsync(_map.OwnedBy(owners), ct))
@@ -58,7 +60,7 @@ internal sealed class PermissionTable<TRow> where TRow : class
             .Select(_map.Owner)
             .ToHashSet();
         foreach (var owner in owners.Where(o => !remaining.Contains(o)))
-            await _repo.AddAsync(_map.EmptyMarker(owner), ct);
+            await _repo.AddAsync(emptyMarker(owner), ct);
     }
 
     /// <summary>

@@ -1,5 +1,8 @@
 using System.Net;
 
+using Microsoft.Extensions.DependencyInjection;
+
+using SoftTime.Application.Abstractions.Permissions;
 using SoftTime.Application.Security;
 using SoftTime.Domain.Entities.SoftTime;
 
@@ -110,9 +113,12 @@ public class PrivilegesWriteHttpTests : IClassFixture<ApiFactory>
 
         // Assert
         resp.StatusCode.Should().Be(HttpStatusCode.NoContent, await resp.Content.ReadAsStringAsync());
-        _f.Store.Get<UserPermission>().Items
-            .Where(p => p.IdResponsable == 10052)
-            .Select(p => p.PermissionCode)
-            .Should().BeEquivalentTo("PROC:SHIFTS", "SAGE:SFOI_PAIE2025:READ");
+        // Migration 006 : les lignes sont des écarts par rapport au rôle ; on vérifie les droits effectifs obtenus.
+        using var scope = _f.Services.CreateScope();
+        var rights = await scope.ServiceProvider.GetRequiredService<IEffectiveRightsService>().GetAsync(10052, fresh: true);
+        rights.Permissions.Should().Contain(new[] { "PROC:SHIFTS", "SAGE:SFOI_PAIE2025:READ" });
+        // Code normalisé à l'enregistrement (action en majuscules, nom de base conservé).
+        _f.Store.Get<UserPermission>().Items.Where(p => p.IdResponsable == 10052)
+            .Select(p => p.PermissionCode).Should().Contain("SAGE:SFOI_PAIE2025:READ");
     }
 }

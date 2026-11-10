@@ -26,9 +26,13 @@ public class PermissionCatalogCharacterizationTests
         => (HashSet<decimal>)typeof(RolePermissionService).GetMethod("DeduirePortes", BindingFlags.NonPublic | BindingFlags.Static)!
             .Invoke(null, new object[] { codes })!;
 
+    // L'ancienne entrée d'UserPermissionService (simple délégation) a été retirée avec la migration 006 : le service
+    // appelle désormais directement le helper partagé ; les valeurs attendues restent celles d'avant l'extraction.
     private static List<string> LegacyDefaults(HashSet<int> rights, IEnumerable<BddSage> sages, IEnumerable<BddPointeuse> pointeuses)
-        => (List<string>)typeof(UserPermissionService).GetMethod("BuildDefaultPermissionsList", BindingFlags.NonPublic | BindingFlags.Static)!
-            .Invoke(null, new object[] { rights, sages, pointeuses })!;
+    {
+        typeof(UserPermissionService).GetMethod("BuildDefaultPermissionsList", BindingFlags.NonPublic | BindingFlags.Static).Should().BeNull();
+        return PermissionCatalog.BuildDefaultPermissionsList(rights, sages, pointeuses);
+    }
 
     [Fact]
     public void BuildDefaultPermissionsList_AuthServiceEntryPoints_MatchTheHelper()

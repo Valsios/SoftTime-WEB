@@ -58,11 +58,14 @@ public class TokenGatesTests
         var user = new Responsable { IdResponsable = id, IdRole = role, Login = login };
         user.Password = new PasswordHasher<Responsable>().HashPassword(user, FakePassword);
         _uow.Get<Responsable>().Items.Add(user);
-        foreach (var c in userRows) _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = id, PermissionCode = c, IsGranted = true });
+        // Copie complète d'avant la migration 006, convertie en écarts par GatesOf (comme au démarrage de l'API).
+        foreach (var c in userRows)
+            _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = id, PermissionCode = c, IsGranted = true, IsDeviation = false });
     }
 
     private async Task<(int[] TokenGates, int[] ResponseGates, LoginResponse Login)> GatesOf(string login, decimal id)
     {
+        await SoftTime.Tests.Http.TestRights.ConvertLegacyCopiesAsync(_uow);
         var response = await _auth.LoginAsync(new LoginRequest(login, FakePassword));
         var claim = new JwtSecurityTokenHandler().ReadJwtToken(response.Token).Claims.First(c => c.Type == "rights").Value;
         var token = claim.Length == 0 ? Array.Empty<int>() : claim.Split(',').Select(int.Parse).OrderBy(x => x).ToArray();

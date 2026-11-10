@@ -497,9 +497,11 @@ public class RolePermissionsTests
         // Arrange
         // Rôle 3 configuré avec PROC:SHIFTS
         _uow.Get<RolePermission>().Items.Add(new RolePermission { IdRole = 3, PermissionCode = "PROC:SHIFTS", IsGranted = true });
-        // Utilisateur 3 avec rôle 3 et personnalisation T_USER_PERMISSION = PARAMS:USERS
+        // Utilisateur 3 avec rôle 3 et personnalisation T_USER_PERMISSION = PARAMS:USERS (copie complète d'avant la
+        // migration 006, convertie en écarts comme au démarrage de l'API)
         _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 3, IdRole = 3, Login = "user3" });
-        _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 3, PermissionCode = "PARAMS:USERS", IsGranted = true });
+        _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 3, PermissionCode = "PARAMS:USERS", IsGranted = true, IsDeviation = false });
+        await SoftTime.Tests.Http.TestRights.ConvertLegacyCopiesAsync(_uow);
 
         // Act
         var perms = await _auth.GetUserDetailedPermissionsAsync(3);
@@ -664,6 +666,65 @@ public class RolePermissionsTests
         // Assert
         shown.GrantedPermissions.Should().Equal("PROC:SHIFTS");
         UserCodes(2).Should().Equal("PROC:SHIFTS");
+    }
+
+    #endregion
+
+    #region Migration 006 — Écarts au lieu de copies
+
+    private async Task<IReadOnlySet<string>> EffectiveOf(decimal userId)
+        => (await SoftTime.Tests.Http.TestRights.Service(_uow).GetAsync(userId, fresh: true)).Permissions;
+
+    [Fact]
+    public async Task SaveRoleDetailedPermissionsAsync_CustomizedAccount_FollowsTheRoleAndKeepsItsDeviations()
+    {
+        // Arrange
+        _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 3, IdRole = 3, Login = "user3", NomResponsable = "User 3" });
+        await _auth.SaveRoleDetailedPermissionsAsync(1, 3, new[] { "PROC:SHIFTS", "PROC:SHIFTS:CREATE" });
+        // Le compte ajoute PARAMS:USERS et retire PROC:SHIFTS:CREATE.
+        await _auth.SaveUserDetailedPermissionsAsync(1, 3, new[] { "PROC:SHIFTS", "PARAMS:USERS" });
+
+        // Act
+        // Le rôle gagne PROC:PUNCHES.
+        await _auth.SaveRoleDetailedPermissionsAsync(1, 3, new[] { "PROC:SHIFTS", "PROC:SHIFTS:CREATE", "PROC:PUNCHES" });
+
+        // Assert
+        (await EffectiveOf(3)).Should().BeEquivalentTo("PROC:SHIFTS", "PROC:PUNCHES", "PARAMS:USERS");
+        _uow.Get<UserPermission>().Items.Where(p => p.IdResponsable == 3).Select(p => (p.PermissionCode, p.IsGranted, p.IsDeviation))
+            .Should().BeEquivalentTo(new[] { ("PARAMS:USERS", true, true), ("PROC:SHIFTS:CREATE", false, true) });
+    }
+
+    [Fact]
+    public async Task SaveUserDetailedPermissionsAsync_EmptyList_StaysWithoutRightsWhenTheRoleGrows()
+    {
+        // Arrange
+        _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 3, IdRole = 3, Login = "user3", NomResponsable = "User 3" });
+        await _auth.SaveRoleDetailedPermissionsAsync(1, 3, new[] { "PROC:SHIFTS" });
+        await _auth.SaveUserDetailedPermissionsAsync(1, 3, Array.Empty<string>());
+
+        // Act
+        await _auth.SaveRoleDetailedPermissionsAsync(1, 3, new[] { "PROC:SHIFTS", "PROC:PUNCHES" });
+
+        // Assert
+        (await EffectiveOf(3)).Should().BeEmpty("la liste vide est mémorisée par le marqueur « aucun droit »");
+    }
+
+    [Fact]
+    public async Task SaveUserDetailedPermissionsAsync_ScreenRoundTrip_EffectiveRightsEqualTheRequestedList()
+    {
+        // Arrange
+        _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 3, IdRole = 3, Login = "user3", NomResponsable = "User 3" });
+        await _auth.SaveRoleDetailedPermissionsAsync(1, 3, new[] { "PROC:SHIFTS", "PROC:SHIFTS:CREATE", "PARAMS:HOLIDAYS" });
+        var requested = new[] { "PROC:SHIFTS", "PARAMS:USERS", "OTHER:CANTEEN" };
+
+        // Act
+        await _auth.SaveUserDetailedPermissionsAsync(1, 3, requested);
+        var shown = await _auth.GetUserDetailedPermissionsAsync(3);
+
+        // Assert
+        (await EffectiveOf(3)).Should().BeEquivalentTo(requested);
+        shown.GrantedPermissions.Should().BeEquivalentTo(requested);
+        shown.IsCustomized.Should().BeTrue();
     }
 
     #endregion

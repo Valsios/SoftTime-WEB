@@ -67,6 +67,29 @@ public static class SchemaPresenceGuard
         }
     }
 
+    public const string MissingUserPermissionDeviationsMessage =
+        "Le stockage des droits en écarts est absent : activez Database:AutoMigrate (développement) "
+        + "ou exécutez migrations/versions/006_ecarts_permissions_utilisateur.sql.";
+
+    /// <summary>
+    /// Sans la migration 006, les droits des comptes seraient lus avec le mauvais format (copie lue comme écarts) :
+    /// le démarrage s'arrête à la place avec un message qui indique la marche à suivre.
+    /// </summary>
+    public static async Task EnsureUserPermissionDeviationsAsync(IUnitOfWork uow, CancellationToken ct)
+    {
+        try
+        {
+            await uow.ExecuteSqlAsync(GuardedSql("T_USER_PERMISSION", $"""
+                IF COL_LENGTH(N'dbo.T_USER_PERMISSION', N'IS_DEVIATION') IS NULL
+                    THROW 51990, N'{Marker}: dbo.T_USER_PERMISSION', 1;
+                """), ct);
+        }
+        catch (Exception ex) when (ex.Message.Contains(Marker, StringComparison.Ordinal))
+        {
+            throw new DomainException(MissingUserPermissionDeviationsMessage);
+        }
+    }
+
     public static string GuardedSql(string table, string sql) => $"""
         IF OBJECT_ID(N'dbo.{table}', N'U') IS NULL
             THROW 51990, N'{Marker}: dbo.{table}', 1;

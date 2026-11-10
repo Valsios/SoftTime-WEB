@@ -30,74 +30,47 @@ public sealed class UserPermissionService : IUserPermissionService
         _rightsChangeJournal = rightsChangeJournal;
     }
 
-    private static List<string> BuildDefaultPermissionsList(
-        HashSet<int> rights,
-        IEnumerable<BddSage> sageDbs,
-        IEnumerable<BddPointeuse> pointeuseDbs)
-        => PermissionCatalog.BuildDefaultPermissionsList(rights, sageDbs, pointeuseDbs);
-
+    /// <summary>
+    /// Droits affichés d'un compte : ses droits effectifs (rôle, plus ses ajouts, moins ses retraits), sans les anciens
+    /// codes que la saisie refuserait. L'administrateur a toujours tous les droits par défaut, plus ses ajouts.
+    /// IsCustomized : le compte a au moins un écart enregistré.
+    /// </summary>
     public async Task<UserDetailedPermissionsDto> GetUserDetailedPermissionsAsync(decimal userId, CancellationToken cancellationToken = default)
     {
         var user = await _uow.Repository<Responsable>().GetByIdAsync(userId, cancellationToken)
             ?? throw new NotFoundException("Utilisateur introuvable.");
-        var isAdmin = user.IdRole == 1;
-        var customList = await _uow.Repository<UserPermission>().ListReadOnlyAsync(
-            p => p.IdResponsable == userId && p.IsGranted, cancellationToken);
-        var defaults = await DefaultPermissionsAsync(user, cancellationToken);
+        var deviations = await _uow.Repository<UserPermission>()
+            .ListReadOnlyAsync(p => p.IdResponsable == userId, cancellationToken);
+        var isCustomized = deviations.Count > 0;
 
-        // Un administrateur doit impérativement avoir tous les privilèges système
-        // même si une personnalisation partielle a été enregistrée.
-        if (customList.Count > 0)
+        if (!AdminRules.IsSuperAdmin(user.IdRole))
         {
-            var perms = customList
-                .Where(p => p.PermissionCode != PermissionMarkers.EmptyPermissionsMarker)
-                .Select(p => p.PermissionCode)
-                .Where(PermissionCodeValidator.IsValid);
-            return new UserDetailedPermissionsDto(userId, WithAdminDefaults(perms, isAdmin, defaults), true);
+            var effective = await _effectiveRights.GetAsync(userId, fresh: true, ct: cancellationToken);
+            var shown = effective.Permissions.Where(PermissionCodeValidator.IsValid).ToList();
+            return new UserDetailedPermissionsDto(userId, shown, isCustomized);
         }
 
-        // B2 — Droits effectifs : droits du rôle si configurés
-        var roleCustomPerms = await _uow.Repository<RolePermission>().ListReadOnlyAsync(
-            p => p.IdRole == user.IdRole && p.IsGranted, cancellationToken);
-        if (roleCustomPerms.Count > 0)
-        {
-            var rolePerms = roleCustomPerms
-                .Where(p => p.PermissionCode != PermissionMarkers.EmptyRolePermissionsMarker)
-                .Select(p => p.PermissionCode)
-                .Where(PermissionCodeValidator.IsValid);
-            return new UserDetailedPermissionsDto(userId, WithAdminDefaults(rolePerms, isAdmin, defaults), false);
-        }
-
-        // Rôle sans lignes et compte sans ajustement : les droits affichés sont les droits effectifs du calculateur
-        // (sans la configuration des bases). L'administrateur garde ses droits par défaut complets.
-        if (!isAdmin)
-            return new UserDetailedPermissionsDto(userId, (await _effectiveRights.GetAsync(userId, fresh: true, ct: cancellationToken)).Permissions.ToList(), false);
-        return new UserDetailedPermissionsDto(userId, defaults.Distinct().ToList(), false);
+        // Administrateur : tous les droits par défaut, plus les ajouts du compte (ex. SELF:READ) et les lignes du rôle.
+        var roleRows = await _uow.Repository<RolePermission>()
+            .ListReadOnlyAsync(p => p.IdRole == user.IdRole && p.IsGranted, cancellationToken);
+        var additions = deviations.Where(p => p.IsGranted).Select(p => p.PermissionCode)
+            .Concat(roleRows.Select(p => p.PermissionCode))
+            .Where(PermissionCodeValidator.IsValid);
+        var defaults = await AdministratorDefaultsAsync(cancellationToken);
+        return new UserDetailedPermissionsDto(userId, additions.Concat(defaults).Distinct().ToList(), isCustomized);
     }
 
-    /// <summary>
-    /// Permissions par défaut déduites des droits du rôle (tous pour l'administrateur) et des bases
-    /// visibles : toutes pour l'administrateur ou le droit Bases, sinon celles de T_BDD_AUTORISE.
-    /// </summary>
-    private async Task<List<string>> DefaultPermissionsAsync(Responsable user, CancellationToken ct)
+    /// <summary>Tous les droits par défaut de l'administrateur : toutes les portes et toutes les bases.</summary>
+    private async Task<List<string>> AdministratorDefaultsAsync(CancellationToken ct)
     {
-        var isAdmin = user.IdRole == 1;
-        var rolePrivileges = await _uow.Repository<DroitRole>().ListReadOnlyAsync(p => p.IdRole == user.IdRole, ct);
-        var rights = isAdmin
-            ? new HashSet<int> { Rights.Databases, Rights.Parameters, Rights.Processing, Rights.Other, Rights.Traceability, Rights.Reports }
-            : rolePrivileges.Select(p => (int)p.IdDroit).ToHashSet();
-
-        var access = await _uow.Repository<BddAutorisee>().ListReadOnlyAsync(a => a.IdResponsable == user.IdResponsable, ct);
-        var sageIds = access.Select(a => a.IdBdd).ToHashSet();
-        var sageDbs = isAdmin || rights.Contains(Rights.Databases)
-            ? await _uow.Repository<BddSage>().ListReadOnlyAsync(_ => true, ct)
-            : await _uow.Repository<BddSage>().ListReadOnlyAsync(s => sageIds.Contains(s.Id), ct);
+        var allGates = new HashSet<int>
+        {
+            Rights.Databases, Rights.Parameters, Rights.Processing, Rights.Other, Rights.Traceability, Rights.Reports,
+        };
+        var sageDbs = await _uow.Repository<BddSage>().ListReadOnlyAsync(_ => true, ct);
         var pointeuseDbs = await _uow.Repository<BddPointeuse>().ListReadOnlyAsync(_ => true, ct);
-        return BuildDefaultPermissionsList(rights, sageDbs, pointeuseDbs);
+        return PermissionCatalog.BuildDefaultPermissionsList(allGates, sageDbs, pointeuseDbs);
     }
-
-    private static List<string> WithAdminDefaults(IEnumerable<string> permissions, bool isAdmin, List<string> defaults) =>
-        (isAdmin ? permissions.Concat(defaults) : permissions).Distinct().ToList();
 
     public async Task SaveUserDetailedPermissionsAsync(decimal currentUserId, decimal targetUserId, IReadOnlyCollection<string> permissions, CancellationToken cancellationToken = default)
     {
@@ -105,17 +78,17 @@ public sealed class UserPermissionService : IUserPermissionService
         var target = await _uow.Repository<Responsable>().GetByIdAsync(targetUserId, cancellationToken)
             ?? throw new NotFoundException("Utilisateur cible introuvable.");
 
-        var toSaveList = PermissionCodeValidator.Normalize(permissions, PermissionMarkers.EmptyPermissionsMarker);
-        if (target.IdRole == AdminRules.AdminRoleId)
-            toSaveList = PermissionCodeValidator.Normalize(
-                toSaveList.Concat(await AdminMandatoryPermissionsAsync(cancellationToken)), PermissionMarkers.EmptyPermissionsMarker);
-
+        var requested = PermissionCodeValidator.Normalize(permissions, PermissionMarkers.EmptyPermissionsMarker);
         var stored = await _uow.Repository<UserPermission>()
             .ListReadOnlyAsync(p => p.IdResponsable == targetUserId && p.IsGranted, cancellationToken);
-        toSaveList = PermissionCodeValidator.WithLegacyDatabaseCodes(toSaveList, stored.Select(p => p.PermissionCode));
-        var permsAvant = await ReplaceUserPermissionsAsync(targetUserId, toSaveList, cancellationToken);
+        requested = PermissionCodeValidator.WithLegacyDatabaseCodes(requested, stored.Select(p => p.PermissionCode));
+
+        var before = await _effectiveRights.GetAsync(targetUserId, fresh: true, ct: cancellationToken);
+        var permsAvant = before.Permissions.ToList();
+        var rows = await DeviationsAsync(target, requested, cancellationToken);
+        await ReplaceUserPermissionsAsync(targetUserId, rows, cancellationToken);
         await _rightsChangeJournal.EcrireAuditDroitAsync(
-            new RightsChange(currentUserId, caller.Login ?? string.Empty, "USER", targetUserId, target.NomResponsable, "UPDATE_USER_PERMS", permsAvant, toSaveList),
+            new RightsChange(currentUserId, caller.Login ?? string.Empty, "USER", targetUserId, target.NomResponsable, "UPDATE_USER_PERMS", permsAvant, requested),
             cancellationToken);
 
         await _uow.SaveChangesAsync(cancellationToken);
@@ -123,43 +96,42 @@ public sealed class UserPermissionService : IUserPermissionService
     }
 
     /// <summary>
-    /// Un administrateur doit obligatoirement conserver l'accès à toutes les bases et aux écrans clés.
+    /// Écarts à enregistrer pour obtenir la liste demandée : ajouts (codes absents du rôle) et retraits (codes du
+    /// rôle non demandés). Liste vide : marqueur « aucun droit ». Administrateur : le calcul ignore ses lignes,
+    /// seuls ses ajouts (ex. SELF:READ) sont conservés.
     /// </summary>
-    private async Task<List<string>> AdminMandatoryPermissionsAsync(CancellationToken ct)
+    private async Task<List<UserPermission>> DeviationsAsync(
+        Responsable target, List<string> requested, CancellationToken ct)
     {
-        var codes = new List<string>
+        var id = target.IdResponsable;
+        if (requested.Count == 0 && !AdminRules.IsSuperAdmin(target.IdRole))
         {
-            "SAGE:CREATE", "POINTEUSE:CREATE", "PARAMS:PRIVILEGES", "PARAMS:ROLES", "PARAMS:USERS", "PARAMS:DB_ACCESS"
-        };
-        var sages = await _uow.Repository<BddSage>().ListAsync(_ => true, ct);
-        codes.AddRange(PermissionCatalog.DatabasePermissions("SAGE", sages.Select(s => s.NomBd)));
-        var pointeuses = await _uow.Repository<BddPointeuse>().ListAsync(_ => true, ct);
-        codes.AddRange(PermissionCatalog.DatabasePermissions("POINTEUSE", pointeuses.Select(p => p.NomBd)));
-        return codes;
+            return new List<UserPermission>
+            {
+                new() { IdResponsable = id, PermissionCode = PermissionMarkers.EmptyPermissionsMarker, IsGranted = true },
+            };
+        }
+
+        var comparer = StringComparer.OrdinalIgnoreCase;
+        var roleOnly = new HashSet<string>(
+            await _effectiveRights.RoleDefaultPermissionsAsync(target.IdRole, ct), comparer);
+        var wanted = new HashSet<string>(requested, comparer);
+        var rows = requested.Where(c => !roleOnly.Contains(c))
+            .Select(c => new UserPermission { IdResponsable = id, PermissionCode = c, IsGranted = true })
+            .ToList();
+        if (!AdminRules.IsSuperAdmin(target.IdRole))
+            rows.AddRange(roleOnly.Where(c => !wanted.Contains(c)).OrderBy(c => c, comparer)
+                .Select(c => new UserPermission { IdResponsable = id, PermissionCode = c, IsGranted = false }));
+        return rows;
     }
 
-    /// <summary>
-    /// Remplace les permissions de l'utilisateur. Une ligne sentinelle conserve l'intention « aucun
-    /// privilège » : sans elle, l'absence de ligne serait interprétée comme un retour aux droits du
-    /// rôle. Retourne les permissions d'avant pour le journal.
-    /// </summary>
-    private async Task<List<string>> ReplaceUserPermissionsAsync(
-        decimal userId, List<string> permissions, CancellationToken ct)
+    /// <summary>Remplace les écarts enregistrés du compte (au format écart, IS_DEVIATION = 1).</summary>
+    private async Task ReplaceUserPermissionsAsync(decimal userId, List<UserPermission> rows, CancellationToken ct)
     {
         var repo = _uow.Repository<UserPermission>();
-        var existing = await repo.ListAsync(p => p.IdResponsable == userId, ct);
-        var permsAvant = existing
-            .Where(p => p.PermissionCode != PermissionMarkers.EmptyPermissionsMarker)
-            .Select(p => p.PermissionCode)
-            .ToList();
-        repo.RemoveRange(existing);
-
-        var codes = permissions.Count == 0
-            ? new List<string> { PermissionMarkers.EmptyPermissionsMarker }
-            : permissions;
-        foreach (var code in codes)
-            await repo.AddAsync(new UserPermission { IdResponsable = userId, PermissionCode = code, IsGranted = true }, ct);
-        return permsAvant;
+        repo.RemoveRange(await repo.ListAsync(p => p.IdResponsable == userId, ct));
+        foreach (var row in rows)
+            await repo.AddAsync(row, ct);
     }
 
     public async Task ResetUserDetailedPermissionsAsync(decimal currentUserId, decimal targetUserId, CancellationToken cancellationToken = default)

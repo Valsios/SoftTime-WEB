@@ -55,9 +55,6 @@ public sealed class DatabasePermissionCodeMigrator : IDatabasePermissionCodeMigr
         SetCode = (r, code) => r.PermissionCode = code,
         CodeStartsWith = start => r => r.PermissionCode.StartsWith(start),
         OwnedBy = ids => r => ids.Contains(r.IdResponsable),
-        EmptyMarker = id => new UserPermission
-        {
-            IdResponsable = id, PermissionCode = PermissionMarkers.EmptyPermissionsMarker, IsGranted = true,
-        },
+        // Écarts (migration 006) : un compte sans ligne a exactement les droits de son rôle, pas de marqueur.
     };
 }

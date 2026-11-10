@@ -179,7 +179,8 @@ public abstract class DatabasePermissionCodesTests
 
         // Assert
         RoleCodes().Should().Equal("__SOFTTIME_EMPTY_ROLE_PERMISSIONS__");
-        UserCodes().Should().Equal("__SOFTTIME_EMPTY_CUSTOM_PERMISSIONS__");
+        // Compte : ses lignes sont des écarts (migration 006) ; sans ligne, il a exactement les droits de son rôle.
+        UserCodes().Should().BeEmpty();
         var rights = await SoftTime.Tests.Http.TestRights.Service(Uow).GetAsync(2, fresh: true);
         rights.Has(Coded("SAGE:AUTRE:READ")).Should().BeFalse();
     }
