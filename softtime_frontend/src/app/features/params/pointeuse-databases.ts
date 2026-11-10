@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@ang
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
+import { errorMessage } from '../../core/error.logic';
 import { Droit } from '../../core/rights';
 import { PointeuseDb, PageChangeEvent } from '../../shared/models';
 import { PointeuseDatabasesService } from '../../shared/services/catalog.service';
@@ -64,6 +65,8 @@ export class PointeuseDatabasesPage implements OnInit {
   readonly saving = signal(false);
   readonly modal = signal(false);
   readonly editId = signal<number | null>(null);
+  /** Nom de la base à l'ouverture de la modification : le droit se vérifie sur ce nom, pas sur le nom saisi (renommage). */
+  readonly editOriginalName = signal<string | null>(null);
   readonly rows = signal<Record<string, unknown>[]>([]);
   readonly page = signal(1);
   pageSize = 50;
@@ -141,6 +144,7 @@ export class PointeuseDatabasesPage implements OnInit {
       return;
     }
     this.editId.set(null);
+    this.editOriginalName.set(null);
     this.form.set({ sqlAuth: true, active: true, typeBase: 'STANDARD' });
     this.modal.set(true);
   }
@@ -151,17 +155,20 @@ export class PointeuseDatabasesPage implements OnInit {
       return;
     }
     this.editId.set(row['id'] as number);
+    this.editOriginalName.set((row['nomBd'] as string) ?? null);
     this.form.set({ ...(row as unknown as PointeuseDb) });
     this.modal.set(true);
   }
 
   closeModal(): void {
     this.modal.set(false);
+    this.editOriginalName.set(null);
   }
 
   onSaved(dto: Record<string, unknown>): void {
     const id = this.editId();
-    if (id && !this.canUpdate(dto)) {
+    // Modification : droit sur le nom d'origine (comme le serveur), pour permettre le renommage vers un nouveau nom.
+    if (id && !this.canUpdate({ ...dto, nomBd: this.editOriginalName() ?? '' })) {
       this.toast.error("Vous n'avez pas la permission de modifier cette base pointeuse.");
       return;
     }
@@ -176,13 +183,15 @@ export class PointeuseDatabasesPage implements OnInit {
       next: () => {
         this.saving.set(false);
         this.modal.set(false);
+        this.editOriginalName.set(null);
         this.toast.success('Enregistré.');
         this.svc.refresh().subscribe();
         this.loadPage();
       },
       error: (e) => {
         this.saving.set(false);
-        this.toast.error(e?.error?.title || e?.error || 'Enregistrement impossible.');
+        // Message du serveur (le même que l'intercepteur, donc non répété), jamais l'objet d'erreur brut.
+        this.toast.error(errorMessage(e));
       },
     });
   }
