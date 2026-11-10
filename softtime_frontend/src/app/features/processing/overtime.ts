@@ -16,7 +16,7 @@ import { SessionStore } from '../../core/session.store';
   template: `
     <page-header title="Heures supplémentaires" subtitle="Calcul EXO/IMPO — période maximale d'un mois">
       <soft-button variant="danger" [loading]="busy()" (click)="purge()">Purger</soft-button>
-      <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
+      <soft-button variant="secondary" [loading]="excel.exporting()" (click)="exportExcel()">Export Excel</soft-button>
       <soft-button variant="accent" [loading]="busy()" (click)="syncPayroll()">{{ syncLabel() }}</soft-button>
       <soft-button [loading]="busy()" (click)="calculate()">Calculer</soft-button>
     </page-header>
@@ -76,7 +76,7 @@ import { SessionStore } from '../../core/session.store';
 })
 export class OvertimePage {
   private readonly svc = inject(OvertimeService);
-  private readonly excel = inject(ExcelExportService);
+  protected readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly session = inject(SessionStore);
@@ -215,7 +215,7 @@ export class OvertimePage {
       return;
     }
     this.loading.set(true);
-    this.svc.list(this.lastFilter).subscribe({
+    this.excel.track(this.svc.list(this.lastFilter)).subscribe({
       next: (items) => {
         this.loading.set(false);
         this.excel.download('heures-supplementaires', this.columns, items.map(asRow));

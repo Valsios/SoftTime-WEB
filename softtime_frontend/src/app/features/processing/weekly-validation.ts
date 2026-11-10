@@ -14,7 +14,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
   imports: [PageHeader, SoftButton, SoftCard, DataTable, PeriodFilter],
   template: `
     <page-header title="Validation semaine" subtitle="Calcul HT/HS lundi–dimanche — seules les lignes cochées sont validées">
-      <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
+      <soft-button variant="secondary" [loading]="excel.exporting()" (click)="exportExcel()">Export Excel</soft-button>
       <soft-button variant="secondary" [loading]="busy()" (click)="validate(false)">Annuler validation</soft-button>
       <soft-button [loading]="busy()" (click)="validate(true)">Valider semaine</soft-button>
       <soft-button variant="danger" [loading]="busy()" (click)="purge()">Purger la validation</soft-button>
@@ -49,7 +49,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
 })
 export class WeeklyValidationPage {
   private readonly svc = inject(WeeklyValidationService);
-  private readonly excel = inject(ExcelExportService);
+  protected readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly clock = inject(ClockParamsService);
@@ -168,7 +168,7 @@ export class WeeklyValidationPage {
       return;
     }
     this.loading.set(true);
-    this.svc.preview(this.lastFilter).subscribe({
+    this.excel.track(this.svc.preview(this.lastFilter)).subscribe({
       next: (items) => {
         this.loading.set(false);
         // L'export reprend exactement la grille, y compris les semaines déjà validées.

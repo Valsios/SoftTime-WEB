@@ -1,4 +1,5 @@
-import { Injectable } from '@angular/core';
+import { Injectable, computed, signal } from '@angular/core';
+import { Observable, defer, finalize } from 'rxjs';
 import { Column } from '../components';
 import { ApiService } from '../../core/api';
 import { matchesSearch } from '../utils/search';
@@ -15,6 +16,22 @@ export interface ExcelSheet {
 
 @Injectable({ providedIn: 'root' })
 export class ExcelExportService extends ApiService {
+  private readonly pending = signal(0);
+
+  /** Vrai tant qu'un export (récupération des données ou génération du fichier) est en cours. */
+  readonly exporting = computed(() => this.pending() > 0);
+
+  /**
+   * Compte une requête amont (liste à exporter) comme faisant partie de l'export, pour que le
+   * bouton reste en chargement sans interruption jusqu'au téléchargement du fichier.
+   */
+  track<T>(source: Observable<T>): Observable<T> {
+    return defer(() => {
+      this.pending.update((n) => n + 1);
+      return source.pipe(finalize(() => this.pending.update((n) => n - 1)));
+    });
+  }
+
   download(fileName: string, columns: Column[], rows: Record<string, unknown>[], sheetName = 'Données', search?: string): void {
     const filteredRows = search?.trim()
       ? rows.filter((row) =>
@@ -35,6 +52,7 @@ export class ExcelExportService extends ApiService {
         { fileName: name, sheetName, headers, rows: data },
         { responseType: 'blob' },
       )
+      .pipe(this.counted())
       .subscribe((blob) => this.saveBlob(blob, name));
   }
 
@@ -50,7 +68,12 @@ export class ExcelExportService extends ApiService {
         { fileName: name, sheets },
         { responseType: 'blob' },
       )
+      .pipe(this.counted())
       .subscribe((blob) => this.saveBlob(blob, name));
+  }
+
+  private counted<T>() {
+    return (source: Observable<T>) => this.track(source);
   }
 
   private saveBlob(blob: Blob, fileName: string): void {

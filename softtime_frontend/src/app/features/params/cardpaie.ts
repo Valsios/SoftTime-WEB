@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { finalize } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
@@ -18,10 +19,10 @@ import { toastImportResult } from '../../shared/utils/import-result';
   imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, ImportTemplatesModal],
   template: `
     <page-header title="Correspondances paie" subtitle="Cartes SAGE ↔ pointeuse">
-      <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
+      <soft-button variant="secondary" [loading]="excel.exporting()" (click)="exportExcel()">Export Excel</soft-button>
       <label class="file-btn">
         <input #csvFile type="file" accept=".csv,.txt" hidden (change)="onCsv($event)" />
-        <soft-button variant="secondary" (click)="csvFile.click()">Import CSV</soft-button>
+        <soft-button variant="secondary" [loading]="importing()" (click)="csvFile.click()">Import CSV</soft-button>
       </label>
       <soft-button variant="ghost" (click)="templatesOpen.set(true)">Modèles d'import</soft-button>
       <soft-button variant="secondary" [loading]="autoMapping()" [disabled]="autoMapping()" (click)="autoMap()">Auto-mapping</soft-button>
@@ -35,7 +36,7 @@ import { toastImportResult } from '../../shared/utils/import-result';
         <ng-template #actions let-row>
           <div class="soft-actions" style="justify-content: end">
             <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
-            <soft-button *ngIf="canDelete()" size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
+            <soft-button *ngIf="canDelete()" size="sm" variant="danger" [loading]="removingId() === row['id']" [disabled]="removingId() !== null" (click)="remove(row)">Supprimer</soft-button>
           </div>
         </ng-template>
       </data-table>
@@ -64,8 +65,11 @@ import { toastImportResult } from '../../shared/utils/import-result';
 })
 export class CardPaiePage implements OnInit {
   private readonly svc = inject(CardPaieService);
+  protected readonly importing = signal(false);
+  /** Id de la ligne en cours de suppression (bouton en chargement, autres suppressions bloquées). */
+  protected readonly removingId = signal<number | null>(null);
   private readonly deptSvc = inject(DepartementServiceService);
-  private readonly excel = inject(ExcelExportService);
+  protected readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly session = inject(SessionStore);
@@ -160,7 +164,10 @@ export class CardPaiePage implements OnInit {
   }
   async remove(row: Record<string, unknown>): Promise<void> {
     if (!(await this.confirm.ask('Supprimer cette correspondance ?'))) return;
-    this.svc.remove(row['id'] as number).subscribe({ next: () => { this.toast.success('Supprimé.'); this.loadPage(); } });
+    this.removingId.set(row['id'] as number);
+    this.svc.remove(row['id'] as number)
+      .pipe(finalize(() => this.removingId.set(null)))
+      .subscribe({ next: () => { this.toast.success('Supprimé.'); this.loadPage(); } });
   }
   autoMap(): void {
     this.autoMapping.set(true);
@@ -171,7 +178,7 @@ export class CardPaiePage implements OnInit {
     });
   }
   exportExcel(): void {
-    this.svc.list().subscribe({
+    this.excel.track(this.svc.list()).subscribe({
       next: (items) => {
         const matricules = items
           .map((i) => i.sageMatricule?.trim())
@@ -180,7 +187,7 @@ export class CardPaiePage implements OnInit {
           this.excel.download('correspondances-paie', this.columns, items.map(asRow), 'Données', this.tableSearch());
           return;
         }
-        this.deptSvc.lookupBatch(matricules).subscribe({
+        this.excel.track(this.deptSvc.lookupBatch(matricules)).subscribe({
           next: (results) => {
             const byMat = new Map(results.map((r) => [r.matricule.trim(), r]));
             const rows = items.map((item) => {
@@ -198,7 +205,10 @@ export class CardPaiePage implements OnInit {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
-    this.svc.importCsv(file).subscribe({
+    this.importing.set(true);
+    this.svc.importCsv(file)
+      .pipe(finalize(() => this.importing.set(false)))
+      .subscribe({
       next: (r) => {
         toastImportResult(
           this.toast,

@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { finalize } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ToastService } from '../../core/toast.service';
@@ -15,7 +16,7 @@ import { asRow } from '../../shared/utils/date';
   imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, SoftToggle],
   template: `
     <page-header title="Codes absence" subtitle="Codes absence">
-      <soft-button variant="secondary" (click)="syncSage()">Sync SAGE</soft-button>
+      <soft-button variant="secondary" [loading]="syncing()" (click)="syncSage()">Sync SAGE</soft-button>
       <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter</soft-button>
     </page-header>
     <soft-card>
@@ -51,6 +52,7 @@ export class AbsenceCodesPage implements OnInit {
 
   readonly loading = signal(true);
   readonly saving = signal(false);
+  readonly syncing = signal(false);
   readonly modal = signal(false);
   readonly editId = signal<number | null>(null);
   readonly rows = signal<Record<string, unknown>[]>([]);
@@ -102,6 +104,7 @@ export class AbsenceCodesPage implements OnInit {
     req.subscribe({ next: () => { this.saving.set(false); this.modal.set(false); this.toast.success('Enregistré.'); this.loadPage(); }, error: () => this.saving.set(false) });
   }
   syncSage(): void {
-    this.svc.syncSage().subscribe({ next: () => { this.toast.success('Synchronisation SAGE terminée.'); this.loadPage(); } });
+    this.syncing.set(true);
+    this.svc.syncSage().pipe(finalize(() => this.syncing.set(false))).subscribe({ next: () => { this.toast.success('Synchronisation SAGE terminée.'); this.loadPage(); } });
   }
 }

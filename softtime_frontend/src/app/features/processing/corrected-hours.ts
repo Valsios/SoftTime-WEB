@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { finalize } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
@@ -20,11 +21,11 @@ import { toastImportResult } from '../../shared/utils/import-result';
   imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, PeriodFilter, ImportTemplatesModal],
   template: `
     <page-header title="Heures corrigées" subtitle="Corrections manuelles">
-      <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
+      <soft-button variant="secondary" [loading]="excel.exporting()" (click)="exportExcel()">Export Excel</soft-button>
       <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter</soft-button>
       <label class="file-btn">
         <input #corrFile type="file" accept=".xlsx,.xls" hidden (change)="onFile($event)" />
-        <soft-button variant="secondary" (click)="corrFile.click()">Import Excel</soft-button>
+        <soft-button variant="secondary" [loading]="importing()" (click)="corrFile.click()">Import Excel</soft-button>
       </label>
       <soft-button variant="ghost" (click)="templatesOpen.set(true)">Modèles d'import</soft-button>
     </page-header>
@@ -47,7 +48,7 @@ import { toastImportResult } from '../../shared/utils/import-result';
         <ng-template #actions let-row>
           <div class="soft-actions">
             <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
-            <soft-button *ngIf="canDelete()" size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
+            <soft-button *ngIf="canDelete()" size="sm" variant="danger" [loading]="removingId() === row['id']" [disabled]="removingId() !== null" (click)="remove(row)">Supprimer</soft-button>
           </div>
         </ng-template>
       </data-table>
@@ -81,7 +82,10 @@ export class CorrectedHoursPage {
   readonly matricule = input<unknown>();
   readonly link = computed(() => readDeepLink({ du: this.du(), au: this.au(), matricule: this.matricule() }));
   private readonly svc = inject(CorrectedHoursService);
-  private readonly excel = inject(ExcelExportService);
+  protected readonly importing = signal(false);
+  /** Id de la ligne en cours de suppression (bouton en chargement, autres suppressions bloquées). */
+  protected readonly removingId = signal<number | null>(null);
+  protected readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly session = inject(SessionStore);
@@ -187,7 +191,10 @@ export class CorrectedHoursPage {
 
   async remove(row: Record<string, unknown>): Promise<void> {
     if (!(await this.confirm.ask('Supprimer cette correction ?'))) return;
-    this.svc.remove(row['id'] as number).subscribe({
+    this.removingId.set(row['id'] as number);
+    this.svc.remove(row['id'] as number)
+      .pipe(finalize(() => this.removingId.set(null)))
+      .subscribe({
       next: () => {
         this.toast.success('Supprimé.');
         this.reload();
@@ -199,7 +206,10 @@ export class CorrectedHoursPage {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
-    this.svc.importExcel(file).subscribe({
+    this.importing.set(true);
+    this.svc.importExcel(file)
+      .pipe(finalize(() => this.importing.set(false)))
+      .subscribe({
       next: (r) => {
         toastImportResult(
           this.toast,
@@ -218,7 +228,7 @@ export class CorrectedHoursPage {
       return;
     }
     this.loading.set(true);
-    this.svc.list(this.lastFilter).subscribe({
+    this.excel.track(this.svc.list(this.lastFilter)).subscribe({
       next: (items) => {
         this.loading.set(false);
         this.excel.download('heures-corrigees', this.columns, items.map(asRow), 'Données', this.tableSearch());

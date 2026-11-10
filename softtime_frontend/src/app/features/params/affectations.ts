@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { catchError, forkJoin, of } from 'rxjs';
+import { catchError, forkJoin, of, finalize } from 'rxjs';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
@@ -20,10 +20,10 @@ import { cardEmployeeLabel } from '../../shared/utils/labels';
   imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftSelect, ImportTemplatesModal],
   template: `
     <page-header title="Affectations" subtitle="Salariés par catégorie">
-      <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
+      <soft-button variant="secondary" [loading]="excel.exporting()" (click)="exportExcel()">Export Excel</soft-button>
       <label class="file-btn">
         <input #affFile type="file" accept=".xlsx,.xls" hidden (change)="onFile($event)" />
-        <soft-button variant="secondary" (click)="affFile.click()">Import Excel</soft-button>
+        <soft-button variant="secondary" [loading]="importing()" (click)="affFile.click()">Import Excel</soft-button>
       </label>
       <soft-button variant="ghost" (click)="templatesOpen.set(true)">Modèles d'import</soft-button>
       <soft-button *ngIf="canCreate()" (click)="openCreate()">Ajouter</soft-button>
@@ -64,7 +64,7 @@ import { cardEmployeeLabel } from '../../shared/utils/labels';
         <ng-template #actions let-row>
           <div class="soft-actions" style="justify-content: end">
             <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
-            <soft-button *ngIf="canDelete()" size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
+            <soft-button *ngIf="canDelete()" size="sm" variant="danger" [loading]="removingId() === row['id']" [disabled]="removingId() !== null" (click)="remove(row)">Supprimer</soft-button>
           </div>
         </ng-template>
       </data-table>
@@ -98,9 +98,12 @@ import { cardEmployeeLabel } from '../../shared/utils/labels';
 })
 export class AffectationsPage implements OnInit {
   private readonly svc = inject(AffectationsService);
+  protected readonly importing = signal(false);
+  /** Id de la ligne en cours de suppression (bouton en chargement, autres suppressions bloquées). */
+  protected readonly removingId = signal<number | null>(null);
   private readonly catSvc = inject(CategoriesService);
   private readonly cards = inject(CardPaieService);
-  private readonly excel = inject(ExcelExportService);
+  protected readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly session = inject(SessionStore);
@@ -246,14 +249,17 @@ export class AffectationsPage implements OnInit {
   }
   async remove(row: Record<string, unknown>): Promise<void> {
     if (!(await this.confirm.ask('Supprimer cette affectation ?'))) return;
-    this.svc.remove(row['id'] as number).subscribe({ next: () => { this.toast.success('Supprimé.'); this.loadPage(); } });
+    this.removingId.set(row['id'] as number);
+    this.svc.remove(row['id'] as number)
+      .pipe(finalize(() => this.removingId.set(null)))
+      .subscribe({ next: () => { this.toast.success('Supprimé.'); this.loadPage(); } });
   }
   exportExcel(): void {
-    this.svc.listAll({
+    this.excel.track(this.svc.listAll({
       categoryId: this.filterCategoryId,
       departement: this.filterDept === 'ALL' ? null : this.filterDept,
       service: this.filterService === 'ALL' ? null : this.filterService,
-    }).subscribe({
+    })).subscribe({
       next: (rows) => this.excel.download(
         'affectations',
         this.columns,
@@ -283,7 +289,10 @@ export class AffectationsPage implements OnInit {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
-    this.svc.importExcel(file).subscribe({
+    this.importing.set(true);
+    this.svc.importExcel(file)
+      .pipe(finalize(() => this.importing.set(false)))
+      .subscribe({
       next: (r) => {
         toastImportResult(
           this.toast,
