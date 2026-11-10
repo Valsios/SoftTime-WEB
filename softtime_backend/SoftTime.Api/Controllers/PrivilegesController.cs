@@ -39,6 +39,10 @@ public class PrivilegesController : ApiControllerBase
         _user = user;
     }
 
+    /// <summary>Catalogue des codes de permission groupés par domaine (même lecture que la liste des portes).</summary>
+    [HttpGet("catalog")]
+    public async Task<IActionResult> GetCatalogAsync(CancellationToken ct) => Ok(await _privileges.GetCatalogAsync(ct));
+
     [HttpGet("droits")]
     public async Task<IActionResult> GetDroitsAsync(CancellationToken ct) => Ok(await _privileges.GetDroitsAsync(ct));
 

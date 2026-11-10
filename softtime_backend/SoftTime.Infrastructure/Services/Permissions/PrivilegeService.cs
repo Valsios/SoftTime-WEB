@@ -33,6 +33,12 @@ public sealed class PrivilegeService : IPrivilegeService
             .Select(d => new DroitDto(d.IdDroit, d.Droit)).ToList();
     }
 
+    public async Task<IReadOnlyList<PermissionDomainDto>> GetCatalogAsync(CancellationToken cancellationToken = default)
+    {
+        await _parametersAccessGuard.EnsureCanReadAsync(ReadPermissions.PrivilegeList, cancellationToken);
+        return PermissionCatalog.Domains().Select(d => new PermissionDomainDto(d.Key, d.Gate, d.Codes)).ToList();
+    }
+
     public async Task<IReadOnlyList<PrivilegeDto>> GetPrivilegesAsync(decimal? roleId, CancellationToken cancellationToken = default)
     {
         await _parametersAccessGuard.EnsureCanReadAsync(ReadPermissions.PrivilegeList, cancellationToken);
