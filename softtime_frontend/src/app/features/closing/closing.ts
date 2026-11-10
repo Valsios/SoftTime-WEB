@@ -287,13 +287,19 @@ import {
               <button type="button" class="soft-btn soft-btn--ghost soft-btn--sm" (click)="clearListFilters()">Tout afficher</button>
             </p>
           }
-          <label class="closing-sort">
-            <span>Trier par</span>
-            <select class="soft-input" name="tri" (change)="onTri($event)">
-              <option value="date" [selected]="tri() === 'date'">Date, matricule, type</option>
-              <option value="gravite" [selected]="tri() === 'gravite'">Gravité (la plus grave d’abord)</option>
-            </select>
-          </label>
+          <!-- Balisage du composant partagé SoftSelect (classes globales de la charte), en version
+               native synchrone : l'état restauré se pose par [selected], sans attendre NgModel. -->
+          <div class="closing-sort soft-field">
+            <label class="soft-field__label" for="closing-tri">Trier par</label>
+            <div class="soft-select">
+              <div class="soft-select__control">
+                <select id="closing-tri" name="tri" (change)="onTri($event)">
+                  <option value="date" [selected]="tri() === 'date'">Date, matricule, type</option>
+                  <option value="gravite" [selected]="tri() === 'gravite'">Gravité (la plus grave d’abord)</option>
+                </select>
+              </div>
+            </div>
+          </div>
           @if (r.anomalies.total === 0 && r.nombreAnomalies === 0) {
             <div class="closing-state closing-state--success" role="status">{{ noAnomaly }}</div>
           } @else if (r.anomalies.total === 0 && (gravites().length > 0 || typesFiltre().length > 0)) {
@@ -360,7 +366,7 @@ import {
       .closing-busy { display: inline-flex; align-items: center; gap: 8px; color: var(--text-secondary); font-weight: 600; }
       .closing-busy__dot {
         width: 12px; height: 12px; border-radius: 50%;
-        border: 2px solid var(--border-color, var(--text-muted)); border-top-color: var(--accent);
+        border: 2px solid var(--border-subtle); border-top-color: var(--accent);
         animation: closing-spin 0.8s linear infinite;
       }
       @keyframes closing-spin { to { transform: rotate(360deg); } }
@@ -406,7 +412,7 @@ import {
       .closing-chip[aria-pressed='true'] { border-color: var(--accent); color: var(--accent); background: var(--info-bg); font-weight: 600; }
       .closing-chip:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
       .closing-chip__count { font-variant-numeric: tabular-nums; font-weight: 600; }
-      .closing-sort { display: inline-flex; align-items: center; gap: 8px; margin: 0 8px 8px; font-size: 13px; color: var(--text-secondary); }
+      .closing-sort { display: inline-flex; align-items: center; gap: 8px; margin: 0 8px 8px; max-width: 320px; }
       .closing-count strong { font-size: 22px; font-family: var(--font-heading); color: var(--app-text-strong); }
       .closing-count__text { color: var(--text-secondary); font-size: 12.5px; }
       .closing-section-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 8px 8px 12px; }
@@ -624,7 +630,7 @@ export class ClosingPage implements OnInit, OnDestroy {
             this.error.set(EXPORT_STALE_MESSAGE);
             return;
           }
-          this.excel.downloadWorkbook(exportFileName(filter), exportSheets(report, items, filter, at, vue));
+          this.excel.downloadWorkbook(exportFileName(filter), exportSheets(report, items, filter, at, vue, this.checklist()));
         },
         error: () => this.exporting.set(false),
       });
