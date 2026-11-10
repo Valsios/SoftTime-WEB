@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@ang
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
+import { errorMessage } from '../../core/error.logic';
 import { Droit } from '../../core/rights';
 import { SageDb, PageChangeEvent } from '../../shared/models';
 import { SageDatabasesService } from '../../shared/services/users.service';
@@ -184,6 +185,7 @@ export class SageDatabasesPage implements OnInit {
       next: () => {
         this.saving.set(false);
         this.modal.set(false);
+        this.editOriginalName.set(null);
         this.toast.success(
           id
             ? 'Enregistré.'
@@ -194,7 +196,8 @@ export class SageDatabasesPage implements OnInit {
       },
       error: (e) => {
         this.saving.set(false);
-        this.toast.error(e?.error?.title || e?.error || 'Enregistrement impossible.');
+        // Message du serveur (le même que l'intercepteur, donc non répété), jamais l'objet d'erreur brut.
+        this.toast.error(errorMessage(e));
       },
     });
   }

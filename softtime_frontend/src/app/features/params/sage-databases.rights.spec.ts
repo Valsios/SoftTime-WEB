@@ -219,16 +219,29 @@ describe('Bases SAGE : parcours réels de l\'écran', () => {
     expect(svc.update).toHaveBeenCalledTimes(2);
   });
 
-  it('comportement actuel après une sauvegarde réussie : la fenêtre se ferme mais editOriginalName n\'est pas remis à null', () => {
+  it('après une sauvegarde réussie : la fenêtre se ferme et editOriginalName est remis à null', () => {
     const { page: p } = page(['SAGE:BASE_A:UPDATE']);
 
     p.openEdit(A);
     p.onSaved({ ...A, nomBd: 'NOUVEAU' });
 
     expect(p.modal()).toBe(false);
-    // Documenté, non corrigé : sans effet visible, car openEdit et openCreate le réécrivent avant toute autre sauvegarde.
-    expect(p.editOriginalName()).toBe('BASE_A');
+    // Corrigé (tâche « réinitialiser editOriginalName ») : plus aucun nom d'origine résiduel après l'enregistrement.
+    expect(p.editOriginalName()).toBeNull();
     expect(p.editId()).toBe(3033);
+  });
+
+  it("erreur serveur : message clair du serveur, jamais l'objet d'erreur brut", () => {
+    const { page: p, svc, toast } = page(['SAGE:BASE_A:UPDATE']);
+    svc.update.mockReturnValueOnce(
+      throwError(() => ({ status: 409, error: { success: false, message: 'Cette base (serveur + nom) est déjà enregistrée.' } })) as never,
+    );
+
+    p.openEdit(A);
+    p.onSaved({ ...A, nomBd: 'DOUBLON' });
+
+    expect(toast.error).toHaveBeenCalledWith('Cette base (serveur + nom) est déjà enregistrée.');
+    expect(toast.error).not.toHaveBeenCalledWith(expect.objectContaining({ success: false }));
   });
 });
 
