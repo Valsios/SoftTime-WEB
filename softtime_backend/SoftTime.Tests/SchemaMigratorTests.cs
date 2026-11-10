@@ -1,4 +1,5 @@
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
+
 using SoftTime.Application.Services;
 using SoftTime.Domain.Repositories;
 using SoftTime.Infrastructure.SchemaMigrations;
@@ -12,76 +13,97 @@ public class SchemaMigratorTests
     [Fact]
     public void Split_OnGoLines_IgnoresCaseCommentsAndEmptyBatches()
     {
+        // Act
         var batches = SqlBatchSplitter.Split("SELECT 1;\r\nGO\r\n  go  \r\nSELECT 2;\nGo -- fin\nSELECT 3;");
 
-        Assert.Equal(new[] { "SELECT 1;", "SELECT 2;", "SELECT 3;" }, batches);
+        // Assert
+        batches.Should().Equal(new[] { "SELECT 1;", "SELECT 2;", "SELECT 3;" });
     }
 
     [Fact]
-    public void Split_KeepsGoInsideIdentifiersAndBlockComments()
+    public void Split_GoInsideIdentifiersOrComments_IsKept()
     {
+        // Arrange
         var script = "SELECT 1 AS GOAL;\nGO\n/* commentaire\nGO\nfin */\nSELECT 2;\nGO";
 
+        // Act
         var batches = SqlBatchSplitter.Split(script);
 
-        Assert.Equal(2, batches.Count);
-        Assert.Equal("SELECT 1 AS GOAL;", batches[0]);
-        Assert.Contains("GO\nfin */", batches[1]);
+        // Assert
+        batches.Count.Should().Be(2);
+        batches[0].Should().Be("SELECT 1 AS GOAL;");
+        batches[1].Should().Contain("GO\nfin */");
     }
 
     [Fact]
     public void Split_WithRepeatCount_RepeatsBatch()
     {
-        Assert.Equal(new[] { "SELECT 1;", "SELECT 1;", "SELECT 1;" }, SqlBatchSplitter.Split("SELECT 1;\nGO 3"));
+        // Act
+        var result = SqlBatchSplitter.Split("SELECT 1;\nGO 3");
+
+        // Assert
+        result.Should().Equal(new[] { "SELECT 1;", "SELECT 1;", "SELECT 1;" });
     }
 
     [Fact]
-    public void EmbeddedInitialSchema_IsLoadedAndContainsNoDestructiveStatement()
+    public void EmbeddedMigrationScriptSource_InitialSchema_LoadsWithoutDestructiveStatement()
     {
+        // Act
         var scripts = new EmbeddedMigrationScriptSource().Load();
 
-        var initial = Assert.Single(scripts, s => s.Version == 1);
-        Assert.Equal("001_schema_initial.sql", initial.Name);
-        Assert.True(SqlBatchSplitter.Split(initial.Content).Count > 40);
+        // Assert
+        var initial = scripts.Should().ContainSingle(s => s.Version == 1).Which;
+        initial.Name.Should().Be("001_schema_initial.sql");
+        (SqlBatchSplitter.Split(initial.Content).Count > 40).Should().BeTrue();
         foreach (var forbidden in new[] { "DROP TABLE", "DROP INDEX", "DROP COLUMN", "DROP CONSTRAINT", "DELETE FROM", "TRUNCATE", "ALTER COLUMN", "USE [", "CREATE DATABASE", "INSERT INTO dbo.T_RESPONSABLE" })
-            Assert.DoesNotContain(forbidden, initial.Content, StringComparison.OrdinalIgnoreCase);
+            initial.Content.Should().NotContainEquivalentOf(forbidden);
     }
 
     // ---------- Ordre numérique ----------
 
     [Fact]
-    public async Task Run_AppliesPendingScriptsInNumericOrder()
+    public async Task RunAsync_PendingScripts_AppliesInNumericOrder()
     {
+        // Arrange
         var connection = new FakeConnection();
-        var migrator = Migrator(connection, Script(10, "010_c.sql"), Script(2, "002_b.sql"), Script(1, "001_a.sql"));
+        var sut = Migrator(connection, Script(10, "010_c.sql"), Script(2, "002_b.sql"), Script(1, "001_a.sql"));
 
-        var result = await migrator.RunAsync();
+        // Act
+        var result = await sut.RunAsync();
 
-        Assert.Equal(new[] { "001_a.sql", "002_b.sql", "010_c.sql" }, result.Applied);
-        Assert.Equal(new[] { 1, 2, 10 }, connection.Recorded.Select(r => r.Version));
-        Assert.Equal(3, connection.Commits);
-        Assert.True(connection.VersionTableEnsured);
-        Assert.True(connection.LockReleased);
+        // Assert
+        result.Applied.Should().Equal(new[] { "001_a.sql", "002_b.sql", "010_c.sql" });
+        connection.Recorded.Select(r => r.Version).Should().Equal(new[] { 1, 2, 10 });
+        connection.Commits.Should().Be(3);
+        connection.VersionTableEnsured.Should().BeTrue();
+        connection.LockReleased.Should().BeTrue();
     }
 
     [Fact]
-    public async Task Run_SkipsAlreadyAppliedScripts()
+    public async Task RunAsync_AlreadyAppliedScripts_AreSkipped()
     {
+        // Arrange
         var first = Script(1, "001_a.sql");
         var connection = new FakeConnection { Applied = { new AppliedMigration(1, first.Name, first.Checksum) } };
 
+        // Act
         var result = await Migrator(connection, first, Script(2, "002_b.sql")).RunAsync();
 
-        Assert.Equal(new[] { "002_b.sql" }, result.Applied);
-        Assert.DoesNotContain(connection.Executed, sql => sql.Contains("001_a"));
+        // Assert
+        result.Applied.Should().Equal(new[] { "002_b.sql" });
+        connection.Executed.Should().NotContain(sql => sql.Contains("001_a"));
     }
 
     [Fact]
     public void Order_WithDuplicateVersion_Throws()
     {
-        var ex = Assert.Throws<InvalidOperationException>(() =>
-            MigrationScriptNames.Order(new[] { Script(1, "001_a.sql"), Script(1, "001_b.sql") }));
-        Assert.Contains("001", ex.Message);
+        // Act
+        var act = () =>
+            MigrationScriptNames.Order(new[] { Script(1, "001_a.sql"), Script(1, "001_b.sql") });
+
+        // Assert
+        var ex = act.Should().ThrowExactly<InvalidOperationException>().Which;
+        ex.Message.Should().Contain("001");
     }
 
     [Theory]
@@ -90,10 +112,14 @@ public class SchemaMigratorTests
     [InlineData("1_court.sql", false, 0)]
     [InlineData("001-tiret.sql", false, 0)]
     [InlineData("000_zero.sql", false, 0)]
-    public void TryParseVersion_FollowsNamingConvention(string name, bool valid, int version)
+    public void TryParseVersion_ScriptFileNames_FollowNamingConvention(string name, bool valid, int version)
     {
-        Assert.Equal(valid, MigrationScriptNames.TryParseVersion(name, out var parsed));
-        Assert.Equal(version, parsed);
+        // Act
+        var result = MigrationScriptNames.TryParseVersion(name, out var parsed);
+
+        // Assert
+        result.Should().Be(valid);
+        parsed.Should().Be(version);
     }
 
     // ---------- Somme de contrôle ----------
@@ -101,24 +127,30 @@ public class SchemaMigratorTests
     [Fact]
     public async Task Run_WithModifiedAppliedScript_WarnsWithoutReexecuting()
     {
+        // Arrange
         var script = Script(1, "001_a.sql");
         var connection = new FakeConnection { Applied = { new AppliedMigration(1, script.Name, new string('0', 64)) } };
 
+        // Act
         var result = await Migrator(connection, script).RunAsync();
 
-        Assert.Empty(result.Applied);
-        Assert.Equal(new[] { "001_a.sql" }, result.ChecksumMismatches);
-        Assert.Empty(connection.Executed);
-        Assert.Empty(connection.Recorded);
+        // Assert
+        result.Applied.Should().BeEmpty();
+        result.ChecksumMismatches.Should().Equal(new[] { "001_a.sql" });
+        connection.Executed.Should().BeEmpty();
+        connection.Recorded.Should().BeEmpty();
     }
 
     [Fact]
-    public void Checksum_IsSha256AndIgnoresLineEndings()
+    public void ComputeChecksum_DifferentLineEndings_GivesSameSha256()
     {
+        // Act
         var lf = MigrationScript.ComputeChecksum("SELECT 1;\nGO\n");
-        Assert.Equal(64, lf.Length);
-        Assert.Equal(lf, MigrationScript.ComputeChecksum("SELECT 1;\r\nGO\r\n"));
-        Assert.NotEqual(lf, MigrationScript.ComputeChecksum("SELECT 2;\nGO\n"));
+
+        // Assert
+        lf.Length.Should().Be(64);
+        MigrationScript.ComputeChecksum("SELECT 1;\r\nGO\r\n").Should().Be(lf);
+        MigrationScript.ComputeChecksum("SELECT 2;\nGO\n").Should().NotBe(lf);
     }
 
     // ---------- Verrou ----------
@@ -126,16 +158,20 @@ public class SchemaMigratorTests
     [Fact]
     public async Task Run_WhenLockIsRefused_ThrowsClearMessageAndExecutesNothing()
     {
+        // Arrange
         var connection = new FakeConnection { LockGranted = false };
-        var migrator = Migrator(connection, new SchemaMigrationOptions { AutoMigrate = true, LockTimeoutSeconds = 5 }, Script(1, "001_a.sql"));
+        var sut = Migrator(connection, new SchemaMigrationOptions { AutoMigrate = true, LockTimeoutSeconds = 5 }, Script(1, "001_a.sql"));
 
-        var ex = await Assert.ThrowsAsync<SchemaMigrationException>(() => migrator.RunAsync());
+        // Act
+        Func<Task> act = () => sut.RunAsync();
 
-        Assert.Contains("verrou", ex.Message);
-        Assert.Contains("5 s", ex.Message);
-        Assert.Equal(5, connection.RequestedLockTimeout);
-        Assert.False(connection.VersionTableEnsured);
-        Assert.Empty(connection.Executed);
+        // Assert
+        var ex = (await act.Should().ThrowExactlyAsync<SchemaMigrationException>()).Which;
+        ex.Message.Should().Contain("verrou");
+        ex.Message.Should().Contain("5 s");
+        connection.RequestedLockTimeout.Should().Be(5);
+        connection.VersionTableEnsured.Should().BeFalse();
+        connection.Executed.Should().BeEmpty();
     }
 
     // ---------- Échec d'un script ----------
@@ -143,23 +179,27 @@ public class SchemaMigratorTests
     [Fact]
     public async Task Run_WhenBatchFails_RollsBackAndThrowsClearMessage()
     {
+        // Arrange
         var connection = new FakeConnection { FailOn = "ECHEC" };
-        var migrator = Migrator(connection,
+        var sut = Migrator(connection,
             Script(1, "001_a.sql"),
             new MigrationScript(2, "002_b.sql", "SELECT 1;\nGO\nSELECT ECHEC;\nGO\nSELECT 3;"),
             Script(3, "003_c.sql"));
 
-        var ex = await Assert.ThrowsAsync<SchemaMigrationException>(() => migrator.RunAsync());
+        // Act
+        Func<Task> act = () => sut.RunAsync();
 
-        Assert.Contains("002_b.sql", ex.Message);
-        Assert.Contains("lot 2 sur 3", ex.Message);
-        Assert.Contains("annulée", ex.Message);
-        Assert.DoesNotContain("Data Source", ex.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(1, connection.Rollbacks);
-        Assert.Equal(1, connection.Commits);
-        Assert.Equal(new[] { 1 }, connection.Recorded.Select(r => r.Version));
-        Assert.DoesNotContain(connection.Executed, sql => sql.Contains("003_c") || sql == "SELECT 3;");
-        Assert.True(connection.LockReleased);
+        // Assert
+        var ex = (await act.Should().ThrowExactlyAsync<SchemaMigrationException>()).Which;
+        ex.Message.Should().Contain("002_b.sql");
+        ex.Message.Should().Contain("lot 2 sur 3");
+        ex.Message.Should().Contain("annulée");
+        ex.Message.Should().NotContainEquivalentOf("Data Source");
+        connection.Rollbacks.Should().Be(1);
+        connection.Commits.Should().Be(1);
+        connection.Recorded.Select(r => r.Version).Should().Equal(new[] { 1 });
+        connection.Executed.Should().NotContain(sql => sql.Contains("003_c") || sql == "SELECT 3;");
+        connection.LockReleased.Should().BeTrue();
     }
 
     // ---------- Option désactivée ----------
@@ -167,39 +207,16 @@ public class SchemaMigratorTests
     [Fact]
     public async Task RunIfEnabled_WhenDisabled_OpensNoConnection()
     {
+        // Arrange
         var factory = new FakeFactory(new FakeConnection());
-        var migrator = new SchemaMigrator(factory, new ListSource(Script(1, "001_a.sql")), new SchemaMigrationOptions());
+        var sut = new SchemaMigrator(factory, new ListSource(Script(1, "001_a.sql")), Options.Create(new SchemaMigrationOptions()));
 
-        var result = await migrator.RunIfEnabledAsync();
+        // Act
+        var result = await sut.RunIfEnabledAsync();
 
-        Assert.Null(result);
-        Assert.Equal(0, factory.Opened);
-    }
-
-    [Fact]
-    public void Options_DefaultToDisabledWithSixtySecondLock()
-    {
-        var options = SchemaMigrationOptions.FromConfiguration(new ConfigurationBuilder().Build());
-
-        Assert.False(options.AutoMigrate);
-        Assert.Equal(60, options.LockTimeoutSeconds);
-    }
-
-    [Fact]
-    public void Options_AreReadFromDatabaseSection()
-    {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Database:AutoMigrate"] = "true",
-                ["Database:AutoMigrateLockTimeoutSeconds"] = "15",
-            })
-            .Build();
-
-        var options = SchemaMigrationOptions.FromConfiguration(configuration);
-
-        Assert.True(options.AutoMigrate);
-        Assert.Equal(15, options.LockTimeoutSeconds);
+        // Assert
+        result.Should().BeNull();
+        factory.Opened.Should().Be(0);
     }
 
     // ---------- Garde des méthodes Ensure* ----------
@@ -207,35 +224,43 @@ public class SchemaMigratorTests
     [Fact]
     public async Task EnsureStorage_OnDatabaseWithoutSchema_ThrowsClearMessage()
     {
+        // Arrange
         var uow = new MissingSchemaUnitOfWork();
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            PunchProcessingConfiguration.EnsureStorageAsync(uow, CancellationToken.None));
+        // Act
+        Func<Task> act = () =>
+            PunchProcessingConfiguration.EnsureStorageAsync(uow, CancellationToken.None);
 
-        Assert.Equal(SchemaPresenceGuard.MissingSchemaMessage, ex.Message);
-        Assert.Contains("OBJECT_ID(N'dbo.T_HEURECORRIGER', N'U') IS NULL", uow.LastSql);
+        // Assert
+        var ex = (await act.Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().Be(SchemaPresenceGuard.MissingSchemaMessage);
+        uow.LastSql.Should().Contain("OBJECT_ID(N'dbo.T_HEURECORRIGER', N'U') IS NULL");
     }
 
     [Fact]
     public async Task EnsureAuditJournal_WithoutJournalTable_ThrowsClearFrenchMessage()
     {
+        // Arrange
         var uow = new MissingSchemaUnitOfWork();
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            SchemaPresenceGuard.EnsureAuditJournalAsync(uow, CancellationToken.None));
+        // Act
+        Func<Task> act = () =>
+            SchemaPresenceGuard.EnsureAuditJournalAsync(uow, CancellationToken.None);
 
-        Assert.Equal(
-            "Le journal d'audit est absent : activez Database:AutoMigrate (développement) ou exécutez migrations/versions/003_journal_central.sql.",
-            ex.Message);
-        Assert.Contains("OBJECT_ID(N'dbo.suivi_JOURNAL', N'U') IS NULL", uow.LastSql);
+        // Assert
+        var ex = (await act.Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().Be("Le journal d'audit est absent : activez Database:AutoMigrate (développement) ou exécutez migrations/versions/003_journal_central.sql.");
+        uow.LastSql.Should().Contain("OBJECT_ID(N'dbo.suivi_JOURNAL', N'U') IS NULL");
     }
 
     [Fact]
-    public void GuardedSql_KeepsOriginalStatementAfterTheCheck()
+    public void GuardedSql_AnyStatement_KeepsItAfterTheCheck()
     {
+        // Act
         var sql = SchemaPresenceGuard.GuardedSql("T_ROLE", "SELECT 1;");
 
-        Assert.True(sql.IndexOf("THROW", StringComparison.Ordinal) < sql.IndexOf("SELECT 1;", StringComparison.Ordinal));
+        // Assert
+        (sql.IndexOf("THROW", StringComparison.Ordinal) < sql.IndexOf("SELECT 1;", StringComparison.Ordinal)).Should().BeTrue();
     }
 
     // ---------- Doubles de test ----------
@@ -246,7 +271,7 @@ public class SchemaMigratorTests
         => Migrator(connection, new SchemaMigrationOptions { AutoMigrate = true }, scripts);
 
     private static SchemaMigrator Migrator(FakeConnection connection, SchemaMigrationOptions options, params MigrationScript[] scripts)
-        => new(new FakeFactory(connection), new ListSource(scripts), options);
+        => new(new FakeFactory(connection), new ListSource(scripts), Options.Create(options));
 
     private sealed class ListSource(params MigrationScript[] scripts) : IMigrationScriptSource
     {
@@ -308,7 +333,7 @@ public class SchemaMigratorTests
 
         public Task ExecuteBatchAsync(string sql, CancellationToken ct)
         {
-            Assert.True(_inTransaction, "Chaque lot doit s'exécuter dans la transaction du script.");
+            _inTransaction.Should().BeTrue("Chaque lot doit s'exécuter dans la transaction du script.");
             if (FailOn != null && sql.Contains(FailOn))
                 throw new InvalidOperationException("Nom d'objet non valide.");
             _pending.Add(sql);
@@ -317,7 +342,7 @@ public class SchemaMigratorTests
 
         public Task RecordAppliedAsync(MigrationScript script, string appliedBy, CancellationToken ct)
         {
-            Assert.False(string.IsNullOrWhiteSpace(appliedBy));
+            string.IsNullOrWhiteSpace(appliedBy).Should().BeFalse();
             Recorded.Add(script);
             return Task.CompletedTask;
         }

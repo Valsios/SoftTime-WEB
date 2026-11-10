@@ -1,34 +1,10 @@
 using Microsoft.AspNetCore.Identity;
+
 using SoftTime.Application.Security;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
 
 namespace SoftTime.Application.Services;
-
-/// <summary>
-/// Résultat détaillé d'une opération de migration des mots de passe.
-/// Trace les comptes migrés, déjà sécurisés, vides ou nécessitant une attention administrative.
-/// </summary>
-public sealed record PasswordMigrationResult
-{
-    public int TotalScanned { get; init; }
-    public int MigratedCount { get; init; }
-    public int AlreadyHashedV3Count { get; init; }
-    public int PreservedV2Count { get; init; }
-    public int SkippedEmptyCount { get; init; }
-    public int AmbiguousCount { get; init; }
-    public List<AmbiguousAccountEntry> AmbiguousAccounts { get; init; } = new();
-}
-
-/// <summary>
-/// Information sur un compte dont la valeur de mot de passe est ambiguë, de format externe ou mal formée.
-/// Ces comptes sont scrupuleusement préservés sans modification pour empêcher toute corruption irréversible.
-/// </summary>
-public sealed record AmbiguousAccountEntry(
-    decimal UserId,
-    string? Login,
-    PasswordClassification Classification,
-    string Diagnostic);
 
 /// <summary>
 /// Stockage requis par les comptes utilisateurs et migration de sécurité.
@@ -39,14 +15,18 @@ public sealed record AmbiguousAccountEntry(
 /// </summary>
 public static class UserAccountConfiguration
 {
+    /// <summary>Schéma créé s'il est absent (scripts idempotents).</summary>
+    private const string StorageSql = """
+        IF COL_LENGTH(N'dbo.T_RESPONSABLE', N'EMAIL') IS NULL
+            ALTER TABLE dbo.T_RESPONSABLE ADD EMAIL nvarchar(200) NULL;
+        """;
+
     /// <summary>
     /// Initialisation minimale du stockage au démarrage de l'API :
     /// ajoute la colonne EMAIL si absente (requis pour l'envoi d'identifiants).
     /// </summary>
-    public static Task EnsureStorageAsync(IUnitOfWork uow, CancellationToken ct = default) => SchemaPresenceGuard.ExecuteAsync(uow, "T_RESPONSABLE", """
-        IF COL_LENGTH(N'dbo.T_RESPONSABLE', N'EMAIL') IS NULL
-            ALTER TABLE dbo.T_RESPONSABLE ADD EMAIL nvarchar(200) NULL;
-        """, ct);
+    public static Task EnsureStorageAsync(IUnitOfWork uow, CancellationToken ct = default)
+        => SchemaPresenceGuard.ExecuteAsync(uow, "T_RESPONSABLE", StorageSql, ct);
 
     /// <summary>
     /// Migration fine et idempotente des mots de passe historiques avec rapport détaillé.
@@ -56,82 +36,73 @@ public static class UserAccountConfiguration
     /// </summary>
     public static async Task<PasswordMigrationResult> MigrateLegacyPasswordsDetailedAsync(
         IUnitOfWork uow,
-        IPasswordHasher<T_RESPONSABLE>? hasher = null,
+        IPasswordHasher<Responsable>? hasher = null,
         CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        hasher ??= new PasswordHasher<T_RESPONSABLE>();
-        var repo = uow.Repository<T_RESPONSABLE>();
+        hasher ??= new PasswordHasher<Responsable>();
+        var repo = uow.Repository<Responsable>();
         var users = await repo.ListAsync(_ => true, ct);
+        var classes = Classer(users, ct);
 
+        // Seuls les mots de passe en clair avérés sont sécurisés (PBKDF2 HMAC-SHA256, 100k itérations).
+        // Les hachages V2 sont préservés intacts : re-hachés en V3 à la prochaine connexion réussie.
+        var enClair = await SecuriserAsync(uow, hasher, repo, classes, ct);
+
+        var ambigus = classes
+            .Where(c => AmbiguityReason(c.Classe) is not null)
+            .Select(c => new AmbiguousAccountEntry(c.User.IdResponsable, c.User.Login, c.Classe, AmbiguityReason(c.Classe)!))
+            .ToList();
         var result = new PasswordMigrationResult { TotalScanned = users.Count };
-        var migrated = 0;
-        var v3Count = 0;
-        var v2Count = 0;
-        var emptyCount = 0;
-        var ambiguousCount = 0;
-
-        foreach (var user in users)
-        {
-            ct.ThrowIfCancellationRequested();
-            var classification = PasswordSecurityHelper.Classify(user.PASSWORD);
-
-            switch (classification)
-            {
-                case PasswordClassification.NullOrEmpty:
-                    emptyCount++;
-                    break;
-
-                case PasswordClassification.IdentityV3:
-                    v3Count++;
-                    break;
-
-                case PasswordClassification.IdentityV2:
-                    // Préservé intact : sera re-haché en V3 de façon transparente à la prochaine connexion réussie
-                    v2Count++;
-                    break;
-
-                case PasswordClassification.LegacyPlainText:
-                    // Mot de passe en clair avéré : sécurisation immédiate en PBKDF2 HMAC-SHA256 (100k itérations)
-                    user.PASSWORD = hasher.HashPassword(user, user.PASSWORD!);
-                    repo.Update(user);
-                    migrated++;
-                    break;
-
-                case PasswordClassification.UnrecognizedHash:
-                    ambiguousCount++;
-                    result.AmbiguousAccounts.Add(new AmbiguousAccountEntry(
-                        user.IDRESPONSABLE,
-                        user.LOGIN,
-                        classification,
-                        "Format de hachage externe (MD5, SHA, BCrypt, etc.). Valeur préservée intacte. Réinitialisation administrative requise."));
-                    break;
-
-                case PasswordClassification.AmbiguousOrMalformed:
-                    ambiguousCount++;
-                    result.AmbiguousAccounts.Add(new AmbiguousAccountEntry(
-                        user.IDRESPONSABLE,
-                        user.LOGIN,
-                        classification,
-                        "Valeur mal formée ou tronquée. Valeur préservée sans altération pour traitement contrôlé."));
-                    break;
-            }
-        }
-
-        if (migrated > 0)
-        {
-            await uow.SaveChangesAsync(ct);
-        }
-
+        result.AmbiguousAccounts.AddRange(ambigus);
         return result with
         {
-            MigratedCount = migrated,
-            AlreadyHashedV3Count = v3Count,
-            PreservedV2Count = v2Count,
-            SkippedEmptyCount = emptyCount,
-            AmbiguousCount = ambiguousCount
+            MigratedCount = enClair.Count,
+            AlreadyHashedV3Count = classes.Count(c => c.Classe == PasswordClassification.IdentityV3),
+            PreservedV2Count = classes.Count(c => c.Classe == PasswordClassification.IdentityV2),
+            SkippedEmptyCount = classes.Count(c => c.Classe == PasswordClassification.NullOrEmpty),
+            AmbiguousCount = ambigus.Count
         };
     }
+
+    /// <summary>Classification du mot de passe stocké de chaque compte.</summary>
+    private static List<(Responsable User, PasswordClassification Classe)> Classer(
+        List<Responsable> users, CancellationToken ct)
+    {
+        var classes = users
+            .Select(user =>
+            {
+                ct.ThrowIfCancellationRequested();
+                return (User: user, Classe: PasswordHashClassifier.Classify(user.Password));
+            })
+            .ToList();
+        return classes;
+    }
+
+    /// <summary>Hache les mots de passe en clair avérés et retourne les comptes sécurisés.</summary>
+    private static async Task<List<Responsable>> SecuriserAsync(
+        IUnitOfWork uow, IPasswordHasher<Responsable> hasher, IRepository<Responsable> repo, List<(Responsable User, PasswordClassification Classe)> classes, CancellationToken ct)
+    {
+        var enClair = classes.Where(c => c.Classe == PasswordClassification.LegacyPlainText).Select(c => c.User).ToList();
+        foreach (var user in enClair)
+        {
+            user.Password = hasher.HashPassword(user, user.Password!);
+            repo.Update(user);
+        }
+        if (enClair.Count > 0)
+            await uow.SaveChangesAsync(ct);
+        return enClair;
+    }
+
+    /// <summary>Raison de conservation d'une valeur non migrable, ou <c>null</c> si la valeur n'est pas ambiguë.</summary>
+    private static string? AmbiguityReason(PasswordClassification classe) => classe switch
+    {
+        PasswordClassification.UnrecognizedHash =>
+            "Format de hachage externe (MD5, SHA, BCrypt, etc.). Valeur préservée intacte. Réinitialisation administrative requise.",
+        PasswordClassification.AmbiguousOrMalformed =>
+            "Valeur mal formée ou tronquée. Valeur préservée sans altération pour traitement contrôlé.",
+        _ => null
+    };
 
     /// <summary>
     /// Migration idempotente et contrôlée des mots de passe historiques stockés en clair.
@@ -139,7 +110,7 @@ public static class UserAccountConfiguration
     /// </summary>
     public static async Task<int> MigrateLegacyPasswordsAsync(
         IUnitOfWork uow,
-        IPasswordHasher<T_RESPONSABLE>? hasher = null,
+        IPasswordHasher<Responsable>? hasher = null,
         CancellationToken ct = default)
     {
         var result = await MigrateLegacyPasswordsDetailedAsync(uow, hasher, ct);

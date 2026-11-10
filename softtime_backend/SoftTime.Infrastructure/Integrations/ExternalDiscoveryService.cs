@@ -1,9 +1,11 @@
 using System.Security;
+using System.Text.RegularExpressions;
+
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using System.Text.RegularExpressions;
-using SoftTime.Application.Abstractions;
+
+using SoftTime.Application.Abstractions.DataSources;
 using SoftTime.Application.Services;
 
 namespace SoftTime.Infrastructure.Integrations;
@@ -47,33 +49,33 @@ public class ExternalDiscoveryService : IExternalDiscoveryService
     }
 
     public Task<IReadOnlyList<string>> ListDatabasesAsync(
-        string serveur, bool sqlAuth, string? login, string? password, CancellationToken ct = default)
+        SqlServerCredentials credentials, CancellationToken ct = default)
         => QueryStringsAsync(
-            ExternalConnectionFactory.Build(serveur, "master", sqlAuth, login, password),
+            ExternalConnectionFactory.Build(credentials, "master"),
             "SELECT name FROM sys.databases WHERE database_id > 4 ORDER BY name", null, ct);
 
     public Task<IReadOnlyList<string>> ListTablesAsync(
-        string serveur, string baseDb, bool sqlAuth, string? login, string? password, CancellationToken ct = default)
+        SqlServerCredentials credentials, string baseDb, CancellationToken ct = default)
         => QueryStringsAsync(
-            ExternalConnectionFactory.Build(serveur, baseDb, sqlAuth, login, password),
+            ExternalConnectionFactory.Build(credentials, baseDb),
             "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_SCHEMA = 'dbo' ORDER BY TABLE_NAME", null, ct);
 
     public Task<IReadOnlyList<string>> ListColumnsAsync(
-        string serveur, string baseDb, string table, bool sqlAuth, string? login, string? password, CancellationToken ct = default)
+        SqlServerCredentials credentials, string baseDb, string table, CancellationToken ct = default)
         => QueryStringsAsync(
-            ExternalConnectionFactory.Build(serveur, baseDb, sqlAuth, login, password),
+            ExternalConnectionFactory.Build(credentials, baseDb),
             "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = @table ORDER BY ORDINAL_POSITION",
             ("@table", table), ct);
 
     public Task<IReadOnlyList<string>> ListDistinctValuesAsync(
-        string serveur, string baseDb, string table, string column, bool sqlAuth, string? login, string? password, CancellationToken ct = default)
+        SqlServerCredentials credentials, string baseDb, string table, string column, CancellationToken ct = default)
     {
         if (!Identifier.IsMatch(table) || !Identifier.IsMatch(column))
-            throw new InvalidOperationException("La table ou la colonne contient un identifiant SQL invalide.");
+            throw new DomainException("La table ou la colonne contient un identifiant SQL invalide.");
 
         var value = $"LTRIM(RTRIM(CONVERT(nvarchar(4000), [{column}])))";
         return QueryStringsAsync(
-            ExternalConnectionFactory.Build(serveur, baseDb, sqlAuth, login, password),
+            ExternalConnectionFactory.Build(credentials, baseDb),
             $"SELECT DISTINCT {value} FROM [dbo].[{table}] WHERE NULLIF({value}, N'') IS NOT NULL ORDER BY {value}", null, ct);
     }
 

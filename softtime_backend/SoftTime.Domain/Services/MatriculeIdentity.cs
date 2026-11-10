@@ -27,4 +27,19 @@ public static class MatriculeIdentity
         var cle = Cle(gauche);
         return cle.Length > 0 && cle == Cle(droite);
     }
+
+    /// <summary>
+    /// Comparaison de matricules ou de badges insensible au remplissage par des zéros
+    /// (« 00369 » == « 369 ») ; deux valeurs vides ne sont jamais égales.
+    /// </summary>
+    public static bool MemeIdentifiant(string? a, string? b)
+    {
+        a = a?.Trim();
+        b = b?.Trim();
+        if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b))
+            return false;
+        if (long.TryParse(a, out var na) && long.TryParse(b, out var nb))
+            return na == nb;
+        return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+    }
 }

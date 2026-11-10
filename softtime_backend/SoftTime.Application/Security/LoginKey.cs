@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+
 using SoftTime.Domain.Entities.SoftTime;
 
 namespace SoftTime.Application.Security;
@@ -21,10 +22,10 @@ public static class LoginKey
     /// Filtre traduit en SQL (<c>UPPER(LTRIM(RTRIM(LOGIN))) = @cle</c>) : une seule requête, sans charger la table.
     /// <paramref name="key"/> doit venir de <see cref="Normalize"/>.
     /// </summary>
-    public static Expression<Func<T_RESPONSABLE, bool>> Matches(string key)
-        => u => u.LOGIN != null && u.LOGIN.Trim().ToUpper() == key;
+    public static Expression<Func<Responsable, bool>> Matches(string key)
+        => u => u.Login != null && u.Login.Trim().ToUpper() == key;
 
     /// <summary>Comme <see cref="Matches"/>, en excluant le compte <paramref name="exceptId"/>.</summary>
-    public static Expression<Func<T_RESPONSABLE, bool>> MatchesOther(string key, decimal exceptId)
-        => u => u.IDRESPONSABLE != exceptId && u.LOGIN != null && u.LOGIN.Trim().ToUpper() == key;
+    public static Expression<Func<Responsable, bool>> MatchesOther(string key, decimal exceptId)
+        => u => u.IdResponsable != exceptId && u.Login != null && u.Login.Trim().ToUpper() == key;
 }

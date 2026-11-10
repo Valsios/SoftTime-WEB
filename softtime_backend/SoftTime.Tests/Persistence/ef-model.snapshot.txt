@@ -1,0 +1,700 @@
+##### SoftTime schema=
+ENTITY AuditDroit table=.T_AUDIT_DROIT key=[Id]
+  P Action col=ACTION type=nvarchar(50) null=True max=50 fixed= unicode= prec=, gen=Never
+  P DateAction col=DATE_ACTION type=datetime2 null=False max= fixed= unicode= prec=, gen=Never
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P IdCible col=ID_CIBLE type=decimal(18,0) null=False max= fixed= unicode= prec=18,0 gen=Never
+  P IdOperateur col=ID_OPERATEUR type=decimal(18,0) null=False max= fixed= unicode= prec=18,0 gen=Never
+  P LoginOperateur col=LOGIN_OPERATEUR type=nvarchar(100) null=True max=100 fixed= unicode= prec=, gen=Never
+  P NomCible col=NOM_CIBLE type=nvarchar(100) null=True max=100 fixed= unicode= prec=, gen=Never
+  P PermsApres col=PERMS_APRES type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P PermsAvant col=PERMS_AVANT type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P TypeCible col=TYPE_CIBLE type=nvarchar(20) null=True max=20 fixed= unicode= prec=, gen=Never
+ENTITY BddAutorisee table=.T_BDD_AUTORISE key=[IdBddAutorise]
+  P IdBdd col=IDBDD type=int null=False max= fixed= unicode= prec=, gen=Never
+  P IdBddAutorise col=IDBDDAUTORISE type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P IdResponsable col=IDRESPONSABLE type=decimal(18,2) null=False max= fixed= unicode= prec=, gen=Never
+ENTITY BddPointeuse table=.T_BDD_POINTEUSE key=[Id]
+  P Active col=ACTIVE type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P MapPunchColDatetime col=MAP_PUNCH_COL_DATETIME type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P MapPunchColType col=MAP_PUNCH_COL_TYPE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P MapPunchColUserId col=MAP_PUNCH_COL_USER_ID type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P MapPunchTable col=MAP_PUNCH_TABLE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P MapUserColBadge col=MAP_USER_COL_BADGE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P MapUserColId col=MAP_USER_COL_ID type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P MapUserColNom col=MAP_USER_COL_NOM type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P MapUserColSsn col=MAP_USER_COL_SSN type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P MapUserTable col=MAP_USER_TABLE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P NomBd col=NOM_BD type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Serveur col=SERVEUR type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P TLogin col=TLOGIN type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P TMdp col=TMDP type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P TypeAuth col=TYPE_AUTH type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P TypeBase col=TYPE_BASE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P TypePointage col=TYPE_POINTAGE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY BddSage table=.T_BDD_SAGE key=[Id]
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P MapColBadge col=MAP_COL_BADGE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P MapColCodeConstante col=MAP_COL_CODE_CONSTANTE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P MapColCodeDepartement col=MAP_COL_CODE_DEPARTEMENT type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P MapColDepartement col=MAP_COL_DEPARTEMENT type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P MapColMatricule col=MAP_COL_MATRICULE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P MapColNom col=MAP_COL_NOM type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P MapColPrenom col=MAP_COL_PRENOM type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P MapColService col=MAP_COL_SERVICE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P MapTable col=MAP_TABLE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P MapTableCodeConstante col=MAP_TABLE_CODE_CONSTANTE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P NomBd col=NOM_BD type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Serveur col=SERVEUR type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P TLogin col=TLOGIN type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P TMdp col=TMDP type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P TypeAuth col=TYPE_AUTH type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P TypeBase col=TYPE_BASE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY Cantine table=.T_CANTINE key=[IdCantine]
+  P DateDeb col=DATEDEB type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P DateFin col=DATEFIN type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P IdCantine col=IDCANTINE type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P MatriculeSage col=MATRICULE_SAGE type=nvarchar(64) null=True max=64 fixed= unicode= prec=, gen=Never
+  P NomBddPointeuse col=NOM_BDD_POINTEUSE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P NomBddSage col=NOM_BDD_SAGE type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P TotalCantine col=TOTAL_CANTINE type=int null=True max= fixed= unicode= prec=, gen=Never
+ENTITY CardPaie table=.T_CARDPAIE key=[Id]
+  P Actif col=ACTIF type=bit null=False max= fixed= unicode= prec=, gen=Never
+  P Date col=DATE type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P Departement col=DEPARTEMENT type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P Origine col=ORIGINE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P PointeuseBdd col=POINTEUSE_BDD type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P PointeuseNom col=POINTEUSE_NOM type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P PointeuseNumero col=POINTEUSE_NUMERO type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P PointeuseServeur col=POINTEUSE_SERVEUR type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P SageBdd col=SAGE_BDD type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P SageMatricule col=SAGE_MATRICULE type=nvarchar(64) null=True max=64 fixed= unicode= prec=, gen=Never
+  P SageNom col=SAGE_NOM type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P SagePrenom col=SAGE_PRENOM type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P SageServeur col=SAGE_SERVEUR type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY Categorie table=.T_CATEGORIE key=[IdCategorie]
+  P BddPointeuse col=BDD_POINTEUSE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P BddSage col=BDD_SAGE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P HeureSemaine col=HEURESEMAINE type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P IdCardPaie col=ID_CARDPAIE type=int null=False max= fixed= unicode= prec=, gen=Never
+  P IdCategorie col=IDCATEGORIE type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P Intitule col=INTITULE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Pause col=PAUSE type=time null=True max= fixed= unicode= prec=, gen=Never
+ENTITY CategorieSalarie table=.T_CAT_SAL key=[Id]
+  P BddPointeuse col=BDD_POINTEUSE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P BddSage col=BDD_SAGE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P IdCateg col=ID_CATEG type=int null=False max= fixed= unicode= prec=, gen=Never
+  P MatriculeSage col=MATRICULE_SAGE type=int null=False max= fixed= unicode= prec=, gen=Never
+ENTITY CodeAbsence table=.T_CODEABSENCE key=[IdAbsence]
+  P IdAbsence col=ID_ABSENCE type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P IntituleAbsence col=INTITULE_ABSENCE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P NotPay col=NOT_PAY type=bit null=True max= fixed= unicode= prec=, gen=Never
+ENTITY CodeConstanteCategorie table=.T_CODE_CONSTANTE key=[Id]
+  P Categorie col=CATEGORIE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P CodeConstante col=CODE_CONSTANTE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P Intitule col=INTITULE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY CorrespondanceActive table=.T_ACTIVECORRESP key=[Id]
+  P Active col=Active type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P DateModif col=DATE_MODIF type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P DerniereSync col=DERNIERE_SYNC type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P PointeuseBdd col=POINTEUSE_BDD type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P PointeuseServeur col=POINTEUSE_SERVEUR type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P SageBdd col=SAGE_BDD type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P SageServeur col=SAGE_SERVEUR type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY DroitAcces table=.T_DROIT key=[IdDroit]
+  P Droit col=DROIT type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P IdDroit col=IDDROIT type=decimal(18,2) null=False max= fixed= unicode= prec=, gen=OnAdd
+ENTITY DroitRole table=.T_DROIT_ROLE key=[IdDroitRole]
+  P IdDroit col=IDDROIT type=decimal(18,2) null=False max= fixed= unicode= prec=, gen=Never
+  P IdDroitRole col=IDDROITROLE type=decimal(18,2) null=False max= fixed= unicode= prec=, gen=OnAdd
+  P IdRole col=IDROLE type=decimal(18,2) null=False max= fixed= unicode= prec=, gen=Never
+ENTITY FieldRole table=.T_FIELD_ROLE key=[Code]
+  P AutoMappingPatterns col=AutoMappingPatterns type=nvarchar(256) null=True max=256 fixed= unicode= prec=, gen=Never
+  P Code col=Code type=nvarchar(64) null=False max=64 fixed= unicode= prec=, gen=Never
+  P EntityKind col=EntityKind type=nvarchar(32) null=True max=32 fixed= unicode= prec=, gen=Never
+  P IsRequired col=IsRequired type=bit null=False max= fixed= unicode= prec=, gen=Never
+  P Label col=Label type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P SortOrder col=SortOrder type=int null=False max= fixed= unicode= prec=, gen=Never
+  P SystemType col=SystemType type=nvarchar(16) null=True max=16 fixed= unicode= prec=, gen=Never
+ENTITY Frais table=.T_FRAIS key=[IdPointage]
+  P DateDeb col=DATEDEB type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P DateFin col=DATEFIN type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P IdPointage col=IDPOINTAGE type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P MatriculeSage col=MATRICULE_SAGE type=nvarchar(64) null=True max=64 fixed= unicode= prec=, gen=Never
+  P NomBddPointeuse col=NOM_BDD_POINTEUSE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P NomBddSage col=NOM_BDD_SAGE type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P TotalPoint col=TOTAL_POINT type=int null=True max= fixed= unicode= prec=, gen=Never
+ENTITY HeureAnomalie table=.T_HEUREANOMALIE key=[Id]
+  P AbsAm col=ABS_AM type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P AbsPm col=ABS_PM type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P BddPointeuse col=BDD_POINTEUSE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P BddSage col=BDD_SAGE type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P DatePointageIn col=DATE_POINTAGE_IN type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P DatePointageOut col=DATE_POINTAGE_OUT type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P Feries col=FERIES type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P FeriesAm col=FERIES_AM type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P FeriesPm col=FERIES_PM type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P H1 col=H1 type=time null=True max= fixed= unicode= prec=, gen=Never
+  P H2 col=H2 type=time null=True max= fixed= unicode= prec=, gen=Never
+  P HEntree col=HENTREE type=time null=True max= fixed= unicode= prec=, gen=Never
+  P Hpe col=HPE type=time null=True max= fixed= unicode= prec=, gen=Never
+  P Hps col=HPS type=time null=True max= fixed= unicode= prec=, gen=Never
+  P HSortie col=HSORTIE type=time null=True max= fixed= unicode= prec=, gen=Never
+  P Id col=ID type=decimal(18,2) null=False max= fixed= unicode= prec=, gen=OnAdd
+  P IntituleAbsence col=INTITULE_ABSENCE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P MatriculeSage col=MATRICULE_SAGE type=nvarchar(64) null=True max=64 fixed= unicode= prec=, gen=Never
+ENTITY HeureCorrigee table=.T_HEURECORRIGER key=[Id]
+  P AbsenceAm col=ABSENCE_AM type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P AbsencePm col=ABSENCE_PM type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P BddPointeuse col=BDD_POINTEUSE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P BddSage col=BDD_SAGE type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P DateImportationSage col=DATE_IMPORTATION_SAGE type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P DatePointageIn col=DATE_POINTAGE_IN type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P DatePointageOut col=DATE_POINTAGE_OUT type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P Ferier col=FERIER type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P FerierAm col=FERIER_AM type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P FerierPm col=FERIER_PM type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P HEntree col=HENTREE type=time null=True max= fixed= unicode= prec=, gen=Never
+  P Hpe col=HPE type=time null=True max= fixed= unicode= prec=, gen=Never
+  P Hps col=HPS type=time null=True max= fixed= unicode= prec=, gen=Never
+  P Hs col=HS type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P HSortie col=HSORTIE type=time null=True max= fixed= unicode= prec=, gen=Never
+  P Id col=ID type=decimal(18,2) null=False max= fixed= unicode= prec=, gen=OnAdd
+  P ImportationSage col=IMPORTATION_SAGE type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P IntituleAbsence col=INTITULE_ABSENCE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P MatriculeSage col=MATRICULE_SAGE type=nvarchar(64) null=True max=64 fixed= unicode= prec=, gen=Never
+  P MDimanche col=M_DIMANCHE type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P MFeries col=M_FERIES type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P MNuit col=M_NUIT type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P Origine col=ORIGINE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Retard col=RETARD type=time null=True max= fixed= unicode= prec=, gen=Never
+  P ValiderCorrection col=VALIDER_CORRECTION type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P ValiderHs col=VALIDER_HS type=bit null=True max= fixed= unicode= prec=, gen=Never
+ENTITY HeureDimanche table=.T_HEUREDIMANCHE key=[Id]
+  P BddPointeuse col=BDD_POINTEUSE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P BddSage col=BDD_SAGE type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P DateDim col=Date_Dim type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P HeureDebut col=HeureDebut type=time null=True max= fixed= unicode= prec=, gen=Never
+  P HeureFin col=HeureFin type=time null=True max= fixed= unicode= prec=, gen=Never
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P MatriculeSage col=MATRICULE_SAGE type=nvarchar(64) null=True max=64 fixed= unicode= prec=, gen=Never
+  P Valeur col=Valeur type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY HistoriqueAnomalie table=.T_HISTORIQUE_ANOMALIE key=[Id]
+  P AbsAm col=ABS_AM type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P AbsPm col=ABS_PM type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P AnomalieId col=ANOMALIE_ID type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P BddPointeuse col=BDD_POINTEUSE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P BddSage col=BDD_SAGE type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P DatePointageIn col=DATE_POINTAGE_IN type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P DatePointageOut col=DATE_POINTAGE_OUT type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P DateSuppression col=DATE_SUPPRESSION type=datetime2 null=False max= fixed= unicode= prec=, gen=Never
+  P Feries col=FERIES type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P FeriesAm col=FERIES_AM type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P FeriesPm col=FERIES_PM type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P H1 col=H1 type=time null=True max= fixed= unicode= prec=, gen=Never
+  P H2 col=H2 type=time null=True max= fixed= unicode= prec=, gen=Never
+  P HEntree col=HENTREE type=time null=True max= fixed= unicode= prec=, gen=Never
+  P Hpe col=HPE type=time null=True max= fixed= unicode= prec=, gen=Never
+  P Hps col=HPS type=time null=True max= fixed= unicode= prec=, gen=Never
+  P HSortie col=HSORTIE type=time null=True max= fixed= unicode= prec=, gen=Never
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P IntituleAbsence col=INTITULE_ABSENCE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P MatriculeSage col=MATRICULE_SAGE type=nvarchar(64) null=True max=64 fixed= unicode= prec=, gen=Never
+ENTITY HistoriqueHs table=.T_HISTORIQUE_HS key=[Id]
+  P Absence col=ABSENCE type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P BddPointeuse col=BDD_POINTEUSE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P BddSage col=BDD_SAGE type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P DateSuppression col=DATE_SUPPRESSION type=datetime2 null=False max= fixed= unicode= prec=, gen=Never
+  P Dim col=DIM type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P Exo130 col=EXO130 type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P Exo150 col=EXO150 type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P Ferie col=FERIE type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P HsId col=HS_ID type=int null=True max= fixed= unicode= prec=, gen=Never
+  P I130 col=I130 type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P I150 col=I150 type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P Matricule col=MATRICULE type=nvarchar(64) null=True max=64 fixed= unicode= prec=, gen=Never
+  P Nuit col=NUIT type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P NumSal col=NUM_SAL type=int null=True max= fixed= unicode= prec=, gen=Never
+  P PeriodeDebut col=PERIODE_DEBUT type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P PeriodeFin col=PERIODE_FIN type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P Retard col=RETARD type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY HistoriquePointage table=.T_HISTORIQUE_POINTAGE key=[Id]
+  P DateImportation col=DATE_IMPORTATION type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P DatePointage col=DATE_POINTAGE type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P DateSuppression col=DATE_SUPPRESSION type=datetime2 null=False max= fixed= unicode= prec=, gen=Never
+  P HeurePointage col=HEURE_POINTAGE type=time null=True max= fixed= unicode= prec=, gen=Never
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P IdUniquePointage col=IDUNIQUE_POINTAGE type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P MatriculeSage col=MATRICULE_SAGE type=nvarchar(64) null=True max=64 fixed= unicode= prec=, gen=Never
+  P NomBddPointeuse col=NOM_BDD_POINTEUSE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P NomBddSage col=NOM_BDD_SAGE type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P PointageId col=POINTAGE_ID type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P TypePointage col=TYPE_POINTAGE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY HsExoImp table=.T_HSExoImp key=[Oid]
+  P Absence col=ABSENCE type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P BddPointeuse col=BDD_POINTEUSE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P BddSage col=BDD_SAGE type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P Dim col=DIM type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P Exo130 col=EXO130 type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P Exo150 col=EXO150 type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P Ferie col=FERIE type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P I130 col=I130 type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P I150 col=I150 type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P Matricule col=Matricule type=nvarchar(64) null=True max=64 fixed= unicode= prec=, gen=Never
+  P Nuit col=NUIT type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P NumSal col=NumSal type=int null=True max= fixed= unicode= prec=, gen=Never
+  P Oid col=OID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P PeriodeDebut col=PeriodeDebut type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P PeriodeFin col=PeriodeFin type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P Retard col=RETARD type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY HsSalarie table=.T_HSSAL key=[Id]
+  P Date col=Date type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P Ht col=HT type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P IdSal col=IDSAL type=int null=True max= fixed= unicode= prec=, gen=Never
+ENTITY HsSemaine table=.T_HSSemaine key=[Oid]
+  P BddPointeuse col=BDD_POINTEUSE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P BddSage col=BDD_SAGE type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P Hs col=HS type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P Hs1 col=HS1 type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P Hs2 col=HS2 type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P Matricule col=Matricule type=nvarchar(64) null=True max=64 fixed= unicode= prec=, gen=Never
+  P Oid col=OID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P PeriodeDebut col=PeriodeDebut type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P PeriodeFin col=PeriodeFin type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P SalNum col=SalNum type=int null=True max= fixed= unicode= prec=, gen=Never
+  P Semaine col=Semaine type=int null=True max= fixed= unicode= prec=, gen=Never
+  P TotalHeure col=TotalHeure type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY HsValidee table=.T_HS_VALIDER key=[Id]
+  P Absence col=ABSENCE type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P BddPointage col=BDD_POINTAGE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P BddSage col=BDD_SAGE type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P DateDeb col=DATE_DEB type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P DateFin col=DATE_FIN type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P Dimanche col=DIMANCHE type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P Feries col=FERIES type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P Hs col=HS type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P Ht col=HT type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P Matricules col=MATRICULES type=nvarchar(64) null=True max=64 fixed= unicode= prec=, gen=Never
+  P Nuit col=NUIT type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P Retard col=RETARD type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P ValidationHs col=VALIDATION_HS type=bit null=True max= fixed= unicode= prec=, gen=Never
+ENTITY ImpressionAbsence table=.T_impr_ABS key=[Id]
+  P AbsenceAm col=ABSENCE_AM type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P AbsencePm col=ABSENCE_PM type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P BddPointeuse col=BDD_POINTEUSE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P BddSage col=BDD_SAGE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P DatePointage col=DATE_POINTAGE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P IntituleAbs col=INTITULE_ABS type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Matricules col=MATRICULES type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY ImpressionHeureSup table=.T_impr_HS key=[Id]
+  P Exo130 col=EXO130 type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Exo150 col=EXO150 type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P Impo130 col=IMPO130 type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Impo150 col=IMPO150 type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Matr col=MATR type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P MDimanches col=MDIMANCHES type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P MFeries col=MFERIES type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P MNuits col=MNUITS type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P TotalH col=TOTALH type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY ImpressionRetard table=.T_impr_RET key=[Id]
+  P BddPointeuse col=BDD_POINTEUSE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P BddSage col=BDD_SAGE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P DatePointage col=DATE_POINTAGE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P HeureEntree col=HEURE_ENTREE type=time null=True max= fixed= unicode= prec=, gen=Never
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P Matricules col=MATRICULES type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Retards col=RETARDS type=time null=True max= fixed= unicode= prec=, gen=Never
+ENTITY JourFerie table=.T_FERIE key=[Id]
+  P BddSage col=BDD_SAGE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Date col=DATE type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P Intitule col=INTITULE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY JournalAudit table=.suivi_JOURNAL key=[Id]
+  P Actions col=ACTIONS type=nvarchar(32) null=True max=32 fixed= unicode= prec=, gen=Never
+  P Anciens col=ANCIENS type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P BasePointeuse col=BASE_POINTEUSE type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P BaseSage col=BASE_SAGE type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P Cles col=CLES type=nvarchar(450) null=True max=450 fixed= unicode= prec=, gen=Never
+  P Colonnes col=COLONNES type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P Correlations col=CORRELATIONS type=uniqueidentifier null=False max= fixed= unicode= prec=, gen=Never
+  P DateUtc col=DATE_UTC type=datetime2 null=False max= fixed= unicode= prec=, gen=Never
+  P Id col=Id type=bigint null=False max= fixed= unicode= prec=, gen=OnAdd
+  P Nouveaux col=NOUVEAUX type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Source col=SOURCE type=nvarchar(64) null=True max=64 fixed= unicode= prec=, gen=Never
+  P Tables col=TABLES type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P Users col=USERS type=nvarchar(256) null=True max=256 fixed= unicode= prec=, gen=Never
+  I IX_suivi_JOURNAL_Base_Date [BaseSage,DateUtc,Id] unique=False filter= desc=False,True,True
+  I IX_suivi_JOURNAL_Correlation [Correlations,Id] unique=False filter= desc=
+  I IX_suivi_JOURNAL_Date [DateUtc,Id] unique=False filter= desc=
+  I IX_suivi_JOURNAL_Table_Action_Date [Tables,Actions,DateUtc,Id] unique=False filter= desc=False,False,True,True
+ENTITY Majoration table=.T_MAJORATION key=[Id]
+  P BddPointeuse col=BDD_POINTEUSE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P BddSage col=BDD_SAGE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Cotation col=Cotation type=decimal(18,2) null=True max= fixed= unicode= prec=18,2 gen=Never
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P Mojoration col=Mojoration type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY PaieEcriture table=.T_PAIE_ECRITURE key=[Id]
+  P BddSage col=BDD_SAGE type=nvarchar(128) null=False max=128 fixed= unicode= prec=, gen=Never
+  P Categorie col=CATEGORIE type=nvarchar(32) null=False max=32 fixed= unicode= prec=, gen=Never
+  P ColMatricule col=COL_MATRICULE type=nvarchar(128) null=False max=128 fixed= unicode= prec=, gen=Never
+  P ColValeur col=COL_VALEUR type=nvarchar(128) null=False max=128 fixed= unicode= prec=, gen=Never
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P TableCible col=TABLE_CIBLE type=nvarchar(256) null=False max=256 fixed= unicode= prec=, gen=Never
+  I IX_T_PAIE_ECRITURE_BDD_SAGE_CATEGORIE [BddSage,Categorie] unique=True filter= desc=
+ENTITY ParametrePointeuse table=.T_CLOCK key=[IdPoint]
+  P IdPoint col=IDPOINT type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P MultiPoint col=MULTIPOINT type=bit null=True max= fixed= unicode= prec=, gen=Never
+ENTITY Planning table=.T_PLANNING key=[IdPlanning]
+  P Ha col=HA type=time null=True max= fixed= unicode= prec=, gen=Never
+  P Hd col=HD type=time null=True max= fixed= unicode= prec=, gen=Never
+  P IdPlanning col=IDPLANNING type=decimal(18,2) null=False max= fixed= unicode= prec=, gen=OnAdd
+  P Intitule col=Intitule type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P NoShift col=NoSHIFT type=int null=True max= fixed= unicode= prec=, gen=Never
+  P Pause col=PAUSE type=time null=True max= fixed= unicode= prec=, gen=Never
+ENTITY PlanningSalarie table=.T_PLANNING_SAL key=[Id]
+  P BddPointeuse col=BDD_POINTEUSE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P BddSage col=BDD_SAGE type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P DateP col=DateP type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P Ha col=HA type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P Hd col=HD type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P IdSal col=IDSAL type=int null=False max= fixed= unicode= prec=, gen=Never
+  P NoShift col=NoSHIFT type=int null=True max= fixed= unicode= prec=, gen=Never
+  P OffP col=OffP type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P Pause col=Pause type=time null=True max= fixed= unicode= prec=, gen=Never
+ENTITY Pointage table=.T_POINTAGE key=[IdPointage]
+  P DateImportation col=DATE_IMPORTATION type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P DatePointage col=DATE_POINTAGE type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P HeurePointage col=HEURE_POINTAGE type=time null=True max= fixed= unicode= prec=, gen=Never
+  P IdPointage col=IDPOINTAGE type=decimal(18,2) null=False max= fixed= unicode= prec=, gen=OnAdd
+  P IdUniquePointage col=IDUNIQUE_POINTAGE type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P MatriculeSage col=MATRICULE_SAGE type=nvarchar(64) null=True max=64 fixed= unicode= prec=, gen=Never
+  P NomBddPointeuse col=NOM_BDD_POINTEUSE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P NomBddSage col=NOM_BDD_SAGE type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P TypePointage col=TYPE_POINTAGE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY RefreshTokenRecord table=.T_REFRESH_TOKEN key=[Id]
+  P DateCreation col=DATE_CREATION type=datetime2 null=False max= fixed= unicode= prec=, gen=Never
+  P DateExpiration col=DATE_EXPIRATION type=datetime2 null=False max= fixed= unicode= prec=, gen=Never
+  P DateRevocation col=DATE_REVOCATION type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P Famille col=FAMILLE type=uniqueidentifier null=False max= fixed= unicode= prec=, gen=Never
+  P Id col=ID type=bigint null=False max= fixed= unicode= prec=, gen=OnAdd
+  P IdResponsable col=IDRESPONSABLE type=decimal(18,0) null=False max= fixed= unicode= prec=18,0 gen=Never
+  P RemplacePar col=REMPLACE_PAR type=char(64) null=True max=64 fixed=True unicode=False prec=, gen=Never
+  P TokenHash col=TOKEN_HASH type=char(64) null=False max=64 fixed=True unicode=False prec=, gen=Never
+  I IX_T_REFRESH_TOKEN_TOKEN_HASH [TokenHash] unique=True filter= desc=
+ENTITY ReposFerie table=.T_REST_FERIE key=[Id]
+  P BddPointeuse col=BDD_POINTEUSE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P BddSage col=BDD_SAGE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P DateDebutSemaine col=DATE_DEBUT_SEMAINE type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P Etat col=ETAT type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P FerieDebutSemaine col=FERIE_DEBUT_SEMAINE type=decimal(18,2) null=True max= fixed= unicode= prec=, gen=Never
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P MatriculeSage col=MATRICULE_SAGE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY Responsable table=.T_RESPONSABLE key=[IdResponsable]
+  P Email col=EMAIL type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P IdResponsable col=IDRESPONSABLE type=decimal(18,0) null=False max= fixed= unicode= prec=18,0 gen=OnAdd
+  P IdRole col=IDROLE type=decimal(18,0) null=False max= fixed= unicode= prec=18,0 gen=Never
+  P Login col=LOGIN type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Matricule col=MATRICULE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P NomResponsable col=NOMRESPONSABLE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Password col=PASSWORD type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P TentativesEchouees col=TENTATIVES_ECHOUEES type=int null=False max= fixed= unicode= prec=, gen=Never
+  P VerrouilleJusqua col=VERROUILLE_JUSQUA type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+ENTITY Role table=.T_ROLE key=[IdRole]
+  P IdRole col=IDROLE type=decimal(18,2) null=False max= fixed= unicode= prec=, gen=OnAdd
+  P NomRole col=NOMROLE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY RolePermission table=.T_ROLE_PERMISSION key=[Id]
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P IdRole col=IDROLE type=decimal(18,0) null=False max= fixed= unicode= prec=18,0 gen=Never
+  P IsGranted col=IS_GRANTED type=bit null=False max= fixed= unicode= prec=, gen=Never
+  P PermissionCode col=PERMISSION_CODE type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  I IX_T_ROLE_PERMISSION_IDROLE_PERMISSION_CODE [IdRole,PermissionCode] unique=True filter=[PERMISSION_CODE] IS NOT NULL desc=
+ENTITY Semaine table=.T_Semaine key=[]
+  P CodeSemain col=CodeSemain type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P DateDeb col=DateDeb type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P DateFin col=DateFin type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+ENTITY SemainePeriode table=.T_SemainePeriode key=[Oid]
+  P DebutSemaine col=DebutSemaine type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P FinSemaine col=FinSemaine type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P NoSemaine col=NoSemaine type=int null=True max= fixed= unicode= prec=, gen=Never
+  P Oid col=OID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+ENTITY SourceEntityMapping table=.T_SOURCE_ENTITY_MAPPING key=[Id]
+  P EntityKind col=EntityKind type=nvarchar(32) null=True max=32 fixed= unicode= prec=, gen=Never
+  P Id col=Id type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P PointeuseDbId col=PointeuseDbId type=int null=True max= fixed= unicode= prec=, gen=Never
+  P SageDbId col=SageDbId type=int null=True max= fixed= unicode= prec=, gen=Never
+  P SourceTable col=SourceTable type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P SystemType col=SystemType type=nvarchar(16) null=True max=16 fixed= unicode= prec=, gen=Never
+  I IX_T_SOURCE_ENTITY_MAPPING_PointeuseDbId_EntityKind [PointeuseDbId,EntityKind] unique=True filter=[PointeuseDbId] IS NOT NULL desc=
+  I IX_T_SOURCE_ENTITY_MAPPING_SageDbId_EntityKind [SageDbId,EntityKind] unique=True filter=[SageDbId] IS NOT NULL desc=
+ENTITY SourceFieldMapping table=.T_SOURCE_FIELD_MAPPING key=[Id]
+  P EntityMappingId col=EntityMappingId type=int null=False max= fixed= unicode= prec=, gen=Never
+  P FieldRoleCode col=FieldRoleCode type=nvarchar(64) null=True max=64 fixed= unicode= prec=, gen=Never
+  P Id col=Id type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P SourceColumn col=SourceColumn type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  I IX_T_SOURCE_FIELD_MAPPING_EntityMappingId_FieldRoleCode [EntityMappingId,FieldRoleCode] unique=True filter=[FieldRoleCode] IS NOT NULL desc=
+  FK FK_T_SOURCE_FIELD_MAPPING_T_SOURCE_ENTITY_MAPPING_EntityMappingId [EntityMappingId] -> SourceEntityMapping required=True delete=Cascade
+ENTITY SuiviConfiguration table=.suivi_TBLCLN key=[Id]
+  P Bases col=BASES type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Colonnes col=COLONNES type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Etats col=ETATS type=bit null=True max= fixed= unicode= prec=, gen=Never
+  P Id col=Id type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P Tables col=TABLES type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Types col=TYPES type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY SuiviModification table=.suivi_SUIVI key=[Id]
+  P Actions col=_ACTIONS type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P Anciens col=_ANCIENS type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Bases col=_BASES type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Colonnes col=_COLONNES type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Datetimes col=_DATETIMES type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P Id col=Id type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P Nouveaux col=_NOUVEAUX type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Tables col=_TABLES type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P Users col=_USERS type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY SuiviTable table=.suivi_T key=[Id]
+  P Bases col=BASES type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Id col=Id type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P SColonnes col=S_COLONNES type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P STables col=S_TABLES type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P STypes col=S_TYPES type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY ToleranceRetard table=.T_TOLERANCES key=[Id]
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P IdCategorie col=IDCATEGORIE type=int null=False max= fixed= unicode= prec=, gen=Never
+  P Sortie col=SORTIE type=int null=True max= fixed= unicode= prec=, gen=Never
+  P Tolerance col=TOLERANCE type=int null=False max= fixed= unicode= prec=, gen=Never
+  P TypesTol col=TYPES_TOL type=bit null=False max= fixed= unicode= prec=, gen=Never
+ENTITY UserPermission table=.T_USER_PERMISSION key=[Id]
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P IdResponsable col=IDRESPONSABLE type=decimal(18,0) null=False max= fixed= unicode= prec=18,0 gen=Never
+  P IsGranted col=IS_GRANTED type=bit null=False max= fixed= unicode= prec=, gen=Never
+  P PermissionCode col=PERMISSION_CODE type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  I IX_T_USER_PERMISSION_IDRESPONSABLE_PERMISSION_CODE [IdResponsable,PermissionCode] unique=True filter=[PERMISSION_CODE] IS NOT NULL desc=
+##### Sage schema=
+ENTITY CalendrierSocieteSage table=.T_GHRCAL_SOCIETE key=[IdGHRCal]
+  P ApresMidi col=ApresMidi type=tinyint null=True max= fixed= unicode= prec=, gen=Never
+  P EtatJour col=EtatJour type=tinyint null=True max= fixed= unicode= prec=, gen=Never
+  P IdGHRCal col=IdGHRCal type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P Matin col=Matin type=tinyint null=True max= fixed= unicode= prec=, gen=Never
+  P PeriodeDebut col=PeriodeDebut type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P PeriodeFin col=PeriodeFin type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+ENTITY ConstanteSage table=.T_CST key=[CodeConstante,NoOrdre]
+  P CodeConstante col=CodeConstante type=nvarchar(450) null=False max= fixed= unicode= prec=, gen=Never
+  P CodeOperande1 col=CodeOperande1 type=smallint null=True max= fixed= unicode= prec=, gen=Never
+  P Intitule col=Intitule type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P NoOrdre col=NoOrdre type=smallint null=False max= fixed= unicode= prec=, gen=Never
+ENTITY DepartementSage table=.T_DEPARTEMENT key=[Code]
+  P Code col=Code type=nvarchar(450) null=False max= fixed= unicode= prec=, gen=Never
+  P Intitule col=Intitule type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY EvenementSage table=.T_GHR key=[CodeNE]
+  P CodeNE col=CodeNE type=nvarchar(450) null=False max= fixed= unicode= prec=, gen=Never
+  P Intitule col=Intitule type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY EvenementSalarieSage table=.T_GHRSAL key=[IdGhrSal]
+  P ApresMidi col=ApresMidi type=tinyint null=True max= fixed= unicode= prec=, gen=Never
+  P CodeNE col=CodeNE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P IdGhrSal col=IdGhrSal type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P Matin col=Matin type=tinyint null=True max= fixed= unicode= prec=, gen=Never
+  P NombreParJour col=NombreParJour type=tinyint null=True max= fixed= unicode= prec=, gen=Never
+  P NumSalarie col=NumSalarie type=int null=False max= fixed= unicode= prec=, gen=Never
+  P PeriodeDebut col=PeriodeDebut type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P PeriodeFin col=PeriodeFin type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P Valeur col=Valeur type=float null=True max= fixed= unicode= prec=, gen=Never
+ENTITY HistoriqueAffectationSage table=.T_HST_AFFECTATION key=[IdHstAffectation]
+  P Categorie col=Categorie type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P DateDebut col=DateDebut type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P DateSortiePoste col=DateSortiePoste type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P Departement col=Departement type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P IdHstAffectation col=IdHstAffectation type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P NumSalarie col=NumSalarie type=int null=False max= fixed= unicode= prec=, gen=Never
+  P Service col=Service type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY SalarieSage table=.T_SAL key=[SaCompteurNumero]
+  P Civilite col=Civilite type=tinyint null=True max= fixed= unicode= prec=, gen=Never
+  P MatriculeSalarie col=MatriculeSalarie type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Nom col=Nom type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P NumeroDeBadge col=NumeroDeBadge type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Prenom col=Prenom type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P SaCompteurNumero col=SA_CompteurNumero type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P SalarieDesactive col=SalarieDesactive type=tinyint null=True max= fixed= unicode= prec=, gen=Never
+##### Pointeuse schema=
+ENTITY CheckInOut table=.CHECKINOUT key=[UserId,CheckTime]
+  P CheckTime col=CHECKTIME type=datetime2 null=False max= fixed= unicode= prec=, gen=Never
+  P CheckType col=CHECKTYPE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Memoinfo col=Memoinfo type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P SensorId col=SENSORID type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Sn col=sn type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P UserExtFmt col=UserExtFmt type=smallint null=True max= fixed= unicode= prec=, gen=Never
+  P UserId col=USERID type=int null=False max= fixed= unicode= prec=, gen=Never
+  P VerifyCode col=VERIFYCODE type=int null=True max= fixed= unicode= prec=, gen=Never
+  P WorkCode col=WorkCode type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY UserInfo table=.USERINFO key=[UserId]
+  P AccGroup col=AccGroup type=int null=True max= fixed= unicode= prec=, gen=Never
+  P Att col=ATT type=smallint null=False max= fixed= unicode= prec=, gen=Never
+  P AutoSchPlan col=AutoSchPlan type=smallint null=True max= fixed= unicode= prec=, gen=Never
+  P BadgeNumber col=BADGENUMBER type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Birthday col=BIRTHDAY type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P CardNo col=CardNo type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P City col=CITY type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P DefaultDeptId col=DEFAULTDEPTID type=smallint null=True max= fixed= unicode= prec=, gen=Never
+  P EmPrivilege col=EMPRIVILEGE type=smallint null=True max= fixed= unicode= prec=, gen=Never
+  P Expires col=Expires type=int null=True max= fixed= unicode= prec=, gen=Never
+  P FaceGroup col=FaceGroup type=int null=True max= fixed= unicode= prec=, gen=Never
+  P FPhone col=FPHONE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Gender col=GENDER type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P HiredDay col=HIREDDAY type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P Holiday col=HOLIDAY type=smallint null=False max= fixed= unicode= prec=, gen=Never
+  P InheritDeptRule col=InheritDeptRule type=smallint null=True max= fixed= unicode= prec=, gen=Never
+  P InheritDeptSch col=InheritDeptSch type=smallint null=True max= fixed= unicode= prec=, gen=Never
+  P InheritDeptSchClass col=InheritDeptSchClass type=smallint null=True max= fixed= unicode= prec=, gen=Never
+  P InLate col=INLATE type=smallint null=False max= fixed= unicode= prec=, gen=Never
+  P LunchDuration col=LUNCHDURATION type=smallint null=False max= fixed= unicode= prec=, gen=Never
+  P MinAutoSchInterval col=MinAutoSchInterval type=int null=True max= fixed= unicode= prec=, gen=Never
+  P Minzu col=MINZU type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P MVerifyPass col=MVerifyPass type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Name col=NAME type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P OPhone col=OPHONE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P OutEarly col=OUTEARLY type=smallint null=False max= fixed= unicode= prec=, gen=Never
+  P Overtime col=OVERTIME type=smallint null=False max= fixed= unicode= prec=, gen=Never
+  P Pager col=PAGER type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Password col=PASSWORD type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Privilege col=privilege type=int null=True max= fixed= unicode= prec=, gen=Never
+  P RegisterOT col=RegisterOT type=smallint null=True max= fixed= unicode= prec=, gen=Never
+  P SecurityFlags col=SECURITYFLAGS type=smallint null=True max= fixed= unicode= prec=, gen=Never
+  P Sep col=SEP type=smallint null=False max= fixed= unicode= prec=, gen=Never
+  P Ssn col=SSN type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P State col=STATE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P Street col=STREET type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P TimeZone1 col=TimeZone1 type=int null=True max= fixed= unicode= prec=, gen=Never
+  P TimeZone2 col=TimeZone2 type=int null=True max= fixed= unicode= prec=, gen=Never
+  P TimeZone3 col=TimeZone3 type=int null=True max= fixed= unicode= prec=, gen=Never
+  P Title col=TITLE type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P UseAccGroupTZ col=UseAccGroupTZ type=int null=True max= fixed= unicode= prec=, gen=Never
+  P UserId col=USERID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P ValidCount col=ValidCount type=int null=True max= fixed= unicode= prec=, gen=Never
+  P ValidTimeBegin col=ValidTimeBegin type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P ValidTimeEnd col=ValidTimeEnd type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P VerificationMethod col=VERIFICATIONMETHOD type=smallint null=True max= fixed= unicode= prec=, gen=Never
+  P VerifyCode col=VerifyCode type=int null=True max= fixed= unicode= prec=, gen=Never
+  P Zip col=ZIP type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+##### Ml schema=ml
+ENTITY MlModele table=ml.Modele key=[Id]
+  P Algorithme col=Algorithme type=nvarchar(64) null=False max=64 fixed= unicode= prec=, gen=Never
+  P BddSage col=BddSage type=nvarchar(128) null=False max=128 fixed= unicode= prec=, gen=Never
+  P Commentaire col=Commentaire type=nvarchar(512) null=True max=512 fixed= unicode= prec=, gen=Never
+  P EntraineLe col=EntraineLe type=datetime2 null=False max= fixed= unicode= prec=, gen=Never
+  P EstActif col=EstActif type=bit null=False max= fixed= unicode= prec=, gen=Never
+  P Id col=Id type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P MetriquesJson col=MetriquesJson type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+  P ModeleBinaire col=ModeleBinaire type=varbinary(max) null=True max= fixed= unicode= prec=, gen=Never
+  P NbLignes col=NbLignes type=int null=False max= fixed= unicode= prec=, gen=Never
+  P NbPositifs col=NbPositifs type=int null=True max= fixed= unicode= prec=, gen=Never
+  P PeriodeDebut col=PeriodeDebut type=datetime2 null=False max= fixed= unicode= prec=, gen=Never
+  P PeriodeFin col=PeriodeFin type=datetime2 null=False max= fixed= unicode= prec=, gen=Never
+  P SchemaHash col=SchemaHash type=nvarchar(64) null=False max=64 fixed= unicode= prec=, gen=Never
+  P Statut col=Statut type=nvarchar(16) null=False max=16 fixed= unicode= prec=, gen=Never
+  P TypeModele col=TypeModele type=nvarchar(32) null=False max=32 fixed= unicode= prec=, gen=Never
+  P Version col=Version type=nvarchar(32) null=False max=32 fixed= unicode= prec=, gen=Never
+  I IX_Modele_BddSage_TypeModele_EstActif [BddSage,TypeModele,EstActif] unique=True filter=[EstActif] = 1 desc=
+ENTITY MlPrediction table=ml.Prediction key=[Id]
+  P BddSage col=BddSage type=nvarchar(128) null=False max=128 fixed= unicode= prec=, gen=Never
+  P BorneBasse col=BorneBasse type=decimal(8,2) null=True max= fixed= unicode= prec=8,2 gen=Never
+  P BorneHaute col=BorneHaute type=decimal(8,2) null=True max= fixed= unicode= prec=8,2 gen=Never
+  P Cible col=Cible type=datetime2 null=False max= fixed= unicode= prec=, gen=Never
+  P GenereLe col=GenereLe type=datetime2 null=False max= fixed= unicode= prec=, gen=Never
+  P Id col=Id type=bigint null=False max= fixed= unicode= prec=, gen=OnAdd
+  P Matricule col=Matricule type=nvarchar(64) null=False max=64 fixed= unicode= prec=, gen=Never
+  P ModeleId col=ModeleId type=int null=False max= fixed= unicode= prec=, gen=Never
+  P NiveauRisque col=NiveauRisque type=tinyint null=False max= fixed= unicode= prec=, gen=Never
+  P Probabilite col=Probabilite type=float null=True max= fixed= unicode= prec=, gen=Never
+  P TypeModele col=TypeModele type=nvarchar(32) null=False max=32 fixed= unicode= prec=, gen=Never
+  P ValeurPrevue col=ValeurPrevue type=decimal(8,2) null=True max= fixed= unicode= prec=8,2 gen=Never
+  I IX_Prediction_BddSage_TypeModele_Cible [BddSage,TypeModele,Cible] unique=False filter= desc=
+  I IX_Prediction_BddSage_TypeModele_Matricule_Cible_ModeleId [BddSage,TypeModele,Matricule,Cible,ModeleId] unique=True filter= desc=
+  I IX_Prediction_ModeleId [ModeleId] unique=False filter= desc=
+  FK FK_Prediction_Modele_ModeleId [ModeleId] -> MlModele required=True delete=NoAction
+ENTITY MlSalarieJour table=ml.SalarieJour key=[Id]
+  P AbsenceDeclaree col=AbsenceDeclaree type=bit null=False max= fixed= unicode= prec=, gen=Never
+  P AbsenceHeures col=AbsenceHeures type=decimal(6,2) null=True max= fixed= unicode= prec=6,2 gen=Never
+  P AbsenceNonJustifiee col=AbsenceNonJustifiee type=bit null=False max= fixed= unicode= prec=, gen=Never
+  P Absences30j col=Absences30j type=int null=False max= fixed= unicode= prec=, gen=Never
+  P Absences7j col=Absences7j type=int null=False max= fixed= unicode= prec=, gen=Never
+  P Absences90j col=Absences90j type=int null=False max= fixed= unicode= prec=, gen=Never
+  P AncienneteJours col=AncienneteJours type=int null=True max= fixed= unicode= prec=, gen=Never
+  P AnneeIso col=AnneeIso type=smallint null=False max= fixed= unicode= prec=, gen=Never
+  P BddSage col=BddSage type=nvarchar(128) null=False max=128 fixed= unicode= prec=, gen=Never
+  P CategorieId col=CategorieId type=int null=True max= fixed= unicode= prec=, gen=Never
+  P CongesPrevusJour col=CongesPrevusJour type=int null=False max= fixed= unicode= prec=, gen=Never
+  P Date col=Date type=datetime2 null=False max= fixed= unicode= prec=, gen=Never
+  P DebutMois col=DebutMois type=bit null=False max= fixed= unicode= prec=, gen=Never
+  P Departement col=Departement type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P EffectifPrevuJour col=EffectifPrevuJour type=int null=False max= fixed= unicode= prec=, gen=Never
+  P EstConge col=EstConge type=bit null=False max= fixed= unicode= prec=, gen=Never
+  P EstFerie col=EstFerie type=bit null=False max= fixed= unicode= prec=, gen=Never
+  P EstJourPlanifie col=EstJourPlanifie type=bit null=False max= fixed= unicode= prec=, gen=Never
+  P EstOff col=EstOff type=bit null=False max= fixed= unicode= prec=, gen=Never
+  P EstWeekend col=EstWeekend type=bit null=False max= fixed= unicode= prec=, gen=Never
+  P FinMois col=FinMois type=bit null=False max= fixed= unicode= prec=, gen=Never
+  P HeuresPlanifiees col=HeuresPlanifiees type=decimal(6,2) null=True max= fixed= unicode= prec=6,2 gen=Never
+  P HeuresSemaineContrat col=HeuresSemaineContrat type=decimal(6,2) null=True max= fixed= unicode= prec=6,2 gen=Never
+  P HeuresSupp4Semaines col=HeuresSupp4Semaines type=decimal(8,2) null=False max= fixed= unicode= prec=8,2 gen=Never
+  P HeuresTravaillees col=HeuresTravaillees type=decimal(6,2) null=True max= fixed= unicode= prec=6,2 gen=Never
+  P Id col=Id type=bigint null=False max= fixed= unicode= prec=, gen=OnAdd
+  P JourDuMois col=JourDuMois type=tinyint null=False max= fixed= unicode= prec=, gen=Never
+  P JoursDepuisDerniereAbsence col=JoursDepuisDerniereAbsence type=int null=True max= fixed= unicode= prec=, gen=Never
+  P JourSemaine col=JourSemaine type=tinyint null=False max= fixed= unicode= prec=, gen=Never
+  P JoursTravailles7j col=JoursTravailles7j type=int null=False max= fixed= unicode= prec=, gen=Never
+  P LendemainFerie col=LendemainFerie type=bit null=False max= fixed= unicode= prec=, gen=Never
+  P Matricule col=Matricule type=nvarchar(64) null=False max=64 fixed= unicode= prec=, gen=Never
+  P Mois col=Mois type=tinyint null=False max= fixed= unicode= prec=, gen=Never
+  P MultiPointage col=MultiPointage type=bit null=False max= fixed= unicode= prec=, gen=Never
+  P PlanningConnu col=PlanningConnu type=bit null=False max= fixed= unicode= prec=, gen=Never
+  P RetardMinutes col=RetardMinutes type=int null=True max= fixed= unicode= prec=, gen=Never
+  P Retards30j col=Retards30j type=int null=False max= fixed= unicode= prec=, gen=Never
+  P SemaineIso col=SemaineIso type=tinyint null=False max= fixed= unicode= prec=, gen=Never
+  P SourceGenereeLe col=SourceGenereeLe type=datetime2 null=False max= fixed= unicode= prec=, gen=Never
+  P TauxAbsence30j col=TauxAbsence30j type=float null=False max= fixed= unicode= prec=, gen=Never
+  P TauxAbsenceEquipe30j col=TauxAbsenceEquipe30j type=float null=False max= fixed= unicode= prec=, gen=Never
+  P VeilleFerie col=VeilleFerie type=bit null=False max= fixed= unicode= prec=, gen=Never
+  P VersionSchema col=VersionSchema type=nvarchar(32) null=False max=32 fixed= unicode= prec=, gen=Never
+  I IX_SalarieJour_BddSage_Date [BddSage,Date] unique=False filter= desc=
+  I IX_SalarieJour_BddSage_Matricule_Date [BddSage,Matricule,Date] unique=True filter= desc=
+ENTITY MlSalarieSemaine table=ml.SalarieSemaine key=[Id]
+  P AbsenceHeures col=AbsenceHeures type=decimal(8,2) null=False max= fixed= unicode= prec=8,2 gen=Never
+  P Absences4Semaines col=Absences4Semaines type=int null=False max= fixed= unicode= prec=, gen=Never
+  P AnneeIso col=AnneeIso type=smallint null=False max= fixed= unicode= prec=, gen=Never
+  P BddSage col=BddSage type=nvarchar(128) null=False max=128 fixed= unicode= prec=, gen=Never
+  P CategorieId col=CategorieId type=int null=True max= fixed= unicode= prec=, gen=Never
+  P CongeJours col=CongeJours type=decimal(4,1) null=False max= fixed= unicode= prec=4,1 gen=Never
+  P Departement col=Departement type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P Dimanche col=Dimanche type=decimal(8,2) null=False max= fixed= unicode= prec=8,2 gen=Never
+  P Ferie col=Ferie type=decimal(8,2) null=False max= fixed= unicode= prec=8,2 gen=Never
+  P HeuresPlanifiees col=HeuresPlanifiees type=decimal(8,2) null=False max= fixed= unicode= prec=8,2 gen=Never
+  P HeuresSemaineContrat col=HeuresSemaineContrat type=decimal(6,2) null=True max= fixed= unicode= prec=6,2 gen=Never
+  P HeuresTravaillees col=HeuresTravaillees type=decimal(8,2) null=False max= fixed= unicode= prec=8,2 gen=Never
+  P HeuresTravaillees4Semaines col=HeuresTravaillees4Semaines type=decimal(8,2) null=False max= fixed= unicode= prec=8,2 gen=Never
+  P Hs col=HS type=decimal(8,2) null=False max= fixed= unicode= prec=8,2 gen=Never
+  P HsMoyenne4Semaines col=HsMoyenne4Semaines type=decimal(8,2) null=False max= fixed= unicode= prec=8,2 gen=Never
+  P HsMoyenne8Semaines col=HsMoyenne8Semaines type=decimal(8,2) null=False max= fixed= unicode= prec=8,2 gen=Never
+  P HsValidee col=HSValidee type=bit null=False max= fixed= unicode= prec=, gen=Never
+  P Id col=Id type=bigint null=False max= fixed= unicode= prec=, gen=OnAdd
+  P Matricule col=Matricule type=nvarchar(64) null=False max=64 fixed= unicode= prec=, gen=Never
+  P MultiPointage col=MultiPointage type=bit null=False max= fixed= unicode= prec=, gen=Never
+  P NbJoursPlanifies col=NbJoursPlanifies type=int null=False max= fixed= unicode= prec=, gen=Never
+  P NbJoursTravailles col=NbJoursTravailles type=int null=False max= fixed= unicode= prec=, gen=Never
+  P Nuit col=Nuit type=decimal(8,2) null=False max= fixed= unicode= prec=8,2 gen=Never
+  P RetardMinutes col=RetardMinutes type=int null=False max= fixed= unicode= prec=, gen=Never
+  P Retards4Semaines col=Retards4Semaines type=int null=False max= fixed= unicode= prec=, gen=Never
+  P SemaineDebut col=SemaineDebut type=datetime2 null=False max= fixed= unicode= prec=, gen=Never
+  P SemaineIso col=SemaineIso type=tinyint null=False max= fixed= unicode= prec=, gen=Never
+  P SourceGenereeLe col=SourceGenereeLe type=datetime2 null=False max= fixed= unicode= prec=, gen=Never
+  P VersionSchema col=VersionSchema type=nvarchar(32) null=False max=32 fixed= unicode= prec=, gen=Never
+  I IX_SalarieSemaine_BddSage_Matricule_SemaineDebut [BddSage,Matricule,SemaineDebut] unique=True filter= desc=
+  I IX_SalarieSemaine_BddSage_SemaineDebut [BddSage,SemaineDebut] unique=False filter= desc=

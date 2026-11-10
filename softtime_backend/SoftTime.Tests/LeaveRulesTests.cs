@@ -21,8 +21,14 @@ public class LeaveRulesTests
     [InlineData("0100")]
     [InlineData("CP")]
     [InlineData(" 0100 ")]
-    public void EstCodeConge_AcceptsRegularCodes(string code)
-        => Assert.True(LeaveRules.EstCodeConge(code));
+    public void EstCodeConge_RegularCode_ReturnsTrue(string code)
+    {
+        // Act
+        var result = LeaveRules.EstCodeConge(code);
+
+        // Assert
+        result.Should().BeTrue();
+    }
 
     [Theory]
     [InlineData("0200")]
@@ -30,18 +36,27 @@ public class LeaveRulesTests
     [InlineData(" 0200 ")]
     [InlineData("")]
     [InlineData(null)]
-    public void EstCodeConge_RejectsExcludedOrEmptyCodes(string? code)
-        => Assert.False(LeaveRules.EstCodeConge(code));
+    public void EstCodeConge_ExcludedOrEmptyCode_ReturnsFalse(string? code)
+    {
+        // Act
+        var result = LeaveRules.EstCodeConge(code);
+
+        // Assert
+        result.Should().BeFalse();
+    }
 
     // ---- Période d'une seule journée ----
 
     [Fact]
     public void Expandre_SingleDayWithoutFlag_CountsFullDay()
     {
+        // Act
         var jours = LeaveRules.Expandre(new[] { Periode(Lundi, Lundi) });
-        var jour = Assert.Single(jours);
-        Assert.Equal(Lundi, jour.Date);
-        Assert.Equal(1m, jour.Valeur);
+
+        // Assert
+        var jour = jours.Should().ContainSingle().Which;
+        jour.Date.Should().Be(Lundi);
+        jour.Valeur.Should().Be(1m);
     }
 
     [Theory]
@@ -49,8 +64,11 @@ public class LeaveRulesTests
     [InlineData(false, true)]
     public void Expandre_SingleDayWithHalfDayFlag_CountsHalfDay(bool matin, bool apresMidi)
     {
+        // Act
         var jours = LeaveRules.Expandre(new[] { Periode(Lundi, Lundi, matin, apresMidi) });
-        Assert.Equal(0.5m, Assert.Single(jours).Valeur);
+
+        // Assert
+        jours.Should().ContainSingle().Which.Valeur.Should().Be(0.5m);
     }
 
     // ---- Périodes de plusieurs jours ----
@@ -58,87 +76,119 @@ public class LeaveRulesTests
     [Fact]
     public void Expandre_MultiDayWithoutFlag_CountsEveryDay()
     {
+        // Act
         // Lundi → mercredi : 3 journées pleines.
         var jours = LeaveRules.Expandre(new[] { Periode(Lundi, Lundi.AddDays(2)) });
-        Assert.Equal(3, jours.Count);
-        Assert.All(jours, j => Assert.Equal(1m, j.Valeur));
+
+        // Assert
+        jours.Count.Should().Be(3);
+        jours.Should().AllSatisfy(j => j.Valeur.Should().Be(1m));
     }
 
     [Fact]
-    public void Expandre_NeverCountsSundays()
+    public void Expandre_PeriodWithSunday_SkipsSundays()
     {
+        // Act
         // Lundi → dimanche inclus : le dimanche est exclu, il reste 6 jours.
         var jours = LeaveRules.Expandre(new[] { Periode(Lundi, Lundi.AddDays(6)) });
-        Assert.Equal(6, jours.Count);
-        Assert.DoesNotContain(jours, j => j.Date.DayOfWeek == DayOfWeek.Sunday);
+
+        // Assert
+        jours.Count.Should().Be(6);
+        jours.Should().NotContain(j => j.Date.DayOfWeek == DayOfWeek.Sunday);
     }
 
     [Fact]
     public void Expandre_ApresMidiPeriod_StartsWithHalfDay()
     {
+        // Act
         // Le congé commence l'après-midi du premier jour.
         var jours = LeaveRules.Expandre(new[] { Periode(Lundi, Lundi.AddDays(2), apresMidi: true) });
-        Assert.Equal(3, jours.Count);
-        Assert.Equal(0.5m, jours[0].Valeur);
-        Assert.Equal(Lundi, jours[0].Date);
-        Assert.Equal(1m, jours[1].Valeur);
-        Assert.Equal(1m, jours[2].Valeur);
+
+        // Assert
+        jours.Count.Should().Be(3);
+        jours[0].Valeur.Should().Be(0.5m);
+        jours[0].Date.Should().Be(Lundi);
+        jours[1].Valeur.Should().Be(1m);
+        jours[2].Valeur.Should().Be(1m);
     }
 
     [Fact]
     public void Expandre_MatinPeriod_EndsWithHalfDay()
     {
+        // Act
         // Le congé se termine le matin du dernier jour.
         var jours = LeaveRules.Expandre(new[] { Periode(Lundi, Lundi.AddDays(2), matin: true) });
-        Assert.Equal(3, jours.Count);
-        Assert.Equal(1m, jours[0].Valeur);
-        Assert.Equal(1m, jours[1].Valeur);
-        Assert.Equal(0.5m, jours[2].Valeur);
-        Assert.Equal(Lundi.AddDays(2), jours[2].Date);
+
+        // Assert
+        jours.Count.Should().Be(3);
+        jours[0].Valeur.Should().Be(1m);
+        jours[1].Valeur.Should().Be(1m);
+        jours[2].Valeur.Should().Be(0.5m);
+        jours[2].Date.Should().Be(Lundi.AddDays(2));
     }
 
     [Fact]
     public void Expandre_ApresMidiStartingOnSunday_StillAddsTheHalfDay()
     {
+        // Arrange
         // Les bornes de demi-journée sont ajoutées sans filtrage du dimanche (comportement du desktop).
         var dimanche = Lundi.AddDays(6);
+
+        // Act
         var jours = LeaveRules.Expandre(new[] { Periode(dimanche, dimanche.AddDays(1), apresMidi: true) });
-        Assert.Contains(jours, j => j.Date == dimanche && j.Valeur == 0.5m);
+
+        // Assert
+        jours.Should().Contain(j => j.Date == dimanche && j.Valeur == 0.5m);
     }
 
     [Fact]
-    public void Expandre_EmptyInputYieldsNothing()
-        => Assert.Empty(LeaveRules.Expandre(Array.Empty<LeavePeriod>()));
+    public void Expandre_EmptyInput_ReturnsNothing()
+    {
+        // Act
+        var result = LeaveRules.Expandre(Array.Empty<LeavePeriod>());
+
+        // Assert
+        result.Should().BeEmpty();
+    }
 
     // ---- Interrogation ----
 
     [Fact]
-    public void EstConge_MatchesTheDayWhateverTheTimePart()
+    public void EstConge_DateWithTimePart_MatchesTheDay()
     {
+        // Act
         var jours = LeaveRules.Expandre(new[] { Periode(Lundi, Lundi) });
-        Assert.True(LeaveRules.EstConge(jours, Lundi.AddHours(9)));
-        Assert.True(LeaveRules.EstConge(jours, Lundi.AddHours(23)));
-        Assert.False(LeaveRules.EstConge(jours, Lundi.AddDays(1)));
+
+        // Assert
+        LeaveRules.EstConge(jours, Lundi.AddHours(9)).Should().BeTrue();
+        LeaveRules.EstConge(jours, Lundi.AddHours(23)).Should().BeTrue();
+        LeaveRules.EstConge(jours, Lundi.AddDays(1)).Should().BeFalse();
     }
 
     [Fact]
-    public void Valeur_ReturnsTheHalfDayOnBoundariesAndZeroOutside()
+    public void Valeur_BoundaryOrOutsideDay_ReturnsHalfDayOrZero()
     {
+        // Act
         var jours = LeaveRules.Expandre(new[] { Periode(Lundi, Lundi.AddDays(2), apresMidi: true) });
-        Assert.Equal(0.5m, LeaveRules.Valeur(jours, Lundi));
-        Assert.Equal(1m, LeaveRules.Valeur(jours, Lundi.AddDays(1)));
-        Assert.Equal(0m, LeaveRules.Valeur(jours, Lundi.AddDays(5)));
+
+        // Assert
+        LeaveRules.Valeur(jours, Lundi).Should().Be(0.5m);
+        LeaveRules.Valeur(jours, Lundi.AddDays(1)).Should().Be(1m);
+        LeaveRules.Valeur(jours, Lundi.AddDays(5)).Should().Be(0m);
     }
 
     [Fact]
-    public void Valeur_KeepsTheStrongestValueOnOverlap()
+    public void Valeur_OverlappingLeaves_KeepsStrongestValue()
     {
+        // Act
         // Deux périodes se chevauchent le mardi : une demi-journée et une journée pleine.
         var jours = LeaveRules.Expandre(new[]
         {
             Periode(Lundi.AddDays(1), Lundi.AddDays(1), matin: true),
             Periode(Lundi.AddDays(1), Lundi.AddDays(1)),
         });
-        Assert.Equal(1m, LeaveRules.Valeur(jours, Lundi.AddDays(1)));
+
+        // Assert
+        LeaveRules.Valeur(jours, Lundi.AddDays(1)).Should().Be(1m);
     }
 }

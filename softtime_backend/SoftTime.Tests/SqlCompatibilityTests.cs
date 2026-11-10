@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+
 using SoftTime.Infrastructure;
 using SoftTime.Infrastructure.Persistence;
 
@@ -16,6 +17,7 @@ public class SqlCompatibilityTests
     [Fact]
     public void CollectionContains_WithInfrastructureOptions_UsesInAndNotOpenJson()
     {
+        // Arrange
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
@@ -23,19 +25,21 @@ public class SqlCompatibilityTests
                     "Server=(local);Database=SoftTime;Trusted_Connection=True;TrustServerCertificate=True"
             })
             .Build();
-
         var services = new ServiceCollection();
         services.AddInfrastructure(configuration);
         using var provider = services.BuildServiceProvider();
         var options = provider.GetRequiredService<DbContextOptions<SoftTimeDbContext>>();
 
+        // Act
         // Vérifie la configuration réellement enregistrée par AddInfrastructure : sans le niveau 120,
         // EF Core 8 génère OPENJSON pour les Contains de collection, rejeté par la base (niveau 100).
         var extension = options.Extensions
             .FirstOrDefault(e => e.GetType().Name == "SqlServerOptionsExtension");
-        Assert.NotNull(extension);
+
+        // Assert
+        extension.Should().NotBeNull();
         var compatibility = extension!.GetType().GetProperty("CompatibilityLevel");
-        Assert.NotNull(compatibility);
-        Assert.Equal(120, compatibility!.GetValue(extension));
+        compatibility.Should().NotBeNull();
+        compatibility!.GetValue(extension).Should().Be(120);
     }
 }

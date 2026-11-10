@@ -1,4 +1,5 @@
 using AutoMapper;
+
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
 
@@ -8,90 +9,143 @@ public class MappingProfile : Profile
 {
     public MappingProfile()
     {
-        CreateMap<T_ROLE, RoleDto>().ForMember(d => d.Id, o => o.MapFrom(s => s.IDROLE)).ForMember(d => d.Nom, o => o.MapFrom(s => s.NOMROLE));
-        CreateMap<T_DROIT, DroitDto>().ForMember(d => d.Id, o => o.MapFrom(s => s.IDDROIT)).ForMember(d => d.Nom, o => o.MapFrom(s => s.DROIT));
-        CreateMap<T_BDD_SAGE, SageDbDto>()
-            .ForMember(d => d.Id, o => o.MapFrom(s => s.ID))
-            .ForMember(d => d.SqlAuth, o => o.MapFrom(s => s.TYPE_AUTH))
-            .ForMember(d => d.NomBd, o => o.MapFrom(s => s.NOM_BD))
+        ConfigureRightsMaps();
+        ConfigureSageDatabaseMaps();
+        ConfigurePointeuseDatabaseMaps();
+        ConfigureSourceMappingMaps();
+        ConfigureCardMaps();
+        ConfigureReferenceDataMaps();
+    }
+
+    private void ConfigureRightsMaps()
+    {
+        CreateMap<Role, RoleDto>().ForMember(d => d.Id, o => o.MapFrom(s => s.IdRole)).ForMember(d => d.Nom, o => o.MapFrom(s => s.NomRole));
+        CreateMap<DroitAcces, DroitDto>().ForMember(d => d.Id, o => o.MapFrom(s => s.IdDroit)).ForMember(d => d.Nom, o => o.MapFrom(s => s.Droit));
+    }
+
+    private void ConfigureSageDatabaseMaps()
+    {
+        CreateMap<BddSage, SageDbDto>()
+            .ForMember(d => d.Id, o => o.MapFrom(s => s.Id))
+            .ForMember(d => d.SqlAuth, o => o.MapFrom(s => s.TypeAuth))
+            .ForMember(d => d.NomBd, o => o.MapFrom(s => s.NomBd))
             .ForMember(d => d.Password, o => o.Ignore())
-            .ForMember(d => d.PasswordDefined, o => o.MapFrom(s => !string.IsNullOrEmpty(s.TMDP)))
-            .ForMember(d => d.Login, o => o.MapFrom(s => s.TLOGIN))
-            .ForMember(d => d.TypeBase, o => o.MapFrom(s => s.TYPE_BASE))
+            .ForMember(d => d.PasswordDefined, o => o.MapFrom(s => !string.IsNullOrEmpty(s.TMdp)))
+            .ForMember(d => d.Login, o => o.MapFrom(s => s.TLogin))
+            .ForMember(d => d.TypeBase, o => o.MapFrom(s => s.TypeBase))
             .ForMember(d => d.Mappings, o => o.Ignore());
-        CreateMap<SageDbDto, T_BDD_SAGE>()
-            .ForMember(d => d.TYPE_AUTH, o => o.MapFrom(s => s.SqlAuth))
-            .ForMember(d => d.NOM_BD, o => o.MapFrom(s => s.NomBd))
-            .ForMember(d => d.TMDP, o => o.MapFrom(s => s.Password))
-            .ForMember(d => d.TLOGIN, o => o.MapFrom(s => s.Login))
-            .ForMember(d => d.SERVEUR, o => o.MapFrom(s => s.Serveur))
-            .ForMember(d => d.TYPE_BASE, o => o.MapFrom(s => s.TypeBase));
-        CreateMap<T_BDD_POINTEUSE, PointeuseDbDto>()
-            .ForMember(d => d.Id, o => o.MapFrom(s => s.ID))
-            .ForMember(d => d.SqlAuth, o => o.MapFrom(s => s.TYPE_AUTH))
-            .ForMember(d => d.NomBd, o => o.MapFrom(s => s.NOM_BD))
+        CreateMap<SageDbDto, BddSage>()
+            .ForMember(d => d.TypeAuth, o => o.MapFrom(s => s.SqlAuth))
+            .ForMember(d => d.NomBd, o => o.MapFrom(s => s.NomBd))
+            .ForMember(d => d.TMdp, o => o.MapFrom(s => s.Password))
+            .ForMember(d => d.TLogin, o => o.MapFrom(s => s.Login))
+            .ForMember(d => d.Serveur, o => o.MapFrom(s => s.Serveur))
+            .ForMember(d => d.TypeBase, o => o.MapFrom(s => s.TypeBase))
+            // Colonnes de mapping historiques : gérées par la configuration des sources, jamais par le DTO.
+            .ForMember(d => d.MapTable, o => o.Ignore())
+            .ForMember(d => d.MapColMatricule, o => o.Ignore())
+            .ForMember(d => d.MapColNom, o => o.Ignore())
+            .ForMember(d => d.MapColPrenom, o => o.Ignore())
+            .ForMember(d => d.MapColBadge, o => o.Ignore())
+            .ForMember(d => d.MapColDepartement, o => o.Ignore())
+            .ForMember(d => d.MapColService, o => o.Ignore())
+            .ForMember(d => d.MapColCodeDepartement, o => o.Ignore())
+            .ForMember(d => d.MapTableCodeConstante, o => o.Ignore())
+            .ForMember(d => d.MapColCodeConstante, o => o.Ignore());
+    }
+
+    private void ConfigurePointeuseDatabaseMaps()
+    {
+        CreateMap<BddPointeuse, PointeuseDbDto>()
+            .ForMember(d => d.Id, o => o.MapFrom(s => s.Id))
+            .ForMember(d => d.SqlAuth, o => o.MapFrom(s => s.TypeAuth))
+            .ForMember(d => d.NomBd, o => o.MapFrom(s => s.NomBd))
             .ForMember(d => d.Password, o => o.Ignore())
-            .ForMember(d => d.PasswordDefined, o => o.MapFrom(s => !string.IsNullOrEmpty(s.TMDP)))
-            .ForMember(d => d.Login, o => o.MapFrom(s => s.TLOGIN))
-            .ForMember(d => d.TypePointage, o => o.MapFrom(s => s.TYPE_POINTAGE))
-            .ForMember(d => d.Active, o => o.MapFrom(s => s.ACTIVE))
-            .ForMember(d => d.TypeBase, o => o.MapFrom(s => s.TYPE_BASE))
+            .ForMember(d => d.PasswordDefined, o => o.MapFrom(s => !string.IsNullOrEmpty(s.TMdp)))
+            .ForMember(d => d.Login, o => o.MapFrom(s => s.TLogin))
+            .ForMember(d => d.TypePointage, o => o.MapFrom(s => s.TypePointage))
+            .ForMember(d => d.Active, o => o.MapFrom(s => s.Active))
+            .ForMember(d => d.TypeBase, o => o.MapFrom(s => s.TypeBase))
             .ForMember(d => d.Mappings, o => o.Ignore());
-        CreateMap<T_FIELD_ROLE, FieldRoleDto>();
-        CreateMap<T_SOURCE_FIELD_MAPPING, SourceFieldMappingDto>();
-        CreateMap<T_SOURCE_ENTITY_MAPPING, SourceEntityMappingDto>();
-        CreateMap<SourceFieldMappingDto, T_SOURCE_FIELD_MAPPING>();
-        CreateMap<SourceEntityMappingDto, T_SOURCE_ENTITY_MAPPING>();
-        CreateMap<PointeuseDbDto, T_BDD_POINTEUSE>()
-            .ForMember(d => d.TYPE_AUTH, o => o.MapFrom(s => s.SqlAuth))
-            .ForMember(d => d.NOM_BD, o => o.MapFrom(s => s.NomBd))
-            .ForMember(d => d.TMDP, o => o.MapFrom(s => s.Password))
-            .ForMember(d => d.TLOGIN, o => o.MapFrom(s => s.Login))
-            .ForMember(d => d.TYPE_POINTAGE, o => o.MapFrom(s => s.TypePointage))
-            .ForMember(d => d.ACTIVE, o => o.MapFrom(s => s.Active))
-            .ForMember(d => d.SERVEUR, o => o.MapFrom(s => s.Serveur))
-            .ForMember(d => d.TYPE_BASE, o => o.MapFrom(s => s.TypeBase));
-        CreateMap<T_CARDPAIE, CardPaieDto>()
-            .ForMember(d => d.SageMatricule, o => o.MapFrom(s => s.SAGE_MATRICULE))
-            .ForMember(d => d.SageNom, o => o.MapFrom(s => s.SAGE_NOM))
-            .ForMember(d => d.SagePrenom, o => o.MapFrom(s => s.SAGE_PRENOM))
-            .ForMember(d => d.PointeuseNumero, o => o.MapFrom(s => s.POINTEUSE_NUMERO))
-            .ForMember(d => d.PointeuseNom, o => o.MapFrom(s => s.POINTEUSE_NOM))
-            .ForMember(d => d.SageServeur, o => o.MapFrom(s => s.SAGE_SERVEUR))
-            .ForMember(d => d.PointeuseServeur, o => o.MapFrom(s => s.POINTEUSE_SERVEUR))
-            .ForMember(d => d.SageBdd, o => o.MapFrom(s => s.SAGE_BDD))
-            .ForMember(d => d.PointeuseBdd, o => o.MapFrom(s => s.POINTEUSE_BDD))
-            .ForMember(d => d.Origine, o => o.MapFrom(s => s.ORIGINE))
-            .ForMember(d => d.Actif, o => o.MapFrom(s => s.ACTIF))
-            .ForMember(d => d.Departement, o => o.MapFrom(s => s.DEPARTEMENT));
-        CreateMap<CardPaieDto, T_CARDPAIE>()
-            .ForMember(d => d.SAGE_MATRICULE, o => o.MapFrom(s => s.SageMatricule))
-            .ForMember(d => d.SAGE_NOM, o => o.MapFrom(s => s.SageNom))
-            .ForMember(d => d.SAGE_PRENOM, o => o.MapFrom(s => s.SagePrenom))
-            .ForMember(d => d.POINTEUSE_NUMERO, o => o.MapFrom(s => s.PointeuseNumero))
-            .ForMember(d => d.POINTEUSE_NOM, o => o.MapFrom(s => s.PointeuseNom))
-            .ForMember(d => d.SAGE_SERVEUR, o => o.MapFrom(s => s.SageServeur))
-            .ForMember(d => d.POINTEUSE_SERVEUR, o => o.MapFrom(s => s.PointeuseServeur))
-            .ForMember(d => d.SAGE_BDD, o => o.MapFrom(s => s.SageBdd))
-            .ForMember(d => d.POINTEUSE_BDD, o => o.MapFrom(s => s.PointeuseBdd))
-            .ForMember(d => d.DEPARTEMENT, o => o.MapFrom(s => s.Departement));
-        CreateMap<T_CATEGORIE, CategoryDto>()
-            .ForMember(d => d.Id, o => o.MapFrom(s => s.IDCATEGORIE))
-            .ForMember(d => d.SupervisorCardId, o => o.MapFrom(s => s.ID_CARDPAIE))
-            .ForMember(d => d.HeuresSemaine, o => o.MapFrom(s => s.HEURESEMAINE));
-        CreateMap<T_MAJORATION, MajorationDto>();
-        CreateMap<T_CODE_CONSTANTE, CodeConstanteDto>()
-            .ForMember(d => d.Id, o => o.MapFrom(s => s.ID))
-            .ForMember(d => d.Categorie, o => o.MapFrom(s => s.CATEGORIE))
-            .ForMember(d => d.Intitule, o => o.MapFrom(s => s.INTITULE))
-            .ForMember(d => d.CodeConstante, o => o.MapFrom(s => s.CODE_CONSTANTE))
+        CreateMap<PointeuseDbDto, BddPointeuse>()
+            .ForMember(d => d.TypeAuth, o => o.MapFrom(s => s.SqlAuth))
+            .ForMember(d => d.NomBd, o => o.MapFrom(s => s.NomBd))
+            .ForMember(d => d.TMdp, o => o.MapFrom(s => s.Password))
+            .ForMember(d => d.TLogin, o => o.MapFrom(s => s.Login))
+            .ForMember(d => d.TypePointage, o => o.MapFrom(s => s.TypePointage))
+            .ForMember(d => d.Active, o => o.MapFrom(s => s.Active))
+            .ForMember(d => d.Serveur, o => o.MapFrom(s => s.Serveur))
+            .ForMember(d => d.TypeBase, o => o.MapFrom(s => s.TypeBase))
+            // Colonnes de mapping historiques : gérées par la configuration des sources, jamais par le DTO.
+            .ForMember(d => d.MapUserTable, o => o.Ignore())
+            .ForMember(d => d.MapUserColId, o => o.Ignore())
+            .ForMember(d => d.MapUserColBadge, o => o.Ignore())
+            .ForMember(d => d.MapUserColSsn, o => o.Ignore())
+            .ForMember(d => d.MapUserColNom, o => o.Ignore())
+            .ForMember(d => d.MapPunchTable, o => o.Ignore())
+            .ForMember(d => d.MapPunchColUserId, o => o.Ignore())
+            .ForMember(d => d.MapPunchColDatetime, o => o.Ignore())
+            .ForMember(d => d.MapPunchColType, o => o.Ignore());
+    }
+
+    private void ConfigureSourceMappingMaps()
+    {
+        CreateMap<FieldRole, FieldRoleDto>();
+        CreateMap<SourceFieldMapping, SourceFieldMappingDto>();
+        CreateMap<SourceEntityMapping, SourceEntityMappingDto>();
+        CreateMap<SourceFieldMappingDto, SourceFieldMapping>()
+            // Clé étrangère posée par le service, pas par le DTO.
+            .ForMember(d => d.EntityMappingId, o => o.Ignore());
+        CreateMap<SourceEntityMappingDto, SourceEntityMapping>();
+    }
+
+    private void ConfigureCardMaps()
+    {
+        CreateMap<CardPaie, CardPaieDto>()
+            .ForMember(d => d.SageMatricule, o => o.MapFrom(s => s.SageMatricule))
+            .ForMember(d => d.SageNom, o => o.MapFrom(s => s.SageNom))
+            .ForMember(d => d.SagePrenom, o => o.MapFrom(s => s.SagePrenom))
+            .ForMember(d => d.PointeuseNumero, o => o.MapFrom(s => s.PointeuseNumero))
+            .ForMember(d => d.PointeuseNom, o => o.MapFrom(s => s.PointeuseNom))
+            .ForMember(d => d.SageServeur, o => o.MapFrom(s => s.SageServeur))
+            .ForMember(d => d.PointeuseServeur, o => o.MapFrom(s => s.PointeuseServeur))
+            .ForMember(d => d.SageBdd, o => o.MapFrom(s => s.SageBdd))
+            .ForMember(d => d.PointeuseBdd, o => o.MapFrom(s => s.PointeuseBdd))
+            .ForMember(d => d.Origine, o => o.MapFrom(s => s.Origine))
+            .ForMember(d => d.Actif, o => o.MapFrom(s => s.Actif))
+            .ForMember(d => d.Departement, o => o.MapFrom(s => s.Departement));
+        CreateMap<CardPaieDto, CardPaie>()
+            .ForMember(d => d.SageMatricule, o => o.MapFrom(s => s.SageMatricule))
+            .ForMember(d => d.SageNom, o => o.MapFrom(s => s.SageNom))
+            .ForMember(d => d.SagePrenom, o => o.MapFrom(s => s.SagePrenom))
+            .ForMember(d => d.PointeuseNumero, o => o.MapFrom(s => s.PointeuseNumero))
+            .ForMember(d => d.PointeuseNom, o => o.MapFrom(s => s.PointeuseNom))
+            .ForMember(d => d.SageServeur, o => o.MapFrom(s => s.SageServeur))
+            .ForMember(d => d.PointeuseServeur, o => o.MapFrom(s => s.PointeuseServeur))
+            .ForMember(d => d.SageBdd, o => o.MapFrom(s => s.SageBdd))
+            .ForMember(d => d.PointeuseBdd, o => o.MapFrom(s => s.PointeuseBdd))
+            .ForMember(d => d.Departement, o => o.MapFrom(s => s.Departement));
+    }
+
+    private void ConfigureReferenceDataMaps()
+    {
+        CreateMap<Categorie, CategoryDto>()
+            .ForMember(d => d.Id, o => o.MapFrom(s => s.IdCategorie))
+            .ForMember(d => d.SupervisorCardId, o => o.MapFrom(s => s.IdCardPaie))
+            .ForMember(d => d.HeuresSemaine, o => o.MapFrom(s => s.HeureSemaine));
+        CreateMap<Majoration, MajorationDto>();
+        CreateMap<CodeConstanteCategorie, CodeConstanteDto>()
+            .ForMember(d => d.Id, o => o.MapFrom(s => s.Id))
+            .ForMember(d => d.Categorie, o => o.MapFrom(s => s.Categorie))
+            .ForMember(d => d.Intitule, o => o.MapFrom(s => s.Intitule))
+            .ForMember(d => d.CodeConstante, o => o.MapFrom(s => s.CodeConstante))
             // La table cible n'est plus stockee : elle provient du mapping « Code constante ».
             .ForMember(d => d.TableCible, o => o.Ignore());
-        CreateMap<T_FERIE, HolidayDto>();
-        CreateMap<T_PLANNING, ShiftDto>()
-            .ForMember(d => d.Id, o => o.MapFrom(s => s.IDPLANNING))
-            .ForMember(d => d.NoShift, o => o.MapFrom(s => s.NoSHIFT))
-            .ForMember(d => d.Ha, o => o.MapFrom(s => s.HA))
-            .ForMember(d => d.Hd, o => o.MapFrom(s => s.HD));
+        CreateMap<JourFerie, HolidayDto>();
+        CreateMap<Planning, ShiftDto>()
+            .ForMember(d => d.Id, o => o.MapFrom(s => s.IdPlanning))
+            .ForMember(d => d.NoShift, o => o.MapFrom(s => s.NoShift))
+            .ForMember(d => d.Ha, o => o.MapFrom(s => s.Ha))
+            .ForMember(d => d.Hd, o => o.MapFrom(s => s.Hd));
     }
 }

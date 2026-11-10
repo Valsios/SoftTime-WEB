@@ -1,0 +1,98 @@
+# Convention de codage C# Softwell (v1.0) : règles vérifiées à la compilation (EnforceCodeStyleInBuild).
+root = true
+
+[*]
+charset = utf-8
+indent_style = space
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{csproj,props,targets,json,xml}]
+indent_size = 2
+
+[*.cs]
+indent_size = 4
+end_of_line = crlf
+max_line_length = 120
+
+# §2.4 Usings : System d'abord, une ligne vide entre les groupes, aucun using inutilisé.
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = true
+csharp_using_directive_placement = outside_namespace:warning
+dotnet_diagnostic.IDE0005.severity = error
+
+# §2.1 Namespace file-scoped.
+csharp_style_namespace_declarations = file_scoped:error
+dotnet_diagnostic.IDE0161.severity = error
+
+# §6.3 Async : pas de ConfigureAwait(false) imposé.
+dotnet_diagnostic.CA2007.severity = none
+
+# §1 Nommage
+dotnet_diagnostic.IDE1006.severity = warning
+dotnet_naming_symbols.interfaces.applicable_kinds = interface
+dotnet_naming_style.prefix_i.required_prefix = I
+dotnet_naming_style.prefix_i.capitalization = pascal_case
+dotnet_naming_rule.interfaces_prefixed_with_i.symbols = interfaces
+dotnet_naming_rule.interfaces_prefixed_with_i.style = prefix_i
+dotnet_naming_rule.interfaces_prefixed_with_i.severity = warning
+
+dotnet_naming_symbols.private_static_fields.applicable_kinds = field
+dotnet_naming_symbols.private_static_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_static_fields.required_modifiers = static
+dotnet_naming_style.prefix_s_underscore.required_prefix = s_
+dotnet_naming_style.prefix_s_underscore.capitalization = camel_case
+dotnet_naming_rule.private_static_fields_s_camel.symbols = private_static_fields
+dotnet_naming_rule.private_static_fields_s_camel.style = prefix_s_underscore
+dotnet_naming_rule.private_static_fields_s_camel.severity = warning
+
+dotnet_naming_symbols.constants.applicable_kinds = field
+dotnet_naming_symbols.constants.required_modifiers = const
+# static readonly (y compris privé) : PascalCase. s_camelCase est réservé aux champs statiques privés modifiables.
+dotnet_naming_symbols.static_readonly.applicable_kinds = field
+dotnet_naming_symbols.static_readonly.required_modifiers = static, readonly
+dotnet_naming_style.pascal.capitalization = pascal_case
+dotnet_naming_rule.constants_pascal.symbols = constants
+dotnet_naming_rule.constants_pascal.style = pascal
+dotnet_naming_rule.constants_pascal.severity = warning
+dotnet_naming_rule.static_readonly_pascal.symbols = static_readonly
+dotnet_naming_rule.static_readonly_pascal.style = pascal
+dotnet_naming_rule.static_readonly_pascal.severity = warning
+
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_style.prefix_underscore.required_prefix = _
+dotnet_naming_style.prefix_underscore.capitalization = camel_case
+dotnet_naming_rule.private_fields_underscore.symbols = private_fields
+dotnet_naming_rule.private_fields_underscore.style = prefix_underscore
+dotnet_naming_rule.private_fields_underscore.severity = warning
+
+dotnet_naming_symbols.async_methods.applicable_kinds = method
+dotnet_naming_symbols.async_methods.required_modifiers = async
+dotnet_naming_style.suffix_async.required_suffix = Async
+dotnet_naming_style.suffix_async.capitalization = pascal_case
+dotnet_naming_rule.async_methods_suffix.symbols = async_methods
+dotnet_naming_rule.async_methods_suffix.style = suffix_async
+dotnet_naming_rule.async_methods_suffix.severity = warning
+
+dotnet_naming_symbols.locals_and_parameters.applicable_kinds = parameter, local
+dotnet_naming_style.camel.capitalization = camel_case
+dotnet_naming_rule.locals_camel.symbols = locals_and_parameters
+dotnet_naming_rule.locals_camel.style = camel
+dotnet_naming_rule.locals_camel.severity = warning
+
+dotnet_naming_symbols.types_and_members.applicable_kinds = class, struct, enum, delegate, property, method, event
+dotnet_naming_rule.types_pascal.symbols = types_and_members
+dotnet_naming_rule.types_pascal.style = pascal
+dotnet_naming_rule.types_pascal.severity = warning
+
+# Code généré (migrations EF) : hors convention.
+[**/Migrations/**.cs]
+generated_code = true
+dotnet_diagnostic.IDE0005.severity = none
+dotnet_diagnostic.IDE0161.severity = none
+dotnet_diagnostic.IDE1006.severity = none
+
+# §10.2 Les tests suivent Method_Scenario_Expected : pas de suffixe Async sur les méthodes de test.
+[SoftTime.Tests/**.cs]
+dotnet_naming_rule.async_methods_suffix.severity = none

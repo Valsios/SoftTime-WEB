@@ -10,19 +10,32 @@ namespace SoftTime.Tests;
 public class OvertimeDetailRulesTests
 {
     [Fact]
-    public void HeuresSupJournalieres_KeepsTheDesktopEightHourThreshold()
+    public void HeuresSupJournalieres_DefaultThreshold_KeepsTheDesktopEightHours()
     {
+        // Act & Assert
         // Desktop : Math.Max(0, totalHeures - 8).
-        Assert.Equal(0m, OvertimeRules.HeuresSupJournalieres(new TimeSpan(8, 0, 0)));
-        Assert.Equal(0m, OvertimeRules.HeuresSupJournalieres(new TimeSpan(6, 30, 0)));
-        Assert.Equal(1.5m, OvertimeRules.HeuresSupJournalieres(new TimeSpan(9, 30, 0)));
+        OvertimeRules.HeuresSupJournalieres(new TimeSpan(8, 0, 0)).Should().Be(0m);
+        OvertimeRules.HeuresSupJournalieres(new TimeSpan(6, 30, 0)).Should().Be(0m);
+        OvertimeRules.HeuresSupJournalieres(new TimeSpan(9, 30, 0)).Should().Be(1.5m);
     }
 
     [Fact]
-    public void HeuresSupJournalieres_AcceptsAnExplicitThreshold()
-        => Assert.Equal(2m, OvertimeRules.HeuresSupJournalieres(new TimeSpan(10, 0, 0), seuil: 8));
+    public void HeuresSupJournalieres_ExplicitThreshold_UsesIt()
+    {
+        // Act
+        var result = OvertimeRules.HeuresSupJournalieres(new TimeSpan(10, 0, 0), seuil: 8);
+
+        // Assert
+        result.Should().Be(2m);
+    }
 
     [Fact]
-    public void HeuresSupJournalieres_NeverReturnsNegative()
-        => Assert.Equal(0m, OvertimeRules.HeuresSupJournalieres(TimeSpan.Zero));
+    public void HeuresSupJournalieres_BelowThreshold_ReturnsZero()
+    {
+        // Act
+        var result = OvertimeRules.HeuresSupJournalieres(TimeSpan.Zero);
+
+        // Assert
+        result.Should().Be(0m);
+    }
 }

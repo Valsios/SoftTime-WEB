@@ -1,23 +1,7 @@
 using SoftTime.Domain.Entities.SoftTime;
+using SoftTime.Domain.Models;
 
 namespace SoftTime.Domain.Services;
-
-/// <summary>
-/// Ligne de l'état des retards : un salarié, un jour, l'heure d'entrée retenue, l'heure prévue
-/// au planning (avec la tolérance de sa catégorie) et le retard calculé en minutes.
-/// </summary>
-public sealed record RetardReportRow(
-    string Matricule,
-    string? Nom,
-    string? Prenom,
-    string? Departement,
-    DateTime Date,
-    TimeSpan? HeureEntree,
-    TimeSpan? HeurePrevue,
-    int ToleranceMinutes,
-    int MinutesRetard,
-    bool RetardSaisi
-);
 
 /// <summary>
 /// Règles pures de calcul de l'état des retards et des composants partagés avec le tableau de bord.
@@ -58,27 +42,30 @@ public static class RetardReportRules
     /// matin annule le retard, une valeur saisie est prioritaire, sinon on compare la première
     /// entrée du jour à l'heure planifiée.
     /// </summary>
-    public static int MinutesRetardJour(
-        bool absenceMatin,
-        IEnumerable<TimeSpan?> retardsSaisis,
-        TimeSpan? premiereEntree,
-        TimeSpan? heurePrevue,
-        int toleranceMinutes)
+    public static int MinutesRetardJour(IReadOnlyCollection<HeureCorrigee> lignes, PlanningSalarie? plan, int toleranceMinutes)
     {
-        if (absenceMatin)
+        if (lignes.Any(h => h.AbsenceAm == true))
             return 0;
 
-        var saisis = retardsSaisis
-            .Where(r => r.HasValue)
-            .Select(r => (int)Math.Max(0m, (decimal)r!.Value.TotalMinutes))
+        var saisis = lignes
+            .Where(h => h.Retard.HasValue)
+            .Select(h => (int)Math.Max(0m, (decimal)h.Retard!.Value.TotalMinutes))
             .ToList();
         if (saisis.Count > 0)
             return saisis.Max();
 
+        var premiereEntree = PremiereEntree(lignes);
+        var heurePrevue = HeurePrevue(plan);
         if (!premiereEntree.HasValue || !heurePrevue.HasValue)
             return 0;
-
         return MinutesRetard(premiereEntree.Value, heurePrevue.Value, toleranceMinutes);
+    }
+
+    /// <summary>Première heure d'entrée saisie parmi les heures corrigées du jour.</summary>
+    public static TimeSpan? PremiereEntree(IEnumerable<HeureCorrigee> lignes)
+    {
+        var entrees = lignes.Where(h => h.HEntree.HasValue).Select(h => h.HEntree!.Value).ToList();
+        return entrees.Count > 0 ? entrees.Min() : null;
     }
 
     /// <summary>
@@ -87,11 +74,11 @@ public static class RetardReportRules
     /// exploitables (shift Pause, HA = HD). Même notion de « jour travaillé » que l'état des
     /// absences, pour que les deux états parlent des mêmes journées.
     /// </summary>
-    public static TimeSpan? HeurePrevue(T_PLANNING_SAL? plan)
+    public static TimeSpan? HeurePrevue(PlanningSalarie? plan)
     {
         if (plan is null || plan.OffP == true)
             return null;
-        if (plan.HA is not DateTime ha || ha.Date <= SentinelleHeure)
+        if (plan.Ha is not DateTime ha || ha.Date <= SentinelleHeure)
             return null;
         if (AbsenceReportRules.CalculerDureeHeures(plan) is null)
             return null;
@@ -103,129 +90,42 @@ public static class RetardReportRules
     public static int ToleranceEntree(
         int carteId,
         IReadOnlyDictionary<int, int> categorieParCarte,
-        IReadOnlyList<T_TOLERANCE> tolerances)
+        IReadOnlyList<ToleranceRetard> tolerances)
     {
         if (!categorieParCarte.TryGetValue(carteId, out var idCategorie))
             return 0;
 
         return tolerances
-            .FirstOrDefault(t => t.IDCATEGORIE == idCategorie && t.TYPES_TOL == false)?.TOLERANCE ?? 0;
+            .FirstOrDefault(t => t.IdCategorie == idCategorie && t.TypesTol == false)?.Tolerance ?? 0;
     }
 
     public static IReadOnlyList<RetardReportRow> Calculer(
-        IReadOnlyList<T_CARDPAIE> cartes,
-        IReadOnlyList<T_HEURECORRIGER> corrections,
-        IReadOnlyList<T_PLANNING_SAL> plannings,
-        IReadOnlyDictionary<int, int> categorieParCarte,
-        IReadOnlyList<T_TOLERANCE> tolerances,
-        IReadOnlySet<DateTime> feries,
-        DateTime from,
-        DateTime to,
-        DateTime dateDuJour)
+        EmployeeSources sources, RetardTolerances tolerancesRetard, IReadOnlySet<DateTime> feries, ReportPeriod periode)
     {
-        var debut = from.Date;
-        var hier = dateDuJour.Date.AddDays(-1);
-
-        // Aucun jour futur : la période demandée est plafonnée à la veille.
-        var fin = to.Date < hier ? to.Date : hier;
-        if (debut > fin)
+        var (cartes, plannings, corrections) = sources;
+        var (categorieParCarte, tolerances) = tolerancesRetard;
+        var (debut, fin) = (periode.Debut, periode.Fin);
+        if (periode.EstVide)
             return Array.Empty<RetardReportRow>();
 
-        var cartesParCle = new Dictionary<string, T_CARDPAIE>(StringComparer.OrdinalIgnoreCase);
-        var cleParIdSal = new Dictionary<int, string>();
-        foreach (var carte in cartes)
-        {
-            var cle = MatriculeIdentity.Cle(carte.SAGE_MATRICULE);
-            if (string.IsNullOrEmpty(cle))
-                continue;
-
-            cleParIdSal[carte.ID] = cle;
-            if (!cartesParCle.TryGetValue(cle, out var existante) || carte.ID < existante.ID)
-                cartesParCle[cle] = carte;
-        }
-
+        var (cleParIdSal, cartesParCle) = AbsenceReportRules.IndexerCartes(cartes);
         if (cartesParCle.Count == 0)
             return Array.Empty<RetardReportRow>();
 
         // Planning du jour travaillé, par clé matricule et par date (plus petite ligne retenue).
-        var planningsParCleEtDate = new Dictionary<(string Cle, DateTime Date), T_PLANNING_SAL>();
-        foreach (var plan in plannings)
-        {
-            if (plan.DateP is not DateTime dateP || plan.OffP == true)
-                continue;
-            if (!cleParIdSal.TryGetValue(plan.IDSAL, out var cle))
-                continue;
+        var planningsTravailles = plannings.Where(p => p.OffP != true).ToList();
+        var calendrier = new ReportCalendar(
+            debut, fin, feries, AbsenceReportRules.IndexerPlannings(planningsTravailles, cleParIdSal, debut, fin));
+        var correctionsParCle = AbsenceReportRules.CorrectionsParCle(corrections);
 
-            var jour = dateP.Date;
-            if (jour < debut || jour > fin)
-                continue;
-
-            var key = (cle, jour);
-            if (!planningsParCleEtDate.TryGetValue(key, out var existant) || plan.ID < existant.ID)
-                planningsParCleEtDate[key] = plan;
-        }
-
-        var correctionsParCle = corrections
-            .Where(h => h.DATE_POINTAGE_IN.HasValue)
-            .GroupBy(h => MatriculeIdentity.Cle(h.MATRICULE_SAGE), StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
-
-        var resultats = new List<RetardReportRow>();
-
-        foreach (var (cle, carte) in cartesParCle)
-        {
-            if (!correctionsParCle.TryGetValue(cle, out var lignes) || lignes.Count == 0)
-                continue;
-
-            var matriculeAffiche = !string.IsNullOrWhiteSpace(carte.SAGE_MATRICULE) ? carte.SAGE_MATRICULE.Trim() : cle;
-            var nomAffiche = carte.SAGE_NOM?.Trim();
-            var prenomAffiche = carte.SAGE_PRENOM?.Trim();
-            var deptAffiche = carte.DEPARTEMENT?.Trim();
-            var tolerance = ToleranceEntree(carte.ID, categorieParCarte, tolerances);
-
-            foreach (var groupeJour in lignes
-                         .Where(h => h.DATE_POINTAGE_IN.HasValue)
-                         .GroupBy(h => h.DATE_POINTAGE_IN!.Value.Date))
-            {
-                var jour = groupeJour.Key;
-                if (jour < debut || jour > fin || AbsenceReportRules.EstNonTravaille(jour, feries))
-                    continue;
-
-                planningsParCleEtDate.TryGetValue((cle, jour), out var plan);
-                var heurePrevue = HeurePrevue(plan);
-                var entrees = groupeJour
-                    .Where(h => h.HENTREE.HasValue)
-                    .Select(h => h.HENTREE!.Value)
-                    .ToList();
-                TimeSpan? premiereEntree = entrees.Count > 0 ? entrees.Min() : null;
-                var retardsSaisis = groupeJour.Select(h => h.RETARD).ToList();
-
-                var minutes = MinutesRetardJour(
-                    absenceMatin: groupeJour.Any(h => h.ABSENCE_AM == true),
-                    retardsSaisis: retardsSaisis,
-                    premiereEntree: premiereEntree,
-                    heurePrevue: heurePrevue,
-                    toleranceMinutes: tolerance);
-
-                if (minutes <= 0)
-                    continue;
-
-                resultats.Add(new RetardReportRow(
-                    Matricule: matriculeAffiche,
-                    Nom: nomAffiche,
-                    Prenom: prenomAffiche,
-                    Departement: deptAffiche,
-                    Date: jour,
-                    HeureEntree: premiereEntree,
-                    HeurePrevue: heurePrevue,
-                    ToleranceMinutes: tolerance,
-                    MinutesRetard: minutes,
-                    RetardSaisi: retardsSaisis.Any(r => r.HasValue)
-                ));
-            }
-        }
-
-        return resultats
+        return cartesParCle
+            .Where(kv => correctionsParCle.TryGetValue(kv.Key, out var lignes) && lignes.Count > 0)
+            .SelectMany(kv => new RetardReportEmployee(
+                    kv.Key,
+                    kv.Value,
+                    correctionsParCle[kv.Key],
+                    ToleranceEntree(kv.Value.Id, categorieParCarte, tolerances))
+                .Retards(calendrier))
             .OrderBy(r => r.Date)
             .ThenBy(r => r.Matricule, StringComparer.OrdinalIgnoreCase)
             .ToList();

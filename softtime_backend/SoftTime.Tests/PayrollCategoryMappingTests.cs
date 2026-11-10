@@ -16,48 +16,78 @@ public class PayrollCategoryMappingTests
     [InlineData("Ferie", 3)]
     [InlineData("Dimanche", 2.5)]
     [InlineData("Nuit", 4)]
-    public void MapsEachPayrollCategoryToItsOwnHsValue(string category, decimal expected)
-        => Assert.Equal(expected, OvertimePayrollCategoryMapper.ValueFor(category, Row));
+    public void ValueFor_KnownCategory_ReturnsItsHsValue(string category, decimal expected)
+    {
+        // Act
+        var result = OvertimePayrollCategoryMapper.ValueFor(category, Row);
+
+        // Assert
+        result.Should().Be(expected);
+    }
 
     [Fact]
-    public void UnknownCategoryIsRejected()
-        => Assert.Throws<InvalidOperationException>(() => OvertimePayrollCategoryMapper.ValueFor("Other", Row));
+    public void ValueFor_UnknownCategory_ThrowsDomainException()
+    {
+        // Act
+        var act = () => OvertimePayrollCategoryMapper.ValueFor("Other", Row);
+
+        // Assert
+        act.Should().ThrowExactly<DomainException>();
+    }
 
     [Fact]
-    public void SqlIdentifiersRejectDangerousCharacters()
-        => Assert.Throws<InvalidOperationException>(() => PayrollWritingConfiguration.ValidateIdentifier("PAIE;DROP TABLE", "table"));
+    public void ValidateIdentifier_DangerousCharacters_ThrowsDomainException()
+    {
+        // Act
+        var act = () => PayrollWritingConfiguration.ValidateIdentifier("PAIE;DROP TABLE", "table");
+
+        // Assert
+        act.Should().ThrowExactly<DomainException>();
+    }
 
     [Fact]
-    public void CompleteConfigurationIsAccepted()
+    public void ValidateConfigurationRows_CompleteConfiguration_IsAccepted()
         => PayrollWritingConfiguration.ValidateConfigurationRows(Configuration());
 
     [Fact]
-    public void MissingCategoryIsRejected()
+    public void ValidateConfigurationRows_MissingCategory_ThrowsDomainException()
     {
+        // Arrange
         var configuration = Configuration();
         configuration.RemoveAt(6);
-        Assert.Throws<InvalidOperationException>(() => PayrollWritingConfiguration.ValidateConfigurationRows(configuration));
+
+        // Act
+        var act = () => PayrollWritingConfiguration.ValidateConfigurationRows(configuration);
+
+        // Assert
+        act.Should().ThrowExactly<DomainException>();
     }
 
     [Fact]
-    public void DuplicateCategoryIsRejected()
+    public void ValidateConfigurationRows_DuplicateCategory_ThrowsDomainException()
     {
+        // Arrange
         var configuration = Configuration();
-        configuration.Add(new T_PAIE_ECRITURE
+        configuration.Add(new PaieEcriture
         {
-            BDD_SAGE = "TEST_AUTRE_RH", TABLE_CIBLE = "PAIE_CUMULS", COL_MATRICULE = "MatriculeEmploye",
-            CATEGORIE = "Exo130", COL_VALEUR = "HeuresExo130Bis"
+            BddSage = "TEST_AUTRE_RH", TableCible = "PAIE_CUMULS", ColMatricule = "MatriculeEmploye",
+            Categorie = "Exo130", ColValeur = "HeuresExo130Bis"
         });
-        Assert.Throws<InvalidOperationException>(() => PayrollWritingConfiguration.ValidateConfigurationRows(configuration));
+
+        // Act
+        var act = () => PayrollWritingConfiguration.ValidateConfigurationRows(configuration);
+
+        // Assert
+        act.Should().ThrowExactly<DomainException>();
     }
 
-    private static List<T_PAIE_ECRITURE> Configuration() => PayrollWritingConfiguration.Categories
-        .Select(category => new T_PAIE_ECRITURE
+    private static List<PaieEcriture> Configuration() => PayrollWritingConfiguration.Categories
+        .Select(category => new PaieEcriture
         {
-            BDD_SAGE = "TEST_AUTRE_RH",
-            TABLE_CIBLE = "PAIE_CUMULS",
-            COL_MATRICULE = "MatriculeEmploye",
-            CATEGORIE = category,
-            COL_VALEUR = $"Heures{category}",
+            BddSage = "TEST_AUTRE_RH",
+            TableCible = "PAIE_CUMULS",
+            ColMatricule = "MatriculeEmploye",
+            Categorie = category,
+            ColValeur = $"Heures{category}",
         }).ToList();
 }

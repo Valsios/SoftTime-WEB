@@ -67,287 +67,355 @@ public class OvertimeCalculatorTests
     [Fact]
     public void CasA_SemaineNormale_SansHeuresSup()
     {
+        // Arrange
         var config = Multi();
         var semaine = Semaine(j => JourneeOuvree(j, "08:00", "17:00", TimeSpan.FromHours(1)));
 
+        // Act
         var resultat = OvertimeCalculator.CalculerSemaine(config, semaine);
 
-        Assert.Equal(40m, resultat.Ht);
-        Assert.Equal(0m, resultat.Hs);
-        Assert.Equal(0m, resultat.Nuit);
+        // Assert
+        resultat.Ht.Should().Be(40m);
+        resultat.Hs.Should().Be(0m);
+        resultat.Nuit.Should().Be(0m);
     }
 
     [Fact]
     public void CasB_Semaine45h_Produit5hSupplementaires()
     {
+        // Arrange
         var config = Multi();
         var semaine = Semaine(j => JourneeOuvree(j, "08:00", "17:00", TimeSpan.Zero));
 
+        // Act
         var resultat = OvertimeCalculator.CalculerSemaine(config, semaine);
 
-        Assert.Equal(45m, resultat.Ht);
-        Assert.Equal(5m, resultat.Hs);
+        // Assert
+        resultat.Ht.Should().Be(45m);
+        resultat.Hs.Should().Be(5m);
     }
 
     [Fact]
     public void CasC_Semaine46hAvecSamedi_Produit6hSupplementaires()
     {
+        // Arrange
         var config = Multi();
         var semaine = Semaine(j => JourneeOuvree(j, "08:00", "17:00", TimeSpan.Zero))
             .Append(Jour(Samedi, new[] { P(Samedi, "09:00", "10:00") }));
 
+        // Act
         var resultat = OvertimeCalculator.CalculerSemaine(config, semaine);
 
-        Assert.Equal(46m, resultat.Ht);
-        Assert.Equal(6m, resultat.Hs);
+        // Assert
+        resultat.Ht.Should().Be(46m);
+        resultat.Hs.Should().Be(6m);
     }
 
     [Fact]
     public void CasF_NuitContre_QuatreHeuresDeNuit()
     {
+        // Arrange
         var config = Multi();
         var jour = Jour(Lundi, new[] { P(Lundi, "20:00", "02:00", joursSortie: 1) });
 
+        // Act
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(6m, resultat.HeuresReelles);
-        Assert.Equal(5.5m, resultat.HeuresRetenues);
-        Assert.Equal(4m, resultat.Nuit);
+        // Assert
+        resultat.HeuresReelles.Should().Be(6m);
+        resultat.HeuresRetenues.Should().Be(5.5m);
+        resultat.Nuit.Should().Be(4m);
     }
 
     [Fact]
     public void CasG_Dimanche_CompteurDimancheSurHeuresRetenues()
     {
+        // Arrange
         var config = Multi();
         var jour = Jour(Dimanche, new[] { P(Dimanche, "08:00", "17:00") }, H("08:00"), H("17:00"), TimeSpan.FromHours(1));
 
+        // Act
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(9m, resultat.HeuresReelles);
-        Assert.Equal(8m, resultat.HeuresRetenues);
-        Assert.Equal(8m, resultat.Dimanche);
-        Assert.Equal(0m, resultat.Nuit);
+        // Assert
+        resultat.HeuresReelles.Should().Be(9m);
+        resultat.HeuresRetenues.Should().Be(8m);
+        resultat.Dimanche.Should().Be(8m);
+        resultat.Nuit.Should().Be(0m);
     }
 
     [Fact]
     public void CasH_Ferie_CompteurFerieSurHeuresReelles()
     {
+        // Arrange
         var config = Multi();
         var jour = Jour(Lundi, new[] { P(Lundi, "09:00", "15:00") }, ferie: true);
 
+        // Act
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(6m, resultat.HeuresReelles);
-        Assert.Equal(5.5m, resultat.HeuresRetenues);
-        Assert.Equal(6m, resultat.Ferie);
+        // Assert
+        resultat.HeuresReelles.Should().Be(6m);
+        resultat.HeuresRetenues.Should().Be(5.5m);
+        resultat.Ferie.Should().Be(6m);
     }
 
     [Fact]
     public void CasI_NuitUnDimanche_LaCotationNuitGagne()
     {
+        // Arrange
         // Samedi 22:00 → dimanche 04:00 : 6 h toutes comprises dans la plage 22:00 → 05:00.
         var config = Multi(cotationNuit: 3m, cotationDimanche: 2m);
         var jour = Jour(Samedi, new[] { P(Samedi, "22:00", "04:00", joursSortie: 1) });
 
+        // Act
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(6m, resultat.Nuit);
-        Assert.Equal(0m, resultat.Dimanche);
+        // Assert
+        resultat.Nuit.Should().Be(6m);
+        resultat.Dimanche.Should().Be(0m);
     }
 
     [Fact]
     public void CasI_NuitUnDimanche_LaCotationDimancheGagneSurLaPartieDimanche()
     {
+        // Arrange
         // La part de samedi (22:00 → 24:00) reste de la nuit ; la part de dimanche passe en dimanche.
         var config = Multi(cotationNuit: 1m, cotationDimanche: 2m);
         var jour = Jour(Samedi, new[] { P(Samedi, "22:00", "04:00", joursSortie: 1) });
 
+        // Act
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(2m, resultat.Nuit);
-        Assert.Equal(4m, resultat.Dimanche);
+        // Assert
+        resultat.Nuit.Should().Be(2m);
+        resultat.Dimanche.Should().Be(4m);
     }
 
     [Fact]
     public void CasJ_Conge_JourneeNeutraliseeSansAbsence()
     {
+        // Arrange
         var config = Multi();
         var jour = Jour(Lundi, Array.Empty<PunchPair>(), H("08:00"), H("17:00"), TimeSpan.FromHours(1), conge: 1m);
 
+        // Act
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.True(resultat.Conge);
-        Assert.Equal(8m, resultat.HeuresRetenues);
-        Assert.Equal(0m, resultat.Absence);
-        Assert.Equal(0m, resultat.Retard);
+        // Assert
+        resultat.Conge.Should().BeTrue();
+        resultat.HeuresRetenues.Should().Be(8m);
+        resultat.Absence.Should().Be(0m);
+        resultat.Retard.Should().Be(0m);
     }
 
     [Fact]
     public void CasJ_CongeDemiJournee_CrediteUneDemiJournee()
     {
+        // Arrange
         var config = Multi();
         var jour = Jour(Lundi, Array.Empty<PunchPair>(), H("08:00"), H("17:00"), TimeSpan.FromHours(1), conge: 0.5m);
 
+        // Act
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(4m, resultat.HeuresRetenues);
+        // Assert
+        resultat.HeuresRetenues.Should().Be(4m);
     }
 
     [Fact]
     public void CasK_Absence_JourPlanifieSansPointage()
     {
+        // Arrange
         var config = Multi();
         var jour = Jour(Lundi, Array.Empty<PunchPair>(), H("08:00"), H("17:00"), TimeSpan.FromHours(1), correction: false);
 
+        // Act
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.False(resultat.JourTravaille);
-        Assert.Equal(0m, resultat.HeuresRetenues);
-        Assert.Equal(8m, resultat.Absence);
+        // Assert
+        resultat.JourTravaille.Should().BeFalse();
+        resultat.HeuresRetenues.Should().Be(0m);
+        resultat.Absence.Should().Be(8m);
     }
 
     [Fact]
     public void CasL_RetardToleranceAbsorbe_ToleranceDepassee()
     {
+        // Arrange
         var jour = Jour(Lundi, new[] { P(Lundi, "08:10", "17:00") }, H("08:00"), H("17:00"), TimeSpan.FromHours(1));
-
         var absorbe = OvertimeCalculator.CalculerJour(Multi(toleranceEntree: 10), jour);
+
+        // Act
         var depasse = OvertimeCalculator.CalculerJour(Multi(toleranceEntree: 5), jour);
 
-        Assert.Equal(0m, absorbe.Retard);
-        Assert.Equal(0.08m, depasse.Retard);
+        // Assert
+        absorbe.Retard.Should().Be(0m);
+        depasse.Retard.Should().Be(0.08m);
     }
 
     [Fact]
     public void CasL_RetardExplicite_Prioritaire()
     {
+        // Arrange
         var jour = Jour(Lundi, new[] { P(Lundi, "08:10", "17:00") }, H("08:00"), H("17:00"), TimeSpan.FromHours(1), retard: TimeSpan.FromMinutes(42));
 
+        // Act
         var resultat = OvertimeCalculator.CalculerJour(Multi(), jour);
 
-        Assert.Equal(0.7m, resultat.Retard);
+        // Assert
+        resultat.Retard.Should().Be(0.7m);
     }
 
     [Fact]
     public void CasM_ArriveeEnAvance_NonPayee()
     {
+        // Arrange
         var config = Multi();
         var jour = Jour(Lundi, new[] { P(Lundi, "07:30", "17:00") }, H("08:00"), H("17:00"), TimeSpan.FromHours(1));
 
+        // Act
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(H("07:30"), resultat.Entree);
-        Assert.Equal(9m, resultat.HeuresReelles);
-        Assert.Equal(8m, resultat.HeuresRetenues);
+        // Assert
+        resultat.Entree.Should().Be(H("07:30"));
+        resultat.HeuresReelles.Should().Be(9m);
+        resultat.HeuresRetenues.Should().Be(8m);
     }
 
     [Fact]
-    public void CasN_SortieArrondieAuPasDeTolerance()
+    public void CalculerJour_CasN_ArronditLaSortieAuPasDeTolerance()
     {
+        // Arrange
         var config = Multi(pasSortie: 15);
         var jour = Jour(Lundi, new[] { P(Lundi, "08:00", "17:50") });
 
+        // Act
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
+        // Assert
         // 17:50 → 17:45 : 9,75 h réelles, moins 30 min de pause manquante.
-        Assert.Equal(9.75m, resultat.HeuresReelles);
-        Assert.Equal(9.25m, resultat.HeuresRetenues);
+        resultat.HeuresReelles.Should().Be(9.75m);
+        resultat.HeuresRetenues.Should().Be(9.25m);
     }
 
     [Fact]
     public void CasO_DeuxPaires_PauseReelleSuffisante()
     {
+        // Arrange
         var config = Multi();
         var jour = Jour(Lundi, new[] { P(Lundi, "08:00", "12:00"), P(Lundi, "13:00", "17:00") });
 
+        // Act
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(8m, resultat.HeuresReelles);
-        Assert.Equal(8m, resultat.HeuresRetenues);
+        // Assert
+        resultat.HeuresReelles.Should().Be(8m);
+        resultat.HeuresRetenues.Should().Be(8m);
     }
 
     [Fact]
-    public void PauseManquantePartielle_EstDeduite()
+    public void CalculerJour_PauseManquantePartielle_EstDeduite()
     {
+        // Arrange
         var config = Multi();
         var jour = Jour(Lundi, new[] { P(Lundi, "08:00", "12:00"), P(Lundi, "12:15", "17:00") });
 
+        // Act
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(8.75m, resultat.HeuresReelles);
-        Assert.Equal(8.5m, resultat.HeuresRetenues);
+        // Assert
+        resultat.HeuresReelles.Should().Be(8.75m);
+        resultat.HeuresRetenues.Should().Be(8.5m);
     }
 
     [Fact]
     public void CasP_JourneeCourte_PasDeDeductionDePause()
     {
+        // Arrange
         var config = Multi();
         var jour = Jour(Lundi, new[] { P(Lundi, "08:00", "11:00") });
 
+        // Act
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(3m, resultat.HeuresReelles);
-        Assert.Equal(3m, resultat.HeuresRetenues);
+        // Assert
+        resultat.HeuresReelles.Should().Be(3m);
+        resultat.HeuresRetenues.Should().Be(3m);
     }
 
     // ------------------------------------------------------------------ règles complémentaires (multi)
 
     [Fact]
-    public void FerieSansTravail_CrediteLaJourneeSansMajoration()
+    public void CalculerJour_FerieSansTravail_CrediteLaJourneeSansMajoration()
     {
+        // Arrange
         var config = Multi();
         var jour = Jour(Lundi, Array.Empty<PunchPair>(), ferie: true, correction: false);
 
+        // Act
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(8m, resultat.HeuresRetenues);
-        Assert.Equal(0m, resultat.Ferie);
-        Assert.Equal(0m, resultat.Absence);
+        // Assert
+        resultat.HeuresRetenues.Should().Be(8m);
+        resultat.Ferie.Should().Be(0m);
+        resultat.Absence.Should().Be(0m);
     }
 
     [Fact]
     public void Femme_8Mars_CrediteLaJourneeEtMajoreLesHeuresTravaillees()
     {
-        var mars = new DateTime(2027, 3, 8); // lundi
+        // Arrange
+        var mars = new DateTime(2027, 3, 8);
         var jour = Jour(mars, new[] { P(mars, "09:00", "12:00") });
 
+        // Act
         var resultat = OvertimeCalculator.CalculerJour(Multi(estFemme: true), jour);
 
-        Assert.Equal(8m, resultat.HeuresRetenues);
-        Assert.Equal(3m, resultat.Ferie);
+        // Assert
+        resultat.HeuresRetenues.Should().Be(8m);
+        resultat.Ferie.Should().Be(3m);
     }
 
     [Fact]
     public void Homme_8Mars_PasDeCredit()
     {
+        // Arrange
         var mars = new DateTime(2027, 3, 8);
         var jour = Jour(mars, new[] { P(mars, "09:00", "12:00") });
 
+        // Act
         var resultat = OvertimeCalculator.CalculerJour(Multi(estFemme: false), jour);
 
-        Assert.Equal(3m, resultat.HeuresRetenues);
-        Assert.Equal(0m, resultat.Ferie);
+        // Assert
+        resultat.HeuresRetenues.Should().Be(3m);
+        resultat.Ferie.Should().Be(0m);
     }
 
     [Fact]
-    public void FerieEtDimanche_LeFeriePrimed()
+    public void CalculerJour_FerieEtDimanche_LeFeriePrime()
     {
+        // Arrange
         var jour = Jour(Dimanche, new[] { P(Dimanche, "08:00", "12:00") }, ferie: true);
 
+        // Act
         var resultat = OvertimeCalculator.CalculerJour(Multi(), jour);
 
-        Assert.Equal(4m, resultat.Ferie);
-        Assert.Equal(0m, resultat.Dimanche);
+        // Assert
+        resultat.Ferie.Should().Be(4m);
+        resultat.Dimanche.Should().Be(0m);
     }
 
     [Fact]
-    public void SemaineVide_ProduitDesZeros()
+    public void CalculerSemaine_SemaineVide_ProduitDesZeros()
     {
+        // Act
         var resultat = OvertimeCalculator.CalculerSemaine(Multi(), Array.Empty<OvertimeDayInput>());
 
-        Assert.Equal(0m, resultat.Ht);
-        Assert.Equal(0m, resultat.Hs);
-        Assert.Empty(resultat.Jours);
+        // Assert
+        resultat.Ht.Should().Be(0m);
+        resultat.Hs.Should().Be(0m);
+        resultat.Jours.Should().BeEmpty();
     }
 
     // ------------------------------------------------------------------ mode 2 pointages
@@ -358,18 +426,22 @@ public class OvertimeCalculatorTests
     [Fact]
     public void Mono_SemaineNormale_SansHeuresSup()
     {
+        // Arrange
         var config = Mono();
         var semaine = Semaine(j => JourneeMono(j, "08:00", "17:00"));
 
+        // Act
         var resultat = OvertimeCalculator.CalculerSemaine(config, semaine);
 
-        Assert.Equal(42.5m, resultat.Ht);
-        Assert.Equal(0m, resultat.Hs);
+        // Assert
+        resultat.Ht.Should().Be(42.5m);
+        resultat.Hs.Should().Be(0m);
     }
 
     [Fact]
     public void Mono_DefautDeJournee_ProduitDesHeuresSupJournalieres()
     {
+        // Arrange
         var config = Mono();
         // Planning 08:00–17:00, pause 30 min => prévu 8,5 h ; 10 h réalisées − 30 min = 9,5 h retenues.
         var semaine = Enumerable.Range(0, 5).Select(i =>
@@ -378,74 +450,91 @@ public class OvertimeCalculatorTests
             return Jour(jour, new[] { P(jour, "08:00", "18:00") }, H("08:00"), H("17:00"), TimeSpan.FromMinutes(30));
         });
 
+        // Act
         var resultat = OvertimeCalculator.CalculerSemaine(config, semaine);
 
-        Assert.Equal(47.5m, resultat.Ht);
-        Assert.Equal(5m, resultat.Hs);
+        // Assert
+        resultat.Ht.Should().Be(47.5m);
+        resultat.Hs.Should().Be(5m);
     }
 
     [Fact]
     public void Mono_Samedi_IntegralementEnHeuresSup()
     {
+        // Arrange
         var config = Mono();
         var jour = Jour(Samedi, new[] { P(Samedi, "08:00", "12:00") }, H("08:00"), H("17:00"), TimeSpan.FromMinutes(30));
 
+        // Act
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(3.5m, resultat.HeuresRetenues);
-        Assert.Equal(3.5m, resultat.HeuresSup);
+        // Assert
+        resultat.HeuresRetenues.Should().Be(3.5m);
+        resultat.HeuresSup.Should().Be(3.5m);
     }
 
     [Fact]
-    public void Mono_SortieArrondieALaDemiHeureInferieure()
+    public void CalculerJour_Mono_ArronditLaSortieALaDemiHeureInferieure()
     {
+        // Arrange
         var config = Mono();
         var jour = Jour(Lundi, new[] { P(Lundi, "08:00", "17:40") }, H("08:00"), H("17:00"), TimeSpan.FromMinutes(30));
 
+        // Act
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
+        // Assert
         // 17:40 → 17:30 (et non 17:40) : 9,5 h réelles.
-        Assert.Equal(9.5m, resultat.HeuresReelles);
-        Assert.Equal(9m, resultat.HeuresRetenues);
+        resultat.HeuresReelles.Should().Be(9.5m);
+        resultat.HeuresRetenues.Should().Be(9m);
     }
 
     [Fact]
     public void Mono_Nuit_TrancheApres22h()
     {
+        // Arrange
         var config = Mono();
         var jour = Jour(Lundi, new[] { P(Lundi, "20:00", "23:00") }, H("20:00"), H("23:00"), TimeSpan.FromMinutes(30));
 
+        // Act
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(1m, resultat.Nuit);
-        Assert.Equal(2.5m, resultat.HeuresRetenues);
+        // Assert
+        resultat.Nuit.Should().Be(1m);
+        resultat.HeuresRetenues.Should().Be(2.5m);
     }
 
     [Fact]
     public void Mono_SansPlanning_ReconstruitLePrevuSurLesHeuresReelles()
     {
+        // Arrange
         var config = Mono();
         var jour = Jour(Lundi, new[] { P(Lundi, "08:00", "16:30") });
 
+        // Act
         var resultat = OvertimeCalculator.CalculerJour(config, jour);
 
-        Assert.Equal(8m, resultat.HeuresRetenues);
-        Assert.Equal(0m, resultat.HeuresSup);
+        // Assert
+        resultat.HeuresRetenues.Should().Be(8m);
+        resultat.HeuresSup.Should().Be(0m);
     }
 
     [Fact]
     public void Mono_Dimanche_Et_Ferie_NeProduisentPasDHeuresSup()
     {
+        // Arrange
         var config = Mono();
         var dimanche = Jour(Dimanche, new[] { P(Dimanche, "08:00", "17:00") }, H("08:00"), H("17:00"), TimeSpan.FromMinutes(30));
         var ferie = Jour(Lundi, new[] { P(Lundi, "08:00", "17:00") }, H("08:00"), H("17:00"), TimeSpan.FromMinutes(30), ferie: true);
-
         var dimancheResultat = OvertimeCalculator.CalculerJour(config, dimanche);
+
+        // Act
         var ferieResultat = OvertimeCalculator.CalculerJour(config, ferie);
 
-        Assert.Equal(8.5m, dimancheResultat.Dimanche);
-        Assert.Equal(0m, dimancheResultat.HeuresSup);
-        Assert.Equal(8.5m, ferieResultat.Ferie);
-        Assert.Equal(0m, ferieResultat.HeuresSup);
+        // Assert
+        dimancheResultat.Dimanche.Should().Be(8.5m);
+        dimancheResultat.HeuresSup.Should().Be(0m);
+        ferieResultat.Ferie.Should().Be(8.5m);
+        ferieResultat.HeuresSup.Should().Be(0m);
     }
 }

@@ -8,49 +8,63 @@ public class SearchTextTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public void EmptySearchMatchesEverything(string? search)
+    public void Matches_EmptySearch_MatchesEverything(string? search)
     {
-        Assert.True(SearchText.Matches(search, "Dupont", "Jean"));
+        // Act
+        var result = SearchText.Matches(search, "Dupont", "Jean");
+
+        // Assert
+        result.Should().BeTrue();
     }
 
     [Fact]
-    public void MatchesIsCaseAndAccentInsensitive()
+    public void Matches_DifferentCaseOrAccents_Matches()
     {
-        Assert.True(SearchText.Matches("rene", "René Dupont"));
-        Assert.True(SearchText.Matches("DUPONT", "René Dupont"));
-        Assert.True(SearchText.Matches("é", "Rene"));
+        // Act & Assert
+        SearchText.Matches("rene", "René Dupont").Should().BeTrue();
+        SearchText.Matches("DUPONT", "René Dupont").Should().BeTrue();
+        SearchText.Matches("é", "Rene").Should().BeTrue();
     }
 
     [Fact]
-    public void MatchesRequiresEveryWord()
+    public void Matches_SeveralWords_RequiresEveryWord()
     {
-        Assert.True(SearchText.Matches("rene dupont", "René", "Dupont"));
-        Assert.False(SearchText.Matches("rene martin", "René", "Dupont"));
+        // Act & Assert
+        SearchText.Matches("rene dupont", "René", "Dupont").Should().BeTrue();
+        SearchText.Matches("rene martin", "René", "Dupont").Should().BeFalse();
     }
 
     [Fact]
-    public void RawTermsPreserveAccentsForSql()
+    public void RawTerms_AccentedSearch_PreservesAccents()
     {
-        Assert.Equal(new[] { "René" }, SearchText.RawTerms(" René "));
-        Assert.Equal(new[] { "rene" }, SearchText.Terms(" René "));
+        // Act
+        var result = SearchText.RawTerms(" René ");
+
+        // Assert
+        result.Should().Equal(new[] { "René" });
+        SearchText.Terms(" René ").Should().Equal(new[] { "rene" });
     }
 
     [Fact]
-    public void MatchesObjectSearchesPublicValuesButIgnoresTechnicalId()
+    public void MatchesObject_AnyObject_SearchesPublicValuesButIgnoresTechnicalId()
     {
+        // Arrange
         var row = new SearchRow(42, "Dupont", "Rene");
 
-        Assert.True(SearchText.MatchesObject("dupont", row));
-        Assert.False(SearchText.MatchesObject("42", row));
+        // Act & Assert
+        SearchText.MatchesObject("dupont", row).Should().BeTrue();
+        SearchText.MatchesObject("42", row).Should().BeFalse();
     }
 
     [Fact]
-    public void NormalizeCapsLength()
+    public void Normalize_LongSearch_CapsLength()
     {
+        // Act
         var normalized = SearchText.Normalize(new string('a', SearchText.MaxLength + 20));
 
-        Assert.NotNull(normalized);
-        Assert.Equal(SearchText.MaxLength, normalized!.Length);
+        // Assert
+        normalized.Should().NotBeNull();
+        normalized!.Length.Should().Be(SearchText.MaxLength);
     }
 
     private sealed record SearchRow(int Id, string Nom, string Prenom);

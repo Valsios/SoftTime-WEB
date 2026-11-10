@@ -1,15 +1,18 @@
 using AutoMapper;
+
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
+
 using SoftTime.Api.Security;
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Authentication;
+using SoftTime.Application.Abstractions.Notifications;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
 using SoftTime.Application.Security;
-using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
 using SoftTime.Infrastructure.Security;
+using SoftTime.Infrastructure.Services.Authentication;
 using SoftTime.Tests.Http;
 
 namespace SoftTime.Tests;
@@ -23,17 +26,17 @@ public class AccountSecurityTests
     private const string Password = "FAKE-Pwd-123!";
     private const string OtherPassword = "FAKE-Other-456!";
 
-    private readonly SnapshotInMemoryUnitOfWork _uow = new();
+    private readonly InMemoryUnitOfWork _uow = new();
     private readonly AccountSecurityOptions _options = new() { MaxFailedLoginAttempts = 3, LockoutMinutes = 15, RefreshTokenDays = 7 };
-    private readonly AuthService _sut;
+    private readonly AuthServices _sut;
 
     public AccountSecurityTests()
     {
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 2, NOMROLE = "Utilisateur" });
-        AddUser(1, 1, "admin", new PasswordHasher<T_RESPONSABLE>());
-        AddUser(2, 2, "agent", new PasswordHasher<T_RESPONSABLE>());
-        _sut = CreateAuth(new PasswordHasher<T_RESPONSABLE>());
+        _uow.Get<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
+        _uow.Get<Role>().Items.Add(new Role { IdRole = 2, NomRole = "Utilisateur" });
+        AddUser(1, 1, "admin", new PasswordHasher<Responsable>());
+        AddUser(2, 2, "agent", new PasswordHasher<Responsable>());
+        _sut = CreateAuth(new PasswordHasher<Responsable>());
     }
 
     // ---------- Verrouillage ----------
@@ -45,10 +48,10 @@ public class AccountSecurityTests
         var response = await _sut.LoginAsync(new LoginRequest("agent", Password));
 
         // Assert
-        Assert.False(string.IsNullOrWhiteSpace(response.RefreshToken));
-        var stored = Assert.Single(Tokens());
-        Assert.Equal(RefreshTokenService.Hash(response.RefreshToken!), stored.TOKEN_HASH);
-        Assert.NotEqual(response.RefreshToken, stored.TOKEN_HASH);
+        string.IsNullOrWhiteSpace(response.RefreshToken).Should().BeFalse();
+        var stored = Tokens().Should().ContainSingle().Which;
+        stored.TokenHash.Should().Be(RefreshTokenService.Hash(response.RefreshToken!));
+        stored.TokenHash.Should().NotBe(response.RefreshToken);
     }
 
     [Fact]
@@ -56,56 +59,56 @@ public class AccountSecurityTests
     {
         // Arrange
         for (var i = 0; i < _options.MaxFailedLoginAttempts; i++)
-            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => _sut.LoginAsync(new LoginRequest("agent", "wrong")));
+            await FluentActions.Awaiting(() => _sut.LoginAsync(new LoginRequest("agent", "wrong"))).Should().ThrowExactlyAsync<UnauthorizedException>();
 
         // Act
-        var ex = await Assert.ThrowsAsync<ForbiddenOperationException>(() => _sut.LoginAsync(new LoginRequest("agent", Password)));
+        var ex = (await FluentActions.Awaiting(() => _sut.LoginAsync(new LoginRequest("agent", Password))).Should().ThrowExactlyAsync<ForbiddenException>()).Which;
 
         // Assert
-        Assert.StartsWith("Compte temporairement verrouillé", ex.Message);
-        Assert.True(User(2).VERROUILLE_JUSQUA > DateTime.UtcNow);
-        Assert.Empty(Tokens());
+        ex.Message.Should().StartWith("Compte temporairement verrouillé");
+        (User(2).VerrouilleJusqua > DateTime.UtcNow).Should().BeTrue();
+        Tokens().Should().BeEmpty();
     }
 
     [Fact]
     public async Task LoginAsync_SuccessAfterFailures_ResetsFailureCounter()
     {
         // Arrange
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => _sut.LoginAsync(new LoginRequest("agent", "wrong")));
-        Assert.Equal(1, User(2).TENTATIVES_ECHOUEES);
+        await FluentActions.Awaiting(() => _sut.LoginAsync(new LoginRequest("agent", "wrong"))).Should().ThrowExactlyAsync<UnauthorizedException>();
+        User(2).TentativesEchouees.Should().Be(1);
 
         // Act
         await _sut.LoginAsync(new LoginRequest("agent", Password));
 
         // Assert
-        Assert.Equal(0, User(2).TENTATIVES_ECHOUEES);
-        Assert.Null(User(2).VERROUILLE_JUSQUA);
+        User(2).TentativesEchouees.Should().Be(0);
+        User(2).VerrouilleJusqua.Should().BeNull();
     }
 
     [Fact]
     public async Task LoginAsync_ExpiredLock_AllowsLoginAgain()
     {
         // Arrange
-        User(2).VERROUILLE_JUSQUA = DateTime.UtcNow.AddMinutes(-1);
+        User(2).VerrouilleJusqua = DateTime.UtcNow.AddMinutes(-1);
 
         // Act
         var response = await _sut.LoginAsync(new LoginRequest("agent", Password));
 
         // Assert
-        Assert.Equal(2, response.UserId);
-        Assert.Null(User(2).VERROUILLE_JUSQUA);
+        response.UserId.Should().Be(2);
+        User(2).VerrouilleJusqua.Should().BeNull();
     }
 
     [Fact]
     public async Task LoginAsync_UnknownLogin_ThrowsSameMessageAsWrongPassword()
     {
         // Act
-        var unknown = await Assert.ThrowsAsync<UnauthorizedAccessException>(() => _sut.LoginAsync(new LoginRequest("inconnu", Password)));
-        var wrong = await Assert.ThrowsAsync<UnauthorizedAccessException>(() => _sut.LoginAsync(new LoginRequest("agent", "wrong")));
+        var unknown = (await FluentActions.Awaiting(() => _sut.LoginAsync(new LoginRequest("inconnu", Password))).Should().ThrowExactlyAsync<UnauthorizedException>()).Which;
+        var wrong = (await FluentActions.Awaiting(() => _sut.LoginAsync(new LoginRequest("agent", "wrong"))).Should().ThrowExactlyAsync<UnauthorizedException>()).Which;
 
         // Assert
-        Assert.Equal(AuthService.InvalidCredentialsMessage, unknown.Message);
-        Assert.Equal(unknown.Message, wrong.Message);
+        unknown.Message.Should().Be(AuthenticationService.InvalidCredentialsMessage);
+        wrong.Message.Should().Be(unknown.Message);
     }
 
     // ---------- Jetons de rafraîchissement ----------
@@ -120,14 +123,14 @@ public class AccountSecurityTests
         var refreshed = await _sut.RefreshAsync(login.RefreshToken);
 
         // Assert
-        Assert.NotEqual(login.RefreshToken, refreshed.RefreshToken);
-        Assert.Equal("FAKE_TOKEN", refreshed.Token);
+        refreshed.RefreshToken.Should().NotBe(login.RefreshToken);
+        refreshed.Token.Should().Be("FAKE_TOKEN");
         var previous = StoredToken(login.RefreshToken!);
         var next = StoredToken(refreshed.RefreshToken!);
-        Assert.NotNull(previous.DATE_REVOCATION);
-        Assert.Equal(next.TOKEN_HASH, previous.REMPLACE_PAR);
-        Assert.Equal(previous.FAMILLE, next.FAMILLE);
-        Assert.Null(next.DATE_REVOCATION);
+        previous.DateRevocation.Should().NotBeNull();
+        previous.RemplacePar.Should().Be(next.TokenHash);
+        next.Famille.Should().Be(previous.Famille);
+        next.DateRevocation.Should().BeNull();
     }
 
     [Fact]
@@ -138,10 +141,10 @@ public class AccountSecurityTests
         var refreshed = await _sut.RefreshAsync(login.RefreshToken);
 
         // Act
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => _sut.RefreshAsync(login.RefreshToken));
+        await FluentActions.Awaiting(() => _sut.RefreshAsync(login.RefreshToken)).Should().ThrowExactlyAsync<UnauthorizedException>();
 
         // Assert
-        Assert.Null(StoredToken(refreshed.RefreshToken!).DATE_REVOCATION);
+        StoredToken(refreshed.RefreshToken!).DateRevocation.Should().BeNull();
     }
 
     [Fact]
@@ -150,14 +153,14 @@ public class AccountSecurityTests
         // Arrange
         var login = await _sut.LoginAsync(new LoginRequest("agent", Password));
         var refreshed = await _sut.RefreshAsync(login.RefreshToken);
-        StoredToken(login.RefreshToken!).DATE_REVOCATION = DateTime.UtcNow.AddMinutes(-5);
+        StoredToken(login.RefreshToken!).DateRevocation = DateTime.UtcNow.AddMinutes(-5);
 
         // Act
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => _sut.RefreshAsync(login.RefreshToken));
+        await FluentActions.Awaiting(() => _sut.RefreshAsync(login.RefreshToken)).Should().ThrowExactlyAsync<UnauthorizedException>();
 
         // Assert
-        Assert.NotNull(StoredToken(refreshed.RefreshToken!).DATE_REVOCATION);
-        Assert.All(Tokens(), t => Assert.NotNull(t.DATE_REVOCATION));
+        StoredToken(refreshed.RefreshToken!).DateRevocation.Should().NotBeNull();
+        Tokens().Should().AllSatisfy(t => t.DateRevocation.Should().NotBeNull());
     }
 
     [Fact]
@@ -169,10 +172,10 @@ public class AccountSecurityTests
         await _sut.LogoutAsync(first.RefreshToken);
 
         // Act
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => _sut.RefreshAsync(first.RefreshToken));
+        await FluentActions.Awaiting(() => _sut.RefreshAsync(first.RefreshToken)).Should().ThrowExactlyAsync<UnauthorizedException>();
 
         // Assert
-        Assert.NotNull(StoredToken(second.RefreshToken!).DATE_REVOCATION);
+        StoredToken(second.RefreshToken!).DateRevocation.Should().NotBeNull();
     }
 
     [Fact]
@@ -180,13 +183,13 @@ public class AccountSecurityTests
     {
         // Arrange
         var login = await _sut.LoginAsync(new LoginRequest("agent", Password));
-        StoredToken(login.RefreshToken!).DATE_EXPIRATION = DateTime.UtcNow.AddSeconds(-1);
+        StoredToken(login.RefreshToken!).DateExpiration = DateTime.UtcNow.AddSeconds(-1);
 
         // Act
-        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() => _sut.RefreshAsync(login.RefreshToken));
+        var ex = (await FluentActions.Awaiting(() => _sut.RefreshAsync(login.RefreshToken)).Should().ThrowExactlyAsync<UnauthorizedException>()).Which;
 
         // Assert
-        Assert.Equal(RefreshTokenService.InvalidTokenMessage, ex.Message);
+        ex.Message.Should().Be(RefreshTokenService.InvalidTokenMessage);
     }
 
     [Theory]
@@ -196,10 +199,10 @@ public class AccountSecurityTests
     public async Task RefreshAsync_MissingOrUnknownToken_ThrowsUnauthorized(string? token)
     {
         // Act
-        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() => _sut.RefreshAsync(token));
+        var ex = (await FluentActions.Awaiting(() => _sut.RefreshAsync(token)).Should().ThrowExactlyAsync<UnauthorizedException>()).Which;
 
         // Assert
-        Assert.Equal(RefreshTokenService.InvalidTokenMessage, ex.Message);
+        ex.Message.Should().Be(RefreshTokenService.InvalidTokenMessage);
     }
 
     [Fact]
@@ -207,13 +210,13 @@ public class AccountSecurityTests
     {
         // Arrange
         var login = await _sut.LoginAsync(new LoginRequest("agent", Password));
-        User(2).VERROUILLE_JUSQUA = DateTime.UtcNow.AddMinutes(10);
+        User(2).VerrouilleJusqua = DateTime.UtcNow.AddMinutes(10);
 
         // Act
         var act = () => _sut.RefreshAsync(login.RefreshToken);
 
         // Assert
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(act);
+        await FluentActions.Awaiting(act).Should().ThrowExactlyAsync<UnauthorizedException>();
     }
 
     [Fact]
@@ -226,7 +229,7 @@ public class AccountSecurityTests
         await _sut.LogoutAsync("jeton-inconnu");
 
         // Assert
-        Assert.Null(Assert.Single(Tokens()).DATE_REVOCATION);
+        Tokens().Should().ContainSingle().Which.DateRevocation.Should().BeNull();
     }
 
     [Fact]
@@ -234,16 +237,16 @@ public class AccountSecurityTests
     {
         // Arrange
         var login = await _sut.LoginAsync(new LoginRequest("agent", Password));
-        User(2).TENTATIVES_ECHOUEES = 2;
-        User(2).VERROUILLE_JUSQUA = DateTime.UtcNow.AddMinutes(10);
+        User(2).TentativesEchouees = 2;
+        User(2).VerrouilleJusqua = DateTime.UtcNow.AddMinutes(10);
 
         // Act
         await _sut.SaveUserAsync(1, new UserDto(2, 2, "Agent", "agent", null, OtherPassword));
 
         // Assert
-        Assert.Equal(0, User(2).TENTATIVES_ECHOUEES);
-        Assert.Null(User(2).VERROUILLE_JUSQUA);
-        Assert.NotNull(StoredToken(login.RefreshToken!).DATE_REVOCATION);
+        User(2).TentativesEchouees.Should().Be(0);
+        User(2).VerrouilleJusqua.Should().BeNull();
+        StoredToken(login.RefreshToken!).DateRevocation.Should().NotBeNull();
     }
 
     [Fact]
@@ -252,14 +255,14 @@ public class AccountSecurityTests
         // Arrange : compte haché par l'ancien hacheur, service configuré avec BCrypt.
         var sut = CreateAuth(new BcryptPasswordHasher());
         var login = await sut.LoginAsync(new LoginRequest("admin", Password));
-        AddUser(3, 2, "ancien", new PasswordHasher<T_RESPONSABLE>());
+        AddUser(3, 2, "ancien", new PasswordHasher<Responsable>());
 
         // Act
         await sut.SaveUserAsync(1, new UserDto(3, 2, "Ancien", "ancien", null, Password));
 
         // Assert
-        Assert.True(BcryptPasswordHasher.IsBcrypt(User(3).PASSWORD));
-        Assert.Null(StoredToken(login.RefreshToken!).DATE_REVOCATION);
+        BcryptPasswordHasher.IsBcrypt(User(3).Password).Should().BeTrue();
+        StoredToken(login.RefreshToken!).DateRevocation.Should().BeNull();
     }
 
     // ---------- BCrypt ----------
@@ -271,12 +274,12 @@ public class AccountSecurityTests
         var sut = new BcryptPasswordHasher();
 
         // Act
-        var hash = sut.HashPassword(new T_RESPONSABLE(), Password);
+        var hash = sut.HashPassword(new Responsable(), Password);
 
         // Assert
-        Assert.True(BcryptPasswordHasher.IsBcrypt(hash));
-        Assert.Equal(PasswordVerificationResult.Success, sut.VerifyHashedPassword(new T_RESPONSABLE(), hash, Password));
-        Assert.Equal(PasswordVerificationResult.Failed, sut.VerifyHashedPassword(new T_RESPONSABLE(), hash, "wrong"));
+        BcryptPasswordHasher.IsBcrypt(hash).Should().BeTrue();
+        sut.VerifyHashedPassword(new Responsable(), hash, Password).Should().Be(PasswordVerificationResult.Success);
+        sut.VerifyHashedPassword(new Responsable(), hash, "wrong").Should().Be(PasswordVerificationResult.Failed);
     }
 
     [Fact]
@@ -284,14 +287,14 @@ public class AccountSecurityTests
     {
         // Arrange
         var sut = new BcryptPasswordHasher();
-        var identityHash = new PasswordHasher<T_RESPONSABLE>().HashPassword(new T_RESPONSABLE(), Password);
+        var identityHash = new PasswordHasher<Responsable>().HashPassword(new Responsable(), Password);
 
         // Act
-        var result = sut.VerifyHashedPassword(new T_RESPONSABLE(), identityHash, Password);
+        var result = sut.VerifyHashedPassword(new Responsable(), identityHash, Password);
 
         // Assert
-        Assert.Equal(PasswordVerificationResult.SuccessRehashNeeded, result);
-        Assert.Equal(PasswordVerificationResult.Failed, sut.VerifyHashedPassword(new T_RESPONSABLE(), identityHash, "wrong"));
+        result.Should().Be(PasswordVerificationResult.SuccessRehashNeeded);
+        sut.VerifyHashedPassword(new Responsable(), identityHash, "wrong").Should().Be(PasswordVerificationResult.Failed);
     }
 
     [Fact]
@@ -304,8 +307,8 @@ public class AccountSecurityTests
         await sut.LoginAsync(new LoginRequest("agent", Password));
 
         // Assert
-        Assert.True(BcryptPasswordHasher.IsBcrypt(User(2).PASSWORD));
-        Assert.Equal(PasswordVerificationResult.Success, new BcryptPasswordHasher().VerifyHashedPassword(User(2), User(2).PASSWORD!, Password));
+        BcryptPasswordHasher.IsBcrypt(User(2).Password).Should().BeTrue();
+        new BcryptPasswordHasher().VerifyHashedPassword(User(2), User(2).Password!, Password).Should().Be(PasswordVerificationResult.Success);
     }
 
     // ---------- Clé JWT ----------
@@ -323,7 +326,7 @@ public class AccountSecurityTests
         var result = sut.Validate(null, new JwtOptions { Key = key, Issuer = "SoftTime", Audience = "SoftTime.Web" });
 
         // Assert
-        Assert.True(result.Failed);
+        result.Failed.Should().BeTrue();
     }
 
     [Fact]
@@ -336,41 +339,41 @@ public class AccountSecurityTests
         var result = sut.Validate(null, new JwtOptions { Key = new string('k', 48), Issuer = "SoftTime", Audience = "SoftTime.Web" });
 
         // Assert
-        Assert.True(result.Succeeded);
+        result.Succeeded.Should().BeTrue();
     }
 
-    private AuthService CreateAuth(IPasswordHasher<T_RESPONSABLE> hasher)
+    private AuthServices CreateAuth(IPasswordHasher<Responsable> hasher)
     {
         var mapper = new MapperConfiguration(c => c.AddProfile<MappingProfile>()).CreateMapper();
         var options = Options.Create(_options);
-        return new AuthService(_uow, new Token(), mapper, new Mail(), new AdminCurrentUser(), TestRights.Service(_uow), hasher,
+        return new AuthServices(_uow, new Token(), mapper, new Mail(), new AdminCurrentUser(), TestRights.Service(_uow), hasher,
             new RefreshTokenService(_uow, options), options);
     }
 
-    private void AddUser(decimal id, decimal role, string login, IPasswordHasher<T_RESPONSABLE> hasher)
+    private void AddUser(decimal id, decimal role, string login, IPasswordHasher<Responsable> hasher)
     {
-        var user = new T_RESPONSABLE { IDRESPONSABLE = id, IDROLE = role, LOGIN = login, NOMRESPONSABLE = login };
-        user.PASSWORD = hasher.HashPassword(user, Password);
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
+        var user = new Responsable { IdResponsable = id, IdRole = role, Login = login, NomResponsable = login };
+        user.Password = hasher.HashPassword(user, Password);
+        _uow.Get<Responsable>().Items.Add(user);
     }
 
-    private T_RESPONSABLE User(decimal id) => _uow.GetRepo<T_RESPONSABLE>().Items.Single(u => u.IDRESPONSABLE == id);
+    private Responsable User(decimal id) => _uow.Get<Responsable>().Items.Single(u => u.IdResponsable == id);
 
-    private List<T_REFRESH_TOKEN> Tokens() => _uow.GetRepo<T_REFRESH_TOKEN>().Items;
+    private List<RefreshTokenRecord> Tokens() => _uow.Get<RefreshTokenRecord>().Items;
 
-    private T_REFRESH_TOKEN StoredToken(string refreshToken)
-        => Tokens().Single(t => t.TOKEN_HASH == RefreshTokenService.Hash(refreshToken));
+    private RefreshTokenRecord StoredToken(string refreshToken)
+        => Tokens().Single(t => t.TokenHash == RefreshTokenService.Hash(refreshToken));
 
     private sealed class Token : ITokenService
     {
-        public string CreateToken(decimal userId, string login, decimal roleId, string? matricule, IEnumerable<int> rights) => "FAKE_TOKEN";
+        public string CreateToken(TokenSubject subject) => "FAKE_TOKEN";
     }
 
     private sealed class Mail : IEmailService
     {
         public bool EstConfigure => true;
         public Task<bool> EnvoyerAsync(EmailMessage message, CancellationToken cancellationToken = default) => Task.FromResult(true);
-        public Task<bool> SendUserCredentialsAsync(string? email, string? pseudo, string? password, string? nom, string? prenom, CancellationToken cancellationToken = default) => Task.FromResult(true);
-        public Task<bool> SendUserUpdateAsync(string? email, string? pseudo, string? newPassword, string? nom, string? prenom, bool pseudoChanged, bool passwordChanged, CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public Task<bool> SendUserCredentialsAsync(AccountMailRecipient destinataire, string? password, CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public Task<bool> SendUserUpdateAsync(AccountMailRecipient destinataire, string? newPassword, bool pseudoChanged, bool passwordChanged, CancellationToken cancellationToken = default) => Task.FromResult(true);
     }
 }

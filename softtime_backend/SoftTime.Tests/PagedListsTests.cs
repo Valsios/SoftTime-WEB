@@ -1,5 +1,7 @@
 using System.Linq.Expressions;
+
 using SoftTime.Application.Services;
+using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
 
@@ -14,160 +16,163 @@ public class PagedListsTests
     [Fact]
     public void Page_EmptySource_ReturnsOnePage()
     {
+        // Act
         var result = PagedLists.Page(Array.Empty<int>(), null, null);
 
-        Assert.Empty(result.Items);
-        Assert.Equal(0, result.Total);
-        Assert.Equal(1, result.Page);
-        Assert.Equal(PaginationRules.TailleDefaut, result.PageSize);
-        Assert.Equal(1, result.TotalPages);
+        // Assert
+        result.Items.Should().BeEmpty();
+        result.Total.Should().Be(0);
+        result.Page.Should().Be(1);
+        result.PageSize.Should().Be(PaginationRules.TailleDefaut);
+        result.TotalPages.Should().Be(1);
     }
 
     [Fact]
-    public void Page_ClampsPageToLastPage()
+    public void Page_PageBeyondLast_ClampsToLastPage()
     {
+        // Act
         var result = PagedLists.Page(Enumerable.Range(1, 25).ToList(), page: 10, pageSize: 10);
 
-        Assert.Equal(3, result.Page);
-        Assert.Equal(3, result.TotalPages);
-        Assert.Equal(5, result.Items.Count);
-        Assert.Equal(21, result.Items[0]);
-        Assert.Equal(25, result.Items[^1]);
+        // Assert
+        result.Page.Should().Be(3);
+        result.TotalPages.Should().Be(3);
+        result.Items.Count.Should().Be(5);
+        result.Items[0].Should().Be(21);
+        result.Items[^1].Should().Be(25);
     }
 
     [Theory]
     [InlineData(0, 1)]
     [InlineData(-4, 1)]
     [InlineData(2, 2)]
-    public void Page_NormalizesPage(int demandee, int attendue)
+    public void Page_InvalidPage_IsNormalized(int demandee, int attendue)
     {
+        // Act
         var result = PagedLists.Page(Enumerable.Range(1, 100).ToList(), demandee, 10);
 
-        Assert.Equal(attendue, result.Page);
+        // Assert
+        result.Page.Should().Be(attendue);
     }
 
     [Fact]
-    public void Page_CapsPageSizeAtMaximum()
+    public void Page_PageSizeAboveMaximum_IsCapped()
     {
+        // Act
         var result = PagedLists.Page(Enumerable.Range(1, 200).ToList(), page: 1, pageSize: 5000);
 
-        Assert.Equal(PaginationRules.TailleMax, result.PageSize);
-        Assert.Equal(PaginationRules.TailleMax, result.Items.Count);
-        Assert.Equal(2, result.TotalPages);
+        // Assert
+        result.PageSize.Should().Be(PaginationRules.TailleMax);
+        result.Items.Count.Should().Be(PaginationRules.TailleMax);
+        result.TotalPages.Should().Be(2);
     }
 
     [Fact]
-    public void Page_FallsBackOnDefaultPageSize()
+    public void Page_NoPageSize_UsesDefault()
     {
+        // Act
         var result = PagedLists.Page(Enumerable.Range(1, 120).ToList(), page: null, pageSize: null);
 
-        Assert.Equal(PaginationRules.TailleDefaut, result.PageSize);
-        Assert.Equal(3, result.TotalPages);
-        Assert.Equal(50, result.Items.Count);
+        // Assert
+        result.PageSize.Should().Be(PaginationRules.TailleDefaut);
+        result.TotalPages.Should().Be(3);
+        result.Items.Count.Should().Be(50);
     }
 
     [Fact]
-    public void Page_PreservesOrder()
+    public void Page_OrderedSource_PreservesOrder()
     {
+        // Arrange
         var source = new[] { "c", "a", "b" };
 
+        // Act
         var result = PagedLists.Page(source, 1, 10);
 
-        Assert.Equal(source, result.Items);
+        // Assert
+        result.Items.Should().Equal(source);
     }
 
     [Fact]
-    public async Task PageAsync_CountsAndPages()
+    public async Task PageAsync_RepositorySource_CountsAndPages()
     {
+        // Arrange
         var repository = new FakeRepository<Item>(
             Enumerable.Range(1, 120).Select(i => new Item(i)).ToList());
 
-        var result = await PagedLists.PageAsync(
-            repository,
-            _ => true,
-            q => q.OrderBy(x => x.Value),
-            page: 2,
-            pageSize: 50,
-            map: x => x.Value * 10);
+        // Act
+        var result = await PagedLists.From(repository, _ => true, q => q.OrderBy(x => x.Value)).PageAsync(new PageRequest(2, 50), x => x.Value * 10);
 
-        Assert.Equal(120, result.Total);
-        Assert.Equal(2, result.Page);
-        Assert.Equal(50, result.PageSize);
-        Assert.Equal(3, result.TotalPages);
-        Assert.Equal(50, result.Items.Count);
-        Assert.Equal(510, result.Items[0]);
-        Assert.Equal(1000, result.Items[^1]);
+        // Assert
+        result.Total.Should().Be(120);
+        result.Page.Should().Be(2);
+        result.PageSize.Should().Be(50);
+        result.TotalPages.Should().Be(3);
+        result.Items.Count.Should().Be(50);
+        result.Items[0].Should().Be(510);
+        result.Items[^1].Should().Be(1000);
     }
 
     [Fact]
     public async Task PageAsync_EmptySource_DoesNotReadItems()
     {
+        // Arrange
         var repository = new FakeRepository<Item>(Array.Empty<Item>());
 
-        var result = await PagedLists.PageAsync(
-            repository,
-            _ => false,
-            q => q.OrderBy(x => x.Value),
-            page: 3,
-            pageSize: 50,
-            map: x => x.Value);
+        // Act
+        var result = await PagedLists.From(repository, _ => false, q => q.OrderBy(x => x.Value)).PageAsync(new PageRequest(3, 50), x => x.Value);
 
-        Assert.Empty(result.Items);
-        Assert.Equal(0, result.Total);
-        Assert.Equal(1, result.Page);
-        Assert.Equal(1, result.TotalPages);
+        // Assert
+        result.Items.Should().BeEmpty();
+        result.Total.Should().Be(0);
+        result.Page.Should().Be(1);
+        result.TotalPages.Should().Be(1);
     }
 
     [Fact]
-    public async Task PageAsync_AppliesPredicateAndClampsPage()
+    public async Task PageAsync_PredicateAndPageBeyondLast_FiltersAndClamps()
     {
+        // Arrange
         var repository = new FakeRepository<Item>(
             Enumerable.Range(1, 25).Select(i => new Item(i)).ToList());
 
-        var result = await PagedLists.PageAsync(
-            repository,
-            x => x.Value % 2 == 0,
-            q => q.OrderBy(x => x.Value),
-            page: 99,
-            pageSize: 10,
-            map: x => x.Value);
+        // Act
+        var result = await PagedLists.From(repository, x => x.Value % 2 == 0, q => q.OrderBy(x => x.Value)).PageAsync(new PageRequest(99, 10), x => x.Value);
 
-        Assert.Equal(12, result.Total);
-        Assert.Equal(2, result.Page);
-        Assert.Equal(2, result.TotalPages);
-        Assert.Equal(new[] { 22, 24 }, result.Items);
+        // Assert
+        result.Total.Should().Be(12);
+        result.Page.Should().Be(2);
+        result.TotalPages.Should().Be(2);
+        result.Items.Should().Equal(new[] { 22, 24 });
     }
 
     [Fact]
     public void Page_PageExtreme_ClampsToLastPage()
     {
+        // Act
         var result = PagedLists.Page(Enumerable.Range(1, 25).ToList(), page: int.MaxValue, pageSize: 10);
 
-        Assert.Equal(3, result.Page);
-        Assert.Equal(3, result.TotalPages);
-        Assert.Equal(5, result.Items.Count);
-        Assert.Equal(21, result.Items[0]);
-        Assert.Equal(25, result.Items[^1]);
+        // Assert
+        result.Page.Should().Be(3);
+        result.TotalPages.Should().Be(3);
+        result.Items.Count.Should().Be(5);
+        result.Items[0].Should().Be(21);
+        result.Items[^1].Should().Be(25);
     }
 
     [Fact]
     public async Task PageAsync_PageExtreme_ClampsToLastPage()
     {
+        // Arrange
         var repository = new FakeRepository<Item>(
             Enumerable.Range(1, 25).Select(i => new Item(i)).ToList());
 
-        var result = await PagedLists.PageAsync(
-            repository,
-            _ => true,
-            q => q.OrderBy(x => x.Value),
-            page: int.MaxValue,
-            pageSize: 10,
-            map: x => x.Value);
+        // Act
+        var result = await PagedLists.From(repository, _ => true, q => q.OrderBy(x => x.Value)).PageAsync(new PageRequest(int.MaxValue, 10), x => x.Value);
 
-        Assert.Equal(25, result.Total);
-        Assert.Equal(3, result.Page);
-        Assert.Equal(3, result.TotalPages);
-        Assert.Equal(new[] { 21, 22, 23, 24, 25 }, result.Items);
+        // Assert
+        result.Total.Should().Be(25);
+        result.Page.Should().Be(3);
+        result.TotalPages.Should().Be(3);
+        result.Items.Should().Equal(new[] { 21, 22, 23, 24, 25 });
     }
 
     private sealed record Item(int Value);

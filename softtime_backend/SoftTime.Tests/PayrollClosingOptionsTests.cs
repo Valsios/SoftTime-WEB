@@ -12,49 +12,53 @@ public class PayrollClosingOptionsTests
     private static readonly DateTime From = new(2025, 11, 10);
     private static readonly DateTime To = new(2025, 11, 30);
 
-    private static readonly T_HS_VALIDER SemaineValidee =
-        new() { MATRICULES = "00369", DATE_DEB = Lundi, DATE_FIN = Lundi.AddDays(6), VALIDATION_HS = true };
+    private static readonly HsValidee SemaineValidee =
+        new() { Matricules = "00369", DateDeb = Lundi, DateFin = Lundi.AddDays(6), ValidationHs = true };
 
     private static IReadOnlyList<ClosingAnomaly> Incomplets(
         ClosingRulesOptions? options,
-        IReadOnlyList<T_HEURECORRIGER>? corrections = null)
-        => PayrollClosingRules.PointagesIncomplets(
-            new[] { new T_CARDPAIE { ID = 1, SAGE_MATRICULE = "00369" } },
-            Array.Empty<T_PLANNING_SAL>(),
-            new[] { new T_POINTAGE { MATRICULE_SAGE = "369", DATE_POINTAGE = Mercredi, HEURE_POINTAGE = TimeSpan.FromHours(8) } },
-            corrections ?? Array.Empty<T_HEURECORRIGER>(),
+        IReadOnlyList<HeureCorrigee>? corrections = null)
+        => PunchCompletenessRules.PointagesIncomplets(
+            new EmployeeSources(new[] { new CardPaie { Id = 1, SageMatricule = "00369" } }, Array.Empty<PlanningSalarie>(), corrections ?? Array.Empty<HeureCorrigee>()),
+            new[] { new Pointage { MatriculeSage = "369", DatePointage = Mercredi, HeurePointage = TimeSpan.FromHours(8) } },
             new[] { SemaineValidee },
-            From, To, multiPointage: false, options);
+            new ClosingScope(From, To, false, options));
 
     [Fact]
-    public void IgnoreValidatedWeeks_DefaultIsTrue()
+    public void IgnoreValidatedWeeks_Default_IsTrue()
     {
-        Assert.True(ClosingRulesOptions.Default.IgnorerSemainesValidees);
-        Assert.True(new ClosingRulesOptions().IgnorerSemainesValidees);
+        ClosingRulesOptions.Default.IgnorerSemainesValidees.Should().BeTrue();
+        new ClosingRulesOptions().IgnorerSemainesValidees.Should().BeTrue();
     }
 
     [Fact]
     public void IgnoreValidatedWeeks_True_KeepsCurrentBehaviour()
     {
-        Assert.Empty(Incomplets(options: null));
-        Assert.Empty(Incomplets(new ClosingRulesOptions { IgnorerSemainesValidees = true }));
+        // Act & Assert
+        Incomplets(options: null).Should().BeEmpty();
+        Incomplets(new ClosingRulesOptions { IgnorerSemainesValidees = true }).Should().BeEmpty();
     }
 
     [Fact]
     public void IgnoreValidatedWeeks_False_ReportsDaysOfValidatedWeek()
     {
-        var anomalie = Assert.Single(Incomplets(new ClosingRulesOptions { IgnorerSemainesValidees = false }));
+        var anomalie = Incomplets(new ClosingRulesOptions { IgnorerSemainesValidees = false }).Should().ContainSingle().Which;
 
-        Assert.Equal(ClosingAnomalyType.PointageIncomplet, anomalie.Type);
-        Assert.Equal("369", anomalie.Matricule);
-        Assert.Equal(Mercredi, anomalie.Date);
+        anomalie.Type.Should().Be(ClosingAnomalyType.PointageIncomplet);
+        anomalie.Matricule.Should().Be("369");
+        anomalie.Date.Should().Be(Mercredi);
     }
 
     [Fact]
     public void IgnoreValidatedWeeks_False_StillIgnoresManualDays()
     {
-        var manuelle = new T_HEURECORRIGER { MATRICULE_SAGE = "369", DATE_POINTAGE_IN = Mercredi, ORIGINE = "MANUEL" };
+        // Arrange
+        var manuelle = new HeureCorrigee { MatriculeSage = "369", DatePointageIn = Mercredi, Origine = "MANUEL" };
 
-        Assert.Empty(Incomplets(new ClosingRulesOptions { IgnorerSemainesValidees = false }, new[] { manuelle }));
+        // Act
+        var result = Incomplets(new ClosingRulesOptions { IgnorerSemainesValidees = false }, new[] { manuelle });
+
+        // Assert
+        result.Should().BeEmpty();
     }
 }

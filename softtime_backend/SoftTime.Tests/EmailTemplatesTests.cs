@@ -1,5 +1,5 @@
+using SoftTime.Application.Abstractions.Notifications;
 using SoftTime.Application.Services;
-using SoftTime.Domain.Models;
 
 namespace SoftTime.Tests;
 
@@ -12,102 +12,91 @@ public class EmailTemplatesTests
     // ---- Échappement HTML ----
 
     [Fact]
-    public void EchapperHtml_NeutralizesMarkupCharacters()
+    public void EchapperHtml_MarkupCharacters_AreNeutralized()
     {
-        Assert.Equal("&lt;script&gt;", EmailTemplates.EchapperHtml("<script>"));
-        Assert.Equal("A &amp; B", EmailTemplates.EchapperHtml("A & B"));
-        Assert.Equal("&quot;", EmailTemplates.EchapperHtml("\""));
+        // Act & Assert
+        EmailTemplates.EchapperHtml("<script>").Should().Be("&lt;script&gt;");
+        EmailTemplates.EchapperHtml("A & B").Should().Be("A &amp; B");
+        EmailTemplates.EchapperHtml("\"").Should().Be("&quot;");
     }
 
     [Fact]
-    public void EchapperHtml_NullBecomesEmpty()
-        => Assert.Equal(string.Empty, EmailTemplates.EchapperHtml(null));
+    public void EchapperHtml_Null_ReturnsEmpty()
+    {
+        // Act
+        var result = EmailTemplates.EchapperHtml(null);
+
+        // Assert
+        result.Should().Be(string.Empty);
+    }
 
     [Fact]
-    public void Identifiants_EscapesInjectedMarkup()
+    public void Identifiants_InjectedMarkup_IsEscaped()
     {
+        // Act
         // Un nom saisi librement ne doit pas pouvoir casser le message ni y injecter de balise.
         var corps = EmailTemplates.Identifiants("<b>Nom</b>", "Ines", "login", "secret");
-        Assert.DoesNotContain("<b>Nom</b>", corps);
-        Assert.Contains("&lt;b&gt;Nom&lt;/b&gt;", corps);
+
+        // Assert
+        corps.Should().NotContain("<b>Nom</b>");
+        corps.Should().Contain("&lt;b&gt;Nom&lt;/b&gt;");
     }
 
     // ---- Identifiants ----
 
     [Fact]
-    public void Identifiants_ContainsLoginAndPassword()
+    public void Identifiants_Credentials_ContainsLoginAndPassword()
     {
+        // Act
         var corps = EmailTemplates.Identifiants("Rakoto", "Ines", "irakoto", "MotDePasse!42");
-        Assert.Contains("irakoto", corps);
-        Assert.Contains("MotDePasse!42", corps);
-        Assert.Contains("Ines", corps);
-        Assert.Contains("Rakoto", corps);
+
+        // Assert
+        corps.Should().Contain("irakoto");
+        corps.Should().Contain("MotDePasse!42");
+        corps.Should().Contain("Ines");
+        corps.Should().Contain("Rakoto");
     }
 
     [Fact]
-    public void Identifiants_UsesTheCredentialsSubject()
-        => Assert.Equal("Vos identifiants SoftTime", EmailTemplates.SujetIdentifiants);
+    public void Identifiants_Credentials_UsesTheCredentialsSubject()
+        => EmailTemplates.SujetIdentifiants.Should().Be("Vos identifiants SoftTime");
 
     [Fact]
-    public void Identifiants_ToleratesMissingValues()
+    public void Identifiants_MissingValues_AreTolerated()
     {
+        // Act
         var corps = EmailTemplates.Identifiants(null, null, null, null);
-        Assert.Contains("Bonjour", corps);
-        Assert.DoesNotContain("null", corps);
+
+        // Assert
+        corps.Should().Contain("Bonjour");
+        corps.Should().NotContain("null");
     }
 
     // ---- Mise à jour ----
 
     [Fact]
-    public void MiseAJour_MentionsOnlyWhatChanged()
+    public void MiseAJour_PartialChange_MentionsOnlyWhatChanged()
     {
-        var corps = EmailTemplates.MiseAJour("Rakoto", "Ines", "nouveau.login", null, loginModifie: true, motDePasseModifie: false);
-        Assert.Contains("nouveau.login", corps);
-        Assert.DoesNotContain("Nouveau mot de passe", corps);
+        // Act
+        var corps = EmailTemplates.MiseAJour(new AccountMailRecipient(null, "nouveau.login", "Rakoto", "Ines"), null, true, false);
+
+        // Assert
+        corps.Should().Contain("nouveau.login");
+        corps.Should().NotContain("Nouveau mot de passe");
     }
 
     [Fact]
-    public void MiseAJour_ShowsTheNewPasswordOnlyWhenItChanged()
+    public void MiseAJour_PasswordChanged_ShowsNewPasswordOnlyThen()
     {
-        var corps = EmailTemplates.MiseAJour("Rakoto", "Ines", "login", "NouveauMotDePasse!1", loginModifie: false, motDePasseModifie: true);
-        Assert.Contains("NouveauMotDePasse!1", corps);
-        Assert.DoesNotContain("Nouvel identifiant", corps);
+        // Act
+        var corps = EmailTemplates.MiseAJour(new AccountMailRecipient(null, "login", "Rakoto", "Ines"), "NouveauMotDePasse!1", false, true);
+
+        // Assert
+        corps.Should().Contain("NouveauMotDePasse!1");
+        corps.Should().NotContain("Nouvel identifiant");
     }
 
     [Fact]
-    public void MiseAJour_UsesTheUpdateSubject()
-        => Assert.Equal("Mise à jour de vos identifiants SoftTime", EmailTemplates.SujetMiseAJour);
-}
-
-/// <summary>Réglages SMTP : le service d'envoi doit rester inactif tant qu'ils sont incomplets.</summary>
-public class EmailSettingsTests
-{
-    [Fact]
-    public void EstConfigure_RequiresHostAndFromAddress()
-    {
-        Assert.False(new EmailSettings(null, 587, true, null, null, null, null).EstConfigure);
-        Assert.False(new EmailSettings("smtp.exemple.com", 587, true, null, null, null, null).EstConfigure);
-        Assert.False(new EmailSettings(null, 587, true, null, null, "no-reply@exemple.com", null).EstConfigure);
-        Assert.True(new EmailSettings("smtp.exemple.com", 587, true, null, null, "no-reply@exemple.com", null).EstConfigure);
-    }
-
-    [Theory]
-    [InlineData(0)]
-    [InlineData(-1)]
-    [InlineData(70000)]
-    public void PortEffectif_FallsBackOnDefaultPort(int port)
-        => Assert.Equal(EmailSettings.PortDefaut, new EmailSettings("smtp.exemple.com", port, true, null, null, "a@b.c", null).PortEffectif);
-
-    [Fact]
-    public void PortEffectif_KeepsAValidPort()
-        => Assert.Equal(25, new EmailSettings("smtp.exemple.com", 25, false, null, null, "a@b.c", null).PortEffectif);
-
-    [Fact]
-    public void NomExpediteur_FallsBackOnTheAddress()
-    {
-        Assert.Equal("SoftTime", new EmailSettings("h", 587, true, null, null, "a@b.c", "SoftTime").NomExpediteur);
-        Assert.Equal("a@b.c", new EmailSettings("h", 587, true, null, null, "a@b.c", null).NomExpediteur);
-        // Un nom réduit à des espaces est traité comme absent.
-        Assert.Equal("a@b.c", new EmailSettings("h", 587, true, null, null, "a@b.c", "   ").NomExpediteur);
-    }
+    public void MiseAJour_AnyChange_UsesTheUpdateSubject()
+        => EmailTemplates.SujetMiseAJour.Should().Be("Mise à jour de vos identifiants SoftTime");
 }

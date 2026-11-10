@@ -9,38 +9,38 @@ public class UserPermissionsTests
     public void UserDetailedPermissionsDto_Default_IsEmpty()
     {
         var dto = new UserDetailedPermissionsDto();
-        Assert.Equal(0, dto.UserId);
-        Assert.Empty(dto.GrantedPermissions);
-        Assert.False(dto.IsCustomized);
+        dto.UserId.Should().Be(0);
+        dto.GrantedPermissions.Should().BeEmpty();
+        dto.IsCustomized.Should().BeFalse();
     }
 
     [Fact]
-    public void UserDetailedPermissionsDto_StoresPermissions()
+    public void UserDetailedPermissionsDto_Constructor_StoresPermissions()
     {
         var perms = new List<string> { "SAGE:DB1:READ", "PARAMS:USERS" };
         var dto = new UserDetailedPermissionsDto(5, perms, true);
 
-        Assert.Equal(5, dto.UserId);
-        Assert.Equal(2, dto.GrantedPermissions.Count);
-        Assert.True(dto.IsCustomized);
-        Assert.Contains("SAGE:DB1:READ", dto.GrantedPermissions);
-        Assert.Contains("PARAMS:USERS", dto.GrantedPermissions);
+        dto.UserId.Should().Be(5);
+        dto.GrantedPermissions.Count.Should().Be(2);
+        dto.IsCustomized.Should().BeTrue();
+        dto.GrantedPermissions.Should().Contain("SAGE:DB1:READ");
+        dto.GrantedPermissions.Should().Contain("PARAMS:USERS");
     }
 
     [Fact]
     public void T_USER_PERMISSION_InitializesCorrectly()
     {
-        var entity = new T_USER_PERMISSION
+        var entity = new UserPermission
         {
-            ID = 1,
-            IDRESPONSABLE = 10,
-            PERMISSION_CODE = "POINTEUSE:CLOCK1:READ",
-            IS_GRANTED = true
+            Id = 1,
+            IdResponsable = 10,
+            PermissionCode = "POINTEUSE:CLOCK1:READ",
+            IsGranted = true
         };
 
-        Assert.Equal(1, entity.ID);
-        Assert.Equal(10, entity.IDRESPONSABLE);
-        Assert.Equal("POINTEUSE:CLOCK1:READ", entity.PERMISSION_CODE);
-        Assert.True(entity.IS_GRANTED);
+        entity.Id.Should().Be(1);
+        entity.IdResponsable.Should().Be(10);
+        entity.PermissionCode.Should().Be("POINTEUSE:CLOCK1:READ");
+        entity.IsGranted.Should().BeTrue();
     }
 }

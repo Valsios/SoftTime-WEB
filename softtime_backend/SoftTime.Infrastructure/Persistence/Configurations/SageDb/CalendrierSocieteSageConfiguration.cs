@@ -1,0 +1,31 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
+using SoftTime.Domain.Entities.Sage;
+
+namespace SoftTime.Infrastructure.Persistence.Configurations.SageDb;
+
+public sealed class CalendrierSocieteSageConfiguration : IEntityTypeConfiguration<CalendrierSocieteSage>
+{
+    public void Configure(EntityTypeBuilder<CalendrierSocieteSage> builder)
+    {
+        builder.ToTable("T_GHRCAL_SOCIETE");
+        builder.HasKey(x => x.IdGHRCal);
+        ConfigureDateColumns(builder);
+        ConfigureValueColumns(builder);
+    }
+
+    private static void ConfigureDateColumns(EntityTypeBuilder<CalendrierSocieteSage> builder)
+    {
+        builder.Property(x => x.PeriodeDebut).HasColumnName("PeriodeDebut").IsRequired(false);
+        builder.Property(x => x.PeriodeFin).HasColumnName("PeriodeFin").IsRequired(false);
+    }
+
+    private static void ConfigureValueColumns(EntityTypeBuilder<CalendrierSocieteSage> builder)
+    {
+        builder.Property(x => x.IdGHRCal).HasColumnName("IdGHRCal").ValueGeneratedOnAdd();
+        builder.Property(x => x.ApresMidi).HasColumnName("ApresMidi").IsRequired(false);
+        builder.Property(x => x.EtatJour).HasColumnName("EtatJour").IsRequired(false);
+        builder.Property(x => x.Matin).HasColumnName("Matin").IsRequired(false);
+    }
+}

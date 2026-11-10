@@ -15,12 +15,12 @@ export class AuthService extends ApiService {
 
   login(body: LoginRequest): Observable<LoginResponse> {
     return this.http
-      .post<LoginResponse>(this.url('/api/auth/login'), body)
+      .post<LoginResponse>(this.url('/api/v1/auth/login'), body)
       .pipe(tap((res) => this.session.setSession(res)));
   }
 
   me(): Observable<LoginResponse> {
-    return this.http.get<LoginResponse>(this.url('/api/auth/me'));
+    return this.http.get<LoginResponse>(this.url('/api/v1/auth/me'));
   }
 
   refreshMe(): Observable<LoginResponse> {
@@ -38,12 +38,12 @@ export class AuthService extends ApiService {
 
   /** Installation vierge (aucun compte) : le client affiche l'écran de création de l'administrateur. */
   isFirstRun(): Observable<boolean> {
-    return this.http.get<boolean>(this.url('/api/auth/is-first-run'));
+    return this.http.get<boolean>(this.url('/api/v1/auth/is-first-run'));
   }
 
   /** Crée le premier compte administrateur (refusé dès qu'un compte existe). */
   createAdmin(body: AdminSetupRequest): Observable<AdminSetupResult> {
-    return this.http.post<AdminSetupResult>(this.url('/api/auth/create-admin'), body);
+    return this.http.post<AdminSetupResult>(this.url('/api/v1/auth/create-admin'), body);
   }
 
   /** Déconnexion : le jeton de rafraîchissement est révoqué côté serveur, puis la session locale est effacée. */

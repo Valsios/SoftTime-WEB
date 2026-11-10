@@ -83,14 +83,14 @@ public static class SearchText
         || string.Equals(name, "OID", StringComparison.OrdinalIgnoreCase)
         || string.Equals(name, "ID", StringComparison.OrdinalIgnoreCase);
 
-    private static string ToText(object value) => value switch
+    private static string ToText(object? value) => value switch
     {
         string text => text,
         DateTime date => date.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture),
         TimeSpan time => time.ToString(@"hh\:mm", CultureInfo.InvariantCulture),
         bool flag => flag ? "oui" : "non",
         IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture) ?? string.Empty,
-        _ => value.ToString() ?? string.Empty,
+        _ => value?.ToString() ?? string.Empty,
     };
 
     private static string ForComparison(string value)

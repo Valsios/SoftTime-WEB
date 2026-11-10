@@ -1,7 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+
 using SoftTime.Api.Authorization;
-using SoftTime.Application.Abstractions;
+using SoftTime.Api.Responses;
+using SoftTime.Application.Abstractions.Ml;
+using SoftTime.Application.Abstractions.Permissions;
+using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.Security;
 using SoftTime.Application.Services;
 using SoftTime.Domain;
@@ -15,22 +19,22 @@ namespace SoftTime.Api.Controllers;
 /// </summary>
 [ApiController]
 [Authorize]
-[Route("api/predictions")]
+[Route("api/v1/predictions")]
 [Tags("Prévisions")]
-public class PredictionsController : ControllerBase
+public class PredictionsController : ApiControllerBase
 {
-    private readonly MlPredictionService _predictions;
+    private readonly IMlForecastQueryService _predictions;
     private readonly MlJobCoordinator _jobs;
     private readonly ICurrentUser _user;
     private readonly ICompanyContext _company;
-    private readonly EffectiveRightsService _rights;
+    private readonly IEffectiveRightsService _rights;
 
     public PredictionsController(
-        MlPredictionService predictions,
+        IMlForecastQueryService predictions,
         MlJobCoordinator jobs,
         ICurrentUser user,
         ICompanyContext company,
-        EffectiveRightsService rights)
+        IEffectiveRightsService rights)
     {
         _predictions = predictions;
         _jobs = jobs;
@@ -40,21 +44,21 @@ public class PredictionsController : ControllerBase
     }
 
     [HttpGet("status")]
-    public async Task<IActionResult> Status(CancellationToken ct)
+    public async Task<IActionResult> StatusAsync(CancellationToken ct)
     {
         await EnsureCanReadAsync(ct);
         return Ok(await _predictions.GetStatusAsync(ct));
     }
 
     [HttpGet("job")]
-    public async Task<IActionResult> Job(CancellationToken ct)
+    public async Task<IActionResult> JobAsync(CancellationToken ct)
     {
         await EnsureCanReadAsync(ct);
         return Ok(_jobs.State);
     }
 
     [HttpGet("overtime")]
-    public async Task<IActionResult> Overtime([FromQuery] DateTime? week, CancellationToken ct)
+    public async Task<IActionResult> OvertimeAsync([FromQuery] DateTime? week, CancellationToken ct)
     {
         await EnsureCanReadAsync(ct);
         return Ok(await _predictions.GetHsForecastsAsync((week ?? DateTime.Today).Date, ct));
@@ -62,7 +66,7 @@ public class PredictionsController : ControllerBase
 
     /// <summary>Totaux HS prévus par semaine sur l'horizon.</summary>
     [HttpGet("overtime/horizon")]
-    public async Task<IActionResult> OvertimeHorizon(CancellationToken ct)
+    public async Task<IActionResult> OvertimeHorizonAsync(CancellationToken ct)
     {
         await EnsureCanReadAsync(ct);
         return Ok(await _predictions.GetHsHorizonAsync(ct));
@@ -70,7 +74,7 @@ public class PredictionsController : ControllerBase
 
     /// <summary>Prévu / réel des dernières semaines terminées.</summary>
     [HttpGet("overtime/accuracy")]
-    public async Task<IActionResult> OvertimeAccuracy([FromQuery] int? weeks, CancellationToken ct)
+    public async Task<IActionResult> OvertimeAccuracyAsync([FromQuery] int? weeks, CancellationToken ct)
     {
         await EnsureCanReadAsync(ct);
         return Ok(await _predictions.GetHsAccuracyAsync(weeks ?? 8, ct));
@@ -104,6 +108,6 @@ public class PredictionsController : ControllerBase
 
         return _jobs.TryEnqueue(job)
             ? Accepted(new { message })
-            : Conflict(new { message = "Un traitement ML est déjà en cours." });
+            : ApiErrors.Result(StatusCodes.Status409Conflict, "Un traitement ML est déjà en cours.");
     }
 }

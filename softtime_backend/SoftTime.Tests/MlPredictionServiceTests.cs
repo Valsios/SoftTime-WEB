@@ -1,9 +1,13 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using SoftTime.Application.Abstractions;
+using Microsoft.Extensions.Options;
+
+using SoftTime.Application.Abstractions.Ml;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.Ml;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models.Ml;
+using SoftTime.Infrastructure.Services.Ml;
+using SoftTime.Infrastructure.Services.RequestContext;
 
 namespace SoftTime.Tests;
 
@@ -17,81 +21,81 @@ public class MlPredictionServiceTests
     private static readonly DateTime Lundi = MondayOf(DateTime.Today);
 
     [Fact]
-    public async Task L_horizon_totalise_chaque_semaine_et_signale_les_semaines_sans_prevision()
+    public async Task GetHsHorizonAsync_SemainesMixtes_TotaliseEtSignaleLesSemainesSansPrevision()
     {
+        // Arrange
         var store = new FakeMlStore();
-        Montant(store, "001", Lundi, 24m, 22m, 26m);  // au-delà du plafond exonéré de 20 h
-        Montant(store, "002", Lundi, 20m, 18m, 22m);  // au plafond : pas au-delà
+        Montant(store, "001", Lundi, 24m, 22m, 26m);
+        Montant(store, "002", Lundi, 20m, 18m, 22m);
         Montant(store, "001", Lundi.AddDays(7), 2.5m, 0.5m, 4.5m);
 
+        // Act
         var semaines = await Service(store).GetHsHorizonAsync();
 
-        Assert.Equal(4, semaines.Count);
-        Assert.Equal(Lundi, semaines[0].SemaineDebut);
-        Assert.Equal(2, semaines[0].Salaries);
-        Assert.Equal(1, semaines[0].AuDelaPlafond);
-        Assert.Equal(44m, semaines[0].HeuresPrevues);
-        Assert.Equal(40m, semaines[0].BorneBasse);
-        Assert.Equal(48m, semaines[0].BorneHaute);
-        Assert.Equal(2.5m, semaines[1].HeuresPrevues);
+        // Assert
+        semaines.Count.Should().Be(4);
+        semaines[0].SemaineDebut.Should().Be(Lundi);
+        semaines[0].Salaries.Should().Be(2);
+        semaines[0].AuDelaPlafond.Should().Be(1);
+        semaines[0].HeuresPrevues.Should().Be(44m);
+        semaines[0].BorneBasse.Should().Be(40m);
+        semaines[0].BorneHaute.Should().Be(48m);
+        semaines[1].HeuresPrevues.Should().Be(2.5m);
         // Planning pas encore saisi : la semaine existe, vide.
-        Assert.Equal(0, semaines[3].Salaries);
-        Assert.Equal(0m, semaines[3].HeuresPrevues);
+        semaines[3].Salaries.Should().Be(0);
+        semaines[3].HeuresPrevues.Should().Be(0m);
     }
 
     [Fact]
-    public async Task Le_suivi_compare_la_prevision_aux_hs_reelles_des_semaines_terminees()
+    public async Task GetHsAccuracyAsync_SemainesTerminees_ComparePrevisionEtHsReelles()
     {
+        // Arrange
         var store = new FakeMlStore();
         var semainePassee = Lundi.AddDays(-7);
-        Montant(store, "001", semainePassee, 4m, 2m, 6m);   // réel 5 : dans la fourchette, écart 1
-        Montant(store, "002", semainePassee, 1m, 0m, 2m);   // réel 4 : hors fourchette, écart 3
-        Montant(store, "003", semainePassee, 2m, 0m, 4m);   // pas de ligne réelle : ignoré
-        Montant(store, "001", Lundi, 9m, 7m, 11m);          // semaine en cours : pas encore comparable
+        Montant(store, "001", semainePassee, 4m, 2m, 6m);
+        Montant(store, "002", semainePassee, 1m, 0m, 2m);
+        Montant(store, "003", semainePassee, 2m, 0m, 4m);
+        Montant(store, "001", Lundi, 9m, 7m, 11m);
         Reel(store, "001", semainePassee, 5m);
         Reel(store, "002", semainePassee, 4m);
 
+        // Act
         var suivi = await Service(store).GetHsAccuracyAsync(8);
 
-        var semaine = Assert.Single(suivi);
-        Assert.Equal(semainePassee, semaine.SemaineDebut);
-        Assert.Equal(2, semaine.Salaries);
-        Assert.Equal(5m, semaine.HeuresPrevues);
-        Assert.Equal(9m, semaine.HeuresReelles);
-        Assert.Equal(2m, semaine.EcartMoyen);
-        Assert.Equal(0.5, semaine.Couverture);
+        // Assert
+        var semaine = suivi.Should().ContainSingle().Which;
+        semaine.SemaineDebut.Should().Be(semainePassee);
+        semaine.Salaries.Should().Be(2);
+        semaine.HeuresPrevues.Should().Be(5m);
+        semaine.HeuresReelles.Should().Be(9m);
+        semaine.EcartMoyen.Should().Be(2m);
+        semaine.Couverture.Should().Be(0.5);
     }
 
     [Fact]
-    public async Task Sans_historique_le_suivi_est_vide()
+    public async Task GetHsAccuracyAsync_SansHistorique_RetourneVide()
     {
+        // Act
         var suivi = await Service(new FakeMlStore()).GetHsAccuracyAsync(8);
 
-        Assert.Empty(suivi);
+        // Assert
+        suivi.Should().BeEmpty();
     }
 
     // ------------------------------------------------------------------ fixtures
 
-    private static MlPredictionService Service(IMlStore store)
+    private static MlForecastQueryService Service(IMlStore store)
     {
         var uow = new InMemoryUnitOfWork();
-        uow.Get<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 1, NOM_BD = Sage });
+        uow.Get<BddSage>().Items.Add(new BddSage { Id = 1, NomBd = Sage });
         var tenant = new TenantConnectionService(
             uow, new FakeCompanyContext(), new FakeCurrentUser(),
             SoftTime.Tests.Http.TestRights.Service(uow), NullLogger<TenantConnectionService>.Instance);
-        var source = new FakeExternalSourceService();
-        var options = new MlOptions();
-        var dataset = new MlDatasetService(
-            uow, tenant, new SageLeaveCalendar(tenant, source), source, store,
-            options, NullLogger<MlDatasetService>.Instance);
-
-        return new MlPredictionService(
-            dataset, store, new FakeMlPredictor(), uow, tenant, options,
-            NullLogger<MlPredictionService>.Instance);
+        return new MlForecastQueryService(store, new FakeMlPredictor(), uow, tenant, Options.Create(new MlOptions()));
     }
 
     private static void Montant(FakeMlStore store, string matricule, DateTime semaine, decimal valeur, decimal basse, decimal haute)
-        => store.Predictions.Add(new T_ML_PREDICTION
+        => store.Predictions.Add(new MlPrediction
         {
             BddSage = Sage,
             Matricule = matricule,
@@ -106,12 +110,12 @@ public class MlPredictionServiceTests
         });
 
     private static void Reel(FakeMlStore store, string matricule, DateTime semaine, decimal hs)
-        => store.Weekly.Add(new T_ML_SALARIE_SEMAINE
+        => store.Weekly.Add(new MlSalarieSemaine
         {
             BddSage = Sage,
             Matricule = matricule,
             SemaineDebut = semaine,
-            HS = hs,
+            Hs = hs,
             VersionSchema = MlSchema.Version,
             SourceGenereeLe = DateTime.Now
         });

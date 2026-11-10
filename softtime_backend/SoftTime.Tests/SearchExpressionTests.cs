@@ -11,14 +11,19 @@ public class SearchExpressionTests
     }
 
     [Fact]
-    public void EmptySearchReturnsNull()
+    public void For_EmptySearch_ReturnsNull()
     {
-        Assert.Null(SearchExpression.For<Row>("  ", row => row.Nom));
+        // Act
+        var result = SearchExpression.For<Row>("  ", row => row.Nom);
+
+        // Assert
+        result.Should().BeNull();
     }
 
     [Fact]
-    public void BuildsOrAcrossFieldsAndAndAcrossWords()
+    public void For_SeveralWordsAndFields_BuildsOrAcrossFieldsAndAndAcrossWords()
     {
+        // Arrange
         var rows = new[]
         {
             new Row { Nom = "Dupont René", Code = "MAT-01" },
@@ -26,40 +31,49 @@ public class SearchExpressionTests
             new Row { Nom = "Dupont", Code = "MAT-03" },
         }.AsQueryable();
 
+        // Act
         var predicate = SearchExpression.For<Row>("dupont ren", row => row.Nom, row => row.Code);
 
-        Assert.NotNull(predicate);
+        // Assert
+        predicate.Should().NotBeNull();
         var result = rows.Where(predicate!).ToList();
-        Assert.Single(result);
-        Assert.Equal("MAT-01", result[0].Code);
+        result.Should().ContainSingle();
+        result[0].Code.Should().Be("MAT-01");
     }
 
     [Fact]
-    public void NullFieldDoesNotMatch()
+    public void For_NullField_DoesNotMatch()
     {
+        // Arrange
         var rows = new[] { new Row { Nom = null, Code = "X" } }.AsQueryable();
+
+        // Act
         var predicate = SearchExpression.For<Row>("x", row => row.Nom);
 
-        Assert.NotNull(predicate);
-        Assert.Empty(rows.Where(predicate!).ToList());
+        // Assert
+        predicate.Should().NotBeNull();
+        rows.Where(predicate!).ToList().Should().BeEmpty();
     }
 
     [Fact]
-    public void AndAlsoCombinesPredicates()
+    public void AndAlso_TwoPredicates_CombinesThem()
     {
+        // Arrange
         var rows = new[]
         {
             new Row { Nom = "Dupont", Code = "A" },
             new Row { Nom = "Dupont", Code = "B" },
             new Row { Nom = "Martin", Code = "A" },
         }.AsQueryable();
-
         var left = SearchExpression.For<Row>("dupont", row => row.Nom)!;
         var right = SearchExpression.For<Row>("a", row => row.Code)!;
         var combined = SearchExpression.AndAlso(left, right);
 
+        // Act
         var result = rows.Where(combined).ToList();
-        Assert.Single(result);
-        Assert.Equal("A", result[0].Code);
+
+        // Assert
+        result.Should().ContainSingle();
+        result[0].Code.Should().Be("A");
     }
 }

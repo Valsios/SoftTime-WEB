@@ -1,14 +1,17 @@
 using AutoMapper;
+
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
-using SoftTime.Application.Abstractions;
+
+using SoftTime.Application.Abstractions.Authentication;
+using SoftTime.Application.Abstractions.Notifications;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
 using SoftTime.Application.Security;
-using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
+using SoftTime.Infrastructure.Services.Authentication;
 using SoftTime.Tests.Http;
 
 namespace SoftTime.Tests;
@@ -24,12 +27,12 @@ public class LoginUniquenessTests
     private const string AdminPassword = "FAKE-Admin-789!";
 
     private readonly LockingUnitOfWork _uow = new();
-    private readonly PasswordHasher<T_RESPONSABLE> _hasher = new();
+    private readonly PasswordHasher<Responsable> _hasher = new();
 
     public LoginUniquenessTests()
     {
-        _uow.Inner.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });
-        _uow.Inner.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 2, NOMROLE = "Utilisateur" });
+        _uow.Inner.Get<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
+        _uow.Inner.Get<Role>().Items.Add(new Role { IdRole = 2, NomRole = "Utilisateur" });
     }
 
     // ---------- Clé de login ----------
@@ -38,13 +41,13 @@ public class LoginUniquenessTests
     [InlineData("agent", "AGENT")]
     [InlineData("  Agent ", "AGENT")]
     [InlineData(null, "")]
-    public void Normalize_TrimsAndUppercases(string? login, string expected)
+    public void Normalize_PaddedMixedCaseLogin_TrimsAndUppercases(string? login, string expected)
     {
         // Act
         var key = LoginKey.Normalize(login);
 
         // Assert
-        Assert.Equal(expected, key);
+        key.Should().Be(expected);
     }
 
     // ---------- Connexion ----------
@@ -63,7 +66,7 @@ public class LoginUniquenessTests
         var response = await sut.LoginAsync(new LoginRequest(typed, Password));
 
         // Assert
-        Assert.Equal(2, response.UserId);
+        response.UserId.Should().Be(2);
     }
 
     [Fact]
@@ -78,7 +81,7 @@ public class LoginUniquenessTests
         var response = await sut.LoginAsync(new LoginRequest("agent", Password));
 
         // Assert
-        Assert.Equal(3, response.UserId);
+        response.UserId.Should().Be(3);
     }
 
     [Fact]
@@ -90,11 +93,11 @@ public class LoginUniquenessTests
         var sut = CreateAuth();
 
         // Act
-        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.LoginAsync(new LoginRequest("agent", Password)));
+        var ex = (await FluentActions.Awaiting(() => sut.LoginAsync(new LoginRequest("agent", Password))).Should().ThrowExactlyAsync<UnauthorizedException>()).Which;
 
         // Assert
-        Assert.Equal("Identifiants invalides.", ex.Message);
-        Assert.Empty(_uow.Inner.GetRepo<T_REFRESH_TOKEN>().Items);
+        ex.Message.Should().Be("Identifiants invalides.");
+        _uow.Inner.Get<RefreshTokenRecord>().Items.Should().BeEmpty();
     }
 
     // ---------- Unicité à l'enregistrement ----------
@@ -109,13 +112,13 @@ public class LoginUniquenessTests
         var sut = CreateAuth();
 
         // Act
-        var ex = await Assert.ThrowsAsync<FieldValidationException>(() =>
-            sut.SaveUserAsync(new UserDto(0, 2, "Autre", login, null, Password)));
+        var ex = (await FluentActions.Awaiting(() =>
+            sut.SaveUserAsync(new UserDto(0, 2, "Autre", login, null, Password))).Should().ThrowExactlyAsync<FieldValidationException>()).Which;
 
         // Assert
-        Assert.Equal("login", ex.Field);
-        Assert.Equal(LoginKey.TakenMessage, ex.Message);
-        Assert.Single(_uow.Inner.GetRepo<T_RESPONSABLE>().Items);
+        ex.Field.Should().Be("login");
+        ex.Message.Should().Be(LoginKey.TakenMessage);
+        _uow.Inner.Get<Responsable>().Items.Should().ContainSingle();
     }
 
     [Fact]
@@ -129,13 +132,13 @@ public class LoginUniquenessTests
         var saved = await sut.SaveUserAsync(new UserDto(2, 2, "Agent", "AGENT", null, null));
 
         // Assert
-        Assert.Equal("AGENT", saved.Login);
+        saved.Login.Should().Be("AGENT");
     }
 
     // ---------- Création initiale de l'administrateur ----------
 
     [Fact]
-    public async Task CreateAdminAsync_RunsUnderExclusiveLock()
+    public async Task CreateAdminAsync_ConcurrentCreation_RunsUnderExclusiveLock()
     {
         // Arrange
         var sut = CreateAuth();
@@ -144,8 +147,8 @@ public class LoginUniquenessTests
         await sut.CreateAdminAsync(new AdminSetupDto("Admin", "admin", AdminPassword, null));
 
         // Assert
-        Assert.Equal(new[] { "SoftTime.CreateAdmin" }, _uow.LockedResources);
-        Assert.Single(_uow.Inner.GetRepo<T_RESPONSABLE>().Items);
+        _uow.LockedResources.Should().Equal(new[] { "SoftTime.CreateAdmin" });
+        _uow.Inner.Get<Responsable>().Items.Should().ContainSingle();
     }
 
     [Fact]
@@ -156,13 +159,13 @@ public class LoginUniquenessTests
         var sut = CreateAuth();
 
         // Act
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            sut.CreateAdminAsync(new AdminSetupDto("Admin", "admin", AdminPassword, null)));
+        var ex = (await FluentActions.Awaiting(() =>
+            sut.CreateAdminAsync(new AdminSetupDto("Admin", "admin", AdminPassword, null))).Should().ThrowExactlyAsync<DomainException>()).Which;
 
         // Assert
-        Assert.StartsWith("Des comptes existent déjà", ex.Message);
-        var only = Assert.Single(_uow.Inner.GetRepo<T_RESPONSABLE>().Items);
-        Assert.Equal("intrus", only.LOGIN);
+        ex.Message.Should().StartWith("Des comptes existent déjà");
+        var only = _uow.Inner.Get<Responsable>().Items.Should().ContainSingle().Which;
+        only.Login.Should().Be("intrus");
     }
 
     [Fact]
@@ -178,9 +181,9 @@ public class LoginUniquenessTests
             Capture(() => second.CreateAdminAsync(new AdminSetupDto("Admin B", "admin-b", AdminPassword, null))));
 
         // Assert
-        Assert.Single(_uow.Inner.GetRepo<T_RESPONSABLE>().Items);
-        Assert.Single(results, r => r is null);
-        Assert.Single(results, r => r is InvalidOperationException);
+        _uow.Inner.Get<Responsable>().Items.Should().ContainSingle();
+        results.Where(r => r is null).Should().ContainSingle();
+        results.Should().ContainSingle(r => r is DomainException);
     }
 
     private static async Task<Exception?> Capture(Func<Task> action)
@@ -196,19 +199,19 @@ public class LoginUniquenessTests
         }
     }
 
-    private AuthService CreateAuth()
+    private AuthServices CreateAuth()
     {
         var mapper = new MapperConfiguration(c => c.AddProfile<MappingProfile>()).CreateMapper();
         var options = Options.Create(new AccountSecurityOptions());
-        return new AuthService(_uow, new Token(), mapper, new Mail(), new AdminCurrentUser(), TestRights.Service(_uow), _hasher,
+        return new AuthServices(_uow, new Token(), mapper, new Mail(), new AdminCurrentUser(), TestRights.Service(_uow), _hasher,
             new RefreshTokenService(_uow, options), options);
     }
 
     private void AddUser(decimal id, decimal role, string login)
     {
-        var user = new T_RESPONSABLE { IDRESPONSABLE = id, IDROLE = role, LOGIN = login, NOMRESPONSABLE = login };
-        user.PASSWORD = _hasher.HashPassword(user, Password);
-        _uow.Inner.GetRepo<T_RESPONSABLE>().Items.Add(user);
+        var user = new Responsable { IdResponsable = id, IdRole = role, Login = login, NomResponsable = login };
+        user.Password = _hasher.HashPassword(user, Password);
+        _uow.Inner.Get<Responsable>().Items.Add(user);
     }
 
     /// <summary>Unité de travail en mémoire dont le verrou exclusif sérialise réellement les appels.</summary>
@@ -216,7 +219,7 @@ public class LoginUniquenessTests
     {
         private readonly SemaphoreSlim _lock = new(1, 1);
 
-        public SnapshotInMemoryUnitOfWork Inner { get; } = new();
+        public InMemoryUnitOfWork Inner { get; } = new();
         public List<string> LockedResources { get; } = new();
         public Action? BeforeLockedAction { get; set; }
 
@@ -248,14 +251,14 @@ public class LoginUniquenessTests
 
     private sealed class Token : ITokenService
     {
-        public string CreateToken(decimal userId, string login, decimal roleId, string? matricule, IEnumerable<int> rights) => "FAKE_TOKEN";
+        public string CreateToken(TokenSubject subject) => "FAKE_TOKEN";
     }
 
     private sealed class Mail : IEmailService
     {
         public bool EstConfigure => true;
         public Task<bool> EnvoyerAsync(EmailMessage message, CancellationToken cancellationToken = default) => Task.FromResult(true);
-        public Task<bool> SendUserCredentialsAsync(string? email, string? pseudo, string? password, string? nom, string? prenom, CancellationToken cancellationToken = default) => Task.FromResult(true);
-        public Task<bool> SendUserUpdateAsync(string? email, string? pseudo, string? newPassword, string? nom, string? prenom, bool pseudoChanged, bool passwordChanged, CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public Task<bool> SendUserCredentialsAsync(AccountMailRecipient destinataire, string? password, CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public Task<bool> SendUserUpdateAsync(AccountMailRecipient destinataire, string? newPassword, bool pseudoChanged, bool passwordChanged, CancellationToken cancellationToken = default) => Task.FromResult(true);
     }
 }

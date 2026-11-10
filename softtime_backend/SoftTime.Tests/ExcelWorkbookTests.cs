@@ -1,5 +1,8 @@
 using System.Text.Json;
+
 using ClosedXML.Excel;
+
+using SoftTime.Application.DTOs;
 using SoftTime.Infrastructure.Excel;
 
 namespace SoftTime.Tests;
@@ -11,9 +14,10 @@ namespace SoftTime.Tests;
 public class ExcelWorkbookTests
 {
     [Fact]
-    public void WriteWorkbook_EcritPlusieursFeuillesEtConserveLesTypes()
+    public void WriteWorkbook_PlusieursFeuilles_EcritChaqueFeuilleEtConserveLesTypes()
     {
-        var bytes = ExcelHelper.WriteWorkbook(new[]
+        // Arrange
+        var bytes = new ExcelWorkbook().WriteWorkbook(new[]
         {
             new ExcelSheetContent(
                 "Synthèse",
@@ -32,51 +36,55 @@ public class ExcelWorkbookTests
                     new object?[] { "Semaine 40", 3 },
                 }),
         });
-
         using var stream = new MemoryStream(bytes);
         using var wb = new XLWorkbook(stream);
 
-        Assert.Equal(new[] { "Synthèse", "Périodes" }, wb.Worksheets.Select(w => w.Name));
+        // Act
+        var result = wb.Worksheets.Select(w => w.Name);
 
+        // Assert
+        result.Should().Equal(new[] { "Synthèse", "Périodes" });
         var synthese = wb.Worksheet("Synthèse");
-        Assert.Equal("Indicateur", synthese.Cell(1, 1).GetString());
-        Assert.Equal("Période", synthese.Cell(2, 1).GetString());
-        Assert.Equal(12, synthese.Cell(3, 2).GetValue<int>());
-        Assert.Equal(12.5, synthese.Cell(4, 2).GetValue<double>(), 3);
-
+        synthese.Cell(1, 1).GetString().Should().Be("Indicateur");
+        synthese.Cell(2, 1).GetString().Should().Be("Période");
+        synthese.Cell(3, 2).GetValue<int>().Should().Be(12);
+        synthese.Cell(4, 2).GetValue<double>().Should().BeApproximately(12.5, 0.0005);
         var periodes = wb.Worksheet("Périodes");
-        Assert.Equal(3, periodes.Cell(2, 2).GetValue<int>());
+        periodes.Cell(2, 2).GetValue<int>().Should().Be(3);
     }
 
     [Fact]
-    public void WriteWorkbook_NettoieEtDedupliqueLesNomsDeFeuilles()
+    public void WriteWorkbook_NomsInvalidesOuDoublons_NettoieEtDeduplique()
     {
-        var bytes = ExcelHelper.WriteWorkbook(new[]
+        // Arrange
+        var bytes = new ExcelWorkbook().WriteWorkbook(new[]
         {
             new ExcelSheetContent("Répartition/Catégorie", new[] { "A" }, Array.Empty<IReadOnlyList<object?>>()),
             new ExcelSheetContent("Répartition/Catégorie", new[] { "B" }, Array.Empty<IReadOnlyList<object?>>()),
             new ExcelSheetContent(new string('x', 40), new[] { "C" }, Array.Empty<IReadOnlyList<object?>>()),
         });
-
         using var stream = new MemoryStream(bytes);
         using var wb = new XLWorkbook(stream);
+
+        // Act
         var noms = wb.Worksheets.Select(w => w.Name).ToList();
 
-        Assert.Equal(3, noms.Count);
-        Assert.Contains("Répartition-Catégorie", noms);
-        Assert.Contains("Répartition-Catégorie (2)", noms);
-        Assert.All(noms, nom => Assert.True(nom.Length <= 31));
-        Assert.Equal(noms.Count, noms.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        // Assert
+        noms.Count.Should().Be(3);
+        noms.Should().Contain("Répartition-Catégorie");
+        noms.Should().Contain("Répartition-Catégorie (2)");
+        noms.Should().AllSatisfy(nom => (nom.Length <= 31).Should().BeTrue());
+        noms.Distinct(StringComparer.OrdinalIgnoreCase).Count().Should().Be(noms.Count);
     }
 
     [Fact]
-    public void WriteWorkbook_ConvertitLesValeursJsonEnCellulesTypees()
+    public void WriteWorkbook_ValeursJson_ConvertitEnCellulesTypees()
     {
+        // Arrange
         using var doc = JsonDocument.Parse(
             """{"entier":7,"decimal":2.5,"texte":"ok","booleen":true,"vide":null}""");
         var json = doc.RootElement;
-
-        var bytes = ExcelHelper.WriteWorkbook(new[]
+        var bytes = new ExcelWorkbook().WriteWorkbook(new[]
         {
             new ExcelSheetContent(
                 "JSON",
@@ -93,27 +101,29 @@ public class ExcelWorkbookTests
                     },
                 }),
         });
-
         using var stream = new MemoryStream(bytes);
-        using var wb = new XLWorkbook(stream);
-        var ws = wb.Worksheet("JSON");
+        using var sut = new XLWorkbook(stream);
 
-        Assert.Equal(7, ws.Cell(2, 1).GetValue<int>());
-        Assert.Equal(2.5, ws.Cell(2, 2).GetValue<double>(), 3);
-        Assert.Equal("ok", ws.Cell(2, 3).GetString());
-        Assert.True(ws.Cell(2, 4).GetValue<bool>());
-        Assert.True(ws.Cell(2, 5).IsEmpty());
+        // Act
+        var ws = sut.Worksheet("JSON");
+
+        // Assert
+        ws.Cell(2, 1).GetValue<int>().Should().Be(7);
+        ws.Cell(2, 2).GetValue<double>().Should().BeApproximately(2.5, 0.0005);
+        ws.Cell(2, 3).GetString().Should().Be("ok");
+        ws.Cell(2, 4).GetValue<bool>().Should().BeTrue();
+        ws.Cell(2, 5).IsEmpty().Should().BeTrue();
     }
 
     [Fact]
     public void WriteWorkbook_SansFeuille_ProduitUneFeuilleParDefaut()
     {
-        var bytes = ExcelHelper.WriteWorkbook(Array.Empty<ExcelSheetContent>());
+        var bytes = new ExcelWorkbook().WriteWorkbook(Array.Empty<ExcelSheetContent>());
 
         using var stream = new MemoryStream(bytes);
         using var wb = new XLWorkbook(stream);
 
-        Assert.Single(wb.Worksheets);
-        Assert.Equal("Données", wb.Worksheets.First().Name);
+        wb.Worksheets.Should().ContainSingle();
+        wb.Worksheets.First().Name.Should().Be("Données");
     }
 }

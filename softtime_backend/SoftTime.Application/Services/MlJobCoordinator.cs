@@ -2,17 +2,6 @@ using System.Threading.Channels;
 
 namespace SoftTime.Application.Services;
 
-/// <summary>Demande de traitement ML, exécutée par le service d'arrière-plan.</summary>
-public sealed record MlJobRequest(string? BddSage, bool FullRefresh, bool Train);
-
-/// <summary>État exposé par <c>GET /api/predictions/status</c>.</summary>
-public sealed record MlJobState(
-    bool Running,
-    string Message,
-    DateTime? StartedAt,
-    DateTime? FinishedAt,
-    string? LastError);
-
 /// <summary>
 /// File d'attente bornée à un job. Les endpoints admin enfilent et répondent 202 ; le service
 /// planifié consomme. Cela évite les requêtes HTTP longues et les doubles exécutions.

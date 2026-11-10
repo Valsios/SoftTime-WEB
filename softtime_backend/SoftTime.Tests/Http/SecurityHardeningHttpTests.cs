@@ -1,13 +1,15 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
+
 using SoftTime.Api.Middleware;
 using SoftTime.Api.Security;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Security;
-using SoftTime.Application.Services;
+using SoftTime.Infrastructure.Services.Authentication;
 
 namespace SoftTime.Tests.Http;
 
@@ -21,46 +23,49 @@ public class SecurityHardeningHttpTests : IClassFixture<ApiFactory>
 
     public SecurityHardeningHttpTests(ApiFactory factory) => _http = factory.CreateClient();
 
-    // ---------- Origine des exceptions ----------
-
-    [Fact]
-    public void IsApplication_ExceptionThrownBySoftTimeCode_IsTrue()
-    {
-        // Arrange
-        var ex = Catch(() => throw new InvalidOperationException("Règle métier."));
-
-        // Act
-        var result = ExceptionOrigin.IsApplication(ex);
-
-        // Assert
-        Assert.True(result);
-    }
-
-    [Fact]
-    public void IsApplication_ExceptionThrownByTheFramework_IsFalse()
-    {
-        // Arrange : levées par System.Linq et System.Collections.Generic, pas par SoftTime.
-        var linq = Catch(() => Enumerable.Empty<int>().First());
-        var dictionary = Catch(() => _ = new Dictionary<string, int>()["Password=secret"]);
-
-        // Act + Assert
-        Assert.IsType<InvalidOperationException>(linq);
-        Assert.False(ExceptionOrigin.IsApplication(linq));
-        Assert.IsType<KeyNotFoundException>(dictionary);
-        Assert.False(ExceptionOrigin.IsApplication(dictionary));
-    }
-
     // ---------- Middleware d'exceptions ----------
 
     [Fact]
     public async Task Middleware_BusinessError_ReturnsItsMessageAs400()
     {
         // Act
-        var (status, body) = await RunMiddleware(_ => throw new InvalidOperationException("Période déjà validée."));
+        var (status, body) = await RunMiddleware(_ => throw new DomainException("Période déjà validée."));
 
         // Assert
-        Assert.Equal(StatusCodes.Status400BadRequest, status);
-        Assert.Contains("Période déjà validée.", body);
+        status.Should().Be(StatusCodes.Status400BadRequest);
+        body.Should().Contain("Période déjà validée.");
+    }
+
+    public static TheoryData<DomainException, int> TypedExceptions => new()
+    {
+        { new NotFoundException("Salarié introuvable."), StatusCodes.Status404NotFound },
+        { new UnauthorizedException("Session expirée."), StatusCodes.Status401Unauthorized },
+        { new ForbiddenException("Droit « Bases » requis."), StatusCodes.Status403Forbidden },
+        { new ConflictException("Login déjà utilisé."), StatusCodes.Status409Conflict }
+    };
+
+    [Theory]
+    [MemberData(nameof(TypedExceptions))]
+    public async Task Middleware_TypedException_ReturnsItsStatusAndMessage(DomainException exception, int expectedStatus)
+    {
+        // Act
+        var (status, body) = await RunMiddleware(_ => throw exception);
+
+        // Assert
+        status.Should().Be(expectedStatus);
+        body.Should().Contain(exception.Message);
+    }
+
+    [Fact]
+    public async Task Middleware_FieldValidationException_Returns400WithTheField()
+    {
+        // Act
+        var (status, body) = await RunMiddleware(_ => throw new FieldValidationException("login", "Login obligatoire."));
+
+        // Assert
+        status.Should().Be(StatusCodes.Status400BadRequest);
+        using var json = JsonDocument.Parse(body);
+        json.RootElement.GetProperty("field").GetString().Should().Be("login");
     }
 
     [Fact]
@@ -74,9 +79,9 @@ public class SecurityHardeningHttpTests : IClassFixture<ApiFactory>
         });
 
         // Assert
-        Assert.Equal(StatusCodes.Status500InternalServerError, status);
-        Assert.Contains("Erreur interne.", body);
-        Assert.DoesNotContain("Sequence", body);
+        status.Should().Be(StatusCodes.Status500InternalServerError);
+        body.Should().Contain("Erreur interne.");
+        body.Should().NotContain("Sequence");
     }
 
     [Fact]
@@ -90,8 +95,8 @@ public class SecurityHardeningHttpTests : IClassFixture<ApiFactory>
         });
 
         // Assert
-        Assert.Equal(StatusCodes.Status500InternalServerError, status);
-        Assert.DoesNotContain("secret", body);
+        status.Should().Be(StatusCodes.Status500InternalServerError);
+        body.Should().NotContain("secret");
     }
 
     // ---------- Catalogue des routes ----------
@@ -100,10 +105,10 @@ public class SecurityHardeningHttpTests : IClassFixture<ApiFactory>
     public async Task MetaEndpoints_Anonymous_Returns401()
     {
         // Act
-        var response = await _http.GetAsync("/api/meta/endpoints");
+        var response = await _http.GetAsync("/api/v1/meta/endpoints");
 
         // Assert
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     // ---------- Validation des entrées ----------
@@ -115,29 +120,29 @@ public class SecurityHardeningHttpTests : IClassFixture<ApiFactory>
         var body = JsonSerializer.Serialize(new { login = new string('a', 500), password = "FAKE-Pwd-123!" });
 
         // Act
-        var response = await _http.PostAsync("/api/auth/login", new StringContent(body, Encoding.UTF8, "application/json"));
+        var response = await _http.PostAsync("/api/v1/auth/login", new StringContent(body, Encoding.UTF8, "application/json"));
 
         // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.Equal("login", json.RootElement.GetProperty("field").GetString());
+        json.RootElement.GetProperty("field").GetString().Should().Be("login");
     }
 
     [Fact]
     public async Task Login_EmptyCredentials_StaysAnOrdinaryLoginFailure()
     {
         // Act
-        var response = await _http.PostAsync("/api/auth/login",
+        var response = await _http.PostAsync("/api/v1/auth/login",
             new StringContent("""{"login":"","password":""}""", Encoding.UTF8, "application/json"));
 
         // Assert
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Theory]
     [InlineData("""{"serveur":"srv","nomBd":"base","typeBase":"INCONNU"}""", "typeBase")]
     [InlineData("""{"serveur":"srv\u0000;Password=x","nomBd":"base","typeBase":"STANDARD"}""", "serveur")]
-    public void SageDbValidator_RejectsUnknownTypeOrControlCharacters(string json, string field)
+    public void SageDbDtoValidator_UnknownTypeOrControlCharacters_IsInvalid(string json, string field)
     {
         // Arrange
         var dto = JsonSerializer.Deserialize<SageDbDto>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
@@ -146,8 +151,8 @@ public class SecurityHardeningHttpTests : IClassFixture<ApiFactory>
         var result = new SoftTime.Application.Validators.SageDbDtoValidator().Validate(dto);
 
         // Assert
-        Assert.False(result.IsValid);
-        Assert.Equal(field, char.ToLowerInvariant(result.Errors[0].PropertyName[0]) + result.Errors[0].PropertyName[1..]);
+        result.IsValid.Should().BeFalse();
+        (char.ToLowerInvariant(result.Errors[0].PropertyName[0]) + result.Errors[0].PropertyName[1..]).Should().Be(field);
     }
 
     // ---------- Cookie du jeton de rafraîchissement ----------
@@ -163,37 +168,37 @@ public class SecurityHardeningHttpTests : IClassFixture<ApiFactory>
         var sent = RefreshTokenCookie.Issue(context, response, new AccountSecurityOptions { RefreshTokenDays = 7 });
 
         // Assert
-        Assert.Null(sent.RefreshToken);
-        Assert.Equal("ACCESS", sent.Token);
+        sent.RefreshToken.Should().BeNull();
+        sent.Token.Should().Be("ACCESS");
         var cookie = context.Response.Headers.SetCookie.ToString();
-        Assert.StartsWith($"{RefreshTokenCookie.Name}=FAKE-REFRESH", cookie);
-        Assert.Contains("httponly", cookie, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("samesite=strict", cookie, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("path=/", cookie, StringComparison.OrdinalIgnoreCase);
+        cookie.Should().StartWith($"{RefreshTokenCookie.Name}=FAKE-REFRESH");
+        cookie.Should().ContainEquivalentOf("httponly");
+        cookie.Should().ContainEquivalentOf("samesite=strict");
+        cookie.Should().ContainEquivalentOf("path=/");
     }
 
     [Fact]
-    public void Read_PrefersTheCookieOverTheBody()
+    public void Read_CookieAndBody_PrefersTheCookie()
     {
         // Arrange
         var context = new DefaultHttpContext();
         context.Request.Headers.Cookie = $"{RefreshTokenCookie.Name}=FROM-COOKIE";
 
         // Act + Assert
-        Assert.Equal("FROM-COOKIE", RefreshTokenCookie.Read(context, "FROM-BODY"));
-        Assert.Equal("FROM-BODY", RefreshTokenCookie.Read(new DefaultHttpContext(), "FROM-BODY"));
+        RefreshTokenCookie.Read(context, "FROM-BODY").Should().Be("FROM-COOKIE");
+        RefreshTokenCookie.Read(new DefaultHttpContext(), "FROM-BODY").Should().Be("FROM-BODY");
     }
 
     [Fact]
-    public async Task Logout_ClearsTheRefreshCookie()
+    public async Task Logout_AuthenticatedClient_ClearsTheRefreshCookie()
     {
         // Act
-        var response = await _http.PostAsync("/api/auth/logout", new StringContent("{}", Encoding.UTF8, "application/json"));
+        var response = await _http.PostAsync("/api/v1/auth/logout", new StringContent("{}", Encoding.UTF8, "application/json"));
 
         // Assert
-        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        var cookie = Assert.Single(response.Headers.GetValues("Set-Cookie"));
-        Assert.StartsWith($"{RefreshTokenCookie.Name}=;", cookie);
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        var cookie = response.Headers.GetValues("Set-Cookie").Should().ContainSingle().Which;
+        cookie.Should().StartWith($"{RefreshTokenCookie.Name}=;");
     }
 
     // ---------- Journalisation ----------
@@ -201,34 +206,21 @@ public class SecurityHardeningHttpTests : IClassFixture<ApiFactory>
     [Theory]
     [InlineData("agent", "agent")]
     [InlineData("faux\r\nINFO connexion réussie", "fauxINFO connexion réussie")]
-    public void LogSafe_RemovesControlCharacters(string typed, string expected)
+    public void LogSafe_ControlCharacters_AreRemoved(string typed, string expected)
     {
         // Act + Assert
-        Assert.Equal(expected, AuthService.LogSafe(typed));
+        AuthenticationService.LogSafe(typed).Should().Be(expected);
     }
 
     [Fact]
-    public void LogSafe_TruncatesLongValues()
+    public void LogSafe_LongValue_IsTruncated()
     {
         // Act
-        var logged = AuthService.LogSafe(new string('x', 100));
+        var logged = AuthenticationService.LogSafe(new string('x', 100));
 
         // Assert
-        Assert.Equal(33, logged.Length);
-        Assert.EndsWith("…", logged);
-    }
-
-    private static Exception Catch(Action action)
-    {
-        try
-        {
-            action();
-        }
-        catch (Exception ex)
-        {
-            return ex;
-        }
-        throw new InvalidOperationException("Aucune exception levée.");
+        logged.Length.Should().Be(33);
+        logged.Should().EndWith("…");
     }
 
     private static async Task<(int Status, string Body)> RunMiddleware(RequestDelegate next)

@@ -1,5 +1,4 @@
-#nullable enable
-
+﻿
 namespace SoftTime.Application.ImportTemplates;
 
 /// <summary>
@@ -14,13 +13,8 @@ namespace SoftTime.Application.ImportTemplates;
 public static class ImportTemplateCatalog
 {
     public const string FormatXlsx = "xlsx";
+
     public const string FormatCsv = "csv";
-
-    private const string MatriculeExemple = "04285";
-    private const string MatriculeExemple2 = "04301";
-    private const string CategorieExemple = "Sédentaire";
-
-    private static readonly string[] JoursNoms = { "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim" };
 
     /// <summary>Modèles disponibles, ordonnés pour l'affichage.</summary>
     public static IReadOnlyList<ImportTemplateDefinition> All(DateTime? semaineReference = null)
@@ -33,10 +27,10 @@ public static class ImportTemplateCatalog
             Shifts(),
             Punches(),
             Corrections(),
-            PlanningMatricule(jours),
-            PlanningCategorie(jours),
-            PlanningGenerateCategorie(lundi),
-            PlanningGenerateMatricule(lundi),
+            PlanningImportTemplates.PlanningMatricule(jours),
+            PlanningImportTemplates.PlanningCategorie(jours),
+            PlanningImportTemplates.PlanningGenerateCategorie(lundi),
+            PlanningImportTemplates.PlanningGenerateMatricule(lundi),
             Affectations(),
             Correspondances()
         };
@@ -64,7 +58,7 @@ public static class ImportTemplateCatalog
 
     // ------------------------------------------------------------------ imports Excel
 
-    private static ImportTemplateDefinition Shifts() => new(
+    internal static ImportTemplateDefinition Shifts() => new(
         Key: "shifts",
         Label: "Shifts — catalogue des horaires",
         Format: FormatXlsx,
@@ -91,7 +85,7 @@ public static class ImportTemplateCatalog
             "Les lignes d'exemple sont à remplacer par vos propres shifts."
         });
 
-    private static ImportTemplateDefinition Punches() => new(
+    internal static ImportTemplateDefinition Punches() => new(
         Key: "punches",
         Label: "Pointages",
         Format: FormatXlsx,
@@ -100,14 +94,14 @@ public static class ImportTemplateCatalog
         Description: "Un pointage par ligne (matricule, date, heure). Entrée et sortie sont deux lignes.",
         Columns: new ImportTemplateColumn[]
         {
-            new("Matricule", true, "texte", MatriculeExemple, "Matricule SAGE du salarié."),
+            new("Matricule", true, "texte", ImportTemplateExamples.MatriculeExemple, "Matricule SAGE du salarié."),
             new("Date", true, "date", "2026-11-02", "aaaa-mm-jj ou jj/mm/aaaa."),
             new("Heure", true, "HH:mm", "08:00")
         },
         ExampleRows: new IReadOnlyList<string>[]
         {
-            new[] { MatriculeExemple, "2026-11-02", "08:00" },
-            new[] { MatriculeExemple, "2026-11-02", "17:00" }
+            new[] { ImportTemplateExamples.MatriculeExemple, "2026-11-02", "08:00" },
+            new[] { ImportTemplateExamples.MatriculeExemple, "2026-11-02", "17:00" }
         },
         Notes: new[]
         {
@@ -116,7 +110,7 @@ public static class ImportTemplateCatalog
             "Le type est forcé à IO : lancez ensuite « Traiter les pointages » pour générer les heures corrigées."
         });
 
-    private static ImportTemplateDefinition Corrections() => new(
+    internal static ImportTemplateDefinition Corrections() => new(
         Key: "corrections",
         Label: "Heures corrigées",
         Format: FormatXlsx,
@@ -125,7 +119,7 @@ public static class ImportTemplateCatalog
         Description: "Une paire entrée/sortie par ligne. La sortie peut tomber un autre jour (poste de nuit).",
         Columns: new ImportTemplateColumn[]
         {
-            new("Matricule", true, "texte", MatriculeExemple),
+            new("Matricule", true, "texte", ImportTemplateExamples.MatriculeExemple),
             new("DateEntree", true, "date", "2026-11-02"),
             new("HeureEntree", true, "HH:mm", "08:00"),
             new("DateSortie", true, "date", "2026-11-02", "Peut être le lendemain de DateEntree."),
@@ -133,8 +127,8 @@ public static class ImportTemplateCatalog
         },
         ExampleRows: new IReadOnlyList<string>[]
         {
-            new[] { MatriculeExemple, "2026-11-02", "08:00", "2026-11-02", "17:00" },
-            new[] { MatriculeExemple2, "2026-11-02", "22:00", "2026-11-03", "06:00" }
+            new[] { ImportTemplateExamples.MatriculeExemple, "2026-11-02", "08:00", "2026-11-02", "17:00" },
+            new[] { ImportTemplateExamples.MatriculeExemple2, "2026-11-02", "22:00", "2026-11-03", "06:00" }
         },
         Notes: new[]
         {
@@ -142,162 +136,9 @@ public static class ImportTemplateCatalog
             "Les corrections importées sont protégées du traitement des pointages (ORIGINE = MANUEL)."
         });
 
-    private static ImportTemplateDefinition PlanningMatricule(IReadOnlyList<DateTime> jours)
-    {
-        var colonnes = new List<ImportTemplateColumn>
-        {
-            new(
-                "MATRICULE",
-                true,
-                "texte",
-                MatriculeExemple,
-                "La première colonne détermine le mode : MATRICULE (par salarié) ou CATEGORIE (par catégorie).")
-        };
-        colonnes.AddRange(jours.Select(j => new ImportTemplateColumn(
-            j.ToString("yyyy-MM-dd"), false, "n° de shift / OFF", "1", "Vide = jour non modifié.")));
-
-        var lignes = new List<IReadOnlyList<string>>
-        {
-            new List<string> { MatriculeExemple, "1", "1", "1", "1", "1", "OFF", "OFF" },
-            new List<string> { MatriculeExemple2, "2", "2", "OFF", "2", "2", "OFF", "OFF" }
-        };
-
-        return new ImportTemplateDefinition(
-            "planning-matricule",
-            "Planning salariés — par matricule",
-            FormatXlsx,
-            "modele-planning-matricule.xlsx",
-            "Planning",
-            "Matrice : une ligne par salarié, une colonne par jour, cellule = numéro de shift, OFF (repos) ou vide.",
-            colonnes,
-            lignes,
-            new[]
-            {
-                "Les en-têtes de colonnes doivent être des dates (aaaa-mm-jj ou jj/mm/aaaa).",
-                "Le numéro de shift doit exister dans le catalogue Shifts.",
-                "Le planning existant du jour est mis à jour."
-            });
-    }
-
-    private static ImportTemplateDefinition PlanningCategorie(IReadOnlyList<DateTime> jours)
-    {
-        var colonnes = new List<ImportTemplateColumn>
-        {
-            new(
-                "CATEGORIE",
-                true,
-                "texte",
-                CategorieExemple,
-                "Intitulé exact d'une catégorie ; la ligne s'applique à tous les salariés affectés.")
-        };
-        colonnes.AddRange(jours.Select(j => new ImportTemplateColumn(
-            j.ToString("yyyy-MM-dd"), false, "n° de shift / OFF", "1", "Vide = jour non modifié.")));
-
-        var lignes = new List<IReadOnlyList<string>>
-        {
-            new List<string> { CategorieExemple, "1", "1", "1", "1", "1", "OFF", "OFF" }
-        };
-
-        return new ImportTemplateDefinition(
-            "planning-categorie",
-            "Planning salariés — par catégorie",
-            FormatXlsx,
-            "modele-planning-categorie.xlsx",
-            "Planning",
-            "Matrice : une ligne par catégorie, une colonne par jour, cellule = numéro de shift, OFF ou vide.",
-            colonnes,
-            lignes,
-            new[]
-            {
-                "L'intitulé de la catégorie doit exister (insensible à la casse, accents compris).",
-                "Le numéro de shift doit exister dans le catalogue Shifts.",
-                "Le planning existant du jour est mis à jour."
-            });
-    }
-
-    // ------------------------------------------------------------------ génération de planning (CSV)
-
-    private static ImportTemplateDefinition PlanningGenerateCategorie(DateTime lundi)
-    {
-        var colonnes = new List<ImportTemplateColumn>
-        {
-            new("Categorie", true, "texte", CategorieExemple, "Intitulé exact de la catégorie."),
-            new("Lundi", true, "date", lundi.ToString("yyyy-MM-dd"), "Doit impérativement être un lundi.")
-        };
-        var ligne = new List<string> { CategorieExemple, lundi.ToString("yyyy-MM-dd") };
-
-        for (var i = 0; i < 7; i++)
-        {
-            var off = i >= 5;
-            colonnes.Add(new ImportTemplateColumn(
-                $"{JoursNoms[i]}_debut", false, "HH:mm / OFF", off ? "OFF" : "08:00",
-                i == 0 ? "OFF pour un jour non travaillé." : null));
-            colonnes.Add(new ImportTemplateColumn($"{JoursNoms[i]}_fin", false, "HH:mm", off ? string.Empty : "17:00"));
-            ligne.Add(off ? "OFF" : "08:00");
-            ligne.Add(off ? string.Empty : "17:00");
-        }
-
-        return new ImportTemplateDefinition(
-            "planning-generate-category",
-            "Génération planning — par catégorie (CSV)",
-            FormatCsv,
-            "modele-planning-generate-categorie.csv",
-            "Planning",
-            "CSV « catégorie ; lundi ; (début ; fin) × 7 » : génère le planning de tous les salariés affectés à la catégorie.",
-            colonnes,
-            new IReadOnlyList<string>[] { ligne },
-            new[]
-            {
-                "La pause appliquée est celle de la catégorie.",
-                "Lundi doit être un lundi (aaaa-mm-jj ou jj/mm/aaaa).",
-                "OFF pour un jour non travaillé ; les heures sont au format HH:mm.",
-                "Séparateur « ; » (la virgule est aussi acceptée)."
-            });
-    }
-
-    private static ImportTemplateDefinition PlanningGenerateMatricule(DateTime lundi)
-    {
-        var colonnes = new List<ImportTemplateColumn>
-        {
-            new("Matricule", true, "texte", MatriculeExemple),
-            new("Lundi", true, "date", lundi.ToString("yyyy-MM-dd"), "Doit impérativement être un lundi.")
-        };
-        var ligne = new List<string> { MatriculeExemple, lundi.ToString("yyyy-MM-dd") };
-
-        for (var i = 0; i < 7; i++)
-        {
-            var off = i >= 5;
-            colonnes.Add(new ImportTemplateColumn(
-                $"{JoursNoms[i]}_debut", false, "HH:mm / OFF", off ? "OFF" : "08:00",
-                i == 0 ? "OFF pour un jour non travaillé." : null));
-            colonnes.Add(new ImportTemplateColumn($"{JoursNoms[i]}_pause", false, "HH:mm", off ? string.Empty : "00:30"));
-            colonnes.Add(new ImportTemplateColumn($"{JoursNoms[i]}_fin", false, "HH:mm", off ? string.Empty : "17:00"));
-            ligne.Add(off ? "OFF" : "08:00");
-            ligne.Add(off ? string.Empty : "00:30");
-            ligne.Add(off ? string.Empty : "17:00");
-        }
-
-        return new ImportTemplateDefinition(
-            "planning-generate-matricule",
-            "Génération planning — par matricule (CSV)",
-            FormatCsv,
-            "modele-planning-generate-matricule.csv",
-            "Planning",
-            "CSV « matricule ; lundi ; (début ; pause ; fin) × 7 » : génère le planning d'un ou plusieurs salariés.",
-            colonnes,
-            new IReadOnlyList<string>[] { ligne },
-            new[]
-            {
-                "Une pause par jour (vide = 00:00).",
-                "Lundi doit être un lundi (aaaa-mm-jj ou jj/mm/aaaa).",
-                "OFF pour un jour non travaillé ; les heures sont au format HH:mm.",
-                "Séparateur « ; » (la virgule est aussi acceptée)."
-            });
-    }
-
     // ------------------------------------------------------------------ paramètres
 
-    private static ImportTemplateDefinition Affectations() => new(
+    internal static ImportTemplateDefinition Affectations() => new(
         Key: "affectations",
         Label: "Affectations salariés ↔ catégories",
         Format: FormatXlsx,
@@ -306,12 +147,12 @@ public static class ImportTemplateCatalog
         Description: "Une ligne par salarié : catégorie (intitulé exact) et matricule.",
         Columns: new ImportTemplateColumn[]
         {
-            new("Categorie", true, "texte", CategorieExemple, "Intitulé exact d'une catégorie existante."),
-            new("Matricule", true, "texte", MatriculeExemple, "Matricule d'une correspondance paie existante.")
+            new("Categorie", true, "texte", ImportTemplateExamples.CategorieExemple, "Intitulé exact d'une catégorie existante."),
+            new("Matricule", true, "texte", ImportTemplateExamples.MatriculeExemple, "Matricule d'une correspondance paie existante.")
         },
         ExampleRows: new IReadOnlyList<string>[]
         {
-            new[] { CategorieExemple, MatriculeExemple }
+            new[] { ImportTemplateExamples.CategorieExemple, ImportTemplateExamples.MatriculeExemple }
         },
         Notes: new[]
         {
@@ -319,7 +160,7 @@ public static class ImportTemplateCatalog
             "L'affectation existante du salarié est mise à jour."
         });
 
-    private static ImportTemplateDefinition Correspondances() => new(
+    internal static ImportTemplateDefinition Correspondances() => new(
         Key: "correspondences",
         Label: "Correspondances paie — badge ↔ matricule (CSV)",
         Format: FormatCsv,
@@ -329,12 +170,12 @@ public static class ImportTemplateCatalog
         Columns: new ImportTemplateColumn[]
         {
             new("Badge", true, "texte", "00123", "Numéro de badge pointeuse."),
-            new("Matricule", true, "texte", MatriculeExemple, "Matricule SAGE.")
+            new("Matricule", true, "texte", ImportTemplateExamples.MatriculeExemple, "Matricule SAGE.")
         },
         ExampleRows: new IReadOnlyList<string>[]
         {
-            new[] { "00123", MatriculeExemple },
-            new[] { "00124", MatriculeExemple2 }
+            new[] { "00123", ImportTemplateExamples.MatriculeExemple },
+            new[] { "00124", ImportTemplateExamples.MatriculeExemple2 }
         },
         Notes: new[]
         {

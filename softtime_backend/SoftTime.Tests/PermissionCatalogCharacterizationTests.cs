@@ -1,8 +1,10 @@
 using System.Reflection;
+
 using SoftTime.Application.Security;
-using SoftTime.Application.Services;
 using SoftTime.Domain;
 using SoftTime.Domain.Entities.SoftTime;
+using SoftTime.Infrastructure.Services.Permissions;
+using SoftTime.Infrastructure.Services.Users;
 
 namespace SoftTime.Tests;
 
@@ -16,39 +18,49 @@ public class PermissionCatalogCharacterizationTests
     // elles s'exécutent maintenant contre le helper partagé (mêmes valeurs attendues).
     private static HashSet<decimal> Gates(IEnumerable<string> codes) => PermissionCatalog.DeduirePortes(codes);
 
-    private static List<string> Defaults(HashSet<int> rights, IEnumerable<T_BDD_SAGE> sages, IEnumerable<T_BDD_POINTEUSE> pointeuses)
+    private static List<string> Defaults(HashSet<int> rights, IEnumerable<BddSage> sages, IEnumerable<BddPointeuse> pointeuses)
         => PermissionCatalog.BuildDefaultPermissionsList(rights, sages, pointeuses);
 
     // Anciennes entrées, toujours présentes dans AuthService (déléguées au helper) : le résultat doit rester identique.
     private static HashSet<decimal> LegacyGates(IEnumerable<string> codes)
-        => (HashSet<decimal>)typeof(AuthService).GetMethod("DeduirePortes", BindingFlags.NonPublic | BindingFlags.Static)!
+        => (HashSet<decimal>)typeof(RolePermissionService).GetMethod("DeduirePortes", BindingFlags.NonPublic | BindingFlags.Static)!
             .Invoke(null, new object[] { codes })!;
 
-    private static List<string> LegacyDefaults(HashSet<int> rights, IEnumerable<T_BDD_SAGE> sages, IEnumerable<T_BDD_POINTEUSE> pointeuses)
-        => (List<string>)typeof(AuthService).GetMethod("BuildDefaultPermissionsList", BindingFlags.NonPublic | BindingFlags.Static)!
+    private static List<string> LegacyDefaults(HashSet<int> rights, IEnumerable<BddSage> sages, IEnumerable<BddPointeuse> pointeuses)
+        => (List<string>)typeof(UserPermissionService).GetMethod("BuildDefaultPermissionsList", BindingFlags.NonPublic | BindingFlags.Static)!
             .Invoke(null, new object[] { rights, sages, pointeuses })!;
 
     [Fact]
-    public void AuthService_entry_points_still_give_the_same_result_as_the_helper()
+    public void BuildDefaultPermissionsList_AuthServiceEntryPoints_MatchTheHelper()
     {
+        // Arrange
         var all = new HashSet<int> { 1, 2, 3, 4, 5, 6 };
         var sages = new[] { Sage("A"), Sage("B") };
         var pointeuses = new[] { Pointeuse("P") };
-        Assert.Equal(Defaults(all, sages, pointeuses), LegacyDefaults(all, sages, pointeuses));
-        Assert.Equal(Defaults(new HashSet<int>(), sages, pointeuses), LegacyDefaults(new HashSet<int>(), sages, pointeuses));
+
+        // Act & Assert
+        LegacyDefaults(all, sages, pointeuses).Should().Equal(Defaults(all, sages, pointeuses));
+        LegacyDefaults(new HashSet<int>(), sages, pointeuses).Should().Equal(Defaults(new HashSet<int>(), sages, pointeuses));
         var codes = new[] { "sage:a:read", "PROC:SHIFTS", "OTHER:CANTEEN", "INCONNU:X" };
-        Assert.Equal(Gates(codes).OrderBy(x => x), LegacyGates(codes).OrderBy(x => x));
+        LegacyGates(codes).OrderBy(x => x).Should().Equal(Gates(codes).OrderBy(x => x));
     }
 
     [Fact]
-    public void Known_static_permissions_are_the_same_set_as_in_AuthService()
+    public void KnownStaticPermissions_Catalog_MatchesAuthServiceSet()
     {
-        var legacy = (HashSet<string>)typeof(AuthService).GetField("KnownStaticPermissions", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
-        Assert.True(legacy.SetEquals(PermissionCatalog.KnownStatic));
-        Assert.True(PermissionCatalog.IsKnown("SAGE:X:READ"));
-        Assert.True(PermissionCatalog.IsKnown("proc:shifts"));
-        Assert.False(PermissionCatalog.IsKnown("N'IMPORTE:QUOI"));
-        Assert.False(PermissionCatalog.IsKnown(""));
+        // Arrange
+        var legacy = (HashSet<string>)typeof(RolePermissionService).GetField("KnownStaticPermissions", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
+
+        // Act
+        // SELF:READ : permission de Mon espace, hors du catalogue historique des rôles.
+        var result = legacy.SetEquals(PermissionCatalog.KnownStatic.Where(c => c != PermissionCatalog.SelfRead));
+
+        // Assert
+        result.Should().BeTrue();
+        PermissionCatalog.IsKnown("SAGE:X:READ").Should().BeTrue();
+        PermissionCatalog.IsKnown("proc:shifts").Should().BeTrue();
+        PermissionCatalog.IsKnown("N'IMPORTE:QUOI").Should().BeFalse();
+        PermissionCatalog.IsKnown("").Should().BeFalse();
     }
 
     private static readonly string[] Params =
@@ -82,8 +94,8 @@ public class PermissionCatalogCharacterizationTests
 
     private static readonly string[] Other = { "OTHER:CANTEEN", "OTHER:TRAVEL_EXPENSES" };
 
-    private static T_BDD_SAGE Sage(string? name) => new() { NOM_BD = name };
-    private static T_BDD_POINTEUSE Pointeuse(string? name) => new() { NOM_BD = name };
+    private static BddSage Sage(string? name) => new() { NomBd = name };
+    private static BddPointeuse Pointeuse(string? name) => new() { NomBd = name };
 
     private static List<string> Build(int[] rights, string[]? sages = null, string[]? pointeuses = null)
         => Defaults(rights.ToHashSet(), (sages ?? Array.Empty<string>()).Select(Sage), (pointeuses ?? Array.Empty<string>()).Select(Pointeuse));
@@ -91,58 +103,85 @@ public class PermissionCatalogCharacterizationTests
     #region BuildDefaultPermissionsList
 
     [Fact]
-    public void Defaults_without_gate_and_without_database_are_empty()
-        => Assert.Empty(Build(Array.Empty<int>()));
-
-    [Fact]
-    public void Defaults_gate_1_without_database_gives_the_two_create_codes()
-        => Assert.Equal(new[] { "SAGE:CREATE", "POINTEUSE:CREATE" }, Build(new[] { Rights.Databases }));
-
-    [Fact]
-    public void Defaults_gate_1_with_databases_gives_create_then_read_update_delete_per_database()
+    public void Build_NoGateNoDatabase_ReturnsEmpty()
     {
+        // Act
+        var result = Build(Array.Empty<int>());
+
+        // Assert
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Build_Gate1WithoutDatabase_GivesTheTwoCreateCodes()
+    {
+        // Act
+        var result = Build(new[] { Rights.Databases });
+
+        // Assert
+        result.Should().Equal(new[] { "SAGE:CREATE", "POINTEUSE:CREATE" });
+    }
+
+    [Fact]
+    public void Build_Gate1WithDatabases_GivesCreateThenCrudPerDatabase()
+    {
+        // Act
         var result = Build(new[] { Rights.Databases }, new[] { "A", "B" }, new[] { "P" });
-        Assert.Equal(new[]
+
+        // Assert
+        result.Should().Equal(new[]
         {
             "SAGE:CREATE",
             "SAGE:A:READ", "SAGE:A:UPDATE", "SAGE:A:DELETE",
             "SAGE:B:READ", "SAGE:B:UPDATE", "SAGE:B:DELETE",
             "POINTEUSE:CREATE",
             "POINTEUSE:P:READ", "POINTEUSE:P:UPDATE", "POINTEUSE:P:DELETE"
-        }, result);
+        });
     }
 
     [Fact]
-    public void Defaults_without_gate_1_but_with_sage_list_still_gives_sage_codes_and_no_pointeuse()
+    public void Build_SageListWithoutGate1_GivesSageCodesWithoutPointeuse()
     {
+        // Act
         var result = Build(new[] { Rights.Processing }, new[] { "A" }, new[] { "P" });
-        Assert.Equal(new[] { "SAGE:CREATE", "SAGE:A:READ", "SAGE:A:UPDATE", "SAGE:A:DELETE" }.Concat(Proc), result);
+
+        // Assert
+        result.Should().Equal(new[] { "SAGE:CREATE", "SAGE:A:READ", "SAGE:A:UPDATE", "SAGE:A:DELETE" }.Concat(Proc));
     }
 
     [Fact]
-    public void Defaults_skip_blank_database_names()
+    public void Build_BlankDatabaseNames_AreSkipped()
     {
+        // Act
         var result = Build(new[] { Rights.Databases }, new[] { "A", "", " " }, new[] { "" });
-        Assert.Equal(new[] { "SAGE:CREATE", "SAGE:A:READ", "SAGE:A:UPDATE", "SAGE:A:DELETE", "POINTEUSE:CREATE" }, result);
+
+        // Assert
+        result.Should().Equal(new[] { "SAGE:CREATE", "SAGE:A:READ", "SAGE:A:UPDATE", "SAGE:A:DELETE", "POINTEUSE:CREATE" });
     }
 
     [Fact]
-    public void Defaults_single_gates_give_their_fixed_lists()
+    public void Build_SingleGate_GivesItsFixedList()
     {
-        Assert.Equal(Params, Build(new[] { Rights.Parameters }));
-        Assert.Equal(Proc, Build(new[] { Rights.Processing }));
-        Assert.Equal(Other, Build(new[] { Rights.Other }));
-        Assert.Equal(new[] { "TRACE:AUDIT" }, Build(new[] { Rights.Traceability }));
-        Assert.Equal(new[] { "REPORTS:REPORTS", "REPORTS:PREDICTIONS", "REPORTS:CLOSING" }, Build(new[] { Rights.Reports }));
+        // Act & Assert
+        Build(new[] { Rights.Parameters }).Should().Equal(Params);
+        Build(new[] { Rights.Processing }).Should().Equal(Proc);
+        Build(new[] { Rights.Other }).Should().Equal(Other);
+        Build(new[] { Rights.Traceability }).Should().Equal(new[] { "TRACE:AUDIT" });
+        Build(new[] { Rights.Reports }).Should().Equal(new[] { "REPORTS:REPORTS", "REPORTS:PREDICTIONS", "REPORTS:CLOSING" });
     }
 
     [Fact]
-    public void Defaults_all_gates_are_concatenated_in_gate_order()
+    public void Build_AllGates_ConcatenatesInGateOrder()
     {
+        // Arrange
         var all = new[] { Rights.Databases, Rights.Parameters, Rights.Processing, Rights.Other, Rights.Traceability, Rights.Reports };
+
+        // Act
         var expected = new[] { "SAGE:CREATE", "SAGE:A:READ", "SAGE:A:UPDATE", "SAGE:A:DELETE", "POINTEUSE:CREATE", "POINTEUSE:P:READ", "POINTEUSE:P:UPDATE", "POINTEUSE:P:DELETE" }
             .Concat(Params).Concat(Proc).Concat(Other).Concat(new[] { "TRACE:AUDIT", "REPORTS:REPORTS", "REPORTS:PREDICTIONS", "REPORTS:CLOSING" });
-        Assert.Equal(expected, Build(all, new[] { "A" }, new[] { "P" }));
+
+        // Assert
+        Build(all, new[] { "A" }, new[] { "P" }).Should().Equal(expected);
     }
 
     #endregion
@@ -150,32 +189,43 @@ public class PermissionCatalogCharacterizationTests
     #region DeduirePortes
 
     [Fact]
-    public void Gates_from_each_prefix()
+    public void Gates_EachPrefix_GivesItsGate()
     {
-        Assert.Equal(new decimal[] { 1 }, Gates(new[] { "SAGE:A:READ" }));
-        Assert.Equal(new decimal[] { 1 }, Gates(new[] { "POINTEUSE:CREATE" }));
-        Assert.Equal(new decimal[] { 2 }, Gates(new[] { "PARAMS:USERS" }));
-        Assert.Equal(new decimal[] { 3 }, Gates(new[] { "PROC:SHIFTS" }));
-        Assert.Equal(new decimal[] { 4 }, Gates(new[] { "OTHER:CANTEEN" }));
-        Assert.Equal(new decimal[] { 5 }, Gates(new[] { "TRACE:AUDIT" }));
-        Assert.Equal(new decimal[] { 6 }, Gates(new[] { "REPORTS:REPORTS" }));
-        Assert.Equal(new decimal[] { 6 }, Gates(new[] { "REPORTS:PREDICTIONS" }));
-        Assert.True(PermissionCatalog.IsKnown("REPORTS:PREDICTIONS"));
+        // Act & Assert
+        Gates(new[] { "SAGE:A:READ" }).Should().Equal(new decimal[] { 1 });
+        Gates(new[] { "POINTEUSE:CREATE" }).Should().Equal(new decimal[] { 1 });
+        Gates(new[] { "PARAMS:USERS" }).Should().Equal(new decimal[] { 2 });
+        Gates(new[] { "PROC:SHIFTS" }).Should().Equal(new decimal[] { 3 });
+        Gates(new[] { "OTHER:CANTEEN" }).Should().Equal(new decimal[] { 4 });
+        Gates(new[] { "TRACE:AUDIT" }).Should().Equal(new decimal[] { 5 });
+        Gates(new[] { "REPORTS:REPORTS" }).Should().Equal(new decimal[] { 6 });
+        Gates(new[] { "REPORTS:PREDICTIONS" }).Should().Equal(new decimal[] { 6 });
+        PermissionCatalog.IsKnown("REPORTS:PREDICTIONS").Should().BeTrue();
     }
 
     [Fact]
-    public void Gates_ignore_case_unknown_prefixes_and_duplicates()
+    public void Gates_MixedCaseUnknownOrDuplicatedPrefixes_AreHandled()
     {
-        Assert.Equal(new decimal[] { 1, 3 }.OrderBy(x => x), Gates(new[] { "sage:a:read", "proc:shifts", "PROC:SHIFTS", "INCONNU:X", "" }).OrderBy(x => x));
-        Assert.Empty(Gates(Array.Empty<string>()));
-        Assert.Empty(Gates(new[] { "INCONNU:X", "__SOFTTIME_EMPTY_CUSTOM_PERMISSIONS__" }));
+        // Act
+        var result = Gates(new[] { "sage:a:read", "proc:shifts", "PROC:SHIFTS", "INCONNU:X", "" }).OrderBy(x => x);
+
+        // Assert
+        result.Should().Equal(new decimal[] { 1, 3 }.OrderBy(x => x));
+        Gates(Array.Empty<string>()).Should().BeEmpty();
+        Gates(new[] { "INCONNU:X", "__SOFTTIME_EMPTY_CUSTOM_PERMISSIONS__" }).Should().BeEmpty();
     }
 
     [Fact]
-    public void Gates_from_a_full_default_list_give_all_six()
+    public void Gates_FullDefaultList_GivesAllSix()
     {
+        // Arrange
         var all = new[] { Rights.Databases, Rights.Parameters, Rights.Processing, Rights.Other, Rights.Traceability, Rights.Reports };
-        Assert.Equal(new decimal[] { 1, 2, 3, 4, 5, 6 }, Gates(Build(all, new[] { "A" }, new[] { "P" })).OrderBy(x => x));
+
+        // Act
+        var result = Gates(Build(all, new[] { "A" }, new[] { "P" })).OrderBy(x => x);
+
+        // Assert
+        result.Should().Equal(new decimal[] { 1, 2, 3, 4, 5, 6 });
     }
 
     #endregion

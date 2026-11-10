@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
 
@@ -12,14 +13,14 @@ public static class PayrollWritingConfiguration
 
     public static string NormalizeCategory(string? category) => Categories.FirstOrDefault(c =>
         string.Equals(c, category?.Trim(), StringComparison.OrdinalIgnoreCase))
-        ?? throw new InvalidOperationException($"Catégorie de paie inconnue : '{category}'.");
+        ?? throw new DomainException($"Catégorie de paie inconnue : '{category}'.");
 
     public static void ValidateIdentifier(string? value, string label, bool allowQualifiedTable = false)
     {
         var parts = (value ?? string.Empty).Split('.', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 0 || (!allowQualifiedTable && parts.Length != 1) || (allowQualifiedTable && parts.Length > 2)
             || parts.Any(part => !IdentifierPart.IsMatch(part)))
-            throw new InvalidOperationException($"{label} contient un identifiant SQL invalide.");
+            throw new DomainException($"{label} contient un identifiant SQL invalide.");
     }
 
     public static string QuoteIdentifier(string value, bool qualifiedTable = false)
@@ -35,26 +36,26 @@ public static class PayrollWritingConfiguration
         return parts.Length == 1 ? ("dbo", parts[0]) : (parts[0], parts[1]);
     }
 
-    public static void ValidateConfigurationRows(IReadOnlyList<T_PAIE_ECRITURE> configs)
+    public static void ValidateConfigurationRows(IReadOnlyList<PaieEcriture> configs)
     {
-        var missing = Categories.Where(c => !configs.Any(x => string.Equals(x.CATEGORIE, c, StringComparison.OrdinalIgnoreCase))).ToList();
+        var missing = Categories.Where(c => !configs.Any(x => string.Equals(x.Categorie, c, StringComparison.OrdinalIgnoreCase))).ToList();
         if (missing.Count > 0)
-            throw new InvalidOperationException($"La configuration d'écriture de la base AUTRE est incomplète : la catégorie {missing[0]} n'est pas configurée.");
-        var duplicate = configs.GroupBy(c => c.CATEGORIE, StringComparer.OrdinalIgnoreCase).FirstOrDefault(g => g.Count() > 1);
+            throw new DomainException($"La configuration d'écriture de la base AUTRE est incomplète : la catégorie {missing[0]} n'est pas configurée.");
+        var duplicate = configs.GroupBy(c => c.Categorie, StringComparer.OrdinalIgnoreCase).FirstOrDefault(g => g.Count() > 1);
         if (duplicate != null)
-            throw new InvalidOperationException($"La configuration d'écriture contient plusieurs définitions pour la catégorie {duplicate.Key}.");
+            throw new DomainException($"La configuration d'écriture contient plusieurs définitions pour la catégorie {duplicate.Key}.");
         if (configs.Count != Categories.Length)
-            throw new InvalidOperationException("La configuration d'écriture contient des catégories inconnues.");
-        var table = configs[0].TABLE_CIBLE;
-        var matricule = configs[0].COL_MATRICULE;
-        if (configs.Any(c => !string.Equals(c.TABLE_CIBLE, table, StringComparison.OrdinalIgnoreCase) || !string.Equals(c.COL_MATRICULE, matricule, StringComparison.OrdinalIgnoreCase)))
-            throw new InvalidOperationException("Toutes les catégories doivent utiliser la même table cible et la même colonne matricule.");
+            throw new DomainException("La configuration d'écriture contient des catégories inconnues.");
+        var table = configs[0].TableCible;
+        var matricule = configs[0].ColMatricule;
+        if (configs.Any(c => !string.Equals(c.TableCible, table, StringComparison.OrdinalIgnoreCase) || !string.Equals(c.ColMatricule, matricule, StringComparison.OrdinalIgnoreCase)))
+            throw new DomainException("Toutes les catégories doivent utiliser la même table cible et la même colonne matricule.");
         ValidateIdentifier(table, "La table cible", allowQualifiedTable: true);
         ValidateIdentifier(matricule, "La colonne matricule");
         foreach (var config in configs)
         {
-            NormalizeCategory(config.CATEGORIE);
-            ValidateIdentifier(config.COL_VALEUR, $"La colonne de la catégorie {config.CATEGORIE}");
+            NormalizeCategory(config.Categorie);
+            ValidateIdentifier(config.ColValeur, $"La colonne de la catégorie {config.Categorie}");
         }
     }
 

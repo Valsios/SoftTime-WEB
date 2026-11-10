@@ -1,7 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+
+using SoftTime.Application.Abstractions.Dashboard;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Services;
 
 namespace SoftTime.Api.Controllers;
 
@@ -11,32 +12,20 @@ namespace SoftTime.Api.Controllers;
 /// </summary>
 [ApiController]
 [Authorize]
-[Route("api/dashboard")]
+[Route("api/v1/dashboard")]
 [Tags("Dashboard")]
-public class DashboardController : ControllerBase
+public class DashboardController : ApiControllerBase
 {
-    private readonly DashboardService _svc;
+    private readonly IDashboardService _svc;
 
-    public DashboardController(DashboardService svc) => _svc = svc;
+    public DashboardController(IDashboardService svc) => _svc = svc;
 
     [HttpGet("stats")]
-    public async Task<IActionResult> Stats(
-        [FromQuery] DateTime from,
-        [FromQuery] DateTime to,
-        [FromQuery] string? matriculeFrom,
-        [FromQuery] string? matriculeTo,
-        [FromQuery] string? departement,
-        [FromQuery] string? categorie,
-        [FromQuery] string? periode,
-        CancellationToken ct)
-        => Ok(await _svc.GetStatsAsync(
-            new PeriodRequest(matriculeFrom, matriculeTo, from, to, departement),
-            categorie,
-            string.IsNullOrWhiteSpace(periode) ? "mensuelle" : periode,
-            ct));
+    public async Task<IActionResult> StatsAsync([FromQuery] DashboardStatsQuery query, CancellationToken ct)
+        => Ok(await _svc.GetStatsAsync(query.ToPeriodRequest(), query.Categorie, query.Granularite, ct));
 
     /// <summary>Valeurs proposées par les filtres (départements, catégories de personnel).</summary>
     [HttpGet("filters")]
-    public async Task<IActionResult> Filters(CancellationToken ct)
+    public async Task<IActionResult> FiltersAsync(CancellationToken ct)
         => Ok(await _svc.GetFiltersAsync(ct));
 }

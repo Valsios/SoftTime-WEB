@@ -1,3 +1,4 @@
+using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
 
 namespace SoftTime.Domain.Services;
@@ -34,8 +35,7 @@ public static class PunchDayGrouping
         IReadOnlyList<PunchMoment> punches,
         IReadOnlyDictionary<DateTime, PunchPlanningWindow> planningByDay,
         DateTime from,
-        DateTime to,
-        TimeSpan? nightExitGrace = null)
+        DateTime to)
     {
         var result = new Dictionary<DateTime, IReadOnlyList<PunchMoment>>();
         from = from.Date;
@@ -43,10 +43,7 @@ public static class PunchDayGrouping
         if (to < from)
             return result;
 
-        var grace = nightExitGrace ?? NightExitGrace;
-        if (grace < TimeSpan.Zero)
-            grace = TimeSpan.Zero;
-
+        var grace = NightExitGrace;
         var ordered = punches
             .Where(p => p.Heure >= TimeSpan.Zero && p.Heure < TimeSpan.FromDays(1))
             .OrderBy(p => p.Date.Date)
@@ -55,56 +52,58 @@ public static class PunchDayGrouping
 
         // Consommation par index : deux pointages à la même heure restent deux lignes distinctes.
         var consumed = new bool[ordered.Count];
-
         for (var jour = from; jour <= to; jour = jour.AddDays(1))
         {
-            var moments = new List<PunchMoment>();
-
-            for (var i = 0; i < ordered.Count; i++)
-            {
-                if (consumed[i] || ordered[i].Date.Date != jour)
-                    continue;
-                moments.Add(ordered[i]);
-            }
-
+            var moments = Enumerable.Range(0, ordered.Count)
+                .Where(i => !consumed[i] && ordered[i].Date.Date == jour)
+                .Select(i => ordered[i])
+                .ToList();
             if (planningByDay.TryGetValue(jour, out var plan) && !plan.Off && plan.EstNuit)
             {
-                var fin = plan.FinEffective!.Value;
-                var borne = fin + grace;
-
-                // Le planning du lendemain peut commencer avant la marge : on s'arrête à son début
-                // pour ne pas aspirer la journée suivante dans la nuit.
-                if (planningByDay.TryGetValue(jour.AddDays(1), out var suivant)
-                    && suivant.Debut is DateTime debutSuivant
-                    && debutSuivant > fin
-                    && debutSuivant < borne)
-                {
-                    borne = debutSuivant;
-                }
-
-                for (var i = 0; i < ordered.Count; i++)
-                {
-                    if (consumed[i])
-                        continue;
-
-                    var moment = ordered[i];
-                    if (moment.Date.Date <= jour)
-                        continue;
-
-                    var dateHeure = moment.Date.Date + moment.Heure;
-                    if (dateHeure >= borne)
-                        continue;
-
-                    moments.Add(moment);
-                    consumed[i] = true;
-                }
+                var borne = BorneNuit(plan, planningByDay.GetValueOrDefault(jour.AddDays(1)), grace);
+                moments.AddRange(ConsommerSortiesDeNuit(ordered, consumed, jour, borne));
             }
-
             moments.Sort(Compare);
             result[jour] = moments;
         }
-
         return result;
+    }
+
+    /// <summary>Fenêtres des jours travaillés du planning, servant au regroupement en multi-pointage.</summary>
+    public static Dictionary<DateTime, PunchPlanningWindow> Fenetres(IReadOnlyDictionary<DateTime, PlanningSalarie> planning) =>
+        planning
+            .Where(kv => kv.Value.OffP != true)
+            .ToDictionary(
+                kv => kv.Key,
+                kv => new PunchPlanningWindow(kv.Key, kv.Value.Ha, kv.Value.Hd, kv.Value.OffP == true));
+
+    /// <summary>
+    /// Fin effective du poste de nuit plus la marge ; le planning du lendemain peut commencer avant
+    /// la marge : on s'arrête alors à son début pour ne pas aspirer la journée suivante dans la nuit.
+    /// </summary>
+    private static DateTime BorneNuit(PunchPlanningWindow plan, PunchPlanningWindow? suivant, TimeSpan grace)
+    {
+        var fin = plan.FinEffective!.Value;
+        var borne = fin + grace;
+        if (suivant?.Debut is DateTime debutSuivant && debutSuivant > fin && debutSuivant < borne)
+            borne = debutSuivant;
+        return borne;
+    }
+
+    /// <summary>Pointages des jours suivants antérieurs à la borne : rattachés à la nuit et consommés.</summary>
+    private static List<PunchMoment> ConsommerSortiesDeNuit(
+        List<PunchMoment> ordered, bool[] consumed, DateTime jour, DateTime borne)
+    {
+        var sorties = new List<PunchMoment>();
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            var moment = ordered[i];
+            if (consumed[i] || moment.Date.Date <= jour || moment.Date.Date + moment.Heure >= borne)
+                continue;
+            sorties.Add(moment);
+            consumed[i] = true;
+        }
+        return sorties;
     }
 
     private static int Compare(PunchMoment gauche, PunchMoment droite)

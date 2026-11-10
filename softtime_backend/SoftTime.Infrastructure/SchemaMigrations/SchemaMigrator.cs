@@ -1,66 +1,8 @@
-using System.Globalization;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace SoftTime.Infrastructure.SchemaMigrations;
-
-/// <summary>Options « Database:AutoMigrate » et « Database:AutoMigrateLockTimeoutSeconds ».</summary>
-public sealed record SchemaMigrationOptions
-{
-    public const int DefaultLockTimeoutSeconds = 60;
-
-    /// <summary>Exécute les scripts versionnés au démarrage. Désactivé par défaut.</summary>
-    public bool AutoMigrate { get; init; }
-
-    /// <summary>Attente maximale du verrou applicatif (deux démarrages simultanés).</summary>
-    public int LockTimeoutSeconds { get; init; } = DefaultLockTimeoutSeconds;
-
-    public static SchemaMigrationOptions FromConfiguration(IConfiguration configuration)
-    {
-        var autoMigrate = bool.TryParse(configuration["Database:AutoMigrate"], out var enabled) && enabled;
-        var timeout = int.TryParse(configuration["Database:AutoMigrateLockTimeoutSeconds"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var seconds) && seconds >= 0
-            ? seconds
-            : DefaultLockTimeoutSeconds;
-        return new SchemaMigrationOptions { AutoMigrate = autoMigrate, LockTimeoutSeconds = timeout };
-    }
-}
-
-/// <summary>Échec d'une migration. Le message est en français et ne contient ni secret ni chaîne de connexion.</summary>
-public sealed class SchemaMigrationException : Exception
-{
-    public SchemaMigrationException(string message, Exception? inner = null) : base(message, inner) { }
-}
-
-/// <summary>Version déjà appliquée, lue dans dbo.T_SCHEMA_VERSION.</summary>
-public sealed record AppliedMigration(int Version, string Name, string Checksum);
-
-/// <summary>Accès à la base pendant une migration (une connexion, abstraite pour les tests).</summary>
-public interface ISchemaMigrationConnection : IAsyncDisposable
-{
-    /// <summary>sp_getapplock exclusif ; faux si le verrou n'a pas été obtenu dans le délai.</summary>
-    Task<bool> TryAcquireLockAsync(int timeoutSeconds, CancellationToken ct);
-    Task ReleaseLockAsync(CancellationToken ct);
-    /// <summary>Crée dbo.T_SCHEMA_VERSION si elle n'existe pas.</summary>
-    Task EnsureVersionTableAsync(CancellationToken ct);
-    Task<IReadOnlyList<AppliedMigration>> GetAppliedAsync(CancellationToken ct);
-    Task BeginTransactionAsync(CancellationToken ct);
-    Task ExecuteBatchAsync(string sql, CancellationToken ct);
-    Task RecordAppliedAsync(MigrationScript script, string appliedBy, CancellationToken ct);
-    Task CommitAsync(CancellationToken ct);
-    Task RollbackAsync(CancellationToken ct);
-}
-
-public interface ISchemaMigrationConnectionFactory
-{
-    Task<ISchemaMigrationConnection> OpenAsync(CancellationToken ct);
-}
-
-public sealed record SchemaMigrationResult(IReadOnlyList<string> Applied, IReadOnlyList<string> ChecksumMismatches)
-{
-    /// <summary>Scripts déjà enregistrés dans T_SCHEMA_VERSION (non rejoués).</summary>
-    public int AlreadyUpToDate { get; init; }
-}
 
 /// <summary>
 /// Applique, dans l'ordre numérique, les scripts versionnés pas encore enregistrés dans
@@ -80,12 +22,12 @@ public sealed class SchemaMigrator
     public SchemaMigrator(
         ISchemaMigrationConnectionFactory connections,
         IMigrationScriptSource scripts,
-        SchemaMigrationOptions options,
+        IOptions<SchemaMigrationOptions> options,
         ILogger<SchemaMigrator>? logger = null)
     {
         _connections = connections;
         _scripts = scripts;
-        _options = options;
+        _options = options.Value;
         _logger = logger ?? NullLogger<SchemaMigrator>.Instance;
     }
 
@@ -119,44 +61,56 @@ public sealed class SchemaMigrator
                 + "Une autre instance de l'API applique peut-être les migrations ; réessayez après son démarrage.");
         try
         {
-            await connection.EnsureVersionTableAsync(ct);
-            var applied = (await connection.GetAppliedAsync(ct)).ToDictionary(a => a.Version);
-            var appliedNow = new List<string>();
-            var mismatches = new List<string>();
-
-            foreach (var script in scripts)
-            {
-                if (applied.TryGetValue(script.Version, out var previous))
-                {
-                    if (!string.Equals(previous.Checksum, script.Checksum, StringComparison.OrdinalIgnoreCase))
-                    {
-                        mismatches.Add(script.Name);
-                        _logger.LogWarning(
-                            "Le script de migration {Script} a été modifié après son application (somme de contrôle {Recorded} enregistrée, {Current} actuelle). Il n'est pas rejoué : ajoutez un nouveau script.",
-                            script.Name, previous.Checksum, script.Checksum);
-                    }
-                    continue;
-                }
-
-                await ApplyAsync(connection, script, ct);
-                appliedNow.Add(script.Name);
-            }
-
-            if (appliedNow.Count == 0)
-                _logger.LogInformation("Schéma à jour : aucune migration à appliquer.");
-            return new SchemaMigrationResult(appliedNow, mismatches) { AlreadyUpToDate = scripts.Count - appliedNow.Count };
+            return await ApplyPendingAsync(connection, scripts, ct);
         }
         finally
         {
-            try
+            await ReleaseLockAsync(connection);
+        }
+    }
+
+    /// <summary>
+    /// Applique les scripts absents de la table des versions. Un script déjà appliqué mais modifié
+    /// depuis n'est pas rejoué : il est seulement signalé.
+    /// </summary>
+    private async Task<SchemaMigrationResult> ApplyPendingAsync(
+        ISchemaMigrationConnection connection, IReadOnlyList<MigrationScript> scripts, CancellationToken ct)
+    {
+        await connection.EnsureVersionTableAsync(ct);
+        var applied = (await connection.GetAppliedAsync(ct)).ToDictionary(a => a.Version);
+        var appliedNow = new List<string>();
+        var mismatches = new List<string>();
+        foreach (var script in scripts)
+        {
+            if (!applied.TryGetValue(script.Version, out var previous))
             {
-                await connection.ReleaseLockAsync(CancellationToken.None);
+                await ApplyAsync(connection, script, ct);
+                appliedNow.Add(script.Name);
             }
-            catch (Exception ex)
+            else if (!string.Equals(previous.Checksum, script.Checksum, StringComparison.OrdinalIgnoreCase))
             {
-                // La fermeture de la connexion libère de toute façon un verrou de session.
-                _logger.LogWarning(ex, "Libération du verrou de migration impossible.");
+                mismatches.Add(script.Name);
+                _logger.LogWarning(
+                    "Le script de migration {Script} a été modifié après son application (somme de contrôle {Recorded} enregistrée, {Current} actuelle). Il n'est pas rejoué : ajoutez un nouveau script.",
+                    script.Name, previous.Checksum, script.Checksum);
             }
+        }
+
+        if (appliedNow.Count == 0)
+            _logger.LogInformation("Schéma à jour : aucune migration à appliquer.");
+        return new SchemaMigrationResult(appliedNow, mismatches) { AlreadyUpToDate = scripts.Count - appliedNow.Count };
+    }
+
+    /// <summary>La fermeture de la connexion libère de toute façon un verrou de session.</summary>
+    private async Task ReleaseLockAsync(ISchemaMigrationConnection connection)
+    {
+        try
+        {
+            await connection.ReleaseLockAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Libération du verrou de migration impossible.");
         }
     }
 

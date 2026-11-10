@@ -1,35 +1,23 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+
 using SoftTime.Application;
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Employees;
+using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.DTOs;
-using SoftTime.Application.Services;
 using SoftTime.Domain.Models;
 using SoftTime.Domain.Services;
 using SoftTime.Infrastructure;
+using SoftTime.Infrastructure.Services.Closing;
+
 using Xunit.Abstractions;
 
 namespace SoftTime.Tests;
-
-/// <summary>
-/// Test ignoré si la variable d'environnement SOFTTIME_CLOTURE_CONN n'existe pas. Sa valeur
-/// (authentification Windows, jamais écrite dans le dépôt) doit viser la copie jetable
-/// <c>SOFTTIME_DEMO_CLOTURE</c> ; toute autre base est refusée. Lecture seule.
-/// </summary>
-public sealed class ClosingIntegrationFactAttribute : FactAttribute
-{
-    public const string Variable = "SOFTTIME_CLOTURE_CONN";
-
-    public ClosingIntegrationFactAttribute()
-    {
-        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(Variable)))
-            Skip = $"Variable d'environnement {Variable} absente : test d'intégration de la clôture ignoré.";
-    }
-}
 
 /// <summary>
 /// Mesure de performance et contrôle « vérité terrain » de <see cref="ClosingService"/> sur une copie
@@ -65,7 +53,7 @@ public class ClosingServiceIntegrationTests
             donnees = await service.ChargerAsync(request, CancellationToken.None);
             var chargement = chrono.ElapsedMilliseconds;
             chrono.Restart();
-            var resultat = ClosingService.Calculer(donnees, request);
+            var resultat = ClosingComputation.Calculer(donnees, request);
             var calcul = chrono.ElapsedMilliseconds;
             rapport.AppendLine(string.Join(";", passage, chargement, calcul, donnees.Cartes.Count, donnees.Plannings.Count,
                 donnees.Pointages.Count, donnees.Corrections.Count, donnees.SemainesValidees.Count,
@@ -83,15 +71,15 @@ public class ClosingServiceIntegrationTests
             action();
             rapport.AppendLine($"{regle};{chrono.ElapsedMilliseconds}");
         }
-        Mesurer("PointagesIncomplets", () => PayrollClosingRules.PointagesIncomplets(d.Cartes, d.Plannings, d.Pointages, d.Corrections, d.SemainesValidees, debut, fin, d.MultiPointage));
-        Mesurer("PointagesManquants", () => PayrollClosingRules.PointagesManquants(d.Cartes, d.Plannings, d.Pointages, d.Corrections, d.Conges, d.Feries, debut, fin, d.DateDuJour));
-        Mesurer("PlanningsSansPointage", () => PayrollClosingRules.PlanningsSansPointage(d.Cartes, d.Plannings, d.Pointages, d.Corrections, d.Conges, d.Feries, debut, fin, d.DateDuJour));
-        Mesurer("PointagesSansPlanning", () => PayrollClosingRules.PointagesSansPlanning(d.Cartes, d.Plannings, d.Pointages, debut, fin));
-        Mesurer("DoublonsExacts", () => PayrollClosingRules.DoublonsExacts(d.Pointages, debut, fin));
-        Mesurer("QuasiDoublons", () => PayrollClosingRules.QuasiDoublons(d.Pointages, debut, fin));
-        Mesurer("FeriesNonAppliques", () => PayrollClosingRules.FeriesNonAppliques(d.Cartes, d.Plannings, d.Corrections, d.Feries, debut, fin, d.DateDuJour));
-        Mesurer("AbsenceReportRules.Calculer", () => AbsenceReportRules.Calculer(d.Plannings, d.Cartes, d.Corrections, d.Conges, d.Feries, debut, fin, d.DateDuJour));
-        Mesurer("chargement_conges_SAGE", () => scope.ServiceProvider.GetRequiredService<SageLeaveCalendar>().LoadAsync().GetAwaiter().GetResult());
+        Mesurer("PointagesIncomplets", () => PunchCompletenessRules.PointagesIncomplets(new EmployeeSources(d.Cartes, d.Plannings, d.Corrections), d.Pointages, d.SemainesValidees, new ClosingScope(debut, fin, d.MultiPointage)));
+        Mesurer("PointagesManquants", () => PunchCompletenessRules.PointagesManquants(new EmployeeSources(d.Cartes, d.Plannings, d.Corrections), d.Pointages, new AbsenceCalendar(d.Conges, d.Feries), new ReportPeriod(debut, fin, d.DateDuJour)));
+        Mesurer("PlanningsSansPointage", () => PlanningCoverageRules.PlanningsSansPointage(new EmployeeSources(d.Cartes, d.Plannings, d.Corrections), d.Pointages, new AbsenceCalendar(d.Conges, d.Feries), new ReportPeriod(debut, fin, d.DateDuJour)));
+        Mesurer("PointagesSansPlanning", () => PlanningCoverageRules.PointagesSansPlanning(d.Cartes, d.Plannings, d.Pointages, new ClosingScope(debut, fin)));
+        Mesurer("DoublonsExacts", () => DuplicatePunchRules.DoublonsExacts(d.Pointages, new ClosingScope(debut, fin)));
+        Mesurer("QuasiDoublons", () => DuplicatePunchRules.QuasiDoublons(d.Pointages, new ClosingScope(debut, fin)));
+        Mesurer("FeriesNonAppliques", () => HolidayPunchRules.FeriesNonAppliques(new EmployeeSources(d.Cartes, d.Plannings, d.Corrections), d.Feries, new ReportPeriod(debut, fin, d.DateDuJour)));
+        Mesurer("AbsenceReportRules.Calculer", () => AbsenceReportRules.Calculer(new EmployeeSources(d.Cartes, d.Plannings, d.Corrections), new AbsenceCalendar(d.Conges, d.Feries), new ReportPeriod(debut, fin, d.DateDuJour)));
+        Mesurer("chargement_conges_SAGE", () => scope.ServiceProvider.GetRequiredService<ISageLeaveCalendar>().LoadAsync().GetAwaiter().GetResult());
 
         var process = Process.GetCurrentProcess();
         process.Refresh();
@@ -102,7 +90,7 @@ public class ClosingServiceIntegrationTests
         // Anomalies de novembre, pour la comparaison avec la vérité terrain.
         foreach (var (suffixe, options) in ModesOptions())
         {
-            var anomalies = ClosingService.Controler(donnees!, Novembre, FinNovembre, options).Anomalies;
+            var anomalies = ClosingComputation.Controler(donnees!, Novembre, FinNovembre, options).Anomalies;
             var csv = new StringBuilder("Type;Matricule;Date;Detail\n");
             foreach (var a in anomalies)
                 csv.Append(a.Type).Append(';').Append(a.Matricule).Append(';')
@@ -138,7 +126,7 @@ public class ClosingServiceIntegrationTests
         var manquees = new List<string>();
         foreach (var (suffixe, options) in ModesOptions())
         {
-            var detectees = ClosingService.Controler(donnees, Novembre, FinNovembre, options).Anomalies
+            var detectees = ClosingComputation.Controler(donnees, Novembre, FinNovembre, options).Anomalies
                 .Select(a => (a.Type.ToString(), a.Matricule, a.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)))
                 .ToHashSet();
             var avant = LireAnomalies(Path.Combine(Dossier() ?? string.Empty, $"anomalies-{suffixe}-avant.csv"));
@@ -168,7 +156,7 @@ public class ClosingServiceIntegrationTests
         }
 
         Ecrire("verite-terrain-resultat", rapport.ToString(), "csv", sansEtiquette: true);
-        Assert.True(manquees.Count == 0, "Anomalies injectées non détectées : " + string.Join(", ", manquees));
+        (manquees.Count == 0).Should().BeTrue("Anomalies injectées non détectées : " + string.Join(", ", manquees));
     }
 
     /// <summary>
@@ -185,8 +173,8 @@ public class ClosingServiceIntegrationTests
         var reglages = Reglages();
         var request = new ClosingAnalysisRequest(debut, fin, Options: reglages, IncludeComparison: Comparaison(defaut: true));
         var donnees = await service.ChargerAsync(request, CancellationToken.None);
-        var resultat = ClosingService.Calculer(donnees, request);
-        var anomalies = ClosingService.Controler(donnees, debut, fin, reglages).Anomalies;
+        var resultat = ClosingComputation.Calculer(donnees, request);
+        var anomalies = ClosingComputation.Controler(donnees, debut, fin, reglages).Anomalies;
 
         static string Comptes(IEnumerable<ClosingCountDto> c) => string.Join(",", c.Select(x => $"{x.Cle}={x.Nombre}"));
         var e = new StringBuilder();
@@ -247,7 +235,7 @@ public class ClosingServiceIntegrationTests
             var chargement = chrono.ElapsedMilliseconds;
             var heapCharge = GC.GetTotalMemory(forceFullCollection: true);
             chrono.Restart();
-            var resultat = ClosingService.Calculer(donnees, request);
+            var resultat = ClosingComputation.Calculer(donnees, request);
             var calcul = chrono.ElapsedMilliseconds;
             mesures.Add($"{(passage == 1 ? "froid" : "chaud")};{chargement};{calcul};{chargement + calcul};{heapCharge / (1024 * 1024)};{resultat.NombreAnomalies};{resultat.Score?.ToString() ?? "null"};{(resultat.Comparaison is null ? "non" : "oui")}");
         }

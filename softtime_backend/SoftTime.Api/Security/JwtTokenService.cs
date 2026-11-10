@@ -2,9 +2,11 @@ using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
-using SoftTime.Application.Abstractions;
+
+using SoftTime.Application.Abstractions.Authentication;
 
 namespace SoftTime.Api.Security;
 
@@ -13,8 +15,9 @@ public class JwtTokenService : ITokenService
     private readonly JwtOptions _options;
     public JwtTokenService(IOptions<JwtOptions> options) => _options = options.Value;
 
-    public string CreateToken(decimal userId, string login, decimal roleId, string? matricule, IEnumerable<int> rights)
+    public string CreateToken(TokenSubject subject)
     {
+        var (userId, login, roleId, matricule, rights) = subject;
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.Key));
         var uid = ((long)userId).ToString(CultureInfo.InvariantCulture);
         var rid = ((long)roleId).ToString(CultureInfo.InvariantCulture);

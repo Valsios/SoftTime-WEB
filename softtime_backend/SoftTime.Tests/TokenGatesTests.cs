@@ -1,11 +1,13 @@
 using System.IdentityModel.Tokens.Jwt;
+
 using AutoMapper;
+
 using Microsoft.AspNetCore.Identity;
-using SoftTime.Application.Abstractions;
+
+using SoftTime.Api.Security;
+using SoftTime.Application.Abstractions.Notifications;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
-using SoftTime.Application.Services;
-using SoftTime.Api.Security;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
 using SoftTime.Tests.Http;
@@ -20,8 +22,8 @@ public class TokenGatesTests
 {
     private const string FakePassword = "FAKE-LOGIN-PWD";
 
-    private readonly SnapshotInMemoryUnitOfWork _uow = new();
-    private readonly AuthService _auth;
+    private readonly InMemoryUnitOfWork _uow = new();
+    private readonly AuthServices _auth;
 
     public TokenGatesTests()
     {
@@ -32,12 +34,12 @@ public class TokenGatesTests
             Audience = "SoftTime.Tests.Web",
         });
         var mapper = new MapperConfiguration(c => c.AddProfile<MappingProfile>()).CreateMapper();
-        _auth = new AuthService(_uow, new JwtTokenService(jwt), mapper, new Mail(), new AdminCurrentUser(), TestRights.Service(_uow), new PasswordHasher<T_RESPONSABLE>());
+        _auth = new AuthServices(_uow, new JwtTokenService(jwt), mapper, new Mail(), new AdminCurrentUser(), TestRights.Service(_uow), new PasswordHasher<Responsable>());
 
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 29, NOMROLE = "Consultation" });
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 10034, NOMROLE = "Utilisateur ordinaire" });
-        _uow.GetRepo<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 3033, NOM_BD = "BASE1" });
+        _uow.Get<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
+        _uow.Get<Role>().Items.Add(new Role { IdRole = 29, NomRole = "Consultation" });
+        _uow.Get<Role>().Items.Add(new Role { IdRole = 10034, NomRole = "Utilisateur ordinaire" });
+        _uow.Get<BddSage>().Items.Add(new BddSage { Id = 3033, NomBd = "BASE1" });
 
         // Consultation : lignes détaillées « Rapports » seulement.
         Role(29, new[] { "REPORTS:REPORTS" }, 6);
@@ -47,16 +49,16 @@ public class TokenGatesTests
 
     private void Role(decimal id, string[] codes, params int[] gates)
     {
-        foreach (var c in codes) _uow.GetRepo<T_ROLE_PERMISSION>().Items.Add(new T_ROLE_PERMISSION { IDROLE = id, PERMISSION_CODE = c, IS_GRANTED = true });
-        foreach (var g in gates) _uow.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = id, IDDROIT = g });
+        foreach (var c in codes) _uow.Get<RolePermission>().Items.Add(new RolePermission { IdRole = id, PermissionCode = c, IsGranted = true });
+        foreach (var g in gates) _uow.Get<DroitRole>().Items.Add(new DroitRole { IdRole = id, IdDroit = g });
     }
 
     private void Account(decimal id, decimal role, string login, params string[] userRows)
     {
-        var user = new T_RESPONSABLE { IDRESPONSABLE = id, IDROLE = role, LOGIN = login };
-        user.PASSWORD = new PasswordHasher<T_RESPONSABLE>().HashPassword(user, FakePassword);
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
-        foreach (var c in userRows) _uow.GetRepo<T_USER_PERMISSION>().Items.Add(new T_USER_PERMISSION { IDRESPONSABLE = id, PERMISSION_CODE = c, IS_GRANTED = true });
+        var user = new Responsable { IdResponsable = id, IdRole = role, Login = login };
+        user.Password = new PasswordHasher<Responsable>().HashPassword(user, FakePassword);
+        _uow.Get<Responsable>().Items.Add(user);
+        foreach (var c in userRows) _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = id, PermissionCode = c, IsGranted = true });
     }
 
     private async Task<(int[] TokenGates, int[] ResponseGates, LoginResponse Login)> GatesOf(string login, decimal id)
@@ -65,94 +67,132 @@ public class TokenGatesTests
         var claim = new JwtSecurityTokenHandler().ReadJwtToken(response.Token).Claims.First(c => c.Type == "rights").Value;
         var token = claim.Length == 0 ? Array.Empty<int>() : claim.Split(',').Select(int.Parse).OrderBy(x => x).ToArray();
         var me = await _auth.GetMeAsync(id);
-        Assert.Equal(response.Rights.OrderBy(x => x), me.Rights.OrderBy(x => x));       // /auth/me renvoie les mêmes portes
+        me.Rights.OrderBy(x => x).Should().Equal(response.Rights.OrderBy(x => x));       // /auth/me renvoie les mêmes portes
         return (token, response.Rights.OrderBy(x => x).ToArray(), response);
     }
 
     [Fact]
-    public async Task Administrator_has_gates_1_to_6()
+    public async Task GatesOf_Administrator_HasGates1To6()
     {
+        // Arrange
         Account(14, 1, "admin");
+
+        // Act
         var (token, response, _) = await GatesOf("admin", 14);
-        Assert.Equal(new[] { 1, 2, 3, 4, 5, 6 }, token);
-        Assert.Equal(token, response);
+
+        // Assert
+        token.Should().Equal(new[] { 1, 2, 3, 4, 5, 6 });
+        response.Should().Equal(token);
     }
 
     [Fact]
-    public async Task Account_with_the_no_right_marker_has_no_gate()
+    public async Task GatesOf_NoRightMarker_HasNoGate()
     {
+        // Arrange
         Account(10028, 10034, "user", PermissionCatalogMarker);
+
+        // Act
         var (token, response, login) = await GatesOf("user", 10028);
-        Assert.Empty(token);
-        Assert.Empty(response);
-        Assert.Empty(login.AuthorizedDatabases);
+
+        // Assert
+        token.Should().BeEmpty();
+        response.Should().BeEmpty();
+        login.AuthorizedDatabases.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task Consultation_account_has_gate_6_only()
+    public async Task GatesOf_ConsultationAccount_HasGate6Only()
     {
+        // Act
         Account(10030, 29, "user1");
-        Assert.Equal(new[] { 6 }, (await GatesOf("user1", 10030)).TokenGates);
+
+        // Assert
+        (await GatesOf("user1", 10030)).TokenGates.Should().Equal(new[] { 6 });
     }
 
     [Fact]
-    public async Task Account_like_joel_with_role_only_has_gates_1_and_3_and_keeps_its_databases()
+    public async Task GatesOf_JoelLikeRoleOnly_HasGates1And3AndKeepsDatabases()
     {
+        // Arrange
         Account(10034, 10034, "joel");
-        _uow.GetRepo<T_BDD_AUTORISE>().Items.Add(new T_BDD_AUTORISE { IDBDDAUTORISE = 1, IDRESPONSABLE = 10034, IDBDD = 3033 });
+        _uow.Get<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = 1, IdResponsable = 10034, IdBdd = 3033 });
+
+        // Act
         var (token, _, login) = await GatesOf("joel", 10034);
-        Assert.Equal(new[] { 1, 3 }, token);
-        Assert.Equal("BASE1", Assert.Single(login.AuthorizedDatabases).NomBd);   // bases proposées : règle de l'étape 4b-5
+
+        // Assert
+        token.Should().Equal(new[] { 1, 3 });
+        login.AuthorizedDatabases.Should().ContainSingle().Which.NomBd.Should().Be("BASE1");
     }
 
     [Fact]
-    public async Task Account_like_joel_with_PARAMS_additions_gets_gate_2_too()
+    public async Task GatesOf_JoelLikeWithParamsAdditions_AlsoHasGate2()
     {
+        // Arrange
         // Stockage actuel : liste complète = droits du rôle + ajouts (convertie en écarts à la lecture).
         Account(10034, 10034, "joel", "SAGE:BASE1:READ", "PROC:SHIFTS", "PARAMS:USERS", "PARAMS:PRIVILEGES");
+
+        // Act
         var (token, _, _) = await GatesOf("joel", 10034);
-        Assert.Equal(new[] { 1, 2, 3 }, token);
+
+        // Assert
+        token.Should().Equal(new[] { 1, 2, 3 });
     }
 
     [Fact]
-    public async Task Removing_every_work_right_removes_gate_3()
+    public async Task GatesOf_EveryWorkRightRemoved_LosesGate3()
     {
+        // Act
         Account(10034, 10034, "joel", "SAGE:BASE1:READ");
-        Assert.Equal(new[] { 1 }, (await GatesOf("joel", 10034)).TokenGates);
+
+        // Assert
+        (await GatesOf("joel", 10034)).TokenGates.Should().Equal(new[] { 1 });
     }
 
     [Fact]
-    public async Task Account_whose_role_does_not_exist_has_no_gate()
+    public async Task GatesOf_UnknownRole_HasNoGate()
     {
+        // Arrange
         Account(10099, 999, "orphan");
+
+        // Act
         var (token, response, login) = await GatesOf("orphan", 10099);
-        Assert.Empty(token);
-        Assert.Empty(response);
-        Assert.Empty(login.AuthorizedDatabases);
+
+        // Assert
+        token.Should().BeEmpty();
+        response.Should().BeEmpty();
+        login.AuthorizedDatabases.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task A_rights_change_is_visible_at_the_next_login()
+    public async Task LoginAsync_AfterRightsChange_ShowsNewGates()
     {
+        // Arrange
         Account(14, 1, "admin");
-        Account(10034, 10034, "joel");
-        Assert.Equal(new[] { 1, 3 }, (await GatesOf("joel", 10034)).TokenGates);
 
+        // Act
+        Account(10034, 10034, "joel");
+
+        // Assert
+        (await GatesOf("joel", 10034)).TokenGates.Should().Equal(new[] { 1, 3 });
         await _auth.SaveUserDetailedPermissionsAsync(14, 10034, new[] { "SAGE:BASE1:READ", "PROC:SHIFTS", "PARAMS:USERS" });
-        Assert.Equal(new[] { 1, 2, 3 }, (await GatesOf("joel", 10034)).TokenGates);
+        (await GatesOf("joel", 10034)).TokenGates.Should().Equal(new[] { 1, 2, 3 });
     }
 
     // S2 : PUT privileges/{role} ne doit pas contredire les portes déduites des droits détaillés d'un rôle.
     [Fact]
-    public async Task SetPrivileges_is_refused_for_a_role_with_detailed_rights_and_still_works_without()
+    public async Task SetPrivilegesAsync_RoleWithDetailedRights_IsRefusedOtherwiseWorks()
     {
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SetPrivilegesAsync(10034, new List<decimal> { 6 }));
-        Assert.Contains("droits détaillés", ex.Message);
-        Assert.Equal(new[] { 1m, 3m }, _uow.GetRepo<T_DROIT_ROLE>().Items.Where(d => d.IDROLE == 10034).Select(d => d.IDDROIT).OrderBy(x => x));
+        // Act
+        Func<Task> act = () => _auth.SetPrivilegesAsync(10034, new List<decimal> { 6 });
 
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 50, NOMROLE = "Sans lignes" });
+        // Assert
+        var ex = (await act.Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().Contain("droits détaillés");
+        _uow.Get<DroitRole>().Items.Where(d => d.IdRole == 10034).Select(d => d.IdDroit).OrderBy(x => x).Should().Equal(new[] { 1m, 3m });
+        _uow.Get<Role>().Items.Add(new Role { IdRole = 50, NomRole = "Sans lignes" });
         await _auth.SetPrivilegesAsync(50, new List<decimal> { 6 });
-        Assert.Single(_uow.GetRepo<T_DROIT_ROLE>().Items.Where(d => d.IDROLE == 50));
+        _uow.Get<DroitRole>().Items.Where(d => d.IdRole == 50).Should().ContainSingle();
     }
 
     private const string PermissionCatalogMarker = "__SOFTTIME_EMPTY_CUSTOM_PERMISSIONS__";
@@ -161,7 +201,7 @@ public class TokenGatesTests
     {
         public bool EstConfigure => true;
         public Task<bool> EnvoyerAsync(EmailMessage message, CancellationToken cancellationToken = default) => Task.FromResult(true);
-        public Task<bool> SendUserCredentialsAsync(string? email, string? pseudo, string? password, string? nom, string? prenom, CancellationToken cancellationToken = default) => Task.FromResult(true);
-        public Task<bool> SendUserUpdateAsync(string? email, string? pseudo, string? newPassword, string? nom, string? prenom, bool pseudoChanged, bool passwordChanged, CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public Task<bool> SendUserCredentialsAsync(AccountMailRecipient destinataire, string? password, CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public Task<bool> SendUserUpdateAsync(AccountMailRecipient destinataire, string? newPassword, bool pseudoChanged, bool passwordChanged, CancellationToken cancellationToken = default) => Task.FromResult(true);
     }
 }

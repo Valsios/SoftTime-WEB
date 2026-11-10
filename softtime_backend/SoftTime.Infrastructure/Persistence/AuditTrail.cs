@@ -1,7 +1,10 @@
-using System.Globalization;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
-using SoftTime.Application.Abstractions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+
+using SoftTime.Application.Abstractions.Audit;
+using SoftTime.Application.Abstractions.Payroll;
+using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
@@ -19,12 +22,12 @@ public sealed class AuditTrail : IAuditTrail
     public AuditTrail(
         IServiceScopeFactory scopeFactory,
         ICompanyContext company,
-        AuditJournalOptions options,
+        IOptions<AuditJournalOptions> options,
         ILogger<AuditTrail> logger)
     {
         _scopeFactory = scopeFactory;
         _company = company;
-        _options = options;
+        _options = options.Value;
         _logger = logger;
     }
 
@@ -35,30 +38,9 @@ public sealed class AuditTrail : IAuditTrail
 
         try
         {
-            var categoryCounts = string.Join(", ", audit.UpdatesByCategory
-                .OrderBy(pair => pair.Key, StringComparer.Ordinal)
-                .Select(pair => $"{pair.Key}={pair.Value}"));
-            var summary = $"Statut={audit.Status}; Période={audit.PeriodFrom:yyyy-MM-dd}..{audit.PeriodTo:yyyy-MM-dd}; "
-                + $"Salariés={audit.Employees}; LignesMisesÀJour={audit.UpdatedRows}; "
-                + (audit.CancelledRows > 0 ? $"LignesAnnulées={audit.CancelledRows}; " : string.Empty)
-                + $"Catégories={categoryCounts}";
-            var sageDatabase = audit.SageDatabase ?? _company.SageDatabase;
-            var pointeuseDatabase = _company.PointeuseDatabase;
-
             using var scope = _scopeFactory.CreateScope();
             var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-            await uow.Repository<suivi_JOURNAL>().AddAsync(new suivi_JOURNAL
-            {
-                DATE_UTC = DateTime.UtcNow,
-                TABLES = audit.TargetTable,
-                ACTIONS = "SYNC_PAIE",
-                NOUVEAUX = summary,
-                USERS = string.IsNullOrWhiteSpace(audit.UserLogin) ? "SYSTEME:OvertimeService" : audit.UserLogin,
-                BASE_SAGE = sageDatabase,
-                BASE_POINTEUSE = pointeuseDatabase,
-                CORRELATIONS = audit.Correlation,
-                SOURCE = audit.Source
-            }, cancellationToken);
+            await uow.Repository<JournalAudit>().AddAsync(LigneSynchronisation(audit), cancellationToken);
             await uow.SaveChangesAsync(cancellationToken);
         }
         catch (Exception exception)
@@ -68,5 +50,32 @@ public sealed class AuditTrail : IAuditTrail
                 audit.Status,
                 audit.TargetTable);
         }
+    }
+
+    /// <summary>Ligne du journal d'audit d'une synchronisation de paie.</summary>
+    private JournalAudit LigneSynchronisation(PayrollSyncAudit audit) => new()
+    {
+        DateUtc = DateTime.UtcNow,
+        Tables = audit.TargetTable,
+        Actions = "SYNC_PAIE",
+        Nouveaux = Synthese(audit),
+        Users = string.IsNullOrWhiteSpace(audit.UserLogin) ? "SYSTEME:OvertimeService" : audit.UserLogin,
+        BaseSage = audit.SageDatabase ?? _company.SageDatabase,
+        BasePointeuse = _company.PointeuseDatabase,
+        Correlations = audit.Correlation,
+        Source = audit.Source
+    };
+
+    /// <summary>Résumé lisible de la synchronisation : statut, période, volumes et lignes par catégorie.</summary>
+    private static string Synthese(PayrollSyncAudit audit)
+    {
+        var categoryCounts = string.Join(", ", audit.UpdatesByCategory
+            .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+            .Select(pair => $"{pair.Key}={pair.Value}"));
+        var summary = $"Statut={audit.Status}; Période={audit.PeriodFrom:yyyy-MM-dd}..{audit.PeriodTo:yyyy-MM-dd}; "
+            + $"Salariés={audit.Employees}; LignesMisesÀJour={audit.UpdatedRows}; "
+            + (audit.CancelledRows > 0 ? $"LignesAnnulées={audit.CancelledRows}; " : string.Empty)
+            + $"Catégories={categoryCounts}";
+        return summary;
     }
 }

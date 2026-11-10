@@ -1,8 +1,12 @@
 using System.Globalization;
+
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.Ml;
 using SoftTime.Domain.Models.Ml;
+using SoftTime.Infrastructure.Services.Ml;
 
 namespace SoftTime.Tests;
 
@@ -15,23 +19,27 @@ public class MlTrainingServiceTests
     private static readonly string Sage = "SAGE_TEST";
 
     [Fact]
-    public async Task Donnees_insuffisantes_restent_en_baseline()
+    public async Task TrainAsync_DonneesInsuffisantes_ResteEnBaseline()
     {
+        // Arrange
         var store = new FakeMlStore();
-        var service = new MlTrainingService(store, new FakeMlTrainer(), Options(), NullLogger<MlTrainingService>.Instance);
+        var sut = new MlTrainingService(store, new FakeMlTrainer(), Options.Create(TrainingOptions()), NullLogger<MlTrainingService>.Instance);
 
-        var outcome = await service.TrainAsync(Sage);
+        // Act
+        var outcome = await sut.TrainAsync(Sage);
 
-        Assert.Equal("Baseline", outcome.Etat);
-        Assert.Null(outcome.HsProbabilite);
-        Assert.Null(outcome.HsMontant);
-        Assert.NotEmpty(store.Models);
-        Assert.All(store.Models, m => Assert.Equal(MlModelStatus.Rejete, m.Statut));
+        // Assert
+        outcome.Etat.Should().Be("Baseline");
+        outcome.HsProbabilite.Should().BeNull();
+        outcome.HsMontant.Should().BeNull();
+        store.Models.Should().NotBeEmpty();
+        store.Models.Should().AllSatisfy(m => m.Statut.Should().Be(MlModelStatus.Rejete));
     }
 
     [Fact]
-    public async Task Modele_au_dessus_de_la_baseline_est_active()
+    public async Task TrainAsync_ModeleAuDessusDeLaBaseline_EstActive()
     {
+        // Arrange
         var store = new FakeMlStore();
         Seed(store);
         var trainer = new FakeMlTrainer
@@ -39,24 +47,27 @@ public class MlTrainingServiceTests
             AmountResult = new MlTrainingResult(true, "Fake", new byte[] { 1, 2, 3 },
                 new MlMetrics(Mae: 0.5, TestRows: 50, TestPositives: 10), null)
         };
-        var service = new MlTrainingService(store, trainer, Options(), NullLogger<MlTrainingService>.Instance);
+        var sut = new MlTrainingService(store, trainer, Options.Create(TrainingOptions()), NullLogger<MlTrainingService>.Instance);
 
-        var outcome = await service.TrainAsync(Sage);
+        // Act
+        var outcome = await sut.TrainAsync(Sage);
 
-        Assert.Equal("Pret", outcome.Etat);
-        Assert.True(outcome.HsProbabilite is { EstActif: true });
-        Assert.True(outcome.HsMontant is { EstActif: true });
-        Assert.Contains(store.Models, m => m.TypeModele == MlModelTypes.HsMontant && m.EstActif);
+        // Assert
+        outcome.Etat.Should().Be("Pret");
+        (outcome.HsProbabilite is { EstActif: true }).Should().BeTrue();
+        (outcome.HsMontant is { EstActif: true }).Should().BeTrue();
+        store.Models.Should().Contain(m => m.TypeModele == MlModelTypes.HsMontant && m.EstActif);
         // La prévision d'absence n'est plus entraînée.
-        Assert.DoesNotContain(store.Models, m => m.TypeModele == MlModelTypes.Absence);
+        store.Models.Should().NotContain(m => m.TypeModele == MlModelTypes.Absence);
     }
 
     [Fact]
-    public async Task Modele_sous_la_baseline_est_rejete_et_ancien_modele_conserve()
+    public async Task TrainAsync_ModeleSousLaBaseline_EstRejeteEtAncienConserve()
     {
+        // Arrange
         var store = new FakeMlStore();
         Seed(store);
-        store.Models.Add(new T_ML_MODELE
+        store.Models.Add(new MlModele
         {
             BddSage = Sage,
             TypeModele = MlModelTypes.HsMontant,
@@ -72,24 +83,25 @@ public class MlTrainingServiceTests
             SchemaHash = "ancien",
             ModeleBinaire = new byte[] { 9 }
         });
-
         var trainer = new FakeMlTrainer
         {
             AmountResult = new MlTrainingResult(true, "Fake", new byte[] { 1, 2, 3 },
                 new MlMetrics(Mae: 2.0, TestRows: 50, TestPositives: 10), null)
         };
-        var service = new MlTrainingService(store, trainer, Options(), NullLogger<MlTrainingService>.Instance);
+        var sut = new MlTrainingService(store, trainer, Options.Create(TrainingOptions()), NullLogger<MlTrainingService>.Instance);
 
-        var outcome = await service.TrainAsync(Sage);
+        // Act
+        var outcome = await sut.TrainAsync(Sage);
 
-        Assert.Equal("Baseline", outcome.Etat);
-        Assert.False(outcome.HsMontant is { EstActif: true });
-        Assert.Equal(1, store.Models.Count(m => m.TypeModele == MlModelTypes.HsMontant && m.EstActif));
-        Assert.Equal("ancien", store.Models.Single(m => m.TypeModele == MlModelTypes.HsMontant && m.EstActif).Version);
-        Assert.Contains(store.Models, m => m.TypeModele == MlModelTypes.HsMontant && m.Statut == MlModelStatus.Rejete);
+        // Assert
+        outcome.Etat.Should().Be("Baseline");
+        (outcome.HsMontant is { EstActif: true }).Should().BeFalse();
+        store.Models.Count(m => m.TypeModele == MlModelTypes.HsMontant && m.EstActif).Should().Be(1);
+        store.Models.Single(m => m.TypeModele == MlModelTypes.HsMontant && m.EstActif).Version.Should().Be("ancien");
+        store.Models.Should().Contain(m => m.TypeModele == MlModelTypes.HsMontant && m.Statut == MlModelStatus.Rejete);
     }
 
-    private static MlOptions Options() => new()
+    private static MlOptions TrainingOptions() => new()
     {
         HistoryMonths = 18,
         TestWindowWeeks = 8,
@@ -110,7 +122,7 @@ public class MlTrainingServiceTests
         for (var i = 0; i < 120; i++)
         {
             var date = to.AddDays(-i);
-            store.Daily.Add(new T_ML_SALARIE_JOUR
+            store.Daily.Add(new MlSalarieJour
             {
                 BddSage = Sage,
                 Matricule = "001",
@@ -138,7 +150,7 @@ public class MlTrainingServiceTests
         for (var i = 0; i < 60; i++)
         {
             var monday = lundi.AddDays(-7 * i);
-            store.Weekly.Add(new T_ML_SALARIE_SEMAINE
+            store.Weekly.Add(new MlSalarieSemaine
             {
                 BddSage = Sage,
                 Matricule = "001",
@@ -149,8 +161,8 @@ public class MlTrainingServiceTests
                 HeuresTravaillees = 40m,
                 NbJoursPlanifies = 5,
                 NbJoursTravailles = 5,
-                HS = i % 3 == 0 ? 2m : 0m,
-                HSValidee = true,
+                Hs = i % 3 == 0 ? 2m : 0m,
+                HsValidee = true,
                 HsMoyenne4Semaines = 1m,
                 HsMoyenne8Semaines = 1m,
                 Departement = "Atelier",

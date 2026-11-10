@@ -14,13 +14,13 @@ export class ImportTemplateService extends ApiService {
   /** Liste complète, chargée une seule fois par session. */
   list(): Observable<ImportTemplate[]> {
     return (this.cache$ ??= this.http
-      .get<ImportTemplate[]>(this.url('/api/import-templates'))
+      .get<ImportTemplate[]>(this.url('/api/v1/import-templates'))
       .pipe(shareReplay(1)));
   }
 
   /** Télécharge le fichier modèle (.xlsx ou .csv) d'une clé du catalogue. */
   download(template: ImportTemplate): Observable<Blob> {
-    return this.http.get(this.url(`/api/import-templates/${encodeURIComponent(template.key)}`), {
+    return this.http.get(this.url(`/api/v1/import-templates/${encodeURIComponent(template.key)}`), {
       responseType: 'blob',
     });
   }

@@ -1,3 +1,5 @@
+using SoftTime.Application.Abstractions.Notifications;
+
 namespace SoftTime.Application.Services;
 
 /// <summary>
@@ -48,8 +50,9 @@ public static class EmailTemplates
     /// n'apparaît que s'il a été remplacé.
     /// </summary>
     public static string MiseAJour(
-        string? nom, string? prenom, string? login, string? nouveauMotDePasse, bool loginModifie, bool motDePasseModifie)
+        AccountMailRecipient destinataire, string? nouveauMotDePasse, bool loginModifie, bool motDePasseModifie)
     {
+        var (_, login, nom, prenom) = destinataire;
         var changements = string.Empty;
         if (loginModifie)
             changements += $"<li><strong>Nouvel identifiant :</strong> {EchapperHtml(login)}</li>";

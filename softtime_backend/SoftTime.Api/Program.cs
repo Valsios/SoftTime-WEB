@@ -3,27 +3,36 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
+
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+
 using SoftTime.Api.HostedServices;
 using SoftTime.Api.Middleware;
 using SoftTime.Api.Security;
 using SoftTime.Application;
-using SoftTime.Application.Abstractions;
+using SoftTime.Application.Abstractions.Authentication;
+using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.Security;
 using SoftTime.Application.Serialization;
 using SoftTime.Application.Services;
+using SoftTime.Domain.Entities.SoftTime;
+using SoftTime.Domain.Repositories;
 using SoftTime.Infrastructure;
 using SoftTime.Infrastructure.SchemaMigrations;
-using SoftTime.Domain.Repositories;
-using Microsoft.AspNetCore.Identity;
-using SoftTime.Domain.Entities.SoftTime;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers(o => o.Filters.Add<SoftTime.Api.Validation.FluentValidationFilter>())
+builder.Services.AddControllers(o =>
+    {
+        o.Filters.Add<SoftTime.Api.Validation.FluentValidationFilter>();
+        o.Filters.Add<SoftTime.Api.Responses.ApiResponseResultFilter>();
+    })
+    .ConfigureApiBehaviorOptions(o => o.InvalidModelStateResponseFactory =
+        context => SoftTime.Api.Responses.ApiErrors.FromModelState(context.ModelState))
     .AddJsonOptions(o => SoftTimeJsonOptions.Configure(o.JsonSerializerOptions));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -152,7 +161,7 @@ builder.Services.AddRateLimiter(o =>
 {
     o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     o.OnRejected = (context, ct) => new ValueTask(context.HttpContext.Response.WriteAsJsonAsync(
-        new { error = "Trop de tentatives. Patientez une minute avant de réessayer." }, ct));
+        SoftTime.Api.Responses.ApiErrors.Fail("Trop de tentatives. Patientez une minute avant de réessayer."), ct));
     o.AddPolicy(AuthRateLimit.Policy, context =>
     {
         var permits = context.RequestServices.GetRequiredService<IOptions<AccountSecurityOptions>>().Value.AuthRequestsPerMinute;
@@ -176,7 +185,7 @@ using (var scope = app.Services.CreateScope())
     await PunchProcessingConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
     await HistoryArchiveConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
     // Le journal central est créé par la migration 003 ; sans elle, le démarrage s'arrête avec un message clair.
-    if (scope.ServiceProvider.GetRequiredService<AuditJournalOptions>().Enabled)
+    if (scope.ServiceProvider.GetRequiredService<IOptions<AuditJournalOptions>>().Value.Enabled)
         await SchemaPresenceGuard.EnsureAuditJournalAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
     await UserAccountConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
     // Jetons de rafraîchissement et verrouillage des comptes : migration 004, sinon arrêt avec un message clair.
@@ -197,12 +206,12 @@ using (var scope = app.Services.CreateScope())
     // Migration globale contrôlée des mots de passe en clair :
     // Par défaut, la migration est assurée de manière fluide et isolée à la connexion de chaque utilisateur (AuthService.LoginAsync),
     // éliminant tout risque de verrou concurrent (multi-instances / conteneurs) ou de dépassement de délai au démarrage.
-    // L'exécution batch au démarrage reste activable explicitement via la configuration "Security:MigrateLegacyPasswordsOnStartup" :
-    if (app.Configuration.GetValue<bool>("Security:MigrateLegacyPasswordsOnStartup", false))
+    // L'exécution batch au démarrage reste activable explicitement via « Security:MigrateLegacyPasswordsOnStartup » (AccountSecurityOptions) :
+    if (app.Services.GetRequiredService<IOptions<AccountSecurityOptions>>().Value.MigrateLegacyPasswordsOnStartup)
     {
         await UserAccountConfiguration.MigrateLegacyPasswordsAsync(
             scope.ServiceProvider.GetRequiredService<IUnitOfWork>(),
-            scope.ServiceProvider.GetRequiredService<IPasswordHasher<T_RESPONSABLE>>(),
+            scope.ServiceProvider.GetRequiredService<IPasswordHasher<Responsable>>(),
             CancellationToken.None);
     }
 }

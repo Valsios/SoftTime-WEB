@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
-using SoftTime.Application.Abstractions;
-using SoftTime.Application.Services;
+
+using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Domain.Services;
 
 namespace SoftTime.Tests.Http;
@@ -16,30 +16,35 @@ public class SystemExecutionTests : IClassFixture<ApiFactory>
     public SystemExecutionTests(ApiFactory factory) => _f = factory;
 
     [Fact]
-    public async Task Background_scope_runs_as_system_administrator_and_can_use_the_sage_database()
+    public async Task BackgroundScope_SystemExecution_RunsAsAdministratorWithSageAccess()
     {
+        // Arrange
         using var scope = _f.Services.CreateScope();
         scope.ServiceProvider.GetRequiredService<SystemExecution>().Enable();
         scope.ServiceProvider.GetRequiredService<ICompanyContext>().Set(ApiFactory.SageName, null);
 
+        // Act
         var user = scope.ServiceProvider.GetRequiredService<ICurrentUser>();
-        Assert.Equal(AdminRules.AdminRoleId, user.RoleId);
-        Assert.Equal(SystemExecution.Login, user.Login);
 
-        await scope.ServiceProvider.GetRequiredService<TenantConnectionService>().EnsureAuthorizedAsync();
+        // Assert
+        user.RoleId.Should().Be(AdminRules.AdminRoleId);
+        user.Login.Should().Be(SystemExecution.Login);
+        await scope.ServiceProvider.GetRequiredService<ITenantConnectionService>().EnsureAuthorizedAsync();
     }
 
     [Fact]
-    public async Task Background_scope_without_system_execution_stays_anonymous_and_is_denied()
+    public async Task BackgroundScope_WithoutSystemExecution_StaysAnonymousAndIsDenied()
     {
+        // Arrange
         using var scope = _f.Services.CreateScope();
         scope.ServiceProvider.GetRequiredService<ICompanyContext>().Set(ApiFactory.SageName, null);
 
+        // Act
         var user = scope.ServiceProvider.GetRequiredService<ICurrentUser>();
-        Assert.Null(user.UserId);
-        Assert.Null(user.RoleId);
 
-        await Assert.ThrowsAsync<ForbiddenOperationException>(
-            () => scope.ServiceProvider.GetRequiredService<TenantConnectionService>().EnsureAuthorizedAsync());
+        // Assert
+        user.UserId.Should().BeNull();
+        user.RoleId.Should().BeNull();
+        await FluentActions.Awaiting(() => scope.ServiceProvider.GetRequiredService<ITenantConnectionService>().EnsureAuthorizedAsync()).Should().ThrowExactlyAsync<ForbiddenException>();
     }
 }

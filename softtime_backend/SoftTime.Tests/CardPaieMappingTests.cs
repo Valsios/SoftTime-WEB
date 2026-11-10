@@ -1,4 +1,5 @@
 using AutoMapper;
+
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
 using SoftTime.Domain.Entities.SoftTime;
@@ -12,16 +13,19 @@ namespace SoftTime.Tests;
 public class CardPaieMappingTests
 {
     [Fact]
-    public void Departement_IsMappedToCardPaieEntity()
+    public void Map_DtoWithDepartement_SetsCardPaieDepartement()
     {
-        var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
+        // Arrange
+        var sut = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
         var dto = new CardPaieDto(0, "001", "Dupont", "Jean", null, null, null, null, null, null, null)
         {
             Departement = "INFO",
         };
 
-        var entity = mapper.Map<T_CARDPAIE>(dto);
+        // Act
+        var entity = sut.Map<CardPaie>(dto);
 
-        Assert.Equal("INFO", entity.DEPARTEMENT);
+        // Assert
+        entity.Departement.Should().Be("INFO");
     }
 }

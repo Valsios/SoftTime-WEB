@@ -8,65 +8,109 @@ namespace SoftTime.Tests;
 public class PaginationRulesTests
 {
     [Fact]
-    public void Normaliser_FallsBackOnDefaults()
+    public void Normaliser_NoValues_UsesDefaults()
     {
-        Assert.Equal((1, 50), PaginationRules.Normaliser(null, null));
+        // Act
+        var result = PaginationRules.Normaliser(null, null);
+
+        // Assert
+        result.Should().Be((1, 50));
     }
 
     [Theory]
     [InlineData(0)]
     [InlineData(-4)]
-    public void Normaliser_RejectsInvalidPage(int page)
+    public void Normaliser_InvalidPage_IsRefused(int page)
     {
+        // Act
         var (pageNormalisee, taille) = PaginationRules.Normaliser(page, 20);
-        Assert.Equal(1, pageNormalisee);
-        Assert.Equal(20, taille);
+
+        // Assert
+        pageNormalisee.Should().Be(1);
+        taille.Should().Be(20);
     }
 
     [Theory]
     [InlineData(0)]
     [InlineData(-10)]
-    public void Normaliser_RejectsInvalidPageSize(int taille)
-        => Assert.Equal((2, PaginationRules.TailleDefaut), PaginationRules.Normaliser(2, taille));
+    public void Normaliser_InvalidPageSize_IsRefused(int taille)
+    {
+        // Act
+        var result = PaginationRules.Normaliser(2, taille);
+
+        // Assert
+        result.Should().Be((2, PaginationRules.TailleDefaut));
+    }
 
     [Theory]
     [InlineData(101)]
     [InlineData(5000)]
-    public void Normaliser_CapsPageSizeAtMaximum(int taille)
-        => Assert.Equal(PaginationRules.TailleMax, PaginationRules.Normaliser(1, taille).Taille);
+    public void Normaliser_PageSizeAboveMaximum_IsCapped(int taille)
+        => PaginationRules.Normaliser(1, taille).Taille.Should().Be(PaginationRules.TailleMax);
 
     [Fact]
-    public void Normaliser_KeepsValidValues()
+    public void Normaliser_ValidValues_KeepsThem()
     {
-        Assert.Equal((3, 100), PaginationRules.Normaliser(3, 100));
-        Assert.Equal((7, 25), PaginationRules.Normaliser(7, 25));
+        // Act & Assert
+        PaginationRules.Normaliser(3, 100).Should().Be((3, 100));
+        PaginationRules.Normaliser(7, 25).Should().Be((7, 25));
     }
 
     [Fact]
     public void Decalage_PageExtreme_DoesNotOverflow()
-        => Assert.Equal(int.MaxValue, PaginationRules.Decalage(int.MaxValue, 100));
+    {
+        // Act
+        var result = PaginationRules.Decalage(int.MaxValue, 100);
+
+        // Assert
+        result.Should().Be(int.MaxValue);
+    }
 
     [Theory]
     [InlineData(0, 50)]
     [InlineData(1, 0)]
     [InlineData(-4, -10)]
     public void Decalage_PageOrSizeInvalid_ReturnsZero(int page, int taille)
-        => Assert.Equal(0, PaginationRules.Decalage(page, taille));
+    {
+        // Act
+        var result = PaginationRules.Decalage(page, taille);
+
+        // Assert
+        result.Should().Be(0);
+    }
 
     [Fact]
     public void PageEffective_EmptyTotal_ReturnsOne()
-        => Assert.Equal(1, PaginationRules.PageEffective(0, 5));
+    {
+        // Act
+        var result = PaginationRules.PageEffective(0, 5);
+
+        // Assert
+        result.Should().Be(1);
+    }
 
     [Fact]
     public void PageEffective_NonEmpty_ReturnsRequestedPage()
-        => Assert.Equal(5, PaginationRules.PageEffective(25, 5));
+    {
+        // Act
+        var result = PaginationRules.PageEffective(25, 5);
+
+        // Assert
+        result.Should().Be(5);
+    }
 
     [Theory]
     [InlineData(1, 50, 0)]
     [InlineData(2, 50, 50)]
     [InlineData(3, 25, 50)]
-    public void Decalage_ComputesTheSkipOffset(int page, int taille, int attendu)
-        => Assert.Equal(attendu, PaginationRules.Decalage(page, taille));
+    public void Decalage_PageAndSize_ReturnsSkipOffset(int page, int taille, int attendu)
+    {
+        // Act
+        var result = PaginationRules.Decalage(page, taille);
+
+        // Assert
+        result.Should().Be(attendu);
+    }
 
     [Theory]
     [InlineData(0, 50, 1)]
@@ -75,6 +119,12 @@ public class PaginationRulesTests
     [InlineData(51, 50, 2)]
     [InlineData(100, 50, 2)]
     [InlineData(101, 50, 3)]
-    public void NombreDePages_AlwaysReturnsAtLeastOnePage(int total, int taille, int attendu)
-        => Assert.Equal(attendu, PaginationRules.NombreDePages(total, taille));
+    public void NombreDePages_NoItem_ReturnsOnePage(int total, int taille, int attendu)
+    {
+        // Act
+        var result = PaginationRules.NombreDePages(total, taille);
+
+        // Assert
+        result.Should().Be(attendu);
+    }
 }

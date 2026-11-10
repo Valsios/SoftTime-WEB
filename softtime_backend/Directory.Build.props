@@ -1,0 +1,13 @@
+<Project>
+  <!-- Réglages communs à tous les projets (convention Softwell §2, §6.4). -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Applique les règles de .editorconfig pendant la compilation. IDE0005 exige la documentation XML. -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- CS1591 : documentation XML manquante. La convention ne l'exige que sur les méthodes publiques critiques. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+</Project>

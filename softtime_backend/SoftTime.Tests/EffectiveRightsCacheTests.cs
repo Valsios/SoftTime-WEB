@@ -1,13 +1,19 @@
 using AutoMapper;
+
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
-using SoftTime.Application.Abstractions;
+
+using SoftTime.Application.Abstractions.Authentication;
+using SoftTime.Application.Abstractions.Notifications;
+using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.Mapping;
 using SoftTime.Application.Security;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
+using SoftTime.Infrastructure.Services.Permissions;
+using SoftTime.Infrastructure.Services.RequestContext;
 using SoftTime.Tests.Http;
 
 namespace SoftTime.Tests;
@@ -15,125 +21,141 @@ namespace SoftTime.Tests;
 /// <summary>Étape 4b-5 : cache de 30 secondes des droits effectifs, invalidation immédiate, échec fermé.</summary>
 public class EffectiveRightsCacheTests
 {
-    private readonly SnapshotInMemoryUnitOfWork _store = new();
+    private readonly InMemoryUnitOfWork _store = new();
     private readonly FakeTime _time = new();
     private readonly EffectiveRightsCache _cache;
     private readonly EffectiveRightsService _rights;
-    private readonly AuthService _auth;
+    private readonly AuthServices _auth;
 
     public EffectiveRightsCacheTests()
     {
         _cache = new EffectiveRightsCache(_time);
         _rights = new EffectiveRightsService(_store, _cache, Microsoft.Extensions.Logging.Abstractions.NullLogger<EffectiveRightsService>.Instance);
         var mapper = new MapperConfiguration(c => c.AddProfile<MappingProfile>()).CreateMapper();
-        _auth = new AuthService(_store, new Token(), mapper, new Mail(), new AdminCurrentUser(), _rights, new PasswordHasher<T_RESPONSABLE>());
+        _auth = new AuthServices(_store, new Token(), mapper, new Mail(), new AdminCurrentUser(), _rights, new PasswordHasher<Responsable>());
 
-        _store.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });
-        _store.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 2, NOMROLE = "Utilisateur" });
-        _store.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 1, IDROLE = 1, LOGIN = "admin" });
-        _store.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = 5, IDROLE = 2, LOGIN = "u5" });
-        _store.GetRepo<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 7, NOM_BD = "BASE1" });
-        _store.GetRepo<T_DROIT_ROLE>().Items.Add(new T_DROIT_ROLE { IDROLE = 2, IDDROIT = 1 });
-        _store.GetRepo<T_ROLE_PERMISSION>().Items.Add(new T_ROLE_PERMISSION { IDROLE = 2, PERMISSION_CODE = "SAGE:BASE1:READ", IS_GRANTED = true });
-        _store.GetRepo<T_BDD_AUTORISE>().Items.Add(new T_BDD_AUTORISE { IDBDDAUTORISE = 1, IDRESPONSABLE = 5, IDBDD = 7 });
+        _store.Get<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
+        _store.Get<Role>().Items.Add(new Role { IdRole = 2, NomRole = "Utilisateur" });
+        _store.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 1, IdRole = 1, Login = "admin" });
+        _store.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 5, IdRole = 2, Login = "u5" });
+        _store.Get<BddSage>().Items.Add(new BddSage { Id = 7, NomBd = "BASE1" });
+        _store.Get<DroitRole>().Items.Add(new DroitRole { IdRole = 2, IdDroit = 1 });
+        _store.Get<RolePermission>().Items.Add(new RolePermission { IdRole = 2, PermissionCode = "SAGE:BASE1:READ", IsGranted = true });
+        _store.Get<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = 1, IdResponsable = 5, IdBdd = 7 });
     }
 
     private async Task<bool> CanUse() => (await _rights.GetAsync(5)).CanUseDatabase(DatabaseKind.Sage, "BASE1");
 
     [Fact]
-    public async Task Rights_are_read_once_then_served_from_cache()
+    public async Task CanUse_RepeatedCalls_ReadsRightsOnceThenUsesCache()
     {
-        Assert.True(await CanUse());
-        _store.GetRepo<T_BDD_AUTORISE>().Items.Clear();        // changement direct en base, sans invalidation
-        Assert.True(await CanUse());                            // toujours servi par le cache
+        // Act & Assert
+        (await CanUse()).Should().BeTrue();
+        _store.Get<BddAutorisee>().Items.Clear();
+        (await CanUse()).Should().BeTrue();
     }
 
     [Fact]
-    public async Task Cache_expires_after_30_seconds()
+    public async Task CanUse_After30Seconds_ReloadsRights()
     {
-        Assert.True(await CanUse());
-        _store.GetRepo<T_BDD_AUTORISE>().Items.Clear();
+        // Act & Assert
+        (await CanUse()).Should().BeTrue();
+        _store.Get<BddAutorisee>().Items.Clear();
         _time.Advance(TimeSpan.FromSeconds(29));
-        Assert.True(await CanUse());
+        (await CanUse()).Should().BeTrue();
         _time.Advance(TimeSpan.FromSeconds(2));
-        Assert.False(await CanUse());                           // relu en base : accès retiré
+        (await CanUse()).Should().BeFalse();
     }
 
     [Fact]
-    public async Task Saving_database_access_invalidates_the_account_immediately()
+    public async Task CanUse_DatabaseAccessSaved_InvalidatesAccountImmediately()
     {
-        Assert.True(await CanUse());
+        // Act & Assert
+        (await CanUse()).Should().BeTrue();
         await _auth.SetDbAccessAsync(5, Array.Empty<int>());
-        Assert.False(await CanUse());
+        (await CanUse()).Should().BeFalse();
     }
 
     [Fact]
-    public async Task Saving_user_rights_invalidates_the_account_immediately()
+    public async Task CanUse_UserRightsSaved_InvalidatesAccountImmediately()
     {
-        Assert.True(await CanUse());
+        // Act & Assert
+        (await CanUse()).Should().BeTrue();
         // Liste complète sans SAGE:BASE1:READ : la lecture est retirée.
         await _auth.SaveUserDetailedPermissionsAsync(1, 5, new[] { "REPORTS:REPORTS", "SAGE:CREATE" });
-        Assert.False(await CanUse());
+        (await CanUse()).Should().BeFalse();
         await _auth.ResetUserDetailedPermissionsAsync(1, 5);
-        Assert.True(await CanUse());                            // retour aux droits du rôle
+        (await CanUse()).Should().BeTrue();
     }
 
     [Fact]
-    public async Task Saving_role_rights_invalidates_every_account()
+    public async Task CanUse_RoleRightsSaved_InvalidatesEveryAccount()
     {
-        Assert.True(await CanUse());
+        // Act & Assert
+        (await CanUse()).Should().BeTrue();
         await _auth.SaveRoleDetailedPermissionsAsync(1, 2, new[] { "REPORTS:REPORTS" });
-        Assert.False(await CanUse());
+        (await CanUse()).Should().BeFalse();
     }
 
     [Fact]
-    public async Task Changing_the_role_of_an_account_invalidates_it()
+    public async Task CanUse_AccountRoleChanged_InvalidatesAccount()
     {
-        Assert.True(await CanUse());
-        _store.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 3, NOMROLE = "Sans droit" });
+        // Act & Assert
+        (await CanUse()).Should().BeTrue();
+        _store.Get<Role>().Items.Add(new Role { IdRole = 3, NomRole = "Sans droit" });
         await _auth.SaveUserAsync(1, new SoftTime.Application.DTOs.UserDto(5, 3, "u5", "u5", null, null));
-        Assert.False(await CanUse());
+        (await CanUse()).Should().BeFalse();
     }
 
     [Fact]
-    public async Task Deleting_an_account_invalidates_it_and_removes_its_access()
+    public async Task CanUse_AccountDeleted_InvalidatesAndRemovesAccess()
     {
-        Assert.True(await CanUse());
+        // Act & Assert
+        (await CanUse()).Should().BeTrue();
         await _auth.DeleteUserAsync(1, 5);
-        Assert.False(await CanUse());                           // compte disparu : plus aucun droit
-        Assert.DoesNotContain(_store.GetRepo<T_BDD_AUTORISE>().Items, a => a.IDRESPONSABLE == 5);
+        (await CanUse()).Should().BeFalse();
+        _store.Get<BddAutorisee>().Items.Should().NotContain(a => a.IdResponsable == 5);
     }
 
     [Fact]
-    public async Task Fail_closed_when_rights_cannot_be_read_and_nothing_sensitive_is_logged()
+    public async Task EnsureAuthorizedAsync_RightsUnreadable_FailsClosedWithoutLoggingSecrets()
     {
+        // Arrange
         var logger = new CapturingLogger<EffectiveRightsService>();
         var failing = new FailingUnitOfWork(_store);
         var rights = new EffectiveRightsService(failing, new EffectiveRightsCache(_time), logger);
-        var tenant = new TenantConnectionService(failing, new Company("BASE1"), new TestCurrentUser(5, 2, 1), rights,
+        var sut = new TenantConnectionService(failing, new Company("BASE1"), new TestCurrentUser(5, 2, 1), rights,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
-
         failing.Fail = true;
-        var ex = await Assert.ThrowsAsync<ForbiddenOperationException>(() => tenant.EnsureAuthorizedAsync());
-        Assert.Equal(TenantConnectionService.AccessDenied, ex.Message);
-        Assert.DoesNotContain("SECRET-CONNECTION-STRING", ex.Message);
 
+        // Act
+        Func<Task> act = () => sut.EnsureAuthorizedAsync();
+
+        // Assert
+        var ex = (await act.Should().ThrowExactlyAsync<ForbiddenException>()).Which;
+        ex.Message.Should().Be(TenantConnectionService.AccessDenied);
+        ex.Message.Should().NotContain("SECRET-CONNECTION-STRING");
         // Journal : identifiant du compte et type d'erreur seulement, jamais le message de l'exception.
-        Assert.Contains(logger.Lines, l => l.Contains("5") && l.Contains(nameof(InvalidOperationException)));
-        Assert.DoesNotContain(logger.Lines, l => l.Contains("SECRET-CONNECTION-STRING") || l.Contains("Password=") || l.Contains("EXCEPTION"));
-
+        logger.Lines.Should().Contain(l => l.Contains("5") && l.Contains(nameof(InvalidOperationException)));
+        logger.Lines.Should().NotContain(l => l.Contains("SECRET-CONNECTION-STRING") || l.Contains("Password=") || l.Contains("EXCEPTION"));
         // Une fois la lecture rétablie, l'accès revient.
         failing.Fail = false;
-        await tenant.EnsureAuthorizedAsync();
+        await sut.EnsureAuthorizedAsync();
     }
 
     [Fact]
-    public async Task Anonymous_account_is_refused()
+    public async Task EnsureAuthorizedAsync_AnonymousAccount_IsRefused()
     {
-        var tenant = new TenantConnectionService(_store, new Company("BASE1"), new NoUser(), _rights,
+        // Arrange
+        var sut = new TenantConnectionService(_store, new Company("BASE1"), new NoUser(), _rights,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
-        _store.GetRepo<T_BDD_SAGE>().Items.Single().NOM_BD = "BASE1";
-        await Assert.ThrowsAsync<ForbiddenOperationException>(() => tenant.EnsureAuthorizedAsync());
+        _store.Get<BddSage>().Items.Single().NomBd = "BASE1";
+
+        // Act
+        Func<Task> act = () => sut.EnsureAuthorizedAsync();
+
+        // Assert
+        await act.Should().ThrowExactlyAsync<ForbiddenException>();
     }
 
     private sealed class NoUser : ICurrentUser
@@ -164,13 +186,13 @@ public class EffectiveRightsCacheTests
     /// <summary>Unité de travail qui échoue à la lecture des comptes quand Fail est vrai (message volontairement sensible).</summary>
     private sealed class FailingUnitOfWork : IUnitOfWork
     {
-        private readonly SnapshotInMemoryUnitOfWork _inner;
-        public FailingUnitOfWork(SnapshotInMemoryUnitOfWork inner) => _inner = inner;
+        private readonly InMemoryUnitOfWork _inner;
+        public FailingUnitOfWork(InMemoryUnitOfWork inner) => _inner = inner;
         public bool Fail { get; set; }
 
         public IRepository<T> Repository<T>() where T : class
         {
-            if (Fail && typeof(T) == typeof(T_RESPONSABLE))
+            if (Fail && typeof(T) == typeof(Responsable))
                 throw new InvalidOperationException("SECRET-CONNECTION-STRING Password=xxx");
             return _inner.Repository<T>();
         }
@@ -190,14 +212,14 @@ public class EffectiveRightsCacheTests
 
     private sealed class Token : ITokenService
     {
-        public string CreateToken(decimal userId, string login, decimal roleId, string? matricule, IEnumerable<int> rights) => "FAKE_TOKEN";
+        public string CreateToken(TokenSubject subject) => "FAKE_TOKEN";
     }
 
     private sealed class Mail : IEmailService
     {
         public bool EstConfigure => true;
         public Task<bool> EnvoyerAsync(EmailMessage message, CancellationToken cancellationToken = default) => Task.FromResult(true);
-        public Task<bool> SendUserCredentialsAsync(string? email, string? pseudo, string? password, string? nom, string? prenom, CancellationToken cancellationToken = default) => Task.FromResult(true);
-        public Task<bool> SendUserUpdateAsync(string? email, string? pseudo, string? newPassword, string? nom, string? prenom, bool pseudoChanged, bool passwordChanged, CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public Task<bool> SendUserCredentialsAsync(AccountMailRecipient destinataire, string? password, CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public Task<bool> SendUserUpdateAsync(AccountMailRecipient destinataire, string? newPassword, bool pseudoChanged, bool passwordChanged, CancellationToken cancellationToken = default) => Task.FromResult(true);
     }
 }

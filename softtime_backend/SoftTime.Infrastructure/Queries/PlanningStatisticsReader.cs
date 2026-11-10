@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using SoftTime.Application.Abstractions;
+
+using SoftTime.Application.Abstractions.EmployeePlanning;
 using SoftTime.Infrastructure.Persistence;
 
 namespace SoftTime.Infrastructure.Queries;
@@ -23,12 +24,12 @@ public class PlanningStatisticsReader : IPlanningStatisticsReader
     {
         var start = from.Date;
         var end = to.Date.AddDays(1);
-        var rows = await _db.T_PLANNING_SAL
+        var rows = await _db.PlanningSalaries
             .AsNoTracking()
-            .Where(p => (p.BDD_SAGE == null || p.BDD_SAGE.Trim() == "" || p.BDD_SAGE.Trim() == sageDb)
+            .Where(p => (p.BddSage == null || p.BddSage.Trim() == "" || p.BddSage.Trim() == sageDb)
                         && p.DateP >= start
                         && p.DateP < end)
-            .GroupBy(p => p.IDSAL)
+            .GroupBy(p => p.IdSal)
             .Select(g => new { CardPaieId = g.Key, PlannedDays = g.Count() })
             .ToListAsync(ct);
         return rows

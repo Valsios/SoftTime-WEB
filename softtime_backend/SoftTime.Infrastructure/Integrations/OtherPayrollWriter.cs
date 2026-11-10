@@ -1,7 +1,11 @@
 using System.Data;
+
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
-using SoftTime.Application.Abstractions;
+
+using SoftTime.Application.Abstractions.Audit;
+using SoftTime.Application.Abstractions.Payroll;
+using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
@@ -16,11 +20,11 @@ public sealed class OtherPayrollWriter : IPayrollWriter
         "bigint", "int", "smallint", "tinyint", "decimal", "numeric", "money", "smallmoney", "float", "real"
     };
     private readonly IUnitOfWork _uow;
-    private readonly TenantConnectionService _tenant;
+    private readonly ITenantConnectionService _tenant;
     private readonly IAuditTrail _auditTrail;
     private readonly ILogger<OtherPayrollWriter> _logger;
 
-    public OtherPayrollWriter(IUnitOfWork uow, TenantConnectionService tenant, IAuditTrail auditTrail, ILogger<OtherPayrollWriter> logger)
+    public OtherPayrollWriter(IUnitOfWork uow, ITenantConnectionService tenant, IAuditTrail auditTrail, ILogger<OtherPayrollWriter> logger)
     {
         _uow = uow;
         _tenant = tenant;
@@ -28,15 +32,15 @@ public sealed class OtherPayrollWriter : IPayrollWriter
         _logger = logger;
     }
 
-    public bool CanHandle(T_BDD_SAGE database) => string.Equals(database.TYPE_BASE, "AUTRE", StringComparison.OrdinalIgnoreCase);
+    public bool CanHandle(BddSage database) => string.Equals(database.TypeBase, "AUTRE", StringComparison.OrdinalIgnoreCase);
 
-    public async Task<PayrollWriteResultDto> ValidateAsync(T_BDD_SAGE database, IReadOnlyList<HsExoDto> rows, CancellationToken ct = default)
+    public async Task<PayrollWriteResultDto> ValidateAsync(BddSage database, IReadOnlyList<HsExoDto> rows, CancellationToken ct = default)
     {
         await PreflightAsync(database, rows, ct);
-        return new PayrollWriteResultDto(database.NOM_BD ?? string.Empty, "AUTRE", 0, 0, "Configuration d'écriture valide.");
+        return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "AUTRE", 0, 0, "Configuration d'écriture valide.");
     }
 
-    public async Task<PayrollWriteResultDto> WriteAsync(T_BDD_SAGE database, IReadOnlyList<HsExoDto> rows, PayrollSyncContext auditContext, CancellationToken ct = default)
+    public async Task<PayrollWriteResultDto> WriteAsync(BddSage database, IReadOnlyList<HsExoDto> rows, PayrollSyncContext auditContext, CancellationToken ct = default)
     {
         var plan = await PreflightAsync(database, rows, ct); // aucune écriture avant la fin du préflight
         await using var connection = new SqlConnection(await _tenant.GetSageConnectionAsync(ct));
@@ -49,59 +53,54 @@ public sealed class OtherPayrollWriter : IPayrollWriter
             foreach (var row in rows)
             foreach (var category in PayrollWritingConfiguration.Categories)
             {
-                var affected = await UpdateAsync(connection, transaction, plan, category, row, ct);
+                var affected = await UpdateAsync(transaction, plan, category, row, ct);
                 if (affected != 1)
-                    throw new InvalidOperationException($"La synchronisation a été annulée : {affected} ligne(s) mise(s) à jour pour le matricule {row.Matricule} et la catégorie {category}; une seule ligne était attendue.");
+                    throw new DomainException($"La synchronisation a été annulée : {affected} ligne(s) mise(s) à jour pour le matricule {row.Matricule} et la catégorie {category}; une seule ligne était attendue.");
                 updates++;
                 categoryCounts[category] += affected;
             }
             await transaction.CommitAsync(ct);
-            await WriteAuditAsync(database, plan, auditContext, rows.Count, categoryCounts.Values.Sum(), 0, categoryCounts, "SUCCES", CancellationToken.None);
-            return new PayrollWriteResultDto(database.NOM_BD ?? string.Empty, "AUTRE", rows.Count, updates,
+            await WriteAuditAsync(database, plan, auditContext, new PayrollSyncOutcome(rows.Count, categoryCounts.Values.Sum(), 0, categoryCounts, "SUCCES"));
+            return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "AUTRE", rows.Count, updates,
                 "Synchronisation des heures supplémentaires terminée.");
         }
         catch
         {
-            try
-            {
-                await transaction.RollbackAsync(CancellationToken.None);
-            }
-            catch (Exception rollbackException)
-            {
-                _logger.LogError(rollbackException, "Échec du rollback de la synchronisation de paie AUTRE.");
-            }
-
-            try
-            {
-                await WriteAuditAsync(database, plan, auditContext, rows.Count, 0, updates, categoryCounts, "ECHEC", CancellationToken.None);
-            }
-            catch (Exception auditException)
-            {
-                _logger.LogError(auditException, "Impossible d'écrire la synthèse d'échec de synchronisation de paie AUTRE.");
-            }
+            await RollbackQuietlyAsync(transaction);
+            await QuietlyAsync(
+                () => WriteAuditAsync(database, plan, auditContext, new PayrollSyncOutcome(rows.Count, 0, updates, categoryCounts, "ECHEC")),
+                "Impossible d'écrire la synthèse d'échec de synchronisation de paie AUTRE.");
             throw;
         }
     }
 
-    private Task WriteAuditAsync(
-        T_BDD_SAGE database,
-        WritePlan plan,
-        PayrollSyncContext context,
-        int employees,
-        int updatedRows,
-        int cancelledRows,
-        IReadOnlyDictionary<string, int> categories,
-        string status,
-        CancellationToken ct)
-        => _auditTrail.WritePayrollSyncAsync(new PayrollSyncAudit(
-            $"{plan.Schema}.{plan.Table}", database.NOM_BD, context.PeriodFrom, context.PeriodTo,
-            employees, updatedRows, cancelledRows, categories, status, context.UserLogin, "SYNC_PAIE:AUTRE", context.Correlation), ct);
+    private Task RollbackQuietlyAsync(SqlTransaction transaction) =>
+        QuietlyAsync(() => transaction.RollbackAsync(CancellationToken.None), "Échec du rollback de la synchronisation de paie AUTRE.");
 
-    private async Task<WritePlan> PreflightAsync(T_BDD_SAGE database, IReadOnlyList<HsExoDto> rows, CancellationToken ct)
+    /// <summary>Exécute une action de repli après échec ; son propre échec est journalisé sans masquer l'erreur initiale.</summary>
+    private async Task QuietlyAsync(Func<Task> action, string erreur)
+    {
+        try
+        {
+            await action();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "{Erreur}", erreur);
+        }
+    }
+
+    private Task WriteAuditAsync(BddSage database, WritePlan plan, PayrollSyncContext context, PayrollSyncOutcome bilan)
+        => _auditTrail.WritePayrollSyncAsync(new PayrollSyncAudit(
+            $"{plan.Schema}.{plan.Table}", database.NomBd, context.PeriodFrom, context.PeriodTo,
+            bilan.Employees, bilan.UpdatedRows, bilan.CancelledRows, bilan.Categories, bilan.Status,
+            context.UserLogin, "SYNC_PAIE:AUTRE", context.Correlation), CancellationToken.None);
+
+    private async Task<WritePlan> PreflightAsync(BddSage database, IReadOnlyList<HsExoDto> rows, CancellationToken ct)
     {
         await PayrollWritingConfiguration.EnsureStorageAsync(_uow, ct);
-        var configs = await _uow.Repository<T_PAIE_ECRITURE>().ListAsync(c => c.BDD_SAGE == database.NOM_BD, ct);
-        var plan = BuildPlan(database.NOM_BD, configs);
+        var configs = await _uow.Repository<PaieEcriture>().ListAsync(c => c.BddSage == database.NomBd, ct);
+        var plan = BuildPlan(database.NomBd, configs);
         await using var connection = new SqlConnection(await _tenant.GetSageConnectionAsync(ct));
         await connection.OpenAsync(ct);
         var columns = await ReadColumnsAsync(connection, plan, ct);
@@ -111,16 +110,16 @@ public sealed class OtherPayrollWriter : IPayrollWriter
         return plan;
     }
 
-    internal static WritePlan BuildPlan(string? database, IReadOnlyList<T_PAIE_ECRITURE> configs)
+    internal static WritePlan BuildPlan(string? database, IReadOnlyList<PaieEcriture> configs)
     {
         PayrollWritingConfiguration.ValidateConfigurationRows(configs);
-        var table = configs[0].TABLE_CIBLE;
-        var matricule = configs[0].COL_MATRICULE;
+        var table = configs[0].TableCible;
+        var matricule = configs[0].ColMatricule;
         var columns = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var config in configs)
         {
-            var category = PayrollWritingConfiguration.NormalizeCategory(config.CATEGORIE);
-            columns.Add(category, config.COL_VALEUR);
+            var category = PayrollWritingConfiguration.NormalizeCategory(config.Categorie);
+            columns.Add(category, config.ColValeur);
         }
         var (schema, targetTable) = PayrollWritingConfiguration.SplitTable(table);
         return new WritePlan(database ?? string.Empty, schema, targetTable, matricule, columns);
@@ -142,20 +141,20 @@ public sealed class OtherPayrollWriter : IPayrollWriter
             result[reader.GetString(0)] = new ColumnInfo(reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetByte(2), reader.IsDBNull(3) ? null : reader.GetInt32(3));
         }
         if (result.Count == 0)
-            throw new InvalidOperationException($"La table {plan.Table} n'existe pas.");
+            throw new DomainException($"La table {plan.Table} n'existe pas.");
         return result;
     }
 
     private static void ValidateColumns(WritePlan plan, IReadOnlyDictionary<string, ColumnInfo> columns)
     {
         if (!columns.ContainsKey(plan.MatriculeColumn))
-            throw new InvalidOperationException($"La colonne {plan.MatriculeColumn} n'existe pas.");
+            throw new DomainException($"La colonne {plan.MatriculeColumn} n'existe pas.");
         foreach (var (category, column) in plan.ValueColumns)
         {
             if (!columns.TryGetValue(column, out var info))
-                throw new InvalidOperationException($"La colonne {column} de la catégorie {category} n'existe pas.");
+                throw new DomainException($"La colonne {column} de la catégorie {category} n'existe pas.");
             if (!NumericTypes.Contains(info.DataType))
-                throw new InvalidOperationException($"La colonne {column} de la catégorie {category} doit être numérique.");
+                throw new DomainException($"La colonne {column} de la catégorie {category} doit être numérique.");
         }
     }
 
@@ -163,7 +162,7 @@ public sealed class OtherPayrollWriter : IPayrollWriter
     {
         var sourceDuplicates = rows.GroupBy(r => r.Matricule?.Trim(), StringComparer.OrdinalIgnoreCase).FirstOrDefault(g => string.IsNullOrWhiteSpace(g.Key) || g.Count() > 1);
         if (sourceDuplicates != null)
-            throw new InvalidOperationException(string.IsNullOrWhiteSpace(sourceDuplicates.Key)
+            throw new DomainException(string.IsNullOrWhiteSpace(sourceDuplicates.Key)
                 ? "Un résultat d'heures supplémentaires ne contient pas de matricule."
                 : $"Plusieurs résultats d'heures supplémentaires correspondent au matricule {sourceDuplicates.Key}.");
         foreach (var row in rows)
@@ -172,7 +171,7 @@ public sealed class OtherPayrollWriter : IPayrollWriter
             var value = OvertimePayrollCategoryMapper.ValueFor(category, row);
             var target = columns[plan.ValueColumns[category]];
             if (!CanStore(value, target))
-                throw new InvalidOperationException($"La valeur {value} du matricule {row.Matricule} n'est pas compatible avec la colonne {plan.ValueColumns[category]}.");
+                throw new DomainException($"La valeur {value} du matricule {row.Matricule} n'est pas compatible avec la colonne {plan.ValueColumns[category]}.");
         }
     }
 
@@ -200,18 +199,18 @@ public sealed class OtherPayrollWriter : IPayrollWriter
             cmd.Parameters.Add("@matricule", SqlDbType.NVarChar, 256).Value = row.Matricule!.Trim();
             var count = Convert.ToInt64(await cmd.ExecuteScalarAsync(ct));
             if (count == 0)
-                throw new InvalidOperationException($"Aucune ligne de paie trouvée pour le matricule {row.Matricule}.");
+                throw new DomainException($"Aucune ligne de paie trouvée pour le matricule {row.Matricule}.");
             if (count > 1)
-                throw new InvalidOperationException($"Plusieurs lignes de paie correspondent au matricule {row.Matricule}.");
+                throw new DomainException($"Plusieurs lignes de paie correspondent au matricule {row.Matricule}.");
         }
     }
 
-    private static async Task<int> UpdateAsync(SqlConnection connection, SqlTransaction transaction, WritePlan plan, string category, HsExoDto row, CancellationToken ct)
+    private static async Task<int> UpdateAsync(SqlTransaction transaction, WritePlan plan, string category, HsExoDto row, CancellationToken ct)
     {
         var table = $"[{plan.Schema}].[{plan.Table}]";
         var valueColumn = PayrollWritingConfiguration.QuoteIdentifier(plan.ValueColumns[category]);
         var matriculeColumn = PayrollWritingConfiguration.QuoteIdentifier(plan.MatriculeColumn);
-        await using var cmd = new SqlCommand($"UPDATE {table} SET {valueColumn} = @value WHERE {matriculeColumn} = @matricule", connection, transaction);
+        await using var cmd = new SqlCommand($"UPDATE {table} SET {valueColumn} = @value WHERE {matriculeColumn} = @matricule", transaction.Connection, transaction);
         cmd.Parameters.Add("@value", SqlDbType.Decimal).Value = OvertimePayrollCategoryMapper.ValueFor(category, row);
         cmd.Parameters["@value"].Precision = 18;
         cmd.Parameters["@value"].Scale = 4;

@@ -1,5 +1,7 @@
 using System.Data.Common;
 
+using SoftTime.Application.Abstractions.DataSources;
+
 namespace SoftTime.Application.Services;
 
 /// <summary>
@@ -9,8 +11,10 @@ namespace SoftTime.Application.Services;
 /// </summary>
 public static class ExternalConnectionFactory
 {
-    public static string Build(string? server, string? catalog, bool sqlAuth, string? login, string? password)
+    public static string Build(
+        SqlServerCredentials credentials, string? catalog)
     {
+        var (server, sqlAuth, login, password) = credentials;
         var builder = new DbConnectionStringBuilder
         {
             ["Data Source"] = server ?? string.Empty,

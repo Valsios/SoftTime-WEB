@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\SoftTime.Application\SoftTime.Application.csproj" />
@@ -12,19 +12,18 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="8.0.0" />
     <PackageReference Include="Microsoft.ML" Version="5.0.1" />
     <PackageReference Include="Microsoft.ML.FastTree" Version="5.0.1" />
   </ItemGroup>
 
-  <!-- Scripts versionnés appliqués par SchemaMigrator (voir migrations/versions/README.md). -->
+  <!-- Scripts versionnÃ©s appliquÃ©s par SchemaMigrator (voir migrations/versions/README.md). -->
   <ItemGroup>
     <EmbeddedResource Include="..\migrations\versions\*.sql" LogicalName="SoftTime.Migrations.Versions.%(Filename)%(Extension)" Link="SchemaMigrations\Scripts\%(Filename)%(Extension)" />
   </ItemGroup>
 
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="SoftTime.Tests" />
+  </ItemGroup>
 
 </Project>

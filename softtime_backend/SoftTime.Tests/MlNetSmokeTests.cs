@@ -10,8 +10,9 @@ namespace SoftTime.Tests;
 public class MlNetSmokeTests
 {
     [Fact]
-    public void Le_modele_absence_s_entraine_et_predit()
+    public void TrainAbsence_DonneesSynthetiques_EntraineEtPredit()
     {
+        // Arrange
         var random = new Random(42);
         var samples = Enumerable.Range(0, 300).Select(i =>
         {
@@ -36,24 +37,25 @@ public class MlNetSmokeTests
                 HeuresSemaineContrat = 40
             };
         }).ToList();
+        var sut = new MlNetTrainer();
 
-        var trainer = new MlNetTrainer();
-        var result = trainer.TrainAbsence(samples.Take(240).ToList(), samples.Skip(240).ToList(), "FastTree");
+        // Act
+        var result = sut.TrainAbsence(samples.Take(240).ToList(), samples.Skip(240).ToList(), "FastTree");
 
-        Assert.True(result.Accepted);
-        Assert.NotNull(result.Model);
-        Assert.True(result.Metrics.Auc.HasValue && result.Metrics.Auc.Value > 0.5,
-            $"AUC inattendue : {result.Metrics.Auc}");
-        Assert.True(result.Metrics.TestPositives > 0);
-
+        // Assert
+        result.Accepted.Should().BeTrue();
+        result.Model.Should().NotBeNull();
+        (result.Metrics.Auc.HasValue && result.Metrics.Auc.Value > 0.5).Should().BeTrue($"AUC inattendue : {result.Metrics.Auc}");
+        (result.Metrics.TestPositives > 0).Should().BeTrue();
         var predictions = new MlNetPredictor().PredictAbsence(result.Model!, samples.Take(5).ToList());
-        Assert.Equal(5, predictions.Count);
-        Assert.All(predictions, p => Assert.InRange(p, 0f, 1f));
+        predictions.Count.Should().Be(5);
+        predictions.Should().AllSatisfy(p => p.Should().BeInRange(0f, 1f));
     }
 
     [Fact]
-    public void Les_modeles_hs_s_entrainent_et_predisent()
+    public void TrainHsAmount_DonneesSynthetiques_EntraineEtPredit()
     {
+        // Arrange
         var samples = Enumerable.Range(0, 240).Select(i =>
         {
             var montant = i % 4 == 0 ? 4f : 0f;
@@ -70,21 +72,21 @@ public class MlNetSmokeTests
                 HeuresSemaineContrat = 40
             };
         }).ToList();
-
-        var trainer = new MlNetTrainer();
+        var sut = new MlNetTrainer();
         var train = samples.Take(192).ToList();
         var test = samples.Skip(192).ToList();
+        var probabilite = sut.TrainHsProbability(train, test, "FastTree");
 
-        var probabilite = trainer.TrainHsProbability(train, test, "FastTree");
-        var montant = trainer.TrainHsAmount(train, test, "FastTree");
+        // Act
+        var montant = sut.TrainHsAmount(train, test, "FastTree");
 
-        Assert.True(probabilite.Accepted);
-        Assert.NotNull(probabilite.Model);
-        Assert.True(montant.Accepted);
-        Assert.NotNull(montant.Model);
-
+        // Assert
+        probabilite.Accepted.Should().BeTrue();
+        probabilite.Model.Should().NotBeNull();
+        montant.Accepted.Should().BeTrue();
+        montant.Model.Should().NotBeNull();
         var predictions = new MlNetPredictor().PredictHsAmount(montant.Model!, test.Take(5).ToList());
-        Assert.Equal(5, predictions.Count);
-        Assert.All(predictions, p => Assert.False(float.IsNaN(p)));
+        predictions.Count.Should().Be(5);
+        predictions.Should().AllSatisfy(p => float.IsNaN(p).Should().BeFalse());
     }
 }

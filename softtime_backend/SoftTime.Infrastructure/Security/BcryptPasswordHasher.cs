@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+
 using SoftTime.Domain.Entities.SoftTime;
 
 namespace SoftTime.Infrastructure.Security;
@@ -8,16 +9,16 @@ namespace SoftTime.Infrastructure.Security;
 /// restent acceptés : leur vérification réussie renvoie <see cref="PasswordVerificationResult.SuccessRehashNeeded"/>,
 /// et la connexion les remplace aussitôt par un hachage BCrypt.
 /// </summary>
-public sealed class BcryptPasswordHasher : IPasswordHasher<T_RESPONSABLE>
+public sealed class BcryptPasswordHasher : IPasswordHasher<Responsable>
 {
     public const int WorkFactor = 12;
 
-    private readonly PasswordHasher<T_RESPONSABLE> _identityHasher = new();
+    private readonly PasswordHasher<Responsable> _identityHasher = new();
 
-    public string HashPassword(T_RESPONSABLE user, string password)
+    public string HashPassword(Responsable user, string password)
         => BCrypt.Net.BCrypt.HashPassword(password, WorkFactor);
 
-    public PasswordVerificationResult VerifyHashedPassword(T_RESPONSABLE user, string hashedPassword, string providedPassword)
+    public PasswordVerificationResult VerifyHashedPassword(Responsable user, string hashedPassword, string providedPassword)
     {
         if (!IsBcrypt(hashedPassword))
         {

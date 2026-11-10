@@ -49,9 +49,11 @@ export function apiFieldErrors(err: HttpErrorResponse): ApiFieldErrors {
   const trusted: Record<string, true> = {};
   if (!body) return { fields, trusted };
 
-  if (body.field && body.error) {
+  // Enveloppe d'échec : le message métier est dans `message` (ancien format : `error`).
+  const fieldMessage = body.error ?? body.message;
+  if (body.field && fieldMessage) {
     const key = normalizeFieldKey(body.field);
-    fields[key] = body.error;
+    fields[key] = fieldMessage;
     trusted[key] = true;
   }
 

@@ -1,13 +1,19 @@
 using System.Linq.Expressions;
 using System.Text.Json;
+
 using Microsoft.Extensions.Logging.Abstractions;
-using SoftTime.Application.Abstractions;
+using Microsoft.Extensions.Options;
+
+using SoftTime.Application.Abstractions.ExternalData;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
+using SoftTime.Infrastructure.Services.Closing;
+using SoftTime.Infrastructure.Services.Employees;
+using SoftTime.Infrastructure.Services.RequestContext;
 
 namespace SoftTime.Tests;
 
@@ -89,44 +95,45 @@ public class ClosingServiceTests
         public FakeExternalSourceService Source { get; } = new();
         public ClosingService Service { get; }
 
-        public Contexte(TimeProvider? horloge = null)
+        public Contexte(TimeProvider? horloge = null, ClosingOptions? reglages = null)
         {
-            Uow.Inner.Get<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 1, NOM_BD = "SAGE_TEST" });
-            Uow.Inner.Get<T_CLOCK>().Items.Add(new T_CLOCK { IDPOINT = 1, MULTIPOINT = false });
+            Uow.Inner.Get<BddSage>().Items.Add(new BddSage { Id = 1, NomBd = "SAGE_TEST" });
+            Uow.Inner.Get<ParametrePointeuse>().Items.Add(new ParametrePointeuse { IdPoint = 1, MultiPoint = false });
             var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(),
                 SoftTime.Tests.Http.TestRights.Service(Uow), NullLogger<TenantConnectionService>.Instance);
-            Service = new ClosingService(Uow, tenant, new SageLeaveCalendar(tenant, Source), horloge ?? new HorlogeFixe());
+            Service = new ClosingService(Uow, tenant, new SageLeaveCalendar(tenant, Source), horloge ?? new HorlogeFixe(),
+                reglages is null ? null : Options.Create(reglages));
         }
 
         public void Carte(int id, string matricule, string? departement)
         {
-            Uow.Inner.Get<T_CARDPAIE>().Items.Add(new T_CARDPAIE
+            Uow.Inner.Get<CardPaie>().Items.Add(new CardPaie
             {
-                ID = id, SAGE_MATRICULE = matricule, DEPARTEMENT = departement, SAGE_BDD = "SAGE_TEST", POINTEUSE_BDD = "PTE_TEST"
+                Id = id, SageMatricule = matricule, Departement = departement, SageBdd = "SAGE_TEST", PointeuseBdd = "PTE_TEST"
             });
             Source.Employees.Add(new ExternalEmployee(matricule, id, "X", "Y", null, false));
         }
 
         public void Plan(int idsal, DateTime jour, TimeSpan? ha = null, TimeSpan? hd = null)
-            => Uow.Inner.Get<T_PLANNING_SAL>().Items.Add(new T_PLANNING_SAL
+            => Uow.Inner.Get<PlanningSalarie>().Items.Add(new PlanningSalarie
             {
-                ID = Uow.Inner.Get<T_PLANNING_SAL>().Items.Count + 1,
-                IDSAL = idsal,
+                Id = Uow.Inner.Get<PlanningSalarie>().Items.Count + 1,
+                IdSal = idsal,
                 DateP = jour.Date,
-                HA = jour.Date.Add(ha ?? H8),
-                HD = jour.Date.Add(hd ?? H17),
+                Ha = jour.Date.Add(ha ?? H8),
+                Hd = jour.Date.Add(hd ?? H17),
                 OffP = false,
-                BDD_SAGE = "SAGE_TEST",
-                BDD_POINTEUSE = "PTE_TEST"
+                BddSage = "SAGE_TEST",
+                BddPointeuse = "PTE_TEST"
             });
 
         public void Punch(string matricule, DateTime jour, params TimeSpan[] heures)
         {
             foreach (var heure in heures)
-                Uow.Inner.Get<T_POINTAGE>().Items.Add(new T_POINTAGE
+                Uow.Inner.Get<Pointage>().Items.Add(new Pointage
                 {
-                    MATRICULE_SAGE = matricule, DATE_POINTAGE = jour.Date, HEURE_POINTAGE = heure,
-                    NOM_BDD_SAGE = "SAGE_TEST", NOM_BDD_POINTEUSE = "PTE_TEST"
+                    MatriculeSage = matricule, DatePointage = jour.Date, HeurePointage = heure,
+                    NomBddSage = "SAGE_TEST", NomBddPointeuse = "PTE_TEST"
                 });
         }
 
@@ -138,13 +145,13 @@ public class ClosingServiceTests
         }
 
         public void SemaineValidee(string matricule, DateTime lundi)
-            => Uow.Inner.Get<T_HS_VALIDER>().Items.Add(new T_HS_VALIDER
+            => Uow.Inner.Get<HsValidee>().Items.Add(new HsValidee
             {
-                BDD_SAGE = "SAGE_TEST", MATRICULES = matricule, DATE_DEB = lundi, DATE_FIN = lundi.AddDays(6), VALIDATION_HS = true
+                BddSage = "SAGE_TEST", Matricules = matricule, DateDeb = lundi, DateFin = lundi.AddDays(6), ValidationHs = true
             });
 
         public void Ferie(DateTime jour) =>
-            Uow.Inner.Get<T_FERIE>().Items.Add(new T_FERIE { DATE = jour, BDD_SAGE = "SAGE_TEST" });
+            Uow.Inner.Get<JourFerie>().Items.Add(new JourFerie { Date = jour, BddSage = "SAGE_TEST" });
 
         /// <summary>
         /// Jeu fixe, semaine du lundi 17 au vendredi 21 novembre 2025, deux salariés planifiés 8 h–17 h :
@@ -196,319 +203,379 @@ public class ClosingServiceTests
     [Fact]
     public async Task Analyse_FixedSet_ScoreAndCountsMatchHandComputation()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
 
+        // Act
         var result = await ctx.Service.AnalyserAsync(Semaine());
 
+        // Assert
         // Poids 5 + 1 + 1 + 5 = 12 sur 10 jours-employé : 100 − 100 × 12 / (5 × 10) = 76
-        Assert.Equal(10, result.JoursEmployeControles);
-        Assert.Equal(76, result.Score);
-        Assert.Equal(4, result.NombreAnomalies);
-        Assert.Equal(PayrollClosingRules.FormuleScore, result.Formule);
-        Assert.Equal(2, Compte(result.ParGravite, ClosingSeverity.Critique));
-        Assert.Equal(0, Compte(result.ParGravite, ClosingSeverity.Importante));
-        Assert.Equal(2, Compte(result.ParGravite, ClosingSeverity.Mineure));
-        Assert.Equal(1, Compte(result.ParType, ClosingAnomalyType.PointageIncomplet));
-        Assert.Equal(1, Compte(result.ParType, ClosingAnomalyType.PointageManquant));
-        Assert.Equal(1, Compte(result.ParType, ClosingAnomalyType.DoublonExact));
-        Assert.Equal(1, Compte(result.ParType, ClosingAnomalyType.QuasiDoublon));
-        Assert.Equal(0, Compte(result.ParType, ClosingAnomalyType.PointageSansPlanning));
-        Assert.Equal(Enum.GetValues<ClosingAnomalyType>().Length, result.ParType.Count);
+        result.JoursEmployeControles.Should().Be(10);
+        result.Score.Should().Be(76);
+        result.NombreAnomalies.Should().Be(4);
+        result.Formule.Should().Be(PayrollClosingRules.FormuleScore);
+        Compte(result.ParGravite, ClosingSeverity.Critique).Should().Be(2);
+        Compte(result.ParGravite, ClosingSeverity.Importante).Should().Be(0);
+        Compte(result.ParGravite, ClosingSeverity.Mineure).Should().Be(2);
+        Compte(result.ParType, ClosingAnomalyType.PointageIncomplet).Should().Be(1);
+        Compte(result.ParType, ClosingAnomalyType.PointageManquant).Should().Be(1);
+        Compte(result.ParType, ClosingAnomalyType.DoublonExact).Should().Be(1);
+        Compte(result.ParType, ClosingAnomalyType.QuasiDoublon).Should().Be(1);
+        Compte(result.ParType, ClosingAnomalyType.PointageSansPlanning).Should().Be(0);
+        result.ParType.Count.Should().Be(Enum.GetValues<ClosingAnomalyType>().Length);
     }
 
     [Fact]
     public async Task Analyse_FixedSet_ScorePerDepartment()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
 
+        // Act
         var result = await ctx.Service.AnalyserAsync(Semaine());
 
+        // Assert
         // INFO : 5 + 1 + 1 = 7 sur 5 jours → 72 ; RH : 5 sur 5 jours → 80
-        Assert.Collection(result.ParDepartement,
+        result.ParDepartement.Should().SatisfyRespectively(
             info =>
             {
-                Assert.Equal("INFO", info.Departement);
-                Assert.Equal(5, info.JoursEmployeControles);
-                Assert.Equal(72, info.Score);
-                Assert.Equal(3, info.NombreAnomalies);
+                info.Departement.Should().Be("INFO");
+                info.JoursEmployeControles.Should().Be(5);
+                info.Score.Should().Be(72);
+                info.NombreAnomalies.Should().Be(3);
             },
             rh =>
             {
-                Assert.Equal("RH", rh.Departement);
-                Assert.Equal(5, rh.JoursEmployeControles);
-                Assert.Equal(80, rh.Score);
-                Assert.Equal(1, Compte(rh.ParType, ClosingAnomalyType.PointageManquant));
+                rh.Departement.Should().Be("RH");
+                rh.JoursEmployeControles.Should().Be(5);
+                rh.Score.Should().Be(80);
+                Compte(rh.ParType, ClosingAnomalyType.PointageManquant).Should().Be(1);
             });
     }
 
     [Fact]
-    public async Task Analyse_ExposesMatriculeAndDepartmentOnly()
+    public async Task AnalyserAsync_Result_ExposesMatriculeAndDepartmentOnly()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
-
         var result = await ctx.Service.AnalyserAsync(Semaine());
+
+        // Act
         var json = JsonSerializer.Serialize(result);
 
-        Assert.DoesNotContain("\"X\"", json);
-        Assert.DoesNotContain("\"Y\"", json);
-        Assert.Contains(result.Anomalies.Items, a => a.Matricule == "2" && a.Departement == "RH");
+        // Assert
+        json.Should().NotContain("\"X\"");
+        json.Should().NotContain("\"Y\"");
+        result.Anomalies.Items.Should().Contain(a => a.Matricule == "2" && a.Departement == "RH");
     }
 
     [Fact]
     public async Task Analyse_DepartmentFilter_KeepsOnlyThatDepartment()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
 
+        // Act
         var result = await ctx.Service.AnalyserAsync(Semaine(departement: "rh"));
 
-        Assert.Equal("rh", result.Departement);
-        Assert.Equal(5, result.JoursEmployeControles);
-        Assert.Equal(80, result.Score);
-        var anomalie = Assert.Single(result.Anomalies.Items);
-        Assert.Equal(nameof(ClosingAnomalyType.PointageManquant), anomalie.Type);
-        Assert.Equal("RH", Assert.Single(result.ParDepartement).Departement);
+        // Assert
+        result.Departement.Should().Be("rh");
+        result.JoursEmployeControles.Should().Be(5);
+        result.Score.Should().Be(80);
+        var anomalie = result.Anomalies.Items.Should().ContainSingle().Which;
+        anomalie.Type.Should().Be(nameof(ClosingAnomalyType.PointageManquant));
+        result.ParDepartement.Should().ContainSingle().Which.Departement.Should().Be("RH");
     }
 
     [Fact]
     public async Task Analyse_PeriodWithoutData_ScoreAndComparisonAreNull()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
 
+        // Act
         var result = await ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(new DateTime(2025, 10, 1), new DateTime(2025, 10, 5)));
 
-        Assert.Equal(0, result.JoursEmployeControles);
-        Assert.Null(result.Score);
-        Assert.Null(result.Comparaison);
-        Assert.Empty(result.Anomalies.Items);
-        Assert.Equal(1, result.Anomalies.Page);
+        // Assert
+        result.JoursEmployeControles.Should().Be(0);
+        result.Score.Should().BeNull();
+        result.Comparaison.Should().BeNull();
+        result.Anomalies.Items.Should().BeEmpty();
+        result.Anomalies.Page.Should().Be(1);
     }
 
     [Fact]
     public async Task Analyse_FuturePeriod_IsNeverControlled()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.Carte(1, "001", "INFO");
         ctx.Plan(1, Today);
         ctx.Plan(1, Today.AddDays(1));
         ctx.Punch("001", Today, H8);
 
+        // Act
         var result = await ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(Today, Today.AddDays(1)));
 
-        Assert.Equal(0, result.JoursEmployeControles);
-        Assert.Null(result.Score);
-        Assert.Equal(0, result.NombreAnomalies);
+        // Assert
+        result.JoursEmployeControles.Should().Be(0);
+        result.Score.Should().BeNull();
+        result.NombreAnomalies.Should().Be(0);
     }
 
     [Fact]
     public async Task Analyse_PreviousPeriodWithoutData_ComparisonIsNull()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
 
+        // Act
         var result = await ctx.Service.AnalyserAsync(Semaine());
 
-        Assert.Equal(76, result.Score);
-        Assert.Null(result.Comparaison);
+        // Assert
+        result.Score.Should().Be(76);
+        result.Comparaison.Should().BeNull();
     }
 
     [Fact]
     public async Task Analyse_Comparison_Improvement()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
         ctx.SemainePrecedente(manquantsPour002: true);
 
+        // Act
         var result = await ctx.Service.AnalyserAsync(Semaine() with { IncludeComparison = true });
 
+        // Assert
         // Précédente (12 → 16 nov.) : 2 manquants sur 6 jours → 100 − 100 × 10 / 30 = 66,67 → 67
-        var comparaison = Assert.IsType<ClosingComparisonDto>(result.Comparaison);
-        Assert.Equal(new DateTime(2025, 11, 12), comparaison.From);
-        Assert.Equal(new DateTime(2025, 11, 16), comparaison.To);
-        Assert.Equal(6, comparaison.JoursEmployeControlesPrecedent);
-        Assert.Equal(67, comparaison.ScorePrecedent);
-        Assert.Equal(9, comparaison.EcartScore);
+        var comparaison = result.Comparaison.Should().BeOfType<ClosingComparisonDto>().Which;
+        comparaison.From.Should().Be(new DateTime(2025, 11, 12));
+        comparaison.To.Should().Be(new DateTime(2025, 11, 16));
+        comparaison.JoursEmployeControlesPrecedent.Should().Be(6);
+        comparaison.ScorePrecedent.Should().Be(67);
+        comparaison.EcartScore.Should().Be(9);
         var manquants = comparaison.ParType.Single(t => t.Type == nameof(ClosingAnomalyType.PointageManquant));
-        Assert.Equal((2, 1, -1), (manquants.Precedent, manquants.Actuel, manquants.Ecart));
+        ((manquants.Precedent, manquants.Actuel, manquants.Ecart)).Should().Be((2, 1, -1));
         var exacts = comparaison.ParType.Single(t => t.Type == nameof(ClosingAnomalyType.DoublonExact));
-        Assert.Equal((0, 1, 1), (exacts.Precedent, exacts.Actuel, exacts.Ecart));
+        ((exacts.Precedent, exacts.Actuel, exacts.Ecart)).Should().Be((0, 1, 1));
     }
 
     [Fact]
     public async Task Analyse_Comparison_Degradation()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
         ctx.SemainePrecedente(manquantsPour002: false);
 
+        // Act
         var result = await ctx.Service.AnalyserAsync(Semaine() with { IncludeComparison = true });
 
-        var comparaison = Assert.IsType<ClosingComparisonDto>(result.Comparaison);
-        Assert.Equal(100, comparaison.ScorePrecedent);
-        Assert.Equal(-24, comparaison.EcartScore);
-        Assert.All(comparaison.ParType, t => Assert.Equal(t.Actuel - t.Precedent, t.Ecart));
+        // Assert
+        var comparaison = result.Comparaison.Should().BeOfType<ClosingComparisonDto>().Which;
+        comparaison.ScorePrecedent.Should().Be(100);
+        comparaison.EcartScore.Should().Be(-24);
+        comparaison.ParType.Should().AllSatisfy(t => t.Ecart.Should().Be(t.Actuel - t.Precedent));
     }
 
     [Fact]
     public async Task Analyse_Pagination_Page2WithStableOrderAndTotal()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
-
         var complet = await ctx.Service.AnalyserAsync(Semaine(page: 1, taille: 100));
+
+        // Act
         var page2 = await ctx.Service.AnalyserAsync(Semaine(page: 2, taille: 3));
 
-        Assert.Equal(
-            new[]
+        // Assert
+        complet.Anomalies.Items.Select(a => a.Type).Should().Equal(new[]
             {
                 nameof(ClosingAnomalyType.PointageManquant), nameof(ClosingAnomalyType.PointageIncomplet),
                 nameof(ClosingAnomalyType.DoublonExact), nameof(ClosingAnomalyType.QuasiDoublon)
-            },
-            complet.Anomalies.Items.Select(a => a.Type));
-        Assert.Equal(4, page2.Anomalies.Total);
-        Assert.Equal(2, page2.Anomalies.Page);
-        Assert.Equal(3, page2.Anomalies.PageSize);
-        Assert.Equal(2, page2.Anomalies.TotalPages);
-        Assert.Equal(complet.Anomalies.Items[3], Assert.Single(page2.Anomalies.Items));
+            });
+        page2.Anomalies.Total.Should().Be(4);
+        page2.Anomalies.Page.Should().Be(2);
+        page2.Anomalies.PageSize.Should().Be(3);
+        page2.Anomalies.TotalPages.Should().Be(2);
+        page2.Anomalies.Items.Should().ContainSingle().Which.Should().Be(complet.Anomalies.Items[3]);
     }
 
     [Fact]
     public async Task Analyse_FromAfterTo_ThrowsValidationError()
     {
+        // Arrange
         var ctx = new Contexte();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(Vendredi, Lundi)));
+        // Act
+        Func<Task> act = () =>
+            ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(Vendredi, Lundi));
+
+        // Assert
+        await act.Should().ThrowExactlyAsync<DomainException>();
     }
 
     [Fact]
     public async Task Analyse_PeriodLongerThan366Days_ThrowsValidationError()
     {
+        // Arrange
         var ctx = new Contexte();
         var from = new DateTime(2024, 1, 1);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(from, from.AddDays(366))));
-        ClosingService.Valider(new ClosingAnalysisRequest(from, from.AddDays(365)));
+        // Act
+        Func<Task> act = () =>
+            ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(from, from.AddDays(366)));
+
+        // Assert
+        await act.Should().ThrowExactlyAsync<DomainException>();
+        ClosingComputation.Valider(new ClosingAnalysisRequest(from, from.AddDays(365)));
     }
 
     [Fact]
     public async Task Analyse_PauseShift_NeverRaisesAnomaly()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.Carte(1, "001", "INFO");
         ctx.Ferie(Lundi.AddDays(1));
         for (var jour = Lundi; jour <= Vendredi; jour = jour.AddDays(1))
             ctx.Plan(1, jour, TimeSpan.FromHours(12), TimeSpan.FromHours(12));
 
+        // Act
         var result = await ctx.Service.AnalyserAsync(Semaine());
 
-        Assert.Equal(0, result.NombreAnomalies);
-        Assert.Equal(0, result.JoursEmployeControles);
-        Assert.Null(result.Score);
+        // Assert
+        result.NombreAnomalies.Should().Be(0);
+        result.JoursEmployeControles.Should().Be(0);
+        result.Score.Should().BeNull();
     }
 
     [Fact]
     public async Task Analyse_SageLeave_ExcludesMissingPunch()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
         ctx.Conge(2, Lundi);
 
+        // Act
         var result = await ctx.Service.AnalyserAsync(Semaine());
 
-        Assert.Equal(0, Compte(result.ParType, ClosingAnomalyType.PointageManquant));
+        // Assert
+        Compte(result.ParType, ClosingAnomalyType.PointageManquant).Should().Be(0);
     }
 
     [Fact]
     public async Task Analyse_ValidatedWeek_FollowsIgnoreOption()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
         ctx.SemaineValidee("001", Lundi);
-
         var parDefaut = await ctx.Service.AnalyserAsync(Semaine());
+
+        // Act
         var signalees = await ctx.Service.AnalyserAsync(Semaine(options: new ClosingRulesOptions { IgnorerSemainesValidees = false }));
 
-        Assert.Equal(0, Compte(parDefaut.ParType, ClosingAnomalyType.PointageIncomplet));
-        Assert.Equal(1, Compte(signalees.ParType, ClosingAnomalyType.PointageIncomplet));
+        // Assert
+        Compte(parDefaut.ParType, ClosingAnomalyType.PointageIncomplet).Should().Be(0);
+        Compte(signalees.ParType, ClosingAnomalyType.PointageIncomplet).Should().Be(1);
     }
 
     [Fact]
     public async Task Analyse_TwoCalls_IdenticalResult()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
         ctx.SemainePrecedente(manquantsPour002: true);
-
         var premier = JsonSerializer.Serialize(await ctx.Service.AnalyserAsync(Semaine()));
+
+        // Act
         var second = JsonSerializer.Serialize(await ctx.Service.AnalyserAsync(Semaine()));
 
-        Assert.Equal(premier, second);
+        // Assert
+        second.Should().Be(premier);
     }
 
     [Fact]
     public async Task Analyse_ComparisonNotRequested_IsAbsentByDefault()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
         ctx.SemainePrecedente(manquantsPour002: true);
 
+        // Act
         var result = await ctx.Service.AnalyserAsync(Semaine());
 
-        Assert.False(Semaine().IncludeComparison);
-        Assert.Null(result.Comparaison);
-        Assert.Equal(76, result.Score);
-        Assert.Equal(4, result.NombreAnomalies);
+        // Assert
+        Semaine().IncludeComparison.Should().BeFalse();
+        result.Comparaison.Should().BeNull();
+        result.Score.Should().Be(76);
+        result.NombreAnomalies.Should().Be(4);
     }
 
     [Fact]
     public async Task Analyse_ComparisonNotRequested_PreviousPeriodIsNotLoaded()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
         ctx.SemainePrecedente(manquantsPour002: true);
-
         var sans = await ctx.Service.ChargerAsync(Semaine(), CancellationToken.None);
+
+        // Act
         var avec = await ctx.Service.ChargerAsync(Semaine() with { IncludeComparison = true }, CancellationToken.None);
 
-        Assert.DoesNotContain(sans.Pointages, p => p.DATE_POINTAGE < Lundi);
-        Assert.DoesNotContain(sans.Plannings, p => p.DateP < Lundi.AddDays(-1));
-        Assert.Contains(avec.Pointages, p => p.DATE_POINTAGE < Lundi);
+        // Assert
+        sans.Pointages.Should().NotContain(p => p.DatePointage < Lundi);
+        sans.Plannings.Should().NotContain(p => p.DateP < Lundi.AddDays(-1));
+        avec.Pointages.Should().Contain(p => p.DatePointage < Lundi);
     }
 
     [Fact]
     public async Task Analyse_WithAndWithoutComparison_SameCurrentPeriodResult()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
         ctx.SemainePrecedente(manquantsPour002: true);
-
         var sans = await ctx.Service.AnalyserAsync(Semaine());
+
+        // Act
         var avec = await ctx.Service.AnalyserAsync(Semaine() with { IncludeComparison = true });
 
-        Assert.NotNull(avec.Comparaison);
-        Assert.Equal(
-            JsonSerializer.Serialize(sans),
-            JsonSerializer.Serialize(avec with { Comparaison = null }));
+        // Assert
+        avec.Comparaison.Should().NotBeNull();
+        JsonSerializer.Serialize(avec with { Comparaison = null }).Should().Be(JsonSerializer.Serialize(sans));
     }
 
     [Fact]
     public async Task Analyse_NoPeriod_DefaultsToPreviousCalendarMonth()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
 
+        // Act
         var result = await ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(default, default));
 
+        // Assert
         // Aujourd'hui = 1er décembre 2025 : mois civil complet précédent = novembre 2025.
-        Assert.Equal(new DateTime(2025, 11, 1), result.From);
-        Assert.Equal(new DateTime(2025, 11, 30), result.To);
-        Assert.Equal(76, result.Score);
+        result.From.Should().Be(new DateTime(2025, 11, 1));
+        result.To.Should().Be(new DateTime(2025, 11, 30));
+        result.Score.Should().Be(76);
     }
 
     [Theory]
@@ -516,36 +583,43 @@ public class ClosingServiceTests
     [InlineData(2025, 12, 31, 2025, 11, 1, 2025, 11, 30)]
     [InlineData(2026, 1, 15, 2025, 12, 1, 2025, 12, 31)]
     [InlineData(2024, 3, 10, 2024, 2, 1, 2024, 2, 29)]
-    public void DefaultPeriod_IsPreviousCalendarMonth(int a, int m, int j, int a1, int m1, int j1, int a2, int m2, int j2)
+    public void AvecPeriodeParDefaut_NoPeriod_UsesPreviousCalendarMonth(int a, int m, int j, int a1, int m1, int j1, int a2, int m2, int j2)
     {
-        var request = ClosingService.AvecPeriodeParDefaut(new ClosingAnalysisRequest(default, default), new DateTime(a, m, j));
+        // Act
+        var request = ClosingComputation.AvecPeriodeParDefaut(new ClosingAnalysisRequest(default, default), new DateTime(a, m, j));
 
-        Assert.Equal(new DateTime(a1, m1, j1), request.From);
-        Assert.Equal(new DateTime(a2, m2, j2), request.To);
+        // Assert
+        request.From.Should().Be(new DateTime(a1, m1, j1));
+        request.To.Should().Be(new DateTime(a2, m2, j2));
     }
 
     [Fact]
     public async Task Analyse_OnlyOneBoundProvided_ThrowsValidationError()
     {
+        // Arrange
         var ctx = new Contexte();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(Lundi, default)));
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(default, Vendredi)));
+        // Act & Assert
+        await FluentActions.Awaiting(() =>
+            ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(Lundi, default))).Should().ThrowExactlyAsync<DomainException>();
+        await FluentActions.Awaiting(() =>
+            ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(default, Vendredi))).Should().ThrowExactlyAsync<DomainException>();
     }
 
     [Fact]
-    public async Task Analyse_NeverWrites()
+    public async Task AnalyserAsync_AnyPeriod_NeverWrites()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
         ctx.SemainePrecedente(manquantsPour002: true);
-
         await ctx.Service.AnalyserAsync(Semaine());
+
+        // Act
         await ctx.Service.AnalyserAsync(Semaine(departement: "INFO", page: 2, taille: 1));
 
-        Assert.Equal(0, ctx.Uow.Ecritures);
+        // Assert
+        ctx.Uow.Ecritures.Should().Be(0);
     }
 
     // ----------------------------------------------------------------------------- cache de l'analyse
@@ -558,15 +632,19 @@ public class ClosingServiceTests
     [Fact]
     public async Task Cache_ResultIdenticalWithAndWithoutCache_ForEveryPageAndFilter()
     {
+        // Arrange
         var avec = new Contexte();
         avec.JeuFixe();
         avec.SemainePrecedente(manquantsPour002: true);
-        var sans = new Contexte(); // même données, cache jamais réutilisé
+        var sans = new Contexte();
         sans.JeuFixe();
         sans.SemainePrecedente(manquantsPour002: true);
 
+        // Act
         // Première demande : remplit le cache ; les suivantes (changements de page) le réutilisent.
         await avec.Service.AnalyserAsync(Page(1, 1, reuse: false, comparaison: true));
+
+        // Assert
         foreach (var info in new[] { false, true })
             foreach (var comparaison in new[] { true })
                 for (var page = 1; page <= 5; page++)
@@ -574,58 +652,543 @@ public class ClosingServiceTests
                     {
                         var attendu = await sans.Service.AnalyserAsync(Page(page, taille, reuse: false, info, comparaison: comparaison));
                         var obtenu = await avec.Service.AnalyserAsync(Page(page, taille, reuse: true, info, comparaison: comparaison));
-                        Assert.Equal(Json(attendu), Json(obtenu));
+                        Json(obtenu).Should().Be(Json(attendu));
                     }
     }
 
     [Fact]
     public async Task Cache_WithoutReuseRequest_AlwaysRecomputesFromData()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
         var avant = await ctx.Service.AnalyserAsync(Page(1, 50, reuse: false));
-
-        ctx.Punch("002", Lundi, H8, H17); // la donnée change : le manquant du lundi disparaît
+        ctx.Punch("002", Lundi, H8, H17);
         var recalcule = await ctx.Service.AnalyserAsync(Page(1, 50, reuse: false));
+
+        // Act
         var reutilise = await ctx.Service.AnalyserAsync(Page(1, 50, reuse: true));
 
-        Assert.Equal(4, avant.NombreAnomalies);
-        Assert.Equal(3, recalcule.NombreAnomalies);   // nouvelle analyse : toujours à jour
-        Assert.Equal(3, reutilise.NombreAnomalies);   // l'analyse précédente a remplacé l'entrée du cache
+        // Assert
+        avant.NombreAnomalies.Should().Be(4);
+        recalcule.NombreAnomalies.Should().Be(3);
+        reutilise.NombreAnomalies.Should().Be(3);
     }
 
     [Fact]
     public async Task Cache_ReuseServesStoredAnalysis_ThenExpires()
     {
+        // Arrange
         var horloge = new HorlogeMobile();
-        var ctx = new Contexte(horloge);
-        ctx.JeuFixe();
-        await ctx.Service.AnalyserAsync(Page(1, 50, reuse: false));
-        ctx.Punch("002", Lundi, H8, H17);
+        var sut = new Contexte(horloge);
+        sut.JeuFixe();
+        await sut.Service.AnalyserAsync(Page(1, 50, reuse: false));
 
-        Assert.Equal(4, (await ctx.Service.AnalyserAsync(Page(2, 1, reuse: true))).NombreAnomalies); // dans les 60 s : analyse conservée
-        horloge.Avancer(TimeSpan.FromSeconds(61));
-        Assert.Equal(3, (await ctx.Service.AnalyserAsync(Page(2, 1, reuse: true))).NombreAnomalies); // expirée : recalculée
+        // Act
+        sut.Punch("002", Lundi, H8, H17);
+
+        // Assert : dans les 120 s, analyse conservée ; au-delà, recalculée.
+        (await sut.Service.AnalyserAsync(Page(2, 1, reuse: true))).NombreAnomalies.Should().Be(4);
+        horloge.Avancer(TimeSpan.FromSeconds(121));
+        (await sut.Service.AnalyserAsync(Page(2, 1, reuse: true))).NombreAnomalies.Should().Be(3);
     }
 
     [Fact]
-    public async Task Cache_KeyIncludesDepartmentComparisonAndRules()
+    public async Task AnalyserAsync_CachedAnalysis_KeyIncludesDepartmentComparisonAndRules()
     {
+        // Arrange
         var ctx = new Contexte();
         ctx.JeuFixe();
         ctx.SemainePrecedente(manquantsPour002: true);
         await ctx.Service.AnalyserAsync(Page(1, 50, reuse: false));
-
         var info = await ctx.Service.AnalyserAsync(Page(1, 50, reuse: true, departement: "INFO"));
         var rh = await ctx.Service.AnalyserAsync(Page(1, 50, reuse: true, departement: "RH"));
         var avecComparaison = await ctx.Service.AnalyserAsync(Page(1, 50, reuse: true, comparaison: true));
+
+        // Act
         var autresPoids = await ctx.Service.AnalyserAsync(
             new ClosingAnalysisRequest(Lundi, Vendredi, Options: new ClosingRulesOptions { PoidsCritique = 10 }, ReuseCached: true));
 
-        Assert.Equal("INFO", info.Departement);
-        Assert.Equal(3, info.NombreAnomalies);
-        Assert.Equal(1, rh.NombreAnomalies);
-        Assert.NotNull(avecComparaison.Comparaison);
-        Assert.NotEqual((await ctx.Service.AnalyserAsync(Page(1, 50, reuse: true))).Score, autresPoids.Score);
+        // Assert
+        info.Departement.Should().Be("INFO");
+        info.NombreAnomalies.Should().Be(3);
+        rh.NombreAnomalies.Should().Be(1);
+        avecComparaison.Comparaison.Should().NotBeNull();
+        autresPoids.Score.Should().NotBe((await ctx.Service.AnalyserAsync(Page(1, 50, reuse: true))).Score);
+    }
+
+    // ----------------------------------------------------------------------------- filtre et tri par gravité
+
+    /// <summary>
+    /// Gravités réglées pour que l'ordre par date diffère de l'ordre par gravité : lundi manquant (Mineure), mardi
+    /// incomplet (Critique), mercredi doublon exact (Information), jeudi quasi-doublon (Critique).
+    /// </summary>
+    private static ClosingRulesOptions GravitesMelangees() => new()
+    {
+        Gravites = new Dictionary<ClosingAnomalyType, ClosingSeverity>
+        {
+            [ClosingAnomalyType.PointageManquant] = ClosingSeverity.Mineure,
+            [ClosingAnomalyType.DoublonExact] = ClosingSeverity.Information,
+            [ClosingAnomalyType.QuasiDoublon] = ClosingSeverity.Critique,
+        }
+    };
+
+    private static ClosingAnalysisRequest AvecGravite(
+        IReadOnlyList<ClosingSeverity>? niveaux = null, bool tri = false, bool information = false,
+        (int? Page, int? Taille, bool Reuse) pagination = default)
+        => new(Lundi, Vendredi, null, pagination.Page, pagination.Taille, GravitesMelangees(),
+            IncludeInformation: information, ReuseCached: pagination.Reuse, Gravites: niveaux, TriParGravite: tri);
+
+    private static string[] Types(ClosingAnalysisDto a) => a.Anomalies.Items.Select(x => x.Type).ToArray();
+
+    /// <summary>Tout sauf la liste : ce qui ne doit jamais dépendre du filtre ni du tri.</summary>
+    private static string SansListe(ClosingAnalysisDto a) => Json(new
+    {
+        a.Score, a.Statut, a.NombreAnomalies, a.JoursEmployeControles, a.ParGravite, a.ParType, a.ParDepartement,
+        a.Comparaison, a.From, a.To
+    });
+
+    [Fact]
+    public async Task AnalyserAsync_WithoutGravityParameter_IsIdenticalToDefaultOutput()
+    {
+        // Arrange
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+        ctx.SemainePrecedente(manquantsPour002: true);
+
+        // Act
+        var absent = await ctx.Service.AnalyserAsync(
+            new ClosingAnalysisRequest(Lundi, Vendredi, null, 1, 50, IncludeComparison: true));
+        var explicite = await ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(
+            Lundi, Vendredi, null, 1, 50, IncludeComparison: true, Gravites: null, TriParGravite: false));
+        var videExplicite = await ctx.Service.AnalyserAsync(new ClosingAnalysisRequest(
+            Lundi, Vendredi, null, 1, 50, IncludeComparison: true, Gravites: Array.Empty<ClosingSeverity>(), TriParGravite: false));
+
+        // Assert
+        Json(explicite).Should().Be(Json(absent));
+        Json(videExplicite).Should().Be(Json(absent));
+        // Ordre historique : date, matricule, type (le lundi manquant, puis incomplet, doublon exact, quasi-doublon).
+        Types(absent).Should().Equal("PointageManquant", "PointageIncomplet", "DoublonExact", "QuasiDoublon");
+        absent.Score.Should().Be(76);
+        absent.NombreAnomalies.Should().Be(4);
+        absent.Anomalies.Total.Should().Be(4);
+    }
+
+    [Theory]
+    [InlineData(ClosingSeverity.Critique)]
+    [InlineData(ClosingSeverity.Mineure, ClosingSeverity.Information)]
+    [InlineData(ClosingSeverity.Importante)]
+    public async Task AnalyserAsync_GravityFilter_KeepsScoreStatusAndCountsOfFullAnalysis(params ClosingSeverity[] niveaux)
+    {
+        // Arrange
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+        ctx.SemainePrecedente(manquantsPour002: true);
+        var complet = await ctx.Service.AnalyserAsync(AvecGravite(information: true));
+
+        // Act
+        var filtre = await ctx.Service.AnalyserAsync(AvecGravite(niveaux));
+
+        // Assert
+        SansListe(filtre).Should().Be(SansListe(complet));   // score, statut, comptages, départements : inchangés
+        filtre.Anomalies.Items.Select(a => Enum.Parse<ClosingSeverity>(a.Gravite)).Where(g => !niveaux.Contains(g))
+            .Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AnalyserAsync_CriticalFilter_RestrictsListAndTotalButNotCounts()
+    {
+        // Arrange
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+
+        // Act
+        var critiques = await ctx.Service.AnalyserAsync(AvecGravite(new[] { ClosingSeverity.Critique }));
+
+        // Assert
+        Types(critiques).Should().Equal("PointageIncomplet", "QuasiDoublon");
+        critiques.Anomalies.Total.Should().Be(2);
+        critiques.NombreAnomalies.Should().Be(4);
+    }
+
+    [Fact]
+    public async Task AnalyserAsync_TwoLevelFilter_KeepsUsualOrder()
+    {
+        // Arrange
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+
+        // Act
+        var deux = await ctx.Service.AnalyserAsync(AvecGravite(new[] { ClosingSeverity.Critique, ClosingSeverity.Mineure }));
+
+        // Assert
+        Types(deux).Should().Equal("PointageManquant", "PointageIncomplet", "QuasiDoublon");
+    }
+
+    [Fact]
+    public async Task AnalyserAsync_FilterWithoutMatch_ReturnsEmptyListButFullCounts()
+    {
+        // Arrange
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+
+        // Act
+        var aucune = await ctx.Service.AnalyserAsync(AvecGravite(new[] { ClosingSeverity.Importante }));
+
+        // Assert
+        aucune.Anomalies.Items.Should().BeEmpty();
+        aucune.Anomalies.Total.Should().Be(0);
+        aucune.NombreAnomalies.Should().Be(4);
+    }
+
+    [Fact]
+    public async Task AnalyserAsync_ExplicitGravityFilter_OverridesIncludeInformation()
+    {
+        // Arrange
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+
+        // Act
+        var parDefaut = await ctx.Service.AnalyserAsync(AvecGravite());                           // Information masquée
+        var avecInfo = await ctx.Service.AnalyserAsync(AvecGravite(information: true));
+        var infoSeule = await ctx.Service.AnalyserAsync(AvecGravite(new[] { ClosingSeverity.Information }));
+        var critiquesEtInfo = await ctx.Service.AnalyserAsync(
+            AvecGravite(new[] { ClosingSeverity.Critique }, information: true));
+
+        // Assert
+        Types(parDefaut).Should().NotContain("DoublonExact");
+        Types(avecInfo).Should().Contain("DoublonExact");
+        Types(infoSeule).Should().Equal("DoublonExact");
+        Types(critiquesEtInfo).Should().NotContain("DoublonExact");   // le filtre explicite l'emporte
+    }
+
+    [Fact]
+    public async Task AnalyserAsync_SortByGravity_PutsMostSevereFirstThenKeepsUsualOrder()
+    {
+        // Arrange
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+
+        // Act
+        var trie = await ctx.Service.AnalyserAsync(AvecGravite(tri: true, information: true));
+
+        // Assert
+        trie.Anomalies.Items.Select(a => Enum.Parse<ClosingSeverity>(a.Gravite)).Should().Equal(
+            ClosingSeverity.Critique, ClosingSeverity.Critique, ClosingSeverity.Mineure, ClosingSeverity.Information);
+        // Égalités départagées par l'ordre habituel (date, matricule, type) : incomplet (mardi) avant quasi-doublon (jeudi).
+        Types(trie).Should().Equal("PointageIncomplet", "QuasiDoublon", "PointageManquant", "DoublonExact");
+    }
+
+    [Fact]
+    public async Task AnalyserAsync_SortByGravity_IsDeterministicAndKeepsTotalsCountsAndScore()
+    {
+        // Arrange
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+        var sansTri = await ctx.Service.AnalyserAsync(AvecGravite(information: true));
+
+        // Act
+        var trie = await ctx.Service.AnalyserAsync(AvecGravite(tri: true, information: true));
+        var encore = await ctx.Service.AnalyserAsync(AvecGravite(tri: true, information: true));
+
+        // Assert
+        Json(encore).Should().Be(Json(trie));
+        trie.Anomalies.Total.Should().Be(sansTri.Anomalies.Total);
+        SansListe(trie).Should().Be(SansListe(sansTri));
+        Types(trie).Should().BeEquivalentTo(Types(sansTri));   // mêmes lignes, autre ordre
+    }
+
+    [Fact]
+    public async Task AnalyserAsync_SortedPages_ConcatenateToFullSortedListWithoutGapsOrDuplicates()
+    {
+        // Arrange
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+        var complet = await ctx.Service.AnalyserAsync(AvecGravite(tri: true, information: true, pagination: (1, 50, false)));
+
+        // Act
+        var assemble = new List<ClosingAnomalyDto>();
+        for (var page = 1; page <= 4; page++)
+            assemble.AddRange((await ctx.Service.AnalyserAsync(
+                AvecGravite(tri: true, information: true, pagination: (page, 1, false)))).Anomalies.Items);
+
+        // Assert
+        Json(assemble).Should().Be(Json(complet.Anomalies.Items));
+    }
+
+    public static IEnumerable<object?[]> FiltresEtTris()
+    {
+        foreach (var niveaux in new IReadOnlyList<ClosingSeverity>?[]
+                 { null, new[] { ClosingSeverity.Critique }, new[] { ClosingSeverity.Mineure, ClosingSeverity.Critique } })
+            foreach (var tri in new[] { false, true })
+                yield return new object?[] { niveaux, tri };
+    }
+
+    [Theory]
+    [MemberData(nameof(FiltresEtTris))]
+    public async Task AnalyserAsync_FilterAndSortFromCache_EqualFreshComputationForEveryPage(
+        IReadOnlyList<ClosingSeverity>? niveaux, bool tri)
+    {
+        // Arrange
+        var avec = new Contexte();
+        avec.JeuFixe();
+        var sans = new Contexte();
+        sans.JeuFixe();
+        await avec.Service.AnalyserAsync(AvecGravite(pagination: (1, 1, false)));   // remplit le cache
+
+        // Act
+        var attendus = new List<string>();
+        var obtenus = new List<string>();
+        for (var page = 1; page <= 4; page++)
+        {
+            attendus.Add(Json(await sans.Service.AnalyserAsync(AvecGravite(niveaux, tri, true, (page, 1, false)))));
+            obtenus.Add(Json(await avec.Service.AnalyserAsync(AvecGravite(niveaux, tri, true, (page, 1, true)))));
+        }
+
+        // Assert
+        obtenus.Should().Equal(attendus);
+    }
+
+    [Fact]
+    public async Task AnalyserAsync_FilterAndSort_NeverWrite()
+    {
+        // Arrange
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+
+        // Act
+        await ctx.Service.AnalyserAsync(AvecGravite(new[] { ClosingSeverity.Critique }, tri: true, information: true));
+
+        // Assert
+        ctx.Uow.Ecritures.Should().Be(0);
+    }
+
+    // ----------------------------------------------------------------------------- cache glissant sous plafond absolu
+
+    private static readonly TimeSpan Pas = TimeSpan.FromSeconds(50);   // plus court que le délai glissant (120 s)
+
+    private static async Task<int> Anomalies(Contexte ctx, bool reuse, string? perimetre = null)
+        => (await ctx.Service.AnalyserAsync(Page(1, 50, reuse) with { Perimetre = perimetre })).NombreAnomalies;
+
+    [Fact]
+    public async Task AnalyserAsync_ContinuousReads_StayCachedUntilAbsoluteCeiling()
+    {
+        // Arrange
+        var horloge = new HorlogeMobile();
+        var ctx = new Contexte(horloge);
+        ctx.JeuFixe();
+        var origine = await Anomalies(ctx, reuse: false);           // calcul d'origine : t = 0
+        ctx.Punch("002", Lundi, H8, H17);                            // la donnée change : un recalcul donnerait 3
+
+        // Act
+        var lues = new List<int>();
+        for (var i = 1; i <= 11; i++)                                // lectures toutes les 50 s jusqu'à t = 550 s
+        {
+            horloge.Avancer(Pas);
+            lues.Add(await Anomalies(ctx, reuse: true));
+        }
+        horloge.Avancer(TimeSpan.FromSeconds(49));                   // t = 599 s : sous le plafond de 600 s
+        var avantPlafond = await Anomalies(ctx, reuse: true);
+        horloge.Avancer(TimeSpan.FromSeconds(2));                    // t = 601 s : plafond dépassé malgré la lecture continue
+        var apresPlafond = await Anomalies(ctx, reuse: true);
+
+        // Assert
+        origine.Should().Be(4);
+        lues.Should().OnlyContain(n => n == 4);
+        avantPlafond.Should().Be(4);
+        apresPlafond.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task AnalyserAsync_NoReadDuringSlidingDelay_Expires()
+    {
+        // Arrange
+        var horloge = new HorlogeMobile();
+        var ctx = new Contexte(horloge);
+        ctx.JeuFixe();
+        await Anomalies(ctx, reuse: false);
+        ctx.Punch("002", Lundi, H8, H17);
+
+        // Act
+        horloge.Avancer(Pas);
+        var renouvelee = await Anomalies(ctx, reuse: true);         // lue à 50 s : renouvelée jusqu'à 170 s
+        horloge.Avancer(TimeSpan.FromSeconds(121));                  // 171 s : plus de 120 s sans lecture
+        var expiree = await Anomalies(ctx, reuse: true);
+
+        // Assert
+        renouvelee.Should().Be(4);
+        expiree.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task AnalyserAsync_WithoutReuse_RecomputesAndRestartsCeiling()
+    {
+        // Arrange
+        var horloge = new HorlogeMobile();
+        var ctx = new Contexte(horloge);
+        ctx.JeuFixe();
+        await Anomalies(ctx, reuse: false);                          // t = 0
+        ctx.Punch("002", Lundi, H8, H17);
+        await LireEnContinuAsync(ctx, horloge, 11);                  // lectures continues jusqu'à t = 550 s
+        horloge.Avancer(TimeSpan.FromSeconds(40));                   // t = 590 s : ancien plafond (600 s) presque atteint
+
+        // Act
+        var recalcul = await Anomalies(ctx, reuse: false);           // « Analyser » : plafond neuf (jusqu'à 1190 s)
+        ctx.Punch("001", Lundi.AddDays(1), H17);                     // nouvelle donnée : un recalcul donnerait 2
+        horloge.Avancer(TimeSpan.FromSeconds(50));                   // t = 640 s : l'ancien plafond est dépassé
+        var entreeNeuve = await Anomalies(ctx, reuse: true);
+        await LireEnContinuAsync(ctx, horloge, 10);                  // jusqu'à t = 1140 s
+        horloge.Avancer(TimeSpan.FromSeconds(49));                   // t = 1189 s : sous le plafond neuf
+        var avantPlafond = await Anomalies(ctx, reuse: true);
+        horloge.Avancer(TimeSpan.FromSeconds(2));                    // t = 1191 s : plafond neuf dépassé
+        var apresPlafond = await Anomalies(ctx, reuse: true);
+
+        // Assert
+        recalcul.Should().Be(3);
+        entreeNeuve.Should().Be(3);
+        avantPlafond.Should().Be(3);
+        apresPlafond.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task AnalyserAsync_TwoUsers_NeverShareCacheEntry()
+    {
+        // Arrange
+        var ctx = new Contexte();
+        ctx.JeuFixe();
+        var origine = await Anomalies(ctx, reuse: false, perimetre: "u1");
+        ctx.Punch("002", Lundi, H8, H17);
+
+        // Act
+        var u1 = await Anomalies(ctx, reuse: true, perimetre: "u1");        // l'entrée de u1
+        var u2 = await Anomalies(ctx, reuse: true, perimetre: "u2");        // u2 ne lit jamais l'entrée de u1
+        var u2Encore = await Anomalies(ctx, reuse: true, perimetre: "u2");  // puis sa propre entrée
+        var u1Encore = await Anomalies(ctx, reuse: true, perimetre: "u1");  // celle de u1 reste inchangée
+        var sansPerimetre = await Anomalies(ctx, reuse: true);              // encore une autre clé
+
+        // Assert
+        origine.Should().Be(4);
+        u1.Should().Be(4);
+        u2.Should().Be(3);
+        u2Encore.Should().Be(3);
+        u1Encore.Should().Be(4);
+        sansPerimetre.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task AnalyserAsync_RenewedCacheEntries_EqualFreshComputation()
+    {
+        // Arrange
+        var horloge = new HorlogeMobile();
+        var avec = new Contexte(horloge);
+        avec.JeuFixe();
+        avec.SemainePrecedente(manquantsPour002: true);
+        var sans = new Contexte();
+        sans.JeuFixe();
+        sans.SemainePrecedente(manquantsPour002: true);
+        await avec.Service.AnalyserAsync(Page(1, 1, reuse: false, comparaison: true));
+
+        // Act
+        var attendus = new List<string>();
+        var obtenus = new List<string>();
+        foreach (var page in new[] { 1, 2, 3, 4 })
+        {
+            horloge.Avancer(Pas);                                    // une lecture toutes les 50 s : entrée renouvelée
+            attendus.Add(Json(await sans.Service.AnalyserAsync(Page(page, 1, reuse: false, information: true, comparaison: true))));
+            obtenus.Add(Json(await avec.Service.AnalyserAsync(Page(page, 1, reuse: true, information: true, comparaison: true))));
+        }
+
+        // Assert
+        obtenus.Should().Equal(attendus);
+    }
+
+    // ----------------------------------------------------------------------------- délai glissant de 120 s
+
+    [Fact]
+    public async Task AnalyserAsync_IsolatedClickAt90Seconds_IsServedByCache()
+    {
+        // Arrange
+        var horloge = new HorlogeMobile();
+        var ctx = new Contexte(horloge);
+        ctx.JeuFixe();
+        await Anomalies(ctx, reuse: false);                          // analyse : t = 0
+        ctx.Punch("002", Lundi, H8, H17);                            // un recalcul donnerait 3
+        horloge.Avancer(TimeSpan.FromSeconds(90));                   // clic isolé, sans lecture entre-temps
+
+        // Act
+        var nombre = await Anomalies(ctx, reuse: true);
+
+        // Assert
+        nombre.Should().Be(4);
+    }
+
+    [Fact]
+    public async Task AnalyserAsync_ClickAt130SecondsWithoutRead_Recomputes()
+    {
+        // Arrange
+        var horloge = new HorlogeMobile();
+        var ctx = new Contexte(horloge);
+        ctx.JeuFixe();
+        await Anomalies(ctx, reuse: false);
+        ctx.Punch("002", Lundi, H8, H17);
+        horloge.Avancer(TimeSpan.FromSeconds(130));                  // plus de 120 s sans lecture
+
+        // Act
+        var nombre = await Anomalies(ctx, reuse: true);
+
+        // Assert
+        nombre.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task AnalyserAsync_ConfiguredSlidingDelay_IsUsed()
+    {
+        // Arrange
+        var horloge = new HorlogeMobile();
+        var ctx = new Contexte(horloge, new ClosingOptions { CacheSeconds = 30 });
+        ctx.JeuFixe();
+        await Anomalies(ctx, reuse: false);
+        ctx.Punch("002", Lundi, H8, H17);
+
+        // Act
+        horloge.Avancer(TimeSpan.FromSeconds(25));
+        var dansLeDelai = await Anomalies(ctx, reuse: true);         // dans les 30 s configurées
+        horloge.Avancer(TimeSpan.FromSeconds(31));
+        var expiree = await Anomalies(ctx, reuse: true);             // 31 s sans lecture
+
+        // Assert
+        dansLeDelai.Should().Be(4);
+        expiree.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task AnalyserAsync_SlidingDelayLongerThanCeiling_IsCappedByCeiling()
+    {
+        // Arrange
+        var horloge = new HorlogeMobile();
+        var ctx = new Contexte(horloge, new ClosingOptions { CacheSeconds = 120, CacheMaxSeconds = 100 });
+        ctx.JeuFixe();
+        await Anomalies(ctx, reuse: false);
+        ctx.Punch("002", Lundi, H8, H17);
+
+        // Act
+        horloge.Avancer(TimeSpan.FromSeconds(99));
+        var avantPlafond = await Anomalies(ctx, reuse: true);
+        horloge.Avancer(TimeSpan.FromSeconds(2));                    // t = 101 s : le plafond l'emporte
+        var apresPlafond = await Anomalies(ctx, reuse: true);
+
+        // Assert
+        avantPlafond.Should().Be(4);
+        apresPlafond.Should().Be(3);
+    }
+
+    /// <summary>Une lecture avec réutilisation toutes les 50 s, <paramref name="lectures"/> fois.</summary>
+    private static async Task LireEnContinuAsync(Contexte ctx, HorlogeMobile horloge, int lectures)
+    {
+        for (var i = 0; i < lectures; i++)
+        {
+            horloge.Avancer(Pas);
+            await Anomalies(ctx, reuse: true);
+        }
     }
 }

@@ -1,15 +1,13 @@
-using System.Linq.Expressions;
 using AutoMapper;
+
 using Microsoft.AspNetCore.Identity;
-using SoftTime.Application.Abstractions;
+
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
-using SoftTime.Application.Security;
 using SoftTime.Application.Services;
 using SoftTime.Domain;
 using SoftTime.Domain.Entities.SoftTime;
-using SoftTime.Domain.Models;
-using SoftTime.Domain.Repositories;
+using SoftTime.Infrastructure.Services.DataSources;
 
 namespace SoftTime.Tests;
 
@@ -19,47 +17,48 @@ public class DatabaseConfigurationSecurityTests
 
     private readonly InMemoryUnitOfWork _uow = new();
     private readonly IMapper _mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
-    private readonly AuthService _auth;
+    private readonly AuthServices _auth;
 
     public DatabaseConfigurationSecurityTests()
     {
-        _auth = new AuthService(_uow, new FakeTokenService(), _mapper, new FakeEmailService(), new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<T_RESPONSABLE>());
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 5, NOMROLE = "Gestionnaire" });
-        _uow.GetRepo<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 7, NOM_BD = Base, SERVEUR = "srv" });
-        _uow.GetRepo<T_BDD_POINTEUSE>().Items.Add(new T_BDD_POINTEUSE { ID = 8, NOM_BD = "PTG", SERVEUR = "srv" });
+        _auth = new AuthServices(_uow, ServiceMocks.TokenService().Object, _mapper, ServiceMocks.EmailService().Object, new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<Responsable>());
+        _uow.Get<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
+        _uow.Get<Role>().Items.Add(new Role { IdRole = 5, NomRole = "Gestionnaire" });
+        _uow.Get<BddSage>().Items.Add(new BddSage { Id = 7, NomBd = Base, Serveur = "srv" });
+        _uow.Get<BddPointeuse>().Items.Add(new BddPointeuse { Id = 8, NomBd = "PTG", Serveur = "srv" });
     }
 
     private DatabaseConfigurationAuthorizer AuthorizerFor(decimal userId, decimal roleId, params int[] rights)
     {
-        if (!_uow.GetRepo<T_RESPONSABLE>().Items.Any(u => u.IDRESPONSABLE == userId))
-            _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE { IDRESPONSABLE = userId, IDROLE = roleId, LOGIN = $"u{userId}" });
-        return new DatabaseConfigurationAuthorizer(new FakeCurrentUser(userId, roleId, rights), _auth);
+        if (!_uow.Get<Responsable>().Items.Any(u => u.IdResponsable == userId))
+            _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = userId, IdRole = roleId, Login = $"u{userId}" });
+        return new DatabaseConfigurationAuthorizer(new TestCurrentUser(userId, roleId, rights), _auth);
     }
 
     private void GrantUser(decimal userId, params string[] codes)
     {
         foreach (var c in codes)
-            _uow.GetRepo<T_USER_PERMISSION>().Items.Add(new T_USER_PERMISSION { IDRESPONSABLE = userId, PERMISSION_CODE = c, IS_GRANTED = true });
+            _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = userId, PermissionCode = c, IsGranted = true });
     }
 
     private void GrantRole(decimal roleId, params string[] codes)
     {
         foreach (var c in codes)
-            _uow.GetRepo<T_ROLE_PERMISSION>().Items.Add(new T_ROLE_PERMISSION { IDROLE = roleId, PERMISSION_CODE = c, IS_GRANTED = true });
+            _uow.Get<RolePermission>().Items.Add(new RolePermission { IdRole = roleId, PermissionCode = c, IsGranted = true });
     }
 
-    private static Task<ForbiddenOperationException> Refused(Func<Task> act) => Assert.ThrowsAsync<ForbiddenOperationException>(act);
+    private static async Task<ForbiddenException> Refused(Func<Task> act) => (await act.Should().ThrowExactlyAsync<ForbiddenException>()).Which;
 
     #region AdminAccess
 
     [Fact]
-    public void AdminAccess_OnlyRoleOneIsAdmin()
+    public void IsAdmin_Role1OrOtherRole_OnlyRole1IsAdmin()
     {
-        Assert.True(AdminAccess.IsAdmin(new FakeCurrentUser(1, 1)));
-        Assert.False(AdminAccess.IsAdmin(new FakeCurrentUser(2, 5, Rights.Parameters)));
-        Assert.Throws<ForbiddenOperationException>(() => AdminAccess.Require(new FakeCurrentUser(2, 5, Rights.Parameters)));
-        AdminAccess.Require(new FakeCurrentUser(1, 1));
+        // Act & Assert
+        AdminAccess.IsAdmin(new TestCurrentUser(1, 1)).Should().BeTrue();
+        AdminAccess.IsAdmin(new TestCurrentUser(2, 5, Rights.Parameters)).Should().BeFalse();
+        FluentActions.Invoking(() => AdminAccess.Require(new TestCurrentUser(2, 5, Rights.Parameters))).Should().ThrowExactly<ForbiddenException>();
+        AdminAccess.Require(new TestCurrentUser(1, 1));
     }
 
     #endregion
@@ -67,7 +66,7 @@ public class DatabaseConfigurationSecurityTests
     #region Configuration des bases
 
     [Fact]
-    public async Task Admin_CanCreateUpdateDelete()
+    public async Task EnsureCanConfigureAsync_Administrator_CanCreateUpdateDelete()
     {
         var a = AuthorizerFor(1, 1);
         await a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, "X");
@@ -77,7 +76,7 @@ public class DatabaseConfigurationSecurityTests
     }
 
     [Fact]
-    public async Task RoleWithoutRight_IsRefused()
+    public async Task EnsureCanConfigureAsync_RoleWithoutRight_IsRefused()
     {
         var a = AuthorizerFor(20, 5, Rights.Reports);
         await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, "X"));
@@ -87,7 +86,7 @@ public class DatabaseConfigurationSecurityTests
     }
 
     [Fact]
-    public async Task RoleWithPermission_IsAllowedOnlyForGrantedAction()
+    public async Task EnsureCanConfigureAsync_RoleWithPermission_IsAllowedOnlyForGrantedAction()
     {
         GrantRole(5, $"SAGE:{Base}:UPDATE", $"SAGE:{Base}:READ");
         var a = AuthorizerFor(21, 5, Rights.Databases);
@@ -100,7 +99,7 @@ public class DatabaseConfigurationSecurityTests
     }
 
     [Fact]
-    public async Task CustomizedAccountWithPermissionAndRight_IsAllowed()
+    public async Task EnsureCanConfigureAsync_CustomizedAccountWithPermissionAndRight_IsAllowed()
     {
         GrantUser(22, "SAGE:CREATE", $"SAGE:{Base}:DELETE");
         var a = AuthorizerFor(22, 5, Rights.Databases);
@@ -110,7 +109,7 @@ public class DatabaseConfigurationSecurityTests
     }
 
     [Fact]
-    public async Task CustomizedAccountWithPermissionButWithoutRight_IsRefused()
+    public async Task EnsureCanConfigureAsync_CustomizedAccountWithoutRight_IsRefused()
     {
         GrantUser(23, "SAGE:CREATE", $"SAGE:{Base}:UPDATE", $"SAGE:{Base}:DELETE");
         var a = AuthorizerFor(23, 5, Rights.Processing);
@@ -119,7 +118,7 @@ public class DatabaseConfigurationSecurityTests
     }
 
     [Fact]
-    public async Task CustomizedAccountWithReadOnly_IsRefused()
+    public async Task EnsureCanConfigureAsync_CustomizedAccountWithReadOnly_IsRefused()
     {
         GrantUser(24, $"SAGE:{Base}:READ", "POINTEUSE:PTG:READ");
         var a = AuthorizerFor(24, 5, Rights.Databases);
@@ -130,14 +129,14 @@ public class DatabaseConfigurationSecurityTests
     }
 
     [Fact]
-    public async Task NonCustomizedAccountWithoutRight_IsRefused()
+    public async Task EnsureCanConfigureAsync_NonCustomizedAccountWithoutRight_IsRefused()
     {
         var a = AuthorizerFor(25, 5, Rights.Reports);
         await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Delete, Base));
     }
 
     [Fact]
-    public async Task EmptyDatabaseName_IsRefusedForUpdateAndDelete()
+    public async Task EnsureCanConfigureAsync_EmptyDatabaseName_IsRefusedForUpdateAndDelete()
     {
         GrantUser(26, "SAGE:CREATE", $"SAGE:{Base}:UPDATE", $"SAGE:{Base}:DELETE");
         var a = AuthorizerFor(26, 5, Rights.Databases);
@@ -147,9 +146,9 @@ public class DatabaseConfigurationSecurityTests
     }
 
     [Fact]
-    public async Task UnknownUser_IsRefused()
+    public async Task EnsureCanConfigureAsync_UnknownUser_IsRefused()
     {
-        var a = new DatabaseConfigurationAuthorizer(new FakeCurrentUser(999, 5, Rights.Databases), _auth);
+        var a = new DatabaseConfigurationAuthorizer(new TestCurrentUser(999, 5, Rights.Databases), _auth);
         await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, "X"));
     }
 
@@ -157,45 +156,65 @@ public class DatabaseConfigurationSecurityTests
 
     #region CatalogService : refus avant toute écriture
 
-    private CatalogService CatalogFor(DatabaseConfigurationAuthorizer authorizer)
+    private CatalogServices CatalogFor(DatabaseConfigurationAuthorizer authorizer)
         => new(_uow, _mapper, null!, null!, null!, authorizer, SoftTime.Tests.Http.TestRights.Service(_uow));
 
     [Fact]
     public async Task CatalogService_DeleteSage_RefusedWithoutPermission_KeepsRow()
     {
+        // Arrange
         var svc = CatalogFor(AuthorizerFor(30, 5, Rights.Databases));
         GrantUser(30, $"SAGE:{Base}:READ");
-        await Refused(() => svc.DeleteSageAsync(7));
-        Assert.Single(_uow.GetRepo<T_BDD_SAGE>().Items);
+
+        // Act
+        await Refused(() => svc.Sage.DeleteSageAsync(7));
+
+        // Assert
+        _uow.Get<BddSage>().Items.Should().ContainSingle();
     }
 
     [Fact]
     public async Task CatalogService_DeleteSage_EmptyName_IsRefused()
     {
-        _uow.GetRepo<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 9, NOM_BD = "", SERVEUR = "srv" });
+        // Arrange
+        _uow.Get<BddSage>().Items.Add(new BddSage { Id = 9, NomBd = "", Serveur = "srv" });
         GrantUser(31, "SAGE:CREATE", "SAGE::DELETE");
         var svc = CatalogFor(AuthorizerFor(31, 5, Rights.Databases));
-        await Refused(() => svc.DeleteSageAsync(9));
-        Assert.Equal(2, _uow.GetRepo<T_BDD_SAGE>().Items.Count);
+
+        // Act
+        await Refused(() => svc.Sage.DeleteSageAsync(9));
+
+        // Assert
+        _uow.Get<BddSage>().Items.Count.Should().Be(2);
     }
 
     [Fact]
     public async Task CatalogService_SaveSage_CreateAndUpdate_RefusedWithoutPermission()
     {
+        // Arrange
         var svc = CatalogFor(AuthorizerFor(32, 5, Rights.Reports));
         var dto = new SageDbDto(0, "srv", null, null, true, "NOUVELLE");
-        await Refused(() => svc.SaveSageAsync(dto));
-        await Refused(() => svc.SaveSageAsync(dto with { Id = 7 }));
-        Assert.Single(_uow.GetRepo<T_BDD_SAGE>().Items);
+        await Refused(() => svc.Sage.SaveSageAsync(dto));
+
+        // Act
+        await Refused(() => svc.Sage.SaveSageAsync(dto with { Id = 7 }));
+
+        // Assert
+        _uow.Get<BddSage>().Items.Should().ContainSingle();
     }
 
     [Fact]
     public async Task CatalogService_Pointeuse_SaveAndDelete_RefusedWithoutPermission()
     {
+        // Arrange
         var svc = CatalogFor(AuthorizerFor(33, 5, Rights.Reports));
-        await Refused(() => svc.DeletePointeuseAsync(8));
-        await Refused(() => svc.SavePointeuseAsync(new PointeuseDbDto(0, "srv", null, null, true, "NEW", null, false)));
-        Assert.Single(_uow.GetRepo<T_BDD_POINTEUSE>().Items);
+        await Refused(() => svc.Pointeuse.DeletePointeuseAsync(8));
+
+        // Act
+        await Refused(() => svc.Pointeuse.SavePointeuseAsync(new PointeuseDbDto(0, "srv", null, null, true, "NEW", null, false)));
+
+        // Assert
+        _uow.Get<BddPointeuse>().Items.Should().ContainSingle();
     }
 
     #endregion
@@ -203,129 +222,32 @@ public class DatabaseConfigurationSecurityTests
     #region Rôle Administrateur intact
 
     [Fact]
-    public async Task AdminRole_CannotBeRenamedDeletedOrHaveItsPrivilegesReplaced()
+    public async Task SaveRoleAsync_AdministratorRole_CannotBeRenamedDeletedOrHavePrivilegesReplaced()
     {
-        await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SaveRoleAsync(new RoleDto(1, "Autre")));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.DeleteRoleAsync(1));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => _auth.SetPrivilegesAsync(1, new List<decimal> { Rights.Reports }));
-        Assert.Equal("Administrateur", _uow.GetRepo<T_ROLE>().Items.First(r => r.IDROLE == 1).NOMROLE);
+        // Act & Assert
+        await FluentActions.Awaiting(() => _auth.SaveRoleAsync(new RoleDto(1, "Autre"))).Should().ThrowExactlyAsync<DomainException>();
+        await FluentActions.Awaiting(() => _auth.DeleteRoleAsync(1)).Should().ThrowExactlyAsync<DomainException>();
+        await FluentActions.Awaiting(() => _auth.SetPrivilegesAsync(1, new List<decimal> { Rights.Reports })).Should().ThrowExactlyAsync<DomainException>();
+        _uow.Get<Role>().Items.First(r => r.IdRole == 1).NomRole.Should().Be("Administrateur");
     }
 
     [Fact]
-    public async Task OtherRoles_RemainEditable()
+    public async Task SetPrivilegesAsync_OtherRole_RemainsEditable()
     {
+        // Act
         await _auth.SetPrivilegesAsync(5, new List<decimal> { Rights.Reports });
-        Assert.Single(_uow.GetRepo<T_DROIT_ROLE>().Items.Where(d => d.IDROLE == 5));
+
+        // Assert
+        _uow.Get<DroitRole>().Items.Where(d => d.IdRole == 5).Should().ContainSingle();
         await _auth.SaveRoleAsync(new RoleDto(5, "Gestionnaire paie"));
-        Assert.Equal("Gestionnaire paie", _uow.GetRepo<T_ROLE>().Items.First(r => r.IDROLE == 5).NOMROLE);
+        _uow.Get<Role>().Items.First(r => r.IdRole == 5).NomRole.Should().Be("Gestionnaire paie");
         await _auth.DeleteRoleAsync(5);
-        Assert.DoesNotContain(_uow.GetRepo<T_ROLE>().Items, r => r.IDROLE == 5);
+        _uow.Get<Role>().Items.Should().NotContain(r => r.IdRole == 5);
     }
 
     #endregion
 
     #region Doubles de test
-
-    private sealed class FakeCurrentUser : ICurrentUser
-    {
-        public FakeCurrentUser(decimal userId, decimal roleId, params int[] rights)
-        {
-            UserId = userId;
-            RoleId = roleId;
-            Rights = rights;
-        }
-        public decimal? UserId { get; }
-        public string? Login => $"u{UserId}";
-        public decimal? RoleId { get; }
-        public string? Matricule => null;
-        public IReadOnlyCollection<int> Rights { get; }
-        public bool HasRight(int droit) => RoleId == 1 || Rights.Contains(droit);
-    }
-
-    private sealed class InMemoryRepository<T> : IRepository<T> where T : class
-    {
-        public List<T> Items { get; } = new();
-
-        public IQueryable<T> Query() => Items.AsQueryable();
-
-        public Task<T?> GetByIdAsync(object id, CancellationToken cancellationToken = default)
-        {
-            var decId = Convert.ToDecimal(id);
-            var match = Items.FirstOrDefault(i => i switch
-            {
-                T_RESPONSABLE r => r.IDRESPONSABLE == decId,
-                T_ROLE ro => ro.IDROLE == decId,
-                T_BDD_SAGE s => s.ID == decId,
-                T_BDD_POINTEUSE p => p.ID == decId,
-                _ => false
-            });
-            return Task.FromResult(match);
-        }
-
-        public Task<List<T>> ListAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default)
-            => Task.FromResult(Items.Where(predicate.Compile()).ToList());
-
-        public Task<List<T>> ListLatestAsync(
-            Expression<Func<T, bool>> predicate,
-            Expression<Func<T, DateTime?>> orderByDescending,
-            int take,
-            CancellationToken cancellationToken = default)
-            => Task.FromResult(Items.Where(predicate.Compile()).OrderByDescending(orderByDescending.Compile()).Take(take).ToList());
-
-        public Task AddAsync(T entity, CancellationToken cancellationToken = default)
-        {
-            Items.Add(entity);
-            return Task.CompletedTask;
-        }
-
-        public Task AddRangeAsync(IEnumerable<T> entities, CancellationToken cancellationToken = default)
-        {
-            Items.AddRange(entities);
-            return Task.CompletedTask;
-        }
-
-        public void Update(T entity) { }
-        public void Remove(T entity) => Items.Remove(entity);
-        public void RemoveRange(IEnumerable<T> entities)
-        {
-            foreach (var e in entities.ToList())
-                Items.Remove(e);
-        }
-    }
-
-    private sealed class InMemoryUnitOfWork : IUnitOfWork
-    {
-        private readonly Dictionary<Type, object> _repos = new();
-
-        public InMemoryRepository<T> GetRepo<T>() where T : class
-        {
-            if (!_repos.TryGetValue(typeof(T), out var r))
-            {
-                r = new InMemoryRepository<T>();
-                _repos[typeof(T)] = r;
-            }
-            return (InMemoryRepository<T>)r;
-        }
-
-        public IRepository<T> Repository<T>() where T : class => GetRepo<T>();
-
-        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) => Task.FromResult(1);
-        public Task ExecuteSqlAsync(string sql, CancellationToken cancellationToken = default) => Task.CompletedTask;
-    }
-
-    private sealed class FakeTokenService : ITokenService
-    {
-        public string CreateToken(decimal userId, string login, decimal roleId, string? matricule, IEnumerable<int> rights)
-            => $"FAKE_JWT_TOKEN_{userId}_{login}";
-    }
-
-    private sealed class FakeEmailService : IEmailService
-    {
-        public bool EstConfigure => true;
-        public Task<bool> EnvoyerAsync(EmailMessage message, CancellationToken cancellationToken = default) => Task.FromResult(true);
-        public Task<bool> SendUserCredentialsAsync(string? email, string? pseudo, string? password, string? nom, string? prenom, CancellationToken cancellationToken = default) => Task.FromResult(true);
-        public Task<bool> SendUserUpdateAsync(string? email, string? pseudo, string? newPassword, string? nom, string? prenom, bool pseudoChanged, bool passwordChanged, CancellationToken cancellationToken = default) => Task.FromResult(true);
-    }
 
     #endregion
 }

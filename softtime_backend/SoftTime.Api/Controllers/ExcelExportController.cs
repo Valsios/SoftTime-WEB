@@ -1,16 +1,21 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+
+using SoftTime.Application.Abstractions.Excel;
 using SoftTime.Application.DTOs;
-using SoftTime.Infrastructure.Excel;
 
 namespace SoftTime.Api.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("api/excel")]
+[Route("api/v1/excel")]
 [Tags("Excel")]
-public class ExcelExportController : ControllerBase
+public class ExcelExportController : ApiControllerBase
 {
+    private readonly IExcelWorkbook _excel;
+
+    public ExcelExportController(IExcelWorkbook excel) => _excel = excel;
+
     [HttpPost("export")]
     public IActionResult Export([FromBody] ExcelExportRequest? request)
     {
@@ -19,7 +24,7 @@ public class ExcelExportController : ControllerBase
         var sheet = string.IsNullOrWhiteSpace(request.SheetName) ? "Données" : request.SheetName;
         var headers = request.Headers ?? new List<string>();
         var rows = request.Rows ?? new List<List<string?>>();
-        var bytes = ExcelHelper.WriteSheet(sheet, headers, rows.Select(r => (r ?? new List<string?>()).Cast<object?>()));
+        var bytes = _excel.WriteSheet(sheet, headers, rows.Select(r => (r ?? new List<string?>()).Cast<object?>()));
         return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", name);
     }
 
@@ -40,7 +45,7 @@ public class ExcelExportController : ControllerBase
                     .Select(r => (IReadOnlyList<object?>)(r ?? new List<object?>()))
                     .ToList()))
             .ToList();
-        var bytes = ExcelHelper.WriteWorkbook(sheets);
+        var bytes = _excel.WriteWorkbook(sheets);
         return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", name);
     }
 

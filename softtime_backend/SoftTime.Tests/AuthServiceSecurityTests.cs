@@ -1,299 +1,349 @@
-using System.Linq.Expressions;
 using AutoMapper;
+
 using Microsoft.AspNetCore.Identity;
-using SoftTime.Application.Abstractions;
+
+using SoftTime.Application.Abstractions.Authentication;
+using SoftTime.Application.Abstractions.Notifications;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
 using SoftTime.Application.Security;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
-using SoftTime.Domain.Models;
-using SoftTime.Domain.Repositories;
 
 namespace SoftTime.Tests;
 
 public class AuthServiceSecurityTests
 {
     private readonly InMemoryUnitOfWork _uow;
-    private readonly FakeTokenService _tokens;
+    private readonly ITokenService _tokens;
     private readonly IMapper _mapper;
-    private readonly FakeEmailService _email;
-    private readonly PasswordHasher<T_RESPONSABLE> _hasher;
-    private readonly AuthService _auth;
+    private readonly IEmailService _email;
+    private readonly PasswordHasher<Responsable> _hasher;
+    private readonly AuthServices _auth;
 
     public AuthServiceSecurityTests()
     {
         _uow = new InMemoryUnitOfWork();
-        _tokens = new FakeTokenService();
+        _tokens = ServiceMocks.TokenService().Object;
 
         var config = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>());
         _mapper = config.CreateMapper();
 
-        _email = new FakeEmailService();
-        _hasher = new PasswordHasher<T_RESPONSABLE>();
-        _auth = new AuthService(_uow, _tokens, _mapper, _email, new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), _hasher);
+        _email = ServiceMocks.EmailService().Object;
+        _hasher = new PasswordHasher<Responsable>();
+        _auth = new AuthServices(_uow, _tokens, _mapper, _email, new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), _hasher);
 
         // Seed default role
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 1, NOMROLE = "Administrateur" });
-        _uow.GetRepo<T_ROLE>().Items.Add(new T_ROLE { IDROLE = 2, NOMROLE = "Utilisateur" });
+        _uow.Get<Role>().Items.Add(new Role { IdRole = 1, NomRole = "Administrateur" });
+        _uow.Get<Role>().Items.Add(new Role { IdRole = 2, NomRole = "Utilisateur" });
     }
 
     [Fact]
     public async Task CreateAdminAsync_HashesPassword_NeverStoresPlainText()
     {
+        // Arrange
         var result = await _auth.CreateAdminAsync(new AdminSetupDto("Admin User", "admin", "AdminSecret123!", "admin@softtime.local"));
 
-        var adminUser = _uow.GetRepo<T_RESPONSABLE>().Items.Single(u => u.LOGIN == "admin");
+        // Act
+        var adminUser = _uow.Get<Responsable>().Items.Single(u => u.Login == "admin");
 
-        Assert.NotNull(adminUser.PASSWORD);
-        Assert.NotEqual("AdminSecret123!", adminUser.PASSWORD);
-        Assert.True(PasswordSecurityHelper.IsHashedPassword(adminUser.PASSWORD));
-
-        var verifyResult = _hasher.VerifyHashedPassword(adminUser, adminUser.PASSWORD, "AdminSecret123!");
-        Assert.Equal(PasswordVerificationResult.Success, verifyResult);
+        // Assert
+        adminUser.Password.Should().NotBeNull();
+        adminUser.Password.Should().NotBe("AdminSecret123!");
+        PasswordHashClassifier.IsHashedPassword(adminUser.Password).Should().BeTrue();
+        var verifyResult = _hasher.VerifyHashedPassword(adminUser, adminUser.Password, "AdminSecret123!");
+        verifyResult.Should().Be(PasswordVerificationResult.Success);
     }
 
     [Fact]
     public async Task SaveUserAsync_NewUser_HashesPasswordAndDoesNotLeakInDto()
     {
+        // Arrange
         var userDto = new UserDto(0, 2, "Test User", "testuser", "M001", "UserPassword456!")
         {
             Email = "test@softtime.local"
         };
-
         var createdDto = await _auth.SaveUserAsync(userDto);
 
-        var savedEntity = _uow.GetRepo<T_RESPONSABLE>().Items.Single(u => u.LOGIN == "testuser");
-        Assert.NotNull(savedEntity.PASSWORD);
-        Assert.NotEqual("UserPassword456!", savedEntity.PASSWORD);
-        Assert.True(PasswordSecurityHelper.IsHashedPassword(savedEntity.PASSWORD));
+        // Act
+        var savedEntity = _uow.Get<Responsable>().Items.Single(u => u.Login == "testuser");
 
+        // Assert
+        savedEntity.Password.Should().NotBeNull();
+        savedEntity.Password.Should().NotBe("UserPassword456!");
+        PasswordHashClassifier.IsHashedPassword(savedEntity.Password).Should().BeTrue();
         // Returned DTO must NEVER contain password or hash
-        Assert.Null(createdDto.Password);
+        createdDto.Password.Should().BeNull();
     }
 
     [Fact]
     public async Task SaveUserAsync_NewUser_WithoutPassword_ThrowsFieldValidation()
     {
+        // Arrange
         var userDto = new UserDto(0, 2, "No Pwd", "nopwd", "M002", "");
 
-        var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(userDto));
+        // Act
+        Func<Task> act = () => _auth.SaveUserAsync(userDto);
 
-        Assert.Equal("password", ex.Field);
-        Assert.Empty(_uow.GetRepo<T_RESPONSABLE>().Items);
+        // Assert
+        var ex = (await act.Should().ThrowExactlyAsync<FieldValidationException>()).Which;
+        ex.Field.Should().Be("password");
+        _uow.Get<Responsable>().Items.Should().BeEmpty();
     }
 
     [Fact]
     public async Task SaveUserAsync_NewUser_WithWeakPassword_ThrowsAndDoesNotCreateUser()
     {
+        // Arrange
         var userDto = new UserDto(0, 2, "Weak User", "weakuser", "M010", "password");
 
-        var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(userDto));
+        // Act
+        Func<Task> act = () => _auth.SaveUserAsync(userDto);
 
-        Assert.Equal("password", ex.Field);
-        Assert.Contains("règles de sécurité", ex.Message);
-        Assert.Empty(_uow.GetRepo<T_RESPONSABLE>().Items.Where(u => u.LOGIN == "weakuser"));
+        // Assert
+        var ex = (await act.Should().ThrowExactlyAsync<FieldValidationException>()).Which;
+        ex.Field.Should().Be("password");
+        ex.Message.Should().Contain("règles de sécurité");
+        _uow.Get<Responsable>().Items.Where(u => u.Login == "weakuser").Should().BeEmpty();
     }
 
     [Fact]
     public async Task SaveUserAsync_NewUser_WithoutName_ThrowsFieldValidation()
     {
+        // Arrange
         var userDto = new UserDto(0, 2, "   ", "sansnom", null, "StrongPassword123!");
 
-        var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(userDto));
+        // Act
+        Func<Task> act = () => _auth.SaveUserAsync(userDto);
 
-        Assert.Equal("nom", ex.Field);
-        Assert.Empty(_uow.GetRepo<T_RESPONSABLE>().Items);
+        // Assert
+        var ex = (await act.Should().ThrowExactlyAsync<FieldValidationException>()).Which;
+        ex.Field.Should().Be("nom");
+        _uow.Get<Responsable>().Items.Should().BeEmpty();
     }
 
     [Fact]
     public async Task SaveUserAsync_NewUser_WithoutLogin_ThrowsFieldValidation()
     {
+        // Arrange
         var userDto = new UserDto(0, 2, "Sans Login", "   ", null, "StrongPassword123!");
 
-        var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(userDto));
+        // Act
+        Func<Task> act = () => _auth.SaveUserAsync(userDto);
 
-        Assert.Equal("login", ex.Field);
-        Assert.Empty(_uow.GetRepo<T_RESPONSABLE>().Items);
+        // Assert
+        var ex = (await act.Should().ThrowExactlyAsync<FieldValidationException>()).Which;
+        ex.Field.Should().Be("login");
+        _uow.Get<Responsable>().Items.Should().BeEmpty();
     }
 
     [Fact]
     public async Task SaveUserAsync_NewUser_WithoutRole_ThrowsFieldValidation()
     {
+        // Arrange
         var userDto = new UserDto(0, 0, "Sans Rôle", "sansrole", null, "StrongPassword123!");
 
-        var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(userDto));
+        // Act
+        Func<Task> act = () => _auth.SaveUserAsync(userDto);
 
-        Assert.Equal("roleId", ex.Field);
-        Assert.Empty(_uow.GetRepo<T_RESPONSABLE>().Items);
+        // Assert
+        var ex = (await act.Should().ThrowExactlyAsync<FieldValidationException>()).Which;
+        ex.Field.Should().Be("roleId");
+        _uow.Get<Responsable>().Items.Should().BeEmpty();
     }
 
     [Fact]
     public async Task SaveUserAsync_NewUser_WithDuplicateLogin_ThrowsFieldValidation()
     {
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(new T_RESPONSABLE
+        // Arrange
+        _uow.Get<Responsable>().Items.Add(new Responsable
         {
-            IDRESPONSABLE = 50,
-            IDROLE = 2,
-            NOMRESPONSABLE = "Existante",
-            LOGIN = "Alice",
-            PASSWORD = _hasher.HashPassword(new T_RESPONSABLE(), "ExistingSecret123!")
+            IdResponsable = 50,
+            IdRole = 2,
+            NomResponsable = "Existante",
+            Login = "Alice",
+            Password = _hasher.HashPassword(new Responsable(), "ExistingSecret123!")
         });
-
         var userDto = new UserDto(0, 2, "Doublon", "  alice ", null, "StrongPassword123!");
 
-        var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(userDto));
+        // Act
+        Func<Task> act = () => _auth.SaveUserAsync(userDto);
 
-        Assert.Equal("login", ex.Field);
-        Assert.Single(_uow.GetRepo<T_RESPONSABLE>().Items);
+        // Assert
+        var ex = (await act.Should().ThrowExactlyAsync<FieldValidationException>()).Which;
+        ex.Field.Should().Be("login");
+        _uow.Get<Responsable>().Items.Should().ContainSingle();
     }
 
     [Fact]
     public async Task SaveUserAsync_ExistingLogin_AllowsProfileUpdateEvenIfLoginIsAlreadyDuplicated()
     {
-        var hash = _hasher.HashPassword(new T_RESPONSABLE(), "Secret123!");
-        _uow.GetRepo<T_RESPONSABLE>().Items.AddRange(new[]
+        // Arrange
+        var hash = _hasher.HashPassword(new Responsable(), "Secret123!");
+        _uow.Get<Responsable>().Items.AddRange(new[]
         {
-            new T_RESPONSABLE { IDRESPONSABLE = 60, IDROLE = 2, NOMRESPONSABLE = "Premier", LOGIN = "shared", PASSWORD = hash },
-            new T_RESPONSABLE { IDRESPONSABLE = 61, IDROLE = 2, NOMRESPONSABLE = "Second", LOGIN = "shared", PASSWORD = hash },
+            new Responsable { IdResponsable = 60, IdRole = 2, NomResponsable = "Premier", Login = "shared", Password = hash },
+            new Responsable { IdResponsable = 61, IdRole = 2, NomResponsable = "Second", Login = "shared", Password = hash },
         });
-
         var updateDto = new UserDto(60, 2, "Premier Renommé", "shared", null, null);
 
+        // Act
         var result = await _auth.SaveUserAsync(updateDto);
 
-        Assert.Equal("Premier Renommé", result.Nom);
-        Assert.Equal(hash, _uow.GetRepo<T_RESPONSABLE>().Items.Single(u => u.IDRESPONSABLE == 60).PASSWORD);
+        // Assert
+        result.Nom.Should().Be("Premier Renommé");
+        _uow.Get<Responsable>().Items.Single(u => u.IdResponsable == 60).Password.Should().Be(hash);
     }
 
     [Fact]
     public async Task CreateAdminAsync_WithWeakPassword_ThrowsAndDoesNotCreateAccount()
     {
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _auth.CreateAdminAsync(new AdminSetupDto("Admin User", "admin", "weakpass", null)));
+        // Act
+        Func<Task> act = () =>
+            _auth.CreateAdminAsync(new AdminSetupDto("Admin User", "admin", "weakpass", null));
 
-        Assert.Contains("règles de sécurité", ex.Message);
-        Assert.Empty(_uow.GetRepo<T_RESPONSABLE>().Items);
+        // Assert
+        var ex = (await act.Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().Contain("règles de sécurité");
+        _uow.Get<Responsable>().Items.Should().BeEmpty();
     }
 
     [Fact]
     public async Task SaveUserAsync_ExistingUser_WithWeakNewPassword_ThrowsAndPreservesExistingHash()
     {
-        var initialHash = _hasher.HashPassword(new T_RESPONSABLE(), "OldSecret!");
-        var user = new T_RESPONSABLE
+        // Arrange
+        var initialHash = _hasher.HashPassword(new Responsable(), "OldSecret!");
+        var user = new Responsable
         {
-            IDRESPONSABLE = 12,
-            IDROLE = 2,
-            NOMRESPONSABLE = "User To Update",
-            LOGIN = "weakupdate",
-            PASSWORD = initialHash
+            IdResponsable = 12,
+            IdRole = 2,
+            NomResponsable = "User To Update",
+            Login = "weakupdate",
+            Password = initialHash
         };
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
-
+        _uow.Get<Responsable>().Items.Add(user);
         var updateDto = new UserDto(12, 2, "User To Update", "weakupdate", "M011", "azerty");
 
-        var ex = await Assert.ThrowsAsync<FieldValidationException>(() => _auth.SaveUserAsync(updateDto));
+        // Act
+        Func<Task> act = () => _auth.SaveUserAsync(updateDto);
 
-        Assert.Equal("password", ex.Field);
-        var unchanged = _uow.GetRepo<T_RESPONSABLE>().Items.Single(u => u.IDRESPONSABLE == 12);
-        Assert.Equal(initialHash, unchanged.PASSWORD);
+        // Assert
+        var ex = (await act.Should().ThrowExactlyAsync<FieldValidationException>()).Which;
+        ex.Field.Should().Be("password");
+        var unchanged = _uow.Get<Responsable>().Items.Single(u => u.IdResponsable == 12);
+        unchanged.Password.Should().Be(initialHash);
     }
 
     [Fact]
     public async Task SaveUserAsync_ExistingUser_PreservesPasswordWhenNotProvided()
     {
-        var initialHash = _hasher.HashPassword(new T_RESPONSABLE(), "OriginalSecret!");
-        var user = new T_RESPONSABLE
+        // Arrange
+        var initialHash = _hasher.HashPassword(new Responsable(), "OriginalSecret!");
+        var user = new Responsable
         {
-            IDRESPONSABLE = 10,
-            IDROLE = 2,
-            NOMRESPONSABLE = "Existing User",
-            LOGIN = "existing",
-            PASSWORD = initialHash
+            IdResponsable = 10,
+            IdRole = 2,
+            NomResponsable = "Existing User",
+            Login = "existing",
+            Password = initialHash
         };
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
-
+        _uow.Get<Responsable>().Items.Add(user);
         // Update profile with null / empty password
         var updateDto = new UserDto(10, 2, "Existing User Renamed", "existing", "M003", null);
         var resultDto = await _auth.SaveUserAsync(updateDto);
 
-        var updatedEntity = _uow.GetRepo<T_RESPONSABLE>().Items.Single(u => u.IDRESPONSABLE == 10);
-        Assert.Equal("Existing User Renamed", updatedEntity.NOMRESPONSABLE);
-        Assert.Equal(initialHash, updatedEntity.PASSWORD);
-        Assert.Null(resultDto.Password);
+        // Act
+        var updatedEntity = _uow.Get<Responsable>().Items.Single(u => u.IdResponsable == 10);
+
+        // Assert
+        updatedEntity.NomResponsable.Should().Be("Existing User Renamed");
+        updatedEntity.Password.Should().Be(initialHash);
+        resultDto.Password.Should().BeNull();
     }
 
     [Fact]
     public async Task SaveUserAsync_ExistingUser_UpdatesPasswordWithNewHash()
     {
-        var initialHash = _hasher.HashPassword(new T_RESPONSABLE(), "OldSecret!");
-        var user = new T_RESPONSABLE
+        // Arrange
+        var initialHash = _hasher.HashPassword(new Responsable(), "OldSecret!");
+        var user = new Responsable
         {
-            IDRESPONSABLE = 11,
-            IDROLE = 2,
-            NOMRESPONSABLE = "User To Update",
-            LOGIN = "toupdate",
-            PASSWORD = initialHash
+            IdResponsable = 11,
+            IdRole = 2,
+            NomResponsable = "User To Update",
+            Login = "toupdate",
+            Password = initialHash
         };
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
-
+        _uow.Get<Responsable>().Items.Add(user);
         var updateDto = new UserDto(11, 2, "User To Update", "toupdate", "M004", "BrandNewSecret789!");
         var resultDto = await _auth.SaveUserAsync(updateDto);
 
-        var updatedEntity = _uow.GetRepo<T_RESPONSABLE>().Items.Single(u => u.IDRESPONSABLE == 11);
-        Assert.NotEqual(initialHash, updatedEntity.PASSWORD);
-        Assert.True(PasswordSecurityHelper.IsHashedPassword(updatedEntity.PASSWORD));
+        // Act
+        var updatedEntity = _uow.Get<Responsable>().Items.Single(u => u.IdResponsable == 11);
 
-        var verify = _hasher.VerifyHashedPassword(updatedEntity, updatedEntity.PASSWORD!, "BrandNewSecret789!");
-        Assert.Equal(PasswordVerificationResult.Success, verify);
-        Assert.Null(resultDto.Password);
+        // Assert
+        updatedEntity.Password.Should().NotBe(initialHash);
+        PasswordHashClassifier.IsHashedPassword(updatedEntity.Password).Should().BeTrue();
+        var verify = _hasher.VerifyHashedPassword(updatedEntity, updatedEntity.Password!, "BrandNewSecret789!");
+        verify.Should().Be(PasswordVerificationResult.Success);
+        resultDto.Password.Should().BeNull();
     }
 
     [Fact]
     public async Task LoginAsync_WithValidHashedPassword_Succeeds()
     {
-        var user = new T_RESPONSABLE
+        // Arrange
+        var user = new Responsable
         {
-            IDRESPONSABLE = 1,
-            IDROLE = 1,
-            NOMRESPONSABLE = "Admin",
-            LOGIN = "admin",
-            PASSWORD = _hasher.HashPassword(new T_RESPONSABLE(), "CorrectPassword123")
+            IdResponsable = 1,
+            IdRole = 1,
+            NomResponsable = "Admin",
+            Login = "admin",
+            Password = _hasher.HashPassword(new Responsable(), "CorrectPassword123")
         };
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
+        _uow.Get<Responsable>().Items.Add(user);
 
+        // Act
         var response = await _auth.LoginAsync(new LoginRequest("admin", "CorrectPassword123"));
 
-        Assert.NotNull(response);
-        Assert.Equal("admin", response.Login);
-        Assert.Equal("FAKE_JWT_TOKEN_1_admin", response.Token);
+        // Assert
+        response.Should().NotBeNull();
+        response.Login.Should().Be("admin");
+        response.Token.Should().Be("FAKE_JWT_TOKEN_1_admin");
     }
 
     [Fact]
     public async Task LoginAsync_WithIncorrectPassword_ThrowsUnauthorized()
     {
-        var user = new T_RESPONSABLE
+        // Arrange
+        var user = new Responsable
         {
-            IDRESPONSABLE = 1,
-            IDROLE = 1,
-            LOGIN = "admin",
-            PASSWORD = _hasher.HashPassword(new T_RESPONSABLE(), "CorrectPassword123")
+            IdResponsable = 1,
+            IdRole = 1,
+            Login = "admin",
+            Password = _hasher.HashPassword(new Responsable(), "CorrectPassword123")
         };
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
+        _uow.Get<Responsable>().Items.Add(user);
 
-        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-            _auth.LoginAsync(new LoginRequest("admin", "WrongPassword!")));
+        // Act
+        Func<Task> act = () =>
+            _auth.LoginAsync(new LoginRequest("admin", "WrongPassword!"));
 
-        Assert.Equal("Identifiants invalides.", ex.Message);
+        // Assert
+        var ex = (await act.Should().ThrowExactlyAsync<UnauthorizedException>()).Which;
+        ex.Message.Should().Be("Identifiants invalides.");
     }
 
     [Fact]
     public async Task LoginAsync_WithNonExistentUser_ThrowsUnauthorized()
     {
-        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-            _auth.LoginAsync(new LoginRequest("ghost", "SomePassword")));
+        // Act
+        Func<Task> act = () =>
+            _auth.LoginAsync(new LoginRequest("ghost", "SomePassword"));
 
-        Assert.Equal("Identifiants invalides.", ex.Message);
+        // Assert
+        var ex = (await act.Should().ThrowExactlyAsync<UnauthorizedException>()).Which;
+        ex.Message.Should().Be("Identifiants invalides.");
     }
 
     [Theory]
@@ -303,8 +353,12 @@ public class AuthServiceSecurityTests
     [InlineData("admin", null)]
     public async Task LoginAsync_WithEmptyCredentials_ThrowsUnauthorized(string? login, string? password)
     {
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-            _auth.LoginAsync(new LoginRequest(login!, password!)));
+        // Act
+        Func<Task> act = () =>
+            _auth.LoginAsync(new LoginRequest(login!, password!));
+
+        // Assert
+        await act.Should().ThrowExactlyAsync<UnauthorizedException>();
     }
 
     [Theory]
@@ -313,473 +367,408 @@ public class AuthServiceSecurityTests
     [InlineData("admin'; DROP TABLE T_RESPONSABLE;--")]
     public async Task LoginAsync_WithSqlInjectionPayload_IsRejectedSafely(string injectionLogin)
     {
-        var user = new T_RESPONSABLE
+        // Arrange
+        var user = new Responsable
         {
-            IDRESPONSABLE = 1,
-            IDROLE = 1,
-            LOGIN = "admin",
-            PASSWORD = _hasher.HashPassword(new T_RESPONSABLE(), "Secret")
+            IdResponsable = 1,
+            IdRole = 1,
+            Login = "admin",
+            Password = _hasher.HashPassword(new Responsable(), "Secret")
         };
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
+        _uow.Get<Responsable>().Items.Add(user);
 
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-            _auth.LoginAsync(new LoginRequest(injectionLogin, "Secret")));
+        // Act
+        Func<Task> act = () =>
+            _auth.LoginAsync(new LoginRequest(injectionLogin, "Secret"));
+
+        // Assert
+        await act.Should().ThrowExactlyAsync<UnauthorizedException>();
     }
 
     [Fact]
     public async Task LoginAsync_WithLegacyPlainTextPassword_UpgradesToHashTransparently()
     {
+        // Arrange
         // Legacy account with plain text password in database
-        var legacyUser = new T_RESPONSABLE
+        var legacyUser = new Responsable
         {
-            IDRESPONSABLE = 42,
-            IDROLE = 1,
-            LOGIN = "legacy_admin",
-            PASSWORD = "plain_text_password"
+            IdResponsable = 42,
+            IdRole = 1,
+            Login = "legacy_admin",
+            Password = "plain_text_password"
         };
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(legacyUser);
 
-        Assert.False(PasswordSecurityHelper.IsHashedPassword(legacyUser.PASSWORD));
+        // Act
+        _uow.Get<Responsable>().Items.Add(legacyUser);
 
+        // Assert
+        PasswordHashClassifier.IsHashedPassword(legacyUser.Password).Should().BeFalse();
         // Attempt login with the legacy plain text password
         var response = await _auth.LoginAsync(new LoginRequest("legacy_admin", "plain_text_password"));
-
-        Assert.NotNull(response);
-        Assert.Equal("legacy_admin", response.Login);
-
+        response.Should().NotBeNull();
+        response.Login.Should().Be("legacy_admin");
         // Stored password must now be upgraded to a secure PBKDF2 hash!
-        Assert.True(PasswordSecurityHelper.IsHashedPassword(legacyUser.PASSWORD));
-        Assert.NotEqual("plain_text_password", legacyUser.PASSWORD);
-
+        PasswordHashClassifier.IsHashedPassword(legacyUser.Password).Should().BeTrue();
+        legacyUser.Password.Should().NotBe("plain_text_password");
         // Next login must succeed verifying against the upgraded hash
         var nextLogin = await _auth.LoginAsync(new LoginRequest("legacy_admin", "plain_text_password"));
-        Assert.NotNull(nextLogin);
+        nextLogin.Should().NotBeNull();
     }
 
     [Fact]
     public async Task LoginAsync_WithValidIdentityV2Hash_SucceedsAndTransparentlyUpgradesToV3()
     {
-        var v2Hash = PasswordSecurityHelperTests.CreateLegacyIdentityV2Hash("v2_secret_password");
-        var user = new T_RESPONSABLE
+        // Arrange
+        var v2Hash = PasswordHashClassifierTests.CreateLegacyIdentityV2Hash("v2_secret_password");
+        var user = new Responsable
         {
-            IDRESPONSABLE = 77,
-            IDROLE = 2,
-            NOMRESPONSABLE = "V2 User",
-            LOGIN = "v2user",
-            PASSWORD = v2Hash
+            IdResponsable = 77,
+            IdRole = 2,
+            NomResponsable = "V2 User",
+            Login = "v2user",
+            Password = v2Hash
         };
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
 
-        Assert.True(PasswordSecurityHelper.IsIdentityV2(user.PASSWORD));
-        Assert.False(PasswordSecurityHelper.IsIdentityV3(user.PASSWORD));
+        // Act
+        _uow.Get<Responsable>().Items.Add(user);
 
+        // Assert
+        PasswordHashClassifier.IsIdentityV2(user.Password).Should().BeTrue();
+        PasswordHashClassifier.IsIdentityV3(user.Password).Should().BeFalse();
         // First login with V2 password
         var response = await _auth.LoginAsync(new LoginRequest("v2user", "v2_secret_password"));
-        Assert.NotNull(response);
-        Assert.Equal("v2user", response.Login);
-
+        response.Should().NotBeNull();
+        response.Login.Should().Be("v2user");
         // Password in DB must now be transparently upgraded to Identity V3!
-        Assert.True(PasswordSecurityHelper.IsIdentityV3(user.PASSWORD));
-        Assert.NotEqual(v2Hash, user.PASSWORD);
-
+        PasswordHashClassifier.IsIdentityV3(user.Password).Should().BeTrue();
+        user.Password.Should().NotBe(v2Hash);
         // Subsequent login verifies via the upgraded V3 hash
         var nextLogin = await _auth.LoginAsync(new LoginRequest("v2user", "v2_secret_password"));
-        Assert.NotNull(nextLogin);
+        nextLogin.Should().NotBeNull();
     }
 
     [Fact]
     public async Task LoginAsync_WithValidIdentityV2Hash_WrongPassword_ThrowsUnauthorizedAndPreservesHash()
     {
-        var v2Hash = PasswordSecurityHelperTests.CreateLegacyIdentityV2Hash("v2_secret_password");
-        var user = new T_RESPONSABLE
+        // Arrange
+        var v2Hash = PasswordHashClassifierTests.CreateLegacyIdentityV2Hash("v2_secret_password");
+        var user = new Responsable
         {
-            IDRESPONSABLE = 78,
-            IDROLE = 2,
-            NOMRESPONSABLE = "V2 User",
-            LOGIN = "v2user_wrong",
-            PASSWORD = v2Hash
+            IdResponsable = 78,
+            IdRole = 2,
+            NomResponsable = "V2 User",
+            Login = "v2user_wrong",
+            Password = v2Hash
         };
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
+        _uow.Get<Responsable>().Items.Add(user);
 
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-            _auth.LoginAsync(new LoginRequest("v2user_wrong", "completely_wrong_pwd")));
+        // Act
+        Func<Task> act = () =>
+            _auth.LoginAsync(new LoginRequest("v2user_wrong", "completely_wrong_pwd"));
 
+        // Assert
+        await act.Should().ThrowExactlyAsync<UnauthorizedException>();
         // V2 hash must remain intact in DB
-        Assert.Equal(v2Hash, user.PASSWORD);
-        Assert.True(PasswordSecurityHelper.IsIdentityV2(user.PASSWORD));
+        user.Password.Should().Be(v2Hash);
+        PasswordHashClassifier.IsIdentityV2(user.Password).Should().BeTrue();
     }
 
     [Fact]
     public async Task LoginAsync_WithValidIdentityV3Hash_SucceedsWithoutModifyingHash()
     {
-        var v3Hash = _hasher.HashPassword(new T_RESPONSABLE(), "v3_password");
-        var user = new T_RESPONSABLE
+        // Arrange
+        var v3Hash = _hasher.HashPassword(new Responsable(), "v3_password");
+        var user = new Responsable
         {
-            IDRESPONSABLE = 79,
-            IDROLE = 1,
-            NOMRESPONSABLE = "V3 User",
-            LOGIN = "v3user",
-            PASSWORD = v3Hash
+            IdResponsable = 79,
+            IdRole = 1,
+            NomResponsable = "V3 User",
+            Login = "v3user",
+            Password = v3Hash
         };
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
+        _uow.Get<Responsable>().Items.Add(user);
 
+        // Act
         var response = await _auth.LoginAsync(new LoginRequest("v3user", "v3_password"));
-        Assert.NotNull(response);
 
+        // Assert
+        response.Should().NotBeNull();
         // Hash was already V3, so it should not be mutated
-        Assert.Equal(v3Hash, user.PASSWORD);
+        user.Password.Should().Be(v3Hash);
     }
 
     [Fact]
     public async Task LoginAsync_WithMalformedHashInDatabase_FailsSafelyWithoutCrashing()
     {
-        var user = new T_RESPONSABLE
+        // Arrange
+        var user = new Responsable
         {
-            IDRESPONSABLE = 80,
-            IDROLE = 2,
-            NOMRESPONSABLE = "Corrupt User",
-            LOGIN = "corrupt",
-            PASSWORD = "NOT_A_VALID_BASE64_HASH!#@$%"
+            IdResponsable = 80,
+            IdRole = 2,
+            NomResponsable = "Corrupt User",
+            Login = "corrupt",
+            Password = "NOT_A_VALID_BASE64_HASH!#@$%"
         };
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
+        _uow.Get<Responsable>().Items.Add(user);
 
-        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-            _auth.LoginAsync(new LoginRequest("corrupt", "some_guess")));
+        // Act
+        Func<Task> act = () =>
+            _auth.LoginAsync(new LoginRequest("corrupt", "some_guess"));
 
-        Assert.Equal("Identifiants invalides.", ex.Message);
+        // Assert
+        var ex = (await act.Should().ThrowExactlyAsync<UnauthorizedException>()).Which;
+        ex.Message.Should().Be("Identifiants invalides.");
         // Value in DB was not wiped or corrupted
-        Assert.Equal("NOT_A_VALID_BASE64_HASH!#@$%", user.PASSWORD);
+        user.Password.Should().Be("NOT_A_VALID_BASE64_HASH!#@$%");
     }
 
     [Fact]
     public async Task MigrateLegacyPasswordsAsync_WithMixOfPlainText_V2_V3_PreservesV2AndV3WithoutDoubleHashing()
     {
-        var v2Hash = PasswordSecurityHelperTests.CreateLegacyIdentityV2Hash("v2_pass");
-        var v3Hash = _hasher.HashPassword(new T_RESPONSABLE(), "v3_pass");
+        // Arrange
+        var v2Hash = PasswordHashClassifierTests.CreateLegacyIdentityV2Hash("v2_pass");
+        var v3Hash = _hasher.HashPassword(new Responsable(), "v3_pass");
+        var userPlain1 = new Responsable { IdResponsable = 101, Login = "plain1", Password = "clear_password_1" };
+        var userPlain2 = new Responsable { IdResponsable = 102, Login = "plain2_inactive", Password = "clear_password_2" };
+        var userV2 = new Responsable { IdResponsable = 103, Login = "v2_user", Password = v2Hash };
+        var userV3 = new Responsable { IdResponsable = 104, Login = "v3_user", Password = v3Hash };
+        var userEmpty = new Responsable { IdResponsable = 105, Login = "empty_user", Password = "" };
+        _uow.Get<Responsable>().Items.AddRange(new[] { userPlain1, userPlain2, userV2, userV3, userEmpty });
 
-        var userPlain1 = new T_RESPONSABLE { IDRESPONSABLE = 101, LOGIN = "plain1", PASSWORD = "clear_password_1" };
-        var userPlain2 = new T_RESPONSABLE { IDRESPONSABLE = 102, LOGIN = "plain2_inactive", PASSWORD = "clear_password_2" };
-        var userV2 = new T_RESPONSABLE { IDRESPONSABLE = 103, LOGIN = "v2_user", PASSWORD = v2Hash };
-        var userV3 = new T_RESPONSABLE { IDRESPONSABLE = 104, LOGIN = "v3_user", PASSWORD = v3Hash };
-        var userEmpty = new T_RESPONSABLE { IDRESPONSABLE = 105, LOGIN = "empty_user", PASSWORD = "" };
-
-        _uow.GetRepo<T_RESPONSABLE>().Items.AddRange(new[] { userPlain1, userPlain2, userV2, userV3, userEmpty });
-
+        // Act
         // First run: only userPlain1 and userPlain2 must be migrated
         var migratedCount = await UserAccountConfiguration.MigrateLegacyPasswordsAsync(_uow, _hasher);
-        Assert.Equal(2, migratedCount);
 
+        // Assert
+        migratedCount.Should().Be(2);
         // Plain text users must now be hashed with Identity V3
-        Assert.True(PasswordSecurityHelper.IsIdentityV3(userPlain1.PASSWORD));
-        Assert.True(PasswordSecurityHelper.IsIdentityV3(userPlain2.PASSWORD));
-
+        PasswordHashClassifier.IsIdentityV3(userPlain1.Password).Should().BeTrue();
+        PasswordHashClassifier.IsIdentityV3(userPlain2.Password).Should().BeTrue();
         // CRITICAL: V2 and V3 users MUST NOT be double-hashed!
-        Assert.Equal(v2Hash, userV2.PASSWORD);
-        Assert.True(PasswordSecurityHelper.IsIdentityV2(userV2.PASSWORD));
-
-        Assert.Equal(v3Hash, userV3.PASSWORD);
-        Assert.True(PasswordSecurityHelper.IsIdentityV3(userV3.PASSWORD));
-
+        userV2.Password.Should().Be(v2Hash);
+        PasswordHashClassifier.IsIdentityV2(userV2.Password).Should().BeTrue();
+        userV3.Password.Should().Be(v3Hash);
+        PasswordHashClassifier.IsIdentityV3(userV3.Password).Should().BeTrue();
         // Second run: completely idempotent (0 migrated)
         var secondRun = await UserAccountConfiguration.MigrateLegacyPasswordsAsync(_uow, _hasher);
-        Assert.Equal(0, secondRun);
-
+        secondRun.Should().Be(0);
         // Verify V2 and V3 are still exactly the same
-        Assert.Equal(v2Hash, userV2.PASSWORD);
-        Assert.Equal(v3Hash, userV3.PASSWORD);
+        userV2.Password.Should().Be(v2Hash);
+        userV3.Password.Should().Be(v3Hash);
     }
 
     [Fact]
     public async Task MigrateLegacyPasswordsAsync_AuthenticationAfterMigration_SucceedsWithOriginalPasswords()
     {
-        var user = new T_RESPONSABLE { IDRESPONSABLE = 201, IDROLE = 1, LOGIN = "migrated_admin", PASSWORD = "InitialPassword123" };
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
-
+        // Arrange
+        var user = new Responsable { IdResponsable = 201, IdRole = 1, Login = "migrated_admin", Password = "InitialPassword123" };
+        _uow.Get<Responsable>().Items.Add(user);
         // Run migration
         await UserAccountConfiguration.MigrateLegacyPasswordsAsync(_uow, _hasher);
 
+        // Act
         // Authenticate with the original password
         var authResponse = await _auth.LoginAsync(new LoginRequest("migrated_admin", "InitialPassword123"));
-        Assert.NotNull(authResponse);
-        Assert.Equal("migrated_admin", authResponse.Login);
 
+        // Assert
+        authResponse.Should().NotBeNull();
+        authResponse.Login.Should().Be("migrated_admin");
         // Authenticate with wrong password fails
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-            _auth.LoginAsync(new LoginRequest("migrated_admin", "WrongGuess")));
+        await FluentActions.Awaiting(() =>
+            _auth.LoginAsync(new LoginRequest("migrated_admin", "WrongGuess"))).Should().ThrowExactlyAsync<UnauthorizedException>();
     }
 
     [Fact]
     public async Task MigrateLegacyPasswordsAsync_WhenCancelled_PreservesExistingData()
     {
-        var user = new T_RESPONSABLE { IDRESPONSABLE = 301, LOGIN = "cancel_test", PASSWORD = "initial_plain" };
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
-
+        // Arrange
+        var user = new Responsable { IdResponsable = 301, Login = "cancel_test", Password = "initial_plain" };
+        _uow.Get<Responsable>().Items.Add(user);
         using var cts = new CancellationTokenSource();
-        cts.Cancel(); // cancelled before execution
+        cts.Cancel();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            UserAccountConfiguration.MigrateLegacyPasswordsAsync(_uow, _hasher, cts.Token));
+        // Act
+        Func<Task> act = () =>
+            UserAccountConfiguration.MigrateLegacyPasswordsAsync(_uow, _hasher, cts.Token);
 
+        // Assert
+        await act.Should().ThrowAsync<OperationCanceledException>();
         // Data must remain intact
-        Assert.Equal("initial_plain", user.PASSWORD);
+        user.Password.Should().Be("initial_plain");
     }
 
     [Fact]
     public async Task MigrateLegacyPasswordsDetailedAsync_WithAmbiguousAndUnrecognizedHashes_PreservesValuesWithoutCorruption()
     {
-        var v2Hash = PasswordSecurityHelperTests.CreateLegacyIdentityV2Hash("v2_pass");
-        var v3StdHash = _hasher.HashPassword(new T_RESPONSABLE(), "v3_pass");
-        var v3Sha512Hash = PasswordSecurityHelperTests.CreateIdentityV3CustomHash("sha512_pass", prf: 2, subkeySize: 64);
-        var v3Sha512_32bHash = PasswordSecurityHelperTests.CreateIdentityV3CustomHash("sha512_32b_pass", prf: 2, subkeySize: 32);
+        // Arrange
+        var v2Hash = PasswordHashClassifierTests.CreateLegacyIdentityV2Hash("v2_pass");
+        var v3StdHash = _hasher.HashPassword(new Responsable(), "v3_pass");
+        var v3Sha512Hash = PasswordHashClassifierTests.CreateIdentityV3CustomHash("sha512_pass", prf: 2, subkeySize: 64);
+        var v3Sha512_32bHash = PasswordHashClassifierTests.CreateIdentityV3CustomHash("sha512_32b_pass", prf: 2, subkeySize: 32);
         const string md5Hash = "5ebe2294ecd0e0f08eab7690d2a6ee69";
         const string bcryptHash = "$2a$12$e8N4Yy9w/1z3o8hN7a5HXe8.J4vW8/x1t3y2w1z3o8hN7a5HXe8.J";
         const string corruptedV3 = "AQAAAA_corrupted_truncated";
-
-        var userPlain = new T_RESPONSABLE { IDRESPONSABLE = 401, LOGIN = "plain_user", PASSWORD = "clear_secret" };
-        var userV2 = new T_RESPONSABLE { IDRESPONSABLE = 402, LOGIN = "v2_user", PASSWORD = v2Hash };
-        var userV3Std = new T_RESPONSABLE { IDRESPONSABLE = 403, LOGIN = "v3_std", PASSWORD = v3StdHash };
-        var userV3Sha512 = new T_RESPONSABLE { IDRESPONSABLE = 404, LOGIN = "v3_sha512", PASSWORD = v3Sha512Hash };
-        var userV3Sha512_32b = new T_RESPONSABLE { IDRESPONSABLE = 405, LOGIN = "v3_sha512_32b", PASSWORD = v3Sha512_32bHash };
-        var userMd5 = new T_RESPONSABLE { IDRESPONSABLE = 406, LOGIN = "md5_user", PASSWORD = md5Hash };
-        var userBcrypt = new T_RESPONSABLE { IDRESPONSABLE = 407, LOGIN = "bcrypt_user", PASSWORD = bcryptHash };
-        var userCorrupt = new T_RESPONSABLE { IDRESPONSABLE = 408, LOGIN = "corrupt_user", PASSWORD = corruptedV3 };
-        var userEmpty = new T_RESPONSABLE { IDRESPONSABLE = 409, LOGIN = "empty_user", PASSWORD = "" };
-
-        _uow.GetRepo<T_RESPONSABLE>().Items.AddRange(new[]
+        var userPlain = new Responsable { IdResponsable = 401, Login = "plain_user", Password = "clear_secret" };
+        var userV2 = new Responsable { IdResponsable = 402, Login = "v2_user", Password = v2Hash };
+        var userV3Std = new Responsable { IdResponsable = 403, Login = "v3_std", Password = v3StdHash };
+        var userV3Sha512 = new Responsable { IdResponsable = 404, Login = "v3_sha512", Password = v3Sha512Hash };
+        var userV3Sha512_32b = new Responsable { IdResponsable = 405, Login = "v3_sha512_32b", Password = v3Sha512_32bHash };
+        var userMd5 = new Responsable { IdResponsable = 406, Login = "md5_user", Password = md5Hash };
+        var userBcrypt = new Responsable { IdResponsable = 407, Login = "bcrypt_user", Password = bcryptHash };
+        var userCorrupt = new Responsable { IdResponsable = 408, Login = "corrupt_user", Password = corruptedV3 };
+        var userEmpty = new Responsable { IdResponsable = 409, Login = "empty_user", Password = "" };
+        _uow.Get<Responsable>().Items.AddRange(new[]
         {
             userPlain, userV2, userV3Std, userV3Sha512, userV3Sha512_32b, userMd5, userBcrypt, userCorrupt, userEmpty
         });
 
+        // Act
         // First migration run
         var report = await UserAccountConfiguration.MigrateLegacyPasswordsDetailedAsync(_uow, _hasher);
 
-        Assert.Equal(9, report.TotalScanned);
-        Assert.Equal(1, report.MigratedCount); // Only userPlain
-        Assert.Equal(3, report.AlreadyHashedV3Count); // userV3Std, userV3Sha512, and userV3Sha512_32b
-        Assert.Equal(1, report.PreservedV2Count); // userV2
-        Assert.Equal(1, report.SkippedEmptyCount); // userEmpty
-        Assert.Equal(3, report.AmbiguousCount); // userMd5, userBcrypt, userCorrupt
-        Assert.Equal(3, report.AmbiguousAccounts.Count);
-
+        // Assert
+        report.TotalScanned.Should().Be(9);
+        report.MigratedCount.Should().Be(1);
+        report.AlreadyHashedV3Count.Should().Be(3);
+        report.PreservedV2Count.Should().Be(1);
+        report.SkippedEmptyCount.Should().Be(1);
+        report.AmbiguousCount.Should().Be(3);
+        report.AmbiguousAccounts.Count.Should().Be(3);
         // Plain text user must now be hashed with Identity V3
-        Assert.True(PasswordSecurityHelper.IsIdentityV3(userPlain.PASSWORD));
-
+        PasswordHashClassifier.IsIdentityV3(userPlain.Password).Should().BeTrue();
         // Ambiguous, unknown and existing hashes MUST be preserved without double-hashing
-        Assert.Equal(md5Hash, userMd5.PASSWORD);
-        Assert.Equal(bcryptHash, userBcrypt.PASSWORD);
-        Assert.Equal(corruptedV3, userCorrupt.PASSWORD);
-        Assert.Equal(v2Hash, userV2.PASSWORD);
-        Assert.Equal(v3StdHash, userV3Std.PASSWORD);
-        Assert.Equal(v3Sha512Hash, userV3Sha512.PASSWORD);
-        Assert.Equal(v3Sha512_32bHash, userV3Sha512_32b.PASSWORD);
-
+        userMd5.Password.Should().Be(md5Hash);
+        userBcrypt.Password.Should().Be(bcryptHash);
+        userCorrupt.Password.Should().Be(corruptedV3);
+        userV2.Password.Should().Be(v2Hash);
+        userV3Std.Password.Should().Be(v3StdHash);
+        userV3Sha512.Password.Should().Be(v3Sha512Hash);
+        userV3Sha512_32b.Password.Should().Be(v3Sha512_32bHash);
         // Second run: completely idempotent
         var report2 = await UserAccountConfiguration.MigrateLegacyPasswordsDetailedAsync(_uow, _hasher);
-        Assert.Equal(0, report2.MigratedCount);
-        Assert.Equal(4, report2.AlreadyHashedV3Count); // userPlain is now V3 too
-        Assert.Equal(3, report2.AmbiguousCount);
-
+        report2.MigratedCount.Should().Be(0);
+        report2.AlreadyHashedV3Count.Should().Be(4);
+        report2.AmbiguousCount.Should().Be(3);
         // Values are still intact
-        Assert.Equal(md5Hash, userMd5.PASSWORD);
-        Assert.Equal(bcryptHash, userBcrypt.PASSWORD);
-        Assert.Equal(corruptedV3, userCorrupt.PASSWORD);
-        Assert.Equal(v3Sha512_32bHash, userV3Sha512_32b.PASSWORD);
+        userMd5.Password.Should().Be(md5Hash);
+        userBcrypt.Password.Should().Be(bcryptHash);
+        userCorrupt.Password.Should().Be(corruptedV3);
+        userV3Sha512_32b.Password.Should().Be(v3Sha512_32bHash);
     }
 
     [Fact]
     public async Task LoginAsync_WithLegacyIdentityV2Hash_AuthenticatesAndUpgradesToV3()
     {
-        var v2Hash = PasswordSecurityHelperTests.CreateLegacyIdentityV2Hash("v2_secret_password");
-        var user = new T_RESPONSABLE
+        // Arrange
+        var v2Hash = PasswordHashClassifierTests.CreateLegacyIdentityV2Hash("v2_secret_password");
+        var user = new Responsable
         {
-            IDRESPONSABLE = 501,
-            IDROLE = 2,
-            LOGIN = "v2_login_user",
-            PASSWORD = v2Hash
+            IdResponsable = 501,
+            IdRole = 2,
+            Login = "v2_login_user",
+            Password = v2Hash
         };
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
+        _uow.Get<Responsable>().Items.Add(user);
 
+        // Act
         var loginResult = await _auth.LoginAsync(new LoginRequest("v2_login_user", "v2_secret_password"));
-        Assert.NotNull(loginResult);
-        Assert.Equal("v2_login_user", loginResult.Login);
 
+        // Assert
+        loginResult.Should().NotBeNull();
+        loginResult.Login.Should().Be("v2_login_user");
         // User must now be automatically upgraded to Identity V3 in storage
-        Assert.True(PasswordSecurityHelper.IsIdentityV3(user.PASSWORD));
-        Assert.NotEqual(v2Hash, user.PASSWORD);
+        PasswordHashClassifier.IsIdentityV3(user.Password).Should().BeTrue();
+        user.Password.Should().NotBe(v2Hash);
     }
 
     [Fact]
     public async Task LoginAsync_WithIdentityV3HmacSha512_AuthenticatesSuccessfully()
     {
-        var hash512 = PasswordSecurityHelperTests.CreateIdentityV3CustomHash("sha512_secret_pwd", prf: 2, subkeySize: 64);
-        var user = new T_RESPONSABLE
+        // Arrange
+        var hash512 = PasswordHashClassifierTests.CreateIdentityV3CustomHash("sha512_secret_pwd", prf: 2, subkeySize: 64);
+        var user = new Responsable
         {
-            IDRESPONSABLE = 502,
-            IDROLE = 2,
-            LOGIN = "sha512_user",
-            PASSWORD = hash512
+            IdResponsable = 502,
+            IdRole = 2,
+            Login = "sha512_user",
+            Password = hash512
         };
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
+        _uow.Get<Responsable>().Items.Add(user);
 
+        // Act
         var loginResult = await _auth.LoginAsync(new LoginRequest("sha512_user", "sha512_secret_pwd"));
-        Assert.NotNull(loginResult);
-        Assert.Equal("sha512_user", loginResult.Login);
+
+        // Assert
+        loginResult.Should().NotBeNull();
+        loginResult.Login.Should().Be("sha512_user");
     }
 
     [Fact]
     public async Task LoginAsync_WithUnrecognizedHashInDb_WhenUserEntersRawHash_FailsAuthentication()
     {
+        // Arrange
         const string md5Hash = "5ebe2294ecd0e0f08eab7690d2a6ee69";
-        var user = new T_RESPONSABLE
+        var user = new Responsable
         {
-            IDRESPONSABLE = 503,
-            IDROLE = 2,
-            LOGIN = "md5_locked_user",
-            PASSWORD = md5Hash
+            IdResponsable = 503,
+            IdRole = 2,
+            Login = "md5_locked_user",
+            Password = md5Hash
         };
-        _uow.GetRepo<T_RESPONSABLE>().Items.Add(user);
 
+        // Act
+        _uow.Get<Responsable>().Items.Add(user);
+
+        // Assert
         // Attempting to log in by submitting the raw MD5 hash must fail
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-            _auth.LoginAsync(new LoginRequest("md5_locked_user", md5Hash)));
-
+        await FluentActions.Awaiting(() =>
+            _auth.LoginAsync(new LoginRequest("md5_locked_user", md5Hash))).Should().ThrowExactlyAsync<UnauthorizedException>();
         // Attempting with arbitrary password also fails
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-            _auth.LoginAsync(new LoginRequest("md5_locked_user", "secret")));
-
+        await FluentActions.Awaiting(() =>
+            _auth.LoginAsync(new LoginRequest("md5_locked_user", "secret"))).Should().ThrowExactlyAsync<UnauthorizedException>();
         // Value in DB is untouched
-        Assert.Equal(md5Hash, user.PASSWORD);
+        user.Password.Should().Be(md5Hash);
     }
 
     [Fact]
-    public async Task GetUsersPagedAsync_ReturnsRequestedPageOrderedByName()
+    public async Task GetUsersPagedAsync_SecondPage_ReturnsRequestedPageOrderedByName()
     {
-        _uow.GetRepo<T_RESPONSABLE>().Items.AddRange(new[]
+        // Arrange
+        _uow.Get<Responsable>().Items.AddRange(new[]
         {
-            new T_RESPONSABLE { IDRESPONSABLE = 1, IDROLE = 1, NOMRESPONSABLE = "Zoe", LOGIN = "zoe" },
-            new T_RESPONSABLE { IDRESPONSABLE = 2, IDROLE = 2, NOMRESPONSABLE = "Alice", LOGIN = "alice" },
-            new T_RESPONSABLE { IDRESPONSABLE = 3, IDROLE = 2, NOMRESPONSABLE = "Bob", LOGIN = "bob" },
+            new Responsable { IdResponsable = 1, IdRole = 1, NomResponsable = "Zoe", Login = "zoe" },
+            new Responsable { IdResponsable = 2, IdRole = 2, NomResponsable = "Alice", Login = "alice" },
+            new Responsable { IdResponsable = 3, IdRole = 2, NomResponsable = "Bob", Login = "bob" },
         });
 
+        // Act
         var result = await _auth.GetUsersPagedAsync(1, 2);
 
-        Assert.Equal(3, result.Total);
-        Assert.Equal(2, result.Items.Count);
-        Assert.Equal("Alice", result.Items[0].Nom);
-        Assert.Equal("Bob", result.Items[1].Nom);
-        Assert.Equal(1, result.Page);
-        Assert.Equal(2, result.PageSize);
-        Assert.Equal(2, result.TotalPages);
+        // Assert
+        result.Total.Should().Be(3);
+        result.Items.Count.Should().Be(2);
+        result.Items[0].Nom.Should().Be("Alice");
+        result.Items[1].Nom.Should().Be("Bob");
+        result.Page.Should().Be(1);
+        result.PageSize.Should().Be(2);
+        result.TotalPages.Should().Be(2);
     }
 
     [Fact]
-    public async Task GetRolesPagedAsync_ReturnsRequestedPage()
+    public async Task GetRolesPagedAsync_SecondPage_ReturnsRequestedPage()
     {
+        // Act
         var result = await _auth.GetRolesPagedAsync(1, 1);
 
-        Assert.Equal(2, result.Total);
-        Assert.Single(result.Items);
-        Assert.Equal("Administrateur", result.Items[0].Nom);
-        Assert.Equal(1, result.Page);
-        Assert.Equal(2, result.TotalPages);
+        // Assert
+        result.Total.Should().Be(2);
+        result.Items.Should().ContainSingle();
+        result.Items[0].Nom.Should().Be("Administrateur");
+        result.Page.Should().Be(1);
+        result.TotalPages.Should().Be(2);
     }
 
     #region In-Memory Test Doubles
-
-    private sealed class InMemoryRepository<T> : IRepository<T> where T : class
-    {
-        public List<T> Items { get; } = new();
-
-        public IQueryable<T> Query() => Items.AsQueryable();
-
-        public Task<T?> GetByIdAsync(object id, CancellationToken cancellationToken = default)
-        {
-            var decId = Convert.ToDecimal(id);
-            var match = Items.FirstOrDefault(i =>
-            {
-                if (i is T_RESPONSABLE r && r.IDRESPONSABLE == decId) return true;
-                if (i is T_ROLE ro && ro.IDROLE == decId) return true;
-                return false;
-            });
-            return Task.FromResult(match);
-        }
-
-        public Task<List<T>> ListAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default)
-        {
-            var func = predicate.Compile();
-            return Task.FromResult(Items.Where(func).ToList());
-        }
-
-        public Task<List<T>> ListLatestAsync(
-            Expression<Func<T, bool>> predicate,
-            Expression<Func<T, DateTime?>> orderByDescending,
-            int take,
-            CancellationToken cancellationToken = default)
-        {
-            var func = predicate.Compile();
-            var orderFunc = orderByDescending.Compile();
-            return Task.FromResult(Items.Where(func).OrderByDescending(orderFunc).Take(take).ToList());
-        }
-
-        public Task AddAsync(T entity, CancellationToken cancellationToken = default)
-        {
-            if (entity is T_RESPONSABLE r && r.IDRESPONSABLE == 0)
-            {
-                r.IDRESPONSABLE = Items.Count == 0 ? 1 : Items.OfType<T_RESPONSABLE>().Max(x => x.IDRESPONSABLE) + 1;
-            }
-            Items.Add(entity);
-            return Task.CompletedTask;
-        }
-
-        public Task AddRangeAsync(IEnumerable<T> entities, CancellationToken cancellationToken = default)
-        {
-            foreach (var e in entities)
-                AddAsync(e, cancellationToken);
-            return Task.CompletedTask;
-        }
-
-        public void Update(T entity) { }
-        public void Remove(T entity) => Items.Remove(entity);
-        public void RemoveRange(IEnumerable<T> entities)
-        {
-            foreach (var e in entities.ToList())
-                Items.Remove(e);
-        }
-    }
-
-    private sealed class InMemoryUnitOfWork : IUnitOfWork
-    {
-        private readonly Dictionary<Type, object> _repos = new();
-
-        public InMemoryRepository<T> GetRepo<T>() where T : class
-        {
-            if (!_repos.TryGetValue(typeof(T), out var r))
-            {
-                r = new InMemoryRepository<T>();
-                _repos[typeof(T)] = r;
-            }
-            return (InMemoryRepository<T>)r;
-        }
-
-        public IRepository<T> Repository<T>() where T : class => GetRepo<T>();
-
-        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) => Task.FromResult(1);
-        public Task ExecuteSqlAsync(string sql, CancellationToken cancellationToken = default) => Task.CompletedTask;
-    }
-
-    private sealed class FakeTokenService : ITokenService
-    {
-        public string CreateToken(decimal userId, string login, decimal roleId, string? matricule, IEnumerable<int> rights)
-            => $"FAKE_JWT_TOKEN_{userId}_{login}";
-    }
-
-    private sealed class FakeEmailService : IEmailService
-    {
-        public bool EstConfigure => true;
-        public Task<bool> EnvoyerAsync(EmailMessage message, CancellationToken cancellationToken = default) => Task.FromResult(true);
-        public Task<bool> SendUserCredentialsAsync(string? email, string? pseudo, string? password, string? nom, string? prenom, CancellationToken cancellationToken = default) => Task.FromResult(true);
-        public Task<bool> SendUserUpdateAsync(string? email, string? pseudo, string? newPassword, string? nom, string? prenom, bool pseudoChanged, bool passwordChanged, CancellationToken cancellationToken = default) => Task.FromResult(true);
-    }
 
     #endregion
 }

@@ -1,10 +1,14 @@
 using System.Text;
+
 using AutoMapper;
+
 using SoftTime.Application.ImportTemplates;
 using SoftTime.Application.Mapping;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Infrastructure.Excel;
+using SoftTime.Infrastructure.Services.History;
+using SoftTime.Infrastructure.Services.RequestContext;
 
 namespace SoftTime.Tests;
 
@@ -25,60 +29,60 @@ public class ImportTemplateImportTests
     private sealed class Contexte
     {
         public InMemoryUnitOfWork Uow { get; } = new();
-        public TimekeepingService Timekeeping { get; }
-        public PlanningService Planning { get; }
-        public CatalogService Catalog { get; }
+        public TimekeepingServices Timekeeping { get; }
+        public PlanningServices Planning { get; }
+        public CatalogServices Catalog { get; }
 
         public Contexte()
         {
-            Uow.Get<T_BDD_SAGE>().Items.Add(new T_BDD_SAGE { ID = 1, NOM_BD = "SAGE_TEST" });
-            Uow.Get<T_BDD_POINTEUSE>().Items.Add(new T_BDD_POINTEUSE { ID = 1, NOM_BD = "PTE_TEST", ACTIVE = true });
-            Uow.Get<T_CARDPAIE>().Items.AddRange(new[]
+            Uow.Get<BddSage>().Items.Add(new BddSage { Id = 1, NomBd = "SAGE_TEST" });
+            Uow.Get<BddPointeuse>().Items.Add(new BddPointeuse { Id = 1, NomBd = "PTE_TEST", Active = true });
+            Uow.Get<CardPaie>().Items.AddRange(new[]
             {
-                new T_CARDPAIE
+                new CardPaie
                 {
-                    ID = 1, SAGE_MATRICULE = "04285", SAGE_BDD = "SAGE_TEST",
-                    POINTEUSE_BDD = "PTE_TEST", POINTEUSE_NUMERO = "00123"
+                    Id = 1, SageMatricule = "04285", SageBdd = "SAGE_TEST",
+                    PointeuseBdd = "PTE_TEST", PointeuseNumero = "00123"
                 },
-                new T_CARDPAIE
+                new CardPaie
                 {
-                    ID = 2, SAGE_MATRICULE = "04301", SAGE_BDD = "SAGE_TEST",
-                    POINTEUSE_BDD = "PTE_TEST", POINTEUSE_NUMERO = "00124"
+                    Id = 2, SageMatricule = "04301", SageBdd = "SAGE_TEST",
+                    PointeuseBdd = "PTE_TEST", PointeuseNumero = "00124"
                 }
             });
-            Uow.Get<T_CATEGORIE>().Items.Add(new T_CATEGORIE
+            Uow.Get<Categorie>().Items.Add(new Categorie
             {
-                IDCATEGORIE = 10,
-                INTITULE = "Sédentaire",
-                HEURESEMAINE = 40m,
-                PAUSE = Pause,
-                BDD_SAGE = "SAGE_TEST",
-                BDD_POINTEUSE = "PTE_TEST"
+                IdCategorie = 10,
+                Intitule = "Sédentaire",
+                HeureSemaine = 40m,
+                Pause = Pause,
+                BddSage = "SAGE_TEST",
+                BddPointeuse = "PTE_TEST"
             });
-            Uow.Get<T_CAT_SAL>().Items.Add(new T_CAT_SAL
+            Uow.Get<CategorieSalarie>().Items.Add(new CategorieSalarie
             {
-                ID = 1, MATRICULE_SAGE = 1, ID_CATEG = 10,
-                BDD_SAGE = "SAGE_TEST", BDD_POINTEUSE = "PTE_TEST"
+                Id = 1, MatriculeSage = 1, IdCateg = 10,
+                BddSage = "SAGE_TEST", BddPointeuse = "PTE_TEST"
             });
-            Uow.Get<T_PLANNING>().Items.AddRange(new[]
+            Uow.Get<Planning>().Items.AddRange(new[]
             {
-                new T_PLANNING { NoSHIFT = 1, HA = Huit, PAUSE = Pause, HD = DixSept, Intitule = "Journée" },
-                new T_PLANNING { NoSHIFT = 2, HA = VingtDeux, PAUSE = Pause, HD = Six, Intitule = "Nuit" }
+                new Planning { NoShift = 1, Ha = Huit, Pause = Pause, Hd = DixSept, Intitule = "Journée" },
+                new Planning { NoShift = 2, Ha = VingtDeux, Pause = Pause, Hd = Six, Intitule = "Nuit" }
             });
 
             var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow), Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
             var external = new FakeExternalSourceService();
-            Timekeeping = new TimekeepingService(Uow, tenant, external, new HistoryArchiveService(Uow, tenant));
-            Planning = new PlanningService(Uow, tenant, new FakePlanningStatisticsReader());
+            Timekeeping = new TimekeepingServices(Uow, tenant, external, new HistoryArchiveService(Uow));
+            Planning = new PlanningServices(Uow, tenant, new FakePlanningStatisticsReader());
             // La découverte de bases n'est pas utilisée par les imports testés ici.
             var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
-            Catalog = new CatalogService(Uow, mapper, tenant, external, null!, null!, SoftTime.Tests.Http.TestRights.Service(Uow));
+            Catalog = new CatalogServices(Uow, mapper, tenant, external, null!, null!, SoftTime.Tests.Http.TestRights.Service(Uow));
         }
 
-        public List<T_POINTAGE> Pointages => Uow.Get<T_POINTAGE>().Items;
-        public List<T_HEURECORRIGER> Corrections => Uow.Get<T_HEURECORRIGER>().Items;
-        public List<T_PLANNING_SAL> PlanningSalaries => Uow.Get<T_PLANNING_SAL>().Items;
-        public List<T_CARDPAIE> Cards => Uow.Get<T_CARDPAIE>().Items;
+        public List<Pointage> Pointages => Uow.Get<Pointage>().Items;
+        public List<HeureCorrigee> Corrections => Uow.Get<HeureCorrigee>().Items;
+        public List<PlanningSalarie> PlanningSalaries => Uow.Get<PlanningSalarie>().Items;
+        public List<CardPaie> Cards => Uow.Get<CardPaie>().Items;
     }
 
     private static ImportTemplateDefinition Modele(string key)
@@ -87,143 +91,170 @@ public class ImportTemplateImportTests
 
     private static List<Dictionary<string, string>> LireXlsx(string key, out List<string> headers)
     {
-        using var flux = new MemoryStream(ImportTemplateFile.Build(Modele(key)));
-        var rows = ExcelHelper.ReadFirstSheet(flux);
+        using var flux = new MemoryStream(ImportTemplateFile.Build(Modele(key), new ExcelWorkbook()));
+        var rows = new ExcelWorkbook().ReadFirstSheet(flux);
         headers = rows.Count > 0 ? rows[0].Keys.ToList() : new List<string>();
         return rows;
     }
 
     private static IReadOnlyList<string[]> LireCsv(string key)
         => new UTF8Encoding(false)
-            .GetString(ImportTemplateFile.Build(Modele(key)))
+            .GetString(ImportTemplateFile.Build(Modele(key), new ExcelWorkbook()))
             .TrimStart('\uFEFF')
             .Split(new[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries)
             .Select(ligne => ligne.Split(';'))
             .ToList();
 
     [Fact]
-    public async Task ModelePointages_EstImportable()
+    public async Task ImportPunchesExcelAsync_ModelePointages_EstImportable()
     {
+        // Arrange
         var contexte = new Contexte();
         var rows = LireXlsx("punches", out _);
 
+        // Act
         var resultat = await contexte.Timekeeping.ImportPunchesExcelAsync(rows);
 
-        Assert.Equal(rows.Count, resultat.Imported);
-        Assert.Equal(0, resultat.Skipped);
-        Assert.Contains($"{rows.Count} pointage(s) importé(s), 0 ligne(s) ignorée(s).", resultat.Message);
-        Assert.Equal(rows.Count, contexte.Pointages.Count);
+        // Assert
+        resultat.Imported.Should().Be(rows.Count);
+        resultat.Skipped.Should().Be(0);
+        resultat.Message.Should().Contain($"{rows.Count} pointage(s) importé(s), 0 ligne(s) ignorée(s).");
+        contexte.Pointages.Count.Should().Be(rows.Count);
     }
 
     [Fact]
-    public async Task ModeleCorrections_EstImportable()
+    public async Task ImportCorrectionsExcelAsync_ModeleCorrections_EstImportable()
     {
+        // Arrange
         var contexte = new Contexte();
         var rows = LireXlsx("corrections", out _);
 
+        // Act
         var resultat = await contexte.Timekeeping.ImportCorrectionsExcelAsync(rows);
 
-        Assert.Equal(rows.Count, resultat.Imported);
-        Assert.Contains($"{rows.Count} correction(s) importée(s), 0 ligne(s) ignorée(s).", resultat.Message);
-        Assert.Equal(rows.Count, contexte.Corrections.Count);
-        Assert.All(contexte.Corrections, c =>
+        // Assert
+        resultat.Imported.Should().Be(rows.Count);
+        resultat.Message.Should().Contain($"{rows.Count} correction(s) importée(s), 0 ligne(s) ignorée(s).");
+        contexte.Corrections.Count.Should().Be(rows.Count);
+        contexte.Corrections.Should().AllSatisfy(c =>
         {
-            Assert.True(c.VALIDER_CORRECTION);
-            Assert.Equal(PunchProcessingConfiguration.OrigineManuel, c.ORIGINE);
+            c.ValiderCorrection.Should().BeTrue();
+            c.Origine.Should().Be(PunchProcessingConfiguration.OrigineManuel);
         });
     }
 
     [Fact]
-    public async Task ModeleShifts_EstImportable()
+    public async Task ImportShiftsExcelAsync_ModeleShifts_EstImportable()
     {
+        // Arrange
         var contexte = new Contexte();
         var rows = LireXlsx("shifts", out _);
 
+        // Act
         var resultat = await contexte.Planning.ImportShiftsExcelAsync(rows);
 
-        Assert.Equal(2, resultat.Imported);
-        Assert.Equal(0, resultat.Skipped);
-        Assert.Contains("2 shift(s) importé(s), 0 ligne(s) ignorée(s).", resultat.Message);
+        // Assert
+        resultat.Imported.Should().Be(2);
+        resultat.Skipped.Should().Be(0);
+        resultat.Message.Should().Contain("2 shift(s) importé(s), 0 ligne(s) ignorée(s).");
     }
 
     [Fact]
-    public async Task ModelePlanningMatricule_EstImportable()
+    public async Task ImportExcelAsync_ModelePlanningMatricule_EstImportable()
     {
+        // Arrange
         var contexte = new Contexte();
         var rows = LireXlsx("planning-matricule", out var headers);
 
+        // Act
         var resultat = await contexte.Planning.ImportExcelAsync(rows, headers);
 
-        Assert.Equal(14, resultat.Imported);
-        Assert.Equal(0, resultat.Skipped);
-        Assert.Contains("14 ligne(s) de planning importée(s), 0 élément(s) ignoré(s).", resultat.Message);
-        Assert.Equal(14, contexte.PlanningSalaries.Count);
+        // Assert
+        resultat.Imported.Should().Be(14);
+        resultat.Skipped.Should().Be(0);
+        resultat.Message.Should().Contain("14 ligne(s) de planning importée(s), 0 élément(s) ignoré(s).");
+        contexte.PlanningSalaries.Count.Should().Be(14);
     }
 
     [Fact]
-    public async Task ModelePlanningCategorie_EstImportable()
+    public async Task ImportExcelAsync_ModelePlanningCategorie_EstImportable()
     {
+        // Arrange
         var contexte = new Contexte();
         var rows = LireXlsx("planning-categorie", out var headers);
 
+        // Act
         var resultat = await contexte.Planning.ImportExcelAsync(rows, headers);
 
-        Assert.Equal(7, resultat.Imported);
-        Assert.Equal(0, resultat.Skipped);
-        Assert.Contains("7 ligne(s) de planning importée(s), 0 élément(s) ignoré(s).", resultat.Message);
-        Assert.All(contexte.PlanningSalaries, p => Assert.Equal(1, p.IDSAL));
+        // Assert
+        resultat.Imported.Should().Be(7);
+        resultat.Skipped.Should().Be(0);
+        resultat.Message.Should().Contain("7 ligne(s) de planning importée(s), 0 élément(s) ignoré(s).");
+        contexte.PlanningSalaries.Should().AllSatisfy(p => p.IdSal.Should().Be(1));
     }
 
     [Fact]
-    public async Task ModeleGenerationCategorie_EstImportable()
+    public async Task GenerateFromCategoryCsvAsync_ModeleGenerationCategorie_EstImportable()
     {
+        // Arrange
         var contexte = new Contexte();
         var lignes = LireCsv("planning-generate-category");
 
+        // Act
         var resultat = await contexte.Planning.GenerateFromCategoryCsvAsync(lignes);
 
-        Assert.Equal(7, resultat.Imported);
-        Assert.Equal(0, resultat.Skipped);
+        // Assert
+        resultat.Imported.Should().Be(7);
+        resultat.Skipped.Should().Be(0);
     }
 
     [Fact]
-    public async Task ModeleGenerationMatricule_EstImportable()
+    public async Task GenerateFromMatriculeCsvAsync_ModeleGenerationMatricule_EstImportable()
     {
+        // Arrange
         var contexte = new Contexte();
         var lignes = LireCsv("planning-generate-matricule");
 
+        // Act
         var resultat = await contexte.Planning.GenerateFromMatriculeCsvAsync(lignes);
 
-        Assert.Equal(7, resultat.Imported);
-        Assert.Equal(0, resultat.Skipped);
+        // Assert
+        resultat.Imported.Should().Be(7);
+        resultat.Skipped.Should().Be(0);
     }
 
     [Fact]
-    public async Task ModeleAffectations_EstImportable()
+    public async Task ImportAffectationsExcelAsync_ModeleAffectations_EstImportable()
     {
+        // Arrange
         var contexte = new Contexte();
         var rows = LireXlsx("affectations", out _);
 
-        var resultat = await contexte.Catalog.ImportAffectationsExcelAsync(rows);
+        // Act
+        var resultat = await contexte.Catalog.AffectationImports.ImportAffectationsExcelAsync(rows);
 
-        Assert.Equal(1, resultat.Imported);
-        Assert.Equal(0, resultat.Skipped);
-        Assert.Equal("1 affectation(s) importée(s), 0 ligne(s) ignorée(s).", resultat.Message);
+        // Assert
+        resultat.Imported.Should().Be(1);
+        resultat.Skipped.Should().Be(0);
+        resultat.Message.Should().Be("1 affectation(s) importée(s), 0 ligne(s) ignorée(s).");
     }
 
     [Fact]
-    public async Task ModeleCorrespondances_EstImportable()
+    public async Task ImportCorrespondencesCsvAsync_ModeleCorrespondances_EstImportable()
     {
+        // Arrange
         var contexte = new Contexte();
         var lignes = LireCsv("correspondences");
 
-        var resultat = await contexte.Catalog.ImportCorrespondencesCsvAsync(lignes);
+        // Act
+        var resultat = await contexte.Catalog.Cards.ImportCorrespondencesCsvAsync(lignes);
 
+        // Assert
         // La ligne d'en-tête est reconnue et ignorée : elle n'est pas comptée comme ligne ignorée.
-        Assert.Equal(2, resultat.Imported);
-        Assert.Equal(0, resultat.Skipped);
-        Assert.Contains("2 correspondance(s) importée(s), 0 ligne(s) ignorée(s).", resultat.Message);
-        Assert.Equal("00123", contexte.Cards.Single(c => c.SAGE_MATRICULE == "04285").POINTEUSE_NUMERO);
-        Assert.Equal("00124", contexte.Cards.Single(c => c.SAGE_MATRICULE == "04301").POINTEUSE_NUMERO);
+        resultat.Imported.Should().Be(2);
+        resultat.Skipped.Should().Be(0);
+        resultat.Message.Should().Contain("2 correspondance(s) importée(s), 0 ligne(s) ignorée(s).");
+        contexte.Cards.Single(c => c.SageMatricule == "04285").PointeuseNumero.Should().Be("00123");
+        contexte.Cards.Single(c => c.SageMatricule == "04301").PointeuseNumero.Should().Be("00124");
     }
 }

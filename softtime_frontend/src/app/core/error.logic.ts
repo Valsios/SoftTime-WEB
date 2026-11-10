@@ -1,3 +1,5 @@
+import { unwrapApiBody } from './api-envelope';
+
 export const FORBIDDEN_DEFAULT_MESSAGE =
   "Accès refusé : votre compte n'a pas le droit requis pour cette fonction.";
 export const BASE_ACCESS_DENIED_MESSAGE = "Vous n'avez pas accès à cette base.";
@@ -65,7 +67,7 @@ export function parseRoleChangePreview(body: unknown): RoleChangePreview | null 
 
 /** 409 « confirmation requise » : une demande de confirmation de la page, pas une erreur à afficher. */
 export function previewFromConflict(err: HttpErrorLike): RoleChangePreview | null {
-  return err.status === 409 ? parseRoleChangePreview(err.error) : null;
+  return err.status === 409 ? parseRoleChangePreview(unwrapApiBody(err.error)) : null;
 }
 
 function validationMessages(errors: unknown): string[] {

@@ -1,7 +1,9 @@
 using System.Text;
 using System.Text.RegularExpressions;
+
 using Microsoft.Data.SqlClient;
-using SoftTime.Application.Abstractions;
+
+using SoftTime.Application.Abstractions.ExternalData;
 
 namespace SoftTime.Infrastructure.Integrations;
 
@@ -17,68 +19,78 @@ public sealed class MappedSourceReader : IMappedSourceReader
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(sourceTable) || !SafeIdentifier.IsMatch(sourceTable))
-            throw new InvalidOperationException($"Nom de table source invalide : {sourceTable}");
+            throw new DomainException($"Nom de table source invalide : {sourceTable}");
         if (roleToColumn is null || roleToColumn.Count == 0)
-            throw new InvalidOperationException("Aucun mapping de colonne fourni.");
+            throw new DomainException("Aucun mapping de colonne fourni.");
 
+        // Toute la validation précède l'ouverture de la connexion : un mapping invalide n'atteint pas la source.
+        var select = BuildSelect(sourceTable, roleToColumn, query);
+        var filterColumn = FilterColumn(query);
+        await using var cmd = new SqlCommand();
+        if (filterColumn is not null && query is not null)
+            AppendFilter(select, cmd, filterColumn, query);
+        cmd.CommandText = select.ToString();
+
+        await using var con = new SqlConnection(connectionString);
+        await con.OpenAsync(cancellationToken);
+        cmd.Connection = con;
+        return await ReadRowsAsync(cmd, cancellationToken);
+    }
+
+    /// <summary>SELECT [colonne] AS [rôle] des colonnes mappées, identifiants contrôlés.</summary>
+    private static StringBuilder BuildSelect(string sourceTable, IReadOnlyDictionary<string, string> roleToColumn, MappedQuery? query)
+    {
         var select = new StringBuilder("SELECT ");
         if (query?.Top is int top and > 0)
             select.Append($"TOP {top} ");
 
-        var hasColumn = false;
-        foreach (var kv in roleToColumn)
-        {
-            if (string.IsNullOrWhiteSpace(kv.Value)) continue;
-            if (!SafeIdentifier.IsMatch(kv.Value))
-                throw new InvalidOperationException($"Nom de colonne source invalide : {kv.Value}");
-            if (hasColumn) select.Append(", ");
-            select.Append($"[{kv.Value}] AS [{kv.Key}]");
-            hasColumn = true;
-        }
-        if (!hasColumn)
-            throw new InvalidOperationException("Aucune colonne source valide dans le mapping.");
+        var colonnes = roleToColumn.Where(kv => !string.IsNullOrWhiteSpace(kv.Value)).ToList();
+        var invalide = colonnes.FirstOrDefault(kv => !SafeIdentifier.IsMatch(kv.Value));
+        if (invalide.Value is not null)
+            throw new DomainException($"Nom de colonne source invalide : {invalide.Value}");
+        if (colonnes.Count == 0)
+            throw new DomainException("Aucune colonne source valide dans le mapping.");
 
+        select.Append(string.Join(", ", colonnes.Select(kv => $"[{kv.Value}] AS [{kv.Key}]")));
         select.Append($" FROM [{sourceTable}]");
+        return select;
+    }
 
-        string? filterColumn = null;
-        if (!string.IsNullOrWhiteSpace(query?.FilterColumn))
+    private static string? FilterColumn(MappedQuery? query)
+    {
+        if (string.IsNullOrWhiteSpace(query?.FilterColumn))
+            return null;
+        var filterColumn = query.FilterColumn;
+        if (!SafeIdentifier.IsMatch(filterColumn))
+            throw new DomainException($"Nom de colonne de filtre invalide : {filterColumn}");
+        return filterColumn;
+    }
+
+    /// <summary>Filtre d'égalité (texte) ou de plage de dates, valeurs toujours paramétrées.</summary>
+    private static void AppendFilter(StringBuilder select, SqlCommand cmd, string filterColumn, MappedQuery query)
+    {
+        if (query.FilterKind == MappedFilterKind.Equals)
         {
-            filterColumn = query!.FilterColumn!;
-            if (!SafeIdentifier.IsMatch(filterColumn))
-                throw new InvalidOperationException($"Nom de colonne de filtre invalide : {filterColumn}");
+            select.Append($" WHERE CAST([{filterColumn}] AS NVARCHAR(128)) = @eq");
+            cmd.Parameters.AddWithValue("@eq", (object?)query.EqualsValue ?? DBNull.Value);
         }
-
-        await using var con = new SqlConnection(connectionString);
-        await con.OpenAsync(cancellationToken);
-        await using var cmd = new SqlCommand { Connection = con };
-
-        if (filterColumn is not null && query is not null)
+        else if (query.FilterKind == MappedFilterKind.Range)
         {
-            if (query.FilterKind == MappedFilterKind.Equals)
-            {
-                select.Append($" WHERE CAST([{filterColumn}] AS NVARCHAR(128)) = @eq");
-                cmd.Parameters.AddWithValue("@eq", (object?)query.EqualsValue ?? DBNull.Value);
-            }
-            else if (query.FilterKind == MappedFilterKind.Range)
-            {
-                select.Append($" WHERE CAST([{filterColumn}] AS DATETIME2) >= @from AND CAST([{filterColumn}] AS DATETIME2) < @to");
-                cmd.Parameters.AddWithValue("@from", (object?)query.RangeFrom ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@to", (object?)query.RangeTo ?? DBNull.Value);
-            }
+            select.Append($" WHERE CAST([{filterColumn}] AS DATETIME2) >= @from AND CAST([{filterColumn}] AS DATETIME2) < @to");
+            cmd.Parameters.AddWithValue("@from", (object?)query.RangeFrom ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@to", (object?)query.RangeTo ?? DBNull.Value);
         }
+    }
 
-        cmd.CommandText = select.ToString();
-
+    private static async Task<List<MappedRow>> ReadRowsAsync(SqlCommand cmd, CancellationToken ct)
+    {
         var rows = new List<MappedRow>();
-        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
         {
             var dict = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
             for (var i = 0; i < reader.FieldCount; i++)
-            {
-                var name = reader.GetName(i);
-                dict[name] = reader.IsDBNull(i) ? null : Convert.ToString(reader.GetValue(i));
-            }
+                dict[reader.GetName(i)] = reader.IsDBNull(i) ? null : Convert.ToString(reader.GetValue(i));
             rows.Add(new MappedRow(dict));
         }
         return rows;

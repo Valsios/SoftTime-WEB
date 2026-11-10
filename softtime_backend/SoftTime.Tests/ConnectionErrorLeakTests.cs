@@ -1,13 +1,16 @@
 using AutoMapper;
+
 using Microsoft.AspNetCore.Identity;
-using SoftTime.Application.Abstractions;
+
+using SoftTime.Application.Abstractions.Authentication;
+using SoftTime.Application.Abstractions.Notifications;
+using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
-using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
 using SoftTime.Infrastructure.Integrations;
-using SoftTime.Tests.Http;
+using SoftTime.Infrastructure.Services.DataSources;
 
 namespace SoftTime.Tests;
 
@@ -27,11 +30,11 @@ public class ConnectionErrorLeakTests
 
     private readonly InMemoryUnitOfWork _uow = new();
 
-    private CatalogService Catalog()
+    private CatalogServices Catalog()
     {
         var mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
-        var auth = new AuthService(_uow, new Token(), mapper, new Mail(), new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<T_RESPONSABLE>());
-        return new CatalogService(_uow, mapper, null!, null!, new ExternalDiscoveryService(),
+        var auth = new AuthServices(_uow, new Token(), mapper, new Mail(), new SoftTime.Tests.Http.AdminCurrentUser(), SoftTime.Tests.Http.TestRights.Service(_uow), new PasswordHasher<Responsable>());
+        return new CatalogServices(_uow, mapper, null!, null!, new ExternalDiscoveryService(),
             new DatabaseConfigurationAuthorizer(new Admin(), auth), SoftTime.Tests.Http.TestRights.Service(_uow));
     }
 
@@ -40,38 +43,39 @@ public class ConnectionErrorLeakTests
     private static void AssertNoLeak(string where, string text)
     {
         foreach (var f in Forbidden)
-            Assert.False(text.Contains(f, StringComparison.OrdinalIgnoreCase), $"{where} contient « {f} » : {text}");
+            text.Contains(f, StringComparison.OrdinalIgnoreCase).Should().BeFalse($"{where} contient « {f} » : {text}");
     }
 
     // Les cinq échecs sont lancés en parallèle : chacun attend le délai de connexion (60 s) de la fabrique de chaînes.
     [Fact]
-    public async Task Failed_connections_leak_neither_password_login_nor_connection_string()
+    public async Task TestConnection_Failure_LeaksNeitherPasswordLoginNorConnectionString()
     {
+        // Arrange
         var svc = Catalog();
+
+        // Act
         var ct = Short();
 
+        // Assert
         async Task<(string Name, string Text)> Msg(string name, Func<Task<ConnectionTestResultDto>> act)
         {
             var r = await act();
-            Assert.False(r.Success);
-            Assert.StartsWith("Connexion impossible", r.Message);
+            r.Success.Should().BeFalse();
+            r.Message.Should().StartWith("Connexion impossible");
             return (name, r.Message);
         }
-
         async Task<(string Name, string Text)> Thrown(string name, Func<Task> act)
         {
-            var ex = await Assert.ThrowsAnyAsync<Exception>(act);
+            var ex = (await FluentActions.Awaiting(act).Should().ThrowAsync<Exception>()).Which;
             // ILogger.LogError(ex, ...) écrit ex.ToString() : type, message, exceptions internes et pile d'appels.
             return (name + " (journal Unhandled, " + ex.GetType().Name + ")", ex.ToString());
         }
-
         var results = await Task.WhenAll(
-            Msg("test sage", () => svc.TestSageConnectionAsync(new TestSageConnectionDto(Host, true, FakeLogin, FakePassword, "BASE", "STANDARD"), ct)),
-            Msg("test pointeuse", () => svc.TestPointeuseConnectionAsync(new TestPointeuseConnectionDto(Host, true, FakeLogin, FakePassword, "BASE", "STANDARD"), ct)),
-            Thrown("découverte bases", () => svc.DiscoverDatabasesAsync(new DiscoverDatabasesDto(Host, true, FakeLogin, FakePassword), ct)),
-            Thrown("découverte tables", () => svc.DiscoverTablesAsync(new DiscoverTablesDto(Host, "BASE", true, FakeLogin, FakePassword), ct)),
-            Thrown("découverte colonnes", () => svc.DiscoverColumnsAsync(new DiscoverColumnsDto(Host, "BASE", "T", true, FakeLogin, FakePassword), ct)));
-
+            Msg("test sage", () => svc.Sage.TestSageConnectionAsync(new TestSageConnectionDto(Host, true, FakeLogin, FakePassword, "BASE", "STANDARD"), ct)),
+            Msg("test pointeuse", () => svc.Pointeuse.TestPointeuseConnectionAsync(new TestPointeuseConnectionDto(Host, true, FakeLogin, FakePassword, "BASE", "STANDARD"), ct)),
+            Thrown("découverte bases", () => svc.Discovery.DiscoverDatabasesAsync(new DiscoverDatabasesDto(Host, true, FakeLogin, FakePassword), ct)),
+            Thrown("découverte tables", () => svc.Discovery.DiscoverTablesAsync(new DiscoverTablesDto(Host, "BASE", true, FakeLogin, FakePassword), ct)),
+            Thrown("découverte colonnes", () => svc.Discovery.DiscoverColumnsAsync(new DiscoverColumnsDto(Host, "BASE", "T", true, FakeLogin, FakePassword), ct)));
         foreach (var (name, text) in results)
         {
             AssertNoLeak(name, text);
@@ -90,14 +94,14 @@ public class ConnectionErrorLeakTests
 
     private sealed class Token : ITokenService
     {
-        public string CreateToken(decimal userId, string login, decimal roleId, string? matricule, IEnumerable<int> rights) => "FAKE_TOKEN";
+        public string CreateToken(TokenSubject subject) => "FAKE_TOKEN";
     }
 
     private sealed class Mail : IEmailService
     {
         public bool EstConfigure => true;
         public Task<bool> EnvoyerAsync(EmailMessage message, CancellationToken cancellationToken = default) => Task.FromResult(true);
-        public Task<bool> SendUserCredentialsAsync(string? email, string? pseudo, string? password, string? nom, string? prenom, CancellationToken cancellationToken = default) => Task.FromResult(true);
-        public Task<bool> SendUserUpdateAsync(string? email, string? pseudo, string? newPassword, string? nom, string? prenom, bool pseudoChanged, bool passwordChanged, CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public Task<bool> SendUserCredentialsAsync(AccountMailRecipient destinataire, string? password, CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public Task<bool> SendUserUpdateAsync(AccountMailRecipient destinataire, string? newPassword, bool pseudoChanged, bool passwordChanged, CancellationToken cancellationToken = default) => Task.FromResult(true);
     }
 }

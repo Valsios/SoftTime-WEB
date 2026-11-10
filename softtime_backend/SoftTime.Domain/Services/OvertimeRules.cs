@@ -75,79 +75,78 @@ public static class OvertimeRules
         if (weeks.Count == 0)
             return result;
 
-        decimal totExo = 0;
-        for (var i = 0; i < weeks.Count; i++)
+        var totExo = AllocateFirstWeek(result, weeks[0]);
+        foreach (var pla in weeks.Skip(1).Where(w => w.Hs > 0))
+            totExo = AllocateFollowingWeek(result, pla, totExo);
+        return result;
+    }
+
+    /// <summary>Première semaine : au-delà du plafond, seules 12 h à 150 % restent exonérées.</summary>
+    private static decimal AllocateFirstWeek(HsExoSplit result, HsWeekSplit pla)
+    {
+        result.Exo130 += pla.Hs1;
+        if (pla.Hs <= ExemptCeilingHours)
         {
-            var pla = weeks[i];
-            if (i == 0)
+            if (pla.Hs2 != 0)
+                result.Exo150 += pla.Hs2;
+        }
+        else
+        {
+            result.Exo150 += 12;
+            result.Impo150 += pla.Hs2 - 12;
+        }
+        return result.Exo130 + result.Exo150;
+    }
+
+    /// <summary>
+    /// Semaines suivantes : le reliquat du plafond est consommé d'abord à 130 % puis à 150 % ; ce qui
+    /// dépasse est imposable. Comportement du desktop conservé à l'identique, y compris quand le
+    /// reliquat (8 h ou moins) dépasse les heures à 130 % : les heures à 150 % ne sont alors pas reportées.
+    /// </summary>
+    private static decimal AllocateFollowingWeek(HsExoSplit result, HsWeekSplit pla, decimal totExo)
+    {
+        var reste = ExemptCeilingHours - totExo;
+        if (totExo >= ExemptCeilingHours || reste <= 0)
+        {
+            result.Impo130 += pla.Hs1;
+            result.Impo150 += pla.Hs2;
+            return totExo;
+        }
+        if (reste <= 8)
+        {
+            if (reste > pla.Hs1)
             {
-                if (pla.Hs <= ExemptCeilingHours)
-                {
-                    result.Exo130 += pla.Hs1;
-                    if (pla.Hs2 != 0)
-                        result.Exo150 += pla.Hs2;
-                    totExo = result.Exo130 + result.Exo150;
-                }
-                else
-                {
-                    result.Exo130 += pla.Hs1;
-                    result.Exo150 += 12;
-                    result.Impo150 += pla.Hs2 - 12;
-                    totExo = result.Exo130 + result.Exo150;
-                }
+                result.Exo130 += pla.Hs1;
+                return totExo + pla.Hs1;
             }
-            else if (pla.Hs > 0)
-            {
-                if (totExo < ExemptCeilingHours)
-                {
-                    var reste = ExemptCeilingHours - totExo;
-                    if (reste > 8)
-                    {
-                        result.Exo130 += pla.Hs1;
-                        totExo += pla.Hs1;
-                        reste = ExemptCeilingHours - totExo;
-                        if (pla.Hs2 > reste)
-                        {
-                            result.Exo150 += reste;
-                            result.Impo150 += pla.Hs2 - reste;
-                            totExo += reste;
-                        }
-                        else if (pla.Hs2 > 0)
-                        {
-                            result.Exo150 += pla.Hs2;
-                            totExo += pla.Hs2;
-                        }
-                    }
-                    else if (reste > 0)
-                    {
-                        if (reste <= pla.Hs1)
-                        {
-                            result.Exo130 += reste;
-                            result.Impo130 += pla.Hs1 - reste;
-                            result.Impo150 += pla.Hs2;
-                            totExo += reste;
-                        }
-                        else
-                        {
-                            result.Exo130 += pla.Hs1;
-                            totExo += pla.Hs1;
-                        }
-                    }
-                    else
-                    {
-                        result.Impo130 += pla.Hs1;
-                        result.Impo150 += pla.Hs2;
-                    }
-                }
-                else
-                {
-                    result.Impo130 += pla.Hs1;
-                    result.Impo150 += pla.Hs2;
-                }
-            }
+            result.Exo130 += reste;
+            result.Impo130 += pla.Hs1 - reste;
+            result.Impo150 += pla.Hs2;
+            return totExo + reste;
         }
 
-        return result;
+        return AllocateAboveEight(result, pla, totExo);
+    }
+
+    /// <summary>Reliquat supérieur à 8 h : toutes les heures à 130 % sont exonérées, puis celles à 150 % jusqu'au plafond.</summary>
+    private static decimal AllocateAboveEight(HsExoSplit result, HsWeekSplit pla, decimal totExo)
+    {
+        decimal reste;
+        result.Exo130 += pla.Hs1;
+        totExo += pla.Hs1;
+        reste = ExemptCeilingHours - totExo;
+        if (pla.Hs2 > reste)
+        {
+            result.Exo150 += reste;
+            result.Impo150 += pla.Hs2 - reste;
+            return totExo + reste;
+        }
+        if (pla.Hs2 > 0)
+        {
+            result.Exo150 += pla.Hs2;
+            totExo += pla.Hs2;
+        }
+        return totExo;
     }
 
     /// <summary>

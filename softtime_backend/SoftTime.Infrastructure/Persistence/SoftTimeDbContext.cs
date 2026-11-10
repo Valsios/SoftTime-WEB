@@ -1,5 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+
 using SoftTime.Domain.Entities.SoftTime;
+using SoftTime.Infrastructure.Persistence.Configurations;
+using SoftTime.Infrastructure.Persistence.Configurations.SoftTimeDb;
 
 namespace SoftTime.Infrastructure.Persistence;
 
@@ -32,252 +35,57 @@ public class SoftTimeDbContext : DbContext
         CancellationToken cancellationToken)
         => base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
 
-    public DbSet<T_ROLE> T_ROLE => Set<T_ROLE>();
-    public DbSet<T_RESPONSABLE> T_RESPONSABLE => Set<T_RESPONSABLE>();
-    public DbSet<T_DROIT> T_DROIT => Set<T_DROIT>();
-    public DbSet<T_DROIT_ROLE> T_DROIT_ROLE => Set<T_DROIT_ROLE>();
-    public DbSet<T_BDD_SAGE> T_BDD_SAGE => Set<T_BDD_SAGE>();
-    public DbSet<T_BDD_POINTEUSE> T_BDD_POINTEUSE => Set<T_BDD_POINTEUSE>();
-    public DbSet<T_BDD_AUTORISE> T_BDD_AUTORISE => Set<T_BDD_AUTORISE>();
-    public DbSet<T_CODEABSENCE> T_CODEABSENCE => Set<T_CODEABSENCE>();
-    public DbSet<T_impr_ABS> T_impr_ABS => Set<T_impr_ABS>();
-    public DbSet<T_impr_RET> T_impr_RET => Set<T_impr_RET>();
-    public DbSet<T_impr_HS> T_impr_HS => Set<T_impr_HS>();
-    public DbSet<T_HEURECORRIGER> T_HEURECORRIGER => Set<T_HEURECORRIGER>();
-    public DbSet<T_HEUREANOMALIE> T_HEUREANOMALIE => Set<T_HEUREANOMALIE>();
-    public DbSet<suivi_SUIVI> suivi_SUIVI => Set<suivi_SUIVI>();
-    public DbSet<suivi_JOURNAL> suivi_JOURNAL => Set<suivi_JOURNAL>();
-    public DbSet<suivi_T> suivi_T => Set<suivi_T>();
-    public DbSet<suivi_TBLCLN> suivi_TBLCLN => Set<suivi_TBLCLN>();
-    public DbSet<T_FRAIS> T_FRAIS => Set<T_FRAIS>();
-    public DbSet<T_CANTINE> T_CANTINE => Set<T_CANTINE>();
-    public DbSet<T_Semaine> T_Semaine => Set<T_Semaine>();
-    public DbSet<T_SemainePeriode> T_SemainePeriode => Set<T_SemainePeriode>();
-    public DbSet<T_CLOCK> T_CLOCK => Set<T_CLOCK>();
-    public DbSet<T_ACTIVECORRESP> T_ACTIVECORRESP => Set<T_ACTIVECORRESP>();
-    public DbSet<T_FERIE> T_FERIE => Set<T_FERIE>();
-    public DbSet<T_HSExoImp> T_HSExoImp => Set<T_HSExoImp>();
-    public DbSet<T_HSSemaine> T_HSSemaine => Set<T_HSSemaine>();
-    public DbSet<T_MAJORATION> T_MAJORATION => Set<T_MAJORATION>();
-    public DbSet<T_TOLERANCE> T_TOLERANCE => Set<T_TOLERANCE>();
-    public DbSet<T_HS_VALIDER> T_HS_VALIDER => Set<T_HS_VALIDER>();
-    public DbSet<T_CATEGORIE> T_CATEGORIE => Set<T_CATEGORIE>();
-    public DbSet<T_CAT_SAL> T_CAT_SAL => Set<T_CAT_SAL>();
-    public DbSet<T_POINTAGE> T_POINTAGE => Set<T_POINTAGE>();
-    public DbSet<T_PLANNING_SAL> T_PLANNING_SAL => Set<T_PLANNING_SAL>();
-    public DbSet<T_PLANNING> T_PLANNING => Set<T_PLANNING>();
-    public DbSet<T_REST_FERIE> T_REST_FERIE => Set<T_REST_FERIE>();
-    public DbSet<T_HEUREDIMANCHE> T_HEUREDIMANCHE => Set<T_HEUREDIMANCHE>();
-    public DbSet<T_CARDPAIE> T_CARDPAIE => Set<T_CARDPAIE>();
-    public DbSet<T_HSSAL> T_HSSAL => Set<T_HSSAL>();
-    public DbSet<T_CODE_CONSTANTE> T_CODE_CONSTANTE => Set<T_CODE_CONSTANTE>();
-    public DbSet<T_PAIE_ECRITURE> T_PAIE_ECRITURE => Set<T_PAIE_ECRITURE>();
-    public DbSet<T_FIELD_ROLE> T_FIELD_ROLE => Set<T_FIELD_ROLE>();
-    public DbSet<T_SOURCE_ENTITY_MAPPING> T_SOURCE_ENTITY_MAPPING => Set<T_SOURCE_ENTITY_MAPPING>();
-    public DbSet<T_SOURCE_FIELD_MAPPING> T_SOURCE_FIELD_MAPPING => Set<T_SOURCE_FIELD_MAPPING>();
-    public DbSet<T_USER_PERMISSION> T_USER_PERMISSION => Set<T_USER_PERMISSION>();
-    public DbSet<T_ROLE_PERMISSION> T_ROLE_PERMISSION => Set<T_ROLE_PERMISSION>();
-    public DbSet<T_AUDIT_DROIT> T_AUDIT_DROIT => Set<T_AUDIT_DROIT>();
-    public DbSet<T_REFRESH_TOKEN> T_REFRESH_TOKEN => Set<T_REFRESH_TOKEN>();
-    public DbSet<T_HISTORIQUE_POINTAGE> T_HISTORIQUE_POINTAGE => Set<T_HISTORIQUE_POINTAGE>();
-    public DbSet<T_HISTORIQUE_ANOMALIE> T_HISTORIQUE_ANOMALIE => Set<T_HISTORIQUE_ANOMALIE>();
-    public DbSet<T_HISTORIQUE_HS> T_HISTORIQUE_HS => Set<T_HISTORIQUE_HS>();
+    public DbSet<Role> Roles => Set<Role>();
+    public DbSet<Responsable> Responsables => Set<Responsable>();
+    public DbSet<DroitAcces> DroitAcces => Set<DroitAcces>();
+    public DbSet<DroitRole> DroitRoles => Set<DroitRole>();
+    public DbSet<BddSage> BddSages => Set<BddSage>();
+    public DbSet<BddPointeuse> BddPointeuses => Set<BddPointeuse>();
+    public DbSet<BddAutorisee> BddAutorisees => Set<BddAutorisee>();
+    public DbSet<CodeAbsence> CodeAbsences => Set<CodeAbsence>();
+    public DbSet<ImpressionAbsence> ImpressionAbsences => Set<ImpressionAbsence>();
+    public DbSet<ImpressionRetard> ImpressionRetards => Set<ImpressionRetard>();
+    public DbSet<ImpressionHeureSup> ImpressionHeureSups => Set<ImpressionHeureSup>();
+    public DbSet<HeureCorrigee> HeureCorrigees => Set<HeureCorrigee>();
+    public DbSet<HeureAnomalie> HeureAnomalies => Set<HeureAnomalie>();
+    public DbSet<SuiviModification> SuiviModifications => Set<SuiviModification>();
+    public DbSet<JournalAudit> JournalAudits => Set<JournalAudit>();
+    public DbSet<SuiviTable> SuiviTables => Set<SuiviTable>();
+    public DbSet<SuiviConfiguration> SuiviConfigurations => Set<SuiviConfiguration>();
+    public DbSet<Frais> Frais => Set<Frais>();
+    public DbSet<Cantine> Cantines => Set<Cantine>();
+    public DbSet<Semaine> Semaines => Set<Semaine>();
+    public DbSet<SemainePeriode> SemainePeriodes => Set<SemainePeriode>();
+    public DbSet<ParametrePointeuse> ParametrePointeuses => Set<ParametrePointeuse>();
+    public DbSet<CorrespondanceActive> CorrespondanceActives => Set<CorrespondanceActive>();
+    public DbSet<JourFerie> JourFeries => Set<JourFerie>();
+    public DbSet<HsExoImp> HsExoImps => Set<HsExoImp>();
+    public DbSet<HsSemaine> HsSemaines => Set<HsSemaine>();
+    public DbSet<Majoration> Majorations => Set<Majoration>();
+    public DbSet<ToleranceRetard> ToleranceRetards => Set<ToleranceRetard>();
+    public DbSet<HsValidee> HsValidees => Set<HsValidee>();
+    public DbSet<Categorie> Categories => Set<Categorie>();
+    public DbSet<CategorieSalarie> CategorieSalaries => Set<CategorieSalarie>();
+    public DbSet<Pointage> Pointages => Set<Pointage>();
+    public DbSet<PlanningSalarie> PlanningSalaries => Set<PlanningSalarie>();
+    public DbSet<Planning> Plannings => Set<Planning>();
+    public DbSet<ReposFerie> ReposFeries => Set<ReposFerie>();
+    public DbSet<HeureDimanche> HeureDimanches => Set<HeureDimanche>();
+    public DbSet<CardPaie> CardPaies => Set<CardPaie>();
+    public DbSet<HsSalarie> HsSalaries => Set<HsSalarie>();
+    public DbSet<CodeConstanteCategorie> CodeConstanteCategories => Set<CodeConstanteCategorie>();
+    public DbSet<PaieEcriture> PaieEcritures => Set<PaieEcriture>();
+    public DbSet<FieldRole> FieldRoles => Set<FieldRole>();
+    public DbSet<SourceEntityMapping> SourceEntityMappings => Set<SourceEntityMapping>();
+    public DbSet<SourceFieldMapping> SourceFieldMappings => Set<SourceFieldMapping>();
+    public DbSet<UserPermission> UserPermissions => Set<UserPermission>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<AuditDroit> AuditDroits => Set<AuditDroit>();
+    public DbSet<RefreshTokenRecord> RefreshTokenRecords => Set<RefreshTokenRecord>();
+    public DbSet<HistoriquePointage> HistoriquePointages => Set<HistoriquePointage>();
+    public DbSet<HistoriqueAnomalie> HistoriqueAnomalies => Set<HistoriqueAnomalie>();
+    public DbSet<HistoriqueHs> HistoriqueHs => Set<HistoriqueHs>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<T_Semaine>().HasNoKey();
-        modelBuilder.Entity<T_TOLERANCE>().ToTable("T_TOLERANCES");
-        modelBuilder.Entity<T_HSSAL>().Property(e => e.Date).HasColumnName("Date");
-        modelBuilder.Entity<T_PLANNING_SAL>().Property(e => e.Pause).HasColumnName("Pause");
-        modelBuilder.Entity<T_MAJORATION>(e =>
-        {
-            e.ToTable("T_MAJORATION");
-            e.Property(x => x.Cotation).HasPrecision(18, 2);
-        });
-
-        modelBuilder.Entity<T_PAIE_ECRITURE>(e =>
-        {
-            e.ToTable("T_PAIE_ECRITURE");
-            e.HasIndex(x => new { x.BDD_SAGE, x.CATEGORIE }).IsUnique();
-        });
-
-        modelBuilder.Entity<T_RESPONSABLE>(e =>
-        {
-            e.ToTable("T_RESPONSABLE");
-            e.HasKey(x => x.IDRESPONSABLE);
-            e.Property(x => x.IDRESPONSABLE).HasColumnName("IDRESPONSABLE").HasPrecision(18, 0).ValueGeneratedOnAdd();
-            e.Property(x => x.IDROLE).HasPrecision(18, 0);
-            e.Property(x => x.LOGIN).IsRequired(false);
-            e.Property(x => x.PASSWORD).IsRequired(false);
-            e.Property(x => x.NOMRESPONSABLE).IsRequired(false);
-        });
-
-        modelBuilder.Entity<T_FIELD_ROLE>(e =>
-        {
-            e.ToTable("T_FIELD_ROLE");
-            e.HasKey(x => x.Code);
-            e.Property(x => x.Code).HasMaxLength(64);
-            e.Property(x => x.Label).HasMaxLength(128);
-            e.Property(x => x.SystemType).HasMaxLength(16);
-            e.Property(x => x.EntityKind).HasMaxLength(32);
-            e.Property(x => x.AutoMappingPatterns).HasMaxLength(256);
-        });
-
-        modelBuilder.Entity<T_SOURCE_ENTITY_MAPPING>(e =>
-        {
-            e.ToTable("T_SOURCE_ENTITY_MAPPING");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.SystemType).HasMaxLength(16);
-            e.Property(x => x.EntityKind).HasMaxLength(32);
-            e.Property(x => x.SourceTable).HasMaxLength(128);
-            e.HasMany(x => x.Fields)
-                .WithOne()
-                .HasForeignKey(x => x.EntityMappingId)
-                .OnDelete(DeleteBehavior.Cascade);
-            // Index filtres : la FK non applicable est NULL pour chaque ligne, or SQL Server
-            // traite les NULL comme egaux dans un index unique (voir EnsureMappingSchemaAsync).
-            e.HasIndex(x => new { x.SageDbId, x.EntityKind }).IsUnique().HasFilter("[SageDbId] IS NOT NULL");
-            e.HasIndex(x => new { x.PointeuseDbId, x.EntityKind }).IsUnique().HasFilter("[PointeuseDbId] IS NOT NULL");
-        });
-
-        modelBuilder.Entity<T_SOURCE_FIELD_MAPPING>(e =>
-        {
-            e.ToTable("T_SOURCE_FIELD_MAPPING");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.FieldRoleCode).HasMaxLength(64);
-            e.Property(x => x.SourceColumn).HasMaxLength(128);
-            e.HasIndex(x => new { x.EntityMappingId, x.FieldRoleCode }).IsUnique();
-        });
-
-        modelBuilder.Entity<T_USER_PERMISSION>(e =>
-        {
-            e.ToTable("T_USER_PERMISSION");
-            e.HasKey(x => x.ID);
-            e.Property(x => x.IDRESPONSABLE).HasPrecision(18, 0);
-            e.Property(x => x.PERMISSION_CODE).HasMaxLength(128);
-            e.HasIndex(x => new { x.IDRESPONSABLE, x.PERMISSION_CODE }).IsUnique();
-        });
-
-        modelBuilder.Entity<T_ROLE_PERMISSION>(e =>
-        {
-            e.ToTable("T_ROLE_PERMISSION");
-            e.HasKey(x => x.ID);
-            e.Property(x => x.IDROLE).HasPrecision(18, 0);
-            e.Property(x => x.PERMISSION_CODE).HasMaxLength(128);
-            e.HasIndex(x => new { x.IDROLE, x.PERMISSION_CODE }).IsUnique();
-        });
-
-        modelBuilder.Entity<T_AUDIT_DROIT>(e =>
-        {
-            e.ToTable("T_AUDIT_DROIT");
-            e.HasKey(x => x.ID);
-            e.Property(x => x.ID_OPERATEUR).HasPrecision(18, 0);
-            e.Property(x => x.ID_CIBLE).HasPrecision(18, 0);
-            e.Property(x => x.LOGIN_OPERATEUR).HasMaxLength(100);
-            e.Property(x => x.TYPE_CIBLE).HasMaxLength(20);
-            e.Property(x => x.NOM_CIBLE).HasMaxLength(100);
-            e.Property(x => x.ACTION).HasMaxLength(50);
-        });
-
-        modelBuilder.Entity<T_REFRESH_TOKEN>(e =>
-        {
-            e.ToTable("T_REFRESH_TOKEN");
-            e.HasKey(x => x.ID);
-            e.Property(x => x.IDRESPONSABLE).HasPrecision(18, 0);
-            e.Property(x => x.TOKEN_HASH).HasMaxLength(64).IsFixedLength().IsUnicode(false).IsRequired();
-            e.Property(x => x.REMPLACE_PAR).HasMaxLength(64).IsFixedLength().IsUnicode(false);
-            e.HasIndex(x => x.TOKEN_HASH).IsUnique();
-        });
-
-        // Longueurs des colonnes de filtre, alignées sur migrations/add_pagination_performance_indexes.sql.
-        // La source de vérité reste le SQL : ces annotations documentent le modèle et dimensionnent
-        // les paramètres EF, sans modifier une base existante.
-        modelBuilder.Entity<T_POINTAGE>(e =>
-        {
-            e.Property(x => x.NOM_BDD_SAGE).HasMaxLength(128);
-            e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
-        });
-        modelBuilder.Entity<T_HEURECORRIGER>(e =>
-        {
-            e.Property(x => x.BDD_SAGE).HasMaxLength(128);
-            e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
-        });
-        modelBuilder.Entity<T_HEUREANOMALIE>(e =>
-        {
-            e.Property(x => x.BDD_SAGE).HasMaxLength(128);
-            e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
-        });
-        modelBuilder.Entity<T_CANTINE>(e =>
-        {
-            e.Property(x => x.NOM_BDD_SAGE).HasMaxLength(128);
-            e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
-        });
-        modelBuilder.Entity<T_FRAIS>(e =>
-        {
-            e.Property(x => x.NOM_BDD_SAGE).HasMaxLength(128);
-            e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
-        });
-        modelBuilder.Entity<T_PLANNING_SAL>(e => e.Property(x => x.BDD_SAGE).HasMaxLength(128));
-        modelBuilder.Entity<T_CARDPAIE>(e =>
-        {
-            e.Property(x => x.SAGE_BDD).HasMaxLength(128);
-            e.Property(x => x.SAGE_MATRICULE).HasMaxLength(64);
-        });
-        modelBuilder.Entity<T_HS_VALIDER>(e =>
-        {
-            e.Property(x => x.BDD_SAGE).HasMaxLength(128);
-            e.Property(x => x.MATRICULES).HasMaxLength(64);
-        });
-        modelBuilder.Entity<T_HSExoImp>(e =>
-        {
-            e.Property(x => x.BDD_SAGE).HasMaxLength(128);
-            e.Property(x => x.Matricule).HasMaxLength(64);
-        });
-        modelBuilder.Entity<T_HSSemaine>(e =>
-        {
-            e.Property(x => x.BDD_SAGE).HasMaxLength(128);
-            e.Property(x => x.Matricule).HasMaxLength(64);
-        });
-        modelBuilder.Entity<T_HEUREDIMANCHE>(e =>
-        {
-            e.Property(x => x.BDD_SAGE).HasMaxLength(128);
-            e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
-        });
-        modelBuilder.Entity<T_HISTORIQUE_POINTAGE>(e =>
-        {
-            e.Property(x => x.NOM_BDD_SAGE).HasMaxLength(128);
-            e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
-        });
-        modelBuilder.Entity<T_HISTORIQUE_ANOMALIE>(e =>
-        {
-            e.Property(x => x.BDD_SAGE).HasMaxLength(128);
-            e.Property(x => x.MATRICULE_SAGE).HasMaxLength(64);
-        });
-        modelBuilder.Entity<T_HISTORIQUE_HS>(e =>
-        {
-            e.Property(x => x.BDD_SAGE).HasMaxLength(128);
-            e.Property(x => x.MATRICULE).HasMaxLength(64);
-        });
-        modelBuilder.Entity<suivi_SUIVI>(e =>
-        {
-            e.Property(x => x._TABLES).HasMaxLength(128);
-            e.Property(x => x._ACTIONS).HasMaxLength(128);
-        });
-        modelBuilder.Entity<suivi_JOURNAL>(e =>
-        {
-            e.Property(x => x.DATE_UTC).HasColumnType("datetime2");
-            e.Property(x => x.TABLES).HasMaxLength(128);
-            e.Property(x => x.CLES).HasMaxLength(450);
-            e.Property(x => x.COLONNES).HasMaxLength(128);
-            e.Property(x => x.ACTIONS).HasMaxLength(32);
-            e.Property(x => x.USERS).HasMaxLength(256);
-            e.Property(x => x.BASE_SAGE).HasMaxLength(128);
-            e.Property(x => x.BASE_POINTEUSE).HasMaxLength(128);
-            e.Property(x => x.SOURCE).HasMaxLength(64);
-            e.HasIndex(x => new { x.DATE_UTC, x.Id }).HasDatabaseName("IX_suivi_JOURNAL_Date").IsDescending(true, true);
-            e.HasIndex(x => new { x.BASE_SAGE, x.DATE_UTC, x.Id }).HasDatabaseName("IX_suivi_JOURNAL_Base_Date").IsDescending(false, true, true);
-            e.HasIndex(x => new { x.TABLES, x.ACTIONS, x.DATE_UTC, x.Id }).HasDatabaseName("IX_suivi_JOURNAL_Table_Action_Date").IsDescending(false, false, true, true);
-            e.HasIndex(x => new { x.CORRELATIONS, x.Id }).HasDatabaseName("IX_suivi_JOURNAL_Correlation");
-        });
-    }
+        => modelBuilder.ApplyConfigurationsOf<RoleConfiguration>();
 }

@@ -1,10 +1,11 @@
 using System.Net;
 using System.Net.Mail;
-using Microsoft.Extensions.Configuration;
+
 using Microsoft.Extensions.Logging;
-using SoftTime.Application.Abstractions;
+using Microsoft.Extensions.Options;
+
+using SoftTime.Application.Abstractions.Notifications;
 using SoftTime.Application.Services;
-using SoftTime.Domain.Models;
 
 namespace SoftTime.Infrastructure.Integrations;
 
@@ -23,12 +24,12 @@ namespace SoftTime.Infrastructure.Integrations;
 /// </summary>
 public class EmailService : IEmailService
 {
-    private readonly IConfiguration _configuration;
+    private readonly IOptionsMonitor<EmailOptions> _options;
     private readonly ILogger<EmailService> _logger;
 
-    public EmailService(IConfiguration configuration, ILogger<EmailService> logger)
+    public EmailService(IOptionsMonitor<EmailOptions> options, ILogger<EmailService> logger)
     {
-        _configuration = configuration;
+        _options = options;
         _logger = logger;
     }
 
@@ -39,17 +40,8 @@ public class EmailService : IEmailService
     public async Task<bool> EnvoyerAsync(EmailMessage message, CancellationToken cancellationToken = default)
     {
         var reglages = Reglages();
-        if (!reglages.EstConfigure)
-        {
-            _logger.LogWarning(
-                "E-mail non envoyé : la section de configuration « Email » est incomplète (Host et FromAddress requis).");
+        if (!PeutEnvoyer(reglages, message))
             return false;
-        }
-        if (string.IsNullOrWhiteSpace(message.To))
-        {
-            _logger.LogWarning("E-mail non envoyé : aucun destinataire sur le compte.");
-            return false;
-        }
 
         using var mail = new MailMessage
         {
@@ -59,11 +51,7 @@ public class EmailService : IEmailService
             IsBodyHtml = true
         };
         mail.To.Add(message.To.Trim());
-
-        using var client = new SmtpClient(reglages.Host, reglages.PortEffectif)
-        {
-            EnableSsl = reglages.EnableSsl
-        };
+        using var client = new SmtpClient(reglages.Host, reglages.PortEffectif) { EnableSsl = reglages.EnableSsl };
         if (!string.IsNullOrWhiteSpace(reglages.User))
             client.Credentials = new NetworkCredential(reglages.User, reglages.Password);
 
@@ -80,26 +68,37 @@ public class EmailService : IEmailService
         }
     }
 
+    /// <summary>Configuration SMTP complète et destinataire renseigné ; sinon l'envoi est abandonné (journalisé).</summary>
+    private bool PeutEnvoyer(EmailSettings reglages, EmailMessage message)
+    {
+        if (!reglages.EstConfigure)
+        {
+            _logger.LogWarning(
+                "E-mail non envoyé : la section de configuration « Email » est incomplète (Host et FromAddress requis).");
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(message.To))
+        {
+            _logger.LogWarning("E-mail non envoyé : aucun destinataire sur le compte.");
+            return false;
+        }
+        return true;
+    }
+
     /// <inheritdoc />
-    public Task<bool> SendUserCredentialsAsync(string? email, string? pseudo, string? password, string? nom, string? prenom, CancellationToken cancellationToken = default)
+    public Task<bool> SendUserCredentialsAsync(AccountMailRecipient destinataire, string? password, CancellationToken cancellationToken = default)
         => EnvoyerAsync(
-            new EmailMessage(email ?? string.Empty, EmailTemplates.SujetIdentifiants,
-                EmailTemplates.Identifiants(nom, prenom, pseudo, password)),
+            new EmailMessage(destinataire.Email ?? string.Empty, EmailTemplates.SujetIdentifiants,
+                EmailTemplates.Identifiants(destinataire.Nom, destinataire.Prenom, destinataire.Login, password)),
             cancellationToken);
 
     /// <inheritdoc />
-    public Task<bool> SendUserUpdateAsync(string? email, string? pseudo, string? newPassword, string? nom, string? prenom, bool pseudoChanged, bool passwordChanged, CancellationToken cancellationToken = default)
+    public Task<bool> SendUserUpdateAsync(AccountMailRecipient destinataire, string? newPassword, bool pseudoChanged, bool passwordChanged, CancellationToken cancellationToken = default)
         => EnvoyerAsync(
-            new EmailMessage(email ?? string.Empty, EmailTemplates.SujetMiseAJour,
-                EmailTemplates.MiseAJour(nom, prenom, pseudo, newPassword, pseudoChanged, passwordChanged)),
+            new EmailMessage(destinataire.Email ?? string.Empty, EmailTemplates.SujetMiseAJour,
+                EmailTemplates.MiseAJour(destinataire, newPassword, pseudoChanged, passwordChanged)),
             cancellationToken);
 
-    private EmailSettings Reglages() => new(
-        _configuration["Email:Host"],
-        int.TryParse(_configuration["Email:Port"], out var port) ? port : EmailSettings.PortDefaut,
-        !bool.TryParse(_configuration["Email:EnableSsl"], out var ssl) || ssl,
-        _configuration["Email:User"],
-        _configuration["Email:Password"],
-        _configuration["Email:FromAddress"],
-        _configuration["Email:FromName"]);
+    /// <summary>Relu à chaque envoi : une modification de la configuration est prise en compte sans redémarrage.</summary>
+    private EmailSettings Reglages() => _options.CurrentValue.ToSettings();
 }

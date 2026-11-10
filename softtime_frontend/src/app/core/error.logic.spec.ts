@@ -8,7 +8,7 @@ import {
   isMissingBaseError,
 } from './error.logic';
 
-const NATIVE_403 = 'Http failure response for http://localhost/api/shifts: 403 Forbidden';
+const NATIVE_403 = 'Http failure response for http://localhost/api/v1/shifts: 403 Forbidden';
 
 describe('error.logic', () => {
   it('un 403 sans corps affiche le message d’accès refusé, pas le texte natif d’Angular', () => {

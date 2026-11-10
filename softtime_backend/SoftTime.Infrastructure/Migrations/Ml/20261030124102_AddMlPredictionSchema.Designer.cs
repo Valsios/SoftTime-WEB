@@ -26,7 +26,7 @@ namespace SoftTime.Infrastructure.Migrations.Ml
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
-            modelBuilder.Entity("SoftTime.Domain.Entities.Ml.T_ML_MODELE", b =>
+            modelBuilder.Entity("SoftTime.Domain.Entities.Ml.MlModele", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -101,7 +101,7 @@ namespace SoftTime.Infrastructure.Migrations.Ml
                     b.ToTable("Modele", "ml");
                 });
 
-            modelBuilder.Entity("SoftTime.Domain.Entities.Ml.T_ML_PREDICTION", b =>
+            modelBuilder.Entity("SoftTime.Domain.Entities.Ml.MlPrediction", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -163,7 +163,7 @@ namespace SoftTime.Infrastructure.Migrations.Ml
                     b.ToTable("Prediction", "ml");
                 });
 
-            modelBuilder.Entity("SoftTime.Domain.Entities.Ml.T_ML_SALARIE_JOUR", b =>
+            modelBuilder.Entity("SoftTime.Domain.Entities.Ml.MlSalarieJour", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -320,7 +320,7 @@ namespace SoftTime.Infrastructure.Migrations.Ml
                     b.ToTable("SalarieJour", "ml");
                 });
 
-            modelBuilder.Entity("SoftTime.Domain.Entities.Ml.T_ML_SALARIE_SEMAINE", b =>
+            modelBuilder.Entity("SoftTime.Domain.Entities.Ml.MlSalarieSemaine", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -362,12 +362,14 @@ namespace SoftTime.Infrastructure.Migrations.Ml
                         .HasPrecision(8, 2)
                         .HasColumnType("decimal(8,2)");
 
-                    b.Property<decimal>("HS")
+                    b.Property<decimal>("Hs")
                         .HasPrecision(8, 2)
-                        .HasColumnType("decimal(8,2)");
+                        .HasColumnType("decimal(8,2)")
+                        .HasColumnName("HS");
 
-                    b.Property<bool>("HSValidee")
-                        .HasColumnType("bit");
+                    b.Property<bool>("HsValidee")
+                        .HasColumnType("bit")
+                        .HasColumnName("HSValidee");
 
                     b.Property<decimal>("HeuresPlanifiees")
                         .HasPrecision(8, 2)
@@ -441,9 +443,9 @@ namespace SoftTime.Infrastructure.Migrations.Ml
                     b.ToTable("SalarieSemaine", "ml");
                 });
 
-            modelBuilder.Entity("SoftTime.Domain.Entities.Ml.T_ML_PREDICTION", b =>
+            modelBuilder.Entity("SoftTime.Domain.Entities.Ml.MlPrediction", b =>
                 {
-                    b.HasOne("SoftTime.Domain.Entities.Ml.T_ML_MODELE", null)
+                    b.HasOne("SoftTime.Domain.Entities.Ml.MlModele", null)
                         .WithMany()
                         .HasForeignKey("ModeleId")
                         .OnDelete(DeleteBehavior.NoAction)
