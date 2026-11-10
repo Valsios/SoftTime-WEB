@@ -3,7 +3,6 @@ import {
   countBySource,
   legacyRemovalMessage,
   readablePrivilegesError,
-  selfRightsRemovalMessage,
 } from './privileges.logic';
 
 /** Refonte des privilèges (phase finale) : messages lisibles, sources des droits, anciens codes, protections. */
@@ -41,10 +40,6 @@ describe('privileges.logic — refonte', () => {
       { source: 'REMOVED', isEffective: false },
     ]);
     expect(counts).toEqual({ role: 2, added: 1, removed: 1 });
-  });
-
-  it('selfRightsRemovalMessage : annonce le nombre de droits retirés à soi-même', () => {
-    expect(selfRightsRemovalMessage(3)).toContain('retirer 3 droit(s) à votre propre compte');
   });
 
   it('legacyRemovalMessage : nomme le code et l’effet sur la porte Bases', () => {

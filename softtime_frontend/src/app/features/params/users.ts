@@ -8,7 +8,14 @@ import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
 import { Droit } from '../../core/rights';
 import { RoleChangePreview, previewFromConflict } from '../../core/error.logic';
-import { confirmFlag, confirmationMessage, needsConfirmation } from './role-change.logic';
+import {
+  OWN_ROLE_HINT,
+  confirmFlag,
+  confirmationMessage,
+  isEditingOwnAccount,
+  needsConfirmation,
+  roleFieldHint,
+} from './role-change.logic';
 import { PasswordPolicy, Role, User, PageChangeEvent } from '../../shared/models';
 import { CardPaieService } from '../../shared/services/catalog.service';
 import { PasswordPolicyService } from '../../shared/services/password-policy.service';
@@ -116,10 +123,12 @@ const MESSAGES_REQUIS: FieldErrors = {
             [required]="true"
             [ngModel]="form.roleId"
             (ngModelChange)="onRoleChange($event)"
+            [disabled]="editingSelf()"
+            [attr.title]="editingSelf() ? ownRoleHint : null"
             name="roleId"
             placeholder="Sélectionner un rôle"
             [options]="roleOptions()"
-            [hint]="roleOptions().length ? '' : 'Aucun rôle disponible : créez un rôle avant de créer un utilisateur.'"
+            [hint]="roleHint()"
             [error]="errors().roleId"
           ></soft-select>
         </div>
@@ -165,6 +174,11 @@ export class UsersPage implements OnInit {
   readonly canCreate = computed(() => this.session.hasPermission('PARAMS:USERS:CREATE', Droit.Parameters));
   readonly canUpdate = computed(() => this.session.hasPermission('PARAMS:USERS:UPDATE', Droit.Parameters));
   readonly canDelete = computed(() => this.session.hasPermission('PARAMS:USERS:DELETE', Droit.Parameters));
+
+  /** Le serveur refuse qu'un compte change son propre rôle : le champ est désactivé, avec l'explication. */
+  readonly ownRoleHint = OWN_ROLE_HINT;
+  readonly editingSelf = computed(() => isEditingOwnAccount(this.editId(), this.session.session()?.userId));
+  readonly roleHint = computed(() => roleFieldHint(this.editingSelf(), this.roleOptions().length));
 
   readonly loading = signal(true);
   readonly saving = signal(false);

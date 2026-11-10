@@ -35,7 +35,6 @@ import {
   legacyRemovalMessage,
   readablePrivilegesError,
   resolveRoleLabel,
-  selfRightsRemovalMessage,
 } from './privileges.logic';
 
 type PrivilegesMode = 'user' | 'role';
@@ -268,7 +267,7 @@ interface FeatureCategory {
       @if (isSelfTarget()) {
         <div class="sw-admin-banner" role="note" data-testid="self-target">
           <app-icon name="alert" [size]="16"></app-icon>
-          <span>Vous modifiez vos propres droits : un droit retiré ne vous est plus accordé dès votre prochaine action.</span>
+          <span>Ce sont vos propres droits : seul un autre administrateur peut les modifier.</span>
         </div>
       }
       <section class="sw-card" aria-label="Droits effectifs du compte" data-testid="effective-sources">
@@ -1891,7 +1890,7 @@ export class PrivilegesPage implements OnInit {
     this.grantedPermissions.set(next);
   }
 
-  async save(): Promise<void> {
+  save(): void {
     if (this.permissionsLocked()) return;
     if (this.mode() === 'role') {
       this.saveRole();
@@ -1913,16 +1912,6 @@ export class PrivilegesPage implements OnInit {
       this.grantedPermissions.set(current);
     }
 
-    // Retirer des droits à son propre compte : ils ne sont plus accordés dès la requête suivante.
-    const removedFromSelf = [...this.baseline()].filter((c) => !this.grantedPermissions().has(c));
-    if (this.isSelfTarget() && removedFromSelf.length > 0) {
-      const ok = await this.confirmService.ask(
-        selfRightsRemovalMessage(removedFromSelf.length),
-        'Retirer vos propres droits',
-        'Retirer',
-      );
-      if (!ok) return;
-    }
 
     this.saving.set(true);
     const perms = Array.from(this.grantedPermissions());

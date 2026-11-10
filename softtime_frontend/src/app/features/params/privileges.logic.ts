@@ -66,12 +66,6 @@ export function readablePrivilegesError(err: unknown): string {
   return message;
 }
 
-/** Confirmation avant de retirer des droits à son propre compte (ils s'appliquent dès la requête suivante). */
-export function selfRightsRemovalMessage(removedCount: number): string {
-  return `Vous allez retirer ${removedCount} droit(s) à votre propre compte. Ils ne seront plus accordés dès votre prochaine action, `
-    + "et vous pourriez perdre l'accès à cet écran. Continuer ?";
-}
-
 /** Nombre de droits par source (droits effectifs du serveur) : hérités du rôle, ajoutés, retirés. */
 export function countBySource(rights: readonly { source: string; isEffective: boolean }[]): { role: number; added: number; removed: number } {
   return {
