@@ -455,6 +455,46 @@ export function exportFileName(filter: ClosingFilter): string {
   return `controle-avant-paie_${filter.from}_${filter.to}`;
 }
 
+/** Nom proposé par « Enregistrer au format PDF » pour le rapport imprimé. */
+export function printFileName(filter: ClosingFilter): string {
+  return `rapport-controle-avant-paie_${filter.from}_${filter.to}`;
+}
+
+export const PRINT_STALE_MESSAGE = 'Les données ont changé depuis l’analyse : réanalysez avant d’imprimer le rapport.';
+
+/**
+ * En-tête du rapport imprimé : ce qui a été contrôlé, quand, avec quel résultat et quelle liste — de
+ * quoi faire preuve du contrôle sans l'écran sous les yeux. Aucun nom ni matricule.
+ */
+export function printHeaderLines(
+  report: Pick<ClosingReport, 'statut' | 'statutLibelle' | 'score' | 'joursEmployeControles' | 'nombreAnomalies'>,
+  filter: ClosingFilter,
+  analysedAt: Date,
+  view: ClosingListView,
+  printedAt: Date,
+): { label: string; value: string }[] {
+  const liste = view.gravites.length || view.types?.length
+    ? listFilterText(view.gravites, view.types ?? [])
+    : view.includeInformation ? 'Toutes gravités' : 'Anomalies à corriger (hors « Information »)';
+  return [
+    { label: 'Période', value: `du ${formatDay(filter.from)} au ${formatDay(filter.to)}` },
+    { label: 'Département', value: filter.departement ? filter.departement : 'Tous' },
+    { label: 'Statut', value: report.statutLibelle ?? statusView(report.statut).label },
+    { label: 'Score', value: scoreText(report.score) },
+    { label: 'Jours-employé contrôlés', value: String(report.joursEmployeControles) },
+    { label: 'Anomalies (toutes gravités)', value: String(report.nombreAnomalies) },
+    { label: 'Liste imprimée', value: `${liste} · tri ${view.tri === 'gravite' ? 'par gravité' : 'par date'}` },
+    { label: 'Analyse du', value: fullStamp(analysedAt) },
+    { label: 'Rapport imprimé le', value: fullStamp(printedAt) },
+  ];
+}
+
+/** « JJ/MM/AAAA à HH:mm » (heure locale) : l'année compte sur un document conservé. */
+function fullStamp(date: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${formatDay(toIsoDay(date))} à ${p(date.getHours())}:${p(date.getMinutes())}`;
+}
+
 /** Lignes de la feuille « Anomalies », dans l'ordre de la liste (aucun tri ni filtre ajouté). */
 export function exportRows(items: readonly ClosingAnomalyView[]): (string | number | boolean | null)[][] {
   return items.map((a) => [

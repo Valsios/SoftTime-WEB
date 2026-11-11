@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
+  ChangeDetectorRef,
   Component,
   computed,
   inject,
@@ -11,13 +12,14 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { EMPTY, expand, Subscription, toArray } from 'rxjs';
+import { EMPTY, expand, map, Observable, Subscription, toArray } from 'rxjs';
 import { errorMessage } from '../../core/error.logic';
 import { SessionStore } from '../../core/session.store';
 import { Column, DataTable, DataTableCell, PageHeader, PeriodFilter, SoftBadge, SoftBarChart, SoftButton, SoftCard, SoftDeltaChart, SoftTabs, SoftToggle, TabItem } from '../../shared/components';
 import { ClosingAnomalyView, ClosingChecklist, ClosingChecklistLine, ClosingReport, PageChangeEvent, PeriodRequest } from '../../shared/models';
 import { ClosingService } from '../../shared/services/closing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
+import { PrintReportService } from '../../shared/services/print-report.service';
 import { ClosingSessionState } from './closing.state';
 import {
   ANALYSING_TEXT,
@@ -46,6 +48,12 @@ import {
   NO_ANOMALY_FOR_FILTER,
   NO_ANOMALY_FOR_LIST_FILTER,
   NO_ANOMALY_FOR_TYPE_TO_FIX,
+  ClosingListView,
+  EXPORT_HEADERS,
+  exportRows,
+  PRINT_STALE_MESSAGE,
+  printFileName,
+  printHeaderLines,
   comparisonDeltaPoints,
   scoreDeltaText,
   severityChartPoints,
@@ -94,6 +102,13 @@ import {
         [attr.aria-busy]="exporting() || null"
         (click)="exportExcel()"
       >Exporter</soft-button>
+      <soft-button
+        variant="secondary"
+        [loading]="printing()"
+        [disabled]="!report() || analysing() || exporting()"
+        [attr.aria-busy]="printing() || null"
+        (click)="printReport()"
+      >Imprimer le rapport</soft-button>
       <label class="closing-switch">
         <span>Comparer avec la période précédente</span>
         <soft-toggle [ngModel]="includeComparison()" (ngModelChange)="onComparison($event)" name="comparaison"></soft-toggle>
@@ -101,9 +116,21 @@ import {
       </label>
     </page-header>
 
-    <p class="closing-banner" role="note">{{ purposeNote }}</p>
+    @if (printing() && printHeader().length) {
+      <section class="closing-print closing-print__head" aria-hidden="true">
+        <h2>Rapport de contrôle avant paie</h2>
+        <dl>
+          @for (l of printHeader(); track l.label) {
+            <div><dt>{{ l.label }}</dt><dd>{{ l.value }}</dd></div>
+          }
+        </dl>
+      </section>
+    }
+
+    <p class="closing-banner print-hide" role="note">{{ purposeNote }}</p>
 
     <period-filter
+      class="print-hide"
       [showMatricule]="false"
       [showDepartement]="true"
       searchLabel="Analyser"
@@ -112,9 +139,11 @@ import {
       (search)="onSearch($event)"
     ></period-filter>
 
-    <div class="closing-status-line" role="status" aria-live="polite">
+    <div class="closing-status-line print-hide" role="status" aria-live="polite">
       @if (analysing()) {
         <span class="closing-busy"><span class="closing-busy__dot" aria-hidden="true"></span>{{ analysingText }}</span>
+      } @else if (printing()) {
+        <span class="closing-busy"><span class="closing-busy__dot" aria-hidden="true"></span>Préparation du rapport…</span>
       } @else if (stale()) {
         <span class="closing-stale">{{ staleText }}</span>
       } @else if (banner(); as texte) {
@@ -144,7 +173,7 @@ import {
               </span>
               @if (stepLink(l, c); as k) {
                 @if (canOpen(k)) {
-                  <a class="soft-btn soft-btn--ghost soft-btn--sm" [routerLink]="k.path" [queryParams]="k.queryParams"
+                  <a class="soft-btn soft-btn--ghost soft-btn--sm print-hide" [routerLink]="k.path" [queryParams]="k.queryParams"
                      [attr.aria-label]="'Ouvrir ' + k.label + ' : ' + l.libelle">{{ k.label }}</a>
                 }
               }
@@ -283,7 +312,7 @@ import {
                   <th scope="col">Jours contrôlés</th>
                   <th scope="col">Anomalies</th>
                   <th scope="col">Critiques</th>
-                  <th scope="col"><span class="closing-sr">Analyser ce département</span></th>
+                  <th scope="col" class="print-hide"><span class="closing-sr">Analyser ce département</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -294,7 +323,7 @@ import {
                     <td>{{ d.joursEmployeControles }}</td>
                     <td>{{ d.nombreAnomalies }}</td>
                     <td>{{ countKey(d.parGravite, 'Critique') }}</td>
-                    <td>
+                    <td class="print-hide">
                       @if (d.departement) {
                         <button
                           type="button"
@@ -318,7 +347,7 @@ import {
           </div>
           @if (typeChips(r); as chips) {
             @if (chips.length > 1) {
-              <div class="closing-type-chips" role="group" aria-label="Filtrer la liste par type d'anomalie">
+              <div class="closing-type-chips print-hide" role="group" aria-label="Filtrer la liste par type d'anomalie">
                 @for (chip of chips; track chip.type) {
                   <button
                     type="button"
@@ -331,17 +360,17 @@ import {
             }
           }
           @if (gravites().length === 0) {
-            <soft-tabs [tabs]="tabs()" [activeTab]="tab()" (activeTabChange)="onTab($event)"></soft-tabs>
+            <soft-tabs class="print-hide" [tabs]="tabs()" [activeTab]="tab()" (activeTabChange)="onTab($event)"></soft-tabs>
           }
           @if (gravites().length || typesFiltre().length) {
-            <p class="closing-filter-line" role="status">
+            <p class="closing-filter-line print-hide" role="status">
               {{ filterText() }} · {{ r.anomalies.total }} ligne(s)
               <button type="button" class="soft-btn soft-btn--ghost soft-btn--sm" (click)="clearListFilters()">Tout afficher</button>
             </p>
           }
           <!-- Balisage du composant partagé SoftSelect (classes globales de la charte), en version
                native synchrone : l'état restauré se pose par [selected], sans attendre NgModel. -->
-          <div class="closing-sort soft-field">
+          <div class="closing-sort soft-field print-hide">
             <label class="soft-field__label" for="closing-tri">Trier par</label>
             <div class="soft-select">
               <div class="soft-select__control">
@@ -362,7 +391,31 @@ import {
             @if (!r.nomsAffiches) {
               <p class="closing-muted">Les noms ne sont pas affichés sur ce serveur : matricule seul.</p>
             }
+            @if (printing() && printRows().length) {
+              <div class="closing-print soft-table-wrap">
+                <table class="soft-table closing-print__table">
+                  <caption>{{ printRows().length }} anomalie(s) de la liste affichée, toutes pages</caption>
+                  <thead>
+                    <tr>
+                      @for (h of printHeaders; track h) {
+                        <th scope="col">{{ h }}</th>
+                      }
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (row of printRows(); track $index) {
+                      <tr>
+                        @for (cell of row; track $index) {
+                          <td>{{ cell }}</td>
+                        }
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
             <data-table
+              class="print-hide"
               [columns]="columns"
               [rows]="rows()"
               [caption]="anomaliesCaption()"
@@ -452,6 +505,23 @@ import {
       .closing-checklist li { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 13.5px; }
       .closing-checklist__text { display: inline-flex; flex-direction: column; gap: 2px; flex: 1 1 220px; min-width: 0; }
       .closing-filter-line { margin: 0 8px 8px; font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+      /* Rapport imprimé : blocs absents de l'écran, rendus seulement pendant l'impression. */
+      .closing-print { display: none; }
+      .closing-print__head h2 { margin: 0 0 8px; font-family: var(--font-heading); font-size: 18px; color: var(--app-text-strong); }
+      .closing-print__head dl { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; font-size: 11px; }
+      .closing-print__head dl div { display: flex; gap: 6px; }
+      .closing-print__head dt { color: var(--text-muted); }
+      .closing-print__head dd { margin: 0; color: var(--app-text); font-weight: 600; }
+      .closing-print__table { font-size: 10px; }
+      .closing-print__table caption { text-align: left; font-size: 11px; color: var(--text-muted); padding: 4px 0; }
+      @media print {
+        :host { gap: 10px; }
+        .closing-print { display: block; }
+        .closing-results[aria-busy='true'] { opacity: 1; }
+        .closing-charts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+        .closing-print__table tr { break-inside: avoid; }
+        .closing-explain { display: none; }
+      }
       .closing-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; }
       @media (max-width: 480px) { .closing-charts { grid-template-columns: minmax(0, 1fr); } }
       .closing-chart-body { padding: 0 8px 8px; }
@@ -490,6 +560,8 @@ export class ClosingPage implements OnInit, OnDestroy {
   private readonly session = inject(SessionStore);
   private readonly state = inject(ClosingSessionState);
   private readonly excel = inject(ExcelExportService);
+  private readonly printer = inject(PrintReportService);
+  private readonly cdr = inject(ChangeDetectorRef);
 
   /** Filtre partagé, positionné sur le mois précédent avant son premier rendu. */
   @ViewChild(PeriodFilter, { static: true }) private filter?: PeriodFilter;
@@ -546,6 +618,11 @@ export class ClosingPage implements OnInit, OnDestroy {
   /** Rassemblement de la liste complète pour l'export en cours : clics répétés ignorés. */
   readonly exporting = signal(false);
   private exportRequest?: Subscription;
+  /** Rapport imprimé en préparation ou ouvert : lignes complètes de la liste et en-tête daté (vides hors impression). */
+  readonly printing = signal(false);
+  readonly printRows = signal<(string | number | boolean | null)[][]>([]);
+  readonly printHeader = signal<{ label: string; value: string }[]>([]);
+  readonly printHeaders = EXPORT_HEADERS;
   readonly error = signal<string | null>(null);
   readonly disabled = signal(false);
   readonly includeComparison = signal(false);
@@ -672,11 +749,67 @@ export class ClosingPage implements OnInit, OnDestroy {
     const filter = this.applied();
     const report = this.report();
     const at = this.analysedAt();
-    if (!filter || !report || !at || this.analysing() || this.exporting()) return;
+    if (!filter || !report || !at || this.analysing() || this.exporting() || this.printing()) return;
     this.exporting.set(true);
     this.error.set(null);
-    const vue = { gravites: this.gravites(), tri: this.tri(), includeInformation: this.includeInformation(), types: this.typesFiltre() };
-    const attendu = report.anomalies.total;
+    const vue = this.listView();
+    this.exportRequest = this.allListItems(filter, vue).subscribe({
+      next: (items) => {
+        this.exporting.set(false);
+        if (items.length !== report.anomalies.total) {
+          this.error.set(EXPORT_STALE_MESSAGE);
+          return;
+        }
+        this.excel.downloadWorkbook(exportFileName(filter), exportSheets(report, items, filter, at, vue, this.checklist()));
+      },
+      error: () => this.exporting.set(false),
+    });
+  }
+
+  /**
+   * Rapport de contrôle imprimable (A4, thème clair, « Enregistrer au format PDF ») : la page telle
+   * qu'affichée — synthèse, graphiques, avancement, évolution, départements — plus un en-tête daté et
+   * TOUTE la liste affichée (toutes les pages, mêmes onglet, filtres et tri), relue comme l'export dans
+   * l'analyse en cache. Même garde que l'export : données modifiées depuis l'analyse → aucun rapport.
+   */
+  printReport(): void {
+    const filter = this.applied();
+    const report = this.report();
+    const at = this.analysedAt();
+    if (!filter || !report || !at || this.analysing() || this.exporting() || this.printing()) return;
+    this.printing.set(true);
+    this.error.set(null);
+    const vue = this.listView();
+    this.exportRequest = this.allListItems(filter, vue).subscribe({
+      next: (items) => {
+        if (items.length !== report.anomalies.total) {
+          this.printing.set(false);
+          this.error.set(PRINT_STALE_MESSAGE);
+          return;
+        }
+        this.printRows.set(exportRows(items));
+        this.printHeader.set(printHeaderLines(report, filter, at, vue, new Date()));
+        this.printer.print({
+          title: printFileName(filter),
+          onStart: () => this.cdr.detectChanges(),
+          onEnd: () => {
+            this.printing.set(false);
+            this.printRows.set([]);
+            this.cdr.detectChanges();
+          },
+        });
+      },
+      error: () => this.printing.set(false),
+    });
+  }
+
+  /** Ce que montre la liste (onglet, filtres, tri) : repris tel quel par l'export et le rapport imprimé. */
+  private listView(): ClosingListView {
+    return { gravites: this.gravites(), tri: this.tri(), includeInformation: this.includeInformation(), types: this.typesFiltre() };
+  }
+
+  /** Toutes les pages de la liste affichée, relues dans l'analyse en cache (aucun recalcul tant qu'elle y est). */
+  private allListItems(filter: ClosingFilter, vue: ClosingListView): Observable<ClosingAnomalyView[]> {
     const fetchPage = (page: number) =>
       this.closing.analysis({
         from: filter.from,
@@ -691,23 +824,11 @@ export class ClosingPage implements OnInit, OnDestroy {
         types: vue.types,
         tri: vue.tri === 'gravite' ? 'gravite' : undefined,
       });
-    this.exportRequest = fetchPage(1)
-      .pipe(
-        expand((r) => (r.anomalies.page < r.anomalies.totalPages ? fetchPage(r.anomalies.page + 1) : EMPTY)),
-        toArray(),
-      )
-      .subscribe({
-        next: (pages) => {
-          const items = pages.flatMap((r) => r.anomalies.items);
-          this.exporting.set(false);
-          if (items.length !== attendu) {
-            this.error.set(EXPORT_STALE_MESSAGE);
-            return;
-          }
-          this.excel.downloadWorkbook(exportFileName(filter), exportSheets(report, items, filter, at, vue, this.checklist()));
-        },
-        error: () => this.exporting.set(false),
-      });
+    return fetchPage(1).pipe(
+      expand((r) => (r.anomalies.page < r.anomalies.totalPages ? fetchPage(r.anomalies.page + 1) : EMPTY)),
+      toArray(),
+      map((pages) => pages.flatMap((r) => r.anomalies.items)),
+    );
   }
 
   /** Le filtre a été modifié par l'utilisateur : relit ses champs pour savoir si la saisie diffère du résultat affiché. */
