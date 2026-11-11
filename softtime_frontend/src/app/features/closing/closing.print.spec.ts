@@ -94,6 +94,7 @@ describe('page Contrôle avant paie : imprimer le rapport', () => {
           provide: SessionStore,
           useValue: {
             hasPermission: vi.fn(() => true),
+            hasRight: vi.fn(() => true),
             token: signal<string | null>('jeton'),
             session: signal<{ userId: number } | null>({ userId: 1 }),
             activeSageDb: signal<string | null>('SAGE_A'),
@@ -178,6 +179,7 @@ describe('page Contrôle avant paie : imprimer le rapport', () => {
           provide: SessionStore,
           useValue: {
             hasPermission: vi.fn(() => true),
+            hasRight: vi.fn(() => true),
             token: signal<string | null>('jeton'),
             session: signal<{ userId: number } | null>({ userId: 1 }),
             activeSageDb: signal<string | null>('SAGE_A'),

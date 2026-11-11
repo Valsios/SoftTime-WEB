@@ -5,6 +5,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { Droit } from '../../core/rights';
 import { SessionStore } from '../../core/session.store';
 import { ClosingAnomalyView, ClosingEmployee, ClosingQuery, ClosingReport } from '../../shared/models';
 import { CardPaieService, DepartementServiceService } from '../../shared/services/catalog.service';
@@ -125,6 +126,8 @@ describe('page Contrôle avant paie : salariés les plus touchés', () => {
           provide: SessionStore,
           useValue: {
             hasPermission: vi.fn(() => hasPermission),
+            // Porte 6 (écran Contrôle avant paie) toujours ; les autres portes seulement avec les droits complets.
+            hasRight: vi.fn((droit: number) => hasPermission || droit === Droit.Reports),
             token: signal<string | null>('jeton'),
             session: signal<{ userId: number } | null>({ userId: 1 }),
             activeSageDb: signal<string | null>('SAGE_A'),
