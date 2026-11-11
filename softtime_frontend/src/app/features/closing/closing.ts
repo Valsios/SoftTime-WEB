@@ -1204,7 +1204,8 @@ export class ClosingPage implements OnInit, OnDestroy {
   }
 
   link(a: ClosingAnomalyView): CorrectionLink | null {
-    return correctionLink(a);
+    const r = this.report();
+    return correctionLink(a, undefined, r ? { from: r.from, to: r.to } : null);
   }
 
   noFix(a: ClosingAnomalyView): boolean {

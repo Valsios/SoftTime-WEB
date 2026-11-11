@@ -22,6 +22,9 @@ La section n'a pas à exister ; une clé absente garde sa valeur par défaut. Un
 | `Closing:DoublonsMonoGravite` | `Mineure` | gravité des doublons en mono-pointage (`Information`, `Mineure`, `Importante` ou `Critique`) |
 | `Closing:MaxPeriodDays` | `366` | 1 à 366 |
 | `Closing:CriticalRatioBlocking` | `0.05` | 0 à 1, point décimal ; **valeur provisoire à confirmer par le manager** |
+| `Closing:CorrectionsManuellesRatio` | `0.5` | 0 à 1, point décimal ; part des jours contrôlés d'un salarié corrigés à la main (`ORIGINE = MANUEL`) |
+| `Closing:CorrectionsManuellesMinimum` | `5` | ≥ 1 ; nombre minimal de jours corrigés à la main (les deux seuils doivent être atteints) |
+| `Closing:HeuresSupHebdoSeuil` | `40` | > 0, point décimal ; heures supplémentaires d'une semaine validée, seuil strictement dépassé |
 | `Closing:Gravites:<Type>` | (gravité par défaut) | `Information`, `Mineure`, `Importante` ou `Critique` |
 | `Closing:Poids:<Gravité>` | `Information` 0, `Mineure` 1, `Importante` 3, `Critique` 5 | ≥ 0, au moins un poids > 0 |
 
@@ -91,7 +94,26 @@ Les valeurs d'avant la phase 3c, à placer dans la section `Closing` (le résult
 `DoublonExact` et `QuasiDoublon` rétablissent `Mineure` quel que soit le mode de pointage.
 
 Types d'anomalie (`<Type>`) : `PointageIncomplet`, `PointageManquant`, `PlanningSansPointage`,
-`PointageSansPlanning`, `DoublonExact`, `QuasiDoublon`, `FerieNonApplique`.
+`PointageSansPlanning`, `DoublonExact`, `QuasiDoublon`, `FerieNonApplique`, `CorrectionsManuelles`,
+`HeuresSupAtypiques`.
+
+### Signaux de vigilance (niveau « Information » par défaut)
+
+`CorrectionsManuelles` et `HeuresSupAtypiques` (`PayrollVigilanceRules`) naissent en `Information`, poids 0 :
+ils figurent dans les comptages et, sur demande, dans la liste, mais le score et le statut sont
+**mathématiquement inchangés** tant qu'aucune gravité n'est réglée (`Closing:Gravites:<Type>`). Seuils par
+défaut volontairement **larges** : seuls les cas nettement hors norme ressortent.
+
+- **Corrections manuelles massives** : un salarié dont les jours corrigés à la main sur la période atteignent
+  à la fois `CorrectionsManuellesMinimum` et `CorrectionsManuellesRatio` × ses jours contrôlés. Une ligne par
+  salarié, datée de son dernier jour corrigé à la main ; « Corriger » ouvre Heures corrigées sur toute la
+  période analysée, matricule prérempli.
+- **Heures supplémentaires atypiques** : semaine **validée** dont les HS dépassent `HeuresSupHebdoSeuil`. Une
+  semaine appartient à la période qui contient son dimanche (même règle que l'exonération) ; la ligne est
+  datée de ce dimanche. « Corriger » ouvre Validation semaine.
+
+Mesure sur la base de démo (novembre 2025) : 22 semaines au-delà de 40 h (209 au-delà de 30 h, 1 854 au-delà
+de 20 h) ; 2 jours corrigés à la main seulement, donc aucune correction manuelle massive.
 
 ## Tâches courantes
 

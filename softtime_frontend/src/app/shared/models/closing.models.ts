@@ -7,7 +7,9 @@ export type ClosingAnomalyType =
   | 'PointageSansPlanning'
   | 'DoublonExact'
   | 'QuasiDoublon'
-  | 'FerieNonApplique';
+  | 'FerieNonApplique'
+  | 'CorrectionsManuelles'
+  | 'HeuresSupAtypiques';
 
 export type ClosingSeverity = 'Information' | 'Mineure' | 'Importante' | 'Critique';
 

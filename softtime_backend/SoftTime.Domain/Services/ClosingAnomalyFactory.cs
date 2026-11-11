@@ -9,6 +9,9 @@ public static class ClosingAnomalyFactory
     /// <summary>Origine des lignes régénérées par le pré-traitement (miroir de <c>PunchProcessingConfiguration.OrigineAuto</c>).</summary>
     internal const string OrigineAuto = "AUTO";
 
+    /// <summary>Origine des corrections saisies à la main (miroir de <c>PunchProcessingConfiguration.OrigineManuel</c>).</summary>
+    internal const string OrigineManuelle = "MANUEL";
+
     internal static ClosingAnomaly Anomalie(
         ClosingAnomalyType type, string cle, DateTime jour, string detail, decimal? heures = null,
         ClosingSeverity? gravite = null, bool? pointageExiste = null)

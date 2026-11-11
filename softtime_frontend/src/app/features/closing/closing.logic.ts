@@ -25,6 +25,8 @@ export const ANOMALY_TYPES = [
   'DoublonExact',
   'QuasiDoublon',
   'FerieNonApplique',
+  'CorrectionsManuelles',
+  'HeuresSupAtypiques',
 ] as const;
 
 export const SEVERITIES = ['Critique', 'Importante', 'Mineure', 'Information'] as const;
@@ -42,6 +44,8 @@ const TYPE_LABELS: Record<string, TypeLabel> = {
   DoublonExact: { singulier: 'doublon exact', pluriel: 'doublons exacts' },
   QuasiDoublon: { singulier: 'quasi-doublon', pluriel: 'quasi-doublons' },
   FerieNonApplique: { singulier: 'férié non appliqué', pluriel: 'fériés non appliqués' },
+  CorrectionsManuelles: { singulier: 'correction manuelle massive', pluriel: 'corrections manuelles massives' },
+  HeuresSupAtypiques: { singulier: 'semaine à heures supp. atypiques', pluriel: 'semaines à heures supp. atypiques' },
 };
 
 const SEVERITY_LABELS: Record<string, TypeLabel> = {
@@ -219,7 +223,13 @@ export const CORRECTION_TARGETS: Record<string, CorrectionTarget> = {
   QuasiDoublon: { path: '/punches', label: 'Pointages', permission: 'PROC:PUNCHES', droit: DROIT_PROCESSING },
   // Le drapeau férié absent n'a pas d'effet sur la paie : seul un pointage ce jour-là se vérifie (voir correctionLink).
   FerieNonApplique: { path: '/anomalies', label: 'Anomalies', permission: 'PROC:ANOMALIES', droit: DROIT_PROCESSING },
+  // Signaux de vigilance : on vérifie les saisies manuelles du salarié, ou la semaine validée.
+  CorrectionsManuelles: { path: '/corrected-hours', label: 'Heures corrigées', permission: 'PROC:CORRECTED_HOURS', droit: DROIT_PROCESSING },
+  HeuresSupAtypiques: { path: '/weekly-validation', label: 'Validation semaine', permission: 'PROC:WEEKLY_VALIDATION', droit: DROIT_PROCESSING },
 };
+
+/** Types qui portent sur une PÉRIODE (le salarié sur toute la période) : le lien ouvre la période analysée entière. */
+const TYPES_SUR_PERIODE: ReadonlySet<string> = new Set(['CorrectionsManuelles']);
 
 /**
  * Pages cibles qui lisent les paramètres facultatifs du, au et matricule (entrées liées à la route,
@@ -256,14 +266,18 @@ export function nothingToFix(anomaly: { type: string; pointageExiste?: boolean |
 export function correctionLink(
   anomaly: { type: string; matricule: string; date: string; pointageExiste?: boolean | null },
   pagesWithParams: ReadonlySet<string> = PAGES_WITH_QUERY_PARAMS,
+  periode?: { from: string; to: string } | null,
 ): CorrectionLink | null {
   const target = CORRECTION_TARGETS[anomaly.type];
   if (!target || nothingToFix(anomaly)) return null;
   const jour = anomaly.date ? anomaly.date.slice(0, 10) : '';
+  const surPeriode = TYPES_SUR_PERIODE.has(anomaly.type) && periode;
   return {
     ...target,
     queryParams: pagesWithParams.has(target.path) && jour
-      ? { du: jour, au: TYPES_JUSQU_AU_LENDEMAIN.has(anomaly.type) ? jourSuivant(jour) : jour, matricule: anomaly.matricule }
+      ? surPeriode
+        ? { du: periode.from.slice(0, 10), au: periode.to.slice(0, 10), matricule: anomaly.matricule }
+        : { du: jour, au: TYPES_JUSQU_AU_LENDEMAIN.has(anomaly.type) ? jourSuivant(jour) : jour, matricule: anomaly.matricule }
       : null,
     ariaLabel: `Corriger dans ${target.label} : ${typeLabel(anomaly.type).toLowerCase()}, matricule ${anomaly.matricule}, ${formatDay(jour)}`,
   };

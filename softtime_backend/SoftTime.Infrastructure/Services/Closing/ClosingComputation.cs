@@ -226,14 +226,15 @@ internal static class ClosingComputation
         anomalies.AddRange(DuplicatePunchRules.DoublonsExacts(index, scope));
         anomalies.AddRange(DuplicatePunchRules.QuasiDoublons(index, scope));
         anomalies.AddRange(HolidayPunchRules.FeriesNonAppliques(sources, d.Feries, periode, index));
+        var jours = JoursControles(d, from, fin);
+        anomalies.AddRange(PayrollVigilanceRules.CorrectionsManuelles(d.Corrections, jours, scope));
+        anomalies.AddRange(PayrollVigilanceRules.HeuresSupAtypiques(d.SemainesValidees, scope));
 
         var exclus = options.ExclureSansPlanningSurPeriode
             ? PlanningCoverageRules.SalariesSansPlanningSurPeriode(d.Cartes, d.Plannings, index, scope).Count
             : 0;
         return new ResultatPeriode(
-            PayrollClosingRules.AppliquerGravites(PayrollClosingRules.Trier(anomalies), options),
-            JoursControles(d, from, fin),
-            exclus);
+            PayrollClosingRules.AppliquerGravites(PayrollClosingRules.Trier(anomalies), options), jours, exclus);
     }
 
     /// <summary>

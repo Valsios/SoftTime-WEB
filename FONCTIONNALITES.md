@@ -260,6 +260,8 @@ cours et futurs ne sont jamais contrôlés (la période est plafonnée à la vei
   | Doublon exact | Mineure en mono-pointage, Information en multi-pointage | Même matricule, même date, même heure. |
   | Quasi-doublon | Mineure en mono-pointage, Information en multi-pointage | Deux pointages séparés de moins de la tolérance (30 s par défaut). |
   | Férié non appliqué | Information | Jour férié dont la correction ne porte pas le drapeau férié (lien de correction seulement si un pointage existe ce jour-là). |
+  | Corrections manuelles massives | Information | Salarié dont au moins 5 jours ET 50 % des jours contrôlés sont corrigés à la main (`Closing:CorrectionsManuelles*`). |
+  | Heures supp. atypiques | Information | Semaine validée au-delà de 40 h supplémentaires (`Closing:HeuresSupHebdoSeuil`) ; semaine rattachée à la période de son dimanche. |
 
   Les quatre niveaux sont Information (poids 0), Mineure (1), Importante (3) et Critique (5). Une
   anomalie « Information » figure dans les comptages mais n'entre ni dans le score ni dans le statut.
@@ -268,13 +270,21 @@ cours et futurs ne sont jamais contrôlés (la période est plafonnée à la vei
 - **Statut** : *Prêt* (aucune anomalie critique), *Bloquant* (critiques ÷ jours-employé contrôlés ≥ **5 %**),
   sinon *À corriger*. **Le seuil de 5 % est provisoire**, à confirmer par le manager (`Closing:CriticalRatioBlocking`).
   « Bloquant » est un statut d'affichage : aucun autre écran n'est empêché.
+- **Filtres de la liste par type et par salarié** : une puce par type présent (`types=…`) et, depuis la carte
+  « Salariés les plus touchés » (20 au plus, rangés par poids dans le score, `parSalarie` / `salariesConcernes`),
+  « Voir ses anomalies » (`matricule=…`). Comme le filtre de gravité, ils ne changent que la liste.
+- **Graphiques** : barres par gravité et par type ; avec la comparaison, carte « Évolution » (score avant → après,
+  écarts par type en barres divergentes, composant partagé `soft-delta-chart`).
+- **Tableau des départements** : « Analyser » relance l'analyse sur le département de la ligne.
+- **Rapport imprimable** : « Imprimer le rapport » (A4, thème clair, service partagé `PrintReportService` avec
+  l'export PDF du tableau de bord analytique) : en-tête daté, page affichée et liste complète.
 - **Filtre et tri par gravité** : les quatre cartes de comptage servent de bascules de filtre de la liste,
   et un menu trie la liste du plus grave au moins grave (puis date, matricule, type). Seule la liste change :
   les comptages, le score et le statut restent ceux de l'analyse complète. Changer le filtre ou le tri relit
   la page 1 dans l'analyse en cache du serveur, sans nouvelle analyse (`gravites=…`, `tri=gravite`).
 - **Export Excel** : le bouton « Exporter » produit un classeur (feuille « Synthèse » avec période, département,
-  statut, score, comptages, filtre et tri appliqués ; feuille « Anomalies » avec toute la liste affichée, toutes
-  les pages). Il suit l'onglet, le filtre de gravité et le tri affichés, et refuse d'exporter si les données ont
+  statut, score, comptages, filtres et tri appliqués ; feuille « Anomalies » avec toute la liste affichée, toutes
+  les pages ; et, quand elles sont affichées, « Avancement », « Comparaison » et « Par département »). Il suit l'onglet, le filtre de gravité et le tri affichés, et refuse d'exporter si les données ont
   changé depuis l'analyse.
 - **Filtre figé en session** : le filtre saisi, le dernier résultat (avec la date et l'heure de l'analyse), l'onglet,
   le filtre de gravité et le tri sont conservés en mémoire tant que la session dure. Aucune analyse ne se lance à

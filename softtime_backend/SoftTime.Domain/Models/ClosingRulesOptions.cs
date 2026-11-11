@@ -8,6 +8,15 @@ public sealed record ClosingRulesOptions
 {
     public const int DefaultDuplicateToleranceSeconds = 30;
 
+    /// <summary>Part des jours contrôlés d'un salarié corrigés à la main au-delà de laquelle on le signale (défaut large).</summary>
+    public const decimal DefaultCorrectionsManuellesRatio = 0.5m;
+
+    /// <summary>Nombre minimal de jours corrigés à la main pour signaler un salarié (évite les petits effectifs).</summary>
+    public const int DefaultCorrectionsManuellesMinimum = 5;
+
+    /// <summary>Heures supplémentaires validées dans une semaine au-delà desquelles la semaine est signalée (défaut large).</summary>
+    public const decimal DefaultHeuresSupHebdoSeuil = 40m;
+
     public static ClosingRulesOptions Default { get; } = new();
 
     /// <summary>Deux pointages séparés de strictement moins de ce délai sont des quasi-doublons.</summary>
@@ -73,4 +82,13 @@ public sealed record ClosingRulesOptions
 
     /// <summary>Seuil du statut « Bloquant » : critiques ÷ jours-employé contrôlés (défaut provisoire 0,05).</summary>
     public decimal CriticalRatioBlocking { get; init; } = Services.ClosingStatusRules.DefaultCriticalRatioBlocking;
+
+    /// <summary>Corrections manuelles massives : part des jours contrôlés corrigés à la main (0 à 1).</summary>
+    public decimal CorrectionsManuellesRatio { get; init; } = DefaultCorrectionsManuellesRatio;
+
+    /// <summary>Corrections manuelles massives : nombre minimal de jours corrigés à la main.</summary>
+    public int CorrectionsManuellesMinimum { get; init; } = DefaultCorrectionsManuellesMinimum;
+
+    /// <summary>Heures supplémentaires atypiques : seuil hebdomadaire, strictement dépassé.</summary>
+    public decimal HeuresSupHebdoSeuil { get; init; } = DefaultHeuresSupHebdoSeuil;
 }
