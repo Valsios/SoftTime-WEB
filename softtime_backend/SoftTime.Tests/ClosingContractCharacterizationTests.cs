@@ -95,6 +95,20 @@ public class ClosingContractCharacterizationTests
     }
 
     [Fact]
+    public void Report_WithoutNewFields_KeepsLegacyConstructionAndDefaults()
+    {
+        // Arrange : construction positionnelle d'origine (17 arguments) : les ajouts du lot B sont facultatifs.
+        var rapport = RapportComplet();
+
+        // Act
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(rapport, OptionsApi()));
+
+        // Assert : champs additifs présents, à leur valeur neutre.
+        document.RootElement.GetProperty("parSalarie").ValueKind.Should().Be(JsonValueKind.Null);
+        document.RootElement.GetProperty("salariesConcernes").GetInt32().Should().Be(0);
+    }
+
+    [Fact]
     public void Checklist_Serialized_KeepsEveryCurrentPropertyName()
     {
         // Arrange

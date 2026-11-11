@@ -347,6 +347,8 @@ export interface ClosingListView {
   includeInformation: boolean;
   /** Types d'anomalie retenus dans la liste (vide : aucun filtre de type). */
   types?: readonly string[];
+  /** Salarié retenu dans la liste (null : tous) : matricule envoyé, libellé affiché. */
+  salarie?: { matricule: string; label: string } | null;
 }
 
 /** Ajoute ou retire un niveau ; le résultat suit toujours l'ordre d'affichage des cartes (du plus grave au moins grave). */
@@ -371,9 +373,40 @@ export function typeFilterText(types: readonly string[]): string {
   return types.length ? `Types : ${types.map((t) => typeLabel(t, 2)).join(', ')}` : '';
 }
 
-/** Les deux filtres de la liste en une phrase (« · » entre eux) ; vide sans aucun filtre. */
-export function listFilterText(gravites: readonly string[], types: readonly string[]): string {
-  return [severityFilterText(gravites), typeFilterText(types)].filter((t) => t).join(' · ');
+/** Les filtres de la liste en une phrase (« · » entre eux) ; vide sans aucun filtre. */
+export function listFilterText(gravites: readonly string[], types: readonly string[], salarie?: string | null): string {
+  return [severityFilterText(gravites), typeFilterText(types), salarie ? `Salarié : ${salarie}` : '']
+    .filter((t) => t)
+    .join(' · ');
+}
+
+/** Ligne du tableau « Salariés les plus touchés » : nom affiché, critiques et types en clair. */
+export interface EmployeeRow {
+  matricule: string;
+  label: string;
+  departement: string;
+  anomalies: number;
+  critiques: number;
+  types: string;
+}
+
+/** Salariés classés par le serveur (ordre conservé), mis en forme pour l'écran ; vide sans classement. */
+export function employeeRows(report: Pick<ClosingReport, 'parSalarie'>): EmployeeRow[] {
+  return (report.parSalarie ?? []).map((s) => ({
+    matricule: s.matricule,
+    label: personLabel(s),
+    departement: s.departement ?? '—',
+    anomalies: s.nombreAnomalies,
+    critiques: countOf(s.parGravite, 'Critique'),
+    types: s.parType.map((t) => `${typeLabel(t.cle, t.nombre).toLowerCase()} (${t.nombre})`).join(', '),
+  }));
+}
+
+/** « 20 salariés les plus touchés sur 57 » ; tous affichés : « 3 salariés concernés ». */
+export function employeesCaption(shown: number, total: number | null | undefined): string {
+  const n = total ?? shown;
+  if (n <= shown) return `${n} ${n > 1 ? 'salariés concernés' : 'salarié concerné'}`;
+  return `${shown} salariés les plus touchés sur ${n}`;
 }
 
 export const NO_ANOMALY_FOR_FILTER = 'Aucune anomalie pour ce filtre de gravité.';
@@ -473,8 +506,8 @@ export function printHeaderLines(
   view: ClosingListView,
   printedAt: Date,
 ): { label: string; value: string }[] {
-  const liste = view.gravites.length || view.types?.length
-    ? listFilterText(view.gravites, view.types ?? [])
+  const liste = view.gravites.length || view.types?.length || view.salarie
+    ? listFilterText(view.gravites, view.types ?? [], view.salarie?.label)
     : view.includeInformation ? 'Toutes gravités' : 'Anomalies à corriger (hors « Information »)';
   return [
     { label: 'Période', value: `du ${formatDay(filter.from)} au ${formatDay(filter.to)}` },
@@ -527,6 +560,7 @@ export function exportSummary(
     ['Anomalies (toutes gravités)', report.nombreAnomalies],
     ['Filtre de gravité', view.gravites.length ? view.gravites.map(severityLabel).join(', ') : view.includeInformation ? 'Aucun (toutes gravités)' : 'Aucun (hors « Information »)'],
     ['Filtre de type', view.types?.length ? view.types.map((t) => typeLabel(t, 2)).join(', ') : 'Aucun (tous les types)'],
+    ['Filtre salarié', view.salarie ? view.salarie.label : 'Aucun (tous les salariés)'],
     ['Tri de la liste', view.tri === 'gravite' ? 'Gravité décroissante, puis date' : 'Date, matricule, type'],
     ['Lignes de la feuille « Anomalies »', exportedRows],
   ];

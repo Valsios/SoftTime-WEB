@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  ElementRef,
   computed,
   inject,
   OnDestroy,
@@ -48,6 +49,8 @@ import {
   NO_ANOMALY_FOR_FILTER,
   NO_ANOMALY_FOR_LIST_FILTER,
   NO_ANOMALY_FOR_TYPE_TO_FIX,
+  employeeRows,
+  employeesCaption,
   ClosingListView,
   EXPORT_HEADERS,
   exportRows,
@@ -341,7 +344,56 @@ import {
           </div>
         </soft-card>
 
-        <soft-card variant="bordered" padding="sm">
+        @if (employees().length) {
+          <soft-card variant="bordered" padding="sm">
+            <div class="closing-section-head">
+              <h2>Salariés les plus touchés</h2>
+              <span>{{ employeesCaptionText() }} · rangés par poids dans le score</span>
+            </div>
+            <div class="soft-table-wrap">
+              <table class="soft-table">
+                <caption class="closing-sr">Salariés les plus touchés par les anomalies de la période</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Salarié</th>
+                    <th scope="col">Département</th>
+                    <th scope="col">Anomalies</th>
+                    <th scope="col">Critiques</th>
+                    <th scope="col">Types</th>
+                    <th scope="col" class="print-hide"><span class="closing-sr">Voir ses anomalies</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (s of employees(); track s.matricule) {
+                    <tr [class.closing-row--selected]="isSalarieSelected(s.matricule)">
+                      <th scope="row">
+                        {{ s.label }}
+                        @if (s.label !== s.matricule) {
+                          <span class="closing-muted closing-matricule">{{ s.matricule }}</span>
+                        }
+                      </th>
+                      <td>{{ s.departement }}</td>
+                      <td>{{ s.anomalies }}</td>
+                      <td>{{ s.critiques }}</td>
+                      <td class="closing-types-cell">{{ s.types }}</td>
+                      <td class="print-hide">
+                        <button
+                          type="button"
+                          class="soft-btn soft-btn--ghost soft-btn--sm"
+                          [attr.aria-pressed]="isSalarieSelected(s.matricule)"
+                          [attr.aria-label]="'Voir les anomalies de ' + s.label"
+                          (click)="toggleSalarie(s)"
+                        >{{ isSalarieSelected(s.matricule) ? 'Liste filtrée' : 'Voir ses anomalies' }}</button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </soft-card>
+        }
+
+        <soft-card #anomaliesSection variant="bordered" padding="sm">
           <div class="closing-section-head">
             <h2>Anomalies à corriger</h2>
           </div>
@@ -362,7 +414,7 @@ import {
           @if (gravites().length === 0) {
             <soft-tabs class="print-hide" [tabs]="tabs()" [activeTab]="tab()" (activeTabChange)="onTab($event)"></soft-tabs>
           }
-          @if (gravites().length || typesFiltre().length) {
+          @if (listFiltered()) {
             <p class="closing-filter-line print-hide" role="status">
               {{ filterText() }} · {{ r.anomalies.total }} ligne(s)
               <button type="button" class="soft-btn soft-btn--ghost soft-btn--sm" (click)="clearListFilters()">Tout afficher</button>
@@ -383,7 +435,7 @@ import {
           </div>
           @if (r.anomalies.total === 0 && r.nombreAnomalies === 0) {
             <div class="closing-state closing-state--success" role="status">{{ noAnomaly }}</div>
-          } @else if (r.anomalies.total === 0 && (gravites().length > 0 || typesFiltre().length > 0)) {
+          } @else if (r.anomalies.total === 0 && listFiltered()) {
             <div class="closing-state closing-state--success" role="status">{{ noAnomalyForFilter() }}</div>
           } @else if (r.anomalies.total === 0) {
             <div class="closing-state closing-state--success" role="status">{{ hiddenInformationText() }}</div>
@@ -528,6 +580,9 @@ import {
       .closing-chart-note { margin: 10px 0 0; font-size: 12.5px; }
       .closing-score-delta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin: 0 0 12px; }
       .closing-score-delta strong { font-family: var(--font-heading); font-size: 18px; color: var(--app-text-strong); font-variant-numeric: tabular-nums; }
+      .closing-row--selected { background: var(--info-bg); }
+      .closing-matricule { display: block; font-weight: 400; font-size: 12px; }
+      .closing-types-cell { font-size: 12.5px; color: var(--text-secondary); min-width: 180px; }
       .closing-type-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 8px 10px; }
       .closing-chip {
         display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px;
@@ -565,6 +620,8 @@ export class ClosingPage implements OnInit, OnDestroy {
 
   /** Filtre partagé, positionné sur le mois précédent avant son premier rendu. */
   @ViewChild(PeriodFilter, { static: true }) private filter?: PeriodFilter;
+  /** Carte de la liste : « Voir ses anomalies » y ramène la vue. */
+  @ViewChild('anomaliesSection', { read: ElementRef }) private anomaliesSection?: ElementRef<HTMLElement>;
 
   /** Colonnes du tableau partagé : la gravité et la correction passent par des gabarits de cellule. */
   readonly columns: Column[] = [
@@ -592,7 +649,7 @@ export class ClosingPage implements OnInit, OnDestroy {
    * filtre de type dans l'onglet « À corriger » sans filtre de gravité : rappel que les informations sont masquées.
    */
   readonly noAnomalyForFilter = computed(() => {
-    if (!this.typesFiltre().length) return NO_ANOMALY_FOR_FILTER;
+    if (!this.typesFiltre().length && !this.salarie()) return NO_ANOMALY_FOR_FILTER;
     return !this.gravites().length && this.tab() === 'afix' ? NO_ANOMALY_FOR_TYPE_TO_FIX : NO_ANOMALY_FOR_LIST_FILTER;
   });
   readonly checklistTitle = CHECKLIST_TITLE;
@@ -632,8 +689,17 @@ export class ClosingPage implements OnInit, OnDestroy {
   /** Niveaux et types retenus dans la liste (vides : aucun filtre) et tri : ne touchent ni l'analyse, ni le score, ni le statut. */
   readonly gravites = signal<string[]>([]);
   readonly typesFiltre = signal<string[]>([]);
+  /** Salarié retenu dans la liste depuis « Salariés les plus touchés » (null : tous). */
+  readonly salarie = signal<{ matricule: string; label: string } | null>(null);
   readonly tri = signal<ClosingSort>('date');
-  readonly filterText = computed(() => listFilterText(this.gravites(), this.typesFiltre()));
+  readonly filterText = computed(() => listFilterText(this.gravites(), this.typesFiltre(), this.salarie()?.label));
+  /** Un filtre de liste au moins (gravité, type ou salarié) : ligne de filtre et message de liste vide dédié. */
+  readonly listFiltered = computed(() => this.gravites().length > 0 || this.typesFiltre().length > 0 || this.salarie() !== null);
+  readonly employees = computed(() => {
+    const r = this.report();
+    return r ? employeeRows(r) : [];
+  });
+  readonly employeesCaptionText = computed(() => employeesCaption(this.employees().length, this.report()?.salariesConcernes));
   readonly page = signal(1);
   readonly pageSize = signal<number>(DEFAULT_PAGE_SIZE);
 
@@ -725,6 +791,7 @@ export class ClosingPage implements OnInit, OnDestroy {
       this.tab.set(this.state.tab());
       this.gravites.set(this.state.gravites());
       this.typesFiltre.set(this.state.types());
+      this.salarie.set(this.state.salarie());
       this.tri.set(this.state.tri());
       this.page.set(kept.report.anomalies.page);
       this.pageSize.set(this.state.pageSize() ?? DEFAULT_PAGE_SIZE);
@@ -805,7 +872,13 @@ export class ClosingPage implements OnInit, OnDestroy {
 
   /** Ce que montre la liste (onglet, filtres, tri) : repris tel quel par l'export et le rapport imprimé. */
   private listView(): ClosingListView {
-    return { gravites: this.gravites(), tri: this.tri(), includeInformation: this.includeInformation(), types: this.typesFiltre() };
+    return {
+      gravites: this.gravites(),
+      tri: this.tri(),
+      includeInformation: this.includeInformation(),
+      types: this.typesFiltre(),
+      salarie: this.salarie(),
+    };
   }
 
   /** Toutes les pages de la liste affichée, relues dans l'analyse en cache (aucun recalcul tant qu'elle y est). */
@@ -822,6 +895,7 @@ export class ClosingPage implements OnInit, OnDestroy {
         reuseCache: true,
         gravites: vue.gravites,
         types: vue.types,
+        matricule: vue.salarie?.matricule ?? null,
         tri: vue.tri === 'gravite' ? 'gravite' : undefined,
       });
     return fetchPage(1).pipe(
@@ -855,6 +929,9 @@ export class ClosingPage implements OnInit, OnDestroy {
     };
     if (this.analysing() && sameFilter(next, this.inflight)) return;
     this.page.set(1);
+    // Le salarié retenu vient du classement du résultat affiché : une nouvelle analyse repart de tous les salariés.
+    this.salarie.set(null);
+    this.state.salarie.set(null);
     this.load(next, false);
     this.loadChecklist(next);
   }
@@ -950,12 +1027,30 @@ export class ClosingPage implements OnInit, OnDestroy {
 
   /** « Tout afficher » : efface les deux filtres de la liste (gravités et types) en une seule relecture. */
   clearListFilters(): void {
-    if (!this.gravites().length && !this.typesFiltre().length) return;
+    if (!this.listFiltered()) return;
     this.gravites.set([]);
     this.state.gravites.set([]);
     this.typesFiltre.set([]);
     this.state.types.set([]);
+    this.salarie.set(null);
+    this.state.salarie.set(null);
     this.reloadList();
+  }
+
+  /**
+   * « Voir ses anomalies » : la liste (page 1, servie par l'analyse en cache) se restreint au salarié, chaque ligne
+   * gardant son lien « Corriger » prérempli ; un second clic sur le même salarié retire le filtre.
+   */
+  toggleSalarie(row: { matricule: string; label: string }): void {
+    const next = this.salarie()?.matricule === row.matricule ? null : { matricule: row.matricule, label: row.label };
+    this.salarie.set(next);
+    this.state.salarie.set(next);
+    this.reloadList();
+    if (next) this.anomaliesSection?.nativeElement.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
+  }
+
+  isSalarieSelected(matricule: string): boolean {
+    return this.salarie()?.matricule === matricule;
   }
 
   isSelected(severity: string): boolean {
@@ -1044,6 +1139,7 @@ export class ClosingPage implements OnInit, OnDestroy {
         reuseCache: pageOnly,
         gravites: this.gravites(),
         types: this.typesFiltre(),
+        matricule: this.salarie()?.matricule ?? null,
         tri: this.tri() === 'gravite' ? 'gravite' : undefined,
       })
       .subscribe({

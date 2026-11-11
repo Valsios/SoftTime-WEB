@@ -58,7 +58,7 @@ public class ClosingListFiltersTests
     [Theory]
     [InlineData("Inconnu")]
     [InlineData("QuasiDoublon,Pas-un-type")]
-    [InlineData("3")]
+    [InlineData("99")]
     public void TypeFilter_UnknownValue_IsRefused(string valeur)
     {
         ClosingTypeFilter.TryParse(valeur, out var types).Should().BeFalse();

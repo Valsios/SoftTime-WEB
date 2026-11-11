@@ -11,7 +11,8 @@ namespace SoftTime.Application.DTOs;
 /// déjà calculée pour la même période : réservé aux changements de page, jamais à une nouvelle analyse.
 /// <see cref="Gravites"/> (absent par défaut) restreint la LISTE aux niveaux donnés ; un filtre explicite
 /// l'emporte sur <see cref="IncludeInformation"/>. <see cref="Types"/> (absent par défaut) restreint la LISTE aux
-/// types donnés, en plus du filtre de gravité. <see cref="TriParGravite"/> (faux par défaut) range la liste du plus
+/// types donnés, en plus du filtre de gravité. <see cref="Matricule"/> (absent par défaut) restreint la LISTE à un
+/// salarié (clé canonique : « 00777 » et « 777 » désignent le même). <see cref="TriParGravite"/> (faux par défaut) range la liste du plus
 /// grave au moins grave, puis dans l'ordre habituel (date, matricule, type, détail), de façon stable. Ni l'un ni
 /// l'autre ne touche aux comptages, au score ni au statut, toujours calculés sur l'analyse complète.
 /// <see cref="Perimetre"/> (absent par défaut) identifie l'utilisateur : il entre dans la clé du cache, jamais dans le
@@ -30,4 +31,5 @@ public sealed record ClosingAnalysisRequest(
     IReadOnlyList<ClosingSeverity>? Gravites = null,
     bool TriParGravite = false,
     string? Perimetre = null,
-    IReadOnlyList<ClosingAnomalyType>? Types = null);
+    IReadOnlyList<ClosingAnomalyType>? Types = null,
+    string? Matricule = null);

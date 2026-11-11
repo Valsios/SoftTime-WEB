@@ -81,9 +81,10 @@ internal static class ClosingComputation
             ? Comparer(actuel, precedent, periodePrecedente, options)
             : null;
 
+        var (parSalarie, concernes) = ClosingEmployeeRanking.Classer(actuel.Anomalies, departementParCle, options);
         return new AnalysePreparee(
             options, from, to, departementParCle, actuel, score, comparaison,
-            ParDepartement(actuel, departementParCle, options));
+            ParDepartement(actuel, departementParCle, options), parSalarie, concernes);
     }
 
     private static ClosingComparisonDto Comparer(
@@ -145,7 +146,9 @@ internal static class ClosingComputation
             prep.ParDepartement,
             prep.Comparaison,
             ClosingStatusRules.Statut(actuel.Anomalies, actuel.JoursControles.Count, prep.Options.CriticalRatioBlocking)?.ToString(),
-            actuel.SalariesSansPlanningExclus);
+            actuel.SalariesSansPlanningExclus,
+            prep.ParSalarie,
+            prep.SalariesConcernes);
     }
 
     /// <summary>Page d'anomalies demandée, filtrée et triée par <see cref="AnomaliesAffichees"/>.</summary>
@@ -189,6 +192,11 @@ internal static class ClosingComputation
                 : anomalies.Where(a => a.Severity != ClosingSeverity.Information).ToList();
         if (request.Types is { Count: > 0 } types)
             affichees = affichees.Where(a => types.Contains(a.Type)).ToList();
+        if (!string.IsNullOrWhiteSpace(request.Matricule))
+        {
+            var cle = MatriculeIdentity.Cle(request.Matricule);
+            affichees = affichees.Where(a => string.Equals(a.Matricule, cle, StringComparison.Ordinal)).ToList();
+        }
         return request.TriParGravite
             ? affichees.OrderByDescending(a => (int)a.Severity).ToList()
             : affichees;
