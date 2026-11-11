@@ -193,11 +193,27 @@ public class FinePermissionsHttpTests : IClassFixture<ApiFactory>
         (await resp.Content.ReadAsStringAsync()).Should().Contain("Cette opération est réservée aux administrateurs.");
     }
 
+    /// <summary>
+    /// La lecture de CardPaie sert au filtre de période des écrans des portes 3 à 6 : la porte 3 seule passe la porte
+    /// (ici sans base active, donc 400 de base manquante, jamais le 403 de porte). Les écritures restent porte 2
+    /// (SecondaryReadsGateHttpTests).
+    /// </summary>
     [Fact]
-    public async Task CardPaieRead_WithoutParametersGate_Returns403()
+    public async Task CardPaieRead_ProcessingGateWithoutParametersGate_IsNotRefusedByGate()
     {
         // Act
         var resp = await Send(10101, HttpMethod.Get, "/api/v1/card-paie");
+
+        // Assert
+        resp.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+        resp.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task CardPaieWrite_WithoutParametersGate_Returns403()
+    {
+        // Act
+        var resp = await Send(10101, HttpMethod.Post, "/api/v1/card-paie", "{}");
 
         // Assert
         resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);

@@ -15,6 +15,8 @@ import { monthStart, today, currentMonday, currentSunday } from '../utils/date';
 import { SimpleChanges } from '@angular/core';
 import { DeepLinkFilter, matchMatricule } from '../utils/deep-link';
 import { CardPaieService, DepartementServiceService } from '../services/catalog.service';
+import { SessionStore } from '../../core/session.store';
+import { CARD_PAIE_READ_GATES, Droit } from '../../core/rights';
 
 @Component({
   selector: 'period-filter',
@@ -65,6 +67,7 @@ import { CardPaieService, DepartementServiceService } from '../services/catalog.
 export class PeriodFilter implements OnInit {
   private readonly cards = inject(CardPaieService);
   private readonly deptSvc = inject(DepartementServiceService);
+  private readonly session = inject(SessionStore);
 
   readonly showMatricule = input(true);
   readonly showDepartement = input(false);
@@ -95,7 +98,19 @@ export class PeriodFilter implements OnInit {
     }
     this.applyInitial();
     if (this.autoSearch()) this.emit();
-    this.cards.list().subscribe({
+    this.loadOptions();
+  }
+
+  /**
+   * Listes du filtre (matricules, départements) : requêtes de confort, silencieuses en cas d'échec. Un compte qui n'a
+   * aucune porte lisant CardPaie (2 à 6) ne l'appelle pas : le filtre reste utilisable sur la période seule.
+   */
+  private loadOptions(): void {
+    if (!CARD_PAIE_READ_GATES.some((droit) => this.session.hasRight(droit))) {
+      this.resolveInitialMatricule([]);
+      return;
+    }
+    this.cards.list({ silent: true }).subscribe({
       next: (list) => {
         const mats = [
           ...new Set(list.map((c) => c.sageMatricule).filter((m): m is string => !!m?.trim())),
@@ -111,7 +126,8 @@ export class PeriodFilter implements OnInit {
         const rawDepts = list.map((c) => c.departement).filter((d): d is string => !!d?.trim());
         const depts = [...new Set(rawDepts)].sort((a, b) => a.localeCompare(b, 'fr'));
         this.departementOptions.set(depts.map((d) => ({ value: d, label: d })));
-        if (depts.length === 0 && mats.length > 0) {
+        // Complément SAGE (matricule → département, donnée personnelle) : réservé à PARAMS:CARDPAIE, jamais ouvert aux autres portes.
+        if (depts.length === 0 && mats.length > 0 && this.session.hasPermission('PARAMS:CARDPAIE', Droit.Parameters)) {
           this.deptSvc.lookupBatch(mats).subscribe({
             next: (results) => {
               const fromLookup = [
@@ -121,6 +137,8 @@ export class PeriodFilter implements OnInit {
                 this.departementOptions.set(fromLookup.map((d) => ({ value: d, label: d })));
               }
             },
+            // Échec : on garde la liste de départements de CardPaie (vide), sans message.
+            error: () => undefined,
           });
         }
       },

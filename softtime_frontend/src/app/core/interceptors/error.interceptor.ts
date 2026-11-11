@@ -6,6 +6,7 @@ import { BaseAccessService } from '../base-access.service';
 import { RightsRefreshService } from '../rights-refresh.service';
 import { errorMessage, isBaseAccessDenied, isMissingBaseError, previewFromConflict } from '../error.logic';
 import { shouldRefreshSession } from '../session-refresh.logic';
+import { SILENT_ERRORS } from '../silent-request';
 import { SessionStore } from '../session.store';
 import { ToastService } from '../toast.service';
 import { TokenRefreshService } from '../token-refresh.service';
@@ -33,6 +34,10 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const handle = (err: HttpErrorResponse): Observable<never> => {
     // La politique de mot de passe a un repli local : inutile d'alerter l'utilisateur.
     if (req.url.includes('/api/v1/auth/password-policy')) {
+      return throwError(() => err);
+    }
+    // Requête optionnelle de confort : l'écran se dégrade sans message (le 401 reste traité ci-dessous).
+    if (req.context.get(SILENT_ERRORS) && err.status !== 401) {
       return throwError(() => err);
     }
     const isLogin = req.url.includes('/api/v1/auth/login');

@@ -62,6 +62,7 @@ const rapport = (over: Partial<ClosingReport> = {}, items: ClosingAnomalyView[] 
 function fausseSession() {
   return {
     hasPermission: vi.fn(() => true),
+    hasRight: vi.fn(() => true),
     token: signal<string | null>('jeton'),
     session: signal<{ userId: number } | null>({ userId: 1 }),
     activeSageDb: signal<string | null>('SAGE_A'),
