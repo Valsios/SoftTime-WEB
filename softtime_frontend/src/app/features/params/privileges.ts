@@ -10,6 +10,8 @@ import { PrivilegesService, RolesService, SageDatabasesService, UsersService } f
 import { PrivilegesDraftService } from '../../shared/services/privileges-draft.service';
 import { AuthService } from '../../shared/services/auth.service';
 import { Icon } from '../../shared/components/icon';
+import { PageHeader } from '../../shared/components/page-header';
+import { SoftButton } from '../../shared/components/soft-button';
 import { PermMark } from './perm-mark';
 import { categoriesFromCatalog } from './privileges.catalog';
 import { PermSearch } from './perm-search';
@@ -59,39 +61,30 @@ interface FeatureCategory {
 @Component({
   selector: 'app-privileges',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, FormsModule, Icon, PermMark, PermSearch],
+  imports: [CommonModule, FormsModule, Icon, PageHeader, SoftButton, PermMark, PermSearch],
   template: `
-    <!-- En-tête de page - Conforme Charte Softwell §7.1 N°3 et N°4 -->
-    <header class="sw-page-header">
-      <div class="sw-page-header-main">
-        <div class="sw-eyebrow">
-          <span class="sw-eyebrow-line"></span>
-          <span class="sw-eyebrow-text">CONFIGURATION · SÉCURITÉ</span>
-        </div>
-        <h1 class="sw-page-title">Privilèges d'accès</h1>
-        <p class="sw-page-subtitle">Permissions détaillées par utilisateur, base de données et fonctionnalité</p>
-      </div>
-
-      <div class="sw-page-header-actions">
-        <button
-          type="button"
-          class="sw-btn-primary"
-          [disabled]="saving() || !hasTarget() || permissionsLocked()"
-          (click)="save()"
-        >
-          @if (saving()) {
-            <span class="sw-spinner"></span>
-            <span>Enregistrement...</span>
-          } @else {
-            <app-icon name="check" [size]="16"></app-icon>
-            <span>Enregistrer les modifications</span>
-          }
-        </button>
-      </div>
-    </header>
+    <!-- En-tête de page partagé (Charte Softwell §7.1 N°3 et N°4) -->
+    <page-header
+      eyebrow="Configuration · Sécurité"
+      title="Privilèges d'accès"
+      subtitle="Permissions détaillées par utilisateur, base de données et fonctionnalité"
+    >
+      <soft-button
+        [loading]="saving()"
+        [disabled]="!hasTarget() || permissionsLocked()"
+        (click)="save()"
+      >
+        @if (saving()) {
+          <span>Enregistrement...</span>
+        } @else {
+          <app-icon name="check" [size]="16"></app-icon>
+          <span>Enregistrer les modifications</span>
+        }
+      </soft-button>
+    </page-header>
 
     @if (isDirty()) {
-      <section class="sw-card sw-draft-bar" role="status" aria-label="Modifications non enregistrées">
+      <section class="soft-card sw-draft-bar" role="status" aria-label="Modifications non enregistrées">
         <div class="sw-draft-bar-content">
           <strong class="sw-draft-bar-title">Modifications non enregistrées</strong>
           <span class="sw-draft-bar-text">{{ changesCount() }} modification(s) non enregistrée(s)</span>
@@ -108,7 +101,7 @@ interface FeatureCategory {
         <div class="sw-draft-bar-actions">
           <button
             type="button"
-            class="sw-btn-sm"
+            class="soft-btn soft-btn--secondary soft-btn--sm"
             [disabled]="saving()"
             (click)="discardChanges()"
           >
@@ -116,7 +109,7 @@ interface FeatureCategory {
           </button>
           <button
             type="button"
-            class="sw-btn-sm sw-btn-primary"
+            class="soft-btn soft-btn--primary soft-btn--sm"
             [disabled]="saving() || permissionsLocked()"
             (click)="save()"
           >
@@ -127,7 +120,7 @@ interface FeatureCategory {
     }
 
     <!-- Sélecteur de mode : par utilisateur ou par rôle -->
-    <section class="sw-card sw-mode-card" aria-label="Mode de configuration">
+    <section class="soft-card sw-mode-card" aria-label="Mode de configuration">
       <div class="sw-segmented" role="group" aria-label="Mode de configuration">
         <button
           type="button"
@@ -151,13 +144,13 @@ interface FeatureCategory {
     </section>
 
     @if (roleEditLocked()) {
-      <section class="sw-card" aria-label="Modification réservée">
+      <section class="soft-card soft-card--pad-sm" aria-label="Modification réservée">
         <p class="sw-empty-hint">Seul un administrateur peut modifier les droits d'un rôle.</p>
       </section>
     }
 
     <!-- Barre de sélection compacte -->
-    <section class="sw-card sw-user-select-card" [attr.aria-label]="mode() === 'user' ? 'Utilisateur à configurer' : 'Rôle à configurer'">
+    <section class="soft-card sw-user-select-card" [attr.aria-label]="mode() === 'user' ? 'Utilisateur à configurer' : 'Rôle à configurer'">
       <div class="sw-user-selector-bar">
         @if (mode() === 'user') {
           <div class="sw-user-selector-field">
@@ -190,12 +183,12 @@ interface FeatureCategory {
 
           @if (!adminLocked()) {
             <div class="sw-bulk-actions">
-              <button type="button" class="sw-btn-sm" [disabled]="permissionsLocked()" (click)="toggleAll(true)">
+              <button type="button" class="soft-btn soft-btn--secondary soft-btn--sm" [disabled]="permissionsLocked()" (click)="toggleAll(true)">
                 Tout cocher
               </button>
               <button
                 type="button"
-                class="sw-btn-sm"
+                class="soft-btn soft-btn--secondary soft-btn--sm"
                 [disabled]="permissionsLocked()"
                 (click)="toggleAll(false)"
                 title="Tout décocher"
@@ -205,7 +198,7 @@ interface FeatureCategory {
               @if (canResetToRole()) {
                 <button
                   type="button"
-                  class="sw-btn-sm"
+                  class="soft-btn soft-btn--secondary soft-btn--sm"
                   [disabled]="saving() || permissionsLoading()"
                   (click)="resetToRole()"
                   title="Effacer les ajustements personnels et reprendre les droits du rôle"
@@ -271,7 +264,7 @@ interface FeatureCategory {
           <span>Ce sont vos propres droits : seul un autre administrateur peut les modifier.</span>
         </div>
       }
-      <section class="sw-card" aria-label="Droits effectifs du compte" data-testid="effective-sources">
+      <section class="soft-card soft-card--pad-sm sw-effective-card" aria-label="Droits effectifs du compte" data-testid="effective-sources">
         <strong>Droits effectifs (calculés par le serveur)</strong>
         <span class="sw-badge sw-badge-default">Hérités du rôle : {{ sourceCounts().role }}</span>
         <span class="sw-badge sw-badge-custom">Ajoutés : {{ sourceCounts().added }}</span>
@@ -286,7 +279,7 @@ interface FeatureCategory {
                 {{ code }}
                 <button
                   type="button"
-                  class="sw-btn-sm"
+                  class="soft-btn soft-btn--secondary soft-btn--sm"
                   [disabled]="saving()"
                   [attr.aria-label]="'Retirer ' + code"
                   (click)="removeLegacy(code)"
@@ -306,7 +299,7 @@ interface FeatureCategory {
       <perm-search [value]="search()" (changed)="search.set($event)"></perm-search>
 
       @if (matchesAnySearch(sageSearchLabels(), search())) {
-      <section class="sw-card sw-perm-card" [class.is-collapsed]="isCollapsed('SAGE')">
+      <section class="soft-card sw-perm-card" [class.is-collapsed]="isCollapsed('SAGE')">
         <div class="sw-perm-card-header">
           <div class="sw-perm-title-group">
             <div class="sw-icon-pill">
@@ -335,8 +328,8 @@ interface FeatureCategory {
                 </span>
               }
             </label>
-            <button type="button" class="sw-btn-xs" [disabled]="permissionsLocked()" (click)="toggleGroup('SAGE', true)">Tout cocher</button>
-            <button type="button" class="sw-btn-xs" (click)="toggleGroup('SAGE', false)" [disabled]="permissionsLocked()">Tout décocher</button>
+            <button type="button" class="soft-btn soft-btn--secondary soft-btn--sm" [disabled]="permissionsLocked()" (click)="toggleGroup('SAGE', true)">Tout cocher</button>
+            <button type="button" class="soft-btn soft-btn--secondary soft-btn--sm" (click)="toggleGroup('SAGE', false)" [disabled]="permissionsLocked()">Tout décocher</button>
             <button
               type="button"
               class="sw-btn-icon-collapse"
@@ -415,7 +408,7 @@ interface FeatureCategory {
 
       <!-- Section 2 : Bases de pointage (Charte §7.1 N°8 & §8.4) -->
       @if (matchesAnySearch(pointeuseSearchLabels(), search())) {
-      <section class="sw-card sw-perm-card" [class.is-collapsed]="isCollapsed('POINTEUSE')">
+      <section class="soft-card sw-perm-card" [class.is-collapsed]="isCollapsed('POINTEUSE')">
         <div class="sw-perm-card-header">
           <div class="sw-perm-title-group">
             <div class="sw-icon-pill">
@@ -444,8 +437,8 @@ interface FeatureCategory {
                 </span>
               }
             </label>
-            <button type="button" class="sw-btn-xs" [disabled]="permissionsLocked()" (click)="toggleGroup('POINTEUSE', true)">Tout cocher</button>
-            <button type="button" class="sw-btn-xs" (click)="toggleGroup('POINTEUSE', false)" [disabled]="permissionsLocked()">Tout décocher</button>
+            <button type="button" class="soft-btn soft-btn--secondary soft-btn--sm" [disabled]="permissionsLocked()" (click)="toggleGroup('POINTEUSE', true)">Tout cocher</button>
+            <button type="button" class="soft-btn soft-btn--secondary soft-btn--sm" (click)="toggleGroup('POINTEUSE', false)" [disabled]="permissionsLocked()">Tout décocher</button>
             <button
               type="button"
               class="sw-btn-icon-collapse"
@@ -524,7 +517,7 @@ interface FeatureCategory {
 
       <!-- Sections 3 à 7 : Catégories fonctionnelles (Charte §7.1 & §8.4) -->
       @for (cat of visibleCategories(); track cat.key) {
-        <section class="sw-card sw-perm-card" [class.is-collapsed]="isCollapsed(cat.key)">
+        <section class="soft-card sw-perm-card" [class.is-collapsed]="isCollapsed(cat.key)">
           <div class="sw-perm-card-header">
             <div class="sw-perm-title-group">
               <div class="sw-icon-pill">
@@ -538,8 +531,8 @@ interface FeatureCategory {
             </div>
 
             <div class="sw-card-bulk-actions">
-              <button type="button" class="sw-btn-xs" [disabled]="permissionsLocked()" (click)="toggleGroup(cat.key, true)">Tout cocher</button>
-              <button type="button" class="sw-btn-xs" [disabled]="permissionsLocked()" (click)="toggleGroup(cat.key, false)">Tout décocher</button>
+              <button type="button" class="soft-btn soft-btn--secondary soft-btn--sm" [disabled]="permissionsLocked()" (click)="toggleGroup(cat.key, true)">Tout cocher</button>
+              <button type="button" class="soft-btn soft-btn--secondary soft-btn--sm" [disabled]="permissionsLocked()" (click)="toggleGroup(cat.key, false)">Tout décocher</button>
               <button
                 type="button"
                 class="sw-btn-icon-collapse"
@@ -650,125 +643,13 @@ interface FeatureCategory {
         font-family: 'Inter', system-ui, -apple-system, sans-serif;
       }
 
-      /* ---- 1. En-tête de page (§7.1 N°3 et N°4) ---- */
-      .sw-page-header {
+      /* ---- 2. Cartes (classe partagée soft-card, §8.4) & Sélecteur d'utilisateur ---- */
+      .sw-effective-card {
         display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
         flex-wrap: wrap;
-        gap: 16px;
-        margin-bottom: 24px;
-        padding-bottom: 20px;
-        border-bottom: 1px solid var(--app-border); /* neutral-200 */
-      }
-
-      .sw-page-header-main {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-      }
-
-      .sw-eyebrow {
-        display: inline-flex;
         align-items: center;
         gap: 8px;
-        margin-bottom: 2px;
-      }
-
-      .sw-eyebrow-line {
-        display: inline-block;
-        width: 16px;
-        height: 2px;
-        background-color: var(--color-gold-400); /* gold-400 - filet or de la charte */
-        border-radius: 1px;
-      }
-
-      .sw-eyebrow-text {
-        font-size: 12px;
-        font-weight: 600;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--text-secondary); /* neutral-600 */
-      }
-
-      .sw-page-title {
-        margin: 0;
-        font-family: 'Outfit', 'Inter', system-ui, sans-serif;
-        font-size: 24px;
-        font-weight: 600;
-        line-height: 1.25;
-        letter-spacing: -0.02em;
-        color: var(--app-text-strong); /* navy-950 */
-      }
-
-      .sw-page-subtitle {
-        margin: 0;
-        font-size: 14px;
-        line-height: 1.5;
-        color: var(--text-secondary); /* neutral-600 */
-      }
-
-      .sw-page-header-actions {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-
-      /* ---- Bouton Principal Console (§8.1 & §4.1) ---- */
-      .sw-btn-primary {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-        min-height: 44px; /* Hauteur standard 44px */
-        padding: 10px 20px;
-        background-color: var(--accent); /* navy-700 Marine Softwell */
-        color: var(--text-on-accent);
-        font-size: 14px;
-        font-weight: 700;
-        font-family: 'Inter', system-ui, sans-serif;
-        border: none;
-        border-radius: 8px; /* rounded-xl charte = 8px */
-        box-shadow: var(--shadow-xs);
-        cursor: pointer;
-        transition: background-color 150ms cubic-bezier(0.2, 0, 0, 1), transform 150ms ease;
-        white-space: nowrap;
-      }
-
-      .sw-btn-primary:hover:not(:disabled) {
-        background-color: var(--accent-hover); /* navy-800 survol */
-      }
-
-      .sw-btn-primary:focus-visible {
-        outline: 3px solid var(--softtime);
-        outline-offset: 2px;
-      }
-
-      .sw-btn-primary:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-
-      .sw-spinner {
-        display: inline-block;
-        width: 14px;
-        height: 14px;
-        border: 2px solid var(--spinner-track);
-        border-top-color: var(--spinner-head);
-        border-radius: 50%;
-        animation: sw-spin 0.6s linear infinite;
-      }
-
-      @keyframes sw-spin {
-        to { transform: rotate(360deg); }
-      }
-
-      /* ---- 2. Carte (§8.4) & Sélecteur d'utilisateur ---- */
-      .sw-card {
-        background-color: var(--app-surface);
-        border: 1px solid var(--app-border); /* neutral-200 */
-        border-radius: 12px; /* rounded-2xl charte = 12px */
-        box-shadow: var(--shadow-xs);
+        margin-bottom: 16px;
       }
 
       .sw-mode-card {
@@ -942,37 +823,6 @@ interface FeatureCategory {
         gap: 8px;
       }
 
-      .sw-btn-sm {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 36px; /* 36px charte */
-        padding: 0 14px;
-        background-color: var(--app-surface);
-        border: 1px solid var(--app-border); /* neutral-200 */
-        border-radius: 8px;
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--app-text);
-        cursor: pointer;
-        transition: all 150ms ease;
-      }
-
-      .sw-btn-sm:hover:not(:disabled) {
-        background-color: var(--surface-light);
-        border-color: var(--border-hover);
-      }
-
-      .sw-btn-sm:focus-visible {
-        outline: 3px solid var(--softtime);
-        outline-offset: 2px;
-      }
-
-      .sw-btn-sm:disabled {
-        opacity: 0.45;
-        cursor: not-allowed;
-      }
-
       /* ---- 3. Cartes de Catégories de Permissions ---- */
       .sw-permissions-container {
         display: flex;
@@ -1051,32 +901,6 @@ interface FeatureCategory {
         display: flex;
         align-items: center;
         gap: 8px;
-      }
-
-      .sw-btn-xs {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        height: 30px;
-        padding: 0 10px;
-        background-color: var(--app-surface);
-        border: 1px solid var(--app-border);
-        border-radius: 6px;
-        font-size: 12px;
-        font-weight: 500;
-        color: var(--app-text);
-        cursor: pointer;
-        transition: all 150ms ease;
-      }
-
-      .sw-btn-xs:hover:not(:disabled) {
-        background-color: var(--surface-light);
-        border-color: var(--border-hover);
-      }
-
-      .sw-btn-xs:disabled {
-        opacity: 0.45;
-        cursor: not-allowed;
       }
 
       .sw-btn-icon-collapse {
