@@ -510,6 +510,8 @@ import {
       :host { display: flex; flex-direction: column; gap: 16px; position: relative; }
       /* Les blocs partagés portent leurs propres marges basses : l'espacement de la page vient du « gap » de l'hôte. */
       :host ::ng-deep .soft-page-header { margin-bottom: 0; }
+      /* Trois commandes dans l'en-tête : elles passent à la ligne sur petit écran au lieu de déborder. */
+      :host ::ng-deep .soft-page-header .soft-actions { flex-wrap: wrap; }
       :host ::ng-deep .soft-toolbar { margin-bottom: 0; }
       .closing-banner {
         margin: 0; padding: 10px 14px; font-size: 13px;
