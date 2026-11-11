@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Security;
 using SoftTime.Application.Abstractions.Settings;
 using SoftTime.Application.DTOs;
 
@@ -17,9 +18,11 @@ public class ClockParamsController : ApiControllerBase
     private readonly IClockParameterService _svc;
     public ClockParamsController(IClockParameterService svc) => _svc = svc;
 
+    [HasPermission(Permissions.ClockParams.Manage, Permissions.WeeklyValidation.Manage)]
     [HttpGet]
     public async Task<IActionResult> GetAsync(CancellationToken ct) => Ok(await _svc.GetClockAsync(ct));
 
+    [HasPermission(Permissions.ClockParams.Manage)]
     [HttpPut]
     public async Task<IActionResult> UpdateAsync([FromBody] ClockParamDto dto, CancellationToken ct)
         => Ok(await _svc.SaveClockAsync(dto, ct));

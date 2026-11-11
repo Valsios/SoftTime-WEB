@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Security;
 using SoftTime.Application.Abstractions.EmployeePlanning;
 using SoftTime.Application.Abstractions.Excel;
 using SoftTime.Application.DTOs;
@@ -11,6 +12,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Processing)]
+[HasPermission(Permissions.Shifts.Read, Permissions.EmployeePlanning.Read)]
 [Route("api/v1/shifts")]
 [Tags("Shifts")]
 public class ShiftsController : ApiControllerBase
@@ -32,14 +34,17 @@ public class ShiftsController : ApiControllerBase
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
         => Ok(await _svc.ListShiftsPagedAsync(page, pageSize, search, ct));
 
+    [HasPermission(Permissions.Shifts.Create)]
     [HttpPost]
     public async Task<IActionResult> CreateAsync([FromBody] ShiftDto dto, CancellationToken ct)
         => Ok(await _svc.SaveShiftAsync(dto with { Id = 0 }, ct));
 
+    [HasPermission(Permissions.Shifts.Update)]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateAsync(decimal id, [FromBody] ShiftDto dto, CancellationToken ct)
         => Ok(await _svc.SaveShiftAsync(dto with { Id = id }, ct));
 
+    [HasPermission(Permissions.Shifts.Delete)]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteAsync(decimal id, CancellationToken ct)
     {
@@ -47,6 +52,7 @@ public class ShiftsController : ApiControllerBase
         return NoContent();
     }
 
+    [HasPermission(Permissions.Shifts.Create)]
     [HttpPost("import-excel")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> ImportExcelAsync(IFormFile file, CancellationToken ct)

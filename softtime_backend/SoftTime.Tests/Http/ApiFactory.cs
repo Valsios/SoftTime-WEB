@@ -60,6 +60,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         {
             services.RemoveAll<IUnitOfWork>();
             services.AddSingleton<IUnitOfWork>(Store);
+            // Les jetons de test reçoivent les permissions et l'empreinte du compte, comme après une connexion.
+            services.AddSingleton<IStartupFilter, FreshTokenStartupFilter>();
             services.RemoveAll<IExternalDiscoveryService>();
             services.AddSingleton(NullObject.Create<IExternalDiscoveryService>());
             services.RemoveAll<IExternalSourceService>();
@@ -89,7 +91,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
 
         // Profil « comme joel » : portes 1 et 3 via le jeton, permissions fines de lecture seulement.
         var perms = Store.Get<UserPermission>().Items;
-        foreach (var code in new[] { $"SAGE:{SageName}:READ", "POINTEUSE:PTG:READ", "PROC:SHIFTS", "PROC:EMPLOYEE_PLANNING" })
+        foreach (var code in new[] { $"SAGE:{SageName}:READ", "POINTEUSE:PTG:READ", "PROC:SHIFTS", "PROC:EMPLOYEE_PLANNING", "PROC:PUNCHES" })
             perms.Add(new UserPermission { IdResponsable = 10034, PermissionCode = code, IsGranted = true });
         Store.Get<RolePermission>().Items.Add(new RolePermission { IdRole = 29, PermissionCode = "REPORTS:REPORTS", IsGranted = true });
 
@@ -122,10 +124,10 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
             foreach (var code in codes)
                 perms.Add(new UserPermission { IdResponsable = id, PermissionCode = code, IsGranted = true });
         }
-        Account(10060, 10034, "nolink", false, $"SAGE:{SageName}:READ", "POINTEUSE:PTG:READ", "PROC:SHIFTS");        // base non cochée
-        Account(10061, 10034, "noread", true, "POINTEUSE:PTG:READ", "PROC:SHIFTS");                                   // cochée, sans lecture
-        Account(10062, 91, "nogate", true, "PROC:SHIFTS");                                                            // aucun droit sur les bases (pas de porte 1)
-        Account(10063, 10034, "ptenone", true, $"SAGE:{SageName}:READ", "PROC:SHIFTS");                               // sans droit pointeuse
+        Account(10060, 10034, "nolink", false, $"SAGE:{SageName}:READ", "POINTEUSE:PTG:READ", "PROC:SHIFTS", "PROC:PUNCHES");        // base non cochée
+        Account(10061, 10034, "noread", true, "POINTEUSE:PTG:READ", "PROC:SHIFTS", "PROC:PUNCHES");                                   // cochée, sans lecture
+        Account(10062, 91, "nogate", true, "PROC:SHIFTS", "PROC:PUNCHES");                                                            // aucun droit sur les bases (pas de porte 1)
+        Account(10063, 10034, "ptenone", true, $"SAGE:{SageName}:READ", "PROC:SHIFTS", "PROC:PUNCHES");                               // sans droit pointeuse
         // Étape 4b-9 : porte 2 (déduite de PARAMS:*) avec une seule permission fine, pour les lectures sensibles.
         Account(10070, 91, "usersreader", false, "PARAMS:USERS");
         Account(10071, 91, "rolesreader", false, "PARAMS:ROLES");
@@ -157,12 +159,41 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
             new("matricule", string.Empty),
             new("rights", string.Join(",", rights))
         };
+        return Mint(claims, DateTime.UtcNow.AddHours(1));
+    }
+
+    /// <summary>Jeton signé avec la clé de test, portant exactement ces claims.</summary>
+    public static string Mint(IEnumerable<Claim> claims, DateTime expires)
+    {
         var token = new JwtSecurityToken(
             TestIssuer, TestAudience, claims,
-            expires: DateTime.UtcNow.AddHours(1),
-            signingCredentials: new SigningCredentials(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestKey)), SecurityAlgorithms.HmacSha256));
+            expires: expires,
+            signingCredentials: new SigningCredentials(SigningKey(), SecurityAlgorithms.HmacSha256));
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
+
+    /// <summary>Vrai si le jeton est signé avec la clé de test, pour le bon émetteur, et n'a pas expiré.</summary>
+    public static bool IsValidToken(string token)
+    {
+        var parameters = new TokenValidationParameters
+        {
+            ValidIssuer = TestIssuer,
+            ValidAudience = TestAudience,
+            IssuerSigningKey = SigningKey(),
+            ClockSkew = TimeSpan.Zero
+        };
+        try
+        {
+            new JwtSecurityTokenHandler().ValidateToken(token, parameters, out _);
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private static SymmetricSecurityKey SigningKey() => new(Encoding.UTF8.GetBytes(TestKey));
 
     /// <summary>Profils de test : null = anonyme.</summary>
     public static string? TokenFor(string profile) => profile switch

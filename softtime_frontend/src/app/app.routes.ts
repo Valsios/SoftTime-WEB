@@ -232,7 +232,7 @@ export const routes: Routes = [
       {
         path: 'history',
         canActivate: [droitGuard, databaseGuard],
-        data: { droit: Droit.Traceability },
+        data: { droit: Droit.Traceability, permission: 'TRACE:AUDIT' },
         loadComponent: () => import('./features/reports/history').then((m) => m.HistoryPage),
       },
       {

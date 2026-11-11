@@ -35,7 +35,7 @@ describe('privileges.logic', () => {
     const message = buildRoleImpactMessage(3);
     expect(message).toContain('3 utilisateur(s)');
     expect(message).toContain('droits sont personnalisés');
-    expect(message).toContain('12 h maximum');
+    expect(message).toContain('dès leur prochaine action');
   });
 
   it('extrait le message d’erreur du serveur', () => {

@@ -21,7 +21,7 @@ export function countUsersOfRole(users: { roleId: number }[], roleId: number): n
 
 /** Message d'impact affiché avant l'enregistrement des droits d'un rôle (V4). */
 export function buildRoleImpactMessage(n: number): string {
-  return `Ce rôle est attribué à ${n} utilisateur(s). Les utilisateurs dont les droits sont personnalisés ne sont pas concernés. Les autres verront le changement à leur prochaine connexion (12 h maximum).`;
+  return `Ce rôle est attribué à ${n} utilisateur(s). Les utilisateurs dont les droits sont personnalisés ne sont pas concernés. Les autres verront le changement dès leur prochaine action.`;
 }
 
 /** Extrait le message d'erreur renvoyé par le serveur, avec un libellé de repli. */
@@ -121,8 +121,8 @@ export function buildResetToRoleMessage(roleName: string, adjustments: number, h
   return hasUnsavedChanges ? `${base} Les modifications non enregistrées sur ce compte seront aussi perdues.` : base;
 }
 
-/** Suite du message de succès après enregistrement : les droits ne changent que lorsque le jeton est renouvelé. */
+/** Suite du message de succès après enregistrement : le jeton périmé est renouvelé à la requête suivante de la personne. */
 export function appliesAtNextLoginNote(mode: 'user' | 'role'): string {
   const who = mode === 'user' ? 'de la personne' : 'des personnes de ce rôle';
-  return `Les changements s'appliquent à la prochaine connexion ${who} (jusqu'à 12 h).`;
+  return `Les changements s'appliquent dès la prochaine action ${who}.`;
 }

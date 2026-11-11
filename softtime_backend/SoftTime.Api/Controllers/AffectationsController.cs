@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Security;
 using SoftTime.Application.Abstractions.Employees;
 using SoftTime.Application.Abstractions.Excel;
 using SoftTime.Application.DTOs;
@@ -11,6 +12,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Parameters)]
+[HasPermission(Permissions.Affectations.Read)]
 [Route("api/v1/affectations")]
 [Tags("Affectations")]
 public class AffectationsController : ApiControllerBase
@@ -46,14 +48,17 @@ public class AffectationsController : ApiControllerBase
         CancellationToken ct)
         => Ok(await _svc.ListAllAffectationsAsync(categoryId, departement, service, ct));
 
+    [HasPermission(Permissions.Affectations.Create)]
     [HttpPost]
     public async Task<IActionResult> CreateAsync([FromBody] AffectationDto dto, CancellationToken ct)
         => Ok(await _svc.SaveAffectationAsync(dto with { Id = 0 }, ct));
 
+    [HasPermission(Permissions.Affectations.Update)]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> UpdateAsync(int id, [FromBody] AffectationDto dto, CancellationToken ct)
         => Ok(await _svc.SaveAffectationAsync(dto with { Id = id }, ct));
 
+    [HasPermission(Permissions.Affectations.Delete)]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> DeleteAsync(int id, CancellationToken ct)
     {
@@ -61,6 +66,7 @@ public class AffectationsController : ApiControllerBase
         return NoContent();
     }
 
+    [HasPermission(Permissions.Affectations.Create)]
     [HttpPost("import-excel")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> ImportExcelAsync(IFormFile file, CancellationToken ct)

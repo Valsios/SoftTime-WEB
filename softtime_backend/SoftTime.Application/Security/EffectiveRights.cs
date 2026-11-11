@@ -9,6 +9,8 @@ namespace SoftTime.Application.Security;
 /// </summary>
 public sealed class EffectiveRights
 {
+    private string? _stamp;
+
     internal EffectiveRights() { }
 
     public bool IsAdministrator { get; internal init; }
@@ -35,6 +37,17 @@ public sealed class EffectiveRights
 
     public IReadOnlySet<string> KnownSageDatabases { get; internal init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     public IReadOnlySet<string> AuthorizedSageDatabases { get; internal init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Empreinte de ces droits, écrite dans le jeton d'accès (voir <see cref="RightsStamp"/>).</summary>
+    public string Stamp => _stamp ??= RightsStamp.Compute(this);
+
+    /// <summary>
+    /// Permissions écrites dans le jeton : les permissions fixes seulement. Les droits par base (SAGE:, POINTEUSE:)
+    /// restent contrôlés côté serveur ; l'administrateur passe par son rôle et n'en porte aucune.
+    /// </summary>
+    public IReadOnlyList<string> TokenPermissions => IsAdministrator
+        ? Array.Empty<string>()
+        : Permissions.Where(code => !IsDatabaseCode(code)).OrderBy(code => code, StringComparer.Ordinal).ToList();
 
     public bool Has(string permission) => Permissions.Contains(permission);
 
@@ -69,4 +82,8 @@ public sealed class EffectiveRights
         if (string.IsNullOrWhiteSpace(name)) return false;
         return Has($"{prefix}:{name}:{(action == DatabaseConfigAction.Update ? "UPDATE" : "DELETE")}");
     }
+
+    private static bool IsDatabaseCode(string code)
+        => code.StartsWith("SAGE:", StringComparison.OrdinalIgnoreCase)
+           || code.StartsWith("POINTEUSE:", StringComparison.OrdinalIgnoreCase);
 }

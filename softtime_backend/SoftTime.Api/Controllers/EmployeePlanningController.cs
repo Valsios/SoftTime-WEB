@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Security;
 using SoftTime.Api.Responses;
 using SoftTime.Application.Abstractions.EmployeePlanning;
 using SoftTime.Application.Abstractions.Excel;
@@ -13,6 +14,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Processing)]
+[HasPermission(Permissions.EmployeePlanning.Read)]
 [Route("api/v1/employee-planning")]
 [Tags("EmployeePlanning")]
 public class EmployeePlanningController : ApiControllerBase
@@ -57,10 +59,12 @@ public class EmployeePlanningController : ApiControllerBase
     public async Task<IActionResult> EmployeesPagedAsync([FromQuery] EmployeePlanningQuery query, CancellationToken ct)
         => Ok(await _planning.ListEmployeeStatsPagedAsync(query, ct));
 
+    [HasPermission(Permissions.EmployeePlanning.Create)]
     [HttpPost]
     public Task<IActionResult> CreateAsync([FromBody] List<EmployeePlanningDto> rows, CancellationToken ct)
         => SavePlanningAsync(rows, ct);
 
+    [HasPermission(Permissions.EmployeePlanning.Update)]
     [HttpPut]
     public Task<IActionResult> UpdateAsync([FromBody] List<EmployeePlanningDto> rows, CancellationToken ct)
         => SavePlanningAsync(rows, ct);
@@ -75,6 +79,7 @@ public class EmployeePlanningController : ApiControllerBase
         return NoContent();
     }
 
+    [HasPermission(Permissions.EmployeePlanning.Delete)]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> DeleteAsync(int id, CancellationToken ct)
     {
@@ -82,6 +87,7 @@ public class EmployeePlanningController : ApiControllerBase
         return NoContent();
     }
 
+    [HasPermission(Permissions.EmployeePlanning.Create)]
     [HttpPost("import-excel")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> ImportExcelAsync(IFormFile file, CancellationToken ct)
@@ -98,6 +104,7 @@ public class EmployeePlanningController : ApiControllerBase
     /// Génère le planning d'une semaine pour toute une catégorie.
     /// CSV « catégorie ; lundi ; (début ; fin) × 7 », « OFF » pour un jour non travaillé.
     /// </summary>
+    [HasPermission(Permissions.EmployeePlanning.Create)]
     [HttpPost("generate-from-category")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> GenerateFromCategoryAsync(IFormFile file, CancellationToken ct)
@@ -107,6 +114,7 @@ public class EmployeePlanningController : ApiControllerBase
     /// Génère le planning d'une semaine pour un ou plusieurs salariés.
     /// CSV « matricule ; lundi ; (début ; pause ; fin) × 7 », « OFF » pour un jour non travaillé.
     /// </summary>
+    [HasPermission(Permissions.EmployeePlanning.Create)]
     [HttpPost("generate")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> GenerateAsync(IFormFile file, CancellationToken ct)

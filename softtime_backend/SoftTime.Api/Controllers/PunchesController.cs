@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Security;
 using SoftTime.Application.Abstractions.Excel;
 using SoftTime.Application.Abstractions.Punches;
 using SoftTime.Application.Abstractions.PunchProcessing;
@@ -12,6 +13,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Processing)]
+[HasPermission(Permissions.Punches.Manage)]
 [Route("api/v1/punches")]
 [Tags("Punches")]
 public class PunchesController : ApiControllerBase

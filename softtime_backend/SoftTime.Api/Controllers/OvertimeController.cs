@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Security;
 using SoftTime.Application.Abstractions.Overtime;
 using SoftTime.Application.DTOs;
 
@@ -10,6 +11,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Processing)]
+[HasPermission(Permissions.Overtime.Manage)]
 [Route("api/v1/overtime")]
 [Tags("Overtime")]
 public class OvertimeController : ApiControllerBase

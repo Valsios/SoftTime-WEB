@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Security;
 using SoftTime.Api.Responses;
 using SoftTime.Application.Abstractions.Reports;
 using SoftTime.Application.DTOs;
@@ -11,6 +12,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Reports)]
+[HasPermission(Permissions.Reports.Read)]
 [Route("api/v1/reports")]
 [Tags("Reports")]
 public class ReportsController : ApiControllerBase

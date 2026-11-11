@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Security;
 using SoftTime.Application.Abstractions.Excel;
 using SoftTime.Application.Abstractions.Punches;
 using SoftTime.Application.DTOs;
@@ -11,6 +12,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Processing)]
+[HasPermission(Permissions.CorrectedHours.Read)]
 [Route("api/v1/corrected-hours")]
 [Tags("CorrectedHours")]
 public class CorrectedHoursController : ApiControllerBase
@@ -35,14 +37,17 @@ public class CorrectedHoursController : ApiControllerBase
     public async Task<IActionResult> GetPagedAsync([FromQuery] PeriodRequest filter, [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
         => Ok(await _svc.ListCorrectionsPagedAsync(filter, page, pageSize, ct));
 
+    [HasPermission(Permissions.CorrectedHours.Create)]
     [HttpPost]
     public async Task<IActionResult> CreateAsync([FromBody] CorrectedHourDto dto, CancellationToken ct)
         => Ok(await _svc.SaveCorrectionAsync(dto with { Id = 0 }, ct));
 
+    [HasPermission(Permissions.CorrectedHours.Update)]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateAsync(decimal id, [FromBody] CorrectedHourDto dto, CancellationToken ct)
         => Ok(await _svc.SaveCorrectionAsync(dto with { Id = id }, ct));
 
+    [HasPermission(Permissions.CorrectedHours.Delete)]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteAsync(decimal id, CancellationToken ct)
     {
@@ -50,6 +55,7 @@ public class CorrectedHoursController : ApiControllerBase
         return NoContent();
     }
 
+    [HasPermission(Permissions.CorrectedHours.Create)]
     [HttpPost("import-excel")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> ImportExcelAsync(IFormFile file, CancellationToken ct)

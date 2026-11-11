@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Security;
 using SoftTime.Application.Abstractions.Settings;
 using SoftTime.Application.DTOs;
 
@@ -10,6 +11,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Parameters)]
+[HasPermission(Permissions.Categories.Read, Permissions.Affectations.Read, Permissions.Tolerances.Read)]
 [Route("api/v1/categories")]
 [Tags("Categories")]
 public class CategoriesController : ApiControllerBase
@@ -25,14 +27,17 @@ public class CategoriesController : ApiControllerBase
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
         => Ok(await _svc.ListCategoriesPagedAsync(page, pageSize, search, ct));
 
+    [HasPermission(Permissions.Categories.Create)]
     [HttpPost]
     public async Task<IActionResult> CreateAsync([FromBody] CategoryDto dto, CancellationToken ct)
         => Ok(await _svc.SaveCategoryAsync(dto with { Id = 0 }, ct));
 
+    [HasPermission(Permissions.Categories.Update)]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> UpdateAsync(int id, [FromBody] CategoryDto dto, CancellationToken ct)
         => Ok(await _svc.SaveCategoryAsync(dto with { Id = id }, ct));
 
+    [HasPermission(Permissions.Categories.Delete)]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> DeleteAsync(int id, CancellationToken ct)
     {

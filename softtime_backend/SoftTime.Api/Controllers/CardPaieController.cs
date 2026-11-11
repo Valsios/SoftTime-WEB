@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Security;
 using SoftTime.Application.Abstractions.Employees;
 using SoftTime.Application.DTOs;
 
@@ -24,16 +25,19 @@ public class CardPaieController : ApiControllerBase
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
         => Ok(await _svc.ListCardsPagedAsync(page, pageSize, search, ct));
 
+    [HasPermission(Permissions.CardPaie.Create)]
     [HttpPost]
     [RequireDroit(Droit.Parameters)]
     public async Task<IActionResult> CreateAsync([FromBody] CardPaieDto dto, CancellationToken ct)
         => Ok(await _svc.SaveCardAsync(dto with { Id = 0 }, ct));
 
+    [HasPermission(Permissions.CardPaie.Update)]
     [HttpPut("{id:int}")]
     [RequireDroit(Droit.Parameters)]
     public async Task<IActionResult> UpdateAsync(int id, [FromBody] CardPaieDto dto, CancellationToken ct)
         => Ok(await _svc.SaveCardAsync(dto with { Id = id }, ct));
 
+    [HasPermission(Permissions.CardPaie.Delete)]
     [HttpDelete("{id:int}")]
     [RequireDroit(Droit.Parameters)]
     public async Task<IActionResult> DeleteAsync(int id, CancellationToken ct)
@@ -46,6 +50,7 @@ public class CardPaieController : ApiControllerBase
     /// Supprime la correspondance SAGE ↔ badge identifiée par le couple de matricules
     /// (portage de <c>SupprimerParCorrespondance</c> du desktop).
     /// </summary>
+    [HasPermission(Permissions.CardPaie.Delete)]
     [HttpDelete("by-correspondence")]
     [RequireDroit(Droit.Parameters)]
     public async Task<IActionResult> DeleteByCorrespondenceAsync(
@@ -57,11 +62,13 @@ public class CardPaieController : ApiControllerBase
         return NoContent();
     }
 
+    [HasPermission(Permissions.CardPaie.Create)]
     [HttpPost("auto-map")]
     [RequireDroit(Droit.Parameters)]
     public async Task<IActionResult> AutoMapAsync(CancellationToken ct)
         => Ok(await _svc.AutoMapCardsAsync(ct));
 
+    [HasPermission(Permissions.CardPaie.Create)]
     [HttpPost("import-csv")]
     [RequireDroit(Droit.Parameters)]
     [Consumes("multipart/form-data")]

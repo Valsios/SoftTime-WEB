@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Security;
 using SoftTime.Application.Abstractions.Settings;
 using SoftTime.Application.DTOs;
 
@@ -10,6 +11,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Parameters)]
+[HasPermission(Permissions.Majorations.Read)]
 [Route("api/v1/majorations")]
 [Tags("Majorations")]
 public class MajorationsController : ApiControllerBase
@@ -25,6 +27,7 @@ public class MajorationsController : ApiControllerBase
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
         => Ok(await _svc.ListMajorationsPagedAsync(page, pageSize, search, ct));
 
+    [HasPermission(Permissions.Majorations.Update)]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> UpdateAsync(int id, [FromBody] MajorationDto dto, CancellationToken ct)
         => Ok(await _svc.SaveMajorationAsync(dto with { Id = id }, ct));
