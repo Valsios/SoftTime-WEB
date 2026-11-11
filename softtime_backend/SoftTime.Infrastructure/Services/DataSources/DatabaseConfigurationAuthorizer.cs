@@ -1,6 +1,7 @@
 using SoftTime.Application.Abstractions.DataSources;
 using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.Abstractions.Users;
+using SoftTime.Application.Security;
 using SoftTime.Application.Services;
 using SoftTime.Domain;
 
@@ -21,26 +22,23 @@ public class DatabaseConfigurationAuthorizer : IDatabaseConfigurationAuthorizer
         _auth = auth;
     }
 
-    public async Task EnsureCanConfigureAsync(DatabaseKind kind, DatabaseConfigAction action, string? dbName, CancellationToken ct = default)
+    public async Task EnsureCanConfigureAsync(DatabaseKind kind, DatabaseConfigAction action, DatabaseRef? target, CancellationToken ct = default)
     {
         if (AdminAccess.IsAdmin(_user)) return;
         var perms = await LoadPermissionsAsync(ct);
-        var prefix = Prefix(kind);
-
         if (action == DatabaseConfigAction.Create)
         {
-            if (!HasCreate(perms, prefix))
+            if (!perms.Contains(DatabasePermissionCodes.CreateCode(kind)))
                 throw new ForbiddenException($"Vous n'avez pas la permission d'ajouter une base {Label(kind)}.");
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(dbName))
+        if (target is null || target.Id <= 0)
             throw new ForbiddenException($"Base {Label(kind)} introuvable : opération refusée.");
-        var code = $"{prefix}:{dbName}:{(action == DatabaseConfigAction.Update ? "UPDATE" : "DELETE")}";
-        if (!perms.Contains(code))
+        if (!DatabasePermissionCodes.Grants(perms, kind, target.Id, DatabasePermissionCodes.ActionOf(action)))
         {
             var verbe = action == DatabaseConfigAction.Update ? "modifier" : "supprimer";
-            throw new ForbiddenException($"Vous n'avez pas la permission de {verbe} la base {Label(kind)} '{dbName}'.");
+            throw new ForbiddenException($"Vous n'avez pas la permission de {verbe} la base {Label(kind)} '{target.Name}'.");
         }
     }
 
@@ -50,13 +48,9 @@ public class DatabaseConfigurationAuthorizer : IDatabaseConfigurationAuthorizer
         if (AdminAccess.IsAdmin(_user)) return;
         var perms = await LoadPermissionsAsync(ct);
         var kinds = kind.HasValue ? new[] { kind.Value } : new[] { DatabaseKind.Sage, DatabaseKind.Pointeuse };
-        var allowed = kinds.Any(k =>
-        {
-            var prefix = Prefix(k);
-            return HasCreate(perms, prefix)
-                   || perms.Any(p => p.StartsWith(prefix + ":", StringComparison.OrdinalIgnoreCase)
-                                     && p.EndsWith(":UPDATE", StringComparison.OrdinalIgnoreCase));
-        });
+        var allowed = kinds.Any(k => perms.Contains(DatabasePermissionCodes.CreateCode(k))
+            || perms.Any(p => DatabasePermissionCodes.TryParse(p, out var pk, out _, out var action)
+                              && pk == k && action == DatabasePermissionCodes.Update));
         if (!allowed)
             throw new ForbiddenException("Vous n'avez pas la permission de configurer les bases.");
     }
@@ -78,11 +72,5 @@ public class DatabaseConfigurationAuthorizer : IDatabaseConfigurationAuthorizer
         }
     }
 
-    private static bool HasCreate(HashSet<string> perms, string prefix)
-        => perms.Contains($"{prefix}:CREATE")
-           || perms.Any(p => p.StartsWith(prefix + ":", StringComparison.OrdinalIgnoreCase)
-                             && p.EndsWith(":CREATE", StringComparison.OrdinalIgnoreCase));
-
-    private static string Prefix(DatabaseKind kind) => kind == DatabaseKind.Sage ? "SAGE" : "POINTEUSE";
     private static string Label(DatabaseKind kind) => kind == DatabaseKind.Sage ? "SAGE" : "pointeuse";
 }

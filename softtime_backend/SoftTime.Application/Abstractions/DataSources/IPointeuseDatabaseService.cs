@@ -14,5 +14,5 @@ public interface IPointeuseDatabaseService
 
     Task DeletePointeuseAsync(int id, CancellationToken ct = default);
 
-    Task<PagedResult<PointeuseDbDto>> ListPointeusePagedAsync(IReadOnlyCollection<string>? allowedNames, int? page, int? pageSize, string? search = null, CancellationToken ct = default);
+    Task<PagedResult<PointeuseDbDto>> ListPointeusePagedAsync(IReadOnlyCollection<int>? allowedIds, int? page, int? pageSize, string? search = null, CancellationToken ct = default);
 }

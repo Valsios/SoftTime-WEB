@@ -4,7 +4,6 @@ using SoftTime.Application.Abstractions.Permissions;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
 using SoftTime.Application.Security;
-using SoftTime.Domain;
 using SoftTime.Domain.Entities.SoftTime;
 
 using AutoMapper;
@@ -40,12 +39,14 @@ public class RightsAdministrationTests
         _uow.Get<BddSage>().Items.Add(new BddSage { Id = 7, NomBd = "PAIE" });
     }
 
+    private static string Resource(string pageCode) => pageCode[..pageCode.LastIndexOf('.')];
+
     private List<AuditDroit> Journal(string action) => _uow.Get<AuditDroit>().Items.Where(a => a.Action == action).ToList();
 
     [Theory]
     [InlineData("INVALID:CODE")]
-    [InlineData("SAGE:PAIE:WRITE")]
-    [InlineData("SAGE:A:B:READ")]
+    [InlineData("sage.PAIE.write")]
+    [InlineData("SAGE:PAIE:READ")]
     public async Task SaveUserDetailedPermissionsAsync_UnknownOrMalformedCode_ThrowsDomainException(string code)
     {
         // Act
@@ -61,11 +62,55 @@ public class RightsAdministrationTests
     public async Task SaveUserDetailedPermissionsAsync_DuplicatesWithSpaces_SavedOnceNormalized()
     {
         // Act
-        await _auth.SaveUserDetailedPermissionsAsync(AdminId, UserId, new[] { " proc:shifts", "PROC:SHIFTS ", "self:read" });
+        await _auth.SaveUserDetailedPermissionsAsync(AdminId, UserId, new[] { " SHIFTS.READ", "shifts.read ", "Self.Read" });
 
         // Assert
         _uow.Get<UserPermission>().Items.Select(p => p.PermissionCode)
-            .Should().BeEquivalentTo("PROC:SHIFTS", PermissionCatalog.SelfRead);
+            .Should().BeEquivalentTo("shifts.read", PermissionCatalog.SelfRead);
+    }
+
+    [Fact]
+    public async Task SaveUserDetailedPermissionsAsync_FullList_IsStoredAsDeviationsFromTheRole()
+    {
+        // Arrange
+        foreach (var code in new[] { "shifts.read", "reports.read" })
+            _uow.Get<RolePermission>().Items.Add(new RolePermission { IdRole = UsedRoleId, PermissionCode = code, IsGranted = true });
+
+        // Act
+        await _auth.SaveUserDetailedPermissionsAsync(AdminId, UserId, new[] { "shifts.read", "canteen.manage" });
+
+        // Assert
+        _uow.Get<UserPermission>().Items.Select(p => (p.PermissionCode, p.IsGranted))
+            .Should().BeEquivalentTo(new[] { ("canteen.manage", true), ("reports.read", false) });
+        var shown = await _auth.GetUserDetailedPermissionsAsync(UserId);
+        shown.GrantedPermissions.Should().BeEquivalentTo("shifts.read", "canteen.manage");
+        shown.IsCustomized.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SaveUserDetailedPermissionsAsync_ListEqualToRole_StoresNothing()
+    {
+        // Arrange
+        _uow.Get<RolePermission>().Items.Add(new RolePermission { IdRole = UsedRoleId, PermissionCode = "shifts.read", IsGranted = true });
+        _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = UserId, PermissionCode = "canteen.manage", IsGranted = true });
+
+        // Act
+        await _auth.SaveUserDetailedPermissionsAsync(AdminId, UserId, new[] { "shifts.read" });
+
+        // Assert
+        _uow.Get<UserPermission>().Items.Should().BeEmpty();
+        (await _auth.GetUserDetailedPermissionsAsync(UserId)).IsCustomized.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SaveUserDetailedPermissionsAsync_AdministratorTarget_IsRefused()
+    {
+        // Act
+        Func<Task> act = () => _auth.SaveUserDetailedPermissionsAsync(AdminId, AdminId, new[] { "shifts.read" });
+
+        // Assert
+        await act.Should().ThrowExactlyAsync<DomainException>();
+        _uow.Get<UserPermission>().Items.Should().BeEmpty();
     }
 
     [Fact]
@@ -96,7 +141,7 @@ public class RightsAdministrationTests
     public async Task DeleteRoleAsync_UnassignedRole_IsDeletedAndJournaled()
     {
         // Arrange
-        _uow.Get<RolePermission>().Items.Add(new RolePermission { IdRole = FreeRoleId, PermissionCode = "PROC:SHIFTS", IsGranted = true });
+        _uow.Get<RolePermission>().Items.Add(new RolePermission { IdRole = FreeRoleId, PermissionCode = "shifts.read", IsGranted = true });
 
         // Act
         await _auth.DeleteRoleAsync(FreeRoleId);
@@ -106,7 +151,7 @@ public class RightsAdministrationTests
         var entry = Journal(RightsChangeActions.DeleteRole).Should().ContainSingle().Which;
         entry.IdCible.Should().Be(FreeRoleId);
         entry.NomCible.Should().Be("Libre");
-        entry.PermsAvant.Should().Be("PROC:SHIFTS");
+        entry.PermsAvant.Should().Be("shifts.read");
     }
 
     [Fact]
@@ -122,28 +167,6 @@ public class RightsAdministrationTests
         rename.PermsAvant.Should().Be("Libre");
         rename.PermsApres.Should().Be("Renommé");
         rename.LoginOperateur.Should().NotBeNullOrEmpty();
-    }
-
-    [Fact]
-    public async Task SetPrivilegesAsync_Gates_AreJournaled()
-    {
-        // Act
-        await _auth.SetPrivilegesAsync(FreeRoleId, new List<decimal> { Rights.Reports, Rights.Processing });
-
-        // Assert
-        var entry = Journal(RightsChangeActions.UpdateRoleGates).Should().ContainSingle().Which;
-        entry.PermsAvant.Should().BeEmpty();
-        entry.PermsApres.Should().Be("GATE:3,GATE:6");
-    }
-
-    [Fact]
-    public async Task SetPrivilegesAsync_UnknownGate_ThrowsDomainException()
-    {
-        // Act
-        Func<Task> act = () => _auth.SetPrivilegesAsync(FreeRoleId, new List<decimal> { 42 });
-
-        // Assert
-        (await act.Should().ThrowExactlyAsync<DomainException>()).Which.Message.Should().Contain("42");
     }
 
     [Fact]
@@ -178,9 +201,9 @@ public class RightsAdministrationTests
             .SelectMany(i => new[]
             {
                 i.Code,
-                i.CanCreate ? i.Code + ":CREATE" : null,
-                i.CanUpdate ? i.Code + ":UPDATE" : null,
-                i.CanDelete ? i.Code + ":DELETE" : null
+                i.CanCreate ? Resource(i.Code) + ".create" : null,
+                i.CanUpdate ? Resource(i.Code) + ".update" : null,
+                i.CanDelete ? Resource(i.Code) + ".delete" : null
             })
             .Where(code => code is not null)
             .ToList();

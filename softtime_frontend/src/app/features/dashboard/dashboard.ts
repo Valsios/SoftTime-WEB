@@ -160,8 +160,8 @@ export class Dashboard {
   readonly closingCard = signal<ReturnType<typeof dashboardCardView> | null>(null);
 
   constructor() {
-    // Même règle que le menu (REPORTS:CLOSING + porte 6) et une base active : sinon, aucun appel.
-    if (!this.session.hasPermission('REPORTS:CLOSING', Droit.Reports) || !this.session.activeSageDb()) return;
+    // Même règle que le menu (closing.read + porte 6) et une base active : sinon, aucun appel.
+    if (!this.session.hasPermission('closing.read', Droit.Reports) || !this.session.activeSageDb()) return;
     const sub = this.closing.analysisSilently({ ...defaultPeriod(), pageSize: 1 }).subscribe({
       next: (r) => this.closingCard.set(dashboardCardView(r)),
       error: () => this.closingCard.set(null),

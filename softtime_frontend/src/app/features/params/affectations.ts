@@ -108,9 +108,9 @@ export class AffectationsPage implements OnInit {
   private readonly confirm = inject(ConfirmService);
   private readonly session = inject(SessionStore);
 
-  readonly canCreate = computed(() => this.session.hasPermission('PARAMS:AFFECTATIONS:CREATE', Droit.Parameters));
-  readonly canUpdate = computed(() => this.session.hasPermission('PARAMS:AFFECTATIONS:UPDATE', Droit.Parameters));
-  readonly canDelete = computed(() => this.session.hasPermission('PARAMS:AFFECTATIONS:DELETE', Droit.Parameters));
+  readonly canCreate = computed(() => this.session.hasPermission('affectations.create', Droit.Parameters));
+  readonly canUpdate = computed(() => this.session.hasPermission('affectations.update', Droit.Parameters));
+  readonly canDelete = computed(() => this.session.hasPermission('affectations.delete', Droit.Parameters));
 
   readonly loading = signal(true);
   readonly saving = signal(false);

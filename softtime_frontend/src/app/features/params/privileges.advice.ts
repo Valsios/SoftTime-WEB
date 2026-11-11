@@ -1,9 +1,9 @@
 /** Droits qui donnent accès à la liste des comptes et des droits. */
 export const SENSITIVE_RIGHTS: readonly { code: string; label: string }[] = [
-  { code: 'PARAMS:USERS', label: 'Utilisateurs' },
-  { code: 'PARAMS:ROLES', label: 'Rôles' },
-  { code: 'PARAMS:PRIVILEGES', label: 'Privilèges' },
-  { code: 'PARAMS:DB_ACCESS', label: 'Accès bases' },
+  { code: 'users.read', label: 'Utilisateurs' },
+  { code: 'roles.read', label: 'Rôles' },
+  { code: 'privileges.read', label: 'Privilèges' },
+  { code: 'db-access.read', label: 'Accès bases' },
 ];
 
 export const SENSITIVE_RIGHT_HINT = 'Droit sensible : donne accès à la liste des comptes et des droits';
@@ -19,12 +19,15 @@ export function sensitiveGranted(permissions: Iterable<string>, baseline: Iterab
   return SENSITIVE_RIGHTS.filter((r) => draft.has(r.code) && !saved.has(r.code)).map((r) => r.label);
 }
 
-/** Vrai si le brouillon accorde un droit de travail (PROC, OTHER, REPORTS) sans aucun accès en lecture à une base SAGE. */
-export function hasWorkRightsWithoutBaseAccess(permissions: Iterable<string>): boolean {
+/**
+ * Vrai si le brouillon accorde un droit de travail (Traitements, Autres, États : `workCodes`, tirés du catalogue)
+ * sans aucun accès en lecture à une base SAGE.
+ */
+export function hasWorkRightsWithoutBaseAccess(permissions: Iterable<string>, workCodes: ReadonlySet<string>): boolean {
   let work = false;
   for (const code of permissions) {
-    if (/^SAGE:.+:READ$/.test(code)) return false;
-    if (/^(PROC|OTHER|REPORTS):/.test(code)) work = true;
+    if (/^sage\..+\.read$/.test(code)) return false;
+    if (workCodes.has(code)) work = true;
   }
   return work;
 }
@@ -34,10 +37,11 @@ export function computeWarnings(
   permissions: Iterable<string>,
   mode: 'user' | 'role',
   baseline: Iterable<string> = [],
+  workCodes: ReadonlySet<string> = new Set(),
 ): string[] {
   const list = [...permissions];
   const warnings: string[] = [];
-  if (hasWorkRightsWithoutBaseAccess(list)) {
+  if (hasWorkRightsWithoutBaseAccess(list, workCodes)) {
     const who = mode === 'user' ? 'ce compte ne verra' : 'les personnes de ce rôle ne verront';
     warnings.push(
       `Sans accès aux bases, ${who} aucune donnée dans Traitements, Rapports ou Autres. ` +
@@ -49,8 +53,20 @@ export function computeWarnings(
   return warnings;
 }
 
-const ACTION_CODE = /^(.+):(CREATE|UPDATE|DELETE)$/;
-const ACTION_SUFFIXES = ['CREATE', 'UPDATE', 'DELETE'];
+export type PermissionAction = 'create' | 'update' | 'delete';
+
+const ACTIONS: readonly PermissionAction[] = ['create', 'update', 'delete'];
+
+/** Ressource d'un code « ressource.action » : « categories » pour « categories.read ». */
+export function resourceOf(code: string): string {
+  const dot = code.lastIndexOf('.');
+  return dot < 0 ? code : code.slice(0, dot);
+}
+
+/** Code d'une action de l'écran dont `pageCode` est le code de page : « categories.read » donne « categories.create ». */
+export function actionCode(pageCode: string, action: PermissionAction): string {
+  return `${resourceOf(pageCode)}.${action}`;
+}
 
 /**
  * Coche ou décoche un droit en respectant les dépendances d'une page : cocher une action coche sa page,
@@ -66,15 +82,16 @@ export function applyToggle(
   const next = new Set(current);
   if (checked) {
     next.add(code);
-    const match = ACTION_CODE.exec(code);
-    if (match && pageCodes.has(match[1])) next.add(match[1]);
+    const isAction = (ACTIONS as readonly string[]).includes(code.slice(code.lastIndexOf('.') + 1));
+    const page = isAction ? [...pageCodes].find((p) => resourceOf(p) === resourceOf(code)) : undefined;
+    if (page) next.add(page);
     return next;
   }
   next.delete(code);
   if (pageCodes.has(code)) {
-    for (const suffix of ACTION_SUFFIXES) {
-      const action = `${code}:${suffix}`;
-      if (!isMandatory(action)) next.delete(action);
+    for (const action of ACTIONS) {
+      const actionOfPage = actionCode(code, action);
+      if (!isMandatory(actionOfPage)) next.delete(actionOfPage);
     }
   }
   return next;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  actionCode,
   applyToggle,
   computeWarnings,
   filterCategories,
@@ -9,83 +10,85 @@ import {
   sensitiveGranted,
 } from './privileges.advice';
 
-const pages = new Set(['PARAMS:USERS', 'PROC:SHIFTS']);
+const pages = new Set(['users.read', 'shifts.read']);
+/** Droits de travail (portes 3, 4, 6) tels que la page les tire du catalogue. */
+const WORK: ReadonlySet<string> = new Set(['shifts.read', 'reports.read', 'canteen.manage']);
 
 describe('computeWarnings', () => {
   it('avertit si un droit de travail est accordé sans lecture de base (utilisateur)', () => {
-    const w = computeWarnings(['PROC:SHIFTS'], 'user');
+    const w = computeWarnings(['shifts.read'], 'user', [], WORK);
     expect(w).toHaveLength(1);
     expect(w[0]).toContain('ce compte ne verra aucune donnée dans Traitements, Rapports ou Autres');
     expect(w[0]).toContain('Accès bases');
   });
 
   it('adapte le texte au mode rôle', () => {
-    expect(computeWarnings(['REPORTS:REPORTS'], 'role')[0]).toContain('les personnes de ce rôle ne verront aucune donnée');
-    expect(computeWarnings(['OTHER:CANTEEN'], 'role')).toHaveLength(1);
+    expect(computeWarnings(['reports.read'], 'role', [], WORK)[0]).toContain('les personnes de ce rôle ne verront aucune donnée');
+    expect(computeWarnings(['canteen.manage'], 'role', [], WORK)).toHaveLength(1);
   });
 
   it('ne dit rien avec une lecture de base, ou sans droit de travail', () => {
-    expect(computeWarnings(['PROC:SHIFTS', 'SAGE:BASE1:READ'], 'user')).toEqual([]);
-    expect(computeWarnings(['PARAMS:CARDPAIE', 'SAGE:BASE1:UPDATE'], 'user')).toEqual([]);
-    expect(computeWarnings([], 'role')).toEqual([]);
+    expect(computeWarnings(['shifts.read', 'sage.BASE1.read'], 'user', [], WORK)).toEqual([]);
+    expect(computeWarnings(['card-paie.read', 'sage.BASE1.update'], 'user', [], WORK)).toEqual([]);
+    expect(computeWarnings([], 'role', [], WORK)).toEqual([]);
   });
 
   it('une base en écriture seule ne compte pas comme accès', () => {
-    expect(computeWarnings(['PROC:SHIFTS', 'SAGE:BASE1:UPDATE'], 'user')).toHaveLength(1);
-    expect(computeWarnings(['PROC:SHIFTS', 'POINTEUSE:PTG:READ'], 'user')).toHaveLength(1);
+    expect(computeWarnings(['shifts.read', 'sage.BASE1.update'], 'user', [], WORK)).toHaveLength(1);
+    expect(computeWarnings(['shifts.read', 'pointeuse.PTG.read'], 'user', [], WORK)).toHaveLength(1);
   });
 
   it('signale les droits sensibles accordés, avec leurs libellés', () => {
-    const w = computeWarnings(['PARAMS:USERS', 'PARAMS:ROLES', 'SAGE:B:READ'], 'user');
+    const w = computeWarnings(['users.read', 'roles.read', 'sage.B.read'], 'user', [], WORK);
     expect(w).toEqual(['Droit sensible accordé : Utilisateurs, Rôles.']);
   });
 
   it('ne signale pas un droit sensible déjà enregistré', () => {
-    expect(computeWarnings(['PARAMS:USERS'], 'user', ['PARAMS:USERS'])).toEqual([]);
-    expect(sensitiveGranted(['PARAMS:DB_ACCESS', 'PARAMS:PRIVILEGES'], ['PARAMS:PRIVILEGES'])).toEqual(['Accès bases']);
+    expect(computeWarnings(['users.read'], 'user', ['users.read'], WORK)).toEqual([]);
+    expect(sensitiveGranted(['db-access.read', 'privileges.read'], ['privileges.read'])).toEqual(['Accès bases']);
   });
 
   it('cumule les deux avertissements', () => {
-    expect(computeWarnings(['PROC:SHIFTS', 'PARAMS:PRIVILEGES'], 'role')).toHaveLength(2);
+    expect(computeWarnings(['shifts.read', 'privileges.read'], 'role', [], WORK)).toHaveLength(2);
   });
 
   it('reconnaît les quatre droits sensibles', () => {
-    for (const c of ['PARAMS:USERS', 'PARAMS:ROLES', 'PARAMS:PRIVILEGES', 'PARAMS:DB_ACCESS']) expect(isSensitiveRight(c)).toBe(true);
-    expect(isSensitiveRight('PARAMS:CARDPAIE')).toBe(false);
-    expect(isSensitiveRight('PARAMS:USERS:CREATE')).toBe(false);
+    for (const c of ['users.read', 'roles.read', 'privileges.read', 'db-access.read']) expect(isSensitiveRight(c)).toBe(true);
+    expect(isSensitiveRight('card-paie.read')).toBe(false);
+    expect(isSensitiveRight('users.create')).toBe(false);
   });
 });
 
 describe('applyToggle (dépendances)', () => {
   it('cocher une action coche aussi sa page', () => {
-    const next = applyToggle(new Set(), 'PROC:SHIFTS:UPDATE', true, pages);
-    expect([...next].sort()).toEqual(['PROC:SHIFTS', 'PROC:SHIFTS:UPDATE']);
+    const next = applyToggle(new Set(), 'shifts.update', true, pages);
+    expect([...next].sort()).toEqual(['shifts.read', 'shifts.update']);
   });
 
   it('décocher une page décoche ses actions, pas celles des autres pages', () => {
-    const start = new Set(['PROC:SHIFTS', 'PROC:SHIFTS:CREATE', 'PROC:SHIFTS:DELETE', 'PARAMS:USERS', 'PARAMS:USERS:CREATE']);
-    const next = applyToggle(start, 'PROC:SHIFTS', false, pages);
-    expect([...next].sort()).toEqual(['PARAMS:USERS', 'PARAMS:USERS:CREATE']);
+    const start = new Set(['shifts.read', 'shifts.create', 'shifts.delete', 'users.read', 'users.create']);
+    const next = applyToggle(start, 'shifts.read', false, pages);
+    expect([...next].sort()).toEqual(['users.create', 'users.read']);
   });
 
   it('décocher une action laisse la page cochée', () => {
-    const next = applyToggle(new Set(['PROC:SHIFTS', 'PROC:SHIFTS:CREATE']), 'PROC:SHIFTS:CREATE', false, pages);
-    expect([...next]).toEqual(['PROC:SHIFTS']);
+    const next = applyToggle(new Set(['shifts.read', 'shifts.create']), 'shifts.create', false, pages);
+    expect([...next]).toEqual(['shifts.read']);
   });
 
   it('cocher une page ne coche pas ses actions', () => {
-    expect([...applyToggle(new Set(), 'PROC:SHIFTS', true, pages)]).toEqual(['PROC:SHIFTS']);
+    expect([...applyToggle(new Set(), 'shifts.read', true, pages)]).toEqual(['shifts.read']);
   });
 
   it('les codes hors pages (bases) ne déclenchent aucune dépendance', () => {
-    expect([...applyToggle(new Set(), 'SAGE:CREATE', true, pages)]).toEqual(['SAGE:CREATE']);
-    expect([...applyToggle(new Set(['SAGE:B:UPDATE']), 'SAGE:B:UPDATE', false, pages)]).toEqual([]);
+    expect([...applyToggle(new Set(), 'sage.create', true, pages)]).toEqual(['sage.create']);
+    expect([...applyToggle(new Set(['sage.B.update']), 'sage.B.update', false, pages)]).toEqual([]);
   });
 
   it('conserve les actions obligatoires et ne modifie pas l’ensemble reçu', () => {
-    const start = new Set(['PARAMS:USERS', 'PARAMS:USERS:CREATE', 'PARAMS:USERS:UPDATE']);
-    const next = applyToggle(start, 'PARAMS:USERS', false, pages, (c) => c === 'PARAMS:USERS:CREATE');
-    expect([...next]).toEqual(['PARAMS:USERS:CREATE']);
+    const start = new Set(['users.read', 'users.create', 'users.update']);
+    const next = applyToggle(start, 'users.read', false, pages, (c) => c === 'users.create');
+    expect([...next]).toEqual(['users.create']);
     expect(start.size).toBe(3);
   });
 });
@@ -118,5 +121,17 @@ describe('recherche', () => {
     expect(matchesAnySearch(['Bases RH / Paie', 'BASE1'], 'paie')).toBe(true);
     expect(matchesAnySearch(['Bases de pointage', 'PTG'], 'paie')).toBe(false);
     expect(matchesAnySearch([], '')).toBe(true);
+  });
+});
+
+describe('actionCode', () => {
+  it("remplace l'action de la page par celle demandée", () => {
+    expect(actionCode('categories.read', 'delete')).toBe('categories.delete');
+    expect(actionCode('employee-planning.read', 'create')).toBe('employee-planning.create');
+  });
+
+  it("cocher une action d'un écran « manage » coche sa page", () => {
+    const next = applyToggle(new Set<string>(), 'anomalies.delete', true, new Set(['anomalies.manage']));
+    expect([...next].sort()).toEqual(['anomalies.delete', 'anomalies.manage']);
   });
 });

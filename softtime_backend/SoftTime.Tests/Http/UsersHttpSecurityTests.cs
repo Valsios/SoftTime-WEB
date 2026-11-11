@@ -97,7 +97,7 @@ public class UsersHttpSecurityTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task GetUsers_WithoutFinePermission_IsRefused()
     {
-        // Avant 4b-9 : la porte 2 seule suffisait (param2 lisait les comptes en 200). Maintenant : porte 2 ET PARAMS:USERS.
+        // Avant 4b-9 : la porte 2 seule suffisait (param2 lisait les comptes en 200). Maintenant : porte 2 ET users.read.
         foreach (var url in new[] { "/api/v1/users", "/api/v1/users/10052" })
         {
             var (ok, _) = await Send("usersreader", "GET", url, null);

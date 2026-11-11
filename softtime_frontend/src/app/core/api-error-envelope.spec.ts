@@ -27,7 +27,7 @@ describe('erreurs au format enveloppe', () => {
   });
 
   it("lit l'aperçu d'un changement de rôle dans data sur un 409", () => {
-    const preview = { adjustmentsToClear: ['PARAMS:USERS'], count: 1, accountLogin: 'jdoe' };
+    const preview = { adjustmentsToClear: ['users.read'], count: 1, accountLogin: 'jdoe' };
     const err = httpError(409, envelope({ message: 'Confirmation requise.', data: preview }));
     expect(previewFromConflict(err)).toEqual(preview);
   });

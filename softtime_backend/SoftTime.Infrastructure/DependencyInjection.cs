@@ -116,6 +116,7 @@ public static class DependencyInjection
         services.AddScoped<IDatabaseAccessService, DatabaseAccessService>();
         services.AddScoped<IRightsAuditService, RightsAuditService>();
         services.AddScoped<IRightsChangeJournal, RightsChangeJournal>();
+        services.AddScoped<IRightsStorageMigration, RightsStorageMigration>();
         services.AddScoped<IEffectiveRightsService, EffectiveRightsService>();
         services.AddScoped<IDatabaseConfigurationAuthorizer, DatabaseConfigurationAuthorizer>();
     }

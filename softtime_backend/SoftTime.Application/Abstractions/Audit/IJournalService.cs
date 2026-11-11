@@ -5,7 +5,7 @@ namespace SoftTime.Application.Abstractions.Audit;
 
 /// <summary>
 /// Lecture seule du journal central <c>suivi_JOURNAL</c> (base de l'application, indépendante de la base SAGE choisie).
-/// Accès : administrateur, ou porte 5 ET permission <c>TRACE:AUDIT</c> effectives. Les valeurs sensibles sont
+/// Accès : administrateur, ou porte 5 ET permission <c>audit.read</c> effectives. Les valeurs sensibles sont
 /// masquées à la lecture par <see cref="AuditMaskingPolicy"/>, même si une ancienne ligne a été stockée en clair.
 /// Ce service n'écrit jamais : aucune modification ni suppression du journal n'est exposée.
 /// </summary>

@@ -12,29 +12,29 @@ import {
 } from './self-space.logic';
 
 describe('Mon espace : profil et page d’arrivée', () => {
-  it('hasSelfPermission : seulement la permission SELF:READ exacte', () => {
-    expect(hasSelfPermission(['SELF:READ'])).toBe(true);
-    expect(hasSelfPermission(['PROC:ANOMALIES', 'SELF:READ'])).toBe(true);
-    expect(hasSelfPermission(['SELF:READ:EXPORT', 'REPORTS:REPORTS'])).toBe(false);
+  it('hasSelfPermission : seulement la permission self.read exacte', () => {
+    expect(hasSelfPermission(['self.read'])).toBe(true);
+    expect(hasSelfPermission(['anomalies.manage', 'self.read'])).toBe(true);
+    expect(hasSelfPermission(['SELF:READ:EXPORT', 'reports.read'])).toBe(false);
     expect(hasSelfPermission([])).toBe(false);
     expect(hasSelfPermission(null)).toBe(false);
     expect(hasSelfPermission(undefined)).toBe(false);
   });
 
-  it('isSelfServiceProfile : SELF:READ ET aucune porte', () => {
-    expect(isSelfServiceProfile(['SELF:READ'], [])).toBe(true);
-    expect(isSelfServiceProfile(['SELF:READ'], null)).toBe(true);
-    expect(isSelfServiceProfile(['SELF:READ'], [3])).toBe(false);        // une porte de gestion : comportement habituel
-    expect(isSelfServiceProfile(['PROC:SHIFTS'], [])).toBe(false);
+  it('isSelfServiceProfile : self.read ET aucune porte', () => {
+    expect(isSelfServiceProfile(['self.read'], [])).toBe(true);
+    expect(isSelfServiceProfile(['self.read'], null)).toBe(true);
+    expect(isSelfServiceProfile(['self.read'], [3])).toBe(false);        // une porte de gestion : comportement habituel
+    expect(isSelfServiceProfile(['shifts.read'], [])).toBe(false);
     expect(isSelfServiceProfile([], [])).toBe(false);
   });
 
   it('homeRoute : Mon espace pour le seul profil Salarié, tableau de bord pour tout le reste (comportement inchangé)', () => {
-    expect(homeRoute(['SELF:READ'], [])).toBe('/mon-espace');
+    expect(homeRoute(['self.read'], [])).toBe('/mon-espace');
     expect(homeRoute([], [1, 2, 3, 4, 5, 6])).toBe('/dashboard');                  // administrateur
-    expect(homeRoute(['PROC:SHIFTS', 'PROC:PUNCHES'], [3])).toBe('/dashboard');     // compte de gestion
+    expect(homeRoute(['shifts.read', 'punches.manage'], [3])).toBe('/dashboard');     // compte de gestion
     expect(homeRoute([], [])).toBe('/dashboard');                                   // compte sans permission détaillée
-    expect(homeRoute(['SELF:READ'], [6])).toBe('/dashboard');                       // permission + porte : comportement habituel
+    expect(homeRoute(['self.read'], [6])).toBe('/dashboard');                       // permission + porte : comportement habituel
     expect(homeRoute(undefined, undefined)).toBe('/dashboard');
   });
 });

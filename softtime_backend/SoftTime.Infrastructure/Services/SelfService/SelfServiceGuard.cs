@@ -12,7 +12,7 @@ namespace SoftTime.Infrastructure.Services.SelfService;
 /// Garde dédiée de « Mon espace ». Elle ne passe PAS par <c>ITenantConnectionService.EnsureAuthorizedAsync</c>
 /// (qui exige la porte 1) :
 /// <list type="number">
-///   <item>permission fine <c>SELF:READ</c> effective (aucune porte n'est requise) ;</item>
+///   <item>permission fine <c>self.read</c> effective (aucune porte n'est requise) ;</item>
 ///   <item>matricule du jeton (<see cref="ICurrentUser.Matricule"/>), non vide, jamais pris dans la requête ; il doit
 ///   être égal au matricule COURANT du compte, relu à chaque appel (compte supprimé, matricule retiré ou changé :
 ///   refus) ; si un AUTRE compte porte la même clé de matricule, aucun des porteurs n'accède à Mon espace ;</item>
@@ -61,7 +61,7 @@ public sealed class SelfServiceGuard : ISelfServiceGuard
         return new SelfContext(uid, sage, matricule, cle, cartes);
     }
 
-    /// <summary>Permission explicite : l'accès « administrateur à tout » ne remplace pas SELF:READ.</summary>
+    /// <summary>Permission explicite : l'accès « administrateur à tout » ne remplace pas self.read.</summary>
     private async Task VerifierPermissionAsync(decimal uid, CancellationToken ct)
     {
         EffectiveRights effective;

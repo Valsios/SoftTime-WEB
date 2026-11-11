@@ -47,8 +47,8 @@ export class AbsenceCodesPage implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly session = inject(SessionStore);
 
-  readonly canCreate = computed(() => this.session.hasPermission('PARAMS:ABSENCE_CODES:CREATE', Droit.Parameters));
-  readonly canUpdate = computed(() => this.session.hasPermission('PARAMS:ABSENCE_CODES:UPDATE', Droit.Parameters));
+  readonly canCreate = computed(() => this.session.hasPermission('absence-codes.create', Droit.Parameters));
+  readonly canUpdate = computed(() => this.session.hasPermission('absence-codes.update', Droit.Parameters));
 
   readonly loading = signal(true);
   readonly saving = signal(false);

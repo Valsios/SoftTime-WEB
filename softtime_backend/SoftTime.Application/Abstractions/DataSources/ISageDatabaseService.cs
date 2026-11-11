@@ -21,7 +21,7 @@ public interface ISageDatabaseService
     /// </summary>
     Task<DepartementServiceOptionsDto> GetDepartementServiceOptionsAsync(CancellationToken ct = default);
 
-    Task<PagedResult<SageDbDto>> ListSagePagedAsync(IReadOnlyCollection<string>? allowedNames, int? page, int? pageSize, string? search = null, CancellationToken ct = default);
+    Task<PagedResult<SageDbDto>> ListSagePagedAsync(IReadOnlyCollection<int>? allowedIds, int? page, int? pageSize, string? search = null, CancellationToken ct = default);
 
     Task<ActivationResultDto> ActivateSagePairAsync(CancellationToken ct = default);
 }

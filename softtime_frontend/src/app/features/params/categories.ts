@@ -65,9 +65,9 @@ export class CategoriesPage implements OnInit {
   private readonly confirm = inject(ConfirmService);
   private readonly session = inject(SessionStore);
 
-  readonly canCreate = computed(() => this.session.hasPermission('PARAMS:CATEGORIES:CREATE', Droit.Parameters));
-  readonly canUpdate = computed(() => this.session.hasPermission('PARAMS:CATEGORIES:UPDATE', Droit.Parameters));
-  readonly canDelete = computed(() => this.session.hasPermission('PARAMS:CATEGORIES:DELETE', Droit.Parameters));
+  readonly canCreate = computed(() => this.session.hasPermission('categories.create', Droit.Parameters));
+  readonly canUpdate = computed(() => this.session.hasPermission('categories.update', Droit.Parameters));
+  readonly canDelete = computed(() => this.session.hasPermission('categories.delete', Droit.Parameters));
 
   readonly loading = signal(true);
   readonly saving = signal(false);

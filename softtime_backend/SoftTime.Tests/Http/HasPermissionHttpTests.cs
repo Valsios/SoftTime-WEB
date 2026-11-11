@@ -79,7 +79,7 @@ public class HasPermissionHttpTests : IClassFixture<ApiFactory>
     [InlineData("PUT", "/api/v1/clock-params")]
     public async Task Action_AccountWithGateButWithoutPermission_Gets403(string method, string url)
     {
-        // Arrange : porte Paramètres, mais PARAMS:CATEGORIES (lecture) pour seule permission.
+        // Arrange : porte Paramètres, mais categories.read (lecture) pour seule permission.
         var before = _f.Snapshot();
         var request = _f.Request("paramsother", new HttpMethod(method), url, method == "GET" ? null : "{}");
 
@@ -122,7 +122,7 @@ public class HasPermissionHttpTests : IClassFixture<ApiFactory>
 
         // Assert
         response.StatusCode.Should().Be(expected);
-        if (expected == HttpStatusCode.OK) text.Should().Contain("SELF:READ");
+        if (expected == HttpStatusCode.OK) text.Should().Contain("self.read");
     }
 
     [Theory]

@@ -9,6 +9,9 @@ namespace SoftTime.Infrastructure.Services.Permissions;
 
 public sealed class RolePermissionService : IRolePermissionService
 {
+    /// <summary>Le rôle Administrateur n'a pas de ligne : il a tous les droits, sur toutes les bases présentes et futures.</summary>
+    private static readonly HashSet<int> s_allGates = new() { 1, 2, 3, 4, 5, 6 };
+
     private readonly IUnitOfWork _uow;
     private readonly IEffectiveRightsService _effectiveRights;
     private readonly IParametersAccessGuard _parametersAccessGuard;
@@ -29,14 +32,14 @@ public sealed class RolePermissionService : IRolePermissionService
     public async Task<RoleDetailedPermissionsDto> GetRoleDetailedPermissionsAsync(decimal roleId, CancellationToken cancellationToken = default)
     {
         await _parametersAccessGuard.EnsureCanReadAsync(ReadPermissions.Privileges, cancellationToken);
+        if (roleId == AdminRules.AdminRoleId)
+            return new RoleDetailedPermissionsDto(roleId, PermissionCatalog.BuildDefaultPermissionsList(s_allGates), true);
         var roleList = await _uow.Repository<RolePermission>().ListReadOnlyAsync(
             p => p.IdRole == roleId && p.IsGranted, cancellationToken);
 
+        // Un rôle sans ligne n'accorde aucun droit (les portes ne donnent plus de droits par défaut).
         if (roleList.Count == 0)
-        {
-            var defaultPerms = (await _effectiveRights.RoleDefaultPermissionsAsync(roleId, cancellationToken)).ToList();
-            return new RoleDetailedPermissionsDto(roleId, defaultPerms, false);
-        }
+            return new RoleDetailedPermissionsDto(roleId, Array.Empty<string>(), false);
 
         var perms = roleList
             .Where(p => p.PermissionCode != PermissionCatalog.EmptyRoleMarker)

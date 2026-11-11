@@ -192,7 +192,7 @@ export class LoginPage implements OnInit {
     this.auth.login({ login: this.login().trim(), password: this.password() }).subscribe({
       next: () => {
         this.loading.set(false);
-        // Profil Salarié (SELF:READ sans aucune porte) : Mon espace ; tous les autres comptes : tableau de bord, comme avant.
+        // Profil Salarié (self.read sans aucune porte) : Mon espace ; tous les autres comptes : tableau de bord, comme avant.
         this.router.navigate([homeRoute(this.session.permissions(), this.session.gates())]);
       },
       error: () => this.loading.set(false),

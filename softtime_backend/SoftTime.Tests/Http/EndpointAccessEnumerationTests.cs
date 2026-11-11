@@ -25,7 +25,7 @@ namespace SoftTime.Tests.Http;
 ///   <item>chaque action a un contrôle d'accès EXPLICITE visible dans ses métadonnées (porte : RequireDroit / RequireAnyDroit, ou
 ///     [AllowAnonymous] listé et justifié), ou figure dans <see cref="ControleDansLeCode"/> (contrôle fait dans le contrôleur ou le
 ///     service, justifié) : une nouvelle action sans l'un ni l'autre fait échouer le test ;</item>
-///   <item>pour un compte Salarié (SELF:READ, matricule, une base, aucune porte, fonction activée), TOUTES les routes hors api/v1/me/space
+///   <item>pour un compte Salarié (self.read, matricule, une base, aucune porte, fonction activée), TOUTES les routes hors api/v1/me/space
 ///     répondent 403, ou 200 avec une liste / page vide ; toute autre réponse est listée comme « échappée » et fait échouer le test.</item>
 /// </list>
 /// Les contrôles « dans le code » ne se voient pas dans les métadonnées : c'est le balayage du compte Salarié qui les prouve.
@@ -48,7 +48,7 @@ public class EndpointAccessEnumerationTests : IClassFixture<ApiFactory>
             if (users.Any(u => u.IdResponsable == SalarieId))
                 return;
             factory.Store.Get<Role>().Items.Add(new Role { IdRole = 93, NomRole = "SalarieEnum" });
-            factory.Store.Get<RolePermission>().Items.Add(new RolePermission { Id = 9301, IdRole = 93, PermissionCode = "SELF:READ", IsGranted = true });
+            factory.Store.Get<RolePermission>().Items.Add(new RolePermission { Id = 9301, IdRole = 93, PermissionCode = "self.read", IsGranted = true });
             users.Add(new Responsable { IdResponsable = SalarieId, IdRole = 93, Login = "enum-salarie", NomResponsable = "salarie", Matricule = Mat });
             factory.Store.Get<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = 93001, IdResponsable = SalarieId, IdBdd = 3033 });
             factory.Store.Get<CardPaie>().Items.Add(new CardPaie { Id = 6001, SageMatricule = Mat, SageBdd = ApiFactory.SageName, PointeuseBdd = "PTG" });
@@ -86,8 +86,8 @@ public class EndpointAccessEnumerationTests : IClassFixture<ApiFactory>
         ["GET api/v1/import-templates/{key}"] = "aide statique ; voir OuvertesJustifiees",
         ["POST api/v1/excel/export"] = "ne lit rien ; voir OuvertesJustifiees",
         ["POST api/v1/excel/export-workbook"] = "ne lit rien ; voir OuvertesJustifiees",
-        ["GET api/v1/closing/analysis"] = "ClosingController : FineReadAccess.EnsureAsync (porte 6 ET REPORTS:CLOSING)",
-        ["GET api/v1/closing/checklist"] = "ClosingController : FineReadAccess.EnsureAsync (porte 6 ET REPORTS:CLOSING)",
+        ["GET api/v1/closing/analysis"] = "ClosingController : FineReadAccess.EnsureAsync (porte 6 ET closing.read)",
+        ["GET api/v1/closing/checklist"] = "ClosingController : FineReadAccess.EnsureAsync (porte 6 ET closing.read)",
         ["GET api/v1/journal"] = "JournalService.EnsureCanReadAsync (porte 5)",
         ["GET api/v1/journal/facets"] = "JournalService.EnsureCanReadAsync (porte 5)",
         ["GET api/v1/journal/{id:long}"] = "JournalService.EnsureCanReadAsync (porte 5)",
@@ -99,11 +99,11 @@ public class EndpointAccessEnumerationTests : IClassFixture<ApiFactory>
         ["POST api/v1/sage-databases/activate"] = "CatalogService.ActivateSagePairAsync -> EnsureAuthorizedAsync (porte 1)",
         ["GET api/v1/predictions/landing"] = "PredictionsController : FineReadAccess (porte 6 ET permission fine)",
         ["GET api/v1/predictions/landing/horizon"] = "PredictionsController : FineReadAccess (porte 6 ET permission fine)",
-        ["GET api/v1/me/space/summary"] = "SelfServiceGuard : SELF:READ + matricule du jeton",
-        ["GET api/v1/me/space/weeks"] = "SelfServiceGuard : SELF:READ + matricule du jeton",
-        ["GET api/v1/me/space/anomalies"] = "SelfServiceGuard : SELF:READ + matricule du jeton",
-        ["GET api/v1/me/space/absences"] = "SelfServiceGuard : SELF:READ + matricule du jeton",
-        ["GET api/v1/me/space/delays"] = "SelfServiceGuard : SELF:READ + matricule du jeton",
+        ["GET api/v1/me/space/summary"] = "SelfServiceGuard : self.read + matricule du jeton",
+        ["GET api/v1/me/space/weeks"] = "SelfServiceGuard : self.read + matricule du jeton",
+        ["GET api/v1/me/space/anomalies"] = "SelfServiceGuard : self.read + matricule du jeton",
+        ["GET api/v1/me/space/absences"] = "SelfServiceGuard : self.read + matricule du jeton",
+        ["GET api/v1/me/space/delays"] = "SelfServiceGuard : self.read + matricule du jeton",
     };
 
     /// <summary>
@@ -331,6 +331,6 @@ public class EndpointAccessEnumerationTests : IClassFixture<ApiFactory>
         donnees.GetProperty("login").GetString().Should().Be("enum-salarie");       // son propre compte
         donnees.GetProperty("token").GetString().Should().Be(string.Empty);          // aucun jeton renvoyé
         donnees.GetProperty("rights").GetArrayLength().Should().Be(0);               // aucune porte
-        texte.Should().NotContain("PROC:");
+        texte.Should().NotContain("shifts.read");
     }
 }

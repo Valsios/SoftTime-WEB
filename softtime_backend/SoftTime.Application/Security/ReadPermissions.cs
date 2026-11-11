@@ -8,11 +8,11 @@ public static class ReadPermissions
 {
     public const string Denied = "Vous n'avez pas la permission requise pour cette consultation.";
 
-    public static readonly string[] Users = { "PARAMS:USERS" };
-    public static readonly string[] UserList = { "PARAMS:USERS", "PARAMS:PRIVILEGES", "PARAMS:DB_ACCESS" };
-    public static readonly string[] Roles = { "PARAMS:ROLES" };
-    public static readonly string[] RoleList = { "PARAMS:USERS", "PARAMS:PRIVILEGES" };
-    public static readonly string[] Privileges = { "PARAMS:PRIVILEGES" };
-    public static readonly string[] PrivilegeList = { "PARAMS:PRIVILEGES", "PARAMS:ROLES" };
-    public static readonly string[] DbAccess = { "PARAMS:DB_ACCESS" };
+    public static readonly string[] Users = { "users.read" };
+    public static readonly string[] UserList = { "users.read", "privileges.read", "db-access.read" };
+    public static readonly string[] Roles = { "roles.read" };
+    public static readonly string[] RoleList = { "users.read", "privileges.read" };
+    public static readonly string[] Privileges = { "privileges.read" };
+    public static readonly string[] PrivilegeList = { "privileges.read", "roles.read" };
+    public static readonly string[] DbAccess = { "db-access.read" };
 }

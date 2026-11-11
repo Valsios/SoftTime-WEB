@@ -68,8 +68,8 @@ export function permissionAllows(ctx: AccessContext, code?: string, fallbackDroi
   const gateFallback = () => (fallbackDroit ? gateAllows(ctx, fallbackDroit) : true);
   if (!code) return gateFallback();
   if (ctx.customized || ctx.permissions.length > 0) {
-    if (code === 'SAGE') return ctx.permissions.some((p) => p.startsWith('SAGE:'));
-    if (code === 'POINTEUSE') return ctx.permissions.some((p) => p.startsWith('POINTEUSE:'));
+    if (code === 'SAGE') return ctx.permissions.some((p) => p.startsWith('sage.'));
+    if (code === 'POINTEUSE') return ctx.permissions.some((p) => p.startsWith('pointeuse.'));
     return ctx.permissions.includes(code);
   }
   return gateFallback();
@@ -97,3 +97,26 @@ export function hasUsableDatabase(databases: readonly { nomBd?: string | null }[
 
 export const NO_DATABASE_MESSAGE =
   "Aucune base n'est disponible pour votre compte. Contactez un administrateur pour obtenir l'accès à une base.";
+
+/** Type de base des droits par base : « sage » (RH / paie) ou « pointeuse ». */
+export type DatabaseKind = 'sage' | 'pointeuse';
+
+/** Action sur une base : la lire (l'utiliser), la modifier, la supprimer. */
+export type DatabaseAction = 'read' | 'update' | 'delete';
+
+export const DATABASE_ACTIONS: readonly DatabaseAction[] = ['read', 'update', 'delete'];
+
+/** Code d'un droit par base : par identifiant (« sage.12.read ») ou pour toutes les bases, présentes et futures (« sage.all.read »). */
+export function databaseCode(kind: DatabaseKind, target: number | 'all', action: DatabaseAction): string {
+  return `${kind}.${target}.${action}`;
+}
+
+/** Vrai si les permissions accordent l'action sur la base, par son identifiant ou par le joker « all ». */
+export function grantsDatabase(
+  permissions: readonly string[],
+  kind: DatabaseKind,
+  id: number,
+  action: DatabaseAction,
+): boolean {
+  return permissions.includes(databaseCode(kind, id, action)) || permissions.includes(databaseCode(kind, 'all', action));
+}

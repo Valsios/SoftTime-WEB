@@ -211,14 +211,14 @@ export interface CorrectionTarget {
 const DROIT_PROCESSING = 3;
 
 export const CORRECTION_TARGETS: Record<string, CorrectionTarget> = {
-  PointageIncomplet: { path: '/anomalies', label: 'Anomalies', permission: 'PROC:ANOMALIES', droit: DROIT_PROCESSING },
-  PointageManquant: { path: '/corrected-hours', label: 'Heures corrigées', permission: 'PROC:CORRECTED_HOURS', droit: DROIT_PROCESSING },
-  PlanningSansPointage: { path: '/corrected-hours', label: 'Heures corrigées', permission: 'PROC:CORRECTED_HOURS', droit: DROIT_PROCESSING },
-  PointageSansPlanning: { path: '/employee-planning', label: 'Planning salariés', permission: 'PROC:EMPLOYEE_PLANNING', droit: DROIT_PROCESSING },
-  DoublonExact: { path: '/punches', label: 'Pointages', permission: 'PROC:PUNCHES', droit: DROIT_PROCESSING },
-  QuasiDoublon: { path: '/punches', label: 'Pointages', permission: 'PROC:PUNCHES', droit: DROIT_PROCESSING },
+  PointageIncomplet: { path: '/anomalies', label: 'Anomalies', permission: 'anomalies.manage', droit: DROIT_PROCESSING },
+  PointageManquant: { path: '/corrected-hours', label: 'Heures corrigées', permission: 'corrected-hours.read', droit: DROIT_PROCESSING },
+  PlanningSansPointage: { path: '/corrected-hours', label: 'Heures corrigées', permission: 'corrected-hours.read', droit: DROIT_PROCESSING },
+  PointageSansPlanning: { path: '/employee-planning', label: 'Planning salariés', permission: 'employee-planning.read', droit: DROIT_PROCESSING },
+  DoublonExact: { path: '/punches', label: 'Pointages', permission: 'punches.manage', droit: DROIT_PROCESSING },
+  QuasiDoublon: { path: '/punches', label: 'Pointages', permission: 'punches.manage', droit: DROIT_PROCESSING },
   // Le drapeau férié absent n'a pas d'effet sur la paie : seul un pointage ce jour-là se vérifie (voir correctionLink).
-  FerieNonApplique: { path: '/anomalies', label: 'Anomalies', permission: 'PROC:ANOMALIES', droit: DROIT_PROCESSING },
+  FerieNonApplique: { path: '/anomalies', label: 'Anomalies', permission: 'anomalies.manage', droit: DROIT_PROCESSING },
 };
 
 /**
@@ -320,12 +320,12 @@ export interface ChecklistLink extends CorrectionTarget {
 
 /** Écran existant de chaque étape ; la période n'est transmise qu'aux écrans qui la lisent (du, au). */
 const CHECKLIST_TARGETS: Record<string, CorrectionTarget> = {
-  Pointages: { path: '/punches', label: 'Pointages', permission: 'PROC:PUNCHES', droit: DROIT_PROCESSING },
-  Anomalies: { path: '/anomalies', label: 'Anomalies', permission: 'PROC:ANOMALIES', droit: DROIT_PROCESSING },
-  Semaines: { path: '/weekly-validation', label: 'Validation semaine', permission: 'PROC:WEEKLY_VALIDATION', droit: DROIT_PROCESSING },
-  ExoImpo: { path: '/overtime', label: 'Heures supp.', permission: 'PROC:OVERTIME', droit: DROIT_PROCESSING },
-  HeuresImposables: { path: '/overtime', label: 'Heures supp.', permission: 'PROC:OVERTIME', droit: DROIT_PROCESSING },
-  SynchroPaie: { path: '/overtime', label: 'Heures supp.', permission: 'PROC:OVERTIME', droit: DROIT_PROCESSING },
+  Pointages: { path: '/punches', label: 'Pointages', permission: 'punches.manage', droit: DROIT_PROCESSING },
+  Anomalies: { path: '/anomalies', label: 'Anomalies', permission: 'anomalies.manage', droit: DROIT_PROCESSING },
+  Semaines: { path: '/weekly-validation', label: 'Validation semaine', permission: 'weekly-validation.manage', droit: DROIT_PROCESSING },
+  ExoImpo: { path: '/overtime', label: 'Heures supp.', permission: 'overtime.manage', droit: DROIT_PROCESSING },
+  HeuresImposables: { path: '/overtime', label: 'Heures supp.', permission: 'overtime.manage', droit: DROIT_PROCESSING },
+  SynchroPaie: { path: '/overtime', label: 'Heures supp.', permission: 'overtime.manage', droit: DROIT_PROCESSING },
 };
 
 export function checklistLink(line: Pick<ClosingChecklistLine, 'code'>, filter: { from: string; to: string }): ChecklistLink | null {

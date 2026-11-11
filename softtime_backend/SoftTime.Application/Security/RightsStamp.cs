@@ -17,7 +17,7 @@ public static class RightsStamp
             rights.IsAdministrator ? "A" : "U",
             Normalize(rights.Permissions),
             string.Join(',', rights.Gates.OrderBy(gate => gate)),
-            Normalize(rights.AuthorizedSageDatabases));
+            string.Join(',', rights.AuthorizedSageDatabases.OrderBy(id => id)));
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(content));
         return Convert.ToHexString(hash)[..StampLength];
     }

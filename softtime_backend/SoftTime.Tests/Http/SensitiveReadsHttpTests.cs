@@ -74,7 +74,7 @@ public class SensitiveReadsHttpTests : IClassFixture<ApiFactory>
     public async Task UserPermissions_OwnAccount_ReadableThroughLoginOnly()
     {
         // Act
-        // GET privileges/user/{id} est réservé à PARAMS:PRIVILEGES ; un compte lit les siens via /auth/me.
+        // GET privileges/user/{id} est réservé à privileges.read ; un compte lit les siens via /auth/me.
         var me = await _http.SendAsync(_f.Request("param2", HttpMethod.Get, "/api/v1/auth/me"));
 
         // Assert

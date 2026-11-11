@@ -46,7 +46,7 @@ public class UserAdministrationGuardTests
         await FluentActions.Awaiting(() => svc.SaveUserAsync(2, new UserDto(3, 3, "Cible", "cible", null, "ValidP@ss123!"))).Should().ThrowExactlyAsync<ForbiddenException>();
         await FluentActions.Awaiting(() => svc.DeleteUserAsync(2, 3)).Should().ThrowExactlyAsync<ForbiddenException>();
         await FluentActions.Awaiting(() => svc.SetDbAccessAsync(3, new[] { 1 })).Should().ThrowExactlyAsync<ForbiddenException>();
-        await FluentActions.Awaiting(() => svc.SaveUserDetailedPermissionsAsync(2, 3, new[] { "PROC:SHIFTS" })).Should().ThrowExactlyAsync<ForbiddenException>();
+        await FluentActions.Awaiting(() => svc.SaveUserDetailedPermissionsAsync(2, 3, new[] { "shifts.read" })).Should().ThrowExactlyAsync<ForbiddenException>();
         await FluentActions.Awaiting(() => svc.ResetUserDetailedPermissionsAsync(2, 3)).Should().ThrowExactlyAsync<ForbiddenException>();
         _uow.Snapshot().Should().Be(before);
     }
@@ -63,7 +63,7 @@ public class UserAdministrationGuardTests
 
         // Assert
         changed.RoleId.Should().Be(3);
-        await sut.SaveUserDetailedPermissionsAsync(1, 3, new[] { "PROC:SHIFTS" });
+        await sut.SaveUserDetailedPermissionsAsync(1, 3, new[] { "shifts.read" });
         await sut.ResetUserDetailedPermissionsAsync(1, 3);
         await sut.DeleteUserAsync(1, created.Id);
         _uow.Get<Responsable>().Items.Should().NotContain(u => u.IdResponsable == created.Id);
@@ -96,11 +96,11 @@ public class UserAdministrationGuardTests
         // Assert
         await FluentActions.Awaiting(() => svc.SaveUserAsync(4, new UserDto(0, 1, "Nouvel admin", "nouvel", null, "ValidP@ss123!"))).Should().ThrowExactlyAsync<ForbiddenException>();
         await FluentActions.Awaiting(() => svc.SaveUserAsync(4, new UserDto(3, 1, "Cible", "cible", null, null))).Should().ThrowExactlyAsync<ForbiddenException>();
-        await FluentActions.Awaiting(() => svc.SaveUserDetailedPermissionsAsync(4, 3, new[] { "PROC:SHIFTS" })).Should().ThrowExactlyAsync<ForbiddenException>();
+        await FluentActions.Awaiting(() => svc.SaveUserDetailedPermissionsAsync(4, 3, new[] { "shifts.read" })).Should().ThrowExactlyAsync<ForbiddenException>();
         await FluentActions.Awaiting(() => svc.ResetUserDetailedPermissionsAsync(4, 3)).Should().ThrowExactlyAsync<ForbiddenException>();
         await FluentActions.Awaiting(() => svc.SetDbAccessAsync(3, new[] { 1 })).Should().ThrowExactlyAsync<ForbiddenException>();
         // Même un rôle nommé comme l'administrateur ne peut pas modifier son propre compte de droits.
-        await FluentActions.Awaiting(() => svc.SaveUserDetailedPermissionsAsync(4, 4, new[] { "PARAMS:USERS" })).Should().ThrowExactlyAsync<ForbiddenException>();
+        await FluentActions.Awaiting(() => svc.SaveUserDetailedPermissionsAsync(4, 4, new[] { "users.read" })).Should().ThrowExactlyAsync<ForbiddenException>();
         _uow.Snapshot().Should().Be(before);
     }
 
@@ -125,7 +125,7 @@ public class UserAdministrationGuardTests
         await FluentActions.Awaiting(() => svc.DeleteUserAsync(4, 3)).Should().ThrowExactlyAsync<ForbiddenException>();
         await FluentActions.Awaiting(() => svc.DeleteUserAsync(4, 1)).Should().ThrowExactlyAsync<ForbiddenException>();
         await FluentActions.Awaiting(() => svc.SetDbAccessAsync(3, new[] { 1 })).Should().ThrowExactlyAsync<ForbiddenException>();
-        await FluentActions.Awaiting(() => svc.SaveUserDetailedPermissionsAsync(4, 3, new[] { "PROC:SHIFTS" })).Should().ThrowExactlyAsync<ForbiddenException>();
+        await FluentActions.Awaiting(() => svc.SaveUserDetailedPermissionsAsync(4, 3, new[] { "shifts.read" })).Should().ThrowExactlyAsync<ForbiddenException>();
         await FluentActions.Awaiting(() => svc.ResetUserDetailedPermissionsAsync(4, 3)).Should().ThrowExactlyAsync<ForbiddenException>();
         _uow.Snapshot().Should().Be(before);
     }

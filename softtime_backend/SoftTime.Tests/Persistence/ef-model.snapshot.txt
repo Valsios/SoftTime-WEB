@@ -106,6 +106,9 @@ ENTITY CorrespondanceActive table=.T_ACTIVECORRESP key=[Id]
   P PointeuseServeur col=POINTEUSE_SERVEUR type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
   P SageBdd col=SAGE_BDD type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
   P SageServeur col=SAGE_SERVEUR type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY DataMigration table=.T_MIGRATION_DONNEES key=[Code]
+  P Code col=CODE type=nvarchar(100) null=False max=100 fixed= unicode= prec=, gen=Never
+  P DateApplication col=DATE_APPLICATION type=datetime2 null=False max= fixed= unicode= prec=, gen=Never
 ENTITY DroitAcces table=.T_DROIT key=[IdDroit]
   P Droit col=DROIT type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
   P IdDroit col=IDDROIT type=decimal(18,2) null=False max= fixed= unicode= prec=, gen=OnAdd

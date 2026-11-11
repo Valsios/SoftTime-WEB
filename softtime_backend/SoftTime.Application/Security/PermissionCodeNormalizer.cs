@@ -2,8 +2,8 @@ namespace SoftTime.Application.Security;
 
 /// <summary>
 /// Une seule règle pour enregistrer des permissions, d'un rôle comme d'un compte : codes nettoyés et dédoublonnés
-/// (majuscules sauf le nom de base des codes SAGE:/POINTEUSE:), marqueurs internes retirés, codes trop longs, inconnus
-/// ou mal formés refusés (400).
+/// (en minuscules), marqueurs internes retirés ; codes trop longs, inconnus, mal formés, ou action d'écran sans la page
+/// de son écran, refusés (400).
 /// </summary>
 public static class PermissionCodeNormalizer
 {
@@ -17,7 +17,7 @@ public static class PermissionCodeNormalizer
         var normalized = permissions
             .Where(code => !string.IsNullOrWhiteSpace(code))
             .Select(code => Clean(code!))
-            .Where(code => code != PermissionCatalog.EmptyRoleMarker && code != PermissionCatalog.EmptyUserMarker)
+            .Where(code => !IsMarker(code))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -28,12 +28,18 @@ public static class PermissionCodeNormalizer
         var unknown = normalized.Where(code => !PermissionCatalog.IsKnown(code)).ToList();
         if (unknown.Count > 0)
             throw new DomainException($"Codes de permission inconnus : {string.Join(", ", unknown)}.");
+
+        var orphans = normalized.Where(code => PermissionCatalog.PageOf(code) is string page && !normalized.Contains(page, StringComparer.OrdinalIgnoreCase))
+            .Select(code => $"{code} (exige {PermissionCatalog.PageOf(code)})")
+            .ToList();
+        if (orphans.Count > 0)
+            throw new DomainException($"Une action exige la page de son écran : {string.Join(", ", orphans)}.");
         return normalized;
     }
 
-    private static string Clean(string code)
-    {
-        var trimmed = code.Trim();
-        return PermissionCatalog.IsDatabaseCode(trimmed) ? trimmed : trimmed.ToUpperInvariant();
-    }
+    private static string Clean(string code) => code.Trim().ToLowerInvariant();
+
+    private static bool IsMarker(string code)
+        => string.Equals(code, PermissionCatalog.EmptyRoleMarker, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(code, PermissionCatalog.EmptyUserMarker, StringComparison.OrdinalIgnoreCase);
 }

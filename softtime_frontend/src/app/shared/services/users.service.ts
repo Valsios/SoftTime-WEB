@@ -79,9 +79,6 @@ export class PrivilegesService extends ApiService {
       params: this.params({ roleId }),
     });
   }
-  replace(roleId: number, droitIds: number[]): Observable<void> {
-    return this.http.put<void>(this.url(`/api/v1/privileges/${roleId}`), droitIds);
-  }
   byUser(userId: number): Observable<{ userId: number; grantedPermissions: string[]; isCustomized: boolean }> {
     return this.http.get<{ userId: number; grantedPermissions: string[]; isCustomized: boolean }>(
       this.url(`/api/v1/privileges/user/${userId}`),

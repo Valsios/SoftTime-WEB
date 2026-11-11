@@ -50,7 +50,7 @@ internal sealed class AuthServices : IUserPermissionService
         Administration = new UserAdministrationService(
             uow, email, effectiveRights, Guard, journal, passwordHasher, refreshTokens, securityOptions);
         Roles = new RoleService(uow, effectiveRights, Guard, journal);
-        Privileges = new PrivilegeService(uow, effectiveRights, Guard, journal);
+        Privileges = new PrivilegeService(uow, Guard);
         DatabaseAccess = new DatabaseAccessService(uow, effectiveRights, Guard, journal);
         RightsAudit = new RightsAuditService(uow);
     }
@@ -132,9 +132,6 @@ internal sealed class AuthServices : IUserPermissionService
 
     public Task<IReadOnlyList<PrivilegeDto>> GetPrivilegesAsync(decimal? roleId, CancellationToken cancellationToken = default)
         => Privileges.GetPrivilegesAsync(roleId, cancellationToken);
-
-    public Task SetPrivilegesAsync(decimal roleId, IReadOnlyCollection<decimal> droitIds, CancellationToken cancellationToken = default)
-        => Privileges.SetPrivilegesAsync(roleId, droitIds, cancellationToken);
 
     public Task EnsureCanReadAsync(string[] anyOf, CancellationToken cancellationToken = default)
         => Guard.EnsureCanReadAsync(anyOf, cancellationToken);

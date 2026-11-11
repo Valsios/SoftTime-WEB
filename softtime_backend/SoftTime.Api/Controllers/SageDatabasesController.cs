@@ -52,7 +52,9 @@ public class SageDatabasesController : ApiControllerBase
             var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
             if (p.IsCustomized)
             {
-                list = list.Where(s => !string.IsNullOrEmpty(s.NomBd) && p.GrantedPermissions.Contains($"SAGE:{s.NomBd}:READ")).ToList();
+                var readable = ReadableDatabases.ReadableIds(p.GrantedPermissions, DatabaseKind.Sage);
+                if (readable is not null)
+                    list = list.Where(s => readable.Contains(s.Id)).ToList();
             }
         }
         return Ok(list);
@@ -64,12 +66,12 @@ public class SageDatabasesController : ApiControllerBase
     {
         if (!DatabaseListAccess.PeutLire(_user))
             return Ok(DatabaseListAccess.PageVide<SageDbDto>(page, pageSize));
-        IReadOnlyCollection<string>? allowed = null;
+        IReadOnlyCollection<int>? allowed = null;
         if (_user.UserId is decimal uid)
         {
             var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
             if (p.IsCustomized)
-                allowed = DatabasePermissionNames.Read(p.GrantedPermissions, "SAGE");
+                allowed = ReadableDatabases.ReadableIds(p.GrantedPermissions, DatabaseKind.Sage);
         }
         return Ok(await _svc.ListSagePagedAsync(allowed, page, pageSize, search, ct));
     }

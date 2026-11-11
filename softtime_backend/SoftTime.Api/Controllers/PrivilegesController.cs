@@ -47,14 +47,6 @@ public class PrivilegesController : ApiControllerBase
     public async Task<IActionResult> GetByRoleAsync([FromQuery] decimal? roleId, CancellationToken ct)
         => Ok(await _privileges.GetPrivilegesAsync(roleId, ct));
 
-    [RequireAdmin]
-    [HttpPut("{roleId}")]
-    public async Task<IActionResult> ReplaceAsync(decimal roleId, [FromBody] List<decimal> droits, CancellationToken ct)
-    {
-        await _privileges.SetPrivilegesAsync(roleId, droits, ct);
-        return NoContent();
-    }
-
     [HttpGet("user/{userId}")]
     public async Task<IActionResult> GetUserPermissionsAsync(decimal userId, CancellationToken ct)
     {

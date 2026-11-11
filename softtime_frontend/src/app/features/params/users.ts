@@ -165,9 +165,9 @@ export class UsersPage implements OnInit {
 
   private readonly modalHost = viewChild('userModal', { read: ElementRef });
 
-  readonly canCreate = computed(() => this.session.hasPermission('PARAMS:USERS:CREATE', Droit.Parameters));
-  readonly canUpdate = computed(() => this.session.hasPermission('PARAMS:USERS:UPDATE', Droit.Parameters));
-  readonly canDelete = computed(() => this.session.hasPermission('PARAMS:USERS:DELETE', Droit.Parameters));
+  readonly canCreate = computed(() => this.session.hasPermission('users.create', Droit.Parameters));
+  readonly canUpdate = computed(() => this.session.hasPermission('users.update', Droit.Parameters));
+  readonly canDelete = computed(() => this.session.hasPermission('users.delete', Droit.Parameters));
 
   readonly loading = signal(true);
   readonly saving = signal(false);

@@ -114,7 +114,7 @@ export class AnomaliesPage {
   private readonly confirm = inject(ConfirmService);
   private readonly session = inject(SessionStore);
 
-  readonly canDelete = computed(() => this.session.hasPermission('PROC:ANOMALIES:DELETE', Droit.Processing));
+  readonly canDelete = computed(() => this.session.hasPermission('anomalies.delete', Droit.Processing));
 
   readonly loading = signal(false);
   readonly busy = signal(false);

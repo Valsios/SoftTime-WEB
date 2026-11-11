@@ -2,6 +2,7 @@
 
 using SoftTime.Application.Abstractions.DataSources;
 using SoftTime.Application.DTOs;
+using SoftTime.Application.Security;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
@@ -56,7 +57,9 @@ public sealed class SourceMappingStore : ISourceMappingStore
             ? Enregistree(await _uow.Repository<BddSage>().GetByIdAsync(id.Value, ct) ?? throw new NotFoundException())
             : Enregistree(await _uow.Repository<BddPointeuse>().GetByIdAsync(id.Value, ct) ?? throw new NotFoundException());
 
-        await _configAuth.EnsureCanConfigureAsync(isSage ? DatabaseKind.Sage : DatabaseKind.Pointeuse, DatabaseConfigAction.Update, storedName, ct);
+        await _configAuth.EnsureCanConfigureAsync(
+            isSage ? DatabaseKind.Sage : DatabaseKind.Pointeuse, DatabaseConfigAction.Update,
+            new DatabaseRef(id.Value, storedName ?? string.Empty), ct);
         var sameTarget = stored.SqlAuth
                          && string.Equals((serveur ?? string.Empty).Trim(), (stored.Serveur ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase)
                          && string.Equals((login ?? string.Empty).Trim(), (stored.Login ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase);

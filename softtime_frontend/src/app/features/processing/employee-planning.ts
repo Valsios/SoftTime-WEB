@@ -168,9 +168,9 @@ export class EmployeePlanningPage implements OnInit {
   private readonly confirm = inject(ConfirmService);
   private readonly session = inject(SessionStore);
 
-  readonly canCreate = computed(() => this.session.hasPermission('PROC:EMPLOYEE_PLANNING:CREATE', Droit.Processing));
-  readonly canUpdate = computed(() => this.session.hasPermission('PROC:EMPLOYEE_PLANNING:UPDATE', Droit.Processing));
-  readonly canDelete = computed(() => this.session.hasPermission('PROC:EMPLOYEE_PLANNING:DELETE', Droit.Processing));
+  readonly canCreate = computed(() => this.session.hasPermission('employee-planning.create', Droit.Processing));
+  readonly canUpdate = computed(() => this.session.hasPermission('employee-planning.update', Droit.Processing));
+  readonly canDelete = computed(() => this.session.hasPermission('employee-planning.delete', Droit.Processing));
 
   readonly loading = signal(false);
   readonly loadingPeople = signal(true);

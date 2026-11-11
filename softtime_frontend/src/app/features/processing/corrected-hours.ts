@@ -90,9 +90,9 @@ export class CorrectedHoursPage {
   private readonly confirm = inject(ConfirmService);
   private readonly session = inject(SessionStore);
 
-  readonly canCreate = computed(() => this.session.hasPermission('PROC:CORRECTED_HOURS:CREATE', Droit.Processing));
-  readonly canUpdate = computed(() => this.session.hasPermission('PROC:CORRECTED_HOURS:UPDATE', Droit.Processing));
-  readonly canDelete = computed(() => this.session.hasPermission('PROC:CORRECTED_HOURS:DELETE', Droit.Processing));
+  readonly canCreate = computed(() => this.session.hasPermission('corrected-hours.create', Droit.Processing));
+  readonly canUpdate = computed(() => this.session.hasPermission('corrected-hours.update', Droit.Processing));
+  readonly canDelete = computed(() => this.session.hasPermission('corrected-hours.delete', Droit.Processing));
 
   readonly loading = signal(false);
   readonly saving = signal(false);

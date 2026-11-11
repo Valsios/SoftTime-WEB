@@ -10,7 +10,7 @@ namespace SoftTime.Api.Controllers;
 /// Consultation du journal central des modifications (<c>suivi_JOURNAL</c>), en lecture seule : aucune route
 /// d'écriture, de modification ni de suppression. Le journal est dans la base de l'application : l'en-tête
 /// X-Sage-Database n'est pas requis et le filtre sur la base SAGE reste facultatif. Accès contrôlé par
-/// <see cref="IJournalService"/> : administrateur, ou porte 5 ET permission TRACE:AUDIT effectives.
+/// <see cref="IJournalService"/> : administrateur, ou porte 5 ET permission audit.read effectives.
 /// </summary>
 [ApiController]
 [Authorize]

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { NAV_SECTIONS } from '../layout/nav';
 import { AccessContext, canAccess, visibleSections } from './access.logic';
 
-// Menu « Contrôle avant paie » et garde de la route /closing : même règle que le serveur (porte 6 ET REPORTS:CLOSING).
+// Menu « Contrôle avant paie » et garde de la route /closing : même règle que le serveur (porte 6 ET closing.read).
 const ctx = (over: Partial<AccessContext>): AccessContext => ({
   roleId: 10034,
   permissions: [],
@@ -18,33 +18,33 @@ const visible = (c: AccessContext) =>
     .some((i) => i.path === '/closing');
 
 // Données de route de /closing (app.routes.ts) : le garde droitGuard appelle canAccess(permission, droit).
-const ROUTE = { permission: 'REPORTS:CLOSING', droit: 6 };
+const ROUTE = { permission: 'closing.read', droit: 6 };
 const guardAllows = (c: AccessContext) => canAccess(c, ROUTE.permission, ROUTE.droit);
 
 describe('menu et garde « Contrôle avant paie »', () => {
-  it('l’élément de menu est dans la section États, porte 6 et REPORTS:CLOSING', () => {
+  it('l’élément de menu est dans la section États, porte 6 et closing.read', () => {
     const etats = NAV_SECTIONS.find((s) => s.title === 'États');
     expect(etats?.items.find((i) => i.path === '/closing')).toMatchObject({
       label: 'Contrôle avant paie',
       droit: 6,
-      permission: 'REPORTS:CLOSING',
+      permission: 'closing.read',
     });
   });
 
   it('porte 6 + permission : menu visible et garde ouverte', () => {
-    const c = ctx({ permissions: ['REPORTS:CLOSING'], gates: [6] });
+    const c = ctx({ permissions: ['closing.read'], gates: [6] });
     expect(visible(c)).toBe(true);
     expect(guardAllows(c)).toBe(true);
   });
 
   it('permission sans la porte 6 : menu masqué et garde fermée', () => {
-    const c = ctx({ permissions: ['REPORTS:CLOSING'], gates: [1, 3] });
+    const c = ctx({ permissions: ['closing.read'], gates: [1, 3] });
     expect(visible(c)).toBe(false);
     expect(guardAllows(c)).toBe(false);
   });
 
   it('porte 6 sans la permission (autres droits États) : menu masqué et garde fermée', () => {
-    const c = ctx({ permissions: ['REPORTS:REPORTS', 'REPORTS:PREDICTIONS'], gates: [6] });
+    const c = ctx({ permissions: ['reports.read', 'predictions.read'], gates: [6] });
     expect(visible(c)).toBe(false);
     expect(guardAllows(c)).toBe(false);
   });

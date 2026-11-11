@@ -59,8 +59,8 @@ export class TolerancesPage implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly session = inject(SessionStore);
 
-  readonly canCreate = computed(() => this.session.hasPermission('PARAMS:TOLERANCES:CREATE', Droit.Parameters));
-  readonly canUpdate = computed(() => this.session.hasPermission('PARAMS:TOLERANCES:UPDATE', Droit.Parameters));
+  readonly canCreate = computed(() => this.session.hasPermission('tolerances.create', Droit.Parameters));
+  readonly canUpdate = computed(() => this.session.hasPermission('tolerances.update', Droit.Parameters));
   private readonly confirm = inject(ConfirmService);
 
   readonly loading = signal(true);

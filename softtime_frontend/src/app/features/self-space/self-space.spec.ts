@@ -141,20 +141,20 @@ describe('Mon espace : garde de route', () => {
     });
   const garde = () => TestBed.runInInjectionContext(() => selfSpaceGuard({} as never, {} as never));
 
-  it('laisse passer SELF:READ', () => {
-    connecter(['SELF:READ']);
+  it('laisse passer self.read', () => {
+    connecter(['self.read']);
     expect(garde()).toBe(true);
   });
 
-  it('renvoie vers l’accueil sans SELF:READ (compte de gestion ou administrateur)', () => {
-    connecter(['PROC:SHIFTS']);
+  it('renvoie vers l’accueil sans self.read (compte de gestion ou administrateur)', () => {
+    connecter(['shifts.read']);
     const resultat = garde();
     expect(resultat).toBeInstanceOf(UrlTree);
     expect(TestBed.inject(Router).serializeUrl(resultat as UrlTree)).toBe('/');
   });
 
   it('refuse après la déconnexion', () => {
-    connecter(['SELF:READ']);
+    connecter(['self.read']);
     TestBed.inject(SessionStore).clear();
     expect(garde()).toBeInstanceOf(UrlTree);
   });

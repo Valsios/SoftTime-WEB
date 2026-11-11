@@ -3,6 +3,7 @@ using System.IdentityModel.Tokens.Jwt;
 using AutoMapper;
 
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging.Abstractions;
 
 using SoftTime.Api.Security;
 using SoftTime.Application.Abstractions.Notifications;
@@ -10,6 +11,7 @@ using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
+using SoftTime.Infrastructure.Services.Permissions;
 using SoftTime.Tests.Http;
 
 namespace SoftTime.Tests;
@@ -42,9 +44,9 @@ public class TokenGatesTests
         _uow.Get<BddSage>().Items.Add(new BddSage { Id = 3033, NomBd = "BASE1" });
 
         // Consultation : lignes détaillées « Rapports » seulement.
-        Role(29, new[] { "REPORTS:REPORTS" }, 6);
+        Role(29, new[] { "reports.read" }, 6);
         // Utilisateur ordinaire : portes 1 et 3 avec lignes détaillées.
-        Role(10034, new[] { "SAGE:BASE1:READ", "PROC:SHIFTS" }, 1, 3);
+        Role(10034, new[] { "sage.3033.read", "shifts.read" }, 1, 3);
     }
 
     private void Role(decimal id, string[] codes, params int[] gates)
@@ -63,6 +65,8 @@ public class TokenGatesTests
 
     private async Task<(int[] TokenGates, int[] ResponseGates, LoginResponse Login)> GatesOf(string login, decimal id)
     {
+        // Comptes écrits en listes complètes (modèle historique) : convertis en écarts comme au démarrage de l'API.
+        await new RightsStorageMigration(_uow, NullLogger<RightsStorageMigration>.Instance).RunAsync();
         var response = await _auth.LoginAsync(new LoginRequest(login, FakePassword));
         var claim = new JwtSecurityTokenHandler().ReadJwtToken(response.Token).Claims.First(c => c.Type == "rights").Value;
         var token = claim.Length == 0 ? Array.Empty<int>() : claim.Split(',').Select(int.Parse).OrderBy(x => x).ToArray();
@@ -130,7 +134,7 @@ public class TokenGatesTests
     {
         // Arrange
         // Stockage actuel : liste complète = droits du rôle + ajouts (convertie en écarts à la lecture).
-        Account(10034, 10034, "joel", "SAGE:BASE1:READ", "PROC:SHIFTS", "PARAMS:USERS", "PARAMS:PRIVILEGES");
+        Account(10034, 10034, "joel", "sage.3033.read", "shifts.read", "users.read", "privileges.read");
 
         // Act
         var (token, _, _) = await GatesOf("joel", 10034);
@@ -143,7 +147,7 @@ public class TokenGatesTests
     public async Task GatesOf_EveryWorkRightRemoved_LosesGate3()
     {
         // Act
-        Account(10034, 10034, "joel", "SAGE:BASE1:READ");
+        Account(10034, 10034, "joel", "sage.3033.read");
 
         // Assert
         (await GatesOf("joel", 10034)).TokenGates.Should().Equal(new[] { 1 });
@@ -175,24 +179,8 @@ public class TokenGatesTests
 
         // Assert
         (await GatesOf("joel", 10034)).TokenGates.Should().Equal(new[] { 1, 3 });
-        await _auth.SaveUserDetailedPermissionsAsync(14, 10034, new[] { "SAGE:BASE1:READ", "PROC:SHIFTS", "PARAMS:USERS" });
+        await _auth.SaveUserDetailedPermissionsAsync(14, 10034, new[] { "sage.3033.read", "shifts.read", "users.read" });
         (await GatesOf("joel", 10034)).TokenGates.Should().Equal(new[] { 1, 2, 3 });
-    }
-
-    // S2 : PUT privileges/{role} ne doit pas contredire les portes déduites des droits détaillés d'un rôle.
-    [Fact]
-    public async Task SetPrivilegesAsync_RoleWithDetailedRights_IsRefusedOtherwiseWorks()
-    {
-        // Act
-        Func<Task> act = () => _auth.SetPrivilegesAsync(10034, new List<decimal> { 6 });
-
-        // Assert
-        var ex = (await act.Should().ThrowExactlyAsync<DomainException>()).Which;
-        ex.Message.Should().Contain("droits détaillés");
-        _uow.Get<DroitRole>().Items.Where(d => d.IdRole == 10034).Select(d => d.IdDroit).OrderBy(x => x).Should().Equal(new[] { 1m, 3m });
-        _uow.Get<Role>().Items.Add(new Role { IdRole = 50, NomRole = "Sans lignes" });
-        await _auth.SetPrivilegesAsync(50, new List<decimal> { 6 });
-        _uow.Get<DroitRole>().Items.Where(d => d.IdRole == 50).Should().ContainSingle();
     }
 
     private const string PermissionCatalogMarker = "__SOFTTIME_EMPTY_CUSTOM_PERMISSIONS__";

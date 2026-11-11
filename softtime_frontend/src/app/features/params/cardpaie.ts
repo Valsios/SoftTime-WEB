@@ -74,9 +74,9 @@ export class CardPaiePage implements OnInit {
   private readonly confirm = inject(ConfirmService);
   private readonly session = inject(SessionStore);
 
-  readonly canCreate = computed(() => this.session.hasPermission('PARAMS:CARDPAIE:CREATE', Droit.Parameters));
-  readonly canUpdate = computed(() => this.session.hasPermission('PARAMS:CARDPAIE:UPDATE', Droit.Parameters));
-  readonly canDelete = computed(() => this.session.hasPermission('PARAMS:CARDPAIE:DELETE', Droit.Parameters));
+  readonly canCreate = computed(() => this.session.hasPermission('card-paie.create', Droit.Parameters));
+  readonly canUpdate = computed(() => this.session.hasPermission('card-paie.update', Droit.Parameters));
+  readonly canDelete = computed(() => this.session.hasPermission('card-paie.delete', Droit.Parameters));
 
   readonly loading = signal(true);
   readonly saving = signal(false);

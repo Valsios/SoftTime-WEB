@@ -21,7 +21,7 @@ export function countUsersOfRole(users: { roleId: number }[], roleId: number): n
 
 /** Message d'impact affiché avant l'enregistrement des droits d'un rôle (V4). */
 export function buildRoleImpactMessage(n: number): string {
-  return `Ce rôle est attribué à ${n} utilisateur(s). Les utilisateurs dont les droits sont personnalisés ne sont pas concernés. Les autres verront le changement dès leur prochaine action.`;
+  return `Ce rôle est attribué à ${n} utilisateur(s). Tous le verront dès leur prochaine action, y compris les comptes personnalisés : leurs ajouts et retraits personnels sont conservés.`;
 }
 
 /** Extrait le message d'erreur renvoyé par le serveur, avec un libellé de repli. */

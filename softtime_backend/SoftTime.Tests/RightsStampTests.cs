@@ -9,16 +9,16 @@ public class RightsStampTests
 {
     private static EffectiveRights Compute(params string[] roleCodes)
         => EffectiveRightsCalculator.ComputeEffectiveRights(
-            new RoleDefinition(50, true, roleCodes.Select(code => new PermissionRow(code)).ToList(), Array.Empty<int>()),
+            new RoleDefinition(50, true, roleCodes.Select(code => new PermissionRow(code)).ToList()),
             Array.Empty<PermissionRow>(),
-            new DatabaseCatalog(new[] { "PAIE" }, new[] { "PTG" }, new[] { "PAIE" }));
+            new DatabaseCatalog(new[] { new DatabaseRef(1, "PAIE") }, new[] { new DatabaseRef(1, "PTG") }, new[] { 1 }));
 
     [Fact]
     public void Stamp_SameRights_IsIdenticalWhateverTheOrder()
     {
         // Arrange
-        var first = Compute("PROC:SHIFTS", "PARAMS:CATEGORIES");
-        var second = Compute("PARAMS:CATEGORIES", "PROC:SHIFTS");
+        var first = Compute("shifts.read", "categories.read");
+        var second = Compute("categories.read", "shifts.read");
 
         // Act
         var same = first.Stamp == second.Stamp;
@@ -32,8 +32,8 @@ public class RightsStampTests
     public void Stamp_PermissionRemoved_Changes()
     {
         // Arrange
-        var before = Compute("PROC:SHIFTS", "PROC:SHIFTS:DELETE");
-        var after = Compute("PROC:SHIFTS");
+        var before = Compute("shifts.read", "shifts.delete");
+        var after = Compute("shifts.read");
 
         // Act
         var current = RightsStamp.IsCurrent(before.Stamp, after);
@@ -49,7 +49,7 @@ public class RightsStampTests
     public void IsCurrent_MissingStamp_IsNeverCurrent(string? tokenStamp)
     {
         // Arrange
-        var rights = Compute("PROC:SHIFTS");
+        var rights = Compute("shifts.read");
 
         // Act
         var current = RightsStamp.IsCurrent(tokenStamp, rights);
@@ -62,13 +62,13 @@ public class RightsStampTests
     public void TokenPermissions_DatabaseCodes_AreLeftOut()
     {
         // Arrange
-        var rights = Compute("PROC:SHIFTS", "SAGE:PAIE:READ", "POINTEUSE:PTG:READ");
+        var rights = Compute("shifts.read", "sage.1.read", "pointeuse.1.read");
 
         // Act
         var tokenPermissions = rights.TokenPermissions;
 
         // Assert
-        tokenPermissions.Should().BeEquivalentTo("PROC:SHIFTS");
+        tokenPermissions.Should().BeEquivalentTo("shifts.read");
     }
 
     [Fact]

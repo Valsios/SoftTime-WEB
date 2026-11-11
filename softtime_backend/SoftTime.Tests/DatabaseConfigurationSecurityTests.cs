@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Identity;
 
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
+using SoftTime.Application.Security;
 using SoftTime.Application.Services;
 using SoftTime.Domain;
 using SoftTime.Domain.Entities.SoftTime;
@@ -14,6 +15,8 @@ namespace SoftTime.Tests;
 public class DatabaseConfigurationSecurityTests
 {
     private const string Base = "BASE1";
+    private static readonly DatabaseRef BaseRef = new(7, Base);
+    private static readonly DatabaseRef PtgRef = new(8, "PTG");
 
     private readonly InMemoryUnitOfWork _uow = new();
     private readonly IMapper _mapper = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>()).CreateMapper();
@@ -69,9 +72,9 @@ public class DatabaseConfigurationSecurityTests
     public async Task EnsureCanConfigureAsync_Administrator_CanCreateUpdateDelete()
     {
         var a = AuthorizerFor(1, 1);
-        await a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, "X");
-        await a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Update, Base);
-        await a.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Delete, "PTG");
+        await a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, null);
+        await a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Update, BaseRef);
+        await a.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Delete, PtgRef);
         await a.EnsureCanConfigureAnyAsync(null);
     }
 
@@ -79,21 +82,21 @@ public class DatabaseConfigurationSecurityTests
     public async Task EnsureCanConfigureAsync_RoleWithoutRight_IsRefused()
     {
         var a = AuthorizerFor(20, 5, Rights.Reports);
-        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, "X"));
-        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Update, Base));
-        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Delete, "PTG"));
+        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, null));
+        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Update, BaseRef));
+        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Delete, PtgRef));
         await Refused(() => a.EnsureCanConfigureAnyAsync(null));
     }
 
     [Fact]
     public async Task EnsureCanConfigureAsync_RoleWithPermission_IsAllowedOnlyForGrantedAction()
     {
-        GrantRole(5, $"SAGE:{Base}:UPDATE", $"SAGE:{Base}:READ");
+        GrantRole(5, "sage.7.update", "sage.7.read");
         var a = AuthorizerFor(21, 5, Rights.Databases);
-        await a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Update, Base);
-        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Delete, Base));
-        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, "X"));
-        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Update, "PTG"));
+        await a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Update, BaseRef);
+        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Delete, BaseRef));
+        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, null));
+        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Update, PtgRef));
         await a.EnsureCanConfigureAnyAsync(DatabaseKind.Sage);
         await Refused(() => a.EnsureCanConfigureAnyAsync(DatabaseKind.Pointeuse));
     }
@@ -101,30 +104,30 @@ public class DatabaseConfigurationSecurityTests
     [Fact]
     public async Task EnsureCanConfigureAsync_CustomizedAccountWithPermissionAndRight_IsAllowed()
     {
-        GrantUser(22, "SAGE:CREATE", $"SAGE:{Base}:DELETE");
+        GrantUser(22, "sage.create", "sage.7.delete");
         var a = AuthorizerFor(22, 5, Rights.Databases);
-        await a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, "X");
-        await a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Delete, Base);
-        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Update, Base));
+        await a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, null);
+        await a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Delete, BaseRef);
+        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Update, BaseRef));
     }
 
     [Fact]
     public async Task EnsureCanConfigureAsync_CustomizedAccountWithoutRight_IsRefused()
     {
-        GrantUser(23, "SAGE:CREATE", $"SAGE:{Base}:UPDATE", $"SAGE:{Base}:DELETE");
+        GrantUser(23, "sage.create", "sage.7.update", "sage.7.delete");
         var a = AuthorizerFor(23, 5, Rights.Processing);
-        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, "X"));
-        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Update, Base));
+        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, null));
+        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Update, BaseRef));
     }
 
     [Fact]
     public async Task EnsureCanConfigureAsync_CustomizedAccountWithReadOnly_IsRefused()
     {
-        GrantUser(24, $"SAGE:{Base}:READ", "POINTEUSE:PTG:READ");
+        GrantUser(24, "sage.7.read", "pointeuse.8.read");
         var a = AuthorizerFor(24, 5, Rights.Databases);
-        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, "X"));
-        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Update, Base));
-        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Delete, "PTG"));
+        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, null));
+        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Update, BaseRef));
+        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Delete, PtgRef));
         await Refused(() => a.EnsureCanConfigureAnyAsync(null));
     }
 
@@ -132,24 +135,38 @@ public class DatabaseConfigurationSecurityTests
     public async Task EnsureCanConfigureAsync_NonCustomizedAccountWithoutRight_IsRefused()
     {
         var a = AuthorizerFor(25, 5, Rights.Reports);
-        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Delete, Base));
+        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Delete, BaseRef));
     }
 
     [Fact]
-    public async Task EnsureCanConfigureAsync_EmptyDatabaseName_IsRefusedForUpdateAndDelete()
+    public async Task EnsureCanConfigureAsync_AllDatabasesJoker_CoversEveryBaseIncludingFutureOnes()
     {
-        GrantUser(26, "SAGE:CREATE", $"SAGE:{Base}:UPDATE", $"SAGE:{Base}:DELETE");
+        // Arrange : modification de toutes les bases SAGE, sans suppression ni base pointeuse.
+        GrantUser(27, "sage.all.read", "sage.all.update");
+        var a = AuthorizerFor(27, 5, Rights.Databases);
+
+        // Act & Assert
+        await a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Update, BaseRef);
+        await a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Update, new DatabaseRef(99, "FUTURE"));
+        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Delete, BaseRef));
+        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Update, PtgRef));
+    }
+
+    [Fact]
+    public async Task EnsureCanConfigureAsync_MissingOrInvalidDatabase_IsRefusedForUpdateAndDelete()
+    {
+        GrantUser(26, "sage.create", "sage.7.update", "sage.7.delete");
         var a = AuthorizerFor(26, 5, Rights.Databases);
-        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Delete, ""));
+        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Delete, new DatabaseRef(0, string.Empty)));
         await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Update, null));
-        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Delete, "  "));
+        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Delete, new DatabaseRef(0, string.Empty)));
     }
 
     [Fact]
     public async Task EnsureCanConfigureAsync_UnknownUser_IsRefused()
     {
         var a = new DatabaseConfigurationAuthorizer(new TestCurrentUser(999, 5, Rights.Databases), _auth);
-        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, "X"));
+        await Refused(() => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, null));
     }
 
     #endregion
@@ -164,7 +181,7 @@ public class DatabaseConfigurationSecurityTests
     {
         // Arrange
         var svc = CatalogFor(AuthorizerFor(30, 5, Rights.Databases));
-        GrantUser(30, $"SAGE:{Base}:READ");
+        GrantUser(30, "sage.7.read");
 
         // Act
         await Refused(() => svc.Sage.DeleteSageAsync(7));
@@ -178,7 +195,7 @@ public class DatabaseConfigurationSecurityTests
     {
         // Arrange
         _uow.Get<BddSage>().Items.Add(new BddSage { Id = 9, NomBd = "", Serveur = "srv" });
-        GrantUser(31, "SAGE:CREATE", "SAGE::DELETE");
+        GrantUser(31, "sage.create", "sage..delete");
         var svc = CatalogFor(AuthorizerFor(31, 5, Rights.Databases));
 
         // Act
@@ -222,23 +239,18 @@ public class DatabaseConfigurationSecurityTests
     #region Rôle Administrateur intact
 
     [Fact]
-    public async Task SaveRoleAsync_AdministratorRole_CannotBeRenamedDeletedOrHavePrivilegesReplaced()
+    public async Task SaveRoleAsync_AdministratorRole_CannotBeRenamedOrDeleted()
     {
         // Act & Assert
         await FluentActions.Awaiting(() => _auth.SaveRoleAsync(new RoleDto(1, "Autre"))).Should().ThrowExactlyAsync<DomainException>();
         await FluentActions.Awaiting(() => _auth.DeleteRoleAsync(1)).Should().ThrowExactlyAsync<DomainException>();
-        await FluentActions.Awaiting(() => _auth.SetPrivilegesAsync(1, new List<decimal> { Rights.Reports })).Should().ThrowExactlyAsync<DomainException>();
         _uow.Get<Role>().Items.First(r => r.IdRole == 1).NomRole.Should().Be("Administrateur");
     }
 
     [Fact]
-    public async Task SetPrivilegesAsync_OtherRole_RemainsEditable()
+    public async Task SaveRoleAsync_OtherRole_CanBeRenamedAndDeleted()
     {
         // Act
-        await _auth.SetPrivilegesAsync(5, new List<decimal> { Rights.Reports });
-
-        // Assert
-        _uow.Get<DroitRole>().Items.Where(d => d.IdRole == 5).Should().ContainSingle();
         await _auth.SaveRoleAsync(new RoleDto(5, "Gestionnaire paie"));
         _uow.Get<Role>().Items.First(r => r.IdRole == 5).NomRole.Should().Be("Gestionnaire paie");
         await _auth.DeleteRoleAsync(5);

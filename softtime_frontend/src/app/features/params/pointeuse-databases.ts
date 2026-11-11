@@ -3,6 +3,7 @@ import { finalize } from 'rxjs';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
+import { grantsDatabase } from '../../core/access.logic';
 import { Droit } from '../../core/rights';
 import { PointeuseDb, PageChangeEvent } from '../../shared/models';
 import { PointeuseDatabasesService } from '../../shared/services/catalog.service';
@@ -90,7 +91,7 @@ export class PointeuseDatabasesPage implements OnInit {
     if (!perms || perms.length === 0) {
       return this.session.hasRight(Droit.Databases);
     }
-    return perms.some((p) => p.startsWith('POINTEUSE:') && p.endsWith(':CREATE')) || perms.includes('POINTEUSE:CREATE');
+    return perms.includes('pointeuse.create');
   }
 
   canUpdate(row: Record<string, unknown>): boolean {
@@ -98,8 +99,7 @@ export class PointeuseDatabasesPage implements OnInit {
     if (!perms || perms.length === 0) {
       return this.session.hasRight(Droit.Databases);
     }
-    const nom = (row['nomBd'] as string) || '';
-    return perms.includes(`POINTEUSE:${nom}:UPDATE`);
+    return grantsDatabase(perms, 'pointeuse', Number(row['id']), 'update');
   }
 
   canDelete(row: Record<string, unknown>): boolean {
@@ -107,8 +107,7 @@ export class PointeuseDatabasesPage implements OnInit {
     if (!perms || perms.length === 0) {
       return this.session.hasRight(Droit.Databases);
     }
-    const nom = (row['nomBd'] as string) || '';
-    return perms.includes(`POINTEUSE:${nom}:DELETE`);
+    return grantsDatabase(perms, 'pointeuse', Number(row['id']), 'delete');
   }
 
   loadPage(): void {

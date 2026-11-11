@@ -16,6 +16,7 @@ using SoftTime.Api.Middleware;
 using SoftTime.Api.Security;
 using SoftTime.Application;
 using SoftTime.Application.Abstractions.Authentication;
+using SoftTime.Application.Abstractions.Permissions;
 using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.Security;
 using SoftTime.Application.Serialization;
@@ -193,6 +194,9 @@ using (var scope = app.Services.CreateScope())
     // Jetons de rafraîchissement et verrouillage des comptes : migration 004, sinon arrêt avec un message clair.
     await SchemaPresenceGuard.EnsureAccountSecurityAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
     await RolePermissionConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
+    // Droits stockés en écarts au rôle (migration 006 pour le registre) : conversion unique, sous verrou, puis plus rien.
+    await SchemaPresenceGuard.EnsureDataMigrationsAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
+    await scope.ServiceProvider.GetRequiredService<IRightsStorageMigration>().RunAsync(CancellationToken.None);
 
     // Migration globale contrôlée des mots de passe en clair :
     // Par défaut, la migration est assurée de manière fluide et isolée à la connexion de chaque utilisateur (AuthService.LoginAsync),

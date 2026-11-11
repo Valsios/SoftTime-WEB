@@ -8,7 +8,7 @@ namespace SoftTime.Tests.Http;
 
 /// <summary>
 /// Journal central (<c>GET api/journal</c>, détail, facets) : lecture réservée à l'administrateur ou à la porte 5 avec
-/// la permission TRACE:AUDIT effective, masquage à la lecture, aucune route d'écriture ; configuration des
+/// la permission audit.read effective, masquage à la lecture, aucune route d'écriture ; configuration des
 /// déclencheurs d'audit réservée aux administrateurs.
 /// </summary>
 public class JournalHttpTests : IClassFixture<ApiFactory>
@@ -33,7 +33,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
     /// <summary>Comptes propres à ces tests (rôle 91 sans droits : chaque ligne utilisateur est un ajout).</summary>
     private static string? Token(string profile) => profile switch
     {
-        "tracereader" => ApiFactory.Token(10100, 91, 5),   // porte 5 + TRACE:AUDIT effective
+        "tracereader" => ApiFactory.Token(10100, 91, 5),   // porte 5 + audit.read effective
         "gate5only" => ApiFactory.Token(10101, 91, 5),     // porte 5 dans le jeton, sans la permission effective
         _ => ApiFactory.TokenFor(profile)
     };
@@ -46,8 +46,8 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
         users.Add(new Responsable { IdResponsable = 10100, IdRole = 91, Login = "tracereader", NomResponsable = "tracereader" });
         users.Add(new Responsable { IdResponsable = 10101, IdRole = 91, Login = "gate5only", NomResponsable = "gate5only" });
         var perms = f.Store.Get<UserPermission>().Items;
-        perms.Add(new UserPermission { IdResponsable = 10100, PermissionCode = "TRACE:AUDIT", IsGranted = true });
-        perms.Add(new UserPermission { IdResponsable = 10101, PermissionCode = "PROC:SHIFTS", IsGranted = true });
+        perms.Add(new UserPermission { IdResponsable = 10100, PermissionCode = "audit.read", IsGranted = true });
+        perms.Add(new UserPermission { IdResponsable = 10101, PermissionCode = "shifts.read", IsGranted = true });
 
         var journal = f.Store.Get<JournalAudit>().Items;
         journal.Add(Row(1, Base, "T_FERIE", "Insertion", "agent1", "INTITULE", null, "Noel"));
@@ -259,7 +259,7 @@ public class JournalHttpTests : IClassFixture<ApiFactory>
         else
         {
             status.Should().Be(HttpStatusCode.Forbidden);
-            // Avec la porte 5 et TRACE:AUDIT, c'est la règle administrateur qui refuse (sinon la permission ou la porte refuse avant).
+            // Avec la porte 5 et audit.read, c'est la règle administrateur qui refuse (sinon la permission ou la porte refuse avant).
             if (profile is "tracereader") text.Should().Contain(AdminOnly);
         }
         _f.Snapshot().Should().Be(before);

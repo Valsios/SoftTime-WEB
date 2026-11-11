@@ -34,7 +34,7 @@ describe('privileges.logic', () => {
   it('construit le message d’impact avec le nombre et les mentions attendues', () => {
     const message = buildRoleImpactMessage(3);
     expect(message).toContain('3 utilisateur(s)');
-    expect(message).toContain('droits sont personnalisés');
+    expect(message).toContain('comptes personnalisés');
     expect(message).toContain('dès leur prochaine action');
   });
 

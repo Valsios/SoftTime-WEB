@@ -9,6 +9,5 @@ public static class RightsChangeActions
     public const string CreateRole = "CREATE_ROLE";
     public const string RenameRole = "RENAME_ROLE";
     public const string DeleteRole = "DELETE_ROLE";
-    public const string UpdateRoleGates = "UPDATE_ROLE_GATES";
     public const string UpdateDatabaseAccess = "UPDATE_DB_ACCESS";
 }

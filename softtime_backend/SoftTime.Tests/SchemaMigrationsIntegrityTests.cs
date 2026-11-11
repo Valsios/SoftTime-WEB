@@ -41,7 +41,7 @@ public class SchemaMigrationsIntegrityTests
         var scripts = new EmbeddedMigrationScriptSource().Load();
 
         // Assert
-        scripts.Select(s => s.Version).ToArray().Should().Equal(new[] { 1, 2, 3, 4, 5 });
+        scripts.Select(s => s.Version).ToArray().Should().StartWith(new[] { 1, 2, 3, 4, 5, 6 });
         var journal = scripts.Should().ContainSingle(s => s.Version == 3).Which;
         journal.Name.Should().Be("003_journal_central.sql");
         foreach (var forbidden in new[] { "DROP ", "DELETE", "TRUNCATE", "ALTER COLUMN", "ALTER TABLE", "USE [", "CREATE DATABASE", "UPDATE ", "INSERT " })
@@ -104,6 +104,39 @@ public class SchemaMigrationsIntegrityTests
         // Des doublons existants n'arrêtent pas le démarrage : l'index est seulement ignoré, avec un message.
         unicity.Content.Should().Contain("IF @doublons IS NULL");
         unicity.Content.Should().Contain("index unique NON créé");
+    }
+
+    [Fact]
+    public void Script006_DataMigrationRegister_OnlyByAdditions()
+    {
+        // Act
+        var script = new EmbeddedMigrationScriptSource().Load().Should().ContainSingle(s => s.Version == 6).Which;
+
+        // Assert
+        script.Name.Should().Be("006_migrations_donnees.sql");
+        foreach (var forbidden in new[] { "DROP ", "DELETE", "TRUNCATE", "ALTER ", "USE [", "UPDATE ", "INSERT " })
+            script.Content.Should().NotContainEquivalentOf(forbidden);
+        script.Content.Should().Contain("OBJECT_ID(N'dbo.T_MIGRATION_DONNEES', N'U') IS NULL");
+    }
+
+    [Fact]
+    public void Script007_PermissionCodes_RenamesEveryCatalogCodeWithoutDeleting()
+    {
+        // Act
+        var script = new EmbeddedMigrationScriptSource().Load().Should().ContainSingle(s => s.Version == 7).Which;
+
+        // Assert
+        script.Name.Should().Be("007_codes_permissions.sql");
+        foreach (var forbidden in new[] { "DROP ", "DELETE FROM", "DELETE dbo", "TRUNCATE", "ALTER ", "USE [", "T_AUDIT_DROIT SET" })
+            script.Content.Should().NotContainEquivalentOf(forbidden);
+        // Chaque code du catalogue est la cible d'un renommage (les codes de base sont traités à part).
+        foreach (var code in PermissionCatalog.KnownStatic)
+            script.Content.Should().Contain($", N'{code}')");
+        // Rejouable : seuls les codes à l'ancien format sont touchés.
+        script.Content.Should().Contain("LIKE N'SAGE:%'");
+        // Codes de base par identifiant : correspondance nom -> identifiant sur les bases déclarées.
+        script.Content.Should().Contain("dbo.T_BDD_SAGE");
+        script.Content.Should().Contain("dbo.T_BDD_POINTEUSE");
     }
 
     // ---------- Journal de démarrage ----------

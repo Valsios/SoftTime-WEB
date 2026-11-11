@@ -1,4 +1,5 @@
-﻿using SoftTime.Application.Services;
+using SoftTime.Application.Security;
+using SoftTime.Application.Services;
 
 namespace SoftTime.Application.Abstractions.DataSources;
 
@@ -8,7 +9,8 @@ namespace SoftTime.Application.Abstractions.DataSources;
 /// </summary>
 public interface IDatabaseConfigurationAuthorizer
 {
-    Task EnsureCanConfigureAsync(DatabaseKind kind, DatabaseConfigAction action, string? dbName, CancellationToken ct = default);
+    /// <summary>Ajouter (cible null), modifier ou supprimer une base : la cible est désignée par son identifiant.</summary>
+    Task EnsureCanConfigureAsync(DatabaseKind kind, DatabaseConfigAction action, DatabaseRef? target, CancellationToken ct = default);
 
     /// <summary>Test de connexion et découverte : il faut pouvoir ajouter ou modifier au moins une base.</summary>
     Task EnsureCanConfigureAnyAsync(DatabaseKind? kind, CancellationToken ct = default);
