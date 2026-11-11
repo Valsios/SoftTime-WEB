@@ -46,31 +46,31 @@ public class RolePermissionsTests
     #region C1, C3 — Contrôles d'accès et validation
 
     [Fact]
-    public async Task SaveRoleDetailedPermissionsAsync_NonAdmin_ThrowsDomainException()
+    public async Task SaveRoleDetailedPermissionsAsync_NonAdmin_ThrowsForbiddenException()
     {
         // Act
         Func<Task> act = () =>
             _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 2, targetRoleId: 3, new[] { "PARAMS:USERS" });
 
         // Assert
-        var ex = (await act.Should().ThrowExactlyAsync<DomainException>()).Which;
+        var ex = (await act.Should().ThrowExactlyAsync<ForbiddenException>()).Which;
         ex.Message.Should().Be("Seul un administrateur peut modifier les permissions d'un rôle.");
     }
 
     [Fact]
-    public async Task SaveRoleDetailedPermissionsAsync_UnknownCaller_ThrowsDomainException()
+    public async Task SaveRoleDetailedPermissionsAsync_UnknownCaller_ThrowsUnauthorizedException()
     {
         // Act
         Func<Task> act = () =>
             _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 999, targetRoleId: 3, new[] { "PARAMS:USERS" });
 
         // Assert
-        var ex = (await act.Should().ThrowExactlyAsync<DomainException>()).Which;
-        ex.Message.Should().Be("Utilisateur appelant introuvable.");
+        var ex = (await act.Should().ThrowExactlyAsync<UnauthorizedException>()).Which;
+        ex.Message.Should().Be("Utilisateur connecté introuvable.");
     }
 
     [Fact]
-    public async Task SaveRoleDetailedPermissionsAsync_CallerWithMissingRole_ThrowsDomainException()
+    public async Task SaveRoleDetailedPermissionsAsync_CallerWithMissingRole_ThrowsForbiddenException()
     {
         // Arrange
         _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 10, IdRole = 999, Login = "orphan", NomResponsable = "Orphan" });
@@ -80,8 +80,8 @@ public class RolePermissionsTests
             _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 10, targetRoleId: 3, new[] { "PARAMS:USERS" });
 
         // Assert
-        var ex = (await act.Should().ThrowExactlyAsync<DomainException>()).Which;
-        ex.Message.Should().Be("Utilisateur appelant introuvable.");
+        var ex = (await act.Should().ThrowExactlyAsync<ForbiddenException>()).Which;
+        ex.Message.Should().Be("Seul un administrateur peut modifier les permissions d'un rôle.");
     }
 
     [Fact]
@@ -134,7 +134,7 @@ public class RolePermissionsTests
     }
 
     [Fact]
-    public async Task SaveRoleDetailedPermissionsAsync_AdminPaieRole_ThrowsDomainException()
+    public async Task SaveRoleDetailedPermissionsAsync_AdminPaieRole_ThrowsForbiddenException()
     {
         // Arrange
         // Rôle "Admin Paie" (IDROLE = 4 != 1)
@@ -146,7 +146,7 @@ public class RolePermissionsTests
             _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 30, targetRoleId: 3, new[] { "PARAMS:USERS" });
 
         // Assert
-        var ex = (await act.Should().ThrowExactlyAsync<DomainException>()).Which;
+        var ex = (await act.Should().ThrowExactlyAsync<ForbiddenException>()).Which;
         ex.Message.Should().Be("Seul un administrateur peut modifier les permissions d'un rôle.");
     }
 
@@ -206,7 +206,7 @@ public class RolePermissionsTests
     [Fact]
     public async Task SaveRoleDetailedPermissionsAsync_CodeExactly128Chars_IsAccepted()
     {
-        var validCode = "SAGE:" + new string('A', 123);
+        var validCode = "SAGE:" + new string('A', 118) + ":READ";
         validCode.Length.Should().Be(128);
 
         await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { validCode });
@@ -529,15 +529,15 @@ public class RolePermissionsTests
     }
 
     [Fact]
-    public async Task ResetUserPermissions_NonAdminSelf_ThrowsDomainException()
+    public async Task ResetUserPermissions_NonAdminSelf_ThrowsForbiddenException()
     {
         // Act
         Func<Task> act = () =>
             _auth.ResetUserDetailedPermissionsAsync(currentUserId: 2, targetUserId: 2);
 
         // Assert
-        var ex = (await act.Should().ThrowExactlyAsync<DomainException>()).Which;
-        ex.Message.Should().Be("Un utilisateur ne peut pas modifier ses propres privilèges sans droit d'administration.");
+        var ex = (await act.Should().ThrowExactlyAsync<ForbiddenException>()).Which;
+        ex.Message.Should().Be("Seul un administrateur peut modifier les privilèges d'un compte.");
     }
 
     #endregion

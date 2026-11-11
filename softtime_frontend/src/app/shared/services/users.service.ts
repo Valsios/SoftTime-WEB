@@ -2,7 +2,19 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '../../core/api';
 import { RoleChangePreview } from '../../core/error.logic';
-import { DbAccess, DepartementService, DepartementServiceOptions, Droit, PagedResult, Privilege, Role, RoleDetailedPermissions, SageDb, User } from '../models';
+import {
+  DbAccess,
+  DepartementService,
+  DepartementServiceOptions,
+  Droit,
+  PagedResult,
+  PermissionCatalogCategory,
+  Privilege,
+  Role,
+  RoleDetailedPermissions,
+  SageDb,
+  User,
+} from '../models';
 
 @Injectable({ providedIn: 'root' })
 export class UsersService extends ApiService {
@@ -55,6 +67,10 @@ export class RolesService extends ApiService {
 
 @Injectable({ providedIn: 'root' })
 export class PrivilegesService extends ApiService {
+  /** Catalogue des permissions : le même que celui qui valide les enregistrements côté serveur. */
+  catalog(): Observable<PermissionCatalogCategory[]> {
+    return this.http.get<PermissionCatalogCategory[]>(this.url('/api/v1/privileges/catalog'));
+  }
   droits(): Observable<Droit[]> {
     return this.http.get<Droit[]>(this.url('/api/v1/privileges/droits'));
   }

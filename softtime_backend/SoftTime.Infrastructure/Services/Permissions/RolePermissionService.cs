@@ -26,42 +26,6 @@ public sealed class RolePermissionService : IRolePermissionService
         _rightsChangeJournal = rightsChangeJournal;
     }
 
-    private static readonly HashSet<string> KnownStaticPermissions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "PARAMS:USERS", "PARAMS:USERS:CREATE", "PARAMS:USERS:UPDATE", "PARAMS:USERS:DELETE",
-        "PARAMS:ROLES", "PARAMS:ROLES:CREATE", "PARAMS:ROLES:UPDATE", "PARAMS:ROLES:DELETE",
-        "PARAMS:PRIVILEGES", "PARAMS:DB_ACCESS", "PARAMS:CLOCK_PARAMS", "PARAMS:CORRESPONDENCE",
-        "PARAMS:CARDPAIE", "PARAMS:CARDPAIE:CREATE", "PARAMS:CARDPAIE:UPDATE", "PARAMS:CARDPAIE:DELETE",
-        "PARAMS:CATEGORIES", "PARAMS:CATEGORIES:CREATE", "PARAMS:CATEGORIES:UPDATE", "PARAMS:CATEGORIES:DELETE",
-        "PARAMS:AFFECTATIONS", "PARAMS:AFFECTATIONS:CREATE", "PARAMS:AFFECTATIONS:UPDATE", "PARAMS:AFFECTATIONS:DELETE",
-        "PARAMS:TOLERANCES", "PARAMS:TOLERANCES:CREATE", "PARAMS:TOLERANCES:UPDATE",
-        "PARAMS:HOLIDAYS", "PARAMS:HOLIDAYS:CREATE", "PARAMS:HOLIDAYS:UPDATE", "PARAMS:HOLIDAYS:DELETE",
-        "PARAMS:MAJORATIONS", "PARAMS:MAJORATIONS:UPDATE",
-        "PARAMS:CODE_CONSTANTES",
-        "PARAMS:ABSENCE_CODES", "PARAMS:ABSENCE_CODES:CREATE", "PARAMS:ABSENCE_CODES:UPDATE",
-        "PROC:SHIFTS", "PROC:SHIFTS:CREATE", "PROC:SHIFTS:UPDATE", "PROC:SHIFTS:DELETE",
-        "PROC:EMPLOYEE_PLANNING", "PROC:EMPLOYEE_PLANNING:CREATE", "PROC:EMPLOYEE_PLANNING:UPDATE", "PROC:EMPLOYEE_PLANNING:DELETE",
-        "PROC:PUNCHES",
-        "PROC:ANOMALIES", "PROC:ANOMALIES:DELETE",
-        "PROC:CORRECTED_HOURS", "PROC:CORRECTED_HOURS:CREATE", "PROC:CORRECTED_HOURS:UPDATE", "PROC:CORRECTED_HOURS:DELETE",
-        "PROC:WEEKLY_VALIDATION", "PROC:OVERTIME",
-        "OTHER:CANTEEN", "OTHER:TRAVEL_EXPENSES",
-        "TRACE:AUDIT",
-        "REPORTS:REPORTS", "REPORTS:PREDICTIONS", "REPORTS:CLOSING"
-    };
-
-    private static bool IsKnownPermissionCode(string code)
-    {
-        if (string.IsNullOrWhiteSpace(code)) return false;
-        if (code.StartsWith("SAGE:", StringComparison.OrdinalIgnoreCase) ||
-            code.StartsWith("POINTEUSE:", StringComparison.OrdinalIgnoreCase))
-            return true;
-        return KnownStaticPermissions.Contains(code);
-    }
-
-    private static HashSet<decimal> DeduirePortes(IEnumerable<string> permCodes)
-        => PermissionCatalog.DeduirePortes(permCodes);
-
     public async Task<RoleDetailedPermissionsDto> GetRoleDetailedPermissionsAsync(decimal roleId, CancellationToken cancellationToken = default)
     {
         await _parametersAccessGuard.EnsureCanReadAsync(ReadPermissions.Privileges, cancellationToken);
@@ -75,7 +39,7 @@ public sealed class RolePermissionService : IRolePermissionService
         }
 
         var perms = roleList
-            .Where(p => p.PermissionCode != PermissionMarkers.EmptyRolePermissionsMarker)
+            .Where(p => p.PermissionCode != PermissionCatalog.EmptyRoleMarker)
             .Select(p => p.PermissionCode)
             .Distinct()
             .ToList();
@@ -85,64 +49,33 @@ public sealed class RolePermissionService : IRolePermissionService
 
     public async Task SaveRoleDetailedPermissionsAsync(decimal currentUserId, decimal targetRoleId, IReadOnlyCollection<string> permissions, CancellationToken cancellationToken = default)
     {
-        if (permissions == null)
-            throw new DomainException("La liste des permissions ne peut pas être nulle.");
-
+        var normalizedPermissions = PermissionCodeNormalizer.Normalize(permissions);
         var caller = await RequireAdministratorCallerAsync(currentUserId, cancellationToken);
         if (targetRoleId == AdminRules.AdminRoleId)
             throw new DomainException("Les privilèges du rôle Administrateur ne sont pas modifiables.");
         var targetRole = await _uow.Repository<Role>().GetByIdAsync(targetRoleId, cancellationToken)
             ?? throw new NotFoundException("Rôle cible introuvable.");
 
-        var normalizedPermissions = NormalizePermissions(permissions);
         var permsAvant = await ReplaceRolePermissionsAsync(targetRoleId, normalizedPermissions, cancellationToken);
         await ReplaceDroitsAsync(targetRoleId, normalizedPermissions, cancellationToken);
 
         await _rightsChangeJournal.EcrireAuditDroitAsync(
-            new RightsChange(currentUserId, caller.Login ?? string.Empty, "ROLE", targetRoleId, targetRole.NomRole, "UPDATE_ROLE_PERMS", permsAvant, normalizedPermissions),
+            new RightsChange(currentUserId, caller.Login ?? string.Empty, RightsChangeActions.RoleTarget, targetRoleId, targetRole.NomRole, "UPDATE_ROLE_PERMS", permsAvant, normalizedPermissions),
             cancellationToken);
 
         await _uow.SaveChangesAsync(cancellationToken);
         _effectiveRights.InvalidateAll();
     }
 
+    /// <summary>Administrateur exigé (403) : d'après le jeton, puis d'après le compte en base.</summary>
     private async Task<Responsable> RequireAdministratorCallerAsync(decimal currentUserId, CancellationToken ct)
     {
+        _parametersAccessGuard.RequireAdministrator();
         var caller = await _uow.Repository<Responsable>().GetByIdAsync(currentUserId, ct)
-            ?? throw new DomainException("Utilisateur appelant introuvable.");
-        _ = await _uow.Repository<Role>().GetByIdAsync(caller.IdRole, ct)
-            ?? throw new DomainException("Utilisateur appelant introuvable.");
+            ?? throw new UnauthorizedException("Utilisateur connecté introuvable.");
         if (!AdminRules.IsSuperAdmin(caller.IdRole))
-            throw new DomainException("Seul un administrateur peut modifier les permissions d'un rôle.");
+            throw new ForbiddenException("Seul un administrateur peut modifier les permissions d'un rôle.");
         return caller;
-    }
-
-    /// <summary>
-    /// Codes nettoyés et dédoublonnés : majuscules sauf les codes de base (SAGE:/POINTEUSE:, dont le
-    /// nom de base est conservé), marqueur « aucune permission » retiré, codes trop longs ou
-    /// inconnus refusés.
-    /// </summary>
-    private static List<string> NormalizePermissions(IReadOnlyCollection<string> permissions)
-    {
-        var normalized = permissions
-            .Where(p => !string.IsNullOrWhiteSpace(p))
-            .Select(p => p.Trim())
-            .Select(p => p.StartsWith("SAGE:", StringComparison.OrdinalIgnoreCase)
-                         || p.StartsWith("POINTEUSE:", StringComparison.OrdinalIgnoreCase)
-                ? p
-                : p.ToUpperInvariant())
-            .Where(p => p != PermissionMarkers.EmptyRolePermissionsMarker)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        var tooLongCodes = normalized.Where(p => p.Length > 128).ToList();
-        if (tooLongCodes.Count > 0)
-            throw new DomainException($"Code de permission trop long (128 caractères maximum) : {string.Join(", ", tooLongCodes)}.");
-
-        var invalidCodes = normalized.Where(p => !IsKnownPermissionCode(p)).ToList();
-        if (invalidCodes.Count > 0)
-            throw new DomainException($"Codes de permission inconnus : {string.Join(", ", invalidCodes)}.");
-        return normalized;
     }
 
     /// <summary>
@@ -155,13 +88,13 @@ public sealed class RolePermissionService : IRolePermissionService
         var rpRepo = _uow.Repository<RolePermission>();
         var existing = await rpRepo.ListAsync(p => p.IdRole == roleId, ct);
         var permsAvant = existing
-            .Where(p => p.PermissionCode != PermissionMarkers.EmptyRolePermissionsMarker)
+            .Where(p => p.PermissionCode != PermissionCatalog.EmptyRoleMarker)
             .Select(p => p.PermissionCode)
             .ToList();
         rpRepo.RemoveRange(existing);
 
         var codes = permissions.Count == 0
-            ? new List<string> { PermissionMarkers.EmptyRolePermissionsMarker }
+            ? new List<string> { PermissionCatalog.EmptyRoleMarker }
             : permissions;
         foreach (var code in codes)
             await rpRepo.AddAsync(new RolePermission { IdRole = roleId, PermissionCode = code, IsGranted = true }, ct);
@@ -173,7 +106,7 @@ public sealed class RolePermissionService : IRolePermissionService
     {
         var droitRepo = _uow.Repository<DroitRole>();
         droitRepo.RemoveRange(await droitRepo.ListAsync(d => d.IdRole == roleId, ct));
-        foreach (var porte in DeduirePortes(permissions))
+        foreach (var porte in PermissionCatalog.DeduirePortes(permissions))
             await droitRepo.AddAsync(new DroitRole { IdRole = roleId, IdDroit = porte }, ct);
     }
 }

@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
-import { PointeuseDb, Role, SageDb, User } from '../../shared/models';
+import { PermissionCatalogCategory, PointeuseDb, Role, SageDb, User } from '../../shared/models';
 import { PointeuseDatabasesService } from '../../shared/services/catalog.service';
 import { PrivilegesService, RolesService, SageDatabasesService, UsersService } from '../../shared/services/users.service';
 import { PrivilegesDraftService } from '../../shared/services/privileges-draft.service';
@@ -50,6 +50,20 @@ interface FeatureCategory {
   title: string;
   icon: string;
   items: FeatureItem[];
+}
+
+/** Icône de chaque catégorie du catalogue serveur (affichage seulement). */
+const CATEGORY_ICONS: Readonly<Record<string, string>> = {
+  PARAMS: 'sliders',
+  PROC: 'grid',
+  OTHER: 'coffee',
+  TRACE: 'history',
+  REPORTS: 'bar-chart',
+  SELF: 'user-check',
+};
+
+function toFeatureCategories(catalog: readonly PermissionCatalogCategory[]): FeatureCategory[] {
+  return catalog.map((c) => ({ key: c.key, title: c.title, icon: CATEGORY_ICONS[c.key] ?? 'key', items: c.items }));
 }
 
 @Component({
@@ -1333,76 +1347,19 @@ export class PrivilegesPage implements OnInit {
     });
   });
 
-  readonly featureCategories: FeatureCategory[] = [
-    {
-      key: 'PARAMS',
-      title: 'Paramètres',
-      icon: 'sliders',
-      items: [
-        { code: 'PARAMS:USERS', label: 'Utilisateurs', canCreate: true, canUpdate: true, canDelete: true },
-        { code: 'PARAMS:ROLES', label: 'Rôles', canCreate: true, canUpdate: true, canDelete: true },
-        { code: 'PARAMS:PRIVILEGES', label: 'Privilèges' },
-        { code: 'PARAMS:DB_ACCESS', label: 'Accès bases' },
-        { code: 'PARAMS:CLOCK_PARAMS', label: 'Paramètres pointeuse' },
-        { code: 'PARAMS:CORRESPONDENCE', label: 'Correspondance' },
-        { code: 'PARAMS:CARDPAIE', label: 'Correspondances paie', canCreate: true, canUpdate: true, canDelete: true },
-        { code: 'PARAMS:CATEGORIES', label: 'Catégories', canCreate: true, canUpdate: true, canDelete: true },
-        { code: 'PARAMS:AFFECTATIONS', label: 'Affectations', canCreate: true, canUpdate: true, canDelete: true },
-        { code: 'PARAMS:TOLERANCES', label: 'Tolérances', canCreate: true, canUpdate: true },
-        { code: 'PARAMS:HOLIDAYS', label: 'Jours fériés', canCreate: true, canUpdate: true, canDelete: true },
-        { code: 'PARAMS:MAJORATIONS', label: 'Majorations', canUpdate: true },
-        { code: 'PARAMS:CODE_CONSTANTES', label: 'Code Constante' },
-        { code: 'PARAMS:ABSENCE_CODES', label: 'Codes absence', canCreate: true, canUpdate: true },
-      ],
-    },
-    {
-      key: 'PROC',
-      title: 'Traitements',
-      icon: 'grid',
-      items: [
-        { code: 'PROC:SHIFTS', label: 'Shifts', canCreate: true, canUpdate: true, canDelete: true },
-        { code: 'PROC:EMPLOYEE_PLANNING', label: 'Planning salariés', canCreate: true, canUpdate: true, canDelete: true },
-        { code: 'PROC:PUNCHES', label: 'Pointages' },
-        { code: 'PROC:ANOMALIES', label: 'Anomalies', canDelete: true },
-        { code: 'PROC:CORRECTED_HOURS', label: 'Heures corrigées', canCreate: true, canUpdate: true, canDelete: true },
-        { code: 'PROC:WEEKLY_VALIDATION', label: 'Validation semaine' },
-        { code: 'PROC:OVERTIME', label: 'Heures supplémentaires' },
-      ],
-    },
-    {
-      key: 'OTHER',
-      title: 'Autres',
-      icon: 'coffee',
-      items: [
-        { code: 'OTHER:CANTEEN', label: 'Cantine' },
-        { code: 'OTHER:TRAVEL_EXPENSES', label: 'Frais déplacement' },
-      ],
-    },
-    {
-      key: 'TRACE',
-      title: 'Traçabilités',
-      icon: 'history',
-      items: [{ code: 'TRACE:AUDIT', label: 'Audit et traçabilité' }],
-    },
-    {
-      key: 'REPORTS',
-      title: 'États',
-      icon: 'bar-chart',
-      items: [
-        { code: 'REPORTS:REPORTS', label: 'Rapports et exports' },
-        { code: 'REPORTS:PREDICTIONS', label: 'Prévisions' },
-        { code: 'REPORTS:CLOSING', label: 'Contrôle avant paie' },
-      ],
-    },
-  ];
+  /** Catalogue des écrans et actions, lu sur le serveur (même source que la validation des enregistrements). */
+  readonly featureCategories = signal<FeatureCategory[]>([]);
+  readonly catalogLoaded = signal(false);
 
   /** Pages (codes sans action) : cocher une action coche sa page, décocher une page décoche ses actions. */
-  private readonly pageCodes: ReadonlySet<string> = new Set(this.featureCategories.flatMap((c) => c.items.map((i) => i.code)));
+  private readonly pageCodes = computed<ReadonlySet<string>>(
+    () => new Set(this.featureCategories().flatMap((c) => c.items.map((i) => i.code))),
+  );
 
   // Recherche : n'agit que sur l'affichage, jamais sur le brouillon.
   readonly search = signal('');
   readonly searching = computed(() => this.search().trim() !== '');
-  readonly visibleCategories = computed(() => filterCategories(this.featureCategories, this.search()));
+  readonly visibleCategories = computed(() => filterCategories(this.featureCategories(), this.search()));
   readonly sageSearchLabels = computed(() => ['Bases RH / Paie', 'Ajouter une base', ...this.sageDbs().map((d) => d.nomBd ?? '')]);
   readonly pointeuseSearchLabels = computed(() => ['Bases de pointage', 'Ajouter une base', ...this.pointeuseDbs().map((d) => d.nomBd ?? '')]);
   readonly matchesAnySearch = matchesAnySearch;
@@ -1419,7 +1376,7 @@ export class PrivilegesPage implements OnInit {
 
   totalCategoryPerms(shown: FeatureCategory): number {
     // La catégorie affichée peut être filtrée par la recherche : le total porte toujours sur la catégorie complète.
-    const cat = this.featureCategories.find((c) => c.key === shown.key) ?? shown;
+    const cat = this.featureCategories().find((c) => c.key === shown.key) ?? shown;
     return cat.items.reduce((acc, it) => {
       let count = 1;
       if (it.canCreate) count++;
@@ -1440,6 +1397,13 @@ export class PrivilegesPage implements OnInit {
         activeUserId = active.targetId;
       }
     }
+    this.privSvc.catalog().subscribe({
+      next: (catalog) => {
+        this.featureCategories.set(toFeatureCategories(catalog));
+        this.catalogLoaded.set(true);
+      },
+      error: () => this.toast.error('Catalogue des permissions indisponible : les droits ne peuvent pas être modifiés.'),
+    });
     this.sageSvc.list().subscribe((dbs) => this.sageDbs.set(dbs));
     this.pointeuseSvc.list().subscribe((dbs) => this.pointeuseDbs.set(dbs));
 
@@ -1619,7 +1583,12 @@ export class PrivilegesPage implements OnInit {
     () => !this.adminLocked() && this.mode() === 'role' && !canEditRolePermissions(this.session.session()?.roleId, this.selectedRoleId()),
   );
   readonly permissionsLocked = computed(
-    () => this.adminLocked() || this.roleEditLocked() || this.permissionsLoading() || !this.permissionsLoaded(),
+    () =>
+      this.adminLocked() ||
+      this.roleEditLocked() ||
+      this.permissionsLoading() ||
+      !this.permissionsLoaded() ||
+      !this.catalogLoaded(),
   );
   readonly isTargetAdmin = this.adminLocked;
 
@@ -1672,7 +1641,7 @@ export class PrivilegesPage implements OnInit {
       return;
     }
     const checked = (event.target as HTMLInputElement).checked;
-    this.grantedPermissions.update((set) => applyToggle(set, code, checked, this.pageCodes, (c) => this.isMandatory(c)));
+    this.grantedPermissions.update((set) => applyToggle(set, code, checked, this.pageCodes(), (c) => this.isMandatory(c)));
   }
 
   readonly collapsedSections = signal<Set<string>>(
@@ -1712,7 +1681,7 @@ export class PrivilegesPage implements OnInit {
       }
       return count;
     }
-    const cat = this.featureCategories.find((c) => c.key === prefix);
+    const cat = this.featureCategories().find((c) => c.key === prefix);
     if (cat) {
       let count = 0;
       for (const item of cat.items) {
@@ -1763,7 +1732,7 @@ export class PrivilegesPage implements OnInit {
           }
         }
       } else {
-        const cat = this.featureCategories.find((c) => c.key === prefix);
+        const cat = this.featureCategories().find((c) => c.key === prefix);
         if (cat) {
           for (const item of cat.items) {
             const itemCodes = [item.code];
@@ -1814,7 +1783,7 @@ export class PrivilegesPage implements OnInit {
       }
     }
     // Categories
-    for (const cat of this.featureCategories) {
+    for (const cat of this.featureCategories()) {
       for (const item of cat.items) {
         next.add(item.code);
         if (item.canCreate) next.add(item.code + ':CREATE');

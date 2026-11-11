@@ -6,7 +6,6 @@ using SoftTime.Domain;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
-using SoftTime.Infrastructure.Services.Permissions;
 
 namespace SoftTime.Infrastructure.Services.Users;
 
@@ -29,17 +28,11 @@ public sealed class UserPermissionService : IUserPermissionService
         _rightsChangeJournal = rightsChangeJournal;
     }
 
-    private static List<string> BuildDefaultPermissionsList(
-        HashSet<int> rights,
-        IEnumerable<BddSage> sageDbs,
-        IEnumerable<BddPointeuse> pointeuseDbs)
-        => PermissionCatalog.BuildDefaultPermissionsList(rights, sageDbs, pointeuseDbs);
-
     public async Task<UserDetailedPermissionsDto> GetUserDetailedPermissionsAsync(decimal userId, CancellationToken cancellationToken = default)
     {
         var user = await _uow.Repository<Responsable>().GetByIdAsync(userId, cancellationToken)
             ?? throw new NotFoundException("Utilisateur introuvable.");
-        var isAdmin = user.IdRole == 1;
+        var isAdmin = AdminRules.IsAdmin(user.IdRole);
         var customList = await _uow.Repository<UserPermission>().ListReadOnlyAsync(
             p => p.IdResponsable == userId && p.IsGranted, cancellationToken);
         var defaults = await DefaultPermissionsAsync(user, cancellationToken);
@@ -49,7 +42,7 @@ public sealed class UserPermissionService : IUserPermissionService
         if (customList.Count > 0)
         {
             var perms = customList
-                .Where(p => p.PermissionCode != PermissionMarkers.EmptyPermissionsMarker)
+                .Where(p => p.PermissionCode != PermissionCatalog.EmptyUserMarker)
                 .Select(p => p.PermissionCode);
             return new UserDetailedPermissionsDto(userId, WithAdminDefaults(perms, isAdmin, defaults), true);
         }
@@ -60,7 +53,7 @@ public sealed class UserPermissionService : IUserPermissionService
         if (roleCustomPerms.Count > 0)
         {
             var rolePerms = roleCustomPerms
-                .Where(p => p.PermissionCode != PermissionMarkers.EmptyRolePermissionsMarker)
+                .Where(p => p.PermissionCode != PermissionCatalog.EmptyRoleMarker)
                 .Select(p => p.PermissionCode);
             return new UserDetailedPermissionsDto(userId, WithAdminDefaults(rolePerms, isAdmin, defaults), false);
         }
@@ -78,7 +71,7 @@ public sealed class UserPermissionService : IUserPermissionService
     /// </summary>
     private async Task<List<string>> DefaultPermissionsAsync(Responsable user, CancellationToken ct)
     {
-        var isAdmin = user.IdRole == 1;
+        var isAdmin = AdminRules.IsAdmin(user.IdRole);
         var rolePrivileges = await _uow.Repository<DroitRole>().ListReadOnlyAsync(p => p.IdRole == user.IdRole, ct);
         var rights = isAdmin
             ? new HashSet<int> { Rights.Databases, Rights.Parameters, Rights.Processing, Rights.Other, Rights.Traceability, Rights.Reports }
@@ -90,7 +83,7 @@ public sealed class UserPermissionService : IUserPermissionService
             ? await _uow.Repository<BddSage>().ListReadOnlyAsync(_ => true, ct)
             : await _uow.Repository<BddSage>().ListReadOnlyAsync(s => sageIds.Contains(s.Id), ct);
         var pointeuseDbs = await _uow.Repository<BddPointeuse>().ListReadOnlyAsync(_ => true, ct);
-        return BuildDefaultPermissionsList(rights, sageDbs, pointeuseDbs);
+        return PermissionCatalog.BuildDefaultPermissionsList(rights, sageDbs, pointeuseDbs);
     }
 
     private static List<string> WithAdminDefaults(IEnumerable<string> permissions, bool isAdmin, List<string> defaults) =>
@@ -98,24 +91,18 @@ public sealed class UserPermissionService : IUserPermissionService
 
     public async Task SaveUserDetailedPermissionsAsync(decimal currentUserId, decimal targetUserId, IReadOnlyCollection<string> permissions, CancellationToken cancellationToken = default)
     {
-        _parametersAccessGuard.RequireAdministrator();
-        var caller = await _uow.Repository<Responsable>().GetByIdAsync(currentUserId, cancellationToken)
-            ?? throw new UnauthorizedException("Utilisateur connecté introuvable.");
+        var toSaveList = PermissionCodeNormalizer.Normalize(permissions);
+        var caller = await RequireAdministratorCallerAsync(currentUserId, cancellationToken);
         var target = await _uow.Repository<Responsable>().GetByIdAsync(targetUserId, cancellationToken)
             ?? throw new NotFoundException("Utilisateur cible introuvable.");
 
-        if (currentUserId == targetUserId && !AdminRules.IsSuperAdmin(caller.IdRole))
-            throw new DomainException("Un utilisateur ne peut pas modifier ses propres privilèges sans droit d'administration.");
-
-        var toSaveList = permissions
-            .Where(p => !string.IsNullOrWhiteSpace(p) && p != PermissionMarkers.EmptyPermissionsMarker)
-            .ToList();
-        if (target.IdRole == 1)
-            toSaveList.AddRange(await AdminMandatoryPermissionsAsync(cancellationToken));
+        if (AdminRules.IsAdmin(target.IdRole))
+            toSaveList = toSaveList.Concat(await AdminMandatoryPermissionsAsync(cancellationToken))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
         var permsAvant = await ReplaceUserPermissionsAsync(targetUserId, toSaveList, cancellationToken);
         await _rightsChangeJournal.EcrireAuditDroitAsync(
-            new RightsChange(currentUserId, caller.Login ?? string.Empty, "USER", targetUserId, target.NomResponsable, "UPDATE_USER_PERMS", permsAvant, toSaveList),
+            new RightsChange(currentUserId, caller.Login ?? string.Empty, RightsChangeActions.UserTarget, targetUserId, target.NomResponsable, "UPDATE_USER_PERMS", permsAvant, toSaveList),
             cancellationToken);
 
         await _uow.SaveChangesAsync(cancellationToken);
@@ -139,7 +126,7 @@ public sealed class UserPermissionService : IUserPermissionService
     }
 
     /// <summary>
-    /// Remplace les permissions de l'utilisateur. Une ligne sentinelle conserve l'intention « aucun
+    /// Remplace les permissions de l'utilisateur (déjà normalisées). Une ligne sentinelle conserve l'intention « aucun
     /// privilège » : sans elle, l'absence de ligne serait interprétée comme un retour aux droits du
     /// rôle. Retourne les permissions d'avant pour le journal.
     /// </summary>
@@ -149,14 +136,14 @@ public sealed class UserPermissionService : IUserPermissionService
         var repo = _uow.Repository<UserPermission>();
         var existing = await repo.ListAsync(p => p.IdResponsable == userId, ct);
         var permsAvant = existing
-            .Where(p => p.PermissionCode != PermissionMarkers.EmptyPermissionsMarker)
+            .Where(p => p.PermissionCode != PermissionCatalog.EmptyUserMarker)
             .Select(p => p.PermissionCode)
             .ToList();
         repo.RemoveRange(existing);
 
         var codes = permissions.Count == 0
-            ? new List<string> { PermissionMarkers.EmptyPermissionsMarker }
-            : permissions.Distinct().Select(p => p.Trim());
+            ? new List<string> { PermissionCatalog.EmptyUserMarker }
+            : permissions;
         foreach (var code in codes)
             await repo.AddAsync(new UserPermission { IdResponsable = userId, PermissionCode = code, IsGranted = true }, ct);
         return permsAvant;
@@ -164,28 +151,29 @@ public sealed class UserPermissionService : IUserPermissionService
 
     public async Task ResetUserDetailedPermissionsAsync(decimal currentUserId, decimal targetUserId, CancellationToken cancellationToken = default)
     {
-        _parametersAccessGuard.RequireAdministrator();
-        var caller = await _uow.Repository<Responsable>().GetByIdAsync(currentUserId, cancellationToken)
-            ?? throw new UnauthorizedException("Utilisateur connecté introuvable.");
-
+        var caller = await RequireAdministratorCallerAsync(currentUserId, cancellationToken);
         var target = await _uow.Repository<Responsable>().GetByIdAsync(targetUserId, cancellationToken)
             ?? throw new NotFoundException("Utilisateur cible introuvable.");
-
-        var callerIsAdmin = AdminRules.IsSuperAdmin(caller.IdRole);
-
-        if (currentUserId == targetUserId && !callerIsAdmin)
-        {
-            throw new DomainException("Un utilisateur ne peut pas modifier ses propres privilèges sans droit d'administration.");
-        }
 
         var permsAvant = await SupprimerPermissionsAsync(targetUserId, cancellationToken);
 
         await _rightsChangeJournal.EcrireAuditDroitAsync(
-            new RightsChange(currentUserId, caller.Login ?? string.Empty, "USER", targetUserId, target.NomResponsable, "RESET_USER_PERMS", permsAvant, null),
+            new RightsChange(currentUserId, caller.Login ?? string.Empty, RightsChangeActions.UserTarget, targetUserId, target.NomResponsable, "RESET_USER_PERMS", permsAvant, null),
             cancellationToken);
 
         await _uow.SaveChangesAsync(cancellationToken);
         _effectiveRights.Invalidate(targetUserId);
+    }
+
+    /// <summary>Administrateur exigé (403) : d'après le jeton, puis d'après le compte en base.</summary>
+    private async Task<Responsable> RequireAdministratorCallerAsync(decimal currentUserId, CancellationToken ct)
+    {
+        _parametersAccessGuard.RequireAdministrator();
+        var caller = await _uow.Repository<Responsable>().GetByIdAsync(currentUserId, ct)
+            ?? throw new UnauthorizedException("Utilisateur connecté introuvable.");
+        if (!AdminRules.IsSuperAdmin(caller.IdRole))
+            throw new ForbiddenException("Seul un administrateur peut modifier les privilèges d'un compte.");
+        return caller;
     }
 
     /// <summary>Supprime les ajustements de l'utilisateur et retourne les permissions d'avant pour le journal.</summary>
@@ -195,7 +183,7 @@ public sealed class UserPermissionService : IUserPermissionService
         var repo = _uow.Repository<UserPermission>();
         var existing = await repo.ListAsync(p => p.IdResponsable == targetUserId, cancellationToken);
         var permsAvant = existing
-            .Where(p => p.PermissionCode != PermissionMarkers.EmptyPermissionsMarker)
+            .Where(p => p.PermissionCode != PermissionCatalog.EmptyUserMarker)
             .Select(p => p.PermissionCode)
             .ToList();
 

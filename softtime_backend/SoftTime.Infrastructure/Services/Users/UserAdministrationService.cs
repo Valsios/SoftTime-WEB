@@ -15,7 +15,6 @@ using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
 using SoftTime.Domain.Services;
 using SoftTime.Infrastructure.Services.Authentication;
-using SoftTime.Infrastructure.Services.Permissions;
 
 namespace SoftTime.Infrastructure.Services.Users;
 
@@ -138,7 +137,7 @@ public sealed class UserAdministrationService : IUserAdministrationService
         if (existingPerms.Count == 0)
             return;
         var permsAvant = existingPerms
-            .Where(p => p.PermissionCode != PermissionMarkers.EmptyPermissionsMarker)
+            .Where(p => p.PermissionCode != PermissionCatalog.EmptyUserMarker)
             .Select(p => p.PermissionCode)
             .ToList();
         permRepo.RemoveRange(existingPerms);

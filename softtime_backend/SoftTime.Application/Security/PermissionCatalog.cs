@@ -4,9 +4,9 @@ using SoftTime.Domain.Entities.SoftTime;
 namespace SoftTime.Application.Security;
 
 /// <summary>
-/// Catalogue des permissions fines et des portes (fonctions pures, sans accès aux données).
-/// DeduirePortes et BuildDefaultPermissionsList sont extraites d'AuthService sans changement de résultat
-/// (voir PermissionCatalogCharacterizationTests).
+/// Catalogue unique des permissions fines et des portes (fonctions pures, sans accès aux données). Le serveur s'en sert
+/// pour valider et accorder les droits ; l'écran Privilèges le lit par <c>GET /api/v1/privileges/catalog</c>.
+/// DeduirePortes et BuildDefaultPermissionsList gardent le résultat d'origine (voir PermissionCatalogCharacterizationTests).
 /// </summary>
 public static class PermissionCatalog
 {
@@ -16,75 +16,90 @@ public static class PermissionCatalog
     /// <summary>Mon espace : lire ses propres données, sans aucune porte.</summary>
     public const string SelfRead = "SELF:READ";
 
-    /// <summary>Permissions accordées par défaut avec chaque droit (porte) du rôle, dans l'ordre d'affichage.</summary>
-    private static readonly (int Droit, string[] Codes)[] PermissionsParDroit =
+    private const string SagePrefix = "SAGE";
+    private const string PointeusePrefix = "POINTEUSE";
+    private static readonly string[] s_databaseActions = { "READ", "UPDATE", "DELETE" };
+
+    /// <summary>Catégories et écrans, dans l'ordre d'affichage. Les bases (SAGE:, POINTEUSE:) dépendent des bases déclarées.</summary>
+    public static readonly IReadOnlyList<PermissionCategoryDefinition> Categories = new[]
     {
-        (Rights.Parameters, new[]
+        new PermissionCategoryDefinition("PARAMS", "Paramètres", Rights.Parameters, new PermissionItemDefinition[]
         {
-            "PARAMS:USERS", "PARAMS:USERS:CREATE", "PARAMS:USERS:UPDATE", "PARAMS:USERS:DELETE",
-            "PARAMS:ROLES", "PARAMS:ROLES:CREATE", "PARAMS:ROLES:UPDATE", "PARAMS:ROLES:DELETE",
-            "PARAMS:PRIVILEGES",
-            "PARAMS:DB_ACCESS",
-            "PARAMS:CLOCK_PARAMS",
-            "PARAMS:CORRESPONDENCE",
-            "PARAMS:CARDPAIE", "PARAMS:CARDPAIE:CREATE", "PARAMS:CARDPAIE:UPDATE", "PARAMS:CARDPAIE:DELETE",
-            "PARAMS:CATEGORIES", "PARAMS:CATEGORIES:CREATE", "PARAMS:CATEGORIES:UPDATE", "PARAMS:CATEGORIES:DELETE",
-            "PARAMS:AFFECTATIONS", "PARAMS:AFFECTATIONS:CREATE", "PARAMS:AFFECTATIONS:UPDATE", "PARAMS:AFFECTATIONS:DELETE",
-            "PARAMS:TOLERANCES", "PARAMS:TOLERANCES:CREATE", "PARAMS:TOLERANCES:UPDATE",
-            "PARAMS:HOLIDAYS", "PARAMS:HOLIDAYS:CREATE", "PARAMS:HOLIDAYS:UPDATE", "PARAMS:HOLIDAYS:DELETE",
-            "PARAMS:MAJORATIONS", "PARAMS:MAJORATIONS:UPDATE",
-            "PARAMS:CODE_CONSTANTES",
-            "PARAMS:ABSENCE_CODES", "PARAMS:ABSENCE_CODES:CREATE", "PARAMS:ABSENCE_CODES:UPDATE"
+            new("PARAMS:USERS", "Utilisateurs", CanCreate: true, CanUpdate: true, CanDelete: true),
+            new("PARAMS:ROLES", "Rôles", CanCreate: true, CanUpdate: true, CanDelete: true),
+            new("PARAMS:PRIVILEGES", "Privilèges"),
+            new("PARAMS:DB_ACCESS", "Accès bases"),
+            new("PARAMS:CLOCK_PARAMS", "Paramètres pointeuse"),
+            new("PARAMS:CORRESPONDENCE", "Correspondance"),
+            new("PARAMS:CARDPAIE", "Correspondances paie", CanCreate: true, CanUpdate: true, CanDelete: true),
+            new("PARAMS:CATEGORIES", "Catégories", CanCreate: true, CanUpdate: true, CanDelete: true),
+            new("PARAMS:AFFECTATIONS", "Affectations", CanCreate: true, CanUpdate: true, CanDelete: true),
+            new("PARAMS:TOLERANCES", "Tolérances", CanCreate: true, CanUpdate: true),
+            new("PARAMS:HOLIDAYS", "Jours fériés", CanCreate: true, CanUpdate: true, CanDelete: true),
+            new("PARAMS:MAJORATIONS", "Majorations", CanUpdate: true),
+            new("PARAMS:CODE_CONSTANTES", "Code Constante"),
+            new("PARAMS:ABSENCE_CODES", "Codes absence", CanCreate: true, CanUpdate: true),
         }),
-        (Rights.Processing, new[]
+        new PermissionCategoryDefinition("PROC", "Traitements", Rights.Processing, new PermissionItemDefinition[]
         {
-            "PROC:SHIFTS", "PROC:SHIFTS:CREATE", "PROC:SHIFTS:UPDATE", "PROC:SHIFTS:DELETE",
-            "PROC:EMPLOYEE_PLANNING", "PROC:EMPLOYEE_PLANNING:CREATE", "PROC:EMPLOYEE_PLANNING:UPDATE", "PROC:EMPLOYEE_PLANNING:DELETE",
-            "PROC:PUNCHES",
-            "PROC:ANOMALIES", "PROC:ANOMALIES:DELETE",
-            "PROC:CORRECTED_HOURS", "PROC:CORRECTED_HOURS:CREATE", "PROC:CORRECTED_HOURS:UPDATE", "PROC:CORRECTED_HOURS:DELETE",
-            "PROC:WEEKLY_VALIDATION",
-            "PROC:OVERTIME"
+            new("PROC:SHIFTS", "Shifts", CanCreate: true, CanUpdate: true, CanDelete: true),
+            new("PROC:EMPLOYEE_PLANNING", "Planning salariés", CanCreate: true, CanUpdate: true, CanDelete: true),
+            new("PROC:PUNCHES", "Pointages"),
+            new("PROC:ANOMALIES", "Anomalies", CanDelete: true),
+            new("PROC:CORRECTED_HOURS", "Heures corrigées", CanCreate: true, CanUpdate: true, CanDelete: true),
+            new("PROC:WEEKLY_VALIDATION", "Validation semaine"),
+            new("PROC:OVERTIME", "Heures supplémentaires"),
         }),
-        (Rights.Other, new[] { "OTHER:CANTEEN", "OTHER:TRAVEL_EXPENSES" }),
-        (Rights.Traceability, new[] { "TRACE:AUDIT" }),
-        (Rights.Reports, new[] { "REPORTS:REPORTS", "REPORTS:PREDICTIONS", "REPORTS:CLOSING" })
+        new PermissionCategoryDefinition("OTHER", "Autres", Rights.Other, new PermissionItemDefinition[]
+        {
+            new("OTHER:CANTEEN", "Cantine"),
+            new("OTHER:TRAVEL_EXPENSES", "Frais déplacement"),
+        }),
+        new PermissionCategoryDefinition("TRACE", "Traçabilités", Rights.Traceability, new PermissionItemDefinition[]
+        {
+            new("TRACE:AUDIT", "Audit et traçabilité"),
+        }),
+        new PermissionCategoryDefinition("REPORTS", "États", Rights.Reports, new PermissionItemDefinition[]
+        {
+            new("REPORTS:REPORTS", "Rapports et exports"),
+            new("REPORTS:PREDICTIONS", "Prévisions"),
+            new("REPORTS:CLOSING", "Contrôle avant paie"),
+        }),
+        new PermissionCategoryDefinition("SELF", "Mon espace", null, new PermissionItemDefinition[]
+        {
+            new(SelfRead, "Consulter ses propres données (salarié)"),
+        }),
     };
 
-    /// <summary>Permissions sans porte : connues du catalogue, jamais accordées par défaut avec un droit.</summary>
-    private static readonly string[] PermissionsSansPorte = { SelfRead };
-
-    /// <summary>Permissions statiques connues ; les codes SAGE: et POINTEUSE: dépendent des bases et sont acceptés par préfixe.</summary>
+    /// <summary>Permissions statiques connues ; les codes SAGE: et POINTEUSE: dépendent des bases et sont validés par leur forme.</summary>
     public static readonly HashSet<string> KnownStatic = new(
-        PermissionsParDroit.SelectMany(p => p.Codes).Concat(PermissionsSansPorte), StringComparer.OrdinalIgnoreCase);
+        Categories.SelectMany(category => category.Items).SelectMany(item => item.Codes()), StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Code connu : statique, ou code de base bien formé (« SAGE:CREATE », « SAGE:NomBase:READ »…).</summary>
     public static bool IsKnown(string code)
     {
         if (string.IsNullOrWhiteSpace(code)) return false;
-        if (code.StartsWith("SAGE:", StringComparison.OrdinalIgnoreCase) ||
-            code.StartsWith("POINTEUSE:", StringComparison.OrdinalIgnoreCase))
-            return true;
-        return KnownStatic.Contains(code);
+        return IsDatabaseCode(code) ? IsWellFormedDatabaseCode(code) : KnownStatic.Contains(code);
     }
+
+    /// <summary>Code de base de données (préfixe SAGE: ou POINTEUSE:), bien formé ou non.</summary>
+    public static bool IsDatabaseCode(string code)
+        => code.StartsWith(SagePrefix + ":", StringComparison.OrdinalIgnoreCase)
+           || code.StartsWith(PointeusePrefix + ":", StringComparison.OrdinalIgnoreCase);
 
     public static HashSet<decimal> DeduirePortes(IEnumerable<string> permCodes)
     {
         var portes = new HashSet<decimal>();
         foreach (var code in permCodes)
         {
-            if (code.StartsWith("SAGE:", StringComparison.OrdinalIgnoreCase) ||
-                code.StartsWith("POINTEUSE:", StringComparison.OrdinalIgnoreCase))
+            if (IsDatabaseCode(code))
+            {
                 portes.Add(Rights.Databases);
-            else if (code.StartsWith("PARAMS:", StringComparison.OrdinalIgnoreCase))
-                portes.Add(Rights.Parameters);
-            else if (code.StartsWith("PROC:", StringComparison.OrdinalIgnoreCase))
-                portes.Add(Rights.Processing);
-            else if (code.StartsWith("OTHER:", StringComparison.OrdinalIgnoreCase))
-                portes.Add(Rights.Other);
-            else if (code.StartsWith("TRACE:", StringComparison.OrdinalIgnoreCase))
-                portes.Add(Rights.Traceability);
-            else if (code.StartsWith("REPORTS:", StringComparison.OrdinalIgnoreCase))
-                portes.Add(Rights.Reports);
+                continue;
+            }
+            var gate = Categories.FirstOrDefault(c => c.Gate.HasValue && code.StartsWith(c.Key + ":", StringComparison.OrdinalIgnoreCase))?.Gate;
+            if (gate is int g)
+                portes.Add(g);
         }
         return portes;
     }
@@ -98,19 +113,16 @@ public static class PermissionCatalog
         var sageList = sageDbs as IReadOnlyCollection<BddSage> ?? sageDbs.ToList();
         if (sageList.Count > 0 || rights.Contains(Rights.Databases))
             defaults.Add("SAGE:CREATE");
-        defaults.AddRange(DatabasePermissions("SAGE", sageList.Select(s => s.NomBd)));
+        defaults.AddRange(DatabasePermissions(SagePrefix, sageList.Select(s => s.NomBd)));
 
         if (rights.Contains(Rights.Databases))
         {
             defaults.Add("POINTEUSE:CREATE");
-            defaults.AddRange(DatabasePermissions("POINTEUSE", pointeuseDbs.Select(p => p.NomBd)));
+            defaults.AddRange(DatabasePermissions(PointeusePrefix, pointeuseDbs.Select(p => p.NomBd)));
         }
 
-        foreach (var (droit, codes) in PermissionsParDroit)
-        {
-            if (rights.Contains(droit))
-                defaults.AddRange(codes);
-        }
+        foreach (var category in Categories.Where(c => c.Gate is int gate && rights.Contains(gate)))
+            defaults.AddRange(category.Items.SelectMany(item => item.Codes()));
         return defaults;
     }
 
@@ -119,5 +131,17 @@ public static class PermissionCatalog
         noms
             .Select(n => n ?? string.Empty)
             .Where(n => !string.IsNullOrWhiteSpace(n))
-            .SelectMany(n => new[] { $"{prefix}:{n}:READ", $"{prefix}:{n}:UPDATE", $"{prefix}:{n}:DELETE" });
+            .SelectMany(n => s_databaseActions.Select(action => $"{prefix}:{n}:{action}"));
+
+    private static bool IsWellFormedDatabaseCode(string code)
+    {
+        var parts = code.Split(':');
+        return parts.Length switch
+        {
+            2 => parts[1].Equals("CREATE", StringComparison.OrdinalIgnoreCase),
+            3 => !string.IsNullOrWhiteSpace(parts[1])
+                 && s_databaseActions.Contains(parts[2], StringComparer.OrdinalIgnoreCase),
+            _ => false
+        };
+    }
 }

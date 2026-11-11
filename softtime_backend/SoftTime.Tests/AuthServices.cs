@@ -39,7 +39,7 @@ internal sealed class AuthServices : IUserPermissionService
         ILogger<AuthenticationService>? logger = null)
     {
         Guard = new ParametersAccessGuard(currentUser, effectiveRights);
-        var journal = new RightsChangeJournal(uow);
+        var journal = new RightsChangeJournal(uow, currentUser);
         UserPermissions = new UserPermissionService(uow, effectiveRights, Guard, journal);
         RolePermissions = new RolePermissionService(uow, effectiveRights, Guard, journal);
         Authentication = new AuthenticationService(
@@ -49,9 +49,9 @@ internal sealed class AuthServices : IUserPermissionService
         Directory = new UserDirectoryService(uow, Guard);
         Administration = new UserAdministrationService(
             uow, email, effectiveRights, Guard, journal, passwordHasher, refreshTokens, securityOptions);
-        Roles = new RoleService(uow, effectiveRights, Guard);
-        Privileges = new PrivilegeService(uow, effectiveRights, Guard);
-        DatabaseAccess = new DatabaseAccessService(uow, effectiveRights, Guard);
+        Roles = new RoleService(uow, effectiveRights, Guard, journal);
+        Privileges = new PrivilegeService(uow, effectiveRights, Guard, journal);
+        DatabaseAccess = new DatabaseAccessService(uow, effectiveRights, Guard, journal);
         RightsAudit = new RightsAuditService(uow);
     }
 

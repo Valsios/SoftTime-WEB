@@ -1,10 +1,6 @@
-using System.Reflection;
-
 using SoftTime.Application.Security;
 using SoftTime.Domain;
 using SoftTime.Domain.Entities.SoftTime;
-using SoftTime.Infrastructure.Services.Permissions;
-using SoftTime.Infrastructure.Services.Users;
 
 namespace SoftTime.Tests;
 
@@ -21,46 +17,50 @@ public class PermissionCatalogCharacterizationTests
     private static List<string> Defaults(HashSet<int> rights, IEnumerable<BddSage> sages, IEnumerable<BddPointeuse> pointeuses)
         => PermissionCatalog.BuildDefaultPermissionsList(rights, sages, pointeuses);
 
-    // Anciennes entrées, toujours présentes dans AuthService (déléguées au helper) : le résultat doit rester identique.
-    private static HashSet<decimal> LegacyGates(IEnumerable<string> codes)
-        => (HashSet<decimal>)typeof(RolePermissionService).GetMethod("DeduirePortes", BindingFlags.NonPublic | BindingFlags.Static)!
-            .Invoke(null, new object[] { codes })!;
-
-    private static List<string> LegacyDefaults(HashSet<int> rights, IEnumerable<BddSage> sages, IEnumerable<BddPointeuse> pointeuses)
-        => (List<string>)typeof(UserPermissionService).GetMethod("BuildDefaultPermissionsList", BindingFlags.NonPublic | BindingFlags.Static)!
-            .Invoke(null, new object[] { rights, sages, pointeuses })!;
-
     [Fact]
-    public void BuildDefaultPermissionsList_AuthServiceEntryPoints_MatchTheHelper()
+    public void KnownStatic_Catalog_IsTheCodesOfEveryScreen()
     {
         // Arrange
-        var all = new HashSet<int> { 1, 2, 3, 4, 5, 6 };
-        var sages = new[] { Sage("A"), Sage("B") };
-        var pointeuses = new[] { Pointeuse("P") };
-
-        // Act & Assert
-        LegacyDefaults(all, sages, pointeuses).Should().Equal(Defaults(all, sages, pointeuses));
-        LegacyDefaults(new HashSet<int>(), sages, pointeuses).Should().Equal(Defaults(new HashSet<int>(), sages, pointeuses));
-        var codes = new[] { "sage:a:read", "PROC:SHIFTS", "OTHER:CANTEEN", "INCONNU:X" };
-        LegacyGates(codes).OrderBy(x => x).Should().Equal(Gates(codes).OrderBy(x => x));
-    }
-
-    [Fact]
-    public void KnownStaticPermissions_Catalog_MatchesAuthServiceSet()
-    {
-        // Arrange
-        var legacy = (HashSet<string>)typeof(RolePermissionService).GetField("KnownStaticPermissions", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
+        var screens = PermissionCatalog.Categories.SelectMany(c => c.Items).SelectMany(i => i.Codes()).ToList();
 
         // Act
-        // SELF:READ : permission de Mon espace, hors du catalogue historique des rôles.
-        var result = legacy.SetEquals(PermissionCatalog.KnownStatic.Where(c => c != PermissionCatalog.SelfRead));
+        var result = PermissionCatalog.KnownStatic.SetEquals(screens);
 
         // Assert
         result.Should().BeTrue();
-        PermissionCatalog.IsKnown("SAGE:X:READ").Should().BeTrue();
-        PermissionCatalog.IsKnown("proc:shifts").Should().BeTrue();
-        PermissionCatalog.IsKnown("N'IMPORTE:QUOI").Should().BeFalse();
-        PermissionCatalog.IsKnown("").Should().BeFalse();
+        screens.Should().OnlyHaveUniqueItems();
+        PermissionCatalog.KnownStatic.Should().Contain(PermissionCatalog.SelfRead);
+    }
+
+    [Theory]
+    [InlineData("SAGE:X:READ", true)]
+    [InlineData("pointeuse:PTG:delete", true)]
+    [InlineData("SAGE:CREATE", true)]
+    [InlineData("proc:shifts", true)]
+    [InlineData("SELF:READ", true)]
+    [InlineData("SAGE:X:WRITE", false)]
+    [InlineData("SAGE::READ", false)]
+    [InlineData("SAGE:A:B:READ", false)]
+    [InlineData("SAGE", false)]
+    [InlineData("N'IMPORTE:QUOI", false)]
+    [InlineData("", false)]
+    public void IsKnown_Code_AcceptsCatalogCodesAndWellFormedDatabaseCodesOnly(string code, bool expected)
+    {
+        // Act
+        var result = PermissionCatalog.IsKnown(code);
+
+        // Assert
+        result.Should().Be(expected);
+    }
+
+    [Fact]
+    public void DeduirePortes_SelfRead_OpensNoGate()
+    {
+        // Act
+        var result = Gates(new[] { PermissionCatalog.SelfRead });
+
+        // Assert
+        result.Should().BeEmpty();
     }
 
     private static readonly string[] Params =

@@ -20,7 +20,6 @@ namespace SoftTime.Tests.Http;
 public class HasPermissionHttpTests : IClassFixture<ApiFactory>
 {
     private const decimal ParamsOtherId = 10074;
-    private const string NoFineCode = "aucune permission fine au catalogue : porte Paramètres seule (à traiter au lot 2)";
     private const string PerDatabase = "droit par base : IDatabaseConfigurationAuthorization";
     private const string ReadOnlyPost = "lecture ou mise en forme (POST pour le corps), n'écrit rien";
 
@@ -46,11 +45,6 @@ public class HasPermissionHttpTests : IClassFixture<ApiFactory>
         ["PUT api/v1/pointeuse-databases/{id:int}"] = PerDatabase,
         ["DELETE api/v1/pointeuse-databases/{id:int}"] = PerDatabase,
         ["POST api/v1/pointeuse-databases/test-connection"] = PerDatabase,
-        ["PUT api/v1/privileges/role/{roleId}"] = "administrateur exigé dans RolePermissionService (à passer en [RequireAdmin] au lot 2)",
-        ["POST api/v1/payroll-write-config"] = NoFineCode,
-        ["PUT api/v1/payroll-write-config/{id:int}"] = NoFineCode,
-        ["DELETE api/v1/payroll-write-config/{id:int}"] = NoFineCode,
-        ["POST api/v1/payroll-write-config/test"] = NoFineCode,
     };
 
     private readonly ApiFactory _f;
@@ -111,6 +105,42 @@ public class HasPermissionHttpTests : IClassFixture<ApiFactory>
         // Assert
         response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
         response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Theory]
+    [InlineData("privreader", HttpStatusCode.OK)]
+    [InlineData("admin", HttpStatusCode.OK)]
+    [InlineData("paramsother", HttpStatusCode.Forbidden)]
+    public async Task Catalog_ReservedToPrivilegesReaders(string profile, HttpStatusCode expected)
+    {
+        // Arrange
+        var request = _f.Request(profile, HttpMethod.Get, "/api/v1/privileges/catalog");
+
+        // Act
+        var response = await _http.SendAsync(request);
+        var text = await response.Content.ReadAsStringAsync();
+
+        // Assert
+        response.StatusCode.Should().Be(expected);
+        if (expected == HttpStatusCode.OK) text.Should().Contain("SELF:READ");
+    }
+
+    [Theory]
+    [InlineData("GET", "/api/v1/payroll-write-config")]
+    [InlineData("POST", "/api/v1/payroll-write-config/test")]
+    [InlineData("PUT", "/api/v1/privileges/role/91")]
+    public async Task AdministratorOnlyRoutes_GateTwoAccount_Gets403(string method, string url)
+    {
+        // Arrange
+        var before = _f.Snapshot();
+        var request = _f.Request("privreader", new HttpMethod(method), url, method == "GET" ? null : "{\"grantedPermissions\":[]}");
+
+        // Act
+        var response = await _http.SendAsync(request);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        _f.Snapshot().Should().Be(before);
     }
 
     [Theory]
