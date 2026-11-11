@@ -14,7 +14,7 @@ import { RouterLink } from '@angular/router';
 import { EMPTY, expand, Subscription, toArray } from 'rxjs';
 import { errorMessage } from '../../core/error.logic';
 import { SessionStore } from '../../core/session.store';
-import { Column, DataTable, DataTableCell, PageHeader, PeriodFilter, SoftBadge, SoftButton, SoftCard, SoftTabs, SoftToggle, TabItem } from '../../shared/components';
+import { Column, DataTable, DataTableCell, PageHeader, PeriodFilter, SoftBadge, SoftBarChart, SoftButton, SoftCard, SoftDeltaChart, SoftTabs, SoftToggle, TabItem } from '../../shared/components';
 import { ClosingAnomalyView, ClosingChecklist, ClosingChecklistLine, ClosingReport, PageChangeEvent, PeriodRequest } from '../../shared/models';
 import { ClosingService } from '../../shared/services/closing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
@@ -46,6 +46,10 @@ import {
   NO_ANOMALY_FOR_FILTER,
   NO_ANOMALY_FOR_LIST_FILTER,
   NO_ANOMALY_FOR_TYPE_TO_FIX,
+  comparisonDeltaPoints,
+  scoreDeltaText,
+  severityChartPoints,
+  typeChartPoints,
   toggleSeverity,
   toggleType,
   FILTER_CHANGED_TEXT,
@@ -80,7 +84,7 @@ import {
 @Component({
   selector: 'app-closing',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, PageHeader, PeriodFilter, SoftButton, SoftCard, SoftBadge, SoftTabs, SoftToggle, RouterLink, DataTable, DataTableCell],
+  imports: [FormsModule, PageHeader, PeriodFilter, SoftButton, SoftCard, SoftBadge, SoftTabs, SoftToggle, SoftBarChart, SoftDeltaChart, RouterLink, DataTable, DataTableCell],
   template: `
     <page-header title="Contrôle avant paie" subtitle="Contrôle des données de la période avant la clôture">
       <soft-button
@@ -206,6 +210,53 @@ import {
           }
         </div>
       </section>
+
+      @if (r.joursEmployeControles > 0 && r.nombreAnomalies > 0) {
+        <section class="closing-charts" aria-label="Répartition des anomalies">
+          <soft-card variant="bordered" padding="sm">
+            <div class="closing-section-head">
+              <h2>Par gravité</h2>
+              <span>{{ r.nombreAnomalies }} anomalie(s), dont « Information »</span>
+            </div>
+            <div class="closing-chart-body">
+              <soft-bar-chart [items]="severityPoints()"></soft-bar-chart>
+            </div>
+          </soft-card>
+          <soft-card variant="bordered" padding="sm">
+            <div class="closing-section-head">
+              <h2>Par type</h2>
+              <span>Du plus fréquent au moins fréquent</span>
+            </div>
+            <div class="closing-chart-body">
+              <soft-bar-chart [items]="typePoints()"></soft-bar-chart>
+            </div>
+          </soft-card>
+        </section>
+      }
+
+      @if (r.comparaison; as cmp) {
+        <soft-card variant="bordered" padding="sm">
+          <div class="closing-section-head">
+            <h2>Évolution par rapport à la période précédente</h2>
+            <span>Du {{ day(cmp.from) }} au {{ day(cmp.to) }}</span>
+          </div>
+          <div class="closing-chart-body">
+            @if (scoreDelta(); as delta) {
+              <p class="closing-score-delta">
+                <span class="closing-kpi__label">Score</span>
+                <strong>{{ cmp.scorePrecedent ?? '—' }} → {{ r.score ?? '—' }}</strong>
+                <span class="closing-muted">{{ delta }}</span>
+              </p>
+            }
+            <soft-delta-chart
+              [items]="deltaPoints()"
+              ariaLabel="Écart du nombre d'anomalies par type avec la période précédente"
+              emptyText="Aucune anomalie sur l'une ou l'autre période."
+            ></soft-delta-chart>
+            <p class="closing-muted closing-chart-note">Barre à droite : plus d'anomalies qu'avant ; à gauche : moins.</p>
+          </div>
+        </soft-card>
+      }
 
       <soft-card variant="bordered" padding="sm">
         <div class="closing-section-head"><h2>Résumé</h2></div>
@@ -401,6 +452,12 @@ import {
       .closing-checklist li { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 13.5px; }
       .closing-checklist__text { display: inline-flex; flex-direction: column; gap: 2px; flex: 1 1 220px; min-width: 0; }
       .closing-filter-line { margin: 0 8px 8px; font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+      .closing-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; }
+      @media (max-width: 480px) { .closing-charts { grid-template-columns: minmax(0, 1fr); } }
+      .closing-chart-body { padding: 0 8px 8px; }
+      .closing-chart-note { margin: 10px 0 0; font-size: 12.5px; }
+      .closing-score-delta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin: 0 0 12px; }
+      .closing-score-delta strong { font-family: var(--font-heading); font-size: 18px; color: var(--app-text-strong); font-variant-numeric: tabular-nums; }
       .closing-type-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 8px 10px; }
       .closing-chip {
         display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px;
@@ -533,6 +590,17 @@ export class ClosingPage implements OnInit, OnDestroy {
     return r ? summarySentences(r) : [];
   });
   readonly comparisonState = computed(() => (this.includeComparison() ? 'Activée' : 'Désactivée'));
+  /** Graphiques de la synthèse : mêmes nombres que les cartes et le résumé, aucune requête de plus. */
+  readonly severityPoints = computed(() => {
+    const r = this.report();
+    return r ? severityChartPoints(r) : [];
+  });
+  readonly typePoints = computed(() => {
+    const r = this.report();
+    return r ? typeChartPoints(r) : [];
+  });
+  readonly deltaPoints = computed(() => comparisonDeltaPoints(this.report()?.comparaison));
+  readonly scoreDelta = computed(() => scoreDeltaText(this.report()?.comparaison));
   /** Totaux des onglets, tirés des comptages (indépendants de l'onglet choisi). */
   readonly tabs = computed<TabItem[]>(() => {
     const r = this.report();

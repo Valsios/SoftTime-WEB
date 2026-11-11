@@ -495,6 +495,57 @@ export function exportSummary(
   return { sheetName: 'Synthèse', headers: ['Information', 'Valeur'], rows };
 }
 
+/**
+ * Couleur de statut d'une gravité pour les graphiques : la même famille que les badges (danger,
+ * avertissement, info, neutre), toujours doublée du libellé de la ligne.
+ */
+const SEVERITY_CHART_COLORS: Record<string, string> = {
+  Critique: 'var(--danger)',
+  Importante: 'var(--warning)',
+  Mineure: 'var(--info)',
+  Information: 'var(--text-disabled)',
+};
+
+/** Barres « par gravité » : les quatre niveaux, du plus grave au moins grave, mêmes nombres que les cartes. */
+export function severityChartPoints(report: Pick<ClosingReport, 'parGravite'>): { label: string; value: number; color: string }[] {
+  return SEVERITIES.map((s) => ({
+    label: severityLabel(s),
+    value: countOf(report.parGravite, s),
+    color: SEVERITY_CHART_COLORS[s],
+  }));
+}
+
+/** Barres « par type » : types présents seulement, du plus fréquent au moins fréquent (ordre du serveur à égalité). */
+export function typeChartPoints(report: Pick<ClosingReport, 'parType'>): { label: string; value: number }[] {
+  return ANOMALY_TYPES
+    .map((t, rang) => ({ rang, label: typeLabel(t, 2), value: countOf(report.parType, t) }))
+    .filter((p) => p.value > 0)
+    .sort((a, b) => b.value - a.value || a.rang - b.rang)
+    .map(({ label, value }) => ({ label, value }));
+}
+
+/**
+ * Écarts par type avec la période précédente : types concernés sur l'une ou l'autre période, plus
+ * fort écart (en valeur absolue) d'abord ; vide sans comparaison.
+ */
+export function comparisonDeltaPoints(comparaison: ClosingComparison | null | undefined): { label: string; value: number }[] {
+  if (!comparaison) return [];
+  return comparaison.parType
+    .filter((t) => t.precedent > 0 || t.actuel > 0)
+    .map((t, rang) => ({ rang, label: typeLabel(t.type, 2), value: t.ecart }))
+    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value) || a.rang - b.rang)
+    .map(({ label, value }) => ({ label, value }));
+}
+
+/** Écart de score en clair : « +7 points », « −3 points », « Score identique », ou rien sans score comparable. */
+export function scoreDeltaText(comparaison: ClosingComparison | null | undefined): string {
+  const e = comparaison?.ecartScore;
+  if (e === null || e === undefined) return '';
+  if (e === 0) return 'Score identique';
+  const points = Math.abs(e) > 1 ? 'points' : 'point';
+  return e > 0 ? `+${e} ${points}` : `−${-e} ${points}`;
+}
+
 /** Feuille « Par département » : les lignes du tableau affiché (vide : aucune feuille). */
 export function exportDepartments(report: Pick<ClosingReport, 'parDepartement'>): ExcelSheet | null {
   if (!report.parDepartement.length) return null;

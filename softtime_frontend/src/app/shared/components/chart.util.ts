@@ -25,6 +25,12 @@ export const CHART_COLORS = [
 export interface ChartPoint {
   label: string;
   value: number;
+  /**
+   * Couleur propre au point (jeton CSS, ex. `var(--danger)`), facultative : sans elle, le graphique
+   * garde sa couleur habituelle. Réservée à une couleur qui a un sens (statut) et toujours doublée
+   * du libellé du point : la couleur seule n'identifie jamais rien.
+   */
+  color?: string;
 }
 
 /** Une courbe : un nom, une couleur et une valeur par libellé de l'axe X. */
