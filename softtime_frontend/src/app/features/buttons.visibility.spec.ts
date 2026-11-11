@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { afterEach, describe, expect, it } from 'vitest';
-import { AccessContext } from '../core/access.logic';
+import { AccessContext, gateAllows } from '../core/access.logic';
 import { ConfirmService } from '../core/confirm.service';
 import { SessionStore } from '../core/session.store';
 import { ToastService } from '../core/toast.service';
@@ -64,7 +64,7 @@ describe('Visibilité des boutons selon les droits', () => {
           useValue: { pointagesPaged: () => of(emptyPage), anomaliesPaged: () => of(emptyPage), hsPaged: () => of(emptyPage) },
         },
         { provide: ExcelExportService, useValue: {} },
-        { provide: SessionStore, useValue: { accessContext: () => context } },
+        { provide: SessionStore, useValue: { accessContext: () => context, hasRight: (d: number) => gateAllows(context, d) } },
         { provide: ToastService, useValue: toast },
         { provide: ConfirmService, useValue: { ask: async () => true } },
       ],

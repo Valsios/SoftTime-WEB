@@ -1,7 +1,9 @@
+import { HttpContext } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable, tap } from 'rxjs';
 import { ApiService } from '../../core/api';
 import { SessionStore } from '../../core/session.store';
+import { silentContext } from '../../core/silent-request';
 import {
   AbsenceCode,
   Affectation,
@@ -25,6 +27,11 @@ import {
   FieldRole,
   PayrollWriteConfiguration,
 } from '../models';
+
+/** Options d'une lecture : contexte silencieux si demandé (voir silent-request.ts). */
+function requestOptions(options: { silent?: boolean }): { context?: HttpContext } {
+  return options.silent ? { context: silentContext() } : {};
+}
 
 @Injectable({ providedIn: 'root' })
 export class PointeuseDatabasesService extends ApiService {
@@ -90,8 +97,9 @@ export class DiscoveryService extends ApiService {
 
 @Injectable({ providedIn: 'root' })
 export class ClockParamsService extends ApiService {
-  get(): Observable<ClockParam> {
-    return this.http.get<ClockParam>(this.url('/api/v1/clock-params'));
+  /** silent : affichage d'information (autre écran que celui des paramètres), un échec n'affiche aucun toast. */
+  get(options: { silent?: boolean } = {}): Observable<ClockParam> {
+    return this.http.get<ClockParam>(this.url('/api/v1/clock-params'), requestOptions(options));
   }
   update(dto: ClockParam): Observable<ClockParam> {
     return this.http.put<ClockParam>(this.url('/api/v1/clock-params'), dto);
@@ -110,8 +118,9 @@ export class CorrespondenceModeService extends ApiService {
 
 @Injectable({ providedIn: 'root' })
 export class CardPaieService extends ApiService {
-  list(): Observable<CardPaie[]> {
-    return this.http.get<CardPaie[]>(this.url('/api/v1/card-paie'));
+  /** silent : liste qui remplit un filtre (matricules, départements), un échec n'affiche aucun toast. */
+  list(options: { silent?: boolean } = {}): Observable<CardPaie[]> {
+    return this.http.get<CardPaie[]>(this.url('/api/v1/card-paie'), requestOptions(options));
   }
   listPaged(page: number, pageSize: number, search?: string | null): Observable<PagedResult<CardPaie>> {
     return this.http.get<PagedResult<CardPaie>>(this.url('/api/v1/card-paie/paged'), {
@@ -279,9 +288,14 @@ export class AbsenceCodesService extends ApiService {
 
 @Injectable({ providedIn: 'root' })
 export class DepartementServiceService extends ApiService {
-  /** Recherche le departement/service Sage pour une liste de matricules. */
+  /**
+   * Recherche le departement/service Sage pour une liste de matricules (complément du filtre de période) : un échec
+   * n'affiche aucun toast. Réservée à la porte 2 avec PARAMS:CARDPAIE côté serveur.
+   */
   lookupBatch(matricules: string[]): Observable<DepartementService[]> {
-    return this.http.post<DepartementService[]>(this.url('/api/v1/departement-service/lookup-batch'), matricules);
+    return this.http.post<DepartementService[]>(this.url('/api/v1/departement-service/lookup-batch'), matricules, {
+      context: silentContext(),
+    });
   }
 }
 
