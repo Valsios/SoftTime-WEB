@@ -45,6 +45,7 @@ import {
   listFilterText,
   NO_ANOMALY_FOR_FILTER,
   NO_ANOMALY_FOR_LIST_FILTER,
+  NO_ANOMALY_FOR_TYPE_TO_FIX,
   toggleSeverity,
   toggleType,
   FILTER_CHANGED_TEXT,
@@ -250,7 +251,7 @@ import {
                           [disabled]="analysing()"
                           [attr.aria-label]="'Analyser le département ' + d.departement"
                           (click)="analyseDepartement(d.departement)"
-                        >Analyser ce département</button>
+                        >Analyser</button>
                       }
                     </td>
                   </tr>
@@ -412,7 +413,7 @@ import {
       .closing-chip[aria-pressed='true'] { border-color: var(--accent); color: var(--accent); background: var(--info-bg); font-weight: 600; }
       .closing-chip:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
       .closing-chip__count { font-variant-numeric: tabular-nums; font-weight: 600; }
-      .closing-sort { display: inline-flex; align-items: center; gap: 8px; margin: 0 8px 8px; max-width: 320px; }
+      .closing-sort { margin: 0 8px 8px; max-width: 320px; }
       .closing-count strong { font-size: 22px; font-family: var(--font-heading); color: var(--app-text-strong); }
       .closing-count__text { color: var(--text-secondary); font-size: 12.5px; }
       .closing-section-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 8px 8px 12px; }
@@ -457,9 +458,14 @@ export class ClosingPage implements OnInit, OnDestroy {
   readonly analysingText = ANALYSING_TEXT;
   readonly staleText = FILTER_CHANGED_TEXT;
   readonly notAnalysedText = NOT_ANALYSED_TEXT;
-  /** Message de liste vide sous filtre : celui de la gravité tant qu'aucun type n'est filtré (texte historique). */
-  readonly noAnomalyForFilter = computed(() =>
-    this.typesFiltre().length ? NO_ANOMALY_FOR_LIST_FILTER : NO_ANOMALY_FOR_FILTER);
+  /**
+   * Message de liste vide sous filtre : celui de la gravité tant qu'aucun type n'est filtré (texte historique) ;
+   * filtre de type dans l'onglet « À corriger » sans filtre de gravité : rappel que les informations sont masquées.
+   */
+  readonly noAnomalyForFilter = computed(() => {
+    if (!this.typesFiltre().length) return NO_ANOMALY_FOR_FILTER;
+    return !this.gravites().length && this.tab() === 'afix' ? NO_ANOMALY_FOR_TYPE_TO_FIX : NO_ANOMALY_FOR_LIST_FILTER;
+  });
   readonly checklistTitle = CHECKLIST_TITLE;
   readonly checklistNote = CHECKLIST_NOTE;
   readonly checklistLoadingText = CHECKLIST_LOADING;

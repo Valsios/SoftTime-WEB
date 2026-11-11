@@ -44,7 +44,7 @@ const rapport = (over: Partial<ClosingReport> = {}): ClosingReport => ({
   ...over,
 });
 
-function creer() {
+function creer(over: Partial<ClosingReport> = {}) {
   TestBed.resetTestingModule();
   const requetes: ClosingQuery[] = [];
   const checklists: { departement?: string | null }[] = [];
@@ -73,7 +73,7 @@ function creer() {
           },
           analysis: (q: ClosingQuery) => {
             requetes.push(q);
-            return of(rapport({ departement: q.departement ?? null }));
+            return of(rapport({ departement: q.departement ?? null, ...over }));
           },
         },
       },
@@ -112,6 +112,24 @@ describe('page Contrôle avant paie : analyse par département depuis le tableau
     expect(derniere.from).toBe(requetes[avant - 1].from); // même période que le résultat affiché
     expect(derniere.to).toBe(requetes[avant - 1].to);
     expect(checklists[checklists.length - 1].departement).toBe('ATELIER');
+  });
+
+  it('puce de type sans ligne à corriger : le message renvoie vers l’onglet « Avec informations »', () => {
+    // 537 quasi-doublons comptés, tous de niveau Information : la liste « À corriger » filtrée est vide.
+    const { fixture, el, requetes } = creer({
+      nombreAnomalies: 537,
+      parType: [{ cle: 'QuasiDoublon', nombre: 537 }, { cle: 'PointageManquant', nombre: 0 }, { cle: 'DoublonExact', nombre: 2 }],
+      parGravite: [{ cle: 'Information', nombre: 539 }],
+    });
+    const puces = Array.from(el.querySelectorAll<HTMLButtonElement>('.closing-chip'));
+    expect(puces.map((p) => p.textContent?.replace(/\s+/g, ' ').trim())).toEqual(['Doublons exacts 2', 'Quasi-doublons 537']);
+
+    puces[1].click();
+    fixture.detectChanges();
+
+    expect(requetes[requetes.length - 1]).toMatchObject({ types: ['QuasiDoublon'], reuseCache: true, page: 1 });
+    expect(puces[1].getAttribute('aria-pressed')).toBe('true');
+    expect(el.querySelector('.closing-state')?.textContent).toContain('ouvrez l’onglet « Avec informations »');
   });
 
   it('le bandeau du résultat nomme ensuite le département analysé', () => {

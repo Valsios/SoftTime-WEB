@@ -378,6 +378,9 @@ export function listFilterText(gravites: readonly string[], types: readonly stri
 
 export const NO_ANOMALY_FOR_FILTER = 'Aucune anomalie pour ce filtre de gravité.';
 export const NO_ANOMALY_FOR_LIST_FILTER = 'Aucune anomalie pour ce filtre de la liste.';
+/** Filtre de type sans ligne dans l'onglet « À corriger » : les lignes de ces types sont peut-être des informations masquées. */
+export const NO_ANOMALY_FOR_TYPE_TO_FIX =
+  'Aucune anomalie à corriger pour ce filtre. Les puces comptent toutes les gravités : ouvrez l’onglet « Avec informations » pour voir les lignes de niveau Information.';
 
 /** Deux filtres équivalents (département vide = tous). */
 export function sameFilter(a: ClosingFilter | null | undefined, b: ClosingFilter | null | undefined): boolean {
