@@ -25,14 +25,17 @@ public class HolidaysController : ApiControllerBase
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
         => Ok(await _svc.ListHolidaysPagedAsync(page, pageSize, search, ct));
 
+    [RequirePermission(Droit.Parameters, "PARAMS:HOLIDAYS:CREATE")]
     [HttpPost]
     public async Task<IActionResult> CreateAsync([FromBody] HolidayDto dto, CancellationToken ct)
         => Ok(await _svc.SaveHolidayAsync(dto with { Id = 0 }, ct));
 
+    [RequirePermission(Droit.Parameters, "PARAMS:HOLIDAYS:UPDATE")]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> UpdateAsync(int id, [FromBody] HolidayDto dto, CancellationToken ct)
         => Ok(await _svc.SaveHolidayAsync(dto with { Id = id }, ct));
 
+    [RequirePermission(Droit.Parameters, "PARAMS:HOLIDAYS:DELETE")]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> DeleteAsync(int id, CancellationToken ct)
     {
@@ -40,6 +43,7 @@ public class HolidaysController : ApiControllerBase
         return NoContent();
     }
 
+    [RequirePermission(Droit.Parameters, "PARAMS:HOLIDAYS:CREATE")]
     [HttpPost("import-sage")]
     public async Task<IActionResult> ImportSageAsync(CancellationToken ct)
     {

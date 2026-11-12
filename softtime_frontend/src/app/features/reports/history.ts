@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { finalize } from 'rxjs';
+import { isAdministrator } from '../../core/access.logic';
 import { ConfirmService } from '../../core/confirm.service';
+import { SessionStore } from '../../core/session.store';
 import { ToastService } from '../../core/toast.service';
 import { PagedResult, ReportFilter, PageChangeEvent } from '../../shared/models';
 import { HistoryService } from '../../shared/services/reports.service';
@@ -30,7 +32,9 @@ type Segment = 'pointages' | 'anomalies' | 'hs';
   template: `
     <page-header title="Historique" subtitle="Archives des suppressions — période = date de suppression">
       <soft-button variant="secondary" [loading]="excel.exporting()" (click)="exportExcel()">Export Excel</soft-button>
-      <soft-button variant="danger" [loading]="busy()" (click)="purgeAll()">Purger l'archive</soft-button>
+      @if (isAdmin()) {
+        <soft-button variant="danger" [loading]="busy()" (click)="purgeAll()">Purger l'archive</soft-button>
+      }
     </page-header>
 
     <soft-tabs [tabs]="tabs" [(activeTab)]="activeTab" (activeTabChange)="onTabChange($event)" />
@@ -50,7 +54,9 @@ type Segment = 'pointages' | 'anomalies' | 'hs';
         (pageChange)="onPageChange($event)"
       >
         <ng-template #actions let-row>
-          <soft-button size="sm" variant="danger" [loading]="removingId() === row['id']" [disabled]="removingId() !== null" (click)="removeOne(row)">Supprimer</soft-button>
+          @if (isAdmin()) {
+            <soft-button size="sm" variant="danger" [loading]="removingId() === row['id']" [disabled]="removingId() !== null" (click)="removeOne(row)">Supprimer</soft-button>
+          }
         </ng-template>
       </data-table>
     </soft-card>
@@ -63,6 +69,10 @@ export class HistoryPage {
   protected readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
+  private readonly session = inject(SessionStore);
+
+  /** Suppression et purge de l'archive : réservées à l'administrateur, comme le serveur. */
+  readonly isAdmin = computed(() => isAdministrator(this.session.accessContext()));
 
   readonly loading = signal(false);
   readonly busy = signal(false);

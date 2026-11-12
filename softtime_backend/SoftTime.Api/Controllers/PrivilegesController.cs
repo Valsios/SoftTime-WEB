@@ -21,20 +21,27 @@ public class PrivilegesController : ApiControllerBase
     private readonly IParametersAccessGuard _guard;
     private readonly IUserPermissionService _userPermissions;
     private readonly IRolePermissionService _rolePermissions;
+    private readonly IUserRightsDescriber _userRights;
     private readonly ICurrentUser _user;
     public PrivilegesController(
         IPrivilegeService privileges,
         IParametersAccessGuard guard,
         IUserPermissionService userPermissions,
         IRolePermissionService rolePermissions,
+        IUserRightsDescriber userRights,
         ICurrentUser user)
     {
         _privileges = privileges;
         _guard = guard;
         _userPermissions = userPermissions;
         _rolePermissions = rolePermissions;
+        _userRights = userRights;
         _user = user;
     }
+
+    /// <summary>Catalogue des codes de permission groupés par domaine (même lecture que la liste des portes).</summary>
+    [HttpGet("catalog")]
+    public async Task<IActionResult> GetCatalogAsync(CancellationToken ct) => Ok(await _privileges.GetCatalogAsync(ct));
 
     [HttpGet("droits")]
     public async Task<IActionResult> GetDroitsAsync(CancellationToken ct) => Ok(await _privileges.GetDroitsAsync(ct));
@@ -56,7 +63,7 @@ public class PrivilegesController : ApiControllerBase
     {
         // GetUserDetailedPermissionsAsync sert aussi en interne (connexion, listes de bases) : le contrôle est donc ici.
         await _guard.EnsureCanReadAsync(ReadPermissions.Privileges, ct);
-        return Ok(await _userPermissions.GetUserDetailedPermissionsAsync(userId, ct));
+        return Ok(await _userRights.DescribeAsync(userId, ct));
     }
 
     [RequireAdmin]
@@ -73,12 +80,25 @@ public class PrivilegesController : ApiControllerBase
     public async Task<IActionResult> GetRolePermissionsAsync(decimal roleId, CancellationToken ct)
         => Ok(await _rolePermissions.GetRoleDetailedPermissionsAsync(roleId, ct));
 
+    [RequireAdmin]
     [HttpPut("role/{roleId}")]
     public async Task<IActionResult> SaveRolePermissionsAsync(decimal roleId, [FromBody] SaveRoleDetailedPermissionsRequest request, CancellationToken ct)
     {
         if (_user.UserId is not decimal currentUserId)
             return Unauthorized();
         await _rolePermissions.SaveRoleDetailedPermissionsAsync(currentUserId, roleId, request.GrantedPermissions, ct);
+        return NoContent();
+    }
+
+    /// <summary>Retire des anciens codes de base sans action (« SAGE:X ») d'un compte, après confirmation à l'écran.</summary>
+    [RequireAdmin]
+    [HttpPost("user/{userId}/legacy-permissions/remove")]
+    public async Task<IActionResult> RemoveLegacyPermissionsAsync(
+        decimal userId, [FromBody] RemoveLegacyPermissionsRequest request, CancellationToken ct)
+    {
+        if (_user.UserId is not decimal currentUserId)
+            return Unauthorized();
+        await _userPermissions.RemoveLegacyPermissionsAsync(currentUserId, userId, request.Codes, ct);
         return NoContent();
     }
 

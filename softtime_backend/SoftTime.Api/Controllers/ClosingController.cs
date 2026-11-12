@@ -64,8 +64,10 @@ public class ClosingController : ApiControllerBase
     /// la même période (délai glissant de 120 s sous un plafond de 600 s, par défaut).
     /// <c>gravites=Critique,Importante</c> restreint la liste à ces niveaux (Information, Mineure, Importante,
     /// Critique) ;
+    /// <c>types=QuasiDoublon,DoublonExact</c> restreint la liste à ces types d'anomalie ;
+    /// <c>matricule=777</c> restreint la liste à ce salarié ;
     /// <c>tri=gravite</c> range la liste du plus grave au moins grave. Les comptages, le score et le statut ne
-    /// dépendent jamais de ces deux paramètres.
+    /// dépendent jamais de ces paramètres.
     /// </summary>
     [HttpGet("analysis")]
     public async Task<IActionResult> AnalysisAsync([FromQuery] ClosingAnalysisQuery query, CancellationToken ct)
@@ -78,7 +80,9 @@ public class ClosingController : ApiControllerBase
             Jour(query.From), Jour(query.To), query.Departement, query.Page, query.PageSize, Options: null,
             IncludeComparison: query.IncludeComparison == true, IncludeInformation: query.IncludeInformation == true,
             ReuseCached: query.ReuseCache == true, Gravites: ClosingSeverityFilter.Parse(query.Gravites),
-            TriParGravite: !string.IsNullOrWhiteSpace(query.Tri), Perimetre: PerimetreUtilisateur());
+            TriParGravite: !string.IsNullOrWhiteSpace(query.Tri), Perimetre: PerimetreUtilisateur(),
+            Types: ClosingTypeFilter.Parse(query.Types),
+            Matricule: string.IsNullOrWhiteSpace(query.Matricule) ? null : query.Matricule.Trim());
         var analyse = await _closing.AnalyserAsync(request, ct);
         var rapport = await _presentation.PresenterAsync(analyse, ct);
 

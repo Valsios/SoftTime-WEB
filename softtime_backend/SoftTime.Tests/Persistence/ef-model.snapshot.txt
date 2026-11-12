@@ -476,6 +476,7 @@ ENTITY ToleranceRetard table=.T_TOLERANCES key=[Id]
 ENTITY UserPermission table=.T_USER_PERMISSION key=[Id]
   P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
   P IdResponsable col=IDRESPONSABLE type=decimal(18,0) null=False max= fixed= unicode= prec=18,0 gen=Never
+  P IsDeviation col=IS_DEVIATION type=bit null=False max= fixed= unicode= prec=, gen=Never
   P IsGranted col=IS_GRANTED type=bit null=False max= fixed= unicode= prec=, gen=Never
   P PermissionCode col=PERMISSION_CODE type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
   I IX_T_USER_PERMISSION_IDRESPONSABLE_PERMISSION_CODE [IdResponsable,PermissionCode] unique=True filter=[PERMISSION_CODE] IS NOT NULL desc=

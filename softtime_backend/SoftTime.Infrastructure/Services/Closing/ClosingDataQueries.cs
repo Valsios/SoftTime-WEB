@@ -93,7 +93,7 @@ internal static class ClosingDataQueries
         return (await repo.ToListAsync(repo.Query()
                 .Where(v => v.BddSage == sageDb && v.ValidationHs == true && v.DateDeb >= lundiDebut && v.DateDeb <= fin)
                 .OrderBy(v => v.Id)
-                .Select(v => new HsValidee { Id = v.Id, Matricules = v.Matricules, DateDeb = v.DateDeb, ValidationHs = v.ValidationHs }), ct))
+                .Select(v => new HsValidee { Id = v.Id, Matricules = v.Matricules, DateDeb = v.DateDeb, ValidationHs = v.ValidationHs, Hs = v.Hs }), ct))
             .Where(v => scope.Cles.Contains(MatriculeIdentity.Cle(v.Matricules)))
             .ToList();
     }

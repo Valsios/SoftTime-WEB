@@ -11,5 +11,7 @@ internal sealed record AnalysePreparee(
     ResultatPeriode Actuel,
     int? Score,
     ClosingComparisonDto? Comparaison,
-    IReadOnlyList<ClosingDepartmentDto> ParDepartement);
+    IReadOnlyList<ClosingDepartmentDto> ParDepartement,
+    IReadOnlyList<ClosingEmployeeDto> ParSalarie,
+    int SalariesConcernes);
 

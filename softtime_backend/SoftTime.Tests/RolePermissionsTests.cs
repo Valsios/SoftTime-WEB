@@ -6,6 +6,7 @@ using SoftTime.Application.Abstractions.Authentication;
 using SoftTime.Application.Abstractions.Notifications;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Mapping;
+using SoftTime.Application.Security;
 using SoftTime.Domain;
 using SoftTime.Domain.Entities.SoftTime;
 
@@ -206,7 +207,8 @@ public class RolePermissionsTests
     [Fact]
     public async Task SaveRoleDetailedPermissionsAsync_CodeExactly128Chars_IsAccepted()
     {
-        var validCode = "SAGE:" + new string('A', 123);
+        // Motif SAGE:<base>:<action> : 5 + 118 + 5 = 128 caractères.
+        var validCode = "SAGE:" + new string('A', 118) + ":READ";
         validCode.Length.Should().Be(128);
 
         await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { validCode });
@@ -214,6 +216,37 @@ public class RolePermissionsTests
         var perms = await _uow.Get<RolePermission>().ListAsync(p => p.IdRole == 3);
         perms.Should().ContainSingle();
         perms[0].PermissionCode.Should().Be(validCode);
+    }
+
+    public static IEnumerable<object[]> CatalogCodes()
+        => PermissionCatalog.KnownStatic.Select(code => new object[] { code });
+
+    [Theory]
+    [MemberData(nameof(CatalogCodes))]
+    public async Task SaveRoleDetailedPermissionsAsync_EveryCatalogCode_IsAccepted(string code)
+    {
+        // Act
+        await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 3, new[] { code });
+
+        // Assert
+        var perms = await _uow.Get<RolePermission>().ListAsync(p => p.IdRole == 3);
+        perms.Should().ContainSingle().Which.PermissionCode.Should().Be(code);
+    }
+
+    [Fact]
+    public async Task SaveRoleDetailedPermissionsAsync_EmployeeRoleWithSelfRead_IsSavedAndReadBack()
+    {
+        // Arrange
+        _uow.Get<Role>().Items.Add(new Role { IdRole = 6, NomRole = "Salarié" });
+
+        // Act
+        await _auth.SaveRoleDetailedPermissionsAsync(currentUserId: 1, targetRoleId: 6, new[] { PermissionCatalog.SelfRead });
+
+        // Assert
+        var perms = await _auth.GetRoleDetailedPermissionsAsync(6);
+        perms.IsConfigured.Should().BeTrue();
+        perms.GrantedPermissions.Should().Equal(PermissionCatalog.SelfRead);
+        (await _uow.Get<DroitRole>().ListAsync(d => d.IdRole == 6)).Should().BeEmpty("SELF:READ n'ouvre aucune porte");
     }
 
     #endregion
@@ -464,9 +497,11 @@ public class RolePermissionsTests
         // Arrange
         // Rôle 3 configuré avec PROC:SHIFTS
         _uow.Get<RolePermission>().Items.Add(new RolePermission { IdRole = 3, PermissionCode = "PROC:SHIFTS", IsGranted = true });
-        // Utilisateur 3 avec rôle 3 et personnalisation T_USER_PERMISSION = PARAMS:USERS
+        // Utilisateur 3 avec rôle 3 et personnalisation T_USER_PERMISSION = PARAMS:USERS (copie complète d'avant la
+        // migration 006, convertie en écarts comme au démarrage de l'API)
         _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 3, IdRole = 3, Login = "user3" });
-        _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 3, PermissionCode = "PARAMS:USERS", IsGranted = true });
+        _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 3, PermissionCode = "PARAMS:USERS", IsGranted = true, IsDeviation = false });
+        await SoftTime.Tests.Http.TestRights.ConvertLegacyCopiesAsync(_uow);
 
         // Act
         var perms = await _auth.GetUserDetailedPermissionsAsync(3);
@@ -493,6 +528,203 @@ public class RolePermissionsTests
         // Assert
         perms.IsCustomized.Should().BeFalse();
         perms.GrantedPermissions.Should().Contain("TRACE:AUDIT");
+    }
+
+    #endregion
+
+    #region Lot 2 — Validation des droits d'un utilisateur (même validateur que les rôles)
+
+    private List<string> UserCodes(decimal userId)
+        => _uow.Get<UserPermission>().Items.Where(p => p.IdResponsable == userId).Select(p => p.PermissionCode).ToList();
+
+    [Fact]
+    public async Task SaveUserDetailedPermissionsAsync_ValidCodes_AreNormalizedAndSaved()
+    {
+        // Act
+        await _auth.SaveUserDetailedPermissionsAsync(1, 2, new[] { "proc:shifts", " sage:Base_1:read ", "PROC:SHIFTS", PermissionCatalog.SelfRead });
+
+        // Assert
+        UserCodes(2).Should().BeEquivalentTo("PROC:SHIFTS", "SAGE:Base_1:READ", "SELF:READ");
+    }
+
+    [Fact]
+    public async Task SaveUserDetailedPermissionsAsync_UnknownCode_ThrowsAndChangesNothing()
+    {
+        // Arrange
+        _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 2, PermissionCode = "PROC:SHIFTS", IsGranted = true });
+        var before = _uow.Snapshot();
+
+        // Act
+        Func<Task> act = () => _auth.SaveUserDetailedPermissionsAsync(1, 2, new[] { "PROC:SHIFTS", "INVALID:HACK:CODE" });
+
+        // Assert
+        var ex = (await act.Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().Be("Codes de permission inconnus : INVALID:HACK:CODE.");
+        _uow.Snapshot().Should().Be(before);
+    }
+
+    [Fact]
+    public async Task SaveUserDetailedPermissionsAsync_CodeLongerThan128Chars_Throws()
+    {
+        // Arrange
+        var longCode = "SAGE:" + new string('A', 119) + ":READ";
+
+        // Act
+        Func<Task> act = () => _auth.SaveUserDetailedPermissionsAsync(1, 2, new[] { longCode });
+
+        // Assert
+        var ex = (await act.Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().StartWith("Code de permission trop long (128 caractères maximum)");
+        UserCodes(2).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SaveUserDetailedPermissionsAsync_NullList_ThrowsDomainException()
+    {
+        // Act
+        Func<Task> act = () => _auth.SaveUserDetailedPermissionsAsync(1, 2, null!);
+
+        // Assert
+        (await act.Should().ThrowExactlyAsync<DomainException>()).Which.Message
+            .Should().Be("La liste des permissions ne peut pas être nulle.");
+    }
+
+    [Fact]
+    public async Task SaveUserDetailedPermissionsAsync_UnchangedRoundTrip_KeepsSameRows()
+    {
+        // Arrange
+        foreach (var code in new[] { "PROC:SHIFTS", "SAGE:BASE1:READ" })
+            _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 2, PermissionCode = code, IsGranted = true });
+        var shown = await _auth.GetUserDetailedPermissionsAsync(2);
+
+        // Act
+        await _auth.SaveUserDetailedPermissionsAsync(1, 2, shown.GrantedPermissions);
+
+        // Assert
+        UserCodes(2).Should().BeEquivalentTo("PROC:SHIFTS", "SAGE:BASE1:READ");
+    }
+
+    [Fact]
+    public async Task SaveUserDetailedPermissionsAsync_LegacyDatabaseCodeWithoutAction_IsKeptWithItsGate()
+    {
+        // Arrange
+        // « SAGE:ANCIENNE » (sans action) : masqué à l'écran, mais compté par le calculateur (porte Bases).
+        foreach (var code in new[] { "PROC:SHIFTS", "SAGE:ANCIENNE" })
+            _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 2, PermissionCode = code, IsGranted = true });
+        var shown = await _auth.GetUserDetailedPermissionsAsync(2);
+
+        // Act
+        await _auth.SaveUserDetailedPermissionsAsync(1, 2, shown.GrantedPermissions.Append("PARAMS:USERS").ToList());
+
+        // Assert
+        shown.GrantedPermissions.Should().NotContain("SAGE:ANCIENNE");
+        UserCodes(2).Should().BeEquivalentTo("PROC:SHIFTS", "PARAMS:USERS", "SAGE:ANCIENNE");
+        var rights = await SoftTime.Tests.Http.TestRights.Service(_uow).GetAsync(2, fresh: true);
+        rights.HasGate(Rights.Databases).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SaveUserDetailedPermissionsAsync_NewLegacyDatabaseCodeTyped_IsStillRefused()
+    {
+        // Act
+        Func<Task> act = () => _auth.SaveUserDetailedPermissionsAsync(1, 2, new[] { "SAGE:ANCIENNE" });
+
+        // Assert
+        (await act.Should().ThrowExactlyAsync<DomainException>()).Which.Message.Should().Be("Codes de permission inconnus : SAGE:ANCIENNE.");
+    }
+
+    [Fact]
+    public async Task SaveRoleDetailedPermissionsAsync_LegacyDatabaseCodeWithoutAction_IsKeptWithItsGate()
+    {
+        // Arrange
+        foreach (var code in new[] { "PROC:SHIFTS", "SAGE:ANCIENNE" })
+            _uow.Get<RolePermission>().Items.Add(new RolePermission { IdRole = 3, PermissionCode = code, IsGranted = true });
+        var shown = await _auth.GetRoleDetailedPermissionsAsync(3);
+
+        // Act
+        await _auth.SaveRoleDetailedPermissionsAsync(1, 3, shown.GrantedPermissions);
+
+        // Assert
+        shown.GrantedPermissions.Should().Equal("PROC:SHIFTS");
+        (await _uow.Get<RolePermission>().ListAsync(p => p.IdRole == 3)).Select(p => p.PermissionCode)
+            .Should().BeEquivalentTo("PROC:SHIFTS", "SAGE:ANCIENNE");
+        (await _uow.Get<DroitRole>().ListAsync(d => d.IdRole == 3)).Select(d => (int)d.IdDroit)
+            .Should().BeEquivalentTo(new[] { Rights.Databases, Rights.Processing });
+    }
+
+    [Fact]
+    public async Task GetUserDetailedPermissionsAsync_LegacyUnknownCodeInDatabase_IsHiddenSoTheScreenCanSave()
+    {
+        // Arrange
+        foreach (var code in new[] { "PROC:SHIFTS", "OBSOLETE:CODE" })
+            _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 2, PermissionCode = code, IsGranted = true });
+
+        // Act
+        var shown = await _auth.GetUserDetailedPermissionsAsync(2);
+        await _auth.SaveUserDetailedPermissionsAsync(1, 2, shown.GrantedPermissions);
+
+        // Assert
+        shown.GrantedPermissions.Should().Equal("PROC:SHIFTS");
+        UserCodes(2).Should().Equal("PROC:SHIFTS");
+    }
+
+    #endregion
+
+    #region Migration 006 — Écarts au lieu de copies
+
+    private async Task<IReadOnlySet<string>> EffectiveOf(decimal userId)
+        => (await SoftTime.Tests.Http.TestRights.Service(_uow).GetAsync(userId, fresh: true)).Permissions;
+
+    [Fact]
+    public async Task SaveRoleDetailedPermissionsAsync_CustomizedAccount_FollowsTheRoleAndKeepsItsDeviations()
+    {
+        // Arrange
+        _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 3, IdRole = 3, Login = "user3", NomResponsable = "User 3" });
+        await _auth.SaveRoleDetailedPermissionsAsync(1, 3, new[] { "PROC:SHIFTS", "PROC:SHIFTS:CREATE" });
+        // Le compte ajoute PARAMS:USERS et retire PROC:SHIFTS:CREATE.
+        await _auth.SaveUserDetailedPermissionsAsync(1, 3, new[] { "PROC:SHIFTS", "PARAMS:USERS" });
+
+        // Act
+        // Le rôle gagne PROC:PUNCHES.
+        await _auth.SaveRoleDetailedPermissionsAsync(1, 3, new[] { "PROC:SHIFTS", "PROC:SHIFTS:CREATE", "PROC:PUNCHES" });
+
+        // Assert
+        (await EffectiveOf(3)).Should().BeEquivalentTo("PROC:SHIFTS", "PROC:PUNCHES", "PARAMS:USERS");
+        _uow.Get<UserPermission>().Items.Where(p => p.IdResponsable == 3).Select(p => (p.PermissionCode, p.IsGranted, p.IsDeviation))
+            .Should().BeEquivalentTo(new[] { ("PARAMS:USERS", true, true), ("PROC:SHIFTS:CREATE", false, true) });
+    }
+
+    [Fact]
+    public async Task SaveUserDetailedPermissionsAsync_EmptyList_StaysWithoutRightsWhenTheRoleGrows()
+    {
+        // Arrange
+        _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 3, IdRole = 3, Login = "user3", NomResponsable = "User 3" });
+        await _auth.SaveRoleDetailedPermissionsAsync(1, 3, new[] { "PROC:SHIFTS" });
+        await _auth.SaveUserDetailedPermissionsAsync(1, 3, Array.Empty<string>());
+
+        // Act
+        await _auth.SaveRoleDetailedPermissionsAsync(1, 3, new[] { "PROC:SHIFTS", "PROC:PUNCHES" });
+
+        // Assert
+        (await EffectiveOf(3)).Should().BeEmpty("la liste vide est mémorisée par le marqueur « aucun droit »");
+    }
+
+    [Fact]
+    public async Task SaveUserDetailedPermissionsAsync_ScreenRoundTrip_EffectiveRightsEqualTheRequestedList()
+    {
+        // Arrange
+        _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 3, IdRole = 3, Login = "user3", NomResponsable = "User 3" });
+        await _auth.SaveRoleDetailedPermissionsAsync(1, 3, new[] { "PROC:SHIFTS", "PROC:SHIFTS:CREATE", "PARAMS:HOLIDAYS" });
+        var requested = new[] { "PROC:SHIFTS", "PARAMS:USERS", "OTHER:CANTEEN" };
+
+        // Act
+        await _auth.SaveUserDetailedPermissionsAsync(1, 3, requested);
+        var shown = await _auth.GetUserDetailedPermissionsAsync(3);
+
+        // Assert
+        (await EffectiveOf(3)).Should().BeEquivalentTo(requested);
+        shown.GrantedPermissions.Should().BeEquivalentTo(requested);
+        shown.IsCustomized.Should().BeTrue();
     }
 
     #endregion
@@ -529,15 +761,34 @@ public class RolePermissionsTests
     }
 
     [Fact]
-    public async Task ResetUserPermissions_NonAdminSelf_ThrowsDomainException()
+    public async Task ResetUserPermissions_TokenAdminDemotedInDatabase_Self_ThrowsForbidden()
     {
         // Act
+        // Le service de test a un jeton administrateur ; le compte 2 n'est pas administrateur en base.
         Func<Task> act = () =>
             _auth.ResetUserDetailedPermissionsAsync(currentUserId: 2, targetUserId: 2);
 
         // Assert
-        var ex = (await act.Should().ThrowExactlyAsync<DomainException>()).Which;
-        ex.Message.Should().Be("Un utilisateur ne peut pas modifier ses propres privilèges sans droit d'administration.");
+        var ex = (await act.Should().ThrowExactlyAsync<ForbiddenException>()).Which;
+        ex.Message.Should().Be("Cette opération est réservée aux administrateurs.");
+    }
+
+    [Fact]
+    public async Task UserPermissionWrites_TokenAdminDemotedInDatabase_OtherAccount_ThrowForbiddenAndChangeNothing()
+    {
+        // Arrange
+        _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 3, IdRole = 3, Login = "user3", NomResponsable = "User 3" });
+        _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 3, PermissionCode = "PROC:SHIFTS", IsGranted = true });
+        var before = _uow.Snapshot();
+
+        // Act
+        Func<Task> save = () => _auth.SaveUserDetailedPermissionsAsync(currentUserId: 2, targetUserId: 3, new[] { "PARAMS:USERS" });
+        Func<Task> reset = () => _auth.ResetUserDetailedPermissionsAsync(currentUserId: 2, targetUserId: 3);
+
+        // Assert
+        await save.Should().ThrowExactlyAsync<ForbiddenException>();
+        await reset.Should().ThrowExactlyAsync<ForbiddenException>();
+        _uow.Snapshot().Should().Be(before);
     }
 
     #endregion

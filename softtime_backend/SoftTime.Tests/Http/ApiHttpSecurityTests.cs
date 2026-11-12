@@ -39,6 +39,8 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
         ["PUT privileges/{roleId}"] = ("PUT", "/api/v1/privileges/91", "[1]", "admin"),
         ["PUT privileges/user/{id}"] = ("PUT", "/api/v1/privileges/user/10050", """{"grantedPermissions":["PROC:SHIFTS"]}""", "admin"),
         ["POST privileges/user/{id}/reset"] = ("POST", "/api/v1/privileges/user/10050/reset", null, "admin"),
+        ["PUT privileges/role/{id}"] = ("PUT", "/api/v1/privileges/role/91", """{"grantedPermissions":["PROC:SHIFTS"]}""", "admin"),
+        ["POST privileges/user/{id}/legacy-permissions/remove"] = ("POST", "/api/v1/privileges/user/10050/legacy-permissions/remove", """{"codes":["SAGE:ANCIENNE"]}""", "admin"),
         ["PUT db-access/{userId}"] = ("PUT", "/api/v1/db-access/10050", "[3033]", "admin"),
         ["POST roles"] = ("POST", "/api/v1/roles", """{"id":0,"nom":"NouveauRole"}""", "admin"),
         ["PUT roles/{id}"] = ("PUT", "/api/v1/roles/91", """{"id":91,"nom":"CibleRenomme"}""", "admin"),
@@ -129,14 +131,13 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
         ("lookup", "GET", "/api/v1/sage-databases/lookup/1", null, true),
         ("lookup-batch", "POST", "/api/v1/sage-databases/lookup-batch", """["1"]""", true),
         ("departement-service-options", "GET", "/api/v1/sage-databases/departement-service-options", null, true),
-        ("cardpaie GET", "GET", "/api/v1/card-paie", null, true),
         ("sage-databases GET", "GET", "/api/v1/sage-databases", null, false),
         ("sage-databases GET paged", "GET", "/api/v1/sage-databases/paged", null, false),
         ("pointeuse-databases GET", "GET", "/api/v1/pointeuse-databases", null, false),
         ("pointeuse-databases GET paged", "GET", "/api/v1/pointeuse-databases/paged", null, false),
     };
 
-    public static IEnumerable<object[]> UsageNames() => new[] { "activate", "lookup", "lookup-batch", "departement-service-options", "cardpaie GET",
+    public static IEnumerable<object[]> UsageNames() => new[] { "activate", "lookup", "lookup-batch", "departement-service-options",
         "sage-databases GET", "sage-databases GET paged", "pointeuse-databases GET", "pointeuse-databases GET paged" }.Select(n => new object[] { n });
 
     [Theory]

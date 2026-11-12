@@ -10,6 +10,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Other)]
+[RequirePermission(Droit.Other, "OTHER:CANTEEN")]
 [Route("api/v1/canteen")]
 [Tags("Canteen")]
 public class CanteenController : ApiControllerBase

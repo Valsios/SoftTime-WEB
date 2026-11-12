@@ -40,25 +40,30 @@ public class PunchesController : ApiControllerBase
     public async Task<IActionResult> GetPagedAsync([FromQuery] PeriodRequest filter, [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
         => Ok(await _svc.ListPunchesPagedAsync(filter, page, pageSize, ct));
 
+    [RequirePermission(Droit.Processing, "PROC:PUNCHES")]
     [HttpPost("import-clock")]
     public async Task<IActionResult> ImportClockAsync([FromBody] ImportPunchesRequest request, CancellationToken ct)
         => Ok(await _imports.ImportFromClockAsync(request, ct));
 
     /// <summary>Pré-traitement : pointages → heures corrigées (T_HEURECORRIGER) + anomalies.</summary>
+    [RequirePermission(Droit.Processing, "PROC:PUNCHES")]
     [HttpPost("preprocess")]
     public async Task<IActionResult> PreprocessAsync([FromBody] PeriodRequest request, CancellationToken ct)
         => Ok(await _processing.ProcessAsync(request, ct));
 
     /// <summary>Corrige un pointage importé (refusé si la semaine est validée).</summary>
+    [RequirePermission(Droit.Processing, "PROC:PUNCHES")]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateAsync(decimal id, [FromBody] PunchUpdateDto dto, CancellationToken ct)
         => Ok(await _svc.UpdatePunchAsync(id, dto, ct));
 
     /// <summary>Purge la période : pointages + corrections automatiques + anomalies (archivés).</summary>
+    [RequirePermission(Droit.Processing, "PROC:PUNCHES")]
     [HttpDelete]
     public async Task<IActionResult> PurgeAsync([FromQuery] PeriodRequest filter, CancellationToken ct)
         => Ok(await _svc.PurgePunchesAsync(filter, ct));
 
+    [RequirePermission(Droit.Processing, "PROC:PUNCHES")]
     [HttpPost("import-excel")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> ImportExcelAsync(IFormFile file, CancellationToken ct)

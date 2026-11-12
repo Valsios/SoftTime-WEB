@@ -41,7 +41,7 @@ public class SchemaMigrationsIntegrityTests
         var scripts = new EmbeddedMigrationScriptSource().Load();
 
         // Assert
-        scripts.Select(s => s.Version).ToArray().Should().Equal(new[] { 1, 2, 3, 4, 5 });
+        scripts.Select(s => s.Version).ToArray().Should().Equal(new[] { 1, 2, 3, 4, 5, 6 });
         var journal = scripts.Should().ContainSingle(s => s.Version == 3).Which;
         journal.Name.Should().Be("003_journal_central.sql");
         foreach (var forbidden in new[] { "DROP ", "DELETE", "TRUNCATE", "ALTER COLUMN", "ALTER TABLE", "USE [", "CREATE DATABASE", "UPDATE ", "INSERT " })
@@ -104,6 +104,24 @@ public class SchemaMigrationsIntegrityTests
         // Des doublons existants n'arrêtent pas le démarrage : l'index est seulement ignoré, avec un message.
         unicity.Content.Should().Contain("IF @doublons IS NULL");
         unicity.Content.Should().Contain("index unique NON créé");
+    }
+
+    // ---------- Script 006 ----------
+
+    [Fact]
+    public void Script006_UserPermissionDeviations_OnlyAddsTheColumn()
+    {
+        // Act
+        var scripts = new EmbeddedMigrationScriptSource().Load();
+
+        // Assert
+        var deviations = scripts.Should().ContainSingle(s => s.Version == 6).Which;
+        deviations.Name.Should().Be("006_ecarts_permissions_utilisateur.sql");
+        foreach (var forbidden in new[] { "DROP ", "DELETE", "TRUNCATE", "ALTER COLUMN", "USE [", "CREATE DATABASE", "UPDATE ", "INSERT " })
+            deviations.Content.Should().NotContainEquivalentOf(forbidden);
+        // Rejouable ; lignes existantes = copies (0), converties par l'application au démarrage.
+        deviations.Content.Should().Contain("COL_LENGTH(N'dbo.T_USER_PERMISSION', N'IS_DEVIATION') IS NULL");
+        deviations.Content.Should().Contain("DEFAULT (0)");
     }
 
     // ---------- Journal de démarrage ----------

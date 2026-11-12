@@ -13,6 +13,7 @@ namespace SoftTime.Application.Services;
 ///   "DuplicateToleranceSeconds": 30, "IgnorerSemainesValidees": true, "MaxPeriodDays": 366,
 ///   "CriticalRatioBlocking": 0.05,
 ///   "ExclureSansPlanningSurPeriode": true, "DoublonsMonoGravite": "Mineure",
+///   "CorrectionsManuellesRatio": 0.5, "CorrectionsManuellesMinimum": 5, "HeuresSupHebdoSeuil": 40,
 ///   "Gravites": { "QuasiDoublon": "Importante" },
 ///   "Poids": { "Information": 0, "Mineure": 1, "Importante": 3, "Critique": 5 }
 /// }
@@ -78,6 +79,21 @@ public sealed class ClosingOptions
     /// </summary>
     public int CacheMaxSeconds { get; set; } = 600;
 
+    /// <summary>
+    /// Corrections manuelles massives (« Closing:CorrectionsManuellesRatio », 0 à 1, défaut 0.5) : part des jours
+    /// contrôlés d'un salarié corrigés à la main au-delà de laquelle il est signalé (niveau Information par défaut).
+    /// </summary>
+    public decimal CorrectionsManuellesRatio { get; set; } = ClosingRulesOptions.DefaultCorrectionsManuellesRatio;
+
+    /// <summary>Corrections manuelles massives (« Closing:CorrectionsManuellesMinimum », au moins 1, défaut 5).</summary>
+    public int CorrectionsManuellesMinimum { get; set; } = ClosingRulesOptions.DefaultCorrectionsManuellesMinimum;
+
+    /// <summary>
+    /// Heures supplémentaires atypiques (« Closing:HeuresSupHebdoSeuil », strictement positif, défaut 40) : heures
+    /// supplémentaires validées dans une semaine au-delà desquelles la semaine est signalée.
+    /// </summary>
+    public decimal HeuresSupHebdoSeuil { get; set; } = ClosingRulesOptions.DefaultHeuresSupHebdoSeuil;
+
     /// <summary>Clés illisibles rencontrées à la lecture de la section (signalées par le validateur).</summary>
     internal List<string> ErreursLecture { get; } = new();
 
@@ -93,7 +109,10 @@ public sealed class ClosingOptions
         PoidsImportante = Poids[ClosingSeverity.Importante],
         PoidsCritique = Poids[ClosingSeverity.Critique],
         Gravites = new Dictionary<ClosingAnomalyType, ClosingSeverity>(Gravites),
-        CriticalRatioBlocking = CriticalRatioBlocking
+        CriticalRatioBlocking = CriticalRatioBlocking,
+        CorrectionsManuellesRatio = CorrectionsManuellesRatio,
+        CorrectionsManuellesMinimum = CorrectionsManuellesMinimum,
+        HeuresSupHebdoSeuil = HeuresSupHebdoSeuil
     };
 
     /// <summary>Liste des erreurs de réglage (vide : réglages valides).</summary>
@@ -112,6 +131,12 @@ public sealed class ClosingOptions
             erreurs.Add($"{Section}:{nameof(CacheMaxSeconds)} doit être compris entre 0 et {PlafondCacheMaxSeconds}.");
         if (CriticalRatioBlocking < 0m || CriticalRatioBlocking > 1m)
             erreurs.Add($"{Section}:{nameof(CriticalRatioBlocking)} doit être compris entre 0 et 1.");
+        if (CorrectionsManuellesRatio < 0m || CorrectionsManuellesRatio > 1m)
+            erreurs.Add($"{Section}:{nameof(CorrectionsManuellesRatio)} doit être compris entre 0 et 1.");
+        if (CorrectionsManuellesMinimum < 1)
+            erreurs.Add($"{Section}:{nameof(CorrectionsManuellesMinimum)} doit être au moins 1.");
+        if (HeuresSupHebdoSeuil <= 0m)
+            erreurs.Add($"{Section}:{nameof(HeuresSupHebdoSeuil)} doit être strictement positif.");
         foreach (var (gravite, poids) in Poids.OrderBy(p => p.Key))
             if (poids < 0)
                 erreurs.Add($"{Section}:{nameof(Poids)}:{gravite} ne peut pas être négatif.");

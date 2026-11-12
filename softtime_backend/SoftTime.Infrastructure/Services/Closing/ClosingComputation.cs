@@ -81,9 +81,10 @@ internal static class ClosingComputation
             ? Comparer(actuel, precedent, periodePrecedente, options)
             : null;
 
+        var (parSalarie, concernes) = ClosingEmployeeRanking.Classer(actuel.Anomalies, departementParCle, options);
         return new AnalysePreparee(
             options, from, to, departementParCle, actuel, score, comparaison,
-            ParDepartement(actuel, departementParCle, options));
+            ParDepartement(actuel, departementParCle, options), parSalarie, concernes);
     }
 
     private static ClosingComparisonDto Comparer(
@@ -145,7 +146,9 @@ internal static class ClosingComputation
             prep.ParDepartement,
             prep.Comparaison,
             ClosingStatusRules.Statut(actuel.Anomalies, actuel.JoursControles.Count, prep.Options.CriticalRatioBlocking)?.ToString(),
-            actuel.SalariesSansPlanningExclus);
+            actuel.SalariesSansPlanningExclus,
+            prep.ParSalarie,
+            prep.SalariesConcernes);
     }
 
     /// <summary>Page d'anomalies demandée, filtrée et triée par <see cref="AnomaliesAffichees"/>.</summary>
@@ -175,7 +178,8 @@ internal static class ClosingComputation
 
     /// <summary>
     /// Anomalies de la LISTE. Les « Information » sont comptées mais omises sauf demande ; un filtre de gravité
-    /// explicite remplace cette règle. Le tri par gravité est stable : l'ordre de départ, déterministe, départage les
+    /// explicite remplace cette règle. Le filtre par type restreint ensuite la liste visible, sans rendre visibles
+    /// des « Information » masquées. Le tri par gravité est stable : l'ordre de départ, déterministe, départage les
     /// égalités. Seule la liste change : comptages, score et statut sont toujours calculés sur l'analyse complète.
     /// </summary>
     internal static IReadOnlyList<ClosingAnomaly> AnomaliesAffichees(
@@ -186,6 +190,13 @@ internal static class ClosingComputation
             : request.IncludeInformation
                 ? anomalies
                 : anomalies.Where(a => a.Severity != ClosingSeverity.Information).ToList();
+        if (request.Types is { Count: > 0 } types)
+            affichees = affichees.Where(a => types.Contains(a.Type)).ToList();
+        if (!string.IsNullOrWhiteSpace(request.Matricule))
+        {
+            var cle = MatriculeIdentity.Cle(request.Matricule);
+            affichees = affichees.Where(a => string.Equals(a.Matricule, cle, StringComparison.Ordinal)).ToList();
+        }
         return request.TriParGravite
             ? affichees.OrderByDescending(a => (int)a.Severity).ToList()
             : affichees;
@@ -215,14 +226,15 @@ internal static class ClosingComputation
         anomalies.AddRange(DuplicatePunchRules.DoublonsExacts(index, scope));
         anomalies.AddRange(DuplicatePunchRules.QuasiDoublons(index, scope));
         anomalies.AddRange(HolidayPunchRules.FeriesNonAppliques(sources, d.Feries, periode, index));
+        var jours = JoursControles(d, from, fin);
+        anomalies.AddRange(PayrollVigilanceRules.CorrectionsManuelles(d.Corrections, jours, scope));
+        anomalies.AddRange(PayrollVigilanceRules.HeuresSupAtypiques(d.SemainesValidees, scope));
 
         var exclus = options.ExclureSansPlanningSurPeriode
             ? PlanningCoverageRules.SalariesSansPlanningSurPeriode(d.Cartes, d.Plannings, index, scope).Count
             : 0;
         return new ResultatPeriode(
-            PayrollClosingRules.AppliquerGravites(PayrollClosingRules.Trier(anomalies), options),
-            JoursControles(d, from, fin),
-            exclus);
+            PayrollClosingRules.AppliquerGravites(PayrollClosingRules.Trier(anomalies), options), jours, exclus);
     }
 
     /// <summary>

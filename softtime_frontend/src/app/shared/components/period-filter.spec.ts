@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { PeriodRequest } from '../models';
 import { CardPaieService, DepartementServiceService } from '../services/catalog.service';
 import { PeriodFilter } from './period-filter';
+import { SessionStore } from '../../core/session.store';
 
 const cartes = [
   { sageMatricule: '02417', sageNom: 'A', sagePrenom: 'B', departement: 'D1' },
@@ -16,6 +17,8 @@ function creer(inputs: Record<string, unknown> = {}) {
     providers: [
       { provide: CardPaieService, useValue: { list: () => of(cartes) } },
       { provide: DepartementServiceService, useValue: { lookupBatch: () => of([]) } },
+      // Compte qui lit CardPaie (porte 2 à 6) : comportement d'avant pour ces tests.
+      { provide: SessionStore, useValue: { hasRight: () => true, hasPermission: () => true } },
     ],
   });
   const fixture = TestBed.createComponent(PeriodFilter);

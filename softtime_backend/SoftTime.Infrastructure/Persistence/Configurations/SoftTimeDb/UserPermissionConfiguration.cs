@@ -26,6 +26,7 @@ public sealed class UserPermissionConfiguration : IEntityTypeConfiguration<UserP
         builder.Property(x => x.Id).HasColumnName("ID").ValueGeneratedOnAdd();
         builder.Property(x => x.IdResponsable).HasColumnName("IDRESPONSABLE").HasPrecision(18, 0);
         builder.Property(x => x.IsGranted).HasColumnName("IS_GRANTED");
+        builder.Property(x => x.IsDeviation).HasColumnName("IS_DEVIATION");
     }
 
     private static void ConfigureIndexes(EntityTypeBuilder<UserPermission> builder)

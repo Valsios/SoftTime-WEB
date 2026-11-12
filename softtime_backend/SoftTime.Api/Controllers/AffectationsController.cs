@@ -46,14 +46,17 @@ public class AffectationsController : ApiControllerBase
         CancellationToken ct)
         => Ok(await _svc.ListAllAffectationsAsync(categoryId, departement, service, ct));
 
+    [RequirePermission(Droit.Parameters, "PARAMS:AFFECTATIONS:CREATE")]
     [HttpPost]
     public async Task<IActionResult> CreateAsync([FromBody] AffectationDto dto, CancellationToken ct)
         => Ok(await _svc.SaveAffectationAsync(dto with { Id = 0 }, ct));
 
+    [RequirePermission(Droit.Parameters, "PARAMS:AFFECTATIONS:UPDATE")]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> UpdateAsync(int id, [FromBody] AffectationDto dto, CancellationToken ct)
         => Ok(await _svc.SaveAffectationAsync(dto with { Id = id }, ct));
 
+    [RequirePermission(Droit.Parameters, "PARAMS:AFFECTATIONS:DELETE")]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> DeleteAsync(int id, CancellationToken ct)
     {
@@ -61,6 +64,7 @@ public class AffectationsController : ApiControllerBase
         return NoContent();
     }
 
+    [RequirePermission(Droit.Parameters, "PARAMS:AFFECTATIONS:CREATE")]
     [HttpPost("import-excel")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> ImportExcelAsync(IFormFile file, CancellationToken ct)

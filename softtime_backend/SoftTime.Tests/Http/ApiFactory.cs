@@ -10,6 +10,7 @@ using Microsoft.IdentityModel.Tokens;
 
 using SoftTime.Application.Abstractions.DataSources;
 using SoftTime.Application.Abstractions.ExternalData;
+using SoftTime.Application.Abstractions.Permissions;
 using SoftTime.Application.Abstractions.Ml;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
@@ -54,6 +55,10 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         // Plusieurs classes de test créent leur fabrique en parallèle : même verrou que Report.
         lock (ReportPath) File.WriteAllText(ReportPath, string.Empty);
         Seed();
+        MarkSeededRowsAsLegacyCopies();
+        // Démarre l'hôte tout de suite : la reprise de la migration 006 (au démarrage) a lieu avant le premier test,
+        // pas au milieu d'un test qui compare deux instantanés du magasin.
+        _ = Services;
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -97,6 +102,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         foreach (var code in new[] { $"SAGE:{SageName}:READ", "POINTEUSE:PTG:READ", "PROC:SHIFTS", "PROC:EMPLOYEE_PLANNING" })
             perms.Add(new UserPermission { IdResponsable = 10034, PermissionCode = code, IsGranted = true });
         Store.Get<RolePermission>().Items.Add(new RolePermission { IdRole = 29, PermissionCode = "REPORTS:REPORTS", IsGranted = true });
+        // Lot 5 : param2 (jeton porte 2) a la porte 2 en base grâce à une permission sans rapport avec les écrans sensibles.
+        perms.Add(new UserPermission { IdResponsable = 10040, PermissionCode = "PARAMS:CLOCK_PARAMS", IsGranted = true });
 
         var sages = Store.Get<BddSage>().Items;
         sages.Add(new BddSage { Id = 3033, NomBd = SageName, Serveur = "invalid.host.test", TLogin = "x", TMdp = FakeSagePassword, TypeAuth = true });
@@ -145,6 +152,13 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         Account(10080, 91, "adjusted1", false, "PROC:SHIFTS", "PROC:PUNCHES");
         Account(10081, 91, "adjusted2", false, "PROC:SHIFTS", "PROC:PUNCHES");
         Account(10083, 91, "adjusted3", false, "PROC:SHIFTS", "PROC:PUNCHES");
+    }
+
+    /// <summary>Lignes amorcées par Seed : copies complètes d'avant la migration 006 (converties au démarrage de l'hôte).</summary>
+    private void MarkSeededRowsAsLegacyCopies()
+    {
+        foreach (var row in Store.Get<UserPermission>().Items)
+            row.IsDeviation = false;
     }
 
     public static string Token(decimal userId, decimal roleId, params int[] rights)
@@ -217,5 +231,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
     {
         Store.Clear();
         Seed();
+        MarkSeededRowsAsLegacyCopies();
+        // L'hôte est déjà démarré : la reprise de la migration 006 est rejouée sur les lignes réamorcées.
+        using var scope = Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<IUserPermissionDeviationMigration>().RunAsync().GetAwaiter().GetResult();
     }
 }

@@ -29,8 +29,11 @@ export class ClosingSessionState {
   readonly tab = signal<'afix' | 'all'>('afix');
   /** Dernière checklist d'avancement chargée avec l'analyse (null : aucune, ou en échec). */
   readonly checklist = signal<ClosingChecklist | null>(null);
-  /** Niveaux de gravité retenus dans la liste (vide : aucun filtre) et tri choisi. */
+  /** Niveaux de gravité et types retenus dans la liste (vides : aucun filtre) et tri choisi. */
   readonly gravites = signal<string[]>([]);
+  readonly types = signal<string[]>([]);
+  /** Salarié retenu dans la liste (null : tous) et son libellé affiché. */
+  readonly salarie = signal<{ matricule: string; label: string } | null>(null);
   readonly tri = signal<ClosingSort>('date');
   readonly page = signal(1);
   readonly pageSize = signal<number | null>(null);
@@ -79,6 +82,8 @@ export class ClosingSessionState {
     this.result.set(null);
     this.tab.set('afix');
     this.gravites.set([]);
+    this.types.set([]);
+    this.salarie.set(null);
     this.tri.set('date');
     this.page.set(1);
     this.pageSize.set(null);

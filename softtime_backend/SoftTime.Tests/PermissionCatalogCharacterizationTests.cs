@@ -26,9 +26,13 @@ public class PermissionCatalogCharacterizationTests
         => (HashSet<decimal>)typeof(RolePermissionService).GetMethod("DeduirePortes", BindingFlags.NonPublic | BindingFlags.Static)!
             .Invoke(null, new object[] { codes })!;
 
+    // L'ancienne entrée d'UserPermissionService (simple délégation) a été retirée avec la migration 006 : le service
+    // appelle désormais directement le helper partagé ; les valeurs attendues restent celles d'avant l'extraction.
     private static List<string> LegacyDefaults(HashSet<int> rights, IEnumerable<BddSage> sages, IEnumerable<BddPointeuse> pointeuses)
-        => (List<string>)typeof(UserPermissionService).GetMethod("BuildDefaultPermissionsList", BindingFlags.NonPublic | BindingFlags.Static)!
-            .Invoke(null, new object[] { rights, sages, pointeuses })!;
+    {
+        typeof(UserPermissionService).GetMethod("BuildDefaultPermissionsList", BindingFlags.NonPublic | BindingFlags.Static).Should().BeNull();
+        return PermissionCatalog.BuildDefaultPermissionsList(rights, sages, pointeuses);
+    }
 
     [Fact]
     public void BuildDefaultPermissionsList_AuthServiceEntryPoints_MatchTheHelper()
@@ -46,17 +50,19 @@ public class PermissionCatalogCharacterizationTests
     }
 
     [Fact]
-    public void KnownStaticPermissions_Catalog_MatchesAuthServiceSet()
+    public void IsKnown_CatalogCodes_SingleSourceForRolesAndUsers()
     {
         // Arrange
-        var legacy = (HashSet<string>)typeof(RolePermissionService).GetField("KnownStaticPermissions", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
+        // La liste privée de RolePermissionService (sans SELF:READ) a été supprimée : le catalogue est la seule source.
+        var field = typeof(RolePermissionService).GetField("KnownStaticPermissions", BindingFlags.NonPublic | BindingFlags.Static);
 
         // Act
-        // SELF:READ : permission de Mon espace, hors du catalogue historique des rôles.
-        var result = legacy.SetEquals(PermissionCatalog.KnownStatic.Where(c => c != PermissionCatalog.SelfRead));
+        var allKnown = PermissionCatalog.KnownStatic.All(PermissionCatalog.IsKnown);
 
         // Assert
-        result.Should().BeTrue();
+        field.Should().BeNull();
+        allKnown.Should().BeTrue();
+        PermissionCatalog.IsKnown(PermissionCatalog.SelfRead).Should().BeTrue();
         PermissionCatalog.IsKnown("SAGE:X:READ").Should().BeTrue();
         PermissionCatalog.IsKnown("proc:shifts").Should().BeTrue();
         PermissionCatalog.IsKnown("N'IMPORTE:QUOI").Should().BeFalse();

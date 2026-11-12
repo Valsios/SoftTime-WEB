@@ -9,4 +9,8 @@ public interface IUserPermissionService
     Task SaveUserDetailedPermissionsAsync(decimal currentUserId, decimal targetUserId, IReadOnlyCollection<string> permissions, CancellationToken cancellationToken = default);
 
     Task ResetUserDetailedPermissionsAsync(decimal currentUserId, decimal targetUserId, CancellationToken cancellationToken = default);
+
+    /// <summary>Retire d'un compte des anciens codes de base sans action (« SAGE:X »), sur confirmation de l'administrateur.</summary>
+    Task RemoveLegacyPermissionsAsync(
+        decimal currentUserId, decimal targetUserId, IReadOnlyCollection<string> codes, CancellationToken cancellationToken = default);
 }

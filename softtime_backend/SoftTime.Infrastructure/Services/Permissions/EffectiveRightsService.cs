@@ -102,27 +102,15 @@ public sealed class EffectiveRightsService : IEffectiveRightsService
             pointeuses.Select(p => p.NomBd ?? string.Empty).ToList(),
             sages.Where(s => accessIds.Contains(s.Id)).Select(s => s.NomBd ?? string.Empty).ToList());
 
-        var userRows = (await _uow.Repository<UserPermission>().ListAsync(p => p.IdResponsable == userId, ct))
-            .Select(p => new PermissionRow(p.PermissionCode, p.IsGranted)).ToList();
+        var stored = await _uow.Repository<UserPermission>().ListAsync(p => p.IdResponsable == userId, ct);
+        // Depuis la migration 006, les lignes sont des écarts. Une ancienne copie non convertie serait lue comme des
+        // ajouts : refus (l'appelant refuse l'accès) plutôt qu'un droit faux. La conversion a lieu au démarrage.
+        if (stored.Any(p => !p.IsDeviation))
+            throw new InvalidOperationException(
+                $"Droits du compte {userId} non convertis en écarts (migration 006) : accès refusé jusqu'au redémarrage de l'API.");
+        var userRows = stored.Select(p => new PermissionRow(p.PermissionCode, p.IsGranted)).ToList();
 
-        return (role, LegacyToDeviations(role, userRows, catalog), catalog);
-    }
-
-    /// <summary>
-    /// Étape 4b-5 : les lignes de l'utilisateur sont encore des listes complètes (modèle historique, toutes à IS_GRANTED = 1).
-    /// On les convertit en écarts à la lecture pour que les droits effectifs restent ceux d'aujourd'hui.
-    /// À supprimer à l'étape de migration vers le stockage en écarts.
-    /// </summary>
-    private static IReadOnlyCollection<PermissionRow> LegacyToDeviations(
-        RoleDefinition role, List<PermissionRow> userRows, DatabaseCatalog catalog)
-    {
-        if (userRows.Count == 0 || userRows.Any(r => !r.IsGranted))
-            return userRows;
-        var roleOnly = EffectiveRightsCalculator.ComputeEffectiveRights(role, Array.Empty<PermissionRow>(), catalog);
-        var (additions, removals) = EffectiveRightsCalculator.ConvertLegacyList(roleOnly.Permissions.ToList(), userRows.Select(r => r.Code).ToList());
-        return additions.Select(c => new PermissionRow(c, true))
-            .Concat(removals.Select(c => new PermissionRow(c, false)))
-            .ToList();
+        return (role, userRows, catalog);
     }
 
     /// <summary>Journal sans donnée sensible : identifiant du compte et type d'erreur seulement.</summary>

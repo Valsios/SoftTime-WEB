@@ -93,7 +93,7 @@ export class SoftBarChart {
     const max = items.length ? Math.max(...items.map((item) => item.value)) : 0;
     return items.map((item) => ({
       ...item,
-      color: this.color(),
+      color: item.color ?? this.color(),
       percent: max > 0 ? (item.value / max) * 100 : 0,
     }));
   });

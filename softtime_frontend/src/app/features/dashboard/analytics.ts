@@ -17,6 +17,7 @@ import {
 } from '../../shared/models';
 import { DashboardService } from '../../shared/services/dashboard.service';
 import { ExcelExportService, type ExcelSheet } from '../../shared/services/excel-export.service';
+import { PrintReportService } from '../../shared/services/print-report.service';
 import {
   ChartPoint,
   ChartSeries,
@@ -388,6 +389,7 @@ interface ReportContext {
 export class AnalyticsPage implements OnInit {
   private readonly svc = inject(DashboardService);
   protected readonly excel = inject(ExcelExportService);
+  private readonly printer = inject(PrintReportService);
   private readonly cdr = inject(ChangeDetectorRef);
 
   readonly loading = signal(false);
@@ -584,35 +586,17 @@ export class AnalyticsPage implements OnInit {
     const context = this.applied();
     if (!stats || !context || this.loading() || this.printing()) return;
 
-    const root = document.documentElement;
-    const previousTheme = root.getAttribute('data-theme');
-    const previousTitle = document.title;
-    let restored = false;
-
-    const restore = (): void => {
-      if (restored) return;
-      restored = true;
-      document.title = previousTitle;
-      if (previousTheme) root.setAttribute('data-theme', previousTheme);
-      else root.removeAttribute('data-theme');
-      this.printing.set(false);
-      this.cdr.detectChanges();
-    };
-
-    window.addEventListener('afterprint', restore, { once: true });
-    // Dernier recours si le navigateur n'émet pas afterprint : ne pas laisser l'écran en mode export.
-    window.setTimeout(restore, 300_000);
-
-    this.printing.set(true);
-    document.title = this.printFileName(context);
-    root.setAttribute('data-theme', 'light');
-    this.cdr.detectChanges();
-
-    try {
-      window.print();
-    } catch {
-      restore();
-    }
+    this.printer.print({
+      title: this.printFileName(context),
+      onStart: () => {
+        this.printing.set(true);
+        this.cdr.detectChanges();
+      },
+      onEnd: () => {
+        this.printing.set(false);
+        this.cdr.detectChanges();
+      },
+    });
   }
 
   /**

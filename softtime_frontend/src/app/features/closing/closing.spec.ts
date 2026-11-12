@@ -62,6 +62,7 @@ const rapport = (over: Partial<ClosingReport> = {}, items: ClosingAnomalyView[] 
 function fausseSession() {
   return {
     hasPermission: vi.fn(() => true),
+    hasRight: vi.fn(() => true),
     token: signal<string | null>('jeton'),
     session: signal<{ userId: number } | null>({ userId: 1 }),
     activeSageDb: signal<string | null>('SAGE_A'),
@@ -839,7 +840,7 @@ describe('page Contrôle avant paie : filtre et tri par gravité', () => {
 
   it('tri par gravité : une requête de liste, du plus grave au moins grave, ordre habituel conservé à gravité égale', () => {
     const { fixture, el, requetes } = monterServeur();
-    const select = el.querySelector<HTMLSelectElement>('select[name="tri"]')!;
+    const select = el.querySelector<HTMLSelectElement>('.closing-sort select')!;
 
     select.value = 'gravite';
     select.dispatchEvent(new Event('change'));
@@ -859,7 +860,7 @@ describe('page Contrôle avant paie : filtre et tri par gravité', () => {
     fixture.detectChanges();
     el.querySelector<HTMLElement>('.closing-filter-line button')!.click();      // retour à « tout afficher »
     fixture.detectChanges();
-    const select = el.querySelector<HTMLSelectElement>('select[name="tri"]')!;
+    const select = el.querySelector<HTMLSelectElement>('.closing-sort select')!;
     select.value = 'gravite';
     select.dispatchEvent(new Event('change'));                                  // tri
     fixture.detectChanges();
@@ -878,7 +879,7 @@ describe('page Contrôle avant paie : filtre et tri par gravité', () => {
   it('filtre et tri conservés en session : au retour sur l’écran, même liste, même état, aucune requête', () => {
     const { fixture, el, requetes } = monterServeur();
     carte(el, 'Importante').click();
-    const select = el.querySelector<HTMLSelectElement>('select[name="tri"]')!;
+    const select = el.querySelector<HTMLSelectElement>('.closing-sort select')!;
     select.value = 'gravite';
     select.dispatchEvent(new Event('change'));
     fixture.detectChanges();
@@ -889,7 +890,7 @@ describe('page Contrôle avant paie : filtre et tri par gravité', () => {
 
     expect(requetes).toHaveLength(avant);
     expect(carte(retour.el, 'Importante').getAttribute('aria-pressed')).toBe('true');
-    expect(retour.el.querySelector<HTMLSelectElement>('select[name="tri"]')!.selectedOptions[0].value).toBe('gravite');
+    expect(retour.el.querySelector<HTMLSelectElement>('.closing-sort select')!.selectedOptions[0].value).toBe('gravite');
     expect(retour.el.querySelector('.closing-filter-line')?.textContent).toContain('Importante');
   });
 
@@ -925,7 +926,7 @@ describe('page Contrôle avant paie : filtre et tri par gravité', () => {
     const { fixture, el, requetes } = monterServeur();
     carte(el, 'Critique').click();
     carte(el, 'Information').click();
-    const select = el.querySelector<HTMLSelectElement>('select[name="tri"]')!;
+    const select = el.querySelector<HTMLSelectElement>('.closing-sort select')!;
     select.value = 'gravite';
     select.dispatchEvent(new Event('change'));
     fixture.detectChanges();

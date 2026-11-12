@@ -25,14 +25,17 @@ public class AbsenceCodesController : ApiControllerBase
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
         => Ok(await _svc.ListAbsenceCodesPagedAsync(page, pageSize, search, ct));
 
+    [RequirePermission(Droit.Parameters, "PARAMS:ABSENCE_CODES:CREATE")]
     [HttpPost]
     public async Task<IActionResult> CreateAsync([FromBody] AbsenceCodeDto dto, CancellationToken ct)
         => Ok(await _svc.SaveAbsenceCodeAsync(dto with { Id = 0 }, ct));
 
+    [RequirePermission(Droit.Parameters, "PARAMS:ABSENCE_CODES:UPDATE")]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> UpdateAsync(int id, [FromBody] AbsenceCodeDto dto, CancellationToken ct)
         => Ok(await _svc.SaveAbsenceCodeAsync(dto with { Id = id }, ct));
 
+    [RequirePermission(Droit.Parameters, "PARAMS:ABSENCE_CODES:CREATE")]
     [HttpPost("sync-sage")]
     public async Task<IActionResult> SyncSageAsync(CancellationToken ct)
     {

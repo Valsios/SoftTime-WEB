@@ -33,10 +33,12 @@ public class OvertimeController : ApiControllerBase
     public async Task<IActionResult> ListPagedAsync([FromQuery] OvertimeListQuery query, CancellationToken ct)
         => Ok(await _exoImpo.ListExoPagedAsync(query.ToPeriodRequest(withSearch: true), query.Page, query.PageSize, ct));
 
+    [RequirePermission(Droit.Processing, "PROC:OVERTIME")]
     [HttpPost("calculate")]
     public async Task<IActionResult> CalculateAsync([FromBody] PeriodRequest request, CancellationToken ct)
         => Ok(await _exoImpo.CalculateExoImpoAsync(request, ct));
 
+    [RequirePermission(Droit.Processing, "PROC:OVERTIME")]
     [HttpPost("purge")]
     public async Task<IActionResult> PurgeAsync([FromBody] PeriodRequest request, CancellationToken ct)
     {
@@ -44,6 +46,7 @@ public class OvertimeController : ApiControllerBase
         return NoContent();
     }
 
+    [RequirePermission(Droit.Processing, "PROC:OVERTIME")]
     [HttpPost("sync-sage")]
     public async Task<IActionResult> SyncSageAsync([FromBody] PeriodRequest request, CancellationToken ct)
     {
@@ -51,6 +54,7 @@ public class OvertimeController : ApiControllerBase
         return NoContent();
     }
 
+    [RequirePermission(Droit.Processing, "PROC:OVERTIME")]
     [HttpPost("sync-payroll")]
     public async Task<IActionResult> SyncPayrollAsync([FromBody] PeriodRequest request, CancellationToken ct)
         => Ok(await _payrollSync.SyncPayrollAsync(request, ct));
