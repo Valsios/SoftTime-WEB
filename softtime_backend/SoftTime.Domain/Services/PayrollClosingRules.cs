@@ -42,6 +42,8 @@ public static class PayrollClosingRules
         ClosingAnomalyType.PlanningSansPointage => ClosingSeverity.Importante,
         ClosingAnomalyType.PointageSansPlanning => ClosingSeverity.Importante,
         ClosingAnomalyType.FerieNonApplique => ClosingSeverity.Information,
+        ClosingAnomalyType.CorrectionsManuelles => ClosingSeverity.Information,
+        ClosingAnomalyType.HeuresSupAtypiques => ClosingSeverity.Information,
         ClosingAnomalyType.DoublonExact => ClosingSeverity.Mineure,
         ClosingAnomalyType.QuasiDoublon => ClosingSeverity.Mineure,
         _ => ClosingSeverity.Critique

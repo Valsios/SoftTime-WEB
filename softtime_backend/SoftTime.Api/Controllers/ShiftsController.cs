@@ -32,14 +32,17 @@ public class ShiftsController : ApiControllerBase
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
         => Ok(await _svc.ListShiftsPagedAsync(page, pageSize, search, ct));
 
+    [RequirePermission(Droit.Processing, "PROC:SHIFTS:CREATE")]
     [HttpPost]
     public async Task<IActionResult> CreateAsync([FromBody] ShiftDto dto, CancellationToken ct)
         => Ok(await _svc.SaveShiftAsync(dto with { Id = 0 }, ct));
 
+    [RequirePermission(Droit.Processing, "PROC:SHIFTS:UPDATE")]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateAsync(decimal id, [FromBody] ShiftDto dto, CancellationToken ct)
         => Ok(await _svc.SaveShiftAsync(dto with { Id = id }, ct));
 
+    [RequirePermission(Droit.Processing, "PROC:SHIFTS:DELETE")]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteAsync(decimal id, CancellationToken ct)
     {
@@ -47,6 +50,7 @@ public class ShiftsController : ApiControllerBase
         return NoContent();
     }
 
+    [RequirePermission(Droit.Processing, "PROC:SHIFTS:CREATE")]
     [HttpPost("import-excel")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> ImportExcelAsync(IFormFile file, CancellationToken ct)

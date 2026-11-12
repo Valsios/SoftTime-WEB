@@ -20,14 +20,17 @@ public class PayrollWriteConfigurationController : ApiControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAllAsync(CancellationToken ct) => Ok(await _svc.ListPayrollWriteConfigurationsAsync(ct));
 
+    [RequireAdmin]
     [HttpPost]
     public async Task<IActionResult> CreateAsync([FromBody] PayrollWriteConfigurationDto dto, CancellationToken ct)
         => Ok(await _svc.SavePayrollWriteConfigurationAsync(dto with { Id = 0 }, ct));
 
+    [RequireAdmin]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> UpdateAsync(int id, [FromBody] PayrollWriteConfigurationDto dto, CancellationToken ct)
         => Ok(await _svc.SavePayrollWriteConfigurationAsync(dto with { Id = id }, ct));
 
+    [RequireAdmin]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> DeleteAsync(int id, CancellationToken ct)
     {
@@ -35,6 +38,7 @@ public class PayrollWriteConfigurationController : ApiControllerBase
         return NoContent();
     }
 
+    [RequireAdmin]
     [HttpPost("test")]
     public async Task<IActionResult> TestAsync(CancellationToken ct) => Ok(await _svc.TestPayrollWriteConfigurationAsync(ct));
 }

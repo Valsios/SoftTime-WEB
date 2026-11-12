@@ -1248,6 +1248,10 @@ button {
   background: var(--gold-400);
   flex: none;
 }
+/* gold-600 sur fond sombre reste sous 3:1 : l'or clair garde le contraste AA en mode sombre. */
+:root[data-theme='dark'] .soft-eyebrow {
+  color: var(--gold-300);
+}
 
 .soft-page-header p {
   margin: 4px 0 0;

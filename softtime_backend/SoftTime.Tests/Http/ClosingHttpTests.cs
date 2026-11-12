@@ -218,6 +218,153 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
         rc.GetProperty("anomalies").GetProperty("total").GetInt32().Should().Be(1);
     }
 
+    [Fact]
+    public async Task Analysis_TypeFilter_ChangesListOnlyNeverStatusScoreOrCounts()
+    {
+        // Arrange
+        var (_, complet) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}"));
+
+        // Act
+        var (codeManquant, manquants) = await Envoyer(_http,
+            Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}&types=pointagemanquant"));
+        var (codeDoublon, doublons) = await Envoyer(_http,
+            Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}&types=DoublonExact,QuasiDoublon"));
+
+        // Assert
+        codeManquant.Should().Be(HttpStatusCode.OK);
+        codeDoublon.Should().Be(HttpStatusCode.OK);
+        using var a = JsonDocument.Parse(complet);
+        using var b = JsonDocument.Parse(manquants);
+        using var c = JsonDocument.Parse(doublons);
+        var (ra, rb, rc) = (a.RootElement.GetProperty("data"), b.RootElement.GetProperty("data"), c.RootElement.GetProperty("data"));
+        foreach (var champ in new[] { "statut", "score", "nombreAnomalies", "joursEmployeControles" })
+        {
+            rb.GetProperty(champ).ToString().Should().Be(ra.GetProperty(champ).ToString());
+            rc.GetProperty(champ).ToString().Should().Be(ra.GetProperty(champ).ToString());
+        }
+        rb.GetProperty("parType").ToString().Should().Be(ra.GetProperty("parType").ToString());
+        rb.GetProperty("anomalies").GetProperty("total").GetInt32().Should().Be(1);   // l'anomalie du jeu est un manquant
+        rc.GetProperty("anomalies").GetProperty("total").GetInt32().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Analysis_EmptyTypeFilter_IsIdenticalToNone()
+    {
+        // Act
+        var (c1, sans) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}"));
+        var (c2, vide) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}&types="));
+
+        // Assert
+        c1.Should().Be(HttpStatusCode.OK);
+        c2.Should().Be(HttpStatusCode.OK);
+        Donnees(vide).Should().Be(Donnees(sans));
+    }
+
+    [Fact]
+    public async Task Analysis_TopEmployees_AreReturnedWithNamesAndTotal()
+    {
+        // Act
+        var (code, texte) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}"));
+
+        // Assert
+        code.Should().Be(HttpStatusCode.OK);
+        using var json = JsonDocument.Parse(texte);
+        var r = json.RootElement.GetProperty("data");
+        r.GetProperty("salariesConcernes").GetInt32().Should().Be(1);
+        var salarie = r.GetProperty("parSalarie")[0];
+        salarie.GetProperty("matricule").GetString().Should().Be("777");
+        salarie.GetProperty("nom").GetString().Should().Be("Testnom");
+        salarie.GetProperty("prenom").GetString().Should().Be("Testprenom");
+        salarie.GetProperty("departement").GetString().Should().Be("DEP1");
+        salarie.GetProperty("nombreAnomalies").GetInt32().Should().Be(1);
+        salarie.GetProperty("poids").GetInt32().Should().Be(5);
+        salarie.GetProperty("parType")[0].GetProperty("cle").GetString().Should().Be("PointageManquant");
+    }
+
+    [Fact]
+    public async Task Analysis_TopEmployeesWithShowNamesFalse_HaveMatriculeOnly()
+    {
+        // Arrange
+        using var sut = AvecReglages(("Closing:ShowNames", "false"));
+
+        // Act
+        var (code, texte) = await Envoyer(sut.CreateClient(), Requete("admin", HttpMethod.Get, $"{Url}?{Semaine}"));
+
+        // Assert
+        code.Should().Be(HttpStatusCode.OK);
+        using var json = JsonDocument.Parse(texte);
+        var salarie = json.RootElement.GetProperty("data").GetProperty("parSalarie")[0];
+        salarie.GetProperty("matricule").GetString().Should().Be("777");
+        salarie.GetProperty("nom").ValueKind.Should().Be(JsonValueKind.Null);
+        texte.Should().NotContain("Testnom");
+    }
+
+    [Fact]
+    public async Task Analysis_MatriculeFilter_ChangesListOnlyNeverStatusScoreCountsOrEmployees()
+    {
+        // Arrange
+        var (_, complet) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}"));
+
+        // Act
+        var (c1, lui) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}&matricule=00777"));
+        var (c2, autre) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}&matricule=12345"));
+
+        // Assert
+        c1.Should().Be(HttpStatusCode.OK);
+        c2.Should().Be(HttpStatusCode.OK);
+        using var a = JsonDocument.Parse(complet);
+        using var b = JsonDocument.Parse(lui);
+        using var c = JsonDocument.Parse(autre);
+        var (ra, rb, rc) = (a.RootElement.GetProperty("data"), b.RootElement.GetProperty("data"), c.RootElement.GetProperty("data"));
+        foreach (var champ in new[] { "statut", "score", "nombreAnomalies", "parSalarie", "salariesConcernes" })
+            rc.GetProperty(champ).ToString().Should().Be(ra.GetProperty(champ).ToString());
+        rb.GetProperty("anomalies").GetProperty("total").GetInt32().Should().Be(1);
+        rc.GetProperty("anomalies").GetProperty("total").GetInt32().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Analysis_MatriculeTooLong_IsRefusedWithClearMessage()
+    {
+        // Act
+        var (code, texte) = await Envoyer(_http,
+            Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}&matricule={new string('9', 51)}"));
+
+        // Assert
+        code.Should().Be(HttpStatusCode.BadRequest);
+        texte.Should().Contain("matricule");
+    }
+
+    [Theory]
+    [InlineData("gate6only", HttpStatusCode.Forbidden)]
+    [InlineData("joel", HttpStatusCode.Forbidden)]
+    [InlineData("anonyme", HttpStatusCode.Unauthorized)]
+    public async Task Analysis_NewListParameters_KeepTheSameAccessRules(string profil, HttpStatusCode attendu)
+    {
+        // Act : les nouveaux paramètres ne contournent jamais le contrôle d'accès.
+        var (code, _) = await Envoyer(_http,
+            Requete(profil, HttpMethod.Get, $"{Url}?{Semaine}&types=PointageManquant&matricule=777"));
+
+        // Assert
+        code.Should().Be(attendu);
+    }
+
+    [Theory]
+    [InlineData("types=Inconnu")]
+    [InlineData("types=QuasiDoublon,PasUnType")]
+    public async Task Analysis_InvalidTypeValue_IsRefusedWithClearMessage(string requete)
+    {
+        // Arrange
+        var before = _f.Snapshot();
+
+        // Act
+        var (code, texte) = await Envoyer(_http, Requete("closereader", HttpMethod.Get, $"{Url}?{Semaine}&{requete}"));
+
+        // Assert
+        code.Should().Be(HttpStatusCode.BadRequest);
+        texte.Should().ContainEquivalentOf("types");
+        _f.Snapshot().Should().Be(before);
+    }
+
     [Theory]
     [InlineData("gravites=Grave")]
     [InlineData("gravites=Critique,Urgent")]

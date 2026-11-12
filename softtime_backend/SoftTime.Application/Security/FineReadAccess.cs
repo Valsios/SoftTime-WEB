@@ -1,6 +1,5 @@
 using SoftTime.Application.Abstractions.Permissions;
 using SoftTime.Application.Abstractions.RequestContext;
-using SoftTime.Application.Services;
 
 namespace SoftTime.Application.Security;
 
@@ -10,23 +9,8 @@ namespace SoftTime.Application.Security;
 /// </summary>
 public static class FineReadAccess
 {
-    public static async Task EnsureAsync(
+    public static Task EnsureAsync(
         ICurrentUser user, IEffectiveRightsService rights, int gate, string permission, CancellationToken cancellationToken = default)
-    {
-        if (AdminAccess.IsAdmin(user)) return;
-        if (user.UserId is not decimal uid)
-            throw new ForbiddenException(ReadPermissions.Denied);
-        EffectiveRights effective;
-        try
-        {
-            effective = await rights.GetAsync(uid, ct: cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            rights.LogReadFailure(uid, ex);
-            throw new ForbiddenException(ReadPermissions.Denied);
-        }
-        if (!effective.HasGate(gate) || !effective.Has(permission))
-            throw new ForbiddenException(ReadPermissions.Denied);
-    }
+        => FinePermissionAccess.EnsureAsync(
+            user, rights, new FinePermission(gate, permission), ReadPermissions.Denied, cancellationToken);
 }

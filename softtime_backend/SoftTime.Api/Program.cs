@@ -14,6 +14,7 @@ using SoftTime.Api.Middleware;
 using SoftTime.Api.Security;
 using SoftTime.Application;
 using SoftTime.Application.Abstractions.Authentication;
+using SoftTime.Application.Abstractions.Permissions;
 using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.Security;
 using SoftTime.Application.Serialization;
@@ -93,7 +94,7 @@ builder.Services.AddScoped<ICurrentUser>(sp =>
     var http = sp.GetRequiredService<IHttpContextAccessor>().HttpContext;
     // Scope d'arrière-plan (traitement sans requête HTTP) : identité système administratrice, jamais pour une requête HTTP.
     if (http is null && sp.GetRequiredService<SystemExecution>().Active)
-        return new CurrentUser { Login = SystemExecution.Login, RoleId = SoftTime.Domain.Services.AdminRules.AdminRoleId };
+        return new CurrentUser { Login = SystemExecution.Login, TokenRoleId = SoftTime.Domain.Services.AdminRules.AdminRoleId };
     var principal = http?.User;
     if (principal?.Identity?.IsAuthenticated != true)
         return new CurrentUser();
@@ -112,9 +113,13 @@ builder.Services.AddScoped<ICurrentUser>(sp =>
     {
         UserId = uid == 0 ? null : uid,
         Login = principal.Identity?.Name,
-        RoleId = role == 0 ? null : role,
+        TokenRoleId = role == 0 ? null : role,
         Matricule = principal.FindFirstValue("matricule"),
-        Rights = rights
+        TokenRights = rights,
+        // Lot 5 : rôle et portes lus en base (ServerRightsMiddleware) ; aucun droit tant qu'ils ne sont pas posés.
+        Server = () => http!.Items.TryGetValue(ServerRights.ItemKey, out var value) && value is ServerRights server
+            ? server
+            : ServerRights.None,
     };
 });
 
@@ -188,6 +193,10 @@ using (var scope = app.Services.CreateScope())
     // Jetons de rafraîchissement et verrouillage des comptes : migration 004, sinon arrêt avec un message clair.
     await SchemaPresenceGuard.EnsureAccountSecurityAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
     await RolePermissionConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
+    // Droits des comptes en écarts : migration 006 obligatoire (sinon arrêt), puis reprise des anciennes copies
+    // (rejouable, une seule sauvegarde, droits effectifs inchangés).
+    await SchemaPresenceGuard.EnsureUserPermissionDeviationsAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
+    await scope.ServiceProvider.GetRequiredService<IUserPermissionDeviationMigration>().RunAsync(CancellationToken.None);
 
     // Migration globale contrôlée des mots de passe en clair :
     // Par défaut, la migration est assurée de manière fluide et isolée à la connexion de chaque utilisateur (AuthService.LoginAsync),
@@ -202,6 +211,7 @@ using (var scope = app.Services.CreateScope())
     }
 }
 // Ordre de la convention (§5.7) : erreurs, HSTS, HTTPS, CORS, authentification, autorisation, limitation.
+app.UseMiddleware<ForbiddenAccessLoggingMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 if (!app.Environment.IsDevelopment())
 {
@@ -216,6 +226,7 @@ if (app.Environment.IsDevelopment())
 }
 app.UseCors();
 app.UseAuthentication();
+app.UseMiddleware<ServerRightsMiddleware>();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.UseMiddleware<TenantMiddleware>();

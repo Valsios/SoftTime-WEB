@@ -33,6 +33,7 @@ public class WeeklyValidationController : ApiControllerBase
         CancellationToken ct)
         => Ok(await _svc.PreviewWeekPagedAsync(request, page, pageSize, ct));
 
+    [RequirePermission(Droit.Processing, "PROC:WEEKLY_VALIDATION")]
     [HttpPost("validate")]
     public async Task<IActionResult> ValidateAsync([FromBody] WeeklyValidationRequest request, CancellationToken ct)
     {
@@ -40,6 +41,7 @@ public class WeeklyValidationController : ApiControllerBase
         return NoContent();
     }
 
+    [RequirePermission(Droit.Processing, "PROC:WEEKLY_VALIDATION")]
     [HttpPost("unvalidate")]
     public async Task<IActionResult> UnvalidateAsync([FromBody] WeeklyValidationRequest request, CancellationToken ct)
     {
@@ -48,6 +50,7 @@ public class WeeklyValidationController : ApiControllerBase
     }
 
     /// <summary>Purge la validation de la semaine (supprime T_HS_VALIDER et déverrouille les heures).</summary>
+    [RequirePermission(Droit.Processing, "PROC:WEEKLY_VALIDATION")]
     [HttpDelete]
     public async Task<IActionResult> PurgeAsync([FromQuery] PeriodRequest filter, CancellationToken ct)
         => Ok(await _svc.PurgeValidationAsync(filter, ct));

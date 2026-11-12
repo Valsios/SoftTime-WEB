@@ -27,6 +27,7 @@ public sealed class SageDatabaseService : ISageDatabaseService
     private readonly ISourceMappingStore _sourceMappingStore;
     private readonly ISourceMappingMigrator _sourceMappingMigrator;
     private readonly ISourceMappingValidator _sourceMappingValidator;
+    private readonly IDatabasePermissionCodeMigrator _permissionCodes;
 
     public SageDatabaseService(
         IUnitOfWork uow,
@@ -40,7 +41,8 @@ public sealed class SageDatabaseService : ISageDatabaseService
         ICardPaieService cardPaieService,
         ISourceMappingStore sourceMappingStore,
         ISourceMappingMigrator sourceMappingMigrator,
-        ISourceMappingValidator sourceMappingValidator)
+        ISourceMappingValidator sourceMappingValidator,
+        IDatabasePermissionCodeMigrator permissionCodes)
     {
         _uow = uow;
         _mapper = mapper;
@@ -54,6 +56,7 @@ public sealed class SageDatabaseService : ISageDatabaseService
         _sourceMappingStore = sourceMappingStore;
         _sourceMappingMigrator = sourceMappingMigrator;
         _sourceMappingValidator = sourceMappingValidator;
+        _permissionCodes = permissionCodes;
     }
 
     public async Task<IReadOnlyList<SageDbDto>> ListSageAsync(CancellationToken ct = default)
@@ -84,7 +87,11 @@ public sealed class SageDatabaseService : ISageDatabaseService
         if (doublon)
             throw new ConflictException(DatabaseTypeBase.DoublonMessage);
 
+        var previousName = dto.Id == 0 ? null : (await _uow.Repository<BddSage>().GetByIdAsync(dto.Id, ct))?.NomBd;
         var entity = await UpsertAsync(dto, ct);
+        // Renommage : les droits SAGE:<ancien nom>:… suivent la base, dans la même sauvegarde.
+        if (previousName is not null)
+            await _permissionCodes.RenameAsync("SAGE", previousName, entity.NomBd ?? string.Empty, ct);
         await _uow.SaveChangesAsync(ct);
         _effectiveRights.InvalidateAll(); // la liste des bases a changé : les droits effectifs en cache sont périmés
         if (dto.Mappings is not null)
@@ -147,6 +154,7 @@ public sealed class SageDatabaseService : ISageDatabaseService
         var e = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException();
         await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Delete, e.NomBd, ct);
         await _sourceMappingStore.RemoveMappingsAsync(true, id, ct);
+        await _permissionCodes.RemoveAsync("SAGE", e.NomBd ?? string.Empty, ct);
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
         _effectiveRights.InvalidateAll(); // la liste des bases a changé : les droits effectifs en cache sont périmés

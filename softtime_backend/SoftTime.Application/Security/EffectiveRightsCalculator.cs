@@ -50,6 +50,7 @@ public static class EffectiveRightsCalculator
 
         return new EffectiveRights
         {
+            RoleId = role.Id,
             Permissions = effective,
             Gates = gates,
             IsCustomized = !effective.SetEquals(roleBase),
@@ -178,6 +179,7 @@ public static class EffectiveRightsCalculator
         return new EffectiveRights
         {
             IsAdministrator = true,
+            RoleId = AdminRoleId,
             Permissions = permissions,
             Gates = new HashSet<int> { 1, 2, 3, 4, 5, 6 },
             SensitiveRights = SensitiveCodes.ToList(),

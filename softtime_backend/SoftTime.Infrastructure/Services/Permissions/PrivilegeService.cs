@@ -12,15 +12,18 @@ public sealed class PrivilegeService : IPrivilegeService
     private readonly IUnitOfWork _uow;
     private readonly IEffectiveRightsService _effectiveRights;
     private readonly IParametersAccessGuard _parametersAccessGuard;
+    private readonly ICurrentOperatorRightsJournal _journal;
 
     public PrivilegeService(
         IUnitOfWork uow,
         IEffectiveRightsService effectiveRights,
-        IParametersAccessGuard parametersAccessGuard)
+        IParametersAccessGuard parametersAccessGuard,
+        ICurrentOperatorRightsJournal journal)
     {
         _uow = uow;
         _effectiveRights = effectiveRights;
         _parametersAccessGuard = parametersAccessGuard;
+        _journal = journal;
     }
 
     public async Task<IReadOnlyList<DroitDto>> GetDroitsAsync(CancellationToken cancellationToken = default)
@@ -28,6 +31,12 @@ public sealed class PrivilegeService : IPrivilegeService
         await _parametersAccessGuard.EnsureCanReadAsync(ReadPermissions.PrivilegeList, cancellationToken);
         return (await _uow.Repository<DroitAcces>().ListReadOnlyAsync(_ => true, cancellationToken))
             .Select(d => new DroitDto(d.IdDroit, d.Droit)).ToList();
+    }
+
+    public async Task<IReadOnlyList<PermissionDomainDto>> GetCatalogAsync(CancellationToken cancellationToken = default)
+    {
+        await _parametersAccessGuard.EnsureCanReadAsync(ReadPermissions.PrivilegeList, cancellationToken);
+        return PermissionCatalog.Domains().Select(d => new PermissionDomainDto(d.Key, d.Gate, d.Codes)).ToList();
     }
 
     public async Task<IReadOnlyList<PrivilegeDto>> GetPrivilegesAsync(decimal? roleId, CancellationToken cancellationToken = default)
@@ -51,7 +60,13 @@ public sealed class PrivilegeService : IPrivilegeService
         repo.RemoveRange(existing);
         foreach (var d in droitIds.Distinct())
             await repo.AddAsync(new DroitRole { IdRole = roleId, IdDroit = d }, cancellationToken);
+        var role = await _uow.Repository<Role>().GetByIdAsync(roleId, cancellationToken);
+        await _journal.RecordAsync(new RightsTarget("ROLE", roleId, role?.NomRole), "UPDATE_ROLE_GATES",
+            Gates(existing.Select(p => p.IdDroit)), Gates(droitIds.Distinct()), cancellationToken);
         await _uow.SaveChangesAsync(cancellationToken);
         _effectiveRights.InvalidateAll();
     }
+
+    private static IEnumerable<string> Gates(IEnumerable<decimal> gates)
+        => gates.OrderBy(g => g).Select(g => $"PORTE:{g:0}");
 }

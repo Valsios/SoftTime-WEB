@@ -68,7 +68,8 @@ export class WeeklyValidationPage {
 
   constructor() {
     // Affiche le mode de calcul actif (T_CLOCK.MULTIPOINT) : il change la règle des HS.
-    this.clock.get().subscribe({
+    // Information seulement : lecture silencieuse (porte 2 ou 3 côté serveur), jamais bloquante.
+    this.clock.get({ silent: true }).subscribe({
       next: (c) =>
         this.modeLabel.set(
           c.multiPoint

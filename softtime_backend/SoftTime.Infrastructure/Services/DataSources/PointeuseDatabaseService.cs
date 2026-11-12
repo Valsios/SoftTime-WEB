@@ -20,6 +20,7 @@ public sealed class PointeuseDatabaseService : IPointeuseDatabaseService
     private readonly ISourceMappingStore _sourceMappingStore;
     private readonly ISourceMappingMigrator _sourceMappingMigrator;
     private readonly ISourceMappingValidator _sourceMappingValidator;
+    private readonly IDatabasePermissionCodeMigrator _permissionCodes;
 
     public PointeuseDatabaseService(
         IUnitOfWork uow,
@@ -29,7 +30,8 @@ public sealed class PointeuseDatabaseService : IPointeuseDatabaseService
         IEffectiveRightsService effectiveRights,
         ISourceMappingStore sourceMappingStore,
         ISourceMappingMigrator sourceMappingMigrator,
-        ISourceMappingValidator sourceMappingValidator)
+        ISourceMappingValidator sourceMappingValidator,
+        IDatabasePermissionCodeMigrator permissionCodes)
     {
         _uow = uow;
         _mapper = mapper;
@@ -39,6 +41,7 @@ public sealed class PointeuseDatabaseService : IPointeuseDatabaseService
         _sourceMappingStore = sourceMappingStore;
         _sourceMappingMigrator = sourceMappingMigrator;
         _sourceMappingValidator = sourceMappingValidator;
+        _permissionCodes = permissionCodes;
     }
 
     public async Task<IReadOnlyList<PointeuseDbDto>> ListPointeuseAsync(CancellationToken ct = default)
@@ -72,7 +75,11 @@ public sealed class PointeuseDatabaseService : IPointeuseDatabaseService
         if (dto.Active == true)
             await ActiverSeuleAsync(dto.Id, ct);
 
+        var previousName = dto.Id == 0 ? null : (await repo.GetByIdAsync(dto.Id, ct))?.NomBd;
         var entity = await UpsertAsync(dto, ct);
+        // Renommage : les droits POINTEUSE:<ancien nom>:… suivent la base, dans la même sauvegarde.
+        if (previousName is not null)
+            await _permissionCodes.RenameAsync("POINTEUSE", previousName, entity.NomBd ?? string.Empty, ct);
         await _uow.SaveChangesAsync(ct);
         _effectiveRights.InvalidateAll(); // la liste des bases a changé : les droits effectifs en cache sont périmés
         if (dto.Mappings is not null)
@@ -147,6 +154,7 @@ public sealed class PointeuseDatabaseService : IPointeuseDatabaseService
         var e = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException();
         await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Delete, e.NomBd, ct);
         await _sourceMappingStore.RemoveMappingsAsync(false, id, ct);
+        await _permissionCodes.RemoveAsync("POINTEUSE", e.NomBd ?? string.Empty, ct);
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
         _effectiveRights.InvalidateAll(); // la liste des bases a changé : les droits effectifs en cache sont périmés

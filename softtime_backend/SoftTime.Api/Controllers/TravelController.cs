@@ -10,6 +10,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Other)]
+[RequirePermission(Droit.Other, "OTHER:TRAVEL_EXPENSES")]
 [Route("api/v1/travel-expenses")]
 [Tags("TravelExpenses")]
 public class TravelController : ApiControllerBase

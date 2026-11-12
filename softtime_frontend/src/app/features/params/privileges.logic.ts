@@ -47,6 +47,40 @@ export function extractErrorMessage(err: unknown): string {
   return fallback;
 }
 
+/**
+ * Message d'erreur de l'écran Privilèges, sans texte technique : les refus du serveur sont reformulés avec la marche à
+ * suivre ; tout autre message est affiché tel quel.
+ */
+export function readablePrivilegesError(err: unknown): string {
+  const message = extractErrorMessage(err);
+  if (message.startsWith('Codes de permission inconnus')) {
+    const codes = message.slice(message.indexOf(':') + 1).trim().replace(/\.$/, '');
+    return `Droits non reconnus par le serveur (${codes}). Rechargez la page : la liste des droits a peut-être changé.`;
+  }
+  if (message.startsWith('Code de permission trop long')) {
+    return 'Un droit porte un nom trop long (128 caractères au plus) : raccourcissez le nom de la base concernée.';
+  }
+  if (message.includes('réservée aux administrateurs')) {
+    return 'Seul un administrateur peut modifier les privilèges.';
+  }
+  return message;
+}
+
+/** Nombre de droits par source (droits effectifs du serveur) : hérités du rôle, ajoutés, retirés. */
+export function countBySource(rights: readonly { source: string; isEffective: boolean }[]): { role: number; added: number; removed: number } {
+  return {
+    role: rights.filter((r) => r.source === 'ROLE' && r.isEffective).length,
+    added: rights.filter((r) => r.source === 'ADDED' && r.isEffective).length,
+    removed: rights.filter((r) => r.source === 'REMOVED').length,
+  };
+}
+
+/** Confirmation avant de retirer un ancien code de base sans action. */
+export function legacyRemovalMessage(code: string): string {
+  return `Retirer l'ancien code « ${code} » ? Il donne encore la porte Bases à ce compte, sans droit sur une base précise. `
+    + 'Retirez-le seulement si ce compte n\'a pas besoin de la porte Bases.';
+}
+
 /** Calcule les différences entre la base de référence et les droits de travail. */
 export function diffPermissions(
   baseline: Iterable<string>,

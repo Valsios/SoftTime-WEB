@@ -2,7 +2,7 @@
  * Clôture de paie assistée : logique pure de l'écran (sans Angular), testée par closing.logic.spec.ts.
  * L'écran n'invente rien : il met en forme la réponse de GET api/v1/closing/analysis.
  */
-import { ClosingAnomalyView, ClosingChecklistLine, ClosingComparison, ClosingCount, ClosingReport, ClosingStatus } from '../../shared/models';
+import { ClosingAnomalyView, ClosingChecklist, ClosingChecklistLine, ClosingComparison, ClosingCount, ClosingReport, ClosingStatus } from '../../shared/models';
 import type { ExcelSheet } from '../../shared/services/excel-export.service';
 
 export const DEFAULT_PAGE_SIZE = 50;
@@ -25,6 +25,8 @@ export const ANOMALY_TYPES = [
   'DoublonExact',
   'QuasiDoublon',
   'FerieNonApplique',
+  'CorrectionsManuelles',
+  'HeuresSupAtypiques',
 ] as const;
 
 export const SEVERITIES = ['Critique', 'Importante', 'Mineure', 'Information'] as const;
@@ -42,6 +44,8 @@ const TYPE_LABELS: Record<string, TypeLabel> = {
   DoublonExact: { singulier: 'doublon exact', pluriel: 'doublons exacts' },
   QuasiDoublon: { singulier: 'quasi-doublon', pluriel: 'quasi-doublons' },
   FerieNonApplique: { singulier: 'férié non appliqué', pluriel: 'fériés non appliqués' },
+  CorrectionsManuelles: { singulier: 'correction manuelle massive', pluriel: 'corrections manuelles massives' },
+  HeuresSupAtypiques: { singulier: 'semaine à heures supp. atypiques', pluriel: 'semaines à heures supp. atypiques' },
 };
 
 const SEVERITY_LABELS: Record<string, TypeLabel> = {
@@ -219,7 +223,13 @@ export const CORRECTION_TARGETS: Record<string, CorrectionTarget> = {
   QuasiDoublon: { path: '/punches', label: 'Pointages', permission: 'PROC:PUNCHES', droit: DROIT_PROCESSING },
   // Le drapeau férié absent n'a pas d'effet sur la paie : seul un pointage ce jour-là se vérifie (voir correctionLink).
   FerieNonApplique: { path: '/anomalies', label: 'Anomalies', permission: 'PROC:ANOMALIES', droit: DROIT_PROCESSING },
+  // Signaux de vigilance : on vérifie les saisies manuelles du salarié, ou la semaine validée.
+  CorrectionsManuelles: { path: '/corrected-hours', label: 'Heures corrigées', permission: 'PROC:CORRECTED_HOURS', droit: DROIT_PROCESSING },
+  HeuresSupAtypiques: { path: '/weekly-validation', label: 'Validation semaine', permission: 'PROC:WEEKLY_VALIDATION', droit: DROIT_PROCESSING },
 };
+
+/** Types qui portent sur une PÉRIODE (le salarié sur toute la période) : le lien ouvre la période analysée entière. */
+const TYPES_SUR_PERIODE: ReadonlySet<string> = new Set(['CorrectionsManuelles']);
 
 /**
  * Pages cibles qui lisent les paramètres facultatifs du, au et matricule (entrées liées à la route,
@@ -256,14 +266,18 @@ export function nothingToFix(anomaly: { type: string; pointageExiste?: boolean |
 export function correctionLink(
   anomaly: { type: string; matricule: string; date: string; pointageExiste?: boolean | null },
   pagesWithParams: ReadonlySet<string> = PAGES_WITH_QUERY_PARAMS,
+  periode?: { from: string; to: string } | null,
 ): CorrectionLink | null {
   const target = CORRECTION_TARGETS[anomaly.type];
   if (!target || nothingToFix(anomaly)) return null;
   const jour = anomaly.date ? anomaly.date.slice(0, 10) : '';
+  const surPeriode = TYPES_SUR_PERIODE.has(anomaly.type) && periode;
   return {
     ...target,
     queryParams: pagesWithParams.has(target.path) && jour
-      ? { du: jour, au: TYPES_JUSQU_AU_LENDEMAIN.has(anomaly.type) ? jourSuivant(jour) : jour, matricule: anomaly.matricule }
+      ? surPeriode
+        ? { du: periode.from.slice(0, 10), au: periode.to.slice(0, 10), matricule: anomaly.matricule }
+        : { du: jour, au: TYPES_JUSQU_AU_LENDEMAIN.has(anomaly.type) ? jourSuivant(jour) : jour, matricule: anomaly.matricule }
       : null,
     ariaLabel: `Corriger dans ${target.label} : ${typeLabel(anomaly.type).toLowerCase()}, matricule ${anomaly.matricule}, ${formatDay(jour)}`,
   };
@@ -340,11 +354,15 @@ export function checklistLink(line: Pick<ClosingChecklistLine, 'code'>, filter: 
 /** Tri de la liste : ordre habituel (date, matricule, type) ou gravité décroissante. */
 export type ClosingSort = 'date' | 'gravite';
 
-/** Ce que montre la liste : niveaux retenus (vide : aucun filtre), tri et présence des « Information » (onglet). */
+/** Ce que montre la liste : niveaux et types retenus (vides : aucun filtre), tri et présence des « Information » (onglet). */
 export interface ClosingListView {
   gravites: readonly string[];
   tri: ClosingSort;
   includeInformation: boolean;
+  /** Types d'anomalie retenus dans la liste (vide : aucun filtre de type). */
+  types?: readonly string[];
+  /** Salarié retenu dans la liste (null : tous) : matricule envoyé, libellé affiché. */
+  salarie?: { matricule: string; label: string } | null;
 }
 
 /** Ajoute ou retire un niveau ; le résultat suit toujours l'ordre d'affichage des cartes (du plus grave au moins grave). */
@@ -353,12 +371,63 @@ export function toggleSeverity(current: readonly string[], severity: string): st
   return SEVERITIES.filter((s) => next.includes(s));
 }
 
+/** Ajoute ou retire un type ; le résultat suit toujours l'ordre d'affichage des types (celui du serveur). */
+export function toggleType(current: readonly string[], type: string): string[] {
+  const next = current.includes(type) ? current.filter((t) => t !== type) : [...current, type];
+  return ANOMALY_TYPES.filter((t) => next.includes(t));
+}
+
 /** « Filtre de gravité : Critique, Importante » ; vide sans filtre. */
 export function severityFilterText(gravites: readonly string[]): string {
   return gravites.length ? `Filtre de gravité : ${gravites.map(severityLabel).join(', ')}` : '';
 }
 
+/** « Types : Pointages manquants, Quasi-doublons » ; vide sans filtre. */
+export function typeFilterText(types: readonly string[]): string {
+  return types.length ? `Types : ${types.map((t) => typeLabel(t, 2)).join(', ')}` : '';
+}
+
+/** Les filtres de la liste en une phrase (« · » entre eux) ; vide sans aucun filtre. */
+export function listFilterText(gravites: readonly string[], types: readonly string[], salarie?: string | null): string {
+  return [severityFilterText(gravites), typeFilterText(types), salarie ? `Salarié : ${salarie}` : '']
+    .filter((t) => t)
+    .join(' · ');
+}
+
+/** Ligne du tableau « Salariés les plus touchés » : nom affiché, critiques et types en clair. */
+export interface EmployeeRow {
+  matricule: string;
+  label: string;
+  departement: string;
+  anomalies: number;
+  critiques: number;
+  types: string;
+}
+
+/** Salariés classés par le serveur (ordre conservé), mis en forme pour l'écran ; vide sans classement. */
+export function employeeRows(report: Pick<ClosingReport, 'parSalarie'>): EmployeeRow[] {
+  return (report.parSalarie ?? []).map((s) => ({
+    matricule: s.matricule,
+    label: personLabel(s),
+    departement: s.departement ?? '—',
+    anomalies: s.nombreAnomalies,
+    critiques: countOf(s.parGravite, 'Critique'),
+    types: s.parType.map((t) => `${typeLabel(t.cle, t.nombre).toLowerCase()} (${t.nombre})`).join(', '),
+  }));
+}
+
+/** « 20 salariés les plus touchés sur 57 » ; tous affichés : « 3 salariés concernés ». */
+export function employeesCaption(shown: number, total: number | null | undefined): string {
+  const n = total ?? shown;
+  if (n <= shown) return `${n} ${n > 1 ? 'salariés concernés' : 'salarié concerné'}`;
+  return `${shown} salariés les plus touchés sur ${n}`;
+}
+
 export const NO_ANOMALY_FOR_FILTER = 'Aucune anomalie pour ce filtre de gravité.';
+export const NO_ANOMALY_FOR_LIST_FILTER = 'Aucune anomalie pour ce filtre de la liste.';
+/** Filtre de type sans ligne dans l'onglet « À corriger » : les lignes de ces types sont peut-être des informations masquées. */
+export const NO_ANOMALY_FOR_TYPE_TO_FIX =
+  'Aucune anomalie à corriger pour ce filtre. Les puces comptent toutes les gravités : ouvrez l’onglet « Avec informations » pour voir les lignes de niveau Information.';
 
 /** Deux filtres équivalents (département vide = tous). */
 export function sameFilter(a: ClosingFilter | null | undefined, b: ClosingFilter | null | undefined): boolean {
@@ -433,6 +502,46 @@ export function exportFileName(filter: ClosingFilter): string {
   return `controle-avant-paie_${filter.from}_${filter.to}`;
 }
 
+/** Nom proposé par « Enregistrer au format PDF » pour le rapport imprimé. */
+export function printFileName(filter: ClosingFilter): string {
+  return `rapport-controle-avant-paie_${filter.from}_${filter.to}`;
+}
+
+export const PRINT_STALE_MESSAGE = 'Les données ont changé depuis l’analyse : réanalysez avant d’imprimer le rapport.';
+
+/**
+ * En-tête du rapport imprimé : ce qui a été contrôlé, quand, avec quel résultat et quelle liste — de
+ * quoi faire preuve du contrôle sans l'écran sous les yeux. Aucun nom ni matricule.
+ */
+export function printHeaderLines(
+  report: Pick<ClosingReport, 'statut' | 'statutLibelle' | 'score' | 'joursEmployeControles' | 'nombreAnomalies'>,
+  filter: ClosingFilter,
+  analysedAt: Date,
+  view: ClosingListView,
+  printedAt: Date,
+): { label: string; value: string }[] {
+  const liste = view.gravites.length || view.types?.length || view.salarie
+    ? listFilterText(view.gravites, view.types ?? [], view.salarie?.label)
+    : view.includeInformation ? 'Toutes gravités' : 'Anomalies à corriger (hors « Information »)';
+  return [
+    { label: 'Période', value: `du ${formatDay(filter.from)} au ${formatDay(filter.to)}` },
+    { label: 'Département', value: filter.departement ? filter.departement : 'Tous' },
+    { label: 'Statut', value: report.statutLibelle ?? statusView(report.statut).label },
+    { label: 'Score', value: scoreText(report.score) },
+    { label: 'Jours-employé contrôlés', value: String(report.joursEmployeControles) },
+    { label: 'Anomalies (toutes gravités)', value: String(report.nombreAnomalies) },
+    { label: 'Liste imprimée', value: `${liste} · tri ${view.tri === 'gravite' ? 'par gravité' : 'par date'}` },
+    { label: 'Analyse du', value: fullStamp(analysedAt) },
+    { label: 'Rapport imprimé le', value: fullStamp(printedAt) },
+  ];
+}
+
+/** « JJ/MM/AAAA à HH:mm » (heure locale) : l'année compte sur un document conservé. */
+function fullStamp(date: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${formatDay(toIsoDay(date))} à ${p(date.getHours())}:${p(date.getMinutes())}`;
+}
+
 /** Lignes de la feuille « Anomalies », dans l'ordre de la liste (aucun tri ni filtre ajouté). */
 export function exportRows(items: readonly ClosingAnomalyView[]): (string | number | boolean | null)[][] {
   return items.map((a) => [
@@ -464,6 +573,8 @@ export function exportSummary(
     ['Jours-employé contrôlés', report.joursEmployeControles],
     ['Anomalies (toutes gravités)', report.nombreAnomalies],
     ['Filtre de gravité', view.gravites.length ? view.gravites.map(severityLabel).join(', ') : view.includeInformation ? 'Aucun (toutes gravités)' : 'Aucun (hors « Information »)'],
+    ['Filtre de type', view.types?.length ? view.types.map((t) => typeLabel(t, 2)).join(', ') : 'Aucun (tous les types)'],
+    ['Filtre salarié', view.salarie ? view.salarie.label : 'Aucun (tous les salariés)'],
     ['Tri de la liste', view.tri === 'gravite' ? 'Gravité décroissante, puis date' : 'Date, matricule, type'],
     ['Lignes de la feuille « Anomalies »', exportedRows],
   ];
@@ -472,15 +583,109 @@ export function exportSummary(
   return { sheetName: 'Synthèse', headers: ['Information', 'Valeur'], rows };
 }
 
+/**
+ * Couleur de statut d'une gravité pour les graphiques : la même famille que les badges (danger,
+ * avertissement, info, neutre), toujours doublée du libellé de la ligne.
+ */
+const SEVERITY_CHART_COLORS: Record<string, string> = {
+  Critique: 'var(--danger)',
+  Importante: 'var(--warning)',
+  Mineure: 'var(--info)',
+  Information: 'var(--text-disabled)',
+};
+
+/** Barres « par gravité » : les quatre niveaux, du plus grave au moins grave, mêmes nombres que les cartes. */
+export function severityChartPoints(report: Pick<ClosingReport, 'parGravite'>): { label: string; value: number; color: string }[] {
+  return SEVERITIES.map((s) => ({
+    label: severityLabel(s),
+    value: countOf(report.parGravite, s),
+    color: SEVERITY_CHART_COLORS[s],
+  }));
+}
+
+/** Barres « par type » : types présents seulement, du plus fréquent au moins fréquent (ordre du serveur à égalité). */
+export function typeChartPoints(report: Pick<ClosingReport, 'parType'>): { label: string; value: number }[] {
+  return ANOMALY_TYPES
+    .map((t, rang) => ({ rang, label: typeLabel(t, 2), value: countOf(report.parType, t) }))
+    .filter((p) => p.value > 0)
+    .sort((a, b) => b.value - a.value || a.rang - b.rang)
+    .map(({ label, value }) => ({ label, value }));
+}
+
+/**
+ * Écarts par type avec la période précédente : types concernés sur l'une ou l'autre période, plus
+ * fort écart (en valeur absolue) d'abord ; vide sans comparaison.
+ */
+export function comparisonDeltaPoints(comparaison: ClosingComparison | null | undefined): { label: string; value: number }[] {
+  if (!comparaison) return [];
+  return comparaison.parType
+    .filter((t) => t.precedent > 0 || t.actuel > 0)
+    .map((t, rang) => ({ rang, label: typeLabel(t.type, 2), value: t.ecart }))
+    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value) || a.rang - b.rang)
+    .map(({ label, value }) => ({ label, value }));
+}
+
+/** Écart de score en clair : « +7 points », « −3 points », « Score identique », ou rien sans score comparable. */
+export function scoreDeltaText(comparaison: ClosingComparison | null | undefined): string {
+  const e = comparaison?.ecartScore;
+  if (e === null || e === undefined) return '';
+  if (e === 0) return 'Score identique';
+  const points = Math.abs(e) > 1 ? 'points' : 'point';
+  return e > 0 ? `+${e} ${points}` : `−${-e} ${points}`;
+}
+
+/** Feuille « Par département » : les lignes du tableau affiché (vide : aucune feuille). */
+export function exportDepartments(report: Pick<ClosingReport, 'parDepartement'>): ExcelSheet | null {
+  if (!report.parDepartement.length) return null;
+  return {
+    sheetName: 'Par département',
+    headers: ['Département', 'Score', 'Jours contrôlés', 'Anomalies', 'Critiques'],
+    rows: report.parDepartement.map((d) => [
+      d.departement ?? 'Sans département',
+      d.score ?? 'Aucun jour contrôlé',
+      d.joursEmployeControles,
+      d.nombreAnomalies,
+      countOf(d.parGravite, 'Critique'),
+    ]),
+  };
+}
+
+/** Feuille « Comparaison » : score et écarts par type avec la période précédente (absente sans comparaison). */
+export function exportComparison(report: Pick<ClosingReport, 'comparaison' | 'score' | 'joursEmployeControles'>): ExcelSheet | null {
+  const c = report.comparaison;
+  if (!c) return null;
+  const rows: (string | number | boolean | null)[][] = [
+    [`Période précédente (du ${formatDay(c.from)} au ${formatDay(c.to)})`, '', '', ''],
+    ['Score', c.scorePrecedent ?? 'Aucun jour contrôlé', report.score ?? 'Aucun jour contrôlé', c.ecartScore ?? ''],
+    ['Jours-employé contrôlés', c.joursEmployeControlesPrecedent, report.joursEmployeControles, ''],
+  ];
+  for (const t of c.parType) rows.push([typeLabel(t.type, 2), t.precedent, t.actuel, t.ecart]);
+  return { sheetName: 'Comparaison', headers: ['Indicateur ou type', 'Précédent', 'Actuel', 'Écart'], rows };
+}
+
+/** Feuille « Avancement » : la checklist affichée, états en toutes lettres (absente si non chargée). */
+export function exportChecklist(checklist: ClosingChecklist | null): ExcelSheet | null {
+  if (!checklist || !checklist.lignes.length) return null;
+  return {
+    sheetName: 'Avancement',
+    headers: ['Étape', 'État', 'Détail', 'Nombre'],
+    rows: checklist.lignes.map((l) => [l.libelle, checklistStateView(l.etat).label, l.detail, l.nombre ?? '']),
+  };
+}
+
 export function exportSheets(
   report: ClosingReport,
   items: readonly ClosingAnomalyView[],
   filter: ClosingFilter,
   analysedAt: Date,
   view: ClosingListView = { gravites: [], tri: 'date', includeInformation: false },
+  checklist: ClosingChecklist | null = null,
 ): ExcelSheet[] {
-  return [
+  const sheets: ExcelSheet[] = [
     exportSummary(report, filter, analysedAt, items.length, view),
     { sheetName: 'Anomalies', headers: EXPORT_HEADERS, rows: exportRows(items) },
   ];
+  for (const sheet of [exportChecklist(checklist), exportComparison(report), exportDepartments(report)])
+    if (sheet) sheets.push(sheet);
+  return sheets;
 }

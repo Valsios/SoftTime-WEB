@@ -13,6 +13,9 @@ public sealed class EffectiveRights
 
     public bool IsAdministrator { get; internal init; }
 
+    /// <summary>Rôle actuel du compte en base (null si le compte ou son rôle est introuvable).</summary>
+    public decimal? RoleId { get; internal init; }
+
     /// <summary>Toutes les permissions effectives (comparaison insensible à la casse).</summary>
     public IReadOnlySet<string> Permissions { get; internal init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 

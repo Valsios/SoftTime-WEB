@@ -16,26 +16,35 @@ public class CardPaieController : ApiControllerBase
     private readonly ICardPaieService _svc;
     public CardPaieController(ICardPaieService svc) => _svc = svc;
 
+    /// <summary>
+    /// Liste des correspondances (matricules, noms, départements), lue aussi par le filtre de période des écrans
+    /// Traitements, Autres, Traçabilité et États : ouverte à ces portes en lecture seule. Les écritures restent porte 2.
+    /// </summary>
+    [RequireAnyDroit(Droit.Parameters, Droit.Processing, Droit.Other, Droit.Traceability, Droit.Reports)]
     [HttpGet]
     public async Task<IActionResult> GetAllAsync(CancellationToken ct) => Ok(await _svc.ListCardsAsync(ct));
 
+    [RequireDroit(Droit.Parameters)]
     [HttpGet("paged")]
     public async Task<IActionResult> GetPagedAsync(
         [FromQuery] int? page, [FromQuery] int? pageSize, [FromQuery] string? search, CancellationToken ct)
         => Ok(await _svc.ListCardsPagedAsync(page, pageSize, search, ct));
 
-    [HttpPost]
     [RequireDroit(Droit.Parameters)]
+    [RequirePermission(Droit.Parameters, "PARAMS:CARDPAIE:CREATE")]
+    [HttpPost]
     public async Task<IActionResult> CreateAsync([FromBody] CardPaieDto dto, CancellationToken ct)
         => Ok(await _svc.SaveCardAsync(dto with { Id = 0 }, ct));
 
-    [HttpPut("{id:int}")]
     [RequireDroit(Droit.Parameters)]
+    [RequirePermission(Droit.Parameters, "PARAMS:CARDPAIE:UPDATE")]
+    [HttpPut("{id:int}")]
     public async Task<IActionResult> UpdateAsync(int id, [FromBody] CardPaieDto dto, CancellationToken ct)
         => Ok(await _svc.SaveCardAsync(dto with { Id = id }, ct));
 
-    [HttpDelete("{id:int}")]
     [RequireDroit(Droit.Parameters)]
+    [RequirePermission(Droit.Parameters, "PARAMS:CARDPAIE:DELETE")]
+    [HttpDelete("{id:int}")]
     public async Task<IActionResult> DeleteAsync(int id, CancellationToken ct)
     {
         await _svc.DeleteCardAsync(id, ct);
@@ -46,8 +55,9 @@ public class CardPaieController : ApiControllerBase
     /// Supprime la correspondance SAGE ↔ badge identifiée par le couple de matricules
     /// (portage de <c>SupprimerParCorrespondance</c> du desktop).
     /// </summary>
-    [HttpDelete("by-correspondence")]
     [RequireDroit(Droit.Parameters)]
+    [RequirePermission(Droit.Parameters, "PARAMS:CARDPAIE:DELETE")]
+    [HttpDelete("by-correspondence")]
     public async Task<IActionResult> DeleteByCorrespondenceAsync(
         [FromQuery] string matriculeSage,
         [FromQuery] string? matriculePointeuse,
@@ -57,13 +67,15 @@ public class CardPaieController : ApiControllerBase
         return NoContent();
     }
 
-    [HttpPost("auto-map")]
     [RequireDroit(Droit.Parameters)]
+    [RequirePermission(Droit.Parameters, "PARAMS:CARDPAIE:CREATE")]
+    [HttpPost("auto-map")]
     public async Task<IActionResult> AutoMapAsync(CancellationToken ct)
         => Ok(await _svc.AutoMapCardsAsync(ct));
 
-    [HttpPost("import-csv")]
     [RequireDroit(Droit.Parameters)]
+    [RequirePermission(Droit.Parameters, "PARAMS:CARDPAIE:CREATE")]
+    [HttpPost("import-csv")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> ImportCsvAsync(IFormFile file, CancellationToken ct)
     {

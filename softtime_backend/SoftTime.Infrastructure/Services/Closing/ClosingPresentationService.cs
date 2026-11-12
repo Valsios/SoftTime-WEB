@@ -32,8 +32,11 @@ public class ClosingPresentationService : IClosingPresentationService
     public async Task<ClosingReportDto> PresenterAsync(ClosingAnalysisDto analyse, CancellationToken ct = default)
     {
         var afficherNoms = _reglages.ShowNames;
-        var noms = afficherNoms && analyse.Anomalies.Items.Count > 0
-            ? await ChargerNomsAsync(analyse.Anomalies.Items.Select(a => a.Matricule), ct)
+        var parSalarie = analyse.ParSalarie ?? Array.Empty<ClosingEmployeeDto>();
+        // Matricules de la page ET des salariés classés : toujours une seule lecture des cartes.
+        var matricules = analyse.Anomalies.Items.Select(a => a.Matricule).Concat(parSalarie.Select(s => s.Matricule)).ToList();
+        var noms = afficherNoms && matricules.Count > 0
+            ? await ChargerNomsAsync(matricules, ct)
             : new Dictionary<string, (string? Nom, string? Prenom)>(StringComparer.Ordinal);
         var items = analyse.Anomalies.Items
             .Select(a =>
@@ -62,7 +65,15 @@ public class ClosingPresentationService : IClosingPresentationService
             analyse.ParDepartement,
             analyse.Comparaison,
             afficherNoms,
-            analyse.SalariesSansPlanningExclus);
+            analyse.SalariesSansPlanningExclus,
+            parSalarie
+                .Select(s =>
+                {
+                    var (nom, prenom) = noms.GetValueOrDefault(s.Matricule);
+                    return new ClosingEmployeeViewDto(s.Matricule, nom, prenom, s.Departement, s.NombreAnomalies, s.Poids, s.ParGravite, s.ParType);
+                })
+                .ToList(),
+            analyse.SalariesConcernes);
     }
 
     /// <summary>Nom et prénom des salariés de la page (carte de plus petit ID par clé matricule).</summary>

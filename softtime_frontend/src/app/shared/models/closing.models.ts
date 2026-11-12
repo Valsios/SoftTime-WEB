@@ -7,7 +7,9 @@ export type ClosingAnomalyType =
   | 'PointageSansPlanning'
   | 'DoublonExact'
   | 'QuasiDoublon'
-  | 'FerieNonApplique';
+  | 'FerieNonApplique'
+  | 'CorrectionsManuelles'
+  | 'HeuresSupAtypiques';
 
 export type ClosingSeverity = 'Information' | 'Mineure' | 'Importante' | 'Critique';
 
@@ -66,6 +68,19 @@ export interface ClosingComparison {
   parType: ClosingTypeDelta[];
 }
 
+/** Salarié parmi les plus touchés de la période (poids = somme des poids de ses anomalies). */
+export interface ClosingEmployee {
+  matricule: string;
+  nom: string | null;
+  prenom: string | null;
+  departement: string | null;
+  nombreAnomalies: number;
+  poids: number;
+  parGravite: ClosingCount[];
+  /** Types présents seulement. */
+  parType: ClosingCount[];
+}
+
 export interface ClosingReport {
   from: string;
   to: string;
@@ -85,6 +100,10 @@ export interface ClosingReport {
   nomsAffiches: boolean;
   /** Salariés sans aucun planning sur la période, non contrôlés par « pointage sans planning ». */
   salariesSansPlanningExclus?: number;
+  /** Salariés les plus touchés (20 au plus), indépendants des filtres de la liste. */
+  parSalarie?: ClosingEmployee[] | null;
+  /** Nombre total de salariés ayant au moins une anomalie. */
+  salariesConcernes?: number;
 }
 
 /** Une étape de la préparation de paie : Fait, AFaire, Information ou NonDeterminable (jamais deviné). */
@@ -118,6 +137,10 @@ export interface ClosingQuery {
   reuseCache?: boolean;
   /** Restreint la LISTE à ces niveaux (Information, Mineure, Importante, Critique) ; comptages, score et statut ne changent pas. */
   gravites?: readonly string[];
+  /** Restreint la LISTE à ces types d'anomalie, en plus du filtre de gravité ; comptages, score et statut ne changent pas. */
+  types?: readonly string[];
+  /** Restreint la LISTE à ce salarié (matricule) ; comptages, score, statut et salariés classés ne changent pas. */
+  matricule?: string | null;
   /** « gravite » : liste du plus grave au moins grave, puis ordre habituel. */
   tri?: 'gravite';
 }

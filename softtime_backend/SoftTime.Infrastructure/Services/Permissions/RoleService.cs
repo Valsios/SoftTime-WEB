@@ -13,15 +13,18 @@ public sealed class RoleService : IRoleService
     private readonly IUnitOfWork _uow;
     private readonly IEffectiveRightsService _effectiveRights;
     private readonly IParametersAccessGuard _parametersAccessGuard;
+    private readonly ICurrentOperatorRightsJournal _journal;
 
     public RoleService(
         IUnitOfWork uow,
         IEffectiveRightsService effectiveRights,
-        IParametersAccessGuard parametersAccessGuard)
+        IParametersAccessGuard parametersAccessGuard,
+        ICurrentOperatorRightsJournal journal)
     {
         _uow = uow;
         _effectiveRights = effectiveRights;
         _parametersAccessGuard = parametersAccessGuard;
+        _journal = journal;
     }
 
     public async Task<IReadOnlyList<RoleDto>> GetRolesAsync(CancellationToken cancellationToken = default)
@@ -77,6 +80,8 @@ public sealed class RoleService : IRoleService
         droitRepo.RemoveRange(droits);
 
         repo.Remove(entity);
+        await _journal.RecordAsync(new RightsTarget("ROLE", id, entity.NomRole), "DELETE_ROLE",
+            rolePerms.Select(p => p.PermissionCode).Concat(droits.Select(d => $"PORTE:{d.IdDroit:0}")), null, cancellationToken);
         await _uow.SaveChangesAsync(cancellationToken);
         _effectiveRights.InvalidateAll();
     }

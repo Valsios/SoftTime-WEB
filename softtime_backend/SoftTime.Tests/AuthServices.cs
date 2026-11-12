@@ -49,9 +49,10 @@ internal sealed class AuthServices : IUserPermissionService
         Directory = new UserDirectoryService(uow, Guard);
         Administration = new UserAdministrationService(
             uow, email, effectiveRights, Guard, journal, passwordHasher, refreshTokens, securityOptions);
-        Roles = new RoleService(uow, effectiveRights, Guard);
-        Privileges = new PrivilegeService(uow, effectiveRights, Guard);
-        DatabaseAccess = new DatabaseAccessService(uow, effectiveRights, Guard);
+        var operatorJournal = new CurrentOperatorRightsJournal(journal, currentUser);
+        Roles = new RoleService(uow, effectiveRights, Guard, operatorJournal);
+        Privileges = new PrivilegeService(uow, effectiveRights, Guard, operatorJournal);
+        DatabaseAccess = new DatabaseAccessService(uow, effectiveRights, Guard, operatorJournal);
         RightsAudit = new RightsAuditService(uow);
     }
 
@@ -150,6 +151,9 @@ internal sealed class AuthServices : IUserPermissionService
 
     public Task ResetUserDetailedPermissionsAsync(decimal currentUserId, decimal targetUserId, CancellationToken cancellationToken = default)
         => UserPermissions.ResetUserDetailedPermissionsAsync(currentUserId, targetUserId, cancellationToken);
+
+    public Task RemoveLegacyPermissionsAsync(decimal currentUserId, decimal targetUserId, IReadOnlyCollection<string> codes, CancellationToken cancellationToken = default)
+        => UserPermissions.RemoveLegacyPermissionsAsync(currentUserId, targetUserId, codes, cancellationToken);
 
     public Task<RoleDetailedPermissionsDto> GetRoleDetailedPermissionsAsync(decimal roleId, CancellationToken cancellationToken = default)
         => RolePermissions.GetRoleDetailedPermissionsAsync(roleId, cancellationToken);

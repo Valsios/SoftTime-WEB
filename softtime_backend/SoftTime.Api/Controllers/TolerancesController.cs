@@ -27,14 +27,17 @@ public class TolerancesController : ApiControllerBase
         [FromQuery] string? search, CancellationToken ct)
         => Ok(await _svc.ListTolerancesPagedAsync(categoryId, page, pageSize, search, ct));
 
+    [RequirePermission(Droit.Parameters, "PARAMS:TOLERANCES:CREATE")]
     [HttpPost]
     public async Task<IActionResult> CreateAsync([FromBody] ToleranceDto dto, CancellationToken ct)
         => Ok(await _svc.SaveToleranceAsync(dto with { Id = 0 }, ct));
 
+    [RequirePermission(Droit.Parameters, "PARAMS:TOLERANCES:UPDATE")]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> UpdateAsync(int id, [FromBody] ToleranceDto dto, CancellationToken ct)
         => Ok(await _svc.SaveToleranceAsync(dto with { Id = id }, ct));
 
+    [RequirePermission(Droit.Parameters, "PARAMS:TOLERANCES")]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> DeleteAsync(int id, CancellationToken ct)
     {

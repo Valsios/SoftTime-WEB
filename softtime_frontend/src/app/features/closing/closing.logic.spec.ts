@@ -251,7 +251,7 @@ describe('liens de correction', () => {
       permission: 'PROC:ANOMALIES',
       droit: 3,
     });
-    expect(Object.keys(CORRECTION_TARGETS)).toHaveLength(7);
+    expect(Object.keys(CORRECTION_TARGETS)).toHaveLength(9);
     expect(correctionLink({ ...anomalie, type: 'Inconnu' })).toBeNull();
   });
 

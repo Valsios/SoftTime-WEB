@@ -71,7 +71,9 @@ public sealed class ClosingAnalysisCache
             .Append(o.DuplicateToleranceSeconds).Append(',').Append(o.IgnorerSemainesValidees).Append(',')
             .Append(o.ExclureSansPlanningSurPeriode).Append(',').Append(o.DoublonsMonoGravite).Append(',')
             .Append(o.PoidsInformation).Append(',').Append(o.PoidsMineure).Append(',').Append(o.PoidsImportante).Append(',')
-            .Append(o.PoidsCritique).Append(',').Append(o.CriticalRatioBlocking.ToString(c)).Append('|');
+            .Append(o.PoidsCritique).Append(',').Append(o.CriticalRatioBlocking.ToString(c)).Append(',')
+            .Append(o.CorrectionsManuellesRatio.ToString(c)).Append(',').Append(o.CorrectionsManuellesMinimum).Append(',')
+            .Append(o.HeuresSupHebdoSeuil.ToString(c)).Append('|');
         foreach (var (type, gravite) in o.Gravites.OrderBy(g => g.Key))
             s.Append(type).Append('=').Append(gravite).Append(';');
         return s.ToString();

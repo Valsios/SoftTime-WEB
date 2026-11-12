@@ -35,14 +35,17 @@ public class CorrectedHoursController : ApiControllerBase
     public async Task<IActionResult> GetPagedAsync([FromQuery] PeriodRequest filter, [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
         => Ok(await _svc.ListCorrectionsPagedAsync(filter, page, pageSize, ct));
 
+    [RequirePermission(Droit.Processing, "PROC:CORRECTED_HOURS:CREATE")]
     [HttpPost]
     public async Task<IActionResult> CreateAsync([FromBody] CorrectedHourDto dto, CancellationToken ct)
         => Ok(await _svc.SaveCorrectionAsync(dto with { Id = 0 }, ct));
 
+    [RequirePermission(Droit.Processing, "PROC:CORRECTED_HOURS:UPDATE")]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateAsync(decimal id, [FromBody] CorrectedHourDto dto, CancellationToken ct)
         => Ok(await _svc.SaveCorrectionAsync(dto with { Id = id }, ct));
 
+    [RequirePermission(Droit.Processing, "PROC:CORRECTED_HOURS:DELETE")]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteAsync(decimal id, CancellationToken ct)
     {
@@ -50,6 +53,7 @@ public class CorrectedHoursController : ApiControllerBase
         return NoContent();
     }
 
+    [RequirePermission(Droit.Processing, "PROC:CORRECTED_HOURS:CREATE")]
     [HttpPost("import-excel")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> ImportExcelAsync(IFormFile file, CancellationToken ct)

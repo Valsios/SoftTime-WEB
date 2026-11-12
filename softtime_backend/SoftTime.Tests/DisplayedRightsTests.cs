@@ -48,8 +48,9 @@ public class DisplayedRightsTests
         _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 15, IdRole = 5, Login = "sanslignes" });
         _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 16, IdRole = 6, Login = "aveclignes" });
         _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 17, IdRole = 5, Login = "ajustements" });
-        _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 17, PermissionCode = "SAGE:CREATE", IsGranted = true });
-        _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 17, PermissionCode = "SAGE:BASE1:READ", IsGranted = true });
+        // Copie complète d'avant la migration 006 (convertie en écarts dans le test qui lit ce compte).
+        _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 17, PermissionCode = "SAGE:CREATE", IsGranted = true, IsDeviation = false });
+        _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 17, PermissionCode = "SAGE:BASE1:READ", IsGranted = true, IsDeviation = false });
     }
 
     [Fact]
@@ -98,6 +99,7 @@ public class DisplayedRightsTests
     public async Task GetUserDetailedPermissionsAsync_AccountWithPersonalRows_KeepsItsList()
     {
         // Act
+        await SoftTime.Tests.Http.TestRights.ConvertLegacyCopiesAsync(_uow);
         var user = await _auth.GetUserDetailedPermissionsAsync(17);
 
         // Assert

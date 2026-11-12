@@ -48,20 +48,26 @@ public sealed class ClosingOptionsSetup : IConfigureOptions<ClosingOptions>
         Entier(section, nameof(ClosingOptions.MaxPeriodDays), options, v => options.MaxPeriodDays = v);
         Entier(section, nameof(ClosingOptions.CacheSeconds), options, v => options.CacheSeconds = v);
         Entier(section, nameof(ClosingOptions.CacheMaxSeconds), options, v => options.CacheMaxSeconds = v);
-        LireRatio(section, options);
+        Decimal(section, (nameof(ClosingOptions.CriticalRatioBlocking), "0.05"), options, v => options.CriticalRatioBlocking = v);
+        Decimal(section, (nameof(ClosingOptions.CorrectionsManuellesRatio), "0.5"), options,
+            v => options.CorrectionsManuellesRatio = v);
+        Entier(section, nameof(ClosingOptions.CorrectionsManuellesMinimum), options, v => options.CorrectionsManuellesMinimum = v);
+        Decimal(section, (nameof(ClosingOptions.HeuresSupHebdoSeuil), "40"), options, v => options.HeuresSupHebdoSeuil = v);
     }
 
-    private static void LireRatio(IConfiguration section, ClosingOptions options)
+    /// <summary>Nombre décimal à point (culture invariante) ; illisible : erreur de démarrage avec un exemple.</summary>
+    private static void Decimal(
+        IConfiguration section, (string Cle, string Exemple) reglage, ClosingOptions options, Action<decimal> affecter)
     {
-        if (section[nameof(ClosingOptions.CriticalRatioBlocking)] is not string ratio)
+        var (cle, exemple) = reglage;
+        if (section[cle] is not string brut)
             return;
         const NumberStyles styles = NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign
             | NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite;
-        if (decimal.TryParse(ratio, styles, CultureInfo.InvariantCulture, out var valeur))
-            options.CriticalRatioBlocking = valeur;
+        if (decimal.TryParse(brut, styles, CultureInfo.InvariantCulture, out var valeur))
+            affecter(valeur);
         else
-            options.ErreursLecture.Add(
-                $"{Section}:{nameof(ClosingOptions.CriticalRatioBlocking)} doit être un nombre décimal (ex. 0.05).");
+            options.ErreursLecture.Add($"{Section}:{cle} doit être un nombre décimal (ex. {exemple}).");
     }
 
     private static void LireGravites(IConfiguration section, ClosingOptions options)

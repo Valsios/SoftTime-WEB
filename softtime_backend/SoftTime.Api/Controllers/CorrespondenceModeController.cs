@@ -20,6 +20,7 @@ public class CorrespondenceModeController : ApiControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAsync(CancellationToken ct) => Ok(await _svc.GetCorrespondenceAsync(ct));
 
+    [RequirePermission(Droit.Parameters, "PARAMS:CORRESPONDENCE")]
     [HttpPut]
     public async Task<IActionResult> UpdateAsync([FromBody] CorrespondenceModeDto dto, CancellationToken ct)
         => Ok(await _svc.SetCorrespondenceAsync(dto.Active, ct));

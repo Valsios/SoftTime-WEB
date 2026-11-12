@@ -19,3 +19,4 @@ export * from './chart.util';
 export * from './soft-line-chart';
 export * from './soft-bar-chart';
 export * from './soft-donut-chart';
+export * from './soft-delta-chart';
