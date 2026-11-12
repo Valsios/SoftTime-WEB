@@ -3,15 +3,13 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
-using Microsoft.EntityFrameworkCore.Migrations;
-using Microsoft.EntityFrameworkCore.Migrations.Operations;
 
 using SoftTime.Infrastructure.Persistence;
 
 namespace SoftTime.Tests.Persistence;
 
 /// <summary>
-/// Fige le mapping EF des quatre contextes (tables, colonnes, types, nullabilité, clés, index, relations).
+/// Fige le mapping EF des trois contextes (tables, colonnes, types, nullabilité, clés, index, relations).
 /// Une modification d'une IEntityTypeConfiguration qui change le schéma attendu fait échouer ce test :
 /// si elle est voulue, ajouter le script SQL versionné correspondant puis régénérer l'instantané
 /// (fichier « ef-model.actual.txt » écrit à côté des binaires du test).
@@ -31,41 +29,12 @@ public class EfModelSnapshotTests
             .Append(Describe("SoftTime", new SoftTimeDbContext(Options<SoftTimeDbContext>())))
             .Append(Describe("Sage", new SageDbContext(Options<SageDbContext>())))
             .Append(Describe("Pointeuse", new PointeuseDbContext(Options<PointeuseDbContext>())))
-            .Append(Describe("Ml", new MlDbContext(Options<MlDbContext>())))
             .ToString();
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "ef-model.actual.txt"), actual);
 
         // Assert
         actual.Should().Be(expected);
     }
-
-    [Fact]
-    public void MlModel_ComparedToTheMigrationSnapshot_HasNoPendingChange()
-    {
-        // Arrange
-        using var sut = new MlDbContext(Options<MlDbContext>());
-        var snapshot = sut.GetService<IMigrationsAssembly>().ModelSnapshot!.Model;
-        if (snapshot is IMutableModel mutable)
-            snapshot = mutable.FinalizeModel();
-        snapshot = sut.GetService<IModelRuntimeInitializer>().Initialize(snapshot);
-        var current = sut.GetService<IDesignTimeModel>().Model;
-
-        // Act
-        var pending = sut.GetService<IMigrationsModelDiffer>()
-            .GetDifferences(snapshot.GetRelationalModel(), current.GetRelationalModel())
-            .Select(Describe)
-            .ToList();
-
-        // Assert : une modification du modèle ML exige une nouvelle migration EF.
-        pending.Should().BeEmpty();
-    }
-
-    private static string Describe(MigrationOperation operation) => operation switch
-    {
-        ColumnOperation c => $"{operation.GetType().Name} {c.Table}.{c.Name} {c.ColumnType} null={c.IsNullable}",
-        RenameColumnOperation r => $"RenameColumn {r.Table}.{r.Name} -> {r.NewName}",
-        _ => operation.GetType().Name
-    };
 
     private static DbContextOptions<TContext> Options<TContext>() where TContext : DbContext
         => new DbContextOptionsBuilder<TContext>()

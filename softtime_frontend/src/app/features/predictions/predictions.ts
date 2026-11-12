@@ -1,14 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
-import { finalize, forkJoin } from 'rxjs';
-import {
-  MlHsAccuracy,
-  MlHsForecast,
-  MlHsWeek,
-  MlJobState,
-  MlModelInfo,
-  MlStatus,
-} from '../../shared/models';
+import { RouterLink } from '@angular/router';
+import { forkJoin } from 'rxjs';
+import { WeekLanding, WeekLandingRow, WeekLandingWeek } from '../../shared/models';
 import { PredictionsService } from '../../shared/services/predictions.service';
 import {
   Column,
@@ -19,83 +13,62 @@ import {
   SoftButton,
   SoftCard,
 } from '../../shared/components';
-import { fmtDate as formatIsoDate } from '../../shared/utils/date';
 
-/** Heures supplémentaires prévues d'un département (agrégat des lignes salarié). */
+/** Atterrissage des heures supplémentaires d'un département (agrégat des lignes salarié). */
 interface HsDepartement {
   nom: string;
   salaries: number;
-  auDelaPlafond: number;
+  /** Salariés qui passent à 150 % ou au-delà. */
+  alertes: number;
+  acquises: number;
   heures: number;
-  borneBasse: number;
-  borneHaute: number;
   part: number;
 }
 
 const SANS_DEPARTEMENT = 'Sans département';
 
+/** Seuil à partir duquel un salarié est une alerte : passage à 150 %. */
+const NIVEAU_ALERTE = 2;
+
 /** Heures à une décimale, séparateurs français (16 248,1). */
 const HEURES = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 /**
- * Moteur prédictif : état des modèles et heures supplémentaires prévues pour la semaine, par
- * département puis par salarié. Les prédictions sont précalculées côté serveur ; cette page ne
- * fait que les agréger, les filtrer et les présenter.
+ * Atterrissage de la semaine : heures supplémentaires que chaque salarié aura faites dimanche soir,
+ * d'après les pointages déjà traités et le planning des jours restants. Le calcul est fait côté
+ * serveur à chaque lecture ; cette page l'agrège, le filtre et le présente.
  */
 @Component({
   selector: 'app-predictions',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [PageHeader, SoftCard, SoftButton, SoftBadge, DataTable, DataTableCell, NgTemplateOutlet],
+  imports: [PageHeader, SoftCard, SoftButton, SoftBadge, DataTable, DataTableCell, NgTemplateOutlet, RouterLink],
   template: `
     <page-header
       title="Prévisions"
-      subtitle="Heures supplémentaires attendues cette semaine, estimées par le moteur ML.NET"
+      subtitle="Atterrissage des heures supplémentaires : ce que chaque salarié aura fait dimanche soir"
     >
+      <a class="soft-btn soft-btn--ghost" routerLink="/employee-planning">Ouvrir le planning</a>
       <soft-button variant="secondary" (click)="load()" [loading]="loading()">Actualiser</soft-button>
-      <soft-button variant="secondary" (click)="action('refresh')" [loading]="acting() === 'refresh'" [disabled]="(job()?.running ?? false) || acting() !== null">
-        Rafraîchir les données
-      </soft-button>
-      <soft-button variant="secondary" (click)="action('train')" [loading]="acting() === 'train'" [disabled]="(job()?.running ?? false) || acting() !== null">
-        Réentraîner
-      </soft-button>
-      <soft-button variant="ghost" (click)="action('backfill')" [loading]="acting() === 'backfill'" [disabled]="(job()?.running ?? false) || acting() !== null">
-        Reconstruire l'historique
-      </soft-button>
     </page-header>
 
     @if (error()) {
       <div class="pred-alert pred-alert--error" role="alert">{{ error() }}</div>
     }
-    @if (info()) {
-      <div class="pred-alert pred-alert--info" role="status">{{ info() }}</div>
-    }
 
-    <div class="pred-status">
-      <span class="pred-status__dot" [class]="'pred-status__dot pred-status__dot--' + etatClass()"></span>
-      <div class="pred-status__text">
-        <strong>{{ etatLabel() }}</strong>
-        <span>{{ status()?.message || 'Chargement…' }}</span>
+    @if (loading() && !landing()) {
+      <div class="pred-empty">Calcul de l'atterrissage…</div>
+    } @else if (landing(); as l) {
+      <div class="pred-status">
+        <span class="pred-status__dot" [class]="'pred-status__dot pred-status__dot--' + fraicheur().etat"></span>
+        <div class="pred-status__text">
+          <strong>{{ fraicheur().titre }}</strong>
+          <span>{{ fraicheur().detail }}</span>
+        </div>
+        <span class="pred-status__meta">
+          Seuils : 150 % au-delà de {{ heures(l.seuilMajoration150) }}, imposable au-delà de {{ heures(l.plafondExonere) }}
+        </span>
       </div>
-      @if (status()?.derniereGeneration) {
-        <span class="pred-status__meta">Dernière génération : {{ fmtDate(status()?.derniereGeneration) }}</span>
-      }
-      @if (job()?.running) {
-        <soft-badge variant="warning">Traitement en cours…</soft-badge>
-      }
-    </div>
 
-    @if (loading() && !status()) {
-      <div class="pred-empty">Chargement des prévisions…</div>
-    } @else if (!status()?.enabled) {
-      <div class="pred-empty">
-        Le moteur est désactivé (Ml:Enabled). Activez-le dans appsettings.json pour générer des prévisions.
-      </div>
-    } @else if (status()?.etat === 'Baseline') {
-      <div class="pred-empty">
-        Aucun modèle d'heures supplémentaires actif pour cette société : les données sont insuffisantes ou
-        le modèle ne bat pas encore la baseline. Lancez « Reconstruire l'historique » puis « Réentraîner ».
-      </div>
-    } @else {
       <soft-card variant="bordered" padding="sm">
         <div class="pred-section-head">
           <h2>Horizon</h2>
@@ -114,11 +87,11 @@ const HEURES = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 1, maximu
               <span class="pred-week__label">{{ i === 0 ? 'Cette semaine' : 'S+' + i }}</span>
               <small>du {{ jourCourt(w.semaineDebut) }}</small>
               <span class="pred-week__bar" aria-hidden="true">
-                <span class="pred-week__fill" [style.height.%]="barreSemaine(w.heuresPrevues)"></span>
+                <span class="pred-week__fill" [style.height.%]="barreSemaine(w.hsAtterrissage)"></span>
               </span>
               @if (w.salaries > 0) {
-                <strong>{{ heures(w.heuresPrevues) }}</strong>
-                <small>{{ w.salaries }} salarié(s) · {{ w.auDelaPlafond }} > {{ plafond() }} h</small>
+                <strong>{{ heures(w.hsAtterrissage) }}</strong>
+                <small>{{ w.enHeuresSup }} en HS · {{ w.auDela150 }} à 150 %</small>
               } @else {
                 <strong>—</strong>
                 <small>planning non saisi</small>
@@ -128,53 +101,53 @@ const HEURES = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 1, maximu
         </div>
       </soft-card>
 
-      <div class="pred-kpis" [class.pred-loading]="hsLoading()" [attr.aria-busy]="hsLoading()">
+      <div class="pred-kpis" [class.pred-loading]="weekLoading()" [attr.aria-busy]="weekLoading()">
         <soft-card variant="bordered">
           <div class="pred-kpi">
-            <span>HS prévues ({{ semaineLabel() }})</span>
-            <strong>{{ heures(hsTotal()) }}</strong>
-            <small>fourchette {{ heures(hsBasse()) }} – {{ heures(hsHaute()) }}</small>
+            <span>HS à l'atterrissage ({{ semaineLabel() }})</span>
+            <strong>{{ heures(l.totaux.hsAtterrissage) }}</strong>
+            <small>dont {{ heures(l.totaux.hsAcquises) }} déjà acquises</small>
           </div>
         </soft-card>
         <soft-card variant="bordered">
           <div class="pred-kpi">
-            <span>Au-delà de {{ plafond() }} h</span>
-            <strong>{{ auDelaPlafond() }} / {{ hs().length }}</strong>
-            <small>salariés dont les HS deviennent imposables</small>
+            <span>Salariés en heures supplémentaires</span>
+            <strong>{{ l.totaux.enHeuresSup }} / {{ l.totaux.salaries }}</strong>
+            <small>finiront la semaine au-dessus de leur contrat</small>
           </div>
         </soft-card>
         <soft-card variant="bordered">
           <div class="pred-kpi">
-            <span>Département le plus chargé</span>
-            @if (departementMax(); as d) {
-              <strong class="pred-kpi__text" [title]="d.nom">{{ d.nom }}</strong>
-              <small>{{ heures(d.heures) }} · {{ pct(d.part) }} du total</small>
-            } @else {
-              <strong>—</strong>
-              <small>aucune HS prévue</small>
-            }
+            <span>Passent à 150 %</span>
+            <strong>{{ l.totaux.auDela150 }}</strong>
+            <small>dont {{ l.totaux.auDelaPlafond }} au-delà de {{ heures(l.plafondExonere) }} (imposable)</small>
           </div>
         </soft-card>
         <soft-card variant="bordered">
           <div class="pred-kpi">
-            <span>Précision du modèle</span>
-            <strong>{{ precision().valeur }}</strong>
-            <small>{{ precision().source }}</small>
+            <span>Heures encore évitables</span>
+            <strong>{{ heures(l.totaux.heuresARetirer) }}</strong>
+            <small>à retirer des plannings restants pour repasser sous les seuils</small>
           </div>
         </soft-card>
       </div>
+
+      @if (l.totaux.sansPlanning > 0) {
+        <div class="pred-alert pred-alert--warn" role="status">
+          {{ l.totaux.sansPlanning }} salarié(s) ont au moins un jour restant sans planning : leur atterrissage est
+          sous-estimé tant que le planning n'est pas saisi.
+        </div>
+      }
 
       <soft-card variant="bordered" padding="sm">
         <div class="pred-section-head">
           <h2>Par département</h2>
           <span>Cliquez sur un département pour voir ses salariés</span>
         </div>
-        @if (hsLoading()) {
-          <div class="pred-empty">Chargement de la semaine…</div>
+        @if (weekLoading()) {
+          <div class="pred-empty">Calcul de la semaine…</div>
         } @else if (departements().length === 0) {
-          <div class="pred-empty">
-            Aucune prévision pour cette semaine : le planning n'est pas encore saisi ou le modèle est indisponible.
-          </div>
+          <div class="pred-empty">Aucun salarié n'a de pointage ni de planning sur cette semaine.</div>
         } @else {
           <div class="pred-depts">
             @for (d of departements(); track d.nom) {
@@ -189,8 +162,8 @@ const HEURES = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 1, maximu
                   <strong>{{ d.nom }}</strong>
                   <small>
                     {{ d.salaries }} salarié{{ d.salaries > 1 ? 's' : '' }}
-                    @if (d.auDelaPlafond > 0) {
-                      · {{ d.auDelaPlafond }} > {{ plafond() }} h
+                    @if (d.alertes > 0) {
+                      · {{ d.alertes }} à 150 %
                     }
                   </small>
                 </span>
@@ -199,7 +172,7 @@ const HEURES = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 1, maximu
                 </span>
                 <span class="pred-dept__value">
                   <strong>{{ heures(d.heures) }}</strong>
-                  <small>{{ heures(d.borneBasse) }} – {{ heures(d.borneHaute) }}</small>
+                  <small>dont {{ heures(d.acquises) }} acquises</small>
                 </span>
                 <span class="pred-dept__share">{{ pct(d.part) }}</span>
               </button>
@@ -211,80 +184,42 @@ const HEURES = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 1, maximu
       <soft-card variant="bordered" padding="sm">
         <div class="pred-section-head">
           <h2>Par salarié</h2>
-          @if (departementFiltre(); as filtre) {
-            <button type="button" class="pred-filter" (click)="filtrerDepartement(null)" title="Retirer le filtre">
-              {{ filtre }} <span aria-hidden="true">✕</span>
+          <span class="pred-filters">
+            @if (departementFiltre(); as filtre) {
+              <button type="button" class="pred-filter" (click)="filtrerDepartement(null)" title="Retirer le filtre">
+                {{ filtre }} <span aria-hidden="true">✕</span>
+              </button>
+            }
+            <button
+              type="button"
+              class="pred-filter"
+              [class.pred-filter--off]="!alertesSeules()"
+              [attr.aria-pressed]="alertesSeules()"
+              (click)="alertesSeules.set(!alertesSeules())"
+            >
+              Alertes seulement ({{ l.totaux.auDela150 }})
             </button>
-          } @else {
-            <span>{{ hs().length }} salarié(s) · {{ semaineLabel() }}</span>
-          }
+          </span>
         </div>
         <data-table
-          [columns]="hsColumns"
-          [rows]="hsRows()"
+          [columns]="colonnes"
+          [rows]="lignes()"
           trackKey="matricule"
           searchPlaceholder="Rechercher un salarié, un matricule, un département…"
-          emptyText="Aucune prévision HS : planning de la semaine incomplet ou modèle indisponible."
+          emptyText="Aucun salarié à afficher pour cette semaine."
         >
           <ng-template dataTableCell="salarie" let-row>
             <ng-container *ngTemplateOutlet="salarieCell; context: { $implicit: row }"></ng-container>
           </ng-template>
-          <ng-template dataTableCell="heuresPrevues" let-row>
-            <strong>{{ heures(hsLigne(row).heuresPrevues) }}</strong>
+          <ng-template dataTableCell="hsAtterrissage" let-row>
+            <strong>{{ heures(ligne(row).hsAtterrissage) }}</strong>
+            <small class="pred-sub">{{ detail(ligne(row)) }}</small>
           </ng-template>
-          <ng-template dataTableCell="probabiliteDepassement" let-row>
-            <soft-badge [variant]="niveauVariant(hsLigne(row).niveau)">
-              {{ niveauLabel(hsLigne(row).niveau) }} · {{ pct(hsLigne(row).probabiliteDepassement) }}
-            </soft-badge>
+          <ng-template dataTableCell="niveau" let-row>
+            <soft-badge [variant]="niveauVariant(ligne(row).niveau)">{{ niveauLabel(ligne(row)) }}</soft-badge>
+            <small class="pred-sub">{{ action(ligne(row)) }}</small>
           </ng-template>
         </data-table>
-      </soft-card>
-
-      <soft-card variant="bordered" padding="sm">
-        <div class="pred-section-head">
-          <h2>Prévu / réel</h2>
-          <span>Semaines terminées : dernière prévision émise comparée aux HS constatées</span>
-        </div>
-        @if (suivi().length === 0) {
-          <div class="pred-empty">
-            Pas encore d'historique : la comparaison apparaît dès qu'une semaine prévue est terminée et recalculée.
-          </div>
-        } @else {
-          <div class="pred-accuracy">
-            <div>
-              <span>Écart moyen par salarié</span>
-              <strong>± {{ heures(suiviSynthese().ecartMoyen) }}</strong>
-            </div>
-            <div>
-              <span>Réel dans la fourchette</span>
-              <strong>{{ pct(suiviSynthese().couverture) }}</strong>
-            </div>
-            <div>
-              <span>Total prévu → réel</span>
-              <strong>{{ heures(suiviSynthese().prevu) }} → {{ heures(suiviSynthese().reel) }}</strong>
-            </div>
-            <div>
-              <span>Biais</span>
-              <strong [class]="ecartClass(suiviSynthese().reel - suiviSynthese().prevu)">
-                {{ biaisLabel(suiviSynthese().prevu, suiviSynthese().reel) }}
-              </strong>
-            </div>
-          </div>
-          <data-table
-            [columns]="suiviColumns"
-            [rows]="suiviRows()"
-            trackKey="semaineDebut"
-            [searchable]="false"
-            [paginate]="false"
-            emptyText="Aucune semaine comparable."
-          >
-            <ng-template dataTableCell="ecart" let-row>
-              <span [class]="ecartClass(suiviLigne(row).heuresReelles - suiviLigne(row).heuresPrevues)">
-                {{ ecartSigne(suiviLigne(row).heuresReelles - suiviLigne(row).heuresPrevues) }}
-              </span>
-            </ng-template>
-          </data-table>
-        }
       </soft-card>
     }
 
@@ -292,24 +227,6 @@ const HEURES = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 1, maximu
       <strong>{{ row['nom'] }} {{ row['prenom'] }}</strong>
       <small class="pred-sub">{{ row['matricule'] }}</small>
     </ng-template>
-
-    <soft-card variant="bordered" padding="sm">
-      <div class="pred-section-head">
-        <h2>Modèles</h2>
-        <span>Registre versionné des entraînements</span>
-      </div>
-      <data-table
-        [columns]="modeleColumns"
-        [rows]="modeleRows()"
-        trackKey="id"
-        searchPlaceholder="Rechercher un type, une version, un statut…"
-        emptyText="Aucun entraînement enregistré."
-      >
-        <ng-template dataTableCell="statut" let-row>
-          <soft-badge [variant]="statutVariant(modele(row))">{{ modele(row).statut }}</soft-badge>
-        </ng-template>
-      </data-table>
-    </soft-card>
   `,
   styles: [
     `
@@ -327,11 +244,6 @@ const HEURES = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 1, maximu
         background: var(--danger-50, #fef2f2);
         color: var(--danger-700, #b91c1c);
         border: 1px solid var(--danger-200, #fecaca);
-      }
-      .pred-alert--info {
-        background: var(--info-50, #eff6ff);
-        color: var(--info-700, #1d4ed8);
-        border: 1px solid var(--info-200, #bfdbfe);
       }
       .pred-status {
         display: flex;
@@ -354,9 +266,6 @@ const HEURES = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 1, maximu
       }
       .pred-status__dot--baseline {
         background: var(--warning-500, #f59e0b);
-      }
-      .pred-status__dot--desactive {
-        background: var(--text-muted, #94a3b8);
       }
       .pred-status__text {
         display: flex;
@@ -395,11 +304,6 @@ const HEURES = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 1, maximu
       .pred-kpi strong {
         font-size: 22px;
         font-family: var(--font-heading);
-      }
-      .pred-kpi__text {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
       }
       .pred-kpi small {
         font-size: 12px;
@@ -561,30 +465,19 @@ const HEURES = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 1, maximu
         border-radius: 4px 4px 0 0;
         background: var(--primary-500);
       }
-      .pred-accuracy {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-        gap: 12px;
-        padding: 0 8px 12px;
+      .pred-alert--warn {
+        background: var(--warning-50, #fffbeb);
+        color: var(--warning-700, #b45309);
+        border: 1px solid var(--warning-200, #fde68a);
       }
-      .pred-accuracy div {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
+      .pred-filters {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 8px;
       }
-      .pred-accuracy span {
-        font-size: 12px;
-        color: var(--text-muted);
-      }
-      .pred-accuracy strong {
-        font-size: 17px;
-        font-family: var(--font-heading);
-      }
-      .pred-ecart--plus {
-        color: var(--danger-700, #b91c1c);
-      }
-      .pred-ecart--moins {
-        color: var(--success-700, #15803d);
+      .pred-filter--off {
+        border-color: var(--app-border);
+        background: none;
       }
       .pred-loading {
         opacity: 0.5;
@@ -615,145 +508,92 @@ const HEURES = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 1, maximu
 export class PredictionsPage implements OnInit {
   private readonly api = inject(PredictionsService);
 
-  readonly status = signal<MlStatus | null>(null);
-  readonly hs = signal<MlHsForecast[]>([]);
-  readonly horizon = signal<MlHsWeek[]>([]);
-  readonly suivi = signal<MlHsAccuracy[]>([]);
-  readonly job = signal<MlJobState | null>(null);
+  readonly landing = signal<WeekLanding | null>(null);
+  readonly horizon = signal<WeekLandingWeek[]>([]);
   readonly loading = signal(false);
-  /** Action de maintenance en cours d'envoi (boutons en chargement, les autres bloqués). */
-  readonly acting = signal<'refresh' | 'train' | 'backfill' | null>(null);
-  readonly hsLoading = signal(false);
+  readonly weekLoading = signal(false);
   /** Lundi (AAAA-MM-JJ) de la semaine analysée ; null : semaine en cours. */
   readonly semaine = signal<string | null>(null);
   readonly error = signal<string | null>(null);
-  readonly info = signal<string | null>(null);
   /** Département sélectionné dans la vue agrégée ; filtre la liste des salariés. */
   readonly departementFiltre = signal<string | null>(null);
+  /** N'afficher que les salariés qui passent à 150 % ou au-delà. */
+  readonly alertesSeules = signal(false);
 
-  readonly modeles = computed<MlModelInfo[]>(() => this.status()?.modeles ?? []);
+  private readonly toutes = computed<WeekLandingRow[]>(() => this.landing()?.lignes ?? []);
 
-  // Tableaux partagés (data-table) : le texte des colonnes (format) sert aussi à la recherche.
-  readonly hsRows = computed(() => {
+  // Le texte des colonnes (format) sert aussi à la recherche du tableau partagé.
+  readonly lignes = computed(() => {
     const filtre = this.departementFiltre();
-    const lignes = filtre ? this.hs().filter((h) => this.nomDepartement(h) === filtre) : this.hs();
+    const lignes = this.toutes()
+      .filter((l) => !filtre || this.nomDepartement(l) === filtre)
+      .filter((l) => !this.alertesSeules() || l.niveau >= NIVEAU_ALERTE);
     return lignes as unknown as Record<string, unknown>[];
   });
-  readonly modeleRows = computed(() => this.modeles() as unknown as Record<string, unknown>[]);
-  readonly suiviRows = computed(() => this.suivi() as unknown as Record<string, unknown>[]);
 
-  readonly suiviColumns: Column[] = [
-    { key: 'semaineDebut', label: 'Semaine', format: (v) => `du ${this.jourCourt(v as string)}` },
-    { key: 'salaries', label: 'Salariés' },
-    { key: 'heuresPrevues', label: 'Prévu', format: (v) => this.heures(v as number) },
-    { key: 'heuresReelles', label: 'Réel', format: (v) => this.heures(v as number) },
-    {
-      key: 'ecart',
-      label: 'Écart',
-      format: (_, row) => this.ecartSigne(this.suiviLigne(row).heuresReelles - this.suiviLigne(row).heuresPrevues),
-    },
-    { key: 'ecartMoyen', label: 'Écart moyen / salarié', format: (v) => `± ${this.heures(v as number)}` },
-    { key: 'couverture', label: 'Dans la fourchette', format: (v) => this.pct(v as number) },
-  ];
-
-  readonly hsColumns: Column[] = [
+  readonly colonnes: Column[] = [
     { key: 'salarie', label: 'Salarié', format: (_, row) => this.salarieTexte(row) },
     { key: 'departement', label: 'Département', format: (v) => (v as string | null) || '—' },
-    { key: 'heuresPrevues', label: 'HS prévues', format: (v) => this.heures(v as number) },
     {
-      key: 'intervalle',
-      label: 'Fourchette',
-      format: (_, row) => `${this.heures(this.hsLigne(row).borneBasse)} – ${this.heures(this.hsLigne(row).borneHaute)}`,
+      key: 'heuresRealisees',
+      label: 'Fait',
+      format: (v, row) => `${this.heures(v as number)} / ${this.heures(this.ligne(row).heuresContrat)}`,
     },
-    {
-      key: 'probabiliteDepassement',
-      label: "Probabilité d'HS",
-      format: (v, row) => `${this.niveauLabel(this.hsLigne(row).niveau)} ${this.pct(v as number)}`,
-    },
+    { key: 'hsAcquises', label: 'HS acquises', format: (v) => this.heures(v as number) },
+    { key: 'heuresPlanifieesRestantes', label: 'Reste planifié', format: (v, row) => this.resteTexte(v as number, this.ligne(row)) },
+    { key: 'hsAtterrissage', label: 'Atterrissage HS', format: (v) => this.heures(v as number) },
+    { key: 'niveau', label: 'Alerte', format: (_, row) => `${this.niveauLabel(this.ligne(row))} ${this.action(this.ligne(row))}` },
   ];
-
-  readonly modeleColumns: Column[] = [
-    { key: 'typeModele', label: 'Type', format: (v) => this.typeLabel(v as string) },
-    { key: 'version', label: 'Version' },
-    { key: 'algorithme', label: 'Algorithme' },
-    { key: 'statut', label: 'Statut' },
-    { key: 'entraineLe', label: 'Entraîné le', format: (v) => this.fmtDate(v as string) },
-    { key: 'metriques', label: 'Métriques', format: (_, row) => this.metricLabel(this.modele(row)) },
-    { key: 'commentaire', label: 'Commentaire', format: (v) => (v as string | null) || '—' },
-  ];
-
-  readonly hsTotal = computed(() => this.hs().reduce((sum, h) => sum + h.heuresPrevues, 0));
-  readonly hsBasse = computed(() => this.hs().reduce((sum, h) => sum + h.borneBasse, 0));
-  readonly hsHaute = computed(() => this.hs().reduce((sum, h) => sum + h.borneHaute, 0));
-  /** Plafond hebdomadaire des HS exonérées (OvertimeRules.ExemptCeilingHours côté serveur). */
-  readonly plafond = computed(() => this.status()?.plafondHsExonere ?? 20);
-  readonly auDelaPlafond = computed(() => this.hs().filter((h) => h.heuresPrevues > this.plafond()).length);
 
   readonly departements = computed<HsDepartement[]>(() => {
-    const total = this.hsTotal();
+    const total = this.toutes().reduce((sum, l) => sum + l.hsAtterrissage, 0);
     const groupes = new Map<string, HsDepartement>();
-    for (const h of this.hs()) {
-      const nom = this.nomDepartement(h);
-      const d = groupes.get(nom) ?? { nom, salaries: 0, auDelaPlafond: 0, heures: 0, borneBasse: 0, borneHaute: 0, part: 0 };
+    for (const l of this.toutes()) {
+      const nom = this.nomDepartement(l);
+      const d = groupes.get(nom) ?? { nom, salaries: 0, alertes: 0, acquises: 0, heures: 0, part: 0 };
       d.salaries++;
-      if (h.heuresPrevues > this.plafond()) d.auDelaPlafond++;
-      d.heures += h.heuresPrevues;
-      d.borneBasse += h.borneBasse;
-      d.borneHaute += h.borneHaute;
+      if (l.niveau >= NIVEAU_ALERTE) d.alertes++;
+      d.acquises += l.hsAcquises;
+      d.heures += l.hsAtterrissage;
       groupes.set(nom, d);
     }
     return [...groupes.values()]
       .map((d) => ({ ...d, part: total > 0 ? d.heures / total : 0 }))
       .sort((a, b) => b.heures - a.heures || a.nom.localeCompare(b.nom));
   });
-  readonly departementMax = computed(() => {
-    const premier = this.departements()[0];
-    return premier && premier.heures > 0 ? premier : null;
-  });
 
-  /** Synthèse prévu / réel, pondérée par le nombre de salariés comparés chaque semaine. */
-  readonly suiviSynthese = computed(() => {
-    const lignes = this.suivi();
-    const salaries = lignes.reduce((sum, s) => sum + s.salaries, 0);
-    const pondere = (f: (s: MlHsAccuracy) => number) =>
-      salaries > 0 ? lignes.reduce((sum, s) => sum + f(s) * s.salaries, 0) / salaries : 0;
-    return {
-      semaines: lignes.length,
-      ecartMoyen: pondere((s) => s.ecartMoyen),
-      couverture: pondere((s) => s.couverture),
-      prevu: lignes.reduce((sum, s) => sum + s.heuresPrevues, 0),
-      reel: lignes.reduce((sum, s) => sum + s.heuresReelles, 0),
-    };
-  });
-
-  /**
-   * Précision affichée : l'écart constaté en conditions réelles dès qu'une semaine est comparable,
-   * sinon l'écart mesuré sur les semaines de test à l'entraînement.
-   */
-  readonly precision = computed(() => {
-    const synthese = this.suiviSynthese();
-    if (synthese.semaines > 0) {
-      return {
-        valeur: `± ${this.heures(synthese.ecartMoyen)}`,
-        source: `constaté sur ${synthese.semaines} semaine(s) terminée(s)`,
-      };
-    }
-    const model = this.modeles().find((m) => m.estActif && m.typeModele === 'HsMontant');
-    const mae = this.metric(model, 'mae');
-    return {
-      valeur: mae == null ? '—' : `± ${this.heures(mae)}`,
-      source: "mesuré à l'entraînement, par salarié et par semaine",
-    };
-  });
-  /** Lundi de la semaine affichée : choix de l'utilisateur, sinon première semaine de l'horizon. */
-  readonly semaineAffichee = computed(
-    () => this.semaine() ?? this.jourIso(this.horizon()[0]?.semaineDebut ?? this.hs()[0]?.semaineDebut),
-  );
+  /** Lundi de la semaine affichée : choix de l'utilisateur, sinon celle renvoyée par le serveur. */
+  readonly semaineAffichee = computed(() => this.semaine() ?? this.jourIso(this.landing()?.totaux.semaineDebut));
   readonly semaineLabel = computed(() => {
     const semaine = this.semaineAffichee();
     return semaine ? `semaine du ${this.jourCourt(semaine)}` : 'semaine en cours';
   });
-  private readonly horizonMax = computed(() => Math.max(0, ...this.horizon().map((w) => w.heuresPrevues)));
+  private readonly horizonMax = computed(() => Math.max(0, ...this.horizon().map((w) => w.hsAtterrissage)));
+
+  /**
+   * Ce sur quoi repose le calcul : jusqu'où les pointages sont traités, et donc à partir de quel
+   * jour la semaine est projetée d'après le planning. Un import en retard est signalé.
+   */
+  readonly fraicheur = computed<{ etat: 'pret' | 'baseline'; titre: string; detail: string }>(() => {
+    const l = this.landing();
+    const dernier = this.jourIso(l?.dernierJourPointe);
+    if (!l || !dernier) {
+      return {
+        etat: 'baseline',
+        titre: 'Aucun pointage traité',
+        detail: "Toute la semaine est projetée d'après le planning.",
+      };
+    }
+    const retard = this.joursEntre(dernier, this.jourIso(l.aujourdhui) ?? dernier);
+    return {
+      etat: retard > 1 ? 'baseline' : 'pret',
+      titre: `Pointages traités jusqu'au ${this.jourCourt(dernier)}`,
+      detail:
+        retard > 1
+          ? `Import en retard de ${retard} jours : les jours suivants sont projetés d'après le planning, pas comptés absents.`
+          : "Les jours suivants sont projetés d'après le planning.",
+    };
+  });
 
   ngOnInit(): void {
     this.load();
@@ -763,55 +603,35 @@ export class PredictionsPage implements OnInit {
     this.loading.set(true);
     this.error.set(null);
     forkJoin({
-      status: this.api.status(),
+      landing: this.api.landing(this.semaine() ?? undefined),
       horizon: this.api.horizon(),
-      suivi: this.api.accuracy(),
-      hs: this.api.overtime(this.semaine() ?? undefined),
-      job: this.api.job(),
     }).subscribe({
       next: (result) => {
-        this.status.set(result.status);
         this.horizon.set(result.horizon);
-        this.suivi.set(result.suivi);
-        this.job.set(result.job);
-        this.appliquerSemaine(result.hs);
+        this.appliquerSemaine(result.landing);
         this.loading.set(false);
       },
       error: (err) => {
-        this.error.set(err?.error?.message ?? 'Impossible de charger les prévisions.');
+        this.error.set(err?.error?.message ?? "Impossible de calculer l'atterrissage.");
         this.loading.set(false);
       },
     });
   }
 
-  action(kind: 'refresh' | 'train' | 'backfill'): void {
-    this.info.set(null);
-    this.error.set(null);
-    const request = kind === 'refresh' ? this.api.refresh() : kind === 'train' ? this.api.train() : this.api.backfill();
-    this.acting.set(kind);
-    request.pipe(finalize(() => this.acting.set(null))).subscribe({
-      next: (result) => {
-        this.info.set(result.message);
-        this.load();
-      },
-      error: (err) => this.error.set(err?.error?.message ?? 'Action refusée.'),
-    });
-  }
-
-  /** Charge les prévisions par salarié d'une semaine de l'horizon. */
+  /** Charge l'atterrissage d'une semaine de l'horizon. */
   choisirSemaine(semaineDebut: string): void {
     const lundi = this.jourIso(semaineDebut);
     if (!lundi || lundi === this.semaineAffichee()) return;
     this.semaine.set(lundi);
-    this.hsLoading.set(true);
-    this.api.overtime(lundi).subscribe({
-      next: (hs) => {
-        this.appliquerSemaine(hs);
-        this.hsLoading.set(false);
+    this.weekLoading.set(true);
+    this.api.landing(lundi).subscribe({
+      next: (landing) => {
+        this.appliquerSemaine(landing);
+        this.weekLoading.set(false);
       },
       error: (err) => {
         this.error.set(err?.error?.message ?? 'Impossible de charger la semaine.');
-        this.hsLoading.set(false);
+        this.weekLoading.set(false);
       },
     });
   }
@@ -826,10 +646,10 @@ export class PredictionsPage implements OnInit {
     return max > 0 && heures > 0 ? Math.max(4, (heures / max) * 100) : 0;
   }
 
-  private appliquerSemaine(hs: MlHsForecast[]): void {
-    this.hs.set(hs);
+  private appliquerSemaine(landing: WeekLanding): void {
+    this.landing.set(landing);
     // Un filtre sur un département absent de la semaine viderait la liste sans raison visible.
-    if (!hs.some((h) => this.nomDepartement(h) === this.departementFiltre())) {
+    if (!landing.lignes.some((l) => this.nomDepartement(l) === this.departementFiltre())) {
       this.departementFiltre.set(null);
     }
   }
@@ -843,10 +663,6 @@ export class PredictionsPage implements OnInit {
   barre(d: HsDepartement): number {
     const max = this.departements()[0]?.heures ?? 0;
     return max > 0 ? Math.max(2, (d.heures / max) * 100) : 0;
-  }
-
-  fmtDate(value: string | null | undefined): string {
-    return formatIsoDate(value);
   }
 
   jourCourt(value: string | null | undefined): string {
@@ -864,119 +680,57 @@ export class PredictionsPage implements OnInit {
     return `${HEURES.format(value ?? 0)} h`;
   }
 
-  /** Écart réel − prévu signé : positif, plus d'HS que prévu. */
-  ecartSigne(ecart: number): string {
-    return `${ecart > 0 ? '+' : ecart < 0 ? '−' : ''}${this.heures(Math.abs(ecart))}`;
-  }
-
-  ecartClass(ecart: number): string {
-    if (ecart > 0.05) return 'pred-ecart--plus';
-    if (ecart < -0.05) return 'pred-ecart--moins';
-    return '';
-  }
-
-  /** Sens global de l'erreur : le modèle sous-estime ou surestime le total. */
-  biaisLabel(prevu: number, reel: number): string {
-    if (prevu <= 0) return reel > 0 ? 'Sous-estimé' : '—';
-    const ratio = (reel - prevu) / prevu;
-    if (Math.abs(ratio) < 0.05) return 'Équilibré';
-    return `${ratio > 0 ? 'Sous-estimé' : 'Surestimé'} de ${this.pct(Math.abs(ratio))}`;
-  }
-
-  private jourIso(value: string | null | undefined): string | null {
-    return value ? String(value).slice(0, 10) : null;
-  }
-
-  etatLabel(): string {
-    switch (this.status()?.etat) {
-      case 'Pret':
-        return 'Moteur prêt';
-      case 'Baseline':
-        return 'Mode baseline';
-      case 'Desactive':
-        return 'Moteur désactivé';
-      default:
-        return 'État inconnu';
-    }
-  }
-
-  etatClass(): string {
-    return (this.status()?.etat ?? 'Desactive').toLowerCase();
-  }
-
-  niveauVariant(niveau: number): 'danger' | 'warning' | 'success' {
+  niveauVariant(niveau: number): 'danger' | 'warning' | 'success' | 'muted' {
     if (niveau >= 3) return 'danger';
-    if (niveau >= 2) return 'warning';
-    return 'success';
+    if (niveau >= NIVEAU_ALERTE) return 'warning';
+    return niveau >= 1 ? 'muted' : 'success';
   }
 
-  /** Texte du niveau, pour que la recherche trouve « élevée », « moyenne » ou « faible ». */
-  niveauLabel(niveau: number): string {
-    if (niveau >= 3) return 'Élevée';
-    if (niveau >= 2) return 'Moyenne';
-    return 'Faible';
+  /** Texte du niveau, pour que la recherche trouve « 150 % », « imposable » ou « aucune ». */
+  niveauLabel(l: WeekLandingRow): string {
+    if (l.niveau >= 3) return 'Imposable';
+    if (l.niveau >= NIVEAU_ALERTE) return 'Passe à 150 %';
+    return l.niveau >= 1 ? 'HS à 130 %' : 'Aucune HS';
   }
 
-  // Lignes du data-table, typées pour les modèles de cellule.
-  hsLigne(row: Record<string, unknown>): MlHsForecast {
-    return row as unknown as MlHsForecast;
+  /** Ce qu'il reste possible de faire : le seuil est déjà franchi, ou des heures peuvent être retirées. */
+  action(l: WeekLandingRow): string {
+    if (l.niveau < NIVEAU_ALERTE) return '';
+    if (l.dejaFranchi) return 'seuil déjà franchi';
+    return l.heuresARetirer > 0 ? `retirer ${this.heures(l.heuresARetirer)} du planning` : '';
   }
 
-  suiviLigne(row: Record<string, unknown>): MlHsAccuracy {
-    return row as unknown as MlHsAccuracy;
+  /** Décomposition de l'atterrissage : ce que dit le planning, puis l'écart habituel du salarié. */
+  detail(l: WeekLandingRow): string {
+    if (l.semainesDerive === 0 || Math.abs(l.derive) < 0.05) return `planning seul : ${this.heures(l.hsSelonPlanning)}`;
+    const signe = l.derive > 0 ? '+' : '−';
+    return `planning ${this.heures(l.hsSelonPlanning)}, écart habituel ${signe}${this.heures(Math.abs(l.derive))}`;
   }
 
-  modele(row: Record<string, unknown>): MlModelInfo {
-    return row as unknown as MlModelInfo;
+  private resteTexte(reste: number, l: WeekLandingRow): string {
+    const sans = l.joursSansPlanning > 0 ? ` · ${l.joursSansPlanning} j sans planning` : '';
+    return `${this.heures(reste)}${sans}`;
   }
 
-  private nomDepartement(h: MlHsForecast): string {
-    return h.departement?.trim() || SANS_DEPARTEMENT;
+  // Ligne du data-table, typée pour les modèles de cellule.
+  ligne(row: Record<string, unknown>): WeekLandingRow {
+    return row as unknown as WeekLandingRow;
+  }
+
+  private nomDepartement(l: WeekLandingRow): string {
+    return l.departement?.trim() || SANS_DEPARTEMENT;
   }
 
   private salarieTexte(row: Record<string, unknown>): string {
     return [row['nom'], row['prenom'], row['matricule']].filter(Boolean).join(' ');
   }
 
-  typeLabel(type: string): string {
-    switch (type) {
-      case 'HsProbabilite':
-        return 'HS — probabilité';
-      case 'HsMontant':
-        return 'HS — montant';
-      default:
-        return type;
-    }
+  private jourIso(value: string | null | undefined): string | null {
+    return value ? String(value).slice(0, 10) : null;
   }
 
-  statutVariant(model: MlModelInfo): 'success' | 'warning' | 'danger' | 'muted' {
-    if (model.estActif) return 'success';
-    if (model.statut === 'Rejete' || model.statut === 'Echec') return 'danger';
-    return 'muted';
-  }
-
-  metricLabel(model: MlModelInfo): string {
-    if (model.typeModele === 'HsMontant') {
-      const mae = this.metric(model, 'mae');
-      const base = this.metric(model, 'baselineMae');
-      if (mae == null) return '—';
-      return `MAE ${mae.toFixed(2)} h${base != null ? ` (base ${base.toFixed(2)} h)` : ''}`;
-    }
-    const auc = this.metric(model, 'auc');
-    const base = this.metric(model, 'baselineAuc');
-    if (auc == null) return '—';
-    return `AUC ${auc.toFixed(3)}${base != null ? ` (base ${base.toFixed(3)})` : ''}`;
-  }
-
-  private metric(model: MlModelInfo | undefined | null, key: string): number | null {
-    if (!model?.metriquesJson) return null;
-    try {
-      const parsed = JSON.parse(model.metriquesJson) as Record<string, unknown>;
-      const pascal = key.charAt(0).toUpperCase() + key.slice(1);
-      const value = parsed[pascal] ?? parsed[key];
-      return typeof value === 'number' ? value : null;
-    } catch {
-      return null;
-    }
+  /** Nombre de jours entre deux dates AAAA-MM-JJ (calcul en UTC, sans effet d'heure d'été). */
+  private joursEntre(debut: string, fin: string): number {
+    return Math.round((Date.parse(`${fin}T00:00:00Z`) - Date.parse(`${debut}T00:00:00Z`)) / 86_400_000);
   }
 }

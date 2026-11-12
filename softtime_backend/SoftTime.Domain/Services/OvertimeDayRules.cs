@@ -5,7 +5,7 @@ namespace SoftTime.Domain.Services;
 
 /// <summary>
 /// Construction d'une journée du calcul des heures supplémentaires, partagée par l'écran HS
-/// (<c>OvertimeService</c>) et la base analytique du moteur prédictif : les deux doivent voir les
+/// (<c>OvertimeService</c>) et l'atterrissage de semaine : les deux doivent voir les
 /// mêmes paires, le même planning et la même notion de présence.
 /// </summary>
 public static class OvertimeDayRules

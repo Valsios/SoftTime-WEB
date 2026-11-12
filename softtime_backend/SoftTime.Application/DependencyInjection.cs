@@ -20,9 +20,7 @@ public static class DependencyInjection
         services.AddScoped<IPasswordHasher<Responsable>, PasswordHasher<Responsable>>();
         services.AddSingleton<EffectiveRightsCache>();
 
-        // Moteur prédictif : options liées à la section « Ml », services de la base analytique.
         services.AddOptions();
-        services.AddSingleton<MlJobCoordinator>();
 
         // Clôture de paie assistée : réglages de la section « Closing » (valeurs par défaut en code),
         // refus du démarrage si un réglage est invalide ; analyse et présentation en lecture seule.

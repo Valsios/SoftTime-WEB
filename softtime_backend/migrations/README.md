@@ -1,57 +1,23 @@
 # Migrations base de données
 
-Deux familles coexistent :
+Le schéma de la base fonctionnelle `dbo` est géré par des scripts SQL :
 
-- les scripts SQL historiques (`*.sql`) de la base fonctionnelle `dbo` ;
-- les migrations **EF Core** du moteur prédictif, versionnées dans
-  `SoftTime.Infrastructure/Migrations/Ml` (contexte `MlDbContext`, schéma `ml`).
+- les scripts **versionnés** de `versions/`, appliqués par `SchemaMigrator` (voir `versions/README.md`) ;
+- les scripts SQL historiques (`*.sql`) de ce dossier, appliqués à la main quand ils sont nécessaires.
 
 ## Règles
 
 1. Les migrations sont versionnées dans Git, jamais appliquées à la main sur une base de production.
 2. Une migration déjà appliquée en production n'est **jamais** modifiée : on ajoute une nouvelle migration.
-3. Le nom doit être descriptif (`AddMlPredictionSchema`, `AddUserLockedUntilColumn`, …).
-4. `Up` **et** `Down` sont testés sur une base jetable avant tout push.
-5. Le déploiement utilise un script idempotent généré par EF.
+3. Le nom doit être descriptif (`AddUserLockedUntilColumn`, …).
+4. Chaque script est testé sur une base jetable avant tout push, et reste idempotent.
 
-## Commandes (depuis `softtime_backend/`)
+## Ancien schéma `ml`
 
-```powershell
-# Nouvelle migration
-dotnet ef migrations add <NomDescriptif> `
-  --project SoftTime.Infrastructure `
-  --startup-project SoftTime.Api `
-  --context MlDbContext `
-  --output-dir Migrations/Ml
+Le moteur prédictif (ML.NET) a été retiré : les prévisions d'heures supplémentaires sont maintenant
+un atterrissage calculé à la demande, sans stockage. L'application ne lit plus et n'écrit plus le
+schéma `ml`, et ne le crée plus au démarrage.
 
-# Script idempotent de déploiement (ajoute l'en-tête QUOTED_IDENTIFIER pour sqlcmd)
-dotnet ef migrations script --idempotent `
-  --project SoftTime.Infrastructure `
-  --startup-project SoftTime.Api `
-  --context MlDbContext `
-  -o migrations/<NomDescriptif>.sql
-
-# Test Up sur une base jetable
-dotnet ef database update `
-  --project SoftTime.Infrastructure `
-  --startup-project SoftTime.Api `
-  --context MlDbContext `
-  --connection "Data Source=localhost\SQLEXPRESS;Initial Catalog=SoftTime_Ml_Test;User ID=sa;Password=***;TrustServerCertificate=True"
-
-# Test Down (retour à zéro)
-dotnet ef database update 0 `
-  --project SoftTime.Infrastructure `
-  --startup-project SoftTime.Api `
-  --context MlDbContext `
-  --connection "<même chaîne>"
-```
-
-Le script généré doit être exécuté avec `sqlcmd -I` (ou contenir `SET QUOTED_IDENTIFIER ON`,
-ce que fait l'en-tête ajouté) à cause de l'index filtré `IX_Modele_BddSage_TypeModele_EstActif`.
-
-## Application au démarrage
-
-`MlStorageConfiguration.EnsureSchemaAsync` applique les migrations du contexte `MlDbContext`
-au démarrage de l'API (schéma `ml` dans la base `SoftTime`, ou base dédiée si
-`ConnectionStrings:SoftTimeMl` est renseignée). Un échec est journalisé et n'empêche pas
-l'API de démarrer.
+Sur une base où il existe déjà, il peut être supprimé avec `DropMlPredictionSchema.sql` (idempotent).
+Ce script **efface définitivement** l'historique analytique, les modèles et les prévisions stockés :
+il n'est jamais lancé automatiquement, à exécuter à la main après sauvegarde.

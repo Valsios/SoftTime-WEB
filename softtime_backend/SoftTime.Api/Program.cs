@@ -10,7 +10,6 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
-using SoftTime.Api.HostedServices;
 using SoftTime.Api.Middleware;
 using SoftTime.Api.Security;
 using SoftTime.Application;
@@ -87,15 +86,13 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
-builder.Services.Configure<MlOptions>(builder.Configuration.GetSection("Ml"));
-builder.Services.AddHostedService<MlMaintenanceHostedService>();
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
 builder.Services.AddScoped<ICompanyContext, CompanyContext>();
 builder.Services.AddScoped<SystemExecution>();
 builder.Services.AddScoped<ICurrentUser>(sp =>
 {
     var http = sp.GetRequiredService<IHttpContextAccessor>().HttpContext;
-    // Scope d'arrière-plan (jobs ML) : identité système administratrice, jamais pour une requête HTTP.
+    // Scope d'arrière-plan (traitement sans requête HTTP) : identité système administratrice, jamais pour une requête HTTP.
     if (http is null && sp.GetRequiredService<SystemExecution>().Active)
         return new CurrentUser { Login = SystemExecution.Login, TokenRoleId = SoftTime.Domain.Services.AdminRules.AdminRoleId };
     var principal = http?.User;
@@ -200,17 +197,6 @@ using (var scope = app.Services.CreateScope())
     // (rejouable, une seule sauvegarde, droits effectifs inchangés).
     await SchemaPresenceGuard.EnsureUserPermissionDeviationsAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
     await scope.ServiceProvider.GetRequiredService<IUserPermissionDeviationMigration>().RunAsync(CancellationToken.None);
-
-    // Base analytique du moteur prédictif : applique les migrations EF versionnées (schéma ml).
-    // Un échec n'empêche pas l'API de démarrer : la fonctionnalité reste simplement indisponible.
-    try
-    {
-        await MlStorageConfiguration.EnsureSchemaAsync(app.Services, CancellationToken.None);
-    }
-    catch (Exception ex)
-    {
-        app.Logger.LogError(ex, "Impossible d'appliquer les migrations du moteur prédictif (schéma ml).");
-    }
 
     // Migration globale contrôlée des mots de passe en clair :
     // Par défaut, la migration est assurée de manière fluide et isolée à la connexion de chaque utilisateur (AuthService.LoginAsync),
