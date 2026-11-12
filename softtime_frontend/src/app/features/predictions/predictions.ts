@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
-import { forkJoin } from 'rxjs';
+import { finalize, forkJoin } from 'rxjs';
 import {
   MlHsAccuracy,
   MlHsForecast,
@@ -51,14 +51,14 @@ const HEURES = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 1, maximu
       title="Prévisions"
       subtitle="Heures supplémentaires attendues cette semaine, estimées par le moteur ML.NET"
     >
-      <soft-button variant="secondary" (click)="load()" [disabled]="loading()">Actualiser</soft-button>
-      <soft-button variant="secondary" (click)="action('refresh')" [disabled]="job()?.running ?? false">
+      <soft-button variant="secondary" (click)="load()" [loading]="loading()">Actualiser</soft-button>
+      <soft-button variant="secondary" (click)="action('refresh')" [loading]="acting() === 'refresh'" [disabled]="(job()?.running ?? false) || acting() !== null">
         Rafraîchir les données
       </soft-button>
-      <soft-button variant="secondary" (click)="action('train')" [disabled]="job()?.running ?? false">
+      <soft-button variant="secondary" (click)="action('train')" [loading]="acting() === 'train'" [disabled]="(job()?.running ?? false) || acting() !== null">
         Réentraîner
       </soft-button>
-      <soft-button variant="ghost" (click)="action('backfill')" [disabled]="job()?.running ?? false">
+      <soft-button variant="ghost" (click)="action('backfill')" [loading]="acting() === 'backfill'" [disabled]="(job()?.running ?? false) || acting() !== null">
         Reconstruire l'historique
       </soft-button>
     </page-header>
@@ -621,6 +621,8 @@ export class PredictionsPage implements OnInit {
   readonly suivi = signal<MlHsAccuracy[]>([]);
   readonly job = signal<MlJobState | null>(null);
   readonly loading = signal(false);
+  /** Action de maintenance en cours d'envoi (boutons en chargement, les autres bloqués). */
+  readonly acting = signal<'refresh' | 'train' | 'backfill' | null>(null);
   readonly hsLoading = signal(false);
   /** Lundi (AAAA-MM-JJ) de la semaine analysée ; null : semaine en cours. */
   readonly semaine = signal<string | null>(null);
@@ -786,7 +788,8 @@ export class PredictionsPage implements OnInit {
     this.info.set(null);
     this.error.set(null);
     const request = kind === 'refresh' ? this.api.refresh() : kind === 'train' ? this.api.train() : this.api.backfill();
-    request.subscribe({
+    this.acting.set(kind);
+    request.pipe(finalize(() => this.acting.set(null))).subscribe({
       next: (result) => {
         this.info.set(result.message);
         this.load();

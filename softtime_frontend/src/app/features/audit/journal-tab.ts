@@ -62,8 +62,8 @@ import {
       <soft-input label="Corrélation" placeholder="Identifiant GUID" [(ngModel)]="draft.correlation" [ngModelOptions]="{ standalone: true }"></soft-input>
       <soft-input label="Base SAGE (facultatif)" [(ngModel)]="draft.sageDatabase" [ngModelOptions]="{ standalone: true }"></soft-input>
       <div class="journal-filters__actions">
-        <soft-button (click)="apply()">Appliquer</soft-button>
-        <soft-button variant="ghost" (click)="reset()">Réinitialiser</soft-button>
+        <soft-button [loading]="loading()" (click)="apply()">Appliquer</soft-button>
+        <soft-button variant="ghost" [disabled]="loading()" (click)="reset()">Réinitialiser</soft-button>
         <soft-button variant="secondary" [loading]="exporting()" [disabled]="loading() || total() === 0" (click)="exportCsv()">
           Exporter en CSV
         </soft-button>
@@ -79,7 +79,7 @@ import {
       } @else if (error()) {
         <div class="journal-state journal-state--error" role="alert">
           <p>{{ error() }}</p>
-          <soft-button variant="secondary" (click)="load()">Réessayer</soft-button>
+          <soft-button variant="secondary" [loading]="loading()" (click)="load()">Réessayer</soft-button>
         </div>
       } @else if (rows().length === 0) {
         <div class="soft-empty" role="status">{{ emptyMessage }}</div>

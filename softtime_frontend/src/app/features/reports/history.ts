@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { finalize } from 'rxjs';
 import { isAdministrator } from '../../core/access.logic';
 import { ConfirmService } from '../../core/confirm.service';
 import { SessionStore } from '../../core/session.store';
@@ -30,7 +31,7 @@ type Segment = 'pointages' | 'anomalies' | 'hs';
   imports: [PageHeader, SoftButton, SoftCard, DataTable, SoftTabs, PeriodFilter],
   template: `
     <page-header title="Historique" subtitle="Archives des suppressions — période = date de suppression">
-      <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
+      <soft-button variant="secondary" [loading]="excel.exporting()" (click)="exportExcel()">Export Excel</soft-button>
       @if (isAdmin()) {
         <soft-button variant="danger" [loading]="busy()" (click)="purgeAll()">Purger l'archive</soft-button>
       }
@@ -54,7 +55,7 @@ type Segment = 'pointages' | 'anomalies' | 'hs';
       >
         <ng-template #actions let-row>
           @if (isAdmin()) {
-            <soft-button size="sm" variant="danger" (click)="removeOne(row)">Supprimer</soft-button>
+            <soft-button size="sm" variant="danger" [loading]="removingId() === row['id']" [disabled]="removingId() !== null" (click)="removeOne(row)">Supprimer</soft-button>
           }
         </ng-template>
       </data-table>
@@ -63,7 +64,9 @@ type Segment = 'pointages' | 'anomalies' | 'hs';
 })
 export class HistoryPage {
   private readonly svc = inject(HistoryService);
-  private readonly excel = inject(ExcelExportService);
+  /** Id de la ligne en cours de suppression (bouton en chargement, autres suppressions bloquées). */
+  protected readonly removingId = signal<number | null>(null);
+  protected readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly session = inject(SessionStore);
@@ -176,7 +179,10 @@ export class HistoryPage {
   async removeOne(row: Record<string, unknown>): Promise<void> {
     if (!(await this.confirm.ask('Supprimer définitivement cette archive ?'))) return;
     const segment = this.activeTab();
-    this.svc.removeOne(segment, row['id'] as number).subscribe({
+    this.removingId.set(row['id'] as number);
+    this.svc.removeOne(segment, row['id'] as number)
+      .pipe(finalize(() => this.removingId.set(null)))
+      .subscribe({
       next: () => {
         this.toast.success('Archive supprimée.');
         this.loadPage();
@@ -209,15 +215,15 @@ export class HistoryPage {
       return;
     }
     if (segment === 'pointages') {
-      this.svc.pointages(filter).subscribe({
+      this.excel.track(this.svc.pointages(filter)).subscribe({
         next: (items) => this.excel.download(fileName, this.columns(), items.map(asRow), 'Données', this.tableSearch()),
       });
     } else if (segment === 'anomalies') {
-      this.svc.anomalies(filter).subscribe({
+      this.excel.track(this.svc.anomalies(filter)).subscribe({
         next: (items) => this.excel.download(fileName, this.columns(), items.map(asRow), 'Données', this.tableSearch()),
       });
     } else {
-      this.svc.hs(filter).subscribe({
+      this.excel.track(this.svc.hs(filter)).subscribe({
         next: (items) => this.excel.download(fileName, this.columns(), items.map(asRow), 'Données', this.tableSearch()),
       });
     }

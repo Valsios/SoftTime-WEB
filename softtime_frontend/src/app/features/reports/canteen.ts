@@ -13,7 +13,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
   imports: [PageHeader, SoftCard, DataTable, PeriodFilter, SoftButton],
   template: `
     <page-header title="Cantine" subtitle="Repas cantine (pointages 11h–14h30)">
-      <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
+      <soft-button variant="secondary" [loading]="excel.exporting()" (click)="exportExcel()">Export Excel</soft-button>
       <soft-button variant="secondary" [loading]="syncing()" (click)="synchronise()">
         Synchroniser (SAGE)
       </soft-button>
@@ -65,7 +65,7 @@ import { asRow, fmtDate } from '../../shared/utils/date';
 })
 export class CanteenPage {
   private readonly svc = inject(CanteenService);
-  private readonly excel = inject(ExcelExportService);
+  protected readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
 
@@ -175,7 +175,7 @@ export class CanteenPage {
       this.excel.download('cantine', this.columns, this.rows(), 'Données', this.totalsSearch());
       return;
     }
-    this.svc.list(this.lastFilter).subscribe({
+    this.excel.track(this.svc.list(this.lastFilter)).subscribe({
       next: (items) => this.excel.download('cantine', this.columns, items.map(asRow), 'Données', this.totalsSearch()),
     });
   }

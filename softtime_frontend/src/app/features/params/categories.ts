@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { finalize } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
@@ -27,7 +28,7 @@ import { cardEmployeeLabel } from '../../shared/utils/labels';
         <ng-template #actions let-row>
           <div class="soft-actions" style="justify-content: end">
             <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
-            <soft-button *ngIf="canDelete()" size="sm" variant="danger" (click)="remove(row)">Supprimer</soft-button>
+            <soft-button *ngIf="canDelete()" size="sm" variant="danger" [loading]="removingId() === row['id']" [disabled]="removingId() !== null" (click)="remove(row)">Supprimer</soft-button>
           </div>
         </ng-template>
       </data-table>
@@ -57,6 +58,8 @@ import { cardEmployeeLabel } from '../../shared/utils/labels';
 })
 export class CategoriesPage implements OnInit {
   private readonly svc = inject(CategoriesService);
+  /** Id de la ligne en cours de suppression (bouton en chargement, autres suppressions bloquées). */
+  protected readonly removingId = signal<number | null>(null);
   private readonly cards = inject(CardPaieService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
@@ -158,7 +161,10 @@ export class CategoriesPage implements OnInit {
   }
   async remove(row: Record<string, unknown>): Promise<void> {
     if (!(await this.confirm.ask('Supprimer cette catégorie ?'))) return;
-    this.svc.remove(row['id'] as number).subscribe({ next: () => { this.toast.success('Supprimé.'); this.loadPage(); } });
+    this.removingId.set(row['id'] as number);
+    this.svc.remove(row['id'] as number)
+      .pipe(finalize(() => this.removingId.set(null)))
+      .subscribe({ next: () => { this.toast.success('Supprimé.'); this.loadPage(); } });
   }
 
   /** Conserve la valeur courante même si la carte n'est plus dans la liste chargée. */

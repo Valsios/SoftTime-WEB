@@ -87,12 +87,12 @@ interface ReportContext {
       subtitle="Indicateurs, évolution, répartition et assiduité"
     >
       <soft-button
-        variant="secondary"
+        variant="secondary" [loading]="excel.exporting()"
         (click)="exportExcel()"
         [disabled]="!stats() || loading()"
       >Export Excel</soft-button>
       <soft-button
-        variant="secondary"
+        variant="secondary" [loading]="printing()"
         (click)="exportPdf()"
         [disabled]="!stats() || loading() || printing()"
       >Export PDF</soft-button>
@@ -258,7 +258,7 @@ interface ReportContext {
     } @else if (erreur()) {
       <soft-card padding="md">
         <p class="muted">L'analyse n'a pas pu être chargée (délai ou serveur indisponible).</p>
-        <soft-button (click)="reload()">Réessayer</soft-button>
+        <soft-button [loading]="loading()" (click)="reload()">Réessayer</soft-button>
       </soft-card>
     } @else {
       <soft-card padding="md">
@@ -388,7 +388,7 @@ interface ReportContext {
 })
 export class AnalyticsPage implements OnInit {
   private readonly svc = inject(DashboardService);
-  private readonly excel = inject(ExcelExportService);
+  protected readonly excel = inject(ExcelExportService);
   private readonly printer = inject(PrintReportService);
   private readonly cdr = inject(ChangeDetectorRef);
 

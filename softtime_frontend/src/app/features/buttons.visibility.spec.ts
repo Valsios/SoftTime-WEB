@@ -63,7 +63,8 @@ describe('Visibilité des boutons selon les droits', () => {
           provide: HistoryService,
           useValue: { pointagesPaged: () => of(emptyPage), anomaliesPaged: () => of(emptyPage), hsPaged: () => of(emptyPage) },
         },
-        { provide: ExcelExportService, useValue: {} },
+        // L'écran lit excel.exporting() depuis la PR #30 (états de chargement) : le faux doit l'exposer.
+        { provide: ExcelExportService, useValue: { exporting: () => false } },
         { provide: SessionStore, useValue: { accessContext: () => context, hasRight: (d: number) => gateAllows(context, d) } },
         { provide: ToastService, useValue: toast },
         { provide: ConfirmService, useValue: { ask: async () => true } },

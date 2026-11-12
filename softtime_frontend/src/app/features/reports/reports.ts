@@ -113,7 +113,7 @@ const RETARD_EXPORT_COLUMNS: Column[] = [
   imports: [FormsModule, PageHeader, SoftCard, DataTable, SoftSelect, PeriodFilter, SoftButton],
   template: `
     <page-header title="Rapports" subtitle="États et extractions GTA">
-      <soft-button variant="secondary" (click)="exportExcel()">Export Excel</soft-button>
+      <soft-button variant="secondary" [loading]="excel.exporting()" (click)="exportExcel()">Export Excel</soft-button>
     </page-header>
 
     <div class="soft-toolbar">
@@ -146,7 +146,7 @@ const RETARD_EXPORT_COLUMNS: Column[] = [
 })
 export class ReportsPage {
   private readonly svc = inject(ReportsService);
-  private readonly excel = inject(ExcelExportService);
+  protected readonly excel = inject(ExcelExportService);
 
   readonly loading = signal(false);
   pageSize = 50;
@@ -244,7 +244,7 @@ export class ReportsPage {
     }
     const filter = this.lastFilter;
     const fn = this.resolve(this.reportType);
-    fn.call(this.svc, filter).subscribe({
+    this.excel.track(fn.call(this.svc, filter)).subscribe({
       next: (items) => {
         const rows = items as Record<string, unknown>[];
         const cols =
