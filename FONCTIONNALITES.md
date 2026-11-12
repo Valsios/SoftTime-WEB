@@ -70,7 +70,7 @@ L’accès est filtré par **rôle** (6 droits) et par **société SAGE** active
 | **Pointages** | Liste, import pointeuse, import Excel. |
 | **Anomalies** | Heures anormales détectées. |
 | **Heures corrigées** | Saisie / import des corrections (entrée, sortie, absences, etc.). |
-| **Validation semaine** | Calcul HT/HS lundi–dimanche, valider ou annuler. |
+| **Validation semaine** | Calcul HT/HS lundi–dimanche, valider ou annuler. Interrupteur « Masquer les salariés sans heures » (actif par défaut) : n'affiche que les salariés ayant une heure corrigée ou un jour planifié travaillé sur la semaine, et toujours ceux dont la semaine est déjà validée (`OnlyWithHours`, `WeeklyActivityRules`). |
 | **Heures supp.** | Calcul EXO/IMPO (plafond), purge, **sync SAGE** (`T_CUMSAL`). |
 
 **Règles de pré-traitement des pointages** (portage de `Frm_Import.importa` du desktop) :

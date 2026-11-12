@@ -119,8 +119,19 @@ public class OvertimeServiceTests
         public Task<IReadOnlyList<WeeklyHsDto>> Apercu(DateTime from, DateTime to)
             => Service.PreviewWeekAsync(new PeriodRequest(null, null, from, to));
 
-        public Task<PagedResult<WeeklyHsDto>> ApercuPagine(DateTime from, DateTime to)
-            => Service.PreviewWeekPagedAsync(new PeriodRequest(null, null, from, to), 1, 50);
+        public Task<PagedResult<WeeklyHsDto>> ApercuPagine(DateTime from, DateTime to, bool seulementAvecHeures = false)
+            => Service.PreviewWeekPagedAsync(
+                new PeriodRequest(null, null, from, to, OnlyWithHours: seulementAvecHeures), 1, 50);
+
+        /// <summary>Salarié supplémentaire, sans heure corrigée ni planning tant qu'on n'en ajoute pas.</summary>
+        public void AjouterSalarie(int id, string matricule)
+            => Uow.Get<CardPaie>().Items.Add(new CardPaie
+            {
+                Id = id,
+                SageMatricule = matricule,
+                SageBdd = "SAGE_TEST",
+                PointeuseBdd = "PTE_TEST"
+            });
     }
 
     private static void SemaineOuvree(Contexte contexte, int heuresSortie = 17, TimeSpan? pause = null)
@@ -235,6 +246,61 @@ public class OvertimeServiceTests
         await contexte.Service.ValidateWeekAsync(request, false);
         contexte.Semaines.Should().ContainSingle().Which.ValidationHs.Should().BeFalse();
         contexte.Corrections.Should().AllSatisfy(h => h.ValiderHs.Should().BeFalse());
+    }
+
+    [Fact]
+    public async Task ApercuPagine_SeulementAvecHeures_MasqueLeSalarieSansHeuresNiPlanning()
+    {
+        // Arrange
+        var sut = new Contexte();
+        SemaineOuvree(sut);
+        sut.AjouterSalarie(2, "002");
+
+        // Act
+        var tous = await sut.ApercuPagine(Lundi, Dimanche);
+        var filtres = await sut.ApercuPagine(Lundi, Dimanche, seulementAvecHeures: true);
+
+        // Assert
+        tous.Items.Select(l => l.Matricule).Should().BeEquivalentTo(new[] { "001", "002" });
+        filtres.Items.Should().ContainSingle().Which.Matricule.Should().Be("001");
+        filtres.Total.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ApercuPagine_SeulementAvecHeures_GardeLeSalariePlanifieMaisAbsent()
+    {
+        // Arrange : 001 est planifié un jour sans aucun pointage, 002 n'a rien.
+        var sut = new Contexte();
+        sut.Planning(Lundi, TimeSpan.Zero);
+        sut.AjouterSalarie(2, "002");
+
+        // Act
+        var filtres = await sut.ApercuPagine(Lundi, Dimanche, seulementAvecHeures: true);
+
+        // Assert
+        filtres.Items.Should().ContainSingle().Which.Matricule.Should().Be("001");
+    }
+
+    [Fact]
+    public async Task ApercuPagine_SeulementAvecHeures_GardeUneSemaineDejaValidee()
+    {
+        // Arrange
+        var sut = new Contexte();
+        sut.AjouterSalarie(2, "002");
+        sut.Semaines.Add(new HsValidee
+        {
+            BddSage = "SAGE_TEST",
+            Matricules = "002",
+            DateDeb = Lundi,
+            DateFin = Dimanche,
+            ValidationHs = true
+        });
+
+        // Act
+        var filtres = await sut.ApercuPagine(Lundi, Dimanche, seulementAvecHeures: true);
+
+        // Assert
+        filtres.Items.Should().ContainSingle().Which.Matricule.Should().Be("002");
     }
 
     [Fact]
