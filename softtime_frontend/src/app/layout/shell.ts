@@ -6,7 +6,7 @@ import { AuthService } from '../shared/services/auth.service';
 import { PointeuseDatabasesService } from '../shared/services/catalog.service';
 import { SageDatabasesService } from '../shared/services/users.service';
 import { NAV_SECTIONS, NavSection } from './nav';
-import { visibleSections as filterSections } from '../core/access.logic';
+import { DatabaseKind, databaseCode, visibleSections as filterSections } from '../core/access.logic';
 import { Icon } from '../shared/components/icon';
 import { PointeuseDb } from '../shared/models';
 import { ToastService } from '../core/toast.service';
@@ -579,18 +579,18 @@ export class Shell implements OnInit {
   private readonly confirm = inject(ConfirmService);
   private readonly closingState = inject(ClosingSessionState);
 
-  /** Entrée « Mon espace » : seulement avec la permission SELF:READ (un administrateur ne l'a pas implicitement). */
+  /** Entrée « Mon espace » : seulement avec la permission self.read (un administrateur ne l'a pas implicitement). */
   readonly selfSpaceLink = computed(() => hasSelfPermission(this.session.permissions()));
-  /** Profil Salarié (SELF:READ et aucune porte) : le tableau de bord, inutilisable sans base, n'est pas proposé. */
+  /** Profil Salarié (self.read et aucune porte) : le tableau de bord, inutilisable sans base, n'est pas proposé. */
   readonly selfOnlyProfile = computed(() => isSelfServiceProfile(this.session.permissions(), this.session.gates()));
 
   /**
    * Badge du Contrôle avant paie : nombre d'anomalies critiques du DERNIER résultat conservé en session. Aucune requête,
-   * aucun rafraîchissement : visible seulement avec la permission REPORTS:CLOSING et une analyse existante ; il disparaît
+   * aucun rafraîchissement : visible seulement avec la permission closing.read et une analyse existante ; il disparaît
    * avec l'état de session (déconnexion, autre compte ou autre base).
    */
   readonly closingBadge = computed(() => {
-    if (!this.session.hasPermission('REPORTS:CLOSING', Droit.Reports)) return null;
+    if (!this.session.hasPermission('closing.read', Droit.Reports)) return null;
     const resultat = this.closingState.result();
     return resultat ? closingBadgeView(resultat.report) : null;
   });
@@ -599,14 +599,18 @@ export class Shell implements OnInit {
   readonly mobileMenuOpen = signal(false);
   readonly isMobileViewport = signal(false);
   readonly collapsedSections = signal<ReadonlySet<string>>(new Set());
-  readonly databases = computed(() =>
-    this.session.databases().filter((db) => this.session.hasPermission(`SAGE:${db.nomBd}:READ`, Droit.Databases)),
-  );
+  readonly databases = computed(() => this.session.databases().filter((db) => this.canReadDatabase('sage', db.id)));
   readonly pointeuseDbs = computed(() =>
-    this.session.pointeuseDatabases().filter((db) =>
-      this.session.hasPermission(`POINTEUSE:${db.nomBd}:READ`, Droit.Databases),
-    ),
+    this.session.pointeuseDatabases().filter((db) => this.canReadDatabase('pointeuse', db.id)),
   );
+
+  /** Lecture d'une base, par son identifiant ou pour toutes les bases (joker « all »), avec la porte Bases. */
+  private canReadDatabase(kind: DatabaseKind, id: number): boolean {
+    return (
+      this.session.hasPermission(databaseCode(kind, id, 'read'), Droit.Databases) ||
+      this.session.hasPermission(databaseCode(kind, 'all', 'read'), Droit.Databases)
+    );
+  }
 
   /** Menu : permission fine ET porte serveur ; une section sans élément visible est masquée (access.logic.ts). */
   readonly visibleSections = computed<NavSection[]>(() => filterSections(NAV_SECTIONS, this.session.accessContext()));

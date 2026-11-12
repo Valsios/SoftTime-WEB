@@ -29,7 +29,9 @@ public class JwtTokenService : ITokenService
             new(ClaimTypes.Name, login),
             new("roleId", rid),
             new("matricule", matricule ?? string.Empty),
-            new("rights", string.Join(",", rights))
+            new("rights", string.Join(",", rights)),
+            new(PermissionClaims.Permissions, PermissionClaims.Join(subject.Permissions)),
+            new(PermissionClaims.RightsStamp, subject.RightsStamp)
         };
         var token = new JwtSecurityToken(
             issuer: _options.Issuer,

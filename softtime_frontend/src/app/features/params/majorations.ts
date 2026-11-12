@@ -39,7 +39,7 @@ export class MajorationsPage implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly session = inject(SessionStore);
 
-  readonly canUpdate = computed(() => this.session.hasPermission('PARAMS:MAJORATIONS:UPDATE', Droit.Parameters));
+  readonly canUpdate = computed(() => this.session.hasPermission('majorations.update', Droit.Parameters));
 
   readonly loading = signal(true);
   readonly saving = signal(false);

@@ -3,6 +3,7 @@
 using SoftTime.Application.Abstractions.DataSources;
 using SoftTime.Application.Abstractions.Permissions;
 using SoftTime.Application.DTOs;
+using SoftTime.Application.Security;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
@@ -88,11 +89,13 @@ public sealed class PointeuseDatabaseService : IPointeuseDatabaseService
     {
         if (dto.Id == 0)
         {
-            await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Create, dto.NomBd, ct);
+            await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Create, null, ct);
             return;
         }
         var current = await _uow.Repository<BddPointeuse>().GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
-        await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Update, current.NomBd, ct);
+        await _configAuth.EnsureCanConfigureAsync(
+            DatabaseKind.Pointeuse, DatabaseConfigAction.Update,
+            new DatabaseRef(current.Id, current.NomBd ?? string.Empty), ct);
     }
 
     /// <summary>Une seule pointeuse active : celle enregistrée.</summary>
@@ -145,28 +148,31 @@ public sealed class PointeuseDatabaseService : IPointeuseDatabaseService
     {
         var repo = _uow.Repository<BddPointeuse>();
         var e = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException();
-        await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Pointeuse, DatabaseConfigAction.Delete, e.NomBd, ct);
+        await _configAuth.EnsureCanConfigureAsync(
+            DatabaseKind.Pointeuse, DatabaseConfigAction.Delete,
+            new DatabaseRef(e.Id, e.NomBd ?? string.Empty), ct);
         await _sourceMappingStore.RemoveMappingsAsync(false, id, ct);
+        await DatabasePermissionCleanup.RemoveAsync(_uow, DatabaseKind.Pointeuse, id, ct);
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
         _effectiveRights.InvalidateAll(); // la liste des bases a changé : les droits effectifs en cache sont périmés
     }
 
     public async Task<PagedResult<PointeuseDbDto>> ListPointeusePagedAsync(
-        IReadOnlyCollection<string>? allowedNames, int? page, int? pageSize, string? search = null, CancellationToken ct = default)
+        IReadOnlyCollection<int>? allowedIds, int? page, int? pageSize, string? search = null, CancellationToken ct = default)
     {
         await _sourceMappingMigrator.EnsureMappingSchemaAsync(ct);
         await _sourceMappingMigrator.MigrateLegacyMappingsAsync(ct);
 
-        if (allowedNames is { Count: 0 })
+        if (allowedIds is { Count: 0 })
         {
             var (_, taille) = PaginationRules.Normaliser(page, pageSize);
             return new PagedResult<PointeuseDbDto>(Array.Empty<PointeuseDbDto>(), 0, 1, taille, 1);
         }
 
-        System.Linq.Expressions.Expression<Func<BddPointeuse, bool>> predicate = allowedNames is null
+        System.Linq.Expressions.Expression<Func<BddPointeuse, bool>> predicate = allowedIds is null
             ? p => true
-            : p => p.NomBd != null && allowedNames.Contains(p.NomBd);
+            : p => allowedIds.Contains(p.Id);
         var result = await PagedLists.From(_uow.Repository<BddPointeuse>(), predicate, q => q.OrderBy(p => p.Id))
             .WithSearch(search, new System.Linq.Expressions.Expression<Func<BddPointeuse, string?>>[] { p => p.Serveur, p => p.NomBd, p => p.TypeBase })
             .PageAsync(new PageRequest(page, pageSize), p => p, ct);

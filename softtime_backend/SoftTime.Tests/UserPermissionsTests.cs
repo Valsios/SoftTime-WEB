@@ -17,14 +17,14 @@ public class UserPermissionsTests
     [Fact]
     public void UserDetailedPermissionsDto_Constructor_StoresPermissions()
     {
-        var perms = new List<string> { "SAGE:DB1:READ", "PARAMS:USERS" };
+        var perms = new List<string> { "sage.1.read", "users.read" };
         var dto = new UserDetailedPermissionsDto(5, perms, true);
 
         dto.UserId.Should().Be(5);
         dto.GrantedPermissions.Count.Should().Be(2);
         dto.IsCustomized.Should().BeTrue();
-        dto.GrantedPermissions.Should().Contain("SAGE:DB1:READ");
-        dto.GrantedPermissions.Should().Contain("PARAMS:USERS");
+        dto.GrantedPermissions.Should().Contain("sage.1.read");
+        dto.GrantedPermissions.Should().Contain("users.read");
     }
 
     [Fact]
@@ -34,13 +34,13 @@ public class UserPermissionsTests
         {
             Id = 1,
             IdResponsable = 10,
-            PermissionCode = "POINTEUSE:CLOCK1:READ",
+            PermissionCode = "pointeuse.1.read",
             IsGranted = true
         };
 
         entity.Id.Should().Be(1);
         entity.IdResponsable.Should().Be(10);
-        entity.PermissionCode.Should().Be("POINTEUSE:CLOCK1:READ");
+        entity.PermissionCode.Should().Be("pointeuse.1.read");
         entity.IsGranted.Should().BeTrue();
     }
 }

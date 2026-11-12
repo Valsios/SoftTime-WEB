@@ -1,10 +1,5 @@
-using System.Reflection;
-
 using SoftTime.Application.Security;
 using SoftTime.Domain;
-using SoftTime.Domain.Entities.SoftTime;
-using SoftTime.Infrastructure.Services.Permissions;
-using SoftTime.Infrastructure.Services.Users;
 
 namespace SoftTime.Tests;
 
@@ -18,87 +13,94 @@ public class PermissionCatalogCharacterizationTests
     // elles s'exécutent maintenant contre le helper partagé (mêmes valeurs attendues).
     private static HashSet<decimal> Gates(IEnumerable<string> codes) => PermissionCatalog.DeduirePortes(codes);
 
-    private static List<string> Defaults(HashSet<int> rights, IEnumerable<BddSage> sages, IEnumerable<BddPointeuse> pointeuses)
-        => PermissionCatalog.BuildDefaultPermissionsList(rights, sages, pointeuses);
+    private static List<string> Build(params int[] rights) => PermissionCatalog.BuildDefaultPermissionsList(rights.ToHashSet());
 
-    // Anciennes entrées, toujours présentes dans AuthService (déléguées au helper) : le résultat doit rester identique.
-    private static HashSet<decimal> LegacyGates(IEnumerable<string> codes)
-        => (HashSet<decimal>)typeof(RolePermissionService).GetMethod("DeduirePortes", BindingFlags.NonPublic | BindingFlags.Static)!
-            .Invoke(null, new object[] { codes })!;
-
-    private static List<string> LegacyDefaults(HashSet<int> rights, IEnumerable<BddSage> sages, IEnumerable<BddPointeuse> pointeuses)
-        => (List<string>)typeof(UserPermissionService).GetMethod("BuildDefaultPermissionsList", BindingFlags.NonPublic | BindingFlags.Static)!
-            .Invoke(null, new object[] { rights, sages, pointeuses })!;
+    private static readonly string[] AllDatabases =
+    {
+        "sage.create", "sage.all.read", "sage.all.update", "sage.all.delete",
+        "pointeuse.create", "pointeuse.all.read", "pointeuse.all.update", "pointeuse.all.delete"
+    };
 
     [Fact]
-    public void BuildDefaultPermissionsList_AuthServiceEntryPoints_MatchTheHelper()
+    public void KnownStatic_Catalog_IsTheCodesOfEveryScreen()
     {
         // Arrange
-        var all = new HashSet<int> { 1, 2, 3, 4, 5, 6 };
-        var sages = new[] { Sage("A"), Sage("B") };
-        var pointeuses = new[] { Pointeuse("P") };
-
-        // Act & Assert
-        LegacyDefaults(all, sages, pointeuses).Should().Equal(Defaults(all, sages, pointeuses));
-        LegacyDefaults(new HashSet<int>(), sages, pointeuses).Should().Equal(Defaults(new HashSet<int>(), sages, pointeuses));
-        var codes = new[] { "sage:a:read", "PROC:SHIFTS", "OTHER:CANTEEN", "INCONNU:X" };
-        LegacyGates(codes).OrderBy(x => x).Should().Equal(Gates(codes).OrderBy(x => x));
-    }
-
-    [Fact]
-    public void KnownStaticPermissions_Catalog_MatchesAuthServiceSet()
-    {
-        // Arrange
-        var legacy = (HashSet<string>)typeof(RolePermissionService).GetField("KnownStaticPermissions", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
+        var screens = PermissionCatalog.Categories.SelectMany(c => c.Items).SelectMany(i => i.Codes()).ToList();
 
         // Act
-        // SELF:READ : permission de Mon espace, hors du catalogue historique des rôles.
-        var result = legacy.SetEquals(PermissionCatalog.KnownStatic.Where(c => c != PermissionCatalog.SelfRead));
+        var result = PermissionCatalog.KnownStatic.SetEquals(screens);
 
         // Assert
         result.Should().BeTrue();
-        PermissionCatalog.IsKnown("SAGE:X:READ").Should().BeTrue();
-        PermissionCatalog.IsKnown("proc:shifts").Should().BeTrue();
-        PermissionCatalog.IsKnown("N'IMPORTE:QUOI").Should().BeFalse();
-        PermissionCatalog.IsKnown("").Should().BeFalse();
+        screens.Should().OnlyHaveUniqueItems();
+        PermissionCatalog.KnownStatic.Should().Contain(PermissionCatalog.SelfRead);
+    }
+
+    [Theory]
+    [InlineData("sage.12.read", true)]
+    [InlineData("POINTEUSE.3.DELETE", true)]
+    [InlineData("sage.create", true)]
+    [InlineData("SHIFTS.READ", true)]
+    [InlineData("self.read", true)]
+    [InlineData("sage.all.update", true)]
+    [InlineData("sage.PAIE.read", false)]
+    [InlineData("sage.0.read", false)]
+    [InlineData("sage.1.2.read", false)]
+    [InlineData("sage.1.write", false)]
+    [InlineData("sage..read", false)]
+    [InlineData("SAGE:A:READ", false)]
+    [InlineData("sage", false)]
+    [InlineData("N'IMPORTE:QUOI", false)]
+    [InlineData("", false)]
+    public void IsKnown_Code_AcceptsCatalogCodesAndWellFormedDatabaseCodesOnly(string code, bool expected)
+    {
+        // Act
+        var result = PermissionCatalog.IsKnown(code);
+
+        // Assert
+        result.Should().Be(expected);
+    }
+
+    [Fact]
+    public void DeduirePortes_SelfRead_OpensNoGate()
+    {
+        // Act
+        var result = Gates(new[] { PermissionCatalog.SelfRead });
+
+        // Assert
+        result.Should().BeEmpty();
     }
 
     private static readonly string[] Params =
     {
-        "PARAMS:USERS", "PARAMS:USERS:CREATE", "PARAMS:USERS:UPDATE", "PARAMS:USERS:DELETE",
-        "PARAMS:ROLES", "PARAMS:ROLES:CREATE", "PARAMS:ROLES:UPDATE", "PARAMS:ROLES:DELETE",
-        "PARAMS:PRIVILEGES",
-        "PARAMS:DB_ACCESS",
-        "PARAMS:CLOCK_PARAMS",
-        "PARAMS:CORRESPONDENCE",
-        "PARAMS:CARDPAIE", "PARAMS:CARDPAIE:CREATE", "PARAMS:CARDPAIE:UPDATE", "PARAMS:CARDPAIE:DELETE",
-        "PARAMS:CATEGORIES", "PARAMS:CATEGORIES:CREATE", "PARAMS:CATEGORIES:UPDATE", "PARAMS:CATEGORIES:DELETE",
-        "PARAMS:AFFECTATIONS", "PARAMS:AFFECTATIONS:CREATE", "PARAMS:AFFECTATIONS:UPDATE", "PARAMS:AFFECTATIONS:DELETE",
-        "PARAMS:TOLERANCES", "PARAMS:TOLERANCES:CREATE", "PARAMS:TOLERANCES:UPDATE",
-        "PARAMS:HOLIDAYS", "PARAMS:HOLIDAYS:CREATE", "PARAMS:HOLIDAYS:UPDATE", "PARAMS:HOLIDAYS:DELETE",
-        "PARAMS:MAJORATIONS", "PARAMS:MAJORATIONS:UPDATE",
-        "PARAMS:CODE_CONSTANTES",
-        "PARAMS:ABSENCE_CODES", "PARAMS:ABSENCE_CODES:CREATE", "PARAMS:ABSENCE_CODES:UPDATE"
+        "users.read", "users.create", "users.update", "users.delete",
+        "roles.read", "roles.create", "roles.update", "roles.delete",
+        "privileges.read",
+        "db-access.read",
+        "clock-params.manage",
+        "correspondence.manage",
+        "card-paie.read", "card-paie.create", "card-paie.update", "card-paie.delete",
+        "categories.read", "categories.create", "categories.update", "categories.delete",
+        "affectations.read", "affectations.create", "affectations.update", "affectations.delete",
+        "tolerances.read", "tolerances.create", "tolerances.update",
+        "holidays.read", "holidays.create", "holidays.update", "holidays.delete",
+        "majorations.read", "majorations.update",
+        "code-constantes.manage",
+        "absence-codes.read", "absence-codes.create", "absence-codes.update"
     };
 
     private static readonly string[] Proc =
     {
-        "PROC:SHIFTS", "PROC:SHIFTS:CREATE", "PROC:SHIFTS:UPDATE", "PROC:SHIFTS:DELETE",
-        "PROC:EMPLOYEE_PLANNING", "PROC:EMPLOYEE_PLANNING:CREATE", "PROC:EMPLOYEE_PLANNING:UPDATE", "PROC:EMPLOYEE_PLANNING:DELETE",
-        "PROC:PUNCHES",
-        "PROC:ANOMALIES", "PROC:ANOMALIES:DELETE",
-        "PROC:CORRECTED_HOURS", "PROC:CORRECTED_HOURS:CREATE", "PROC:CORRECTED_HOURS:UPDATE", "PROC:CORRECTED_HOURS:DELETE",
-        "PROC:WEEKLY_VALIDATION",
-        "PROC:OVERTIME"
+        "shifts.read", "shifts.create", "shifts.update", "shifts.delete",
+        "employee-planning.read", "employee-planning.create", "employee-planning.update", "employee-planning.delete",
+        "punches.manage",
+        "anomalies.manage", "anomalies.delete",
+        "corrected-hours.read", "corrected-hours.create", "corrected-hours.update", "corrected-hours.delete",
+        "weekly-validation.manage",
+        "overtime.manage"
     };
 
-    private static readonly string[] Other = { "OTHER:CANTEEN", "OTHER:TRAVEL_EXPENSES" };
-
-    private static BddSage Sage(string? name) => new() { NomBd = name };
-    private static BddPointeuse Pointeuse(string? name) => new() { NomBd = name };
-
-    private static List<string> Build(int[] rights, string[]? sages = null, string[]? pointeuses = null)
-        => Defaults(rights.ToHashSet(), (sages ?? Array.Empty<string>()).Select(Sage), (pointeuses ?? Array.Empty<string>()).Select(Pointeuse));
+    private static readonly string[] Other = { "canteen.manage", "travel-expenses.manage" };
 
     #region BuildDefaultPermissionsList
 
@@ -106,68 +108,31 @@ public class PermissionCatalogCharacterizationTests
     public void Build_NoGateNoDatabase_ReturnsEmpty()
     {
         // Act
-        var result = Build(Array.Empty<int>());
+        var result = Build();
 
         // Assert
         result.Should().BeEmpty();
     }
 
     [Fact]
-    public void Build_Gate1WithoutDatabase_GivesTheTwoCreateCodes()
+    public void Build_Gate1_GivesCreateAndEveryActionOnAllDatabasesIncludingFutureOnes()
     {
         // Act
-        var result = Build(new[] { Rights.Databases });
+        var result = Build(Rights.Databases);
 
         // Assert
-        result.Should().Equal(new[] { "SAGE:CREATE", "POINTEUSE:CREATE" });
-    }
-
-    [Fact]
-    public void Build_Gate1WithDatabases_GivesCreateThenCrudPerDatabase()
-    {
-        // Act
-        var result = Build(new[] { Rights.Databases }, new[] { "A", "B" }, new[] { "P" });
-
-        // Assert
-        result.Should().Equal(new[]
-        {
-            "SAGE:CREATE",
-            "SAGE:A:READ", "SAGE:A:UPDATE", "SAGE:A:DELETE",
-            "SAGE:B:READ", "SAGE:B:UPDATE", "SAGE:B:DELETE",
-            "POINTEUSE:CREATE",
-            "POINTEUSE:P:READ", "POINTEUSE:P:UPDATE", "POINTEUSE:P:DELETE"
-        });
-    }
-
-    [Fact]
-    public void Build_SageListWithoutGate1_GivesSageCodesWithoutPointeuse()
-    {
-        // Act
-        var result = Build(new[] { Rights.Processing }, new[] { "A" }, new[] { "P" });
-
-        // Assert
-        result.Should().Equal(new[] { "SAGE:CREATE", "SAGE:A:READ", "SAGE:A:UPDATE", "SAGE:A:DELETE" }.Concat(Proc));
-    }
-
-    [Fact]
-    public void Build_BlankDatabaseNames_AreSkipped()
-    {
-        // Act
-        var result = Build(new[] { Rights.Databases }, new[] { "A", "", " " }, new[] { "" });
-
-        // Assert
-        result.Should().Equal(new[] { "SAGE:CREATE", "SAGE:A:READ", "SAGE:A:UPDATE", "SAGE:A:DELETE", "POINTEUSE:CREATE" });
+        result.Should().Equal(AllDatabases);
     }
 
     [Fact]
     public void Build_SingleGate_GivesItsFixedList()
     {
         // Act & Assert
-        Build(new[] { Rights.Parameters }).Should().Equal(Params);
-        Build(new[] { Rights.Processing }).Should().Equal(Proc);
-        Build(new[] { Rights.Other }).Should().Equal(Other);
-        Build(new[] { Rights.Traceability }).Should().Equal(new[] { "TRACE:AUDIT" });
-        Build(new[] { Rights.Reports }).Should().Equal(new[] { "REPORTS:REPORTS", "REPORTS:PREDICTIONS", "REPORTS:CLOSING" });
+        Build(Rights.Parameters).Should().Equal(Params);
+        Build(Rights.Processing).Should().Equal(Proc);
+        Build(Rights.Other).Should().Equal(Other);
+        Build(Rights.Traceability).Should().Equal(new[] { "audit.read" });
+        Build(Rights.Reports).Should().Equal(new[] { "reports.read", "predictions.read", "closing.read" });
     }
 
     [Fact]
@@ -177,14 +142,30 @@ public class PermissionCatalogCharacterizationTests
         var all = new[] { Rights.Databases, Rights.Parameters, Rights.Processing, Rights.Other, Rights.Traceability, Rights.Reports };
 
         // Act
-        var expected = new[] { "SAGE:CREATE", "SAGE:A:READ", "SAGE:A:UPDATE", "SAGE:A:DELETE", "POINTEUSE:CREATE", "POINTEUSE:P:READ", "POINTEUSE:P:UPDATE", "POINTEUSE:P:DELETE" }
-            .Concat(Params).Concat(Proc).Concat(Other).Concat(new[] { "TRACE:AUDIT", "REPORTS:REPORTS", "REPORTS:PREDICTIONS", "REPORTS:CLOSING" });
+        var expected = AllDatabases
+            .Concat(Params).Concat(Proc).Concat(Other).Concat(new[] { "audit.read", "reports.read", "predictions.read", "closing.read" });
 
         // Assert
-        Build(all, new[] { "A" }, new[] { "P" }).Should().Equal(expected);
+        Build(all).Should().Equal(expected);
     }
 
     #endregion
+
+    [Theory]
+    [InlineData("categories.delete", "categories.read")]
+    [InlineData("anomalies.delete", "anomalies.manage")]
+    [InlineData("users.create", "users.read")]
+    [InlineData("categories.read", null)]
+    [InlineData("sage.1.update", null)]
+    [InlineData("inconnu.delete", null)]
+    public void PageOf_Code_GivesThePageItsScreenRequires(string code, string? page)
+    {
+        // Act
+        var result = PermissionCatalog.PageOf(code);
+
+        // Assert
+        result.Should().Be(page);
+    }
 
     #region DeduirePortes
 
@@ -192,22 +173,22 @@ public class PermissionCatalogCharacterizationTests
     public void Gates_EachPrefix_GivesItsGate()
     {
         // Act & Assert
-        Gates(new[] { "SAGE:A:READ" }).Should().Equal(new decimal[] { 1 });
-        Gates(new[] { "POINTEUSE:CREATE" }).Should().Equal(new decimal[] { 1 });
-        Gates(new[] { "PARAMS:USERS" }).Should().Equal(new decimal[] { 2 });
-        Gates(new[] { "PROC:SHIFTS" }).Should().Equal(new decimal[] { 3 });
-        Gates(new[] { "OTHER:CANTEEN" }).Should().Equal(new decimal[] { 4 });
-        Gates(new[] { "TRACE:AUDIT" }).Should().Equal(new decimal[] { 5 });
-        Gates(new[] { "REPORTS:REPORTS" }).Should().Equal(new decimal[] { 6 });
-        Gates(new[] { "REPORTS:PREDICTIONS" }).Should().Equal(new decimal[] { 6 });
-        PermissionCatalog.IsKnown("REPORTS:PREDICTIONS").Should().BeTrue();
+        Gates(new[] { "sage.A.read" }).Should().Equal(new decimal[] { 1 });
+        Gates(new[] { "pointeuse.create" }).Should().Equal(new decimal[] { 1 });
+        Gates(new[] { "users.read" }).Should().Equal(new decimal[] { 2 });
+        Gates(new[] { "shifts.read" }).Should().Equal(new decimal[] { 3 });
+        Gates(new[] { "canteen.manage" }).Should().Equal(new decimal[] { 4 });
+        Gates(new[] { "audit.read" }).Should().Equal(new decimal[] { 5 });
+        Gates(new[] { "reports.read" }).Should().Equal(new decimal[] { 6 });
+        Gates(new[] { "predictions.read" }).Should().Equal(new decimal[] { 6 });
+        PermissionCatalog.IsKnown("predictions.read").Should().BeTrue();
     }
 
     [Fact]
     public void Gates_MixedCaseUnknownOrDuplicatedPrefixes_AreHandled()
     {
         // Act
-        var result = Gates(new[] { "sage:a:read", "proc:shifts", "PROC:SHIFTS", "INCONNU:X", "" }).OrderBy(x => x);
+        var result = Gates(new[] { "sage.a.read", "SHIFTS.READ", "shifts.read", "INCONNU:X", "" }).OrderBy(x => x);
 
         // Assert
         result.Should().Equal(new decimal[] { 1, 3 }.OrderBy(x => x));
@@ -222,7 +203,7 @@ public class PermissionCatalogCharacterizationTests
         var all = new[] { Rights.Databases, Rights.Parameters, Rights.Processing, Rights.Other, Rights.Traceability, Rights.Reports };
 
         // Act
-        var result = Gates(Build(all, new[] { "A" }, new[] { "P" })).OrderBy(x => x);
+        var result = Gates(Build(all)).OrderBy(x => x);
 
         // Assert
         result.Should().Equal(new decimal[] { 1, 2, 3, 4, 5, 6 });

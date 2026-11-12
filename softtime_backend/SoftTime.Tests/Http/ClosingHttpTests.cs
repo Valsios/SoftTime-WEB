@@ -10,7 +10,7 @@ using SoftTime.Domain.Entities.SoftTime;
 namespace SoftTime.Tests.Http;
 
 /// <summary>
-/// GET api/closing/analysis : lecture seule, base active puis porte 6 ET REPORTS:CLOSING
+/// GET api/closing/analysis : lecture seule, base active puis porte 6 ET closing.read
 /// (administrateur toujours accepté), même message de refus que les prévisions. Les comptes de
 /// clôture sont ajoutés au magasin en mémoire de la fabrique par cette classe (ApiFactory inchangée).
 /// </summary>
@@ -49,18 +49,18 @@ public class ClosingHttpTests : IClassFixture<ApiFactory>
         var perms = store.Get<UserPermission>().Items;
         users.Add(new Responsable { IdResponsable = LecteurId, IdRole = 91, Login = "closereader", NomResponsable = "closereader" });
         store.Get<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = (int)LecteurId, IdResponsable = LecteurId, IdBdd = 3033 });
-        perms.Add(new UserPermission { IdResponsable = LecteurId, PermissionCode = "REPORTS:CLOSING", IsGranted = true });
-        perms.Add(new UserPermission { IdResponsable = LecteurId, PermissionCode = $"SAGE:{ApiFactory.SageName}:READ", IsGranted = true });
+        perms.Add(new UserPermission { IdResponsable = LecteurId, PermissionCode = "closing.read", IsGranted = true });
+        perms.Add(new UserPermission { IdResponsable = LecteurId, PermissionCode = $"sage.{ApiFactory.SageId}.read", IsGranted = true });
         // L'analyse lit les pointages : la base pointeuse active doit aussi être lisible (comme le pré-traitement).
-        perms.Add(new UserPermission { IdResponsable = LecteurId, PermissionCode = "POINTEUSE:PTG:READ", IsGranted = true });
+        perms.Add(new UserPermission { IdResponsable = LecteurId, PermissionCode = "pointeuse.1.read", IsGranted = true });
         // Base SAGE cochée et lisible, mais sans lecture de la base pointeuse.
         users.Add(new Responsable { IdResponsable = SansPointeuseId, IdRole = 91, Login = "closenopte", NomResponsable = "closenopte" });
         store.Get<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = (int)SansPointeuseId, IdResponsable = SansPointeuseId, IdBdd = 3033 });
-        perms.Add(new UserPermission { IdResponsable = SansPointeuseId, PermissionCode = "REPORTS:CLOSING", IsGranted = true });
-        perms.Add(new UserPermission { IdResponsable = SansPointeuseId, PermissionCode = $"SAGE:{ApiFactory.SageName}:READ", IsGranted = true });
+        perms.Add(new UserPermission { IdResponsable = SansPointeuseId, PermissionCode = "closing.read", IsGranted = true });
+        perms.Add(new UserPermission { IdResponsable = SansPointeuseId, PermissionCode = $"sage.{ApiFactory.SageId}.read", IsGranted = true });
         // Permission fine de clôture, mais base non cochée dans « Accès bases ».
         users.Add(new Responsable { IdResponsable = SansBaseId, IdRole = 91, Login = "closenobase", NomResponsable = "closenobase" });
-        perms.Add(new UserPermission { IdResponsable = SansBaseId, PermissionCode = "REPORTS:CLOSING", IsGranted = true });
+        perms.Add(new UserPermission { IdResponsable = SansBaseId, PermissionCode = "closing.read", IsGranted = true });
 
         var lundi = new DateTime(2025, 11, 3);
         store.Get<CardPaie>().Items.Add(new CardPaie

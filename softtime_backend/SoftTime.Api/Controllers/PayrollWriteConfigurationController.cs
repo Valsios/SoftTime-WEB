@@ -10,6 +10,9 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Parameters)]
+// Configuration de l'écriture dans la paie SAGE (connexion comprise) : aucune permission fine au catalogue et aucun
+// écran ne l'utilise, elle est donc réservée à l'administrateur.
+[RequireAdmin]
 [Route("api/v1/payroll-write-config")]
 [Tags("PayrollWriteConfiguration")]
 public class PayrollWriteConfigurationController : ApiControllerBase

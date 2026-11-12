@@ -14,14 +14,14 @@ const section = (title: string, droit: number, items: { label: string; droit: nu
 const NAV = [
   section('Bases', 1, [{ label: 'Bases RH', droit: 1, permission: 'SAGE' }]),
   section('Paramètres', 2, [
-    { label: 'Utilisateurs', droit: 2, permission: 'PARAMS:USERS' },
-    { label: 'Catégories', droit: 2, permission: 'PARAMS:CATEGORIES' },
+    { label: 'Utilisateurs', droit: 2, permission: 'users.read' },
+    { label: 'Catégories', droit: 2, permission: 'categories.read' },
   ]),
   section('Traitement', 3, [
-    { label: 'Shifts', droit: 3, permission: 'PROC:SHIFTS' },
-    { label: 'Pointages', droit: 3, permission: 'PROC:PUNCHES' },
+    { label: 'Shifts', droit: 3, permission: 'shifts.read' },
+    { label: 'Pointages', droit: 3, permission: 'punches.manage' },
   ]),
-  section('États', 6, [{ label: 'Rapports', droit: 6, permission: 'REPORTS:REPORTS' }]),
+  section('États', 6, [{ label: 'Rapports', droit: 6, permission: 'reports.read' }]),
 ];
 
 const ctx = (over: Partial<AccessContext>): AccessContext => ({
@@ -43,18 +43,18 @@ describe('access.logic', () => {
   it('administrateur : tout est visible, même sans porte ni permission', () => {
     const admin = ctx({ roleId: 1, gates: [], permissions: [] });
     expect(labels(admin)).toEqual(['Bases RH', 'Utilisateurs', 'Catégories', 'Shifts', 'Pointages', 'Rapports']);
-    expect(canAccess(admin, 'PARAMS:USERS', 2)).toBe(true);
+    expect(canAccess(admin, 'users.read', 2)).toBe(true);
   });
 
   it('rôle seul : permission fine et porte présentes', () => {
-    const role = ctx({ permissions: ['SAGE:BASE1:READ', 'PROC:SHIFTS', 'REPORTS:REPORTS'], customized: false, gates: [1, 3, 6] });
+    const role = ctx({ permissions: ['sage.BASE1.read', 'shifts.read', 'reports.read'], customized: false, gates: [1, 3, 6] });
     expect(labels(role)).toEqual(['Bases RH', 'Shifts', 'Rapports']);
   });
 
   it('rôle plus ajouts : un ajout PARAMS avec la porte 2 rend l’écran visible', () => {
-    const base = ['SAGE:BASE1:READ', 'PROC:SHIFTS'];
+    const base = ['sage.BASE1.read', 'shifts.read'];
     expect(labels(ctx({ permissions: base, customized: true, gates: [1, 3] }))).toEqual(['Bases RH', 'Shifts']);
-    const withAdds = ctx({ permissions: [...base, 'PARAMS:USERS'], customized: true, gates: [1, 2, 3] });
+    const withAdds = ctx({ permissions: [...base, 'users.read'], customized: true, gates: [1, 2, 3] });
     expect(labels(withAdds)).toEqual(['Bases RH', 'Utilisateurs', 'Shifts']);
   });
 
@@ -65,22 +65,22 @@ describe('access.logic', () => {
   });
 
   it('porte sans permission : l’écran reste masqué', () => {
-    const c = ctx({ permissions: ['PROC:SHIFTS'], customized: true, gates: [3, 6] });
-    expect(canAccess(c, 'PROC:PUNCHES', 3)).toBe(false);
-    expect(canAccess(c, 'REPORTS:REPORTS', 6)).toBe(false);
+    const c = ctx({ permissions: ['shifts.read'], customized: true, gates: [3, 6] });
+    expect(canAccess(c, 'punches.manage', 3)).toBe(false);
+    expect(canAccess(c, 'reports.read', 6)).toBe(false);
     expect(labels(c)).toEqual(['Shifts']);
   });
 
   it('permission sans porte : l’écran est masqué (il serait refusé par le serveur)', () => {
-    const c = ctx({ permissions: ['PARAMS:USERS', 'PROC:SHIFTS'], customized: true, gates: [3] });
-    expect(permissionAllows(c, 'PARAMS:USERS', 2)).toBe(true);
+    const c = ctx({ permissions: ['users.read', 'shifts.read'], customized: true, gates: [3] });
+    expect(permissionAllows(c, 'users.read', 2)).toBe(true);
     expect(gateAllows(c, 2)).toBe(false);
-    expect(canAccess(c, 'PARAMS:USERS', 2)).toBe(false);
+    expect(canAccess(c, 'users.read', 2)).toBe(false);
     expect(labels(c)).toEqual(['Shifts']);
   });
 
   it('une section dont tous les éléments sont masqués disparaît', () => {
-    const c = ctx({ permissions: ['PARAMS:USERS'], customized: true, gates: [2] });
+    const c = ctx({ permissions: ['users.read'], customized: true, gates: [2] });
     const sections = visibleSections(NAV, c);
     expect(sections.map((s) => s.title)).toEqual(['Paramètres']);
     expect(sections[0].items.map((i) => i.label)).toEqual(['Utilisateurs']);
@@ -88,20 +88,20 @@ describe('access.logic', () => {
 
   it('sans liste de permissions ni écart, la porte suffit (repli historique)', () => {
     const c = ctx({ permissions: [], customized: false, gates: [3] });
-    expect(canAccess(c, 'PROC:SHIFTS', 3)).toBe(true);
-    expect(canAccess(c, 'PARAMS:USERS', 2)).toBe(false);
+    expect(canAccess(c, 'shifts.read', 3)).toBe(true);
+    expect(canAccess(c, 'users.read', 2)).toBe(false);
   });
 
   it('jeton illisible : repli sur les portes renvoyées à la connexion', () => {
-    const c = ctx({ permissions: ['PROC:SHIFTS'], customized: true, gates: null, fallbackRights: [3] });
-    expect(canAccess(c, 'PROC:SHIFTS', 3)).toBe(true);
-    expect(canAccess(ctx({ permissions: ['PROC:SHIFTS'], customized: true, gates: null, fallbackRights: [] }), 'PROC:SHIFTS', 3)).toBe(false);
+    const c = ctx({ permissions: ['shifts.read'], customized: true, gates: null, fallbackRights: [3] });
+    expect(canAccess(c, 'shifts.read', 3)).toBe(true);
+    expect(canAccess(ctx({ permissions: ['shifts.read'], customized: true, gates: null, fallbackRights: [] }), 'shifts.read', 3)).toBe(false);
   });
 
   it('sans porte demandée, seul le code de permission compte', () => {
-    const c = ctx({ permissions: ['SAGE:BASE1:READ'], customized: true, gates: [] });
-    expect(canAccess(c, 'SAGE:BASE1:READ')).toBe(true);
-    expect(canAccess(c, 'SAGE:BASE2:READ')).toBe(false);
+    const c = ctx({ permissions: ['sage.BASE1.read'], customized: true, gates: [] });
+    expect(canAccess(c, 'sage.BASE1.read')).toBe(true);
+    expect(canAccess(c, 'sage.BASE2.read')).toBe(false);
     expect(canAccess(c)).toBe(true);
   });
 

@@ -41,7 +41,9 @@ public class PointeuseDatabasesController : ApiControllerBase
             var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
             if (p.IsCustomized)
             {
-                list = list.Where(s => !string.IsNullOrEmpty(s.NomBd) && p.GrantedPermissions.Contains($"POINTEUSE:{s.NomBd}:READ")).ToList();
+                var readable = ReadableDatabases.ReadableIds(p.GrantedPermissions, DatabaseKind.Pointeuse);
+                if (readable is not null)
+                    list = list.Where(s => readable.Contains(s.Id)).ToList();
             }
         }
         return Ok(list);
@@ -53,12 +55,12 @@ public class PointeuseDatabasesController : ApiControllerBase
     {
         if (!DatabaseListAccess.PeutLire(_user))
             return Ok(DatabaseListAccess.PageVide<PointeuseDbDto>(page, pageSize));
-        IReadOnlyCollection<string>? allowed = null;
+        IReadOnlyCollection<int>? allowed = null;
         if (_user.UserId is decimal uid)
         {
             var p = await _auth.GetUserDetailedPermissionsAsync(uid, ct);
             if (p.IsCustomized)
-                allowed = DatabasePermissionNames.Read(p.GrantedPermissions, "POINTEUSE");
+                allowed = ReadableDatabases.ReadableIds(p.GrantedPermissions, DatabaseKind.Pointeuse);
         }
         return Ok(await _svc.ListPointeusePagedAsync(allowed, page, pageSize, search, ct));
     }

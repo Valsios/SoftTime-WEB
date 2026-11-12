@@ -88,14 +88,14 @@ describe('Shell : badge du Contrôle avant paie', () => {
   });
 
   it('aucun badge tant qu’aucune analyse n’existe en session', () => {
-    seConnecter(['REPORTS:CLOSING']);
+    seConnecter(['closing.read']);
     const { el } = monter();
 
     expect(badge(el)).toBeNull();
   });
 
   it('avec la permission et une analyse : le nombre d’anomalies critiques, un libellé lisible et un lien vers la page', () => {
-    seConnecter(['REPORTS:CLOSING']);
+    seConnecter(['closing.read']);
     analyser(3);
     const { el } = monter();
 
@@ -108,7 +108,7 @@ describe('Shell : badge du Contrôle avant paie', () => {
   });
 
   it('libellés au singulier et à zéro, sans alerte visuelle à zéro', () => {
-    seConnecter(['REPORTS:CLOSING']);
+    seConnecter(['closing.read']);
     analyser(1);
     const un = monter();
     expect(badge(un.el)!.getAttribute('aria-label')).toBe('Contrôle avant paie : 1 anomalie critique');
@@ -120,8 +120,8 @@ describe('Shell : badge du Contrôle avant paie', () => {
     expect(badge(un.el)!.classList.contains('topbar__closing--alert')).toBe(false);
   });
 
-  it('sans la permission REPORTS:CLOSING : jamais de badge, même avec une analyse en mémoire', () => {
-    seConnecter(['PROC:ANOMALIES']);
+  it('sans la permission closing.read : jamais de badge, même avec une analyse en mémoire', () => {
+    seConnecter(['anomalies.manage']);
     analyser(5);
     const { el } = monter();
 
@@ -129,7 +129,7 @@ describe('Shell : badge du Contrôle avant paie', () => {
   });
 
   it('disparaît à la déconnexion', () => {
-    const store = seConnecter(['REPORTS:CLOSING']);
+    const store = seConnecter(['closing.read']);
     analyser(2);
     const { fixture, el } = monter();
     expect(badge(el)).not.toBeNull();
@@ -142,7 +142,7 @@ describe('Shell : badge du Contrôle avant paie', () => {
   });
 
   it('disparaît au changement de base active', () => {
-    const store = seConnecter(['REPORTS:CLOSING']);
+    const store = seConnecter(['closing.read']);
     analyser(2);
     const { fixture, el } = monter();
     expect(badge(el)).not.toBeNull();
@@ -155,7 +155,7 @@ describe('Shell : badge du Contrôle avant paie', () => {
   });
 
   it('aucune requête pour le badge : ni à l’apparition, ni au fil du temps', () => {
-    seConnecter(['REPORTS:CLOSING']);
+    seConnecter(['closing.read']);
     const { fixture, el } = monter();
     const avant = [refreshMe.mock.calls.length, refreshPointeuse.mock.calls.length];
 

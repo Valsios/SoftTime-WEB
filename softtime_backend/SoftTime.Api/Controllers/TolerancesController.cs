@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Security;
 using SoftTime.Application.Abstractions.Settings;
 using SoftTime.Application.DTOs;
 
@@ -10,6 +11,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Parameters)]
+[HasPermission(Permissions.Tolerances.Read)]
 [Route("api/v1/tolerances")]
 [Tags("Tolerances")]
 public class TolerancesController : ApiControllerBase
@@ -27,14 +29,17 @@ public class TolerancesController : ApiControllerBase
         [FromQuery] string? search, CancellationToken ct)
         => Ok(await _svc.ListTolerancesPagedAsync(categoryId, page, pageSize, search, ct));
 
+    [HasPermission(Permissions.Tolerances.Create)]
     [HttpPost]
     public async Task<IActionResult> CreateAsync([FromBody] ToleranceDto dto, CancellationToken ct)
         => Ok(await _svc.SaveToleranceAsync(dto with { Id = 0 }, ct));
 
+    [HasPermission(Permissions.Tolerances.Update)]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> UpdateAsync(int id, [FromBody] ToleranceDto dto, CancellationToken ct)
         => Ok(await _svc.SaveToleranceAsync(dto with { Id = id }, ct));
 
+    [HasPermission(Permissions.Tolerances.Update)]
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> DeleteAsync(int id, CancellationToken ct)
     {

@@ -3,7 +3,7 @@
  * Rien ici ne désigne un autre salarié : l'écran ne montre que les données du compte connecté, le serveur étant la vraie barrière.
  */
 
-export const SELF_PERMISSION = 'SELF:READ';
+export const SELF_PERMISSION = 'self.read';
 export const SELF_ROUTE = '/mon-espace';
 export const DEFAULT_ROUTE = '/dashboard';
 /** Fenêtre consultable : les 4 derniers mois, mois en cours compris (même règle que le serveur). */
@@ -13,7 +13,7 @@ export function hasSelfPermission(permissions: readonly string[] | null | undefi
   return (permissions ?? []).includes(SELF_PERMISSION);
 }
 
-/** Profil « Salarié » : la permission SELF:READ et aucune porte. Tout autre compte garde son comportement habituel. */
+/** Profil « Salarié » : la permission self.read et aucune porte. Tout autre compte garde son comportement habituel. */
 export function isSelfServiceProfile(
   permissions: readonly string[] | null | undefined,
   gates: readonly number[] | null | undefined,

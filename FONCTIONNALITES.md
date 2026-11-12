@@ -70,7 +70,7 @@ L’accès est filtré par **rôle** (6 droits) et par **société SAGE** active
 | **Pointages** | Liste, import pointeuse, import Excel. |
 | **Anomalies** | Heures anormales détectées. |
 | **Heures corrigées** | Saisie / import des corrections (entrée, sortie, absences, etc.). |
-| **Validation semaine** | Calcul HT/HS lundi–dimanche, valider ou annuler. |
+| **Validation semaine** | Calcul HT/HS lundi–dimanche, valider ou annuler. Interrupteur « Masquer les salariés sans heures » (actif par défaut) : n'affiche que les salariés ayant une heure corrigée ou un jour planifié travaillé sur la semaine, et toujours ceux dont la semaine est déjà validée (`OnlyWithHours`, `WeeklyActivityRules`). |
 | **Heures supp.** | Calcul EXO/IMPO (plafond), purge, **sync SAGE** (`T_CUMSAL`). |
 
 **Règles de pré-traitement des pointages** (portage de `Frm_Import.importa` du desktop) :
@@ -212,7 +212,7 @@ planning, et suit donc immédiatement une correction ou un changement de plannin
   plafond exonéré (> 20 h dans la semaine, `OvertimeRules.ExemptCeilingHours`). Pour chaque salarié
   au-dessus d'un seuil : **heures à retirer du planning restant** pour repasser dessous, ou
   « seuil déjà franchi » si les heures faites l'ont déjà dépassé.
-- **Page `/predictions`** (États, permission `REPORTS:PREDICTIONS`) : fraîcheur des pointages,
+- **Page `/predictions`** (États, permission `predictions.read`) : fraîcheur des pointages,
   **horizon de 4 semaines** (`Landing:HorizonWeeks` ; « planning non saisi » quand rien n'est
   planifié ; un clic choisit la semaine), total à l'atterrissage et part déjà acquise, salariés en
   HS, passages à 150 %, heures encore évitables, alerte « jours sans planning », vue **par
@@ -237,7 +237,7 @@ planning, et suit donc immédiatement une correction ou un changement de plannin
 
 Page **en lecture seule** d'aide à la préparation de la paie : elle liste les anomalies de la période,
 donne un score et un statut, et renvoie vers les écrans de correction existants. Accès : porte 6
-(États) **et** permission `REPORTS:CLOSING` (l'administrateur y a toujours accès). Elle peut être coupée
+(États) **et** permission `closing.read` (l'administrateur y a toujours accès). Elle peut être coupée
 par le réglage `Closing:Enabled`. Période par défaut : le mois civil complet précédent ; les jours en
 cours et futurs ne sont jamais contrôlés (la période est plafonnée à la veille).
 
@@ -287,7 +287,7 @@ cours et futurs ne sont jamais contrôlés (la période est plafonnée à la vei
 
   Le cache de la checklist dure 60 s, par utilisateur, base, période et département.
 - **Badge** : dans la barre du haut, près du bouton de thème, le nombre d'anomalies critiques du dernier résultat,
-  pour les comptes ayant `REPORTS:CLOSING`, et seulement si une analyse existe en session. Il ne fait aucune requête
+  pour les comptes ayant `closing.read`, et seulement si une analyse existe en session. Il ne fait aucune requête
   et ne se rafraîchit pas seul ; il disparaît avec l'état de session.
 - **Cache de l'analyse** : le serveur garde l'analyse en mémoire par utilisateur, base, période et département. Le délai de 120 s est **glissant** (chaque lecture du filtre, du tri, de l'onglet ou d'une page le renouvelle) sous un **plafond absolu de 600 s** depuis le calcul (`Closing:CacheMaxSeconds`, 0 à 3600) ; le délai glissant se règle par `Closing:CacheSeconds` (120 s par défaut, 0 à 3600, jamais au-delà du plafond ; 0 : aucun cache) ; « Analyser » recalcule toujours à neuf et repart d'un plafond neuf.
 - **Âge de l'analyse** : près du résultat, « Analyse faite il y a X min », calculé sur l'heure conservée en session, sans requête.
@@ -307,9 +307,9 @@ export ni lien vers un autre écran. Fonction **non validée** : tout est additi
   coupée : toutes les routes `api/v1/me/space/*` répondent 404.
 - **Compte Salarié** : créé à la main par la RH dans l'écran Utilisateurs, avec le rôle « Salarié », le **matricule SAGE**, l'e-mail et **une
   seule base** cochée dans « Accès bases ». Le rôle se crée avec `migrations/mon_espace_role_salarie.sql` (fourni, jamais exécuté
-  automatiquement, volontairement hors de `migrations/versions`, appliqué seul en développement) : une permission, `SELF:READ`, et
+  automatiquement, volontairement hors de `migrations/versions`, appliqué seul en développement) : une permission, `self.read`, et
   aucune porte. Ne jamais ajouter de permission `SAGE:` ni `POINTEUSE:` à ce compte : elles donneraient la porte 1.
-- **Garde** (`SelfServiceGuard`), appliquée à chaque requête et sans passer par la porte 1 : option activée ; permission `SELF:READ` effective ;
+- **Garde** (`SelfServiceGuard`), appliquée à chaque requête et sans passer par la porte 1 : option activée ; permission `self.read` effective ;
   matricule lu **uniquement** dans le jeton (aucun paramètre de requête, de route ni d'en-tête ne désigne un salarié) ; exactement
   **une** base autorisée dans `T_BDD_AUTORISE` ; matricule présent dans `T_CARDPAIE` de cette base. Sinon 403 avec un message explicite.
   Le client d'un salarié n'envoie **pas** `X-Sage-Database` : `TenantMiddleware` refuse tout en-tête de base à un compte sans porte 1.
@@ -319,8 +319,8 @@ export ni lien vers un autre écran. Fonction **non validée** : tout est additi
   `RetardReportRules`, `OvertimeRules.SplitWeekly`. Les congés SAGE se lisent pour tout le tenant (environ 3 à 5 s sur la démo, 13 s
   au plus mesuré) : seule la part du salarié est conservée, en cache à son nom (5 min). Aucun service de traitement, aucun état des retards
   (qui écrit `T_impr_RET`), aucun contrôle avant paie n'est utilisé.
-- **Après la connexion** : un compte avec `SELF:READ` et aucune porte arrive sur `/mon-espace` ; tous les autres comptes sur `/dashboard`
-  comme avant. L'entrée de menu « Mon espace » n'apparaît qu'avec `SELF:READ`.
+- **Après la connexion** : un compte avec `self.read` et aucune porte arrive sur `/mon-espace` ; tous les autres comptes sur `/dashboard`
+  comme avant. L'entrée de menu « Mon espace » n'apparaît qu'avec `self.read`.
 - **Hors périmètre** : changement de mot de passe (aucun écran ni route « changer mon mot de passe » n'existe, ni changement obligatoire à la
   première connexion), création de comptes en lot, invitation, périmètre par département, solde de congés (absent de SoftTime).
 - **Retrait** : mettre `SelfService__Enabled` à faux (ou le retirer) ; supprimer `SoftTime.Application/SelfService/`, `SelfSpaceController.cs`,
@@ -333,7 +333,7 @@ export ni lien vers un autre écran. Fonction **non validée** : tout est additi
 - **Garde — le compte est relu à chaque appel.** Le matricule du jeton n'est plus la seule source : la garde relit le compte dans
   `T_RESPONSABLE` (une requête, sans cache). Compte supprimé, matricule retiré ou différent de celui du jeton (réaffectation par la RH,
   jeton de 12 h encore valide) : 403 explicite « reconnectez-vous ». `T_RESPONSABLE` n'a pas de colonne « actif » : un compte désactivé est un
-  compte supprimé ou sans `SELF:READ`. Seules les routes `api/v1/me/space/*` font cette lecture ; aucune autre route n'est touchée.
+  compte supprimé ou sans `self.read`. Seules les routes `api/v1/me/space/*` font cette lecture ; aucune autre route n'est touchée.
 - **Matricule partagé = refus.** Si un autre compte porte la même clé de matricule (casse, espaces et zéros de tête ignorés), **aucun** des
   porteurs ne lit Mon espace (403 « matricule porté par plusieurs comptes : contactez la RH »), sans citer l'autre compte. À la création des
   comptes Salarié, donner un matricule unique.
@@ -351,7 +351,7 @@ export ni lien vers un autre écran. Fonction **non validée** : tout est additi
   JSON brut), avec le message du serveur et une consigne : « Contactez la RH. » (403 de compte), « Reconnectez-vous. » (message demandant de se
   reconnecter), « Choisissez un autre mois. » (400), « Réessayez dans un instant. » (erreur serveur ou réseau). Les erreurs de compte, de période ou de
   session remplacent les quatre cartes ; avec l'option coupée (404 « Mon espace n'est pas activé »), l'encadré indique « Mon espace n'est pas encore activé :
-  contactez la RH. ». Le menu et la redirection après connexion ne changent pas (ils dépendent de `SELF:READ`, pas de l'option serveur).
+  contactez la RH. ». Le menu et la redirection après connexion ne changent pas (ils dépendent de `self.read`, pas de l'option serveur).
 - **Semaine à cheval.** Une semaine qui chevauche deux mois apparaît dans chacun (le filtre retient les semaines dont le lundi est dans la période élargie au lundi
   précédent) : une note sous la carte « Mes heures par semaine » le rappelle, les totaux de deux mois ne doivent donc pas être additionnés.
 

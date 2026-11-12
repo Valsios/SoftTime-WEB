@@ -49,9 +49,9 @@ export class RolesPage implements OnInit {
   private readonly confirm = inject(ConfirmService);
   private readonly session = inject(SessionStore);
 
-  readonly canCreate = computed(() => this.session.hasPermission('PARAMS:ROLES:CREATE', Droit.Parameters));
-  readonly canUpdate = computed(() => this.session.hasPermission('PARAMS:ROLES:UPDATE', Droit.Parameters));
-  readonly canDelete = computed(() => this.session.hasPermission('PARAMS:ROLES:DELETE', Droit.Parameters));
+  readonly canCreate = computed(() => this.session.hasPermission('roles.create', Droit.Parameters));
+  readonly canUpdate = computed(() => this.session.hasPermission('roles.update', Droit.Parameters));
+  readonly canDelete = computed(() => this.session.hasPermission('roles.delete', Droit.Parameters));
 
   readonly loading = signal(true);
   readonly saving = signal(false);

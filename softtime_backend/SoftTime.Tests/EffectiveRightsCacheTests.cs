@@ -40,7 +40,7 @@ public class EffectiveRightsCacheTests
         _store.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 5, IdRole = 2, Login = "u5" });
         _store.Get<BddSage>().Items.Add(new BddSage { Id = 7, NomBd = "BASE1" });
         _store.Get<DroitRole>().Items.Add(new DroitRole { IdRole = 2, IdDroit = 1 });
-        _store.Get<RolePermission>().Items.Add(new RolePermission { IdRole = 2, PermissionCode = "SAGE:BASE1:READ", IsGranted = true });
+        _store.Get<RolePermission>().Items.Add(new RolePermission { IdRole = 2, PermissionCode = "sage.7.read", IsGranted = true });
         _store.Get<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = 1, IdResponsable = 5, IdBdd = 7 });
     }
 
@@ -81,8 +81,8 @@ public class EffectiveRightsCacheTests
     {
         // Act & Assert
         (await CanUse()).Should().BeTrue();
-        // Liste complète sans SAGE:BASE1:READ : la lecture est retirée.
-        await _auth.SaveUserDetailedPermissionsAsync(1, 5, new[] { "REPORTS:REPORTS", "SAGE:CREATE" });
+        // Liste complète sans sage.7.read : la lecture est retirée.
+        await _auth.SaveUserDetailedPermissionsAsync(1, 5, new[] { "reports.read", "sage.create" });
         (await CanUse()).Should().BeFalse();
         await _auth.ResetUserDetailedPermissionsAsync(1, 5);
         (await CanUse()).Should().BeTrue();
@@ -93,7 +93,7 @@ public class EffectiveRightsCacheTests
     {
         // Act & Assert
         (await CanUse()).Should().BeTrue();
-        await _auth.SaveRoleDetailedPermissionsAsync(1, 2, new[] { "REPORTS:REPORTS" });
+        await _auth.SaveRoleDetailedPermissionsAsync(1, 2, new[] { "reports.read" });
         (await CanUse()).Should().BeFalse();
     }
 

@@ -4,7 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
-import { PointeuseDb, Role, SageDb, User } from '../../shared/models';
+import { DATABASE_ACTIONS, DatabaseAction, DatabaseKind, databaseCode } from '../../core/access.logic';
+import { PermissionCatalogCategory, PointeuseDb, Role, SageDb, User } from '../../shared/models';
 import { PointeuseDatabasesService } from '../../shared/services/catalog.service';
 import { PrivilegesService, RolesService, SageDatabasesService, UsersService } from '../../shared/services/users.service';
 import { PrivilegesDraftService } from '../../shared/services/privileges-draft.service';
@@ -14,6 +15,7 @@ import { PermMark } from './perm-mark';
 import { PermSearch } from './perm-search';
 import {
   SENSITIVE_RIGHT_HINT,
+  actionCode,
   applyToggle,
   computeWarnings,
   filterCategories,
@@ -48,8 +50,39 @@ interface FeatureItem {
 interface FeatureCategory {
   key: string;
   title: string;
+  gate?: number | null;
   icon: string;
   items: FeatureItem[];
+}
+
+/** Icône de chaque catégorie du catalogue serveur (affichage seulement). */
+const CATEGORY_ICONS: Readonly<Record<string, string>> = {
+  PARAMS: 'sliders',
+  PROC: 'grid',
+  OTHER: 'coffee',
+  TRACE: 'history',
+  REPORTS: 'bar-chart',
+  SELF: 'user-check',
+};
+
+function toFeatureCategories(catalog: readonly PermissionCatalogCategory[]): FeatureCategory[] {
+  return catalog.map((c) => ({ key: c.key, title: c.title, gate: c.gate, icon: CATEGORY_ICONS[c.key] ?? 'key', items: c.items }));
+}
+
+/** Sections de bases de l'écran et type de base correspondant. */
+const DATABASE_KINDS: readonly DatabaseKind[] = ['sage', 'pointeuse'];
+const DATABASE_KIND_BY_SECTION: Readonly<Record<string, DatabaseKind>> = { SAGE: 'sage', POINTEUSE: 'pointeuse' };
+
+/** Portes des droits de travail : Traitements (3), Autres (4), États (6). */
+const WORK_GATES: readonly number[] = [3, 4, 6];
+
+/** Codes d'un écran : sa page et ses actions. */
+function itemCodes(item: FeatureItem): string[] {
+  const codes = [item.code];
+  if (item.canCreate) codes.push(actionCode(item.code, 'create'));
+  if (item.canUpdate) codes.push(actionCode(item.code, 'update'));
+  if (item.canDelete) codes.push(actionCode(item.code, 'delete'));
+  return codes;
 }
 
 @Component({
@@ -277,16 +310,16 @@ interface FeatureCategory {
           </div>
 
           <div class="sw-card-bulk-actions">
-            <label class="sw-check-label sw-header-check-label" [class.is-disabled]="isReadOnly('SAGE:CREATE')">
+            <label class="sw-check-label sw-header-check-label" [class.is-disabled]="isReadOnly('sage.create')">
               <input
                 type="checkbox"
-                [checked]="has('SAGE:CREATE')"
-                [disabled]="isReadOnly('SAGE:CREATE')"
-                (change)="toggle('SAGE:CREATE', $event)"
+                [checked]="has('sage.create')"
+                [disabled]="isReadOnly('sage.create')"
+                (change)="toggle('sage.create', $event)"
               />
-              <perm-mark [kind]="mark('SAGE:CREATE')"></perm-mark>
+              <perm-mark [kind]="mark('sage.create')"></perm-mark>
               <span>Ajouter une base</span>
-              @if (isMandatory('SAGE:CREATE')) {
+              @if (isMandatory('sage.create')) {
                 <span class="sw-lock-indicator" title="Obligatoire pour le profil Administrateur">
                   <app-icon name="shield" [size]="12"></app-icon>
                 </span>
@@ -307,6 +340,28 @@ interface FeatureCategory {
 
         @if (!isCollapsed('SAGE')) {
           <div class="sw-card-content">
+            <div class="sw-perm-rows-list">
+              <div class="sw-perm-row">
+                <div class="sw-perm-name-col">
+                  <strong class="sw-perm-item-title">Toutes les bases</strong>
+                  <span class="sw-perm-item-subtitle">Y compris celles ajoutées plus tard</span>
+                </div>
+                <div class="sw-actions-toggles">
+                  @for (action of dbActions; track action.key) {
+                    <label class="sw-check-label" [class.is-disabled]="isReadOnly(dbCode('sage', 'all', action.key))">
+                      <input
+                        type="checkbox"
+                        [checked]="has(dbCode('sage', 'all', action.key))"
+                        [disabled]="isReadOnly(dbCode('sage', 'all', action.key))"
+                        (change)="toggle(dbCode('sage', 'all', action.key), $event)"
+                      />
+                      <perm-mark [kind]="mark(dbCode('sage', 'all', action.key))"></perm-mark>
+                      <span>{{ action.label }}</span>
+                    </label>
+                  }
+                </div>
+              </div>
+            </div>
             @if (!sageDbs().length) {
               <div class="sw-empty-hint">Aucune base SAGE configurée dans le système.</div>
             } @else {
@@ -319,44 +374,44 @@ interface FeatureCategory {
                     </div>
 
                     <div class="sw-actions-toggles">
-                      <label class="sw-check-label" [class.is-disabled]="isReadOnly('SAGE:' + db.nomBd + ':READ')">
+                      <label class="sw-check-label" [class.is-disabled]="isDbReadOnly('sage', db.id, 'read')">
                         <input
                           type="checkbox"
-                          [checked]="has('SAGE:' + db.nomBd + ':READ')"
-                          [disabled]="isReadOnly('SAGE:' + db.nomBd + ':READ')"
-                          (change)="toggle('SAGE:' + db.nomBd + ':READ', $event)"
+                          [checked]="hasDb('sage', db.id, 'read')"
+                          [disabled]="isDbReadOnly('sage', db.id, 'read')"
+                          (change)="toggle(dbCode('sage', db.id, 'read'), $event)"
                         />
-                        <perm-mark [kind]="mark('SAGE:' + db.nomBd + ':READ')"></perm-mark>
+                        <perm-mark [kind]="mark(dbCode('sage', db.id, 'read'))"></perm-mark>
                         <span>Consulter</span>
-                        @if (isMandatory('SAGE:' + db.nomBd + ':READ')) {
+                        @if (isMandatory(dbCode('sage', db.id, 'read'))) {
                           <span class="sw-lock-dot" title="Obligatoire pour l'administrateur"></span>
                         }
                       </label>
 
-                      <label class="sw-check-label" [class.is-disabled]="isReadOnly('SAGE:' + db.nomBd + ':UPDATE')">
+                      <label class="sw-check-label" [class.is-disabled]="isDbReadOnly('sage', db.id, 'update')">
                         <input
                           type="checkbox"
-                          [checked]="has('SAGE:' + db.nomBd + ':UPDATE')"
-                          [disabled]="isReadOnly('SAGE:' + db.nomBd + ':UPDATE')"
-                          (change)="toggle('SAGE:' + db.nomBd + ':UPDATE', $event)"
+                          [checked]="hasDb('sage', db.id, 'update')"
+                          [disabled]="isDbReadOnly('sage', db.id, 'update')"
+                          (change)="toggle(dbCode('sage', db.id, 'update'), $event)"
                         />
-                        <perm-mark [kind]="mark('SAGE:' + db.nomBd + ':UPDATE')"></perm-mark>
+                        <perm-mark [kind]="mark(dbCode('sage', db.id, 'update'))"></perm-mark>
                         <span>Modifier</span>
-                        @if (isMandatory('SAGE:' + db.nomBd + ':UPDATE')) {
+                        @if (isMandatory(dbCode('sage', db.id, 'update'))) {
                           <span class="sw-lock-dot" title="Obligatoire pour l'administrateur"></span>
                         }
                       </label>
 
-                      <label class="sw-check-label" [class.is-disabled]="isReadOnly('SAGE:' + db.nomBd + ':DELETE')">
+                      <label class="sw-check-label" [class.is-disabled]="isDbReadOnly('sage', db.id, 'delete')">
                         <input
                           type="checkbox"
-                          [checked]="has('SAGE:' + db.nomBd + ':DELETE')"
-                          [disabled]="isReadOnly('SAGE:' + db.nomBd + ':DELETE')"
-                          (change)="toggle('SAGE:' + db.nomBd + ':DELETE', $event)"
+                          [checked]="hasDb('sage', db.id, 'delete')"
+                          [disabled]="isDbReadOnly('sage', db.id, 'delete')"
+                          (change)="toggle(dbCode('sage', db.id, 'delete'), $event)"
                         />
-                        <perm-mark [kind]="mark('SAGE:' + db.nomBd + ':DELETE')"></perm-mark>
+                        <perm-mark [kind]="mark(dbCode('sage', db.id, 'delete'))"></perm-mark>
                         <span>Supprimer</span>
-                        @if (isMandatory('SAGE:' + db.nomBd + ':DELETE')) {
+                        @if (isMandatory(dbCode('sage', db.id, 'delete'))) {
                           <span class="sw-lock-dot" title="Obligatoire pour l'administrateur"></span>
                         }
                       </label>
@@ -386,16 +441,16 @@ interface FeatureCategory {
           </div>
 
           <div class="sw-card-bulk-actions">
-            <label class="sw-check-label sw-header-check-label" [class.is-disabled]="isReadOnly('POINTEUSE:CREATE')">
+            <label class="sw-check-label sw-header-check-label" [class.is-disabled]="isReadOnly('pointeuse.create')">
               <input
                 type="checkbox"
-                [checked]="has('POINTEUSE:CREATE')"
-                [disabled]="isReadOnly('POINTEUSE:CREATE')"
-                (change)="toggle('POINTEUSE:CREATE', $event)"
+                [checked]="has('pointeuse.create')"
+                [disabled]="isReadOnly('pointeuse.create')"
+                (change)="toggle('pointeuse.create', $event)"
               />
-              <perm-mark [kind]="mark('POINTEUSE:CREATE')"></perm-mark>
+              <perm-mark [kind]="mark('pointeuse.create')"></perm-mark>
               <span>Ajouter une base</span>
-              @if (isMandatory('POINTEUSE:CREATE')) {
+              @if (isMandatory('pointeuse.create')) {
                 <span class="sw-lock-indicator" title="Obligatoire pour le profil Administrateur">
                   <app-icon name="shield" [size]="12"></app-icon>
                 </span>
@@ -416,6 +471,28 @@ interface FeatureCategory {
 
         @if (!isCollapsed('POINTEUSE')) {
           <div class="sw-card-content">
+            <div class="sw-perm-rows-list">
+              <div class="sw-perm-row">
+                <div class="sw-perm-name-col">
+                  <strong class="sw-perm-item-title">Toutes les bases</strong>
+                  <span class="sw-perm-item-subtitle">Y compris celles ajoutées plus tard</span>
+                </div>
+                <div class="sw-actions-toggles">
+                  @for (action of dbActions; track action.key) {
+                    <label class="sw-check-label" [class.is-disabled]="isReadOnly(dbCode('pointeuse', 'all', action.key))">
+                      <input
+                        type="checkbox"
+                        [checked]="has(dbCode('pointeuse', 'all', action.key))"
+                        [disabled]="isReadOnly(dbCode('pointeuse', 'all', action.key))"
+                        (change)="toggle(dbCode('pointeuse', 'all', action.key), $event)"
+                      />
+                      <perm-mark [kind]="mark(dbCode('pointeuse', 'all', action.key))"></perm-mark>
+                      <span>{{ action.label }}</span>
+                    </label>
+                  }
+                </div>
+              </div>
+            </div>
             @if (!pointeuseDbs().length) {
               <div class="sw-empty-hint">Aucune base pointeuse configurée dans le système.</div>
             } @else {
@@ -428,44 +505,44 @@ interface FeatureCategory {
                     </div>
 
                     <div class="sw-actions-toggles">
-                      <label class="sw-check-label" [class.is-disabled]="isReadOnly('POINTEUSE:' + db.nomBd + ':READ')">
+                      <label class="sw-check-label" [class.is-disabled]="isDbReadOnly('pointeuse', db.id, 'read')">
                         <input
                           type="checkbox"
-                          [checked]="has('POINTEUSE:' + db.nomBd + ':READ')"
-                          [disabled]="isReadOnly('POINTEUSE:' + db.nomBd + ':READ')"
-                          (change)="toggle('POINTEUSE:' + db.nomBd + ':READ', $event)"
+                          [checked]="hasDb('pointeuse', db.id, 'read')"
+                          [disabled]="isDbReadOnly('pointeuse', db.id, 'read')"
+                          (change)="toggle(dbCode('pointeuse', db.id, 'read'), $event)"
                         />
-                        <perm-mark [kind]="mark('POINTEUSE:' + db.nomBd + ':READ')"></perm-mark>
+                        <perm-mark [kind]="mark(dbCode('pointeuse', db.id, 'read'))"></perm-mark>
                         <span>Consulter</span>
-                        @if (isMandatory('POINTEUSE:' + db.nomBd + ':READ')) {
+                        @if (isMandatory(dbCode('pointeuse', db.id, 'read'))) {
                           <span class="sw-lock-dot" title="Obligatoire pour l'administrateur"></span>
                         }
                       </label>
 
-                      <label class="sw-check-label" [class.is-disabled]="isReadOnly('POINTEUSE:' + db.nomBd + ':UPDATE')">
+                      <label class="sw-check-label" [class.is-disabled]="isDbReadOnly('pointeuse', db.id, 'update')">
                         <input
                           type="checkbox"
-                          [checked]="has('POINTEUSE:' + db.nomBd + ':UPDATE')"
-                          [disabled]="isReadOnly('POINTEUSE:' + db.nomBd + ':UPDATE')"
-                          (change)="toggle('POINTEUSE:' + db.nomBd + ':UPDATE', $event)"
+                          [checked]="hasDb('pointeuse', db.id, 'update')"
+                          [disabled]="isDbReadOnly('pointeuse', db.id, 'update')"
+                          (change)="toggle(dbCode('pointeuse', db.id, 'update'), $event)"
                         />
-                        <perm-mark [kind]="mark('POINTEUSE:' + db.nomBd + ':UPDATE')"></perm-mark>
+                        <perm-mark [kind]="mark(dbCode('pointeuse', db.id, 'update'))"></perm-mark>
                         <span>Modifier</span>
-                        @if (isMandatory('POINTEUSE:' + db.nomBd + ':UPDATE')) {
+                        @if (isMandatory(dbCode('pointeuse', db.id, 'update'))) {
                           <span class="sw-lock-dot" title="Obligatoire pour l'administrateur"></span>
                         }
                       </label>
 
-                      <label class="sw-check-label" [class.is-disabled]="isReadOnly('POINTEUSE:' + db.nomBd + ':DELETE')">
+                      <label class="sw-check-label" [class.is-disabled]="isDbReadOnly('pointeuse', db.id, 'delete')">
                         <input
                           type="checkbox"
-                          [checked]="has('POINTEUSE:' + db.nomBd + ':DELETE')"
-                          [disabled]="isReadOnly('POINTEUSE:' + db.nomBd + ':DELETE')"
-                          (change)="toggle('POINTEUSE:' + db.nomBd + ':DELETE', $event)"
+                          [checked]="hasDb('pointeuse', db.id, 'delete')"
+                          [disabled]="isDbReadOnly('pointeuse', db.id, 'delete')"
+                          (change)="toggle(dbCode('pointeuse', db.id, 'delete'), $event)"
                         />
-                        <perm-mark [kind]="mark('POINTEUSE:' + db.nomBd + ':DELETE')"></perm-mark>
+                        <perm-mark [kind]="mark(dbCode('pointeuse', db.id, 'delete'))"></perm-mark>
                         <span>Supprimer</span>
-                        @if (isMandatory('POINTEUSE:' + db.nomBd + ':DELETE')) {
+                        @if (isMandatory(dbCode('pointeuse', db.id, 'delete'))) {
                           <span class="sw-lock-dot" title="Obligatoire pour l'administrateur"></span>
                         }
                       </label>
@@ -537,46 +614,46 @@ interface FeatureCategory {
                     @if (item.canCreate || item.canUpdate || item.canDelete) {
                       <div class="sw-actions-toggles">
                         @if (item.canCreate) {
-                          <label class="sw-check-label" [class.is-disabled]="isReadOnly(item.code + ':CREATE')">
+                          <label class="sw-check-label" [class.is-disabled]="isReadOnly(actionCode(item.code, 'create'))">
                             <input
                               type="checkbox"
-                              [checked]="has(item.code + ':CREATE')"
-                              [disabled]="isReadOnly(item.code + ':CREATE')"
-                              (change)="toggle(item.code + ':CREATE', $event)"
+                              [checked]="has(actionCode(item.code, 'create'))"
+                              [disabled]="isReadOnly(actionCode(item.code, 'create'))"
+                              (change)="toggle(actionCode(item.code, 'create'), $event)"
                             />
-                            <perm-mark [kind]="mark(item.code + ':CREATE')"></perm-mark>
+                            <perm-mark [kind]="mark(actionCode(item.code, 'create'))"></perm-mark>
                             <span>Ajouter</span>
-                            @if (isMandatory(item.code + ':CREATE')) {
+                            @if (isMandatory(actionCode(item.code, 'create'))) {
                               <span class="sw-lock-dot" title="Obligatoire pour l'administrateur"></span>
                             }
                           </label>
                         }
                         @if (item.canUpdate) {
-                          <label class="sw-check-label" [class.is-disabled]="isReadOnly(item.code + ':UPDATE')">
+                          <label class="sw-check-label" [class.is-disabled]="isReadOnly(actionCode(item.code, 'update'))">
                             <input
                               type="checkbox"
-                              [checked]="has(item.code + ':UPDATE')"
-                              [disabled]="isReadOnly(item.code + ':UPDATE')"
-                              (change)="toggle(item.code + ':UPDATE', $event)"
+                              [checked]="has(actionCode(item.code, 'update'))"
+                              [disabled]="isReadOnly(actionCode(item.code, 'update'))"
+                              (change)="toggle(actionCode(item.code, 'update'), $event)"
                             />
-                            <perm-mark [kind]="mark(item.code + ':UPDATE')"></perm-mark>
+                            <perm-mark [kind]="mark(actionCode(item.code, 'update'))"></perm-mark>
                             <span>Modifier</span>
-                            @if (isMandatory(item.code + ':UPDATE')) {
+                            @if (isMandatory(actionCode(item.code, 'update'))) {
                               <span class="sw-lock-dot" title="Obligatoire pour l'administrateur"></span>
                             }
                           </label>
                         }
                         @if (item.canDelete) {
-                          <label class="sw-check-label" [class.is-disabled]="isReadOnly(item.code + ':DELETE')">
+                          <label class="sw-check-label" [class.is-disabled]="isReadOnly(actionCode(item.code, 'delete'))">
                             <input
                               type="checkbox"
-                              [checked]="has(item.code + ':DELETE')"
-                              [disabled]="isReadOnly(item.code + ':DELETE')"
-                              (change)="toggle(item.code + ':DELETE', $event)"
+                              [checked]="has(actionCode(item.code, 'delete'))"
+                              [disabled]="isReadOnly(actionCode(item.code, 'delete'))"
+                              (change)="toggle(actionCode(item.code, 'delete'), $event)"
                             />
-                            <perm-mark [kind]="mark(item.code + ':DELETE')"></perm-mark>
+                            <perm-mark [kind]="mark(actionCode(item.code, 'delete'))"></perm-mark>
                             <span>Supprimer</span>
-                            @if (isMandatory(item.code + ':DELETE')) {
+                            @if (isMandatory(actionCode(item.code, 'delete'))) {
                               <span class="sw-lock-dot" title="Obligatoire pour l'administrateur"></span>
                             }
                           </label>
@@ -1333,93 +1410,71 @@ export class PrivilegesPage implements OnInit {
     });
   });
 
-  readonly featureCategories: FeatureCategory[] = [
-    {
-      key: 'PARAMS',
-      title: 'Paramètres',
-      icon: 'sliders',
-      items: [
-        { code: 'PARAMS:USERS', label: 'Utilisateurs', canCreate: true, canUpdate: true, canDelete: true },
-        { code: 'PARAMS:ROLES', label: 'Rôles', canCreate: true, canUpdate: true, canDelete: true },
-        { code: 'PARAMS:PRIVILEGES', label: 'Privilèges' },
-        { code: 'PARAMS:DB_ACCESS', label: 'Accès bases' },
-        { code: 'PARAMS:CLOCK_PARAMS', label: 'Paramètres pointeuse' },
-        { code: 'PARAMS:CORRESPONDENCE', label: 'Correspondance' },
-        { code: 'PARAMS:CARDPAIE', label: 'Correspondances paie', canCreate: true, canUpdate: true, canDelete: true },
-        { code: 'PARAMS:CATEGORIES', label: 'Catégories', canCreate: true, canUpdate: true, canDelete: true },
-        { code: 'PARAMS:AFFECTATIONS', label: 'Affectations', canCreate: true, canUpdate: true, canDelete: true },
-        { code: 'PARAMS:TOLERANCES', label: 'Tolérances', canCreate: true, canUpdate: true },
-        { code: 'PARAMS:HOLIDAYS', label: 'Jours fériés', canCreate: true, canUpdate: true, canDelete: true },
-        { code: 'PARAMS:MAJORATIONS', label: 'Majorations', canUpdate: true },
-        { code: 'PARAMS:CODE_CONSTANTES', label: 'Code Constante' },
-        { code: 'PARAMS:ABSENCE_CODES', label: 'Codes absence', canCreate: true, canUpdate: true },
-      ],
-    },
-    {
-      key: 'PROC',
-      title: 'Traitements',
-      icon: 'grid',
-      items: [
-        { code: 'PROC:SHIFTS', label: 'Shifts', canCreate: true, canUpdate: true, canDelete: true },
-        { code: 'PROC:EMPLOYEE_PLANNING', label: 'Planning salariés', canCreate: true, canUpdate: true, canDelete: true },
-        { code: 'PROC:PUNCHES', label: 'Pointages' },
-        { code: 'PROC:ANOMALIES', label: 'Anomalies', canDelete: true },
-        { code: 'PROC:CORRECTED_HOURS', label: 'Heures corrigées', canCreate: true, canUpdate: true, canDelete: true },
-        { code: 'PROC:WEEKLY_VALIDATION', label: 'Validation semaine' },
-        { code: 'PROC:OVERTIME', label: 'Heures supplémentaires' },
-      ],
-    },
-    {
-      key: 'OTHER',
-      title: 'Autres',
-      icon: 'coffee',
-      items: [
-        { code: 'OTHER:CANTEEN', label: 'Cantine' },
-        { code: 'OTHER:TRAVEL_EXPENSES', label: 'Frais déplacement' },
-      ],
-    },
-    {
-      key: 'TRACE',
-      title: 'Traçabilités',
-      icon: 'history',
-      items: [{ code: 'TRACE:AUDIT', label: 'Audit et traçabilité' }],
-    },
-    {
-      key: 'REPORTS',
-      title: 'États',
-      icon: 'bar-chart',
-      items: [
-        { code: 'REPORTS:REPORTS', label: 'Rapports et exports' },
-        { code: 'REPORTS:PREDICTIONS', label: 'Prévisions' },
-        { code: 'REPORTS:CLOSING', label: 'Contrôle avant paie' },
-      ],
-    },
-  ];
+  /** Catalogue des écrans et actions, lu sur le serveur (même source que la validation des enregistrements). */
+  readonly featureCategories = signal<FeatureCategory[]>([]);
+  readonly catalogLoaded = signal(false);
 
   /** Pages (codes sans action) : cocher une action coche sa page, décocher une page décoche ses actions. */
-  private readonly pageCodes: ReadonlySet<string> = new Set(this.featureCategories.flatMap((c) => c.items.map((i) => i.code)));
+  private readonly pageCodes = computed<ReadonlySet<string>>(
+    () => new Set(this.featureCategories().flatMap((c) => c.items.map((i) => i.code))),
+  );
+
+  /** Droits de travail (Traitements, Autres, États) : sans base lisible, ils ne montrent aucune donnée. */
+  private readonly workCodes = computed<ReadonlySet<string>>(
+    () =>
+      new Set(
+        this.featureCategories()
+          .filter((c) => WORK_GATES.includes(c.gate ?? 0))
+          .flatMap((c) => c.items.flatMap((i) => itemCodes(i))),
+      ),
+  );
 
   // Recherche : n'agit que sur l'affichage, jamais sur le brouillon.
   readonly search = signal('');
   readonly searching = computed(() => this.search().trim() !== '');
-  readonly visibleCategories = computed(() => filterCategories(this.featureCategories, this.search()));
+  readonly visibleCategories = computed(() => filterCategories(this.featureCategories(), this.search()));
   readonly sageSearchLabels = computed(() => ['Bases RH / Paie', 'Ajouter une base', ...this.sageDbs().map((d) => d.nomBd ?? '')]);
   readonly pointeuseSearchLabels = computed(() => ['Bases de pointage', 'Ajouter une base', ...this.pointeuseDbs().map((d) => d.nomBd ?? '')]);
   readonly matchesAnySearch = matchesAnySearch;
   readonly isSensitive = isSensitiveRight;
+  readonly actionCode = actionCode;
   readonly sensitiveHint = SENSITIVE_RIGHT_HINT;
 
   /** Avertissements du brouillon (ne bloquent pas l'enregistrement). */
   readonly warnings = computed(() =>
-    this.adminLocked() ? [] : computeWarnings(this.grantedPermissions(), this.mode(), this.baseline()),
+    this.adminLocked() ? [] : computeWarnings(this.grantedPermissions(), this.mode(), this.baseline(), this.workCodes()),
   );
 
-  readonly totalSagePerms = computed(() => (this.sageDbs().length > 0 ? 1 + this.sageDbs().length * 3 : 0));
-  readonly totalPointeusePerms = computed(() => (this.pointeuseDbs().length > 0 ? 1 + this.pointeuseDbs().length * 3 : 0));
+  // Ajout + joker (3) + 3 par base déclarée.
+  readonly totalSagePerms = computed(() => 4 + this.sageDbs().length * 3);
+  readonly totalPointeusePerms = computed(() => 4 + this.pointeuseDbs().length * 3);
+
+  readonly dbCode = databaseCode;
+  readonly dbActions: readonly { key: DatabaseAction; label: string }[] = [
+    { key: 'read', label: 'Consulter' },
+    { key: 'update', label: 'Modifier' },
+    { key: 'delete', label: 'Supprimer' },
+  ];
+
+  /** Coché pour cette base : par son identifiant ou par le joker « toutes les bases ». */
+  hasDb(kind: DatabaseKind, id: number, action: DatabaseAction): boolean {
+    return this.has(databaseCode(kind, id, action)) || this.has(databaseCode(kind, 'all', action));
+  }
+
+  /** Case d'une base verrouillée quand le joker accorde déjà l'action. */
+  isDbReadOnly(kind: DatabaseKind, id: number, action: DatabaseAction): boolean {
+    return this.isReadOnly(databaseCode(kind, id, action)) || this.has(databaseCode(kind, 'all', action));
+  }
+
+  /** Codes d'une section de bases : ajout, joker, puis chaque base listée. */
+  private databaseCodes(kind: DatabaseKind, ids: readonly number[]): string[] {
+    const targets: (number | 'all')[] = ['all', ...ids];
+    return [`${kind}.create`, ...targets.flatMap((t) => DATABASE_ACTIONS.map((a) => databaseCode(kind, t, a)))];
+  }
 
   totalCategoryPerms(shown: FeatureCategory): number {
     // La catégorie affichée peut être filtrée par la recherche : le total porte toujours sur la catégorie complète.
-    const cat = this.featureCategories.find((c) => c.key === shown.key) ?? shown;
+    const cat = this.featureCategories().find((c) => c.key === shown.key) ?? shown;
     return cat.items.reduce((acc, it) => {
       let count = 1;
       if (it.canCreate) count++;
@@ -1440,6 +1495,13 @@ export class PrivilegesPage implements OnInit {
         activeUserId = active.targetId;
       }
     }
+    this.privSvc.catalog().subscribe({
+      next: (catalog) => {
+        this.featureCategories.set(toFeatureCategories(catalog));
+        this.catalogLoaded.set(true);
+      },
+      error: () => this.toast.error('Catalogue des permissions indisponible : les droits ne peuvent pas être modifiés.'),
+    });
     this.sageSvc.list().subscribe((dbs) => this.sageDbs.set(dbs));
     this.pointeuseSvc.list().subscribe((dbs) => this.pointeuseDbs.set(dbs));
 
@@ -1619,7 +1681,12 @@ export class PrivilegesPage implements OnInit {
     () => !this.adminLocked() && this.mode() === 'role' && !canEditRolePermissions(this.session.session()?.roleId, this.selectedRoleId()),
   );
   readonly permissionsLocked = computed(
-    () => this.adminLocked() || this.roleEditLocked() || this.permissionsLoading() || !this.permissionsLoaded(),
+    () =>
+      this.adminLocked() ||
+      this.roleEditLocked() ||
+      this.permissionsLoading() ||
+      !this.permissionsLoaded() ||
+      !this.catalogLoaded(),
   );
   readonly isTargetAdmin = this.adminLocked;
 
@@ -1630,32 +1697,24 @@ export class PrivilegesPage implements OnInit {
   isMandatory(code: string): boolean {
     if (!this.isTargetAdmin()) return false;
     return (
-      code.startsWith('SAGE:') ||
-      code.startsWith('POINTEUSE:') ||
-      code === 'PARAMS:PRIVILEGES' ||
-      code === 'PARAMS:ROLES' ||
-      code === 'PARAMS:USERS' ||
-      code === 'PARAMS:DB_ACCESS'
+      code.startsWith('sage.') ||
+      code.startsWith('pointeuse.') ||
+      code === 'privileges.read' ||
+      code === 'roles.read' ||
+      code === 'users.read' ||
+      code === 'db-access.read'
     );
   }
 
   private addMandatoryPermissions(set: Set<string>): void {
-    set.add('SAGE:CREATE');
-    for (const db of this.sageDbs()) {
-      set.add(`SAGE:${db.nomBd}:READ`);
-      set.add(`SAGE:${db.nomBd}:UPDATE`);
-      set.add(`SAGE:${db.nomBd}:DELETE`);
+    for (const kind of DATABASE_KINDS) {
+      set.add(`${kind}.create`);
+      for (const action of DATABASE_ACTIONS) set.add(databaseCode(kind, 'all', action));
     }
-    set.add('POINTEUSE:CREATE');
-    for (const db of this.pointeuseDbs()) {
-      set.add(`POINTEUSE:${db.nomBd}:READ`);
-      set.add(`POINTEUSE:${db.nomBd}:UPDATE`);
-      set.add(`POINTEUSE:${db.nomBd}:DELETE`);
-    }
-    set.add('PARAMS:PRIVILEGES');
-    set.add('PARAMS:ROLES');
-    set.add('PARAMS:USERS');
-    set.add('PARAMS:DB_ACCESS');
+    set.add('privileges.read');
+    set.add('roles.read');
+    set.add('users.read');
+    set.add('db-access.read');
   }
 
   has(code: string): boolean {
@@ -1672,7 +1731,7 @@ export class PrivilegesPage implements OnInit {
       return;
     }
     const checked = (event.target as HTMLInputElement).checked;
-    this.grantedPermissions.update((set) => applyToggle(set, code, checked, this.pageCodes, (c) => this.isMandatory(c)));
+    this.grantedPermissions.update((set) => applyToggle(set, code, checked, this.pageCodes(), (c) => this.isMandatory(c)));
   }
 
   readonly collapsedSections = signal<Set<string>>(
@@ -1694,32 +1753,19 @@ export class PrivilegesPage implements OnInit {
   }
 
   countActiveCategory(prefix: string): number {
-    if (prefix === 'SAGE') {
-      let count = this.has('SAGE:CREATE') ? 1 : 0;
-      for (const db of this.sageDbs()) {
-        if (this.has(`SAGE:${db.nomBd}:READ`)) count++;
-        if (this.has(`SAGE:${db.nomBd}:UPDATE`)) count++;
-        if (this.has(`SAGE:${db.nomBd}:DELETE`)) count++;
-      }
-      return count;
+    const kind = DATABASE_KIND_BY_SECTION[prefix];
+    if (kind) {
+      const ids = (kind === 'sage' ? this.sageDbs() : this.pointeuseDbs()).map((db) => db.id);
+      return this.databaseCodes(kind, ids).filter((code) => this.has(code)).length;
     }
-    if (prefix === 'POINTEUSE') {
-      let count = this.has('POINTEUSE:CREATE') ? 1 : 0;
-      for (const db of this.pointeuseDbs()) {
-        if (this.has(`POINTEUSE:${db.nomBd}:READ`)) count++;
-        if (this.has(`POINTEUSE:${db.nomBd}:UPDATE`)) count++;
-        if (this.has(`POINTEUSE:${db.nomBd}:DELETE`)) count++;
-      }
-      return count;
-    }
-    const cat = this.featureCategories.find((c) => c.key === prefix);
+    const cat = this.featureCategories().find((c) => c.key === prefix);
     if (cat) {
       let count = 0;
       for (const item of cat.items) {
         if (this.has(item.code)) count++;
-        if (item.canCreate && this.has(`${item.code}:CREATE`)) count++;
-        if (item.canUpdate && this.has(`${item.code}:UPDATE`)) count++;
-        if (item.canDelete && this.has(`${item.code}:DELETE`)) count++;
+        if (item.canCreate && this.has(actionCode(item.code, 'create'))) count++;
+        if (item.canUpdate && this.has(actionCode(item.code, 'update'))) count++;
+        if (item.canDelete && this.has(actionCode(item.code, 'delete'))) count++;
       }
       return count;
     }
@@ -1734,43 +1780,16 @@ export class PrivilegesPage implements OnInit {
     }
     this.grantedPermissions.update((set) => {
       const next = new Set(set);
-      if (prefix === 'SAGE') {
-        if (enable) next.add('SAGE:CREATE');
-        else next.delete('SAGE:CREATE');
-        for (const db of this.sageDbs()) {
-          const codes = [
-            `SAGE:${db.nomBd}:READ`,
-            `SAGE:${db.nomBd}:UPDATE`,
-            `SAGE:${db.nomBd}:DELETE`,
-          ];
-          for (const c of codes) {
-            if (enable) next.add(c);
-            else next.delete(c);
-          }
-        }
-      } else if (prefix === 'POINTEUSE') {
-        if (enable) next.add('POINTEUSE:CREATE');
-        else next.delete('POINTEUSE:CREATE');
-        for (const db of this.pointeuseDbs()) {
-          const codes = [
-            `POINTEUSE:${db.nomBd}:READ`,
-            `POINTEUSE:${db.nomBd}:UPDATE`,
-            `POINTEUSE:${db.nomBd}:DELETE`,
-          ];
-          for (const c of codes) {
-            if (enable) next.add(c);
-            else next.delete(c);
-          }
-        }
+      const kind = DATABASE_KIND_BY_SECTION[prefix];
+      if (kind) {
+        // Tout cocher : l'ajout et toutes les bases, y compris futures (joker) ; tout décocher retire aussi les droits par base.
+        for (const code of [...next].filter((c) => c.startsWith(`${kind}.`))) next.delete(code);
+        if (enable) for (const code of this.databaseCodes(kind, [])) next.add(code);
       } else {
-        const cat = this.featureCategories.find((c) => c.key === prefix);
+        const cat = this.featureCategories().find((c) => c.key === prefix);
         if (cat) {
           for (const item of cat.items) {
-            const itemCodes = [item.code];
-            if (item.canCreate) itemCodes.push(item.code + ':CREATE');
-            if (item.canUpdate) itemCodes.push(item.code + ':UPDATE');
-            if (item.canDelete) itemCodes.push(item.code + ':DELETE');
-            for (const c of itemCodes) {
+            for (const c of itemCodes(item)) {
               if (enable) next.add(c);
               else if (!this.isMandatory(c)) next.delete(c);
             }
@@ -1795,31 +1814,12 @@ export class PrivilegesPage implements OnInit {
       return;
     }
     const next = new Set<string>();
-    // SAGE
-    if (this.sageDbs().length > 0) {
-      next.add('SAGE:CREATE');
-      for (const db of this.sageDbs()) {
-        next.add(`SAGE:${db.nomBd}:READ`);
-        next.add(`SAGE:${db.nomBd}:UPDATE`);
-        next.add(`SAGE:${db.nomBd}:DELETE`);
-      }
-    }
-    // POINTEUSE
-    if (this.pointeuseDbs().length > 0) {
-      next.add('POINTEUSE:CREATE');
-      for (const db of this.pointeuseDbs()) {
-        next.add(`POINTEUSE:${db.nomBd}:READ`);
-        next.add(`POINTEUSE:${db.nomBd}:UPDATE`);
-        next.add(`POINTEUSE:${db.nomBd}:DELETE`);
-      }
-    }
+    // Bases : l'ajout et toutes les bases, y compris futures (joker).
+    for (const kind of DATABASE_KINDS) for (const code of this.databaseCodes(kind, [])) next.add(code);
     // Categories
-    for (const cat of this.featureCategories) {
+    for (const cat of this.featureCategories()) {
       for (const item of cat.items) {
-        next.add(item.code);
-        if (item.canCreate) next.add(item.code + ':CREATE');
-        if (item.canUpdate) next.add(item.code + ':UPDATE');
-        if (item.canDelete) next.add(item.code + ':DELETE');
+        for (const c of itemCodes(item)) next.add(c);
       }
     }
     this.grantedPermissions.set(next);

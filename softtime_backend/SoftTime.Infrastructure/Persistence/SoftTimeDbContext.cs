@@ -82,6 +82,7 @@ public class SoftTimeDbContext : DbContext
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<AuditDroit> AuditDroits => Set<AuditDroit>();
     public DbSet<RefreshTokenRecord> RefreshTokenRecords => Set<RefreshTokenRecord>();
+    public DbSet<DataMigration> DataMigrations => Set<DataMigration>();
     public DbSet<HistoriquePointage> HistoriquePointages => Set<HistoriquePointage>();
     public DbSet<HistoriqueAnomalie> HistoriqueAnomalies => Set<HistoriqueAnomalie>();
     public DbSet<HistoriqueHs> HistoriqueHs => Set<HistoriqueHs>();

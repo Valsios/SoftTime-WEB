@@ -53,6 +53,23 @@ export interface RoleDetailedPermissions {
   isConfigured: boolean;
 }
 
+/** Écran du catalogue des permissions : code de page et actions proposées. */
+export interface PermissionCatalogItem {
+  code: string;
+  label: string;
+  canCreate: boolean;
+  canUpdate: boolean;
+  canDelete: boolean;
+}
+
+/** Catégorie du catalogue des permissions (`GET /api/v1/privileges/catalog`), source unique côté serveur. */
+export interface PermissionCatalogCategory {
+  key: string;
+  title: string;
+  gate: number | null;
+  items: PermissionCatalogItem[];
+}
+
 /** Création du premier compte administrateur (installation vierge). */
 export interface AdminSetupRequest {
   nom: string;

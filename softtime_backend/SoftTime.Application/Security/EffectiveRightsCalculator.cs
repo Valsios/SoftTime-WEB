@@ -1,17 +1,19 @@
+using SoftTime.Application.Services;
 using SoftTime.Domain;
-using SoftTime.Domain.Entities.SoftTime;
 
 namespace SoftTime.Application.Security;
 
 /// <summary>
-/// Calcul pur (sans accès aux données) des droits effectifs : droits du rôle, plus les ajouts de l'utilisateur,
-/// moins ses retraits. Les portes se déduisent des droits effectifs, en un seul endroit.
-/// Non branché : aucun appelant en production pour l'instant.
+/// Calcul pur (sans accès aux données) des droits effectifs : lignes du rôle, plus les ajouts du compte, moins ses
+/// retraits. Une action d'écran n'est effective qu'avec la page de son écran. Les portes se déduisent des droits
+/// effectifs, en un seul endroit : un rôle sans ligne n'accorde rien.
 /// </summary>
 public static class EffectiveRightsCalculator
 {
     public static readonly IReadOnlyList<string> SensitiveCodes =
-        new[] { "PARAMS:USERS", "PARAMS:ROLES", "PARAMS:PRIVILEGES", "PARAMS:DB_ACCESS" };
+        new[] { "users.read", "roles.read", "privileges.read", "db-access.read" };
+
+    private const decimal AdminRoleId = 1;
 
     private static readonly int[] WorkGates = { Rights.Processing, Rights.Other, Rights.Reports };
 
@@ -27,53 +29,91 @@ public static class EffectiveRightsCalculator
         IReadOnlyCollection<PermissionRow> userRows,
         DatabaseCatalog databases)
     {
-        var comparer = StringComparer.OrdinalIgnoreCase;
-        var (knownSage, knownPointeuse, authorized) = Bases(databases);
-
         if (role.Id == AdminRoleId && role.Exists)
-            return Administrator(knownSage, knownPointeuse, authorized);
+            return WithDatabases(Administrator(), databases);
         if (!role.Exists || role.Id is null)
-            return WithoutRole(knownSage, authorized);
+            return WithDatabases(WithoutRole(), databases);
 
-        // 1. Droits du rôle ; 2. écarts de l'utilisateur.
+        // 1. Droits du rôle ; 2. écarts du compte ; 3. actions sans leur page retirées ; 4. portes déduites.
         var ignored = new List<string>();
-        var (roleBase, hasDetail) = RoleBase(role, knownSage, knownPointeuse, ignored);
+        var roleBase = RoleBase(role, ignored);
         var (additions, removals, userMarker) = UserDeviations(userRows, ignored);
-
-        var (start, effective) = Appliquer(roleBase, additions, removals, userMarker);
-
-        // 3. Portes déduites des droits effectifs. Un rôle sans lignes détaillées conserve ses portes tant que
-        //    l'utilisateur n'en retire pas les droits (cas d'une porte Bases sans aucune base déclarée).
+        var (start, effective) = Apply(roleBase, additions, removals, userMarker);
+        var orphans = RemoveActionsWithoutPage(effective);
         var gates = PermissionCatalog.DeduirePortes(effective).Select(g => (int)g).ToHashSet();
-        if (!hasDetail && !userMarker)
-            gates.UnionWith(role.Gates.Where(g => !removals.Any(r => GateOfCode(r) == g)));
+        var authorized = databases.AuthorizedSage.ToHashSet();
 
-        return new EffectiveRights
+        return WithDatabases(new EffectiveRights
         {
             Permissions = effective,
             Gates = gates,
             IsCustomized = !effective.SetEquals(roleBase),
-            Inconsistencies = FindInconsistencies(gates, effective, authorized),
+            Inconsistencies = FindInconsistencies(gates, effective, authorized).Concat(orphans).ToList(),
             SensitiveRights = SensitiveCodes.Where(effective.Contains).ToList(),
-            IgnoredPermissions = ignored.Distinct(comparer).ToList(),
+            IgnoredPermissions = ignored.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
             IneffectiveDeviations = IneffectiveDeviations(start, additions, removals),
-            KnownSageDatabases = knownSage,
-            AuthorizedSageDatabases = authorized,
-        };
+        }, databases);
     }
 
-    /// <summary>Bases SAGE et pointeuse connues, et bases SAGE autorisées (noms nettoyés, sans casse).</summary>
-    private static (HashSet<string> KnownSage, HashSet<string> KnownPointeuse, HashSet<string> Authorized) Bases(DatabaseCatalog databases)
+    /// <summary>
+    /// Migration des rôles historiques sans ligne : droits que leurs portes (T_DROIT_ROLE) accordaient, SANS la
+    /// configuration des bases. La porte Bases donnait la lecture de toutes les bases, y compris celles ajoutées
+    /// ensuite : elle devient le joker « sage.all.read » / « pointeuse.all.read ».
+    /// </summary>
+    public static IReadOnlyList<string> RightsFromLegacyGates(IReadOnlyCollection<int> gates)
+        => PermissionCatalog.BuildDefaultPermissionsList(gates.ToHashSet())
+            .Where(c => !DatabasePermissionCodes.IsConfiguration(c))
+            .ToList();
+
+    /// <summary>
+    /// Écarts entre les droits d'un rôle et la liste complète voulue pour un compte : ajouts (dans la liste, pas dans
+    /// le rôle) et retraits (dans le rôle, pas dans la liste). Codes inconnus écartés et signalés.
+    /// </summary>
+    public static LegacyConversion ConvertLegacyList(IReadOnlyCollection<string> roleEffective, IReadOnlyCollection<string> legacyList)
     {
         var comparer = StringComparer.OrdinalIgnoreCase;
-        var knownSage = new HashSet<string>(Clean(databases.Sage), comparer);
-        var knownPointeuse = new HashSet<string>(Clean(databases.Pointeuse), comparer);
-        var authorized = new HashSet<string>(Clean(databases.AuthorizedSage), comparer);
-        return (knownSage, knownPointeuse, authorized);
+        var role = new HashSet<string>(roleEffective.Where(c => !string.IsNullOrWhiteSpace(c)), comparer);
+        var list = new HashSet<string>(comparer);
+        var ignored = new List<string>();
+        foreach (var code in legacyList)
+        {
+            if (string.IsNullOrWhiteSpace(code) || code == PermissionCatalog.EmptyUserMarker) continue;
+            if (PermissionCatalog.IsKnown(code)) list.Add(code.Trim());
+            else ignored.Add(code);
+        }
+
+        return new LegacyConversion(
+            list.Where(c => !role.Contains(c)).OrderBy(c => c, comparer).ToList(),
+            role.Where(c => !list.Contains(c)).OrderBy(c => c, comparer).ToList(),
+            ignored.Distinct(comparer).ToList());
     }
 
-    /// <summary>Droits de départ (aucun si l'utilisateur a posé le marqueur « aucun droit ») puis ajouts et retraits.</summary>
-    private static (HashSet<string> Start, HashSet<string> Effective) Appliquer(
+    /// <summary>Bases déclarées (identifiant par nom) et bases SAGE cochées pour le compte.</summary>
+    private static EffectiveRights WithDatabases(EffectiveRights rights, DatabaseCatalog databases) => new()
+    {
+        IsAdministrator = rights.IsAdministrator,
+        Permissions = rights.Permissions,
+        Gates = rights.Gates,
+        IsCustomized = rights.IsCustomized,
+        Inconsistencies = rights.Inconsistencies,
+        SensitiveRights = rights.SensitiveRights,
+        IgnoredPermissions = rights.IgnoredPermissions,
+        IneffectiveDeviations = rights.IneffectiveDeviations,
+        SageDatabases = ByName(databases.Sage),
+        PointeuseDatabases = ByName(databases.Pointeuse),
+        AuthorizedSageDatabases = databases.AuthorizedSage.ToHashSet(),
+    };
+
+    private static Dictionary<string, int> ByName(IEnumerable<DatabaseRef> bases)
+    {
+        var byName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var b in bases.Where(b => !string.IsNullOrWhiteSpace(b.Name)))
+            byName.TryAdd(b.Name.Trim(), b.Id);
+        return byName;
+    }
+
+    /// <summary>Droits de départ (aucun si le compte a le marqueur « aucun droit ») puis ajouts et retraits.</summary>
+    private static (HashSet<string> Start, HashSet<string> Effective) Apply(
         HashSet<string> roleBase, HashSet<string> additions, HashSet<string> removals, bool userMarker)
     {
         var comparer = StringComparer.OrdinalIgnoreCase;
@@ -84,41 +124,40 @@ public static class EffectiveRightsCalculator
         return (start, effective);
     }
 
-    /// <summary>Sans rôle valide, aucun droit : les lignes de l'utilisateur seules ne suffisent pas.</summary>
-    private static EffectiveRights WithoutRole(HashSet<string> knownSage, HashSet<string> authorized) => new()
+    /// <summary>
+    /// Une action d'écran (« categories.delete ») sans la page de son écran (« categories.read ») ne donne rien : elle
+    /// est retirée et signalée (par exemple, page retirée au compte alors que le rôle garde l'action).
+    /// </summary>
+    private static List<RightsInconsistency> RemoveActionsWithoutPage(HashSet<string> effective)
     {
-        KnownSageDatabases = knownSage,
-        AuthorizedSageDatabases = authorized,
+        var orphans = effective.Where(c => PermissionCatalog.PageOf(c) is string page && !effective.Contains(page)).ToList();
+        effective.ExceptWith(orphans);
+        return orphans.Select(c => new RightsInconsistency(
+            "ACTION_WITHOUT_PAGE", 0, $"Le droit « {c} » est ignoré : il exige « {PermissionCatalog.PageOf(c)} »."))
+            .ToList();
+    }
+
+    /// <summary>Sans rôle valide, aucun droit : les lignes du compte seules ne suffisent pas.</summary>
+    private static EffectiveRights WithoutRole() => new()
+    {
         Inconsistencies = new[] { new RightsInconsistency("ROLE_NOT_FOUND", 0, "Le rôle de l'utilisateur est introuvable : aucun droit n'est accordé.") },
     };
 
-    /// <summary>
-    /// Droits du rôle : ses lignes détaillées (ou le marqueur « aucun droit »), à défaut les droits par
-    /// défaut de ses portes. Les codes inconnus sont écartés dans <paramref name="ignored"/>.
-    /// </summary>
-    private static (HashSet<string> RoleBase, bool HasDetail) RoleBase(
-        RoleDefinition role, HashSet<string> knownSage, HashSet<string> knownPointeuse, List<string> ignored)
+    /// <summary>Droits du rôle : ses lignes accordées connues (le marqueur « aucun droit » n'en est pas une).</summary>
+    private static HashSet<string> RoleBase(RoleDefinition role, List<string> ignored)
     {
-        var comparer = StringComparer.OrdinalIgnoreCase;
-        var roleGranted = new HashSet<string>(comparer);
-        var roleHasMarker = false;
-        foreach (var row in role.Rows.Where(r => r.IsGranted))
+        var granted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in role.Rows.Where(r => r.IsGranted && r.Code != PermissionCatalog.EmptyRoleMarker))
         {
-            if (row.Code == PermissionCatalog.EmptyRoleMarker)
-                roleHasMarker = true;
-            else if (!PermissionCatalog.IsKnown(row.Code))
-                ignored.Add(row.Code);
+            if (PermissionCatalog.IsKnown(row.Code))
+                granted.Add(row.Code.Trim());
             else
-                roleGranted.Add(row.Code.Trim());
+                ignored.Add(row.Code);
         }
-
-        var hasDetail = roleGranted.Count > 0 || roleHasMarker;
-        return hasDetail
-            ? (roleGranted, true)
-            : (new HashSet<string>(DefaultsWithoutConfiguration(role.Gates.ToHashSet(), knownSage, knownPointeuse), comparer), false);
+        return granted;
     }
 
-    /// <summary>Ajouts, retraits et marqueur « aucun droit » de l'utilisateur ; codes inconnus écartés.</summary>
+    /// <summary>Ajouts, retraits et marqueur « aucun droit » du compte ; codes inconnus écartés.</summary>
     private static (HashSet<string> Additions, HashSet<string> Removals, bool Marker) UserDeviations(
         IReadOnlyCollection<PermissionRow> userRows, List<string> ignored)
     {
@@ -143,77 +182,21 @@ public static class EffectiveRightsCalculator
             .Concat(removals.Where(r => !start.Contains(r) && !additions.Contains(r)).Select(r => $"-{r}"))
             .ToList();
 
-    /// <summary>
-    /// Migration future (simulation) : écarts entre les droits effectifs du rôle et la liste complète actuelle de l'utilisateur.
-    /// Une liste vide, ou réduite au marqueur « aucun droit », retire tous les droits du rôle.
-    /// </summary>
-    public static LegacyConversion ConvertLegacyList(IReadOnlyCollection<string> roleEffective, IReadOnlyCollection<string> legacyList)
+    /// <summary>L'administrateur a tous les droits, sur toutes les bases présentes et futures.</summary>
+    private static EffectiveRights Administrator() => new()
     {
-        var comparer = StringComparer.OrdinalIgnoreCase;
-        var role = new HashSet<string>(roleEffective.Where(c => !string.IsNullOrWhiteSpace(c)), comparer);
-        var list = new HashSet<string>(comparer);
-        var ignored = new List<string>();
-        foreach (var code in legacyList)
-        {
-            if (string.IsNullOrWhiteSpace(code) || code == PermissionCatalog.EmptyUserMarker) continue;
-            if (PermissionCatalog.IsKnown(code)) list.Add(code.Trim());
-            else ignored.Add(code);
-        }
+        IsAdministrator = true,
+        Permissions = new HashSet<string>(
+            PermissionCatalog.BuildDefaultPermissionsList(new HashSet<int> { 1, 2, 3, 4, 5, 6 }), StringComparer.OrdinalIgnoreCase),
+        Gates = new HashSet<int> { 1, 2, 3, 4, 5, 6 },
+        SensitiveRights = SensitiveCodes.ToList(),
+    };
 
-        return new LegacyConversion(
-            list.Where(c => !role.Contains(c)).OrderBy(c => c, comparer).ToList(),
-            role.Where(c => !list.Contains(c)).OrderBy(c => c, comparer).ToList(),
-            ignored.Distinct(comparer).ToList());
-    }
-
-    private const decimal AdminRoleId = 1;
-
-    private static EffectiveRights Administrator(HashSet<string> sage, HashSet<string> pointeuse, HashSet<string> authorized)
-    {
-        var all = PermissionCatalog.BuildDefaultPermissionsList(
-            new HashSet<int> { 1, 2, 3, 4, 5, 6 },
-            sage.Select(n => new BddSage { NomBd = n }),
-            pointeuse.Select(n => new BddPointeuse { NomBd = n }));
-        var permissions = new HashSet<string>(all, StringComparer.OrdinalIgnoreCase);
-        return new EffectiveRights
-        {
-            IsAdministrator = true,
-            Permissions = permissions,
-            Gates = new HashSet<int> { 1, 2, 3, 4, 5, 6 },
-            SensitiveRights = SensitiveCodes.ToList(),
-            KnownSageDatabases = sage,
-            AuthorizedSageDatabases = authorized,
-        };
-    }
-
-    /// <summary>
-    /// Droits par défaut des portes d'un rôle sans lignes détaillées. Même liste que BuildDefaultPermissionsList,
-    /// SANS la configuration des bases (CREATE, UPDATE, DELETE sur SAGE: et POINTEUSE:), et sans droits sur les bases
-    /// si la porte 1 n'est pas donnée.
-    /// </summary>
-    private static IEnumerable<string> DefaultsWithoutConfiguration(HashSet<int> gates, HashSet<string> sage, HashSet<string> pointeuse)
-    {
-        var hasDatabases = gates.Contains(Rights.Databases);
-        var defaults = PermissionCatalog.BuildDefaultPermissionsList(
-            gates,
-            hasDatabases ? sage.Select(n => new BddSage { NomBd = n }) : Enumerable.Empty<BddSage>(),
-            hasDatabases ? pointeuse.Select(n => new BddPointeuse { NomBd = n }) : Enumerable.Empty<BddPointeuse>());
-        return defaults.Where(c => !IsDatabaseConfiguration(c));
-    }
-
-    private static bool IsDatabaseConfiguration(string code)
-    {
-        var isDb = code.StartsWith("SAGE:", StringComparison.OrdinalIgnoreCase) || code.StartsWith("POINTEUSE:", StringComparison.OrdinalIgnoreCase);
-        return isDb && (code.EndsWith(":CREATE", StringComparison.OrdinalIgnoreCase)
-                        || code.EndsWith(":UPDATE", StringComparison.OrdinalIgnoreCase)
-                        || code.EndsWith(":DELETE", StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static List<RightsInconsistency> FindInconsistencies(HashSet<int> gates, HashSet<string> effective, HashSet<string> authorized)
+    private static List<RightsInconsistency> FindInconsistencies(HashSet<int> gates, HashSet<string> effective, HashSet<int> authorized)
     {
         var result = new List<RightsInconsistency>();
         var canUseASageDatabase = gates.Contains(Rights.Databases)
-                                  && authorized.Any(b => effective.Contains($"SAGE:{b}:READ"));
+                                  && authorized.Any(id => DatabasePermissionCodes.Grants(effective, DatabaseKind.Sage, id, DatabasePermissionCodes.Read));
         if (canUseASageDatabase) return result;
         foreach (var gate in WorkGates.Where(gates.Contains))
             result.Add(new RightsInconsistency(
@@ -221,13 +204,4 @@ public static class EffectiveRightsCalculator
                 $"Le droit « {GateLabels[gate]} » est accordé sans accès à une base : cochez une base dans « Accès bases » et accordez-en la lecture."));
         return result;
     }
-
-    private static int GateOfCode(string code)
-    {
-        var gates = PermissionCatalog.DeduirePortes(new[] { code });
-        return gates.Count == 0 ? 0 : (int)gates.First();
-    }
-
-    private static IEnumerable<string> Clean(IEnumerable<string> names)
-        => names.Where(n => !string.IsNullOrWhiteSpace(n)).Select(n => n.Trim());
 }

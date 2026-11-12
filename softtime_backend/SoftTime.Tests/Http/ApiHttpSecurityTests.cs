@@ -36,8 +36,7 @@ public class ApiHttpSecurityTests : IClassFixture<ApiFactory>
     // Kind : admin = [RequireAdmin] ; db = contrôle de service par base ; dbany = test de connexion / découverte.
     private static readonly Dictionary<string, (string Method, string Url, string? Body, string Kind)> Routes = new()
     {
-        ["PUT privileges/{roleId}"] = ("PUT", "/api/v1/privileges/91", "[1]", "admin"),
-        ["PUT privileges/user/{id}"] = ("PUT", "/api/v1/privileges/user/10050", """{"grantedPermissions":["PROC:SHIFTS"]}""", "admin"),
+        ["PUT privileges/user/{id}"] = ("PUT", "/api/v1/privileges/user/10050", """{"grantedPermissions":["shifts.read"]}""", "admin"),
         ["POST privileges/user/{id}/reset"] = ("POST", "/api/v1/privileges/user/10050/reset", null, "admin"),
         ["PUT db-access/{userId}"] = ("PUT", "/api/v1/db-access/10050", "[3033]", "admin"),
         ["POST roles"] = ("POST", "/api/v1/roles", """{"id":0,"nom":"NouveauRole"}""", "admin"),

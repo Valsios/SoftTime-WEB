@@ -183,7 +183,7 @@ public class DatabasePasswordTests
     {
         // Arrange
         // Compte avec la porte Bases mais seulement la lecture : l'usage du mot de passe stocké est refusé.
-        _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 2, PermissionCode = "SAGE:BASE1:READ", IsGranted = true });
+        _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 2, PermissionCode = "sage.7.read", IsGranted = true });
         var svc = Catalog(2, 5, Rights.Databases);
 
         // Act
@@ -193,7 +193,7 @@ public class DatabasePasswordTests
         // Assert
         await act.Should().ThrowExactlyAsync<ForbiddenException>();
         _discovery.LastPassword.Should().BeNull();
-        _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 2, PermissionCode = "SAGE:BASE1:UPDATE", IsGranted = true });
+        _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 2, PermissionCode = "sage.7.update", IsGranted = true });
         await svc.Sage.TestSageConnectionAsync(new TestSageConnectionDto("srv", true, "sa", null, "BASE1", "STANDARD", null, 7));
         _discovery.LastPassword.Should().Be(Stored);
     }

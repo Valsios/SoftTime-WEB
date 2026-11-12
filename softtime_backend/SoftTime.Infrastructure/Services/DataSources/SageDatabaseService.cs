@@ -6,6 +6,7 @@ using SoftTime.Application.Abstractions.Permissions;
 using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.Abstractions.Settings;
 using SoftTime.Application.DTOs;
+using SoftTime.Application.Security;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
@@ -100,11 +101,13 @@ public sealed class SageDatabaseService : ISageDatabaseService
     {
         if (dto.Id == 0)
         {
-            await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, dto.NomBd, ct);
+            await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Create, null, ct);
             return;
         }
         var current = await _uow.Repository<BddSage>().GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
-        await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Update, current.NomBd, ct);
+        await _configAuth.EnsureCanConfigureAsync(
+            DatabaseKind.Sage, DatabaseConfigAction.Update,
+            new DatabaseRef(current.Id, current.NomBd ?? string.Empty), ct);
     }
 
     private async Task<BddSage> UpsertAsync(SageDbDto dto, CancellationToken ct)
@@ -145,8 +148,11 @@ public sealed class SageDatabaseService : ISageDatabaseService
     {
         var repo = _uow.Repository<BddSage>();
         var e = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException();
-        await _configAuth.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Delete, e.NomBd, ct);
+        await _configAuth.EnsureCanConfigureAsync(
+            DatabaseKind.Sage, DatabaseConfigAction.Delete,
+            new DatabaseRef(e.Id, e.NomBd ?? string.Empty), ct);
         await _sourceMappingStore.RemoveMappingsAsync(true, id, ct);
+        await DatabasePermissionCleanup.RemoveAsync(_uow, DatabaseKind.Sage, id, ct);
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
         _effectiveRights.InvalidateAll(); // la liste des bases a changé : les droits effectifs en cache sont périmés
@@ -206,20 +212,20 @@ public sealed class SageDatabaseService : ISageDatabaseService
     // ---------------------------------------------------------------- Listes paginées (Lot A)
 
     public async Task<PagedResult<SageDbDto>> ListSagePagedAsync(
-        IReadOnlyCollection<string>? allowedNames, int? page, int? pageSize, string? search = null, CancellationToken ct = default)
+        IReadOnlyCollection<int>? allowedIds, int? page, int? pageSize, string? search = null, CancellationToken ct = default)
     {
         await _sourceMappingMigrator.EnsureMappingSchemaAsync(ct);
         await _sourceMappingMigrator.MigrateLegacyMappingsAsync(ct);
 
-        if (allowedNames is { Count: 0 })
+        if (allowedIds is { Count: 0 })
         {
             var (_, taille) = PaginationRules.Normaliser(page, pageSize);
             return new PagedResult<SageDbDto>(Array.Empty<SageDbDto>(), 0, 1, taille, 1);
         }
 
-        System.Linq.Expressions.Expression<Func<BddSage, bool>> predicate = allowedNames is null
+        System.Linq.Expressions.Expression<Func<BddSage, bool>> predicate = allowedIds is null
             ? s => true
-            : s => s.NomBd != null && allowedNames.Contains(s.NomBd);
+            : s => allowedIds.Contains(s.Id);
         var result = await PagedLists.From(_uow.Repository<BddSage>(), predicate, q => q.OrderBy(s => s.Id))
             .WithSearch(search, new System.Linq.Expressions.Expression<Func<BddSage, string?>>[] { s => s.Serveur, s => s.NomBd, s => s.TypeBase })
             .PageAsync(new PageRequest(page, pageSize), s => s, ct);

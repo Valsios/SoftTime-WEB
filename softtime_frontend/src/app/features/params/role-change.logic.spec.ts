@@ -37,7 +37,7 @@ describe('role-change.logic', () => {
   });
 
   it('un 409 contenant un aperçu est une demande de confirmation', () => {
-    const body = { adjustmentsToClear: ['+PROC:SHIFTS', '-PROC:PUNCHES'], count: 2, accountLogin: 'joel' };
+    const body = { adjustmentsToClear: ['+shifts.read', '-punches.manage'], count: 2, accountLogin: 'joel' };
     expect(previewFromConflict({ status: 409, error: body })).toEqual(body);
   });
 

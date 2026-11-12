@@ -248,7 +248,7 @@ describe('liens de correction', () => {
     expect(correctionLink({ ...anomalie, type: 'QuasiDoublon' })?.path).toBe('/punches');
     expect(correctionLink({ ...anomalie, type: 'FerieNonApplique', pointageExiste: true })).toMatchObject({
       path: '/anomalies',
-      permission: 'PROC:ANOMALIES',
+      permission: 'anomalies.manage',
       droit: 3,
     });
     expect(Object.keys(CORRECTION_TARGETS)).toHaveLength(7);

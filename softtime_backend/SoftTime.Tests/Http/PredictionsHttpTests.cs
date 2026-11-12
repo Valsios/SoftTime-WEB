@@ -3,7 +3,7 @@ using System.Net;
 namespace SoftTime.Tests.Http;
 
 /// <summary>
-/// REPORTS:PREDICTIONS : les lectures de l'atterrissage exigent la porte 6 ET la permission fine
+/// predictions.read : les lectures de l'atterrissage exigent la porte 6 ET la permission fine
 /// (administrateur toujours accepté), avec le même message de refus que les lectures sensibles.
 /// L'atterrissage étant calculé sur les pointages, la base SAGE et la pointeuse doivent être lisibles.
 /// </summary>

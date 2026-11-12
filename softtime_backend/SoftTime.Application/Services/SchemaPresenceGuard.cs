@@ -67,6 +67,23 @@ public static class SchemaPresenceGuard
         }
     }
 
+    public const string MissingDataMigrationsMessage =
+        "Le registre des migrations de données est absent : activez Database:AutoMigrate (développement) "
+        + "ou exécutez migrations/versions/006_migrations_donnees.sql.";
+
+    /// <summary>Sans la migration 006, la migration des droits au démarrage ne pourrait pas s'inscrire : arrêt avec un message clair.</summary>
+    public static async Task EnsureDataMigrationsAsync(IUnitOfWork uow, CancellationToken ct)
+    {
+        try
+        {
+            await uow.ExecuteSqlAsync(GuardedSql("T_MIGRATION_DONNEES", "SELECT 1;"), ct);
+        }
+        catch (Exception ex) when (ex.Message.Contains(Marker, StringComparison.Ordinal))
+        {
+            throw new DomainException(MissingDataMigrationsMessage);
+        }
+    }
+
     public static string GuardedSql(string table, string sql) => $"""
         IF OBJECT_ID(N'dbo.{table}', N'U') IS NULL
             THROW 51990, N'{Marker}: dbo.{table}', 1;

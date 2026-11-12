@@ -9,6 +9,8 @@ namespace SoftTime.Application.Security;
 /// </summary>
 public sealed class EffectiveRights
 {
+    private string? _stamp;
+
     internal EffectiveRights() { }
 
     public bool IsAdministrator { get; internal init; }
@@ -24,7 +26,7 @@ public sealed class EffectiveRights
 
     public IReadOnlyList<RightsInconsistency> Inconsistencies { get; internal init; } = Array.Empty<RightsInconsistency>();
 
-    /// <summary>Droits sensibles accordés : PARAMS:USERS, PARAMS:ROLES, PARAMS:PRIVILEGES, PARAMS:DB_ACCESS.</summary>
+    /// <summary>Droits sensibles accordés : users.read, roles.read, privileges.read, db-access.read.</summary>
     public IReadOnlyList<string> SensitiveRights { get; internal init; } = Array.Empty<string>();
 
     /// <summary>Codes inconnus rencontrés (jamais acceptés).</summary>
@@ -33,27 +35,43 @@ public sealed class EffectiveRights
     /// <summary>Lignes de l'utilisateur sans effet (ajout déjà détenu, retrait d'un droit absent, ajout annulé par un retrait).</summary>
     public IReadOnlyList<string> IneffectiveDeviations { get; internal init; } = Array.Empty<string>();
 
-    public IReadOnlySet<string> KnownSageDatabases { get; internal init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-    public IReadOnlySet<string> AuthorizedSageDatabases { get; internal init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Bases SAGE déclarées : identifiant par nom (sans casse).</summary>
+    public IReadOnlyDictionary<string, int> SageDatabases { get; internal init; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Bases pointeuse déclarées : identifiant par nom (sans casse).</summary>
+    public IReadOnlyDictionary<string, int> PointeuseDatabases { get; internal init; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Identifiants des bases SAGE cochées dans « Accès bases » pour le compte.</summary>
+    public IReadOnlySet<int> AuthorizedSageDatabases { get; internal init; } = new HashSet<int>();
+
+    /// <summary>Empreinte de ces droits, écrite dans le jeton d'accès (voir <see cref="RightsStamp"/>).</summary>
+    public string Stamp => _stamp ??= RightsStamp.Compute(this);
+
+    /// <summary>
+    /// Permissions écrites dans le jeton : les permissions fixes seulement. Les droits par base (sage., pointeuse.)
+    /// restent contrôlés côté serveur ; l'administrateur passe par son rôle et n'en porte aucune.
+    /// </summary>
+    public IReadOnlyList<string> TokenPermissions => IsAdministrator
+        ? Array.Empty<string>()
+        : Permissions.Where(code => !DatabasePermissionCodes.IsDatabaseCode(code)).OrderBy(code => code, StringComparer.Ordinal).ToList();
 
     public bool Has(string permission) => Permissions.Contains(permission);
 
     public bool HasGate(int gate) => Gates.Contains(gate);
 
     /// <summary>
-    /// Utiliser une base. SAGE : porte 1, base cochée dans « Accès bases » ET SAGE:&lt;base&gt;:READ.
-    /// Pointeuse : porte 1 ET POINTEUSE:&lt;base&gt;:READ — la règle exacte reste à décider, T_BDD_AUTORISE ne concerne que SAGE.
-    /// L'administrateur utilise toute base connue.
+    /// Utiliser une base désignée par son nom (en-tête de la requête). SAGE : porte 1, base cochée dans « Accès bases »
+    /// ET lecture de la base (sage.&lt;id&gt;.read ou sage.all.read). Pointeuse : porte 1 ET lecture de la base
+    /// (T_BDD_AUTORISE ne concerne que SAGE).
+    /// Une base inconnue n'est jamais utilisable ; l'administrateur utilise toute base connue.
     /// </summary>
     public bool CanUseDatabase(DatabaseKind kind, string? name)
     {
-        if (string.IsNullOrWhiteSpace(name)) return false;
-        if (IsAdministrator)
-            return kind == DatabaseKind.Sage ? KnownSageDatabases.Contains(name) : Has($"POINTEUSE:{name}:READ");
+        if (string.IsNullOrWhiteSpace(name) || !TryGetId(kind, name, out var id)) return false;
+        if (IsAdministrator) return true;
         if (!HasGate(1)) return false;
-        return kind == DatabaseKind.Sage
-            ? AuthorizedSageDatabases.Contains(name) && Has($"SAGE:{name}:READ")
-            : Has($"POINTEUSE:{name}:READ");
+        if (kind == DatabaseKind.Sage && !AuthorizedSageDatabases.Contains(id)) return false;
+        return DatabasePermissionCodes.Grants(Permissions, kind, id, DatabasePermissionCodes.Read);
     }
 
     /// <summary>Configurer une base : porte 1 ET permission fine (CREATE, UPDATE ou DELETE). Jamais nécessaire pour travailler.</summary>
@@ -61,12 +79,12 @@ public sealed class EffectiveRights
     {
         if (IsAdministrator) return true;
         if (!HasGate(1)) return false;
-        var prefix = kind == DatabaseKind.Sage ? "SAGE" : "POINTEUSE";
         if (action == DatabaseConfigAction.Create)
-            return Has($"{prefix}:CREATE")
-                   || Permissions.Any(p => p.StartsWith(prefix + ":", StringComparison.OrdinalIgnoreCase)
-                                           && p.EndsWith(":CREATE", StringComparison.OrdinalIgnoreCase));
-        if (string.IsNullOrWhiteSpace(name)) return false;
-        return Has($"{prefix}:{name}:{(action == DatabaseConfigAction.Update ? "UPDATE" : "DELETE")}");
+            return Has(DatabasePermissionCodes.CreateCode(kind));
+        if (string.IsNullOrWhiteSpace(name) || !TryGetId(kind, name, out var id)) return false;
+        return DatabasePermissionCodes.Grants(Permissions, kind, id, DatabasePermissionCodes.ActionOf(action));
     }
+
+    private bool TryGetId(DatabaseKind kind, string name, out int id)
+        => (kind == DatabaseKind.Sage ? SageDatabases : PointeuseDatabases).TryGetValue(name.Trim(), out id);
 }

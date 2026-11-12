@@ -13,7 +13,7 @@ namespace SoftTime.Infrastructure.Services.Audit;
 
 /// <summary>
 /// Lecture seule du journal central <c>suivi_JOURNAL</c> (base de l'application, indépendante de la base SAGE choisie).
-/// Accès : administrateur, ou porte 5 ET permission <c>TRACE:AUDIT</c> effectives. Les valeurs sensibles sont
+/// Accès : administrateur, ou porte 5 ET permission <c>audit.read</c> effectives. Les valeurs sensibles sont
 /// masquées à la lecture par <see cref="AuditMaskingPolicy"/>, même si une ancienne ligne a été stockée en clair.
 /// Ce service n'écrit jamais : aucune modification ni suppression du journal n'est exposée.
 /// </summary>
@@ -81,9 +81,9 @@ public class JournalService : IJournalService
         return new JournalFacetsDto(tables, actions, users);
     }
 
-    /// <summary>Lecture du journal : administrateur, ou porte 5 ET permission TRACE:AUDIT effectives.</summary>
+    /// <summary>Lecture du journal : administrateur, ou porte 5 ET permission audit.read effectives.</summary>
     private Task EnsureCanReadAsync(CancellationToken ct)
-        => FineReadAccess.EnsureAsync(_user, _rights, Rights.Traceability, "TRACE:AUDIT", ct);
+        => FineReadAccess.EnsureAsync(_user, _rights, Rights.Traceability, "audit.read", ct);
 
     /// <summary>Filtres traduits en paramètres SQL par EF (aucune valeur concaténée dans une requête).</summary>
     private static Expression<Func<JournalAudit, bool>> Filter(JournalQuery q)

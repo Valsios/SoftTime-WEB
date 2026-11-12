@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Security;
 using SoftTime.Application.Abstractions.Punches;
 using SoftTime.Application.DTOs;
 
@@ -10,6 +11,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Processing)]
+[HasPermission(Permissions.Anomalies.Manage)]
 [Route("api/v1/anomalies")]
 [Tags("Anomalies")]
 public class AnomaliesController : ApiControllerBase
@@ -43,6 +45,7 @@ public class AnomaliesController : ApiControllerBase
     public async Task<IActionResult> ValidateAsync([FromBody] AnomalyValidationRequest request, CancellationToken ct)
         => Ok(await _svc.ValidateAnomaliesAsync(request.Ids, ct));
 
+    [HasPermission(Permissions.Anomalies.Delete)]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteAsync(decimal id, CancellationToken ct)
     {

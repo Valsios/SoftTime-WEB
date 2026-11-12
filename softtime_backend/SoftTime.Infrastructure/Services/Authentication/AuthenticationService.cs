@@ -143,7 +143,13 @@ public sealed class AuthenticationService : IAuthenticationService
     {
         var login = user.Login ?? string.Empty;
         var (rights, effective) = await TokenGatesAsync(user, cancellationToken);
-        var token = _tokens.CreateToken(new TokenSubject(user.IdResponsable, login, user.IdRole, user.Matricule, rights));
+        // Empreinte et permissions du jeton : celles des droits effectifs lus à l'instant (administrateur compris).
+        var current = effective ?? await _effectiveRights.GetAsync(user.IdResponsable, fresh: true, ct: cancellationToken);
+        var token = _tokens.CreateToken(new TokenSubject(user.IdResponsable, login, user.IdRole, user.Matricule, rights)
+        {
+            Permissions = current.TokenPermissions,
+            RightsStamp = current.Stamp,
+        });
         var detailed = await _userPermissionService.GetUserDetailedPermissionsAsync(user.IdResponsable, cancellationToken);
         var authorizedSages = await UsableSageDatabasesAsync(user, effective, cancellationToken);
         return new LoginResponse(token, user.IdResponsable, login, user.NomResponsable ?? login, user.IdRole, user.Matricule, rights,

@@ -84,7 +84,7 @@ public class TenantConnectionService : ITenantConnectionService
         }
     }
 
-    // Pointeuse : administrateur, ou porte 1 effective ET POINTEUSE:<base>:READ effective.
+    // Pointeuse : administrateur, ou porte 1 effective ET pointeuse.<base>.read effective.
     // Sans EnsureAuthorizedAsync préalable, les droits sont inconnus et l'accès est refusé.
     private void EnsurePointeuseUsable(string name)
     {

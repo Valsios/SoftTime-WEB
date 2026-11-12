@@ -3,6 +3,7 @@ import { finalize } from 'rxjs';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { SessionStore } from '../../core/session.store';
+import { grantsDatabase } from '../../core/access.logic';
 import { Droit } from '../../core/rights';
 import { SageDb, PageChangeEvent } from '../../shared/models';
 import { SageDatabasesService } from '../../shared/services/users.service';
@@ -92,7 +93,7 @@ export class SageDatabasesPage implements OnInit {
     if (!perms || perms.length === 0) {
       return this.session.hasRight(Droit.Databases);
     }
-    return perms.some((p) => p.startsWith('SAGE:') && p.endsWith(':CREATE')) || perms.includes('SAGE:CREATE');
+    return perms.includes('sage.create');
   }
 
   canUpdate(row: Record<string, unknown>): boolean {
@@ -100,8 +101,7 @@ export class SageDatabasesPage implements OnInit {
     if (!perms || perms.length === 0) {
       return this.session.hasRight(Droit.Databases);
     }
-    const nom = (row['nomBd'] as string) || '';
-    return perms.includes(`SAGE:${nom}:UPDATE`);
+    return grantsDatabase(perms, 'sage', Number(row['id']), 'update');
   }
 
   canDelete(row: Record<string, unknown>): boolean {
@@ -109,8 +109,7 @@ export class SageDatabasesPage implements OnInit {
     if (!perms || perms.length === 0) {
       return this.session.hasRight(Droit.Databases);
     }
-    const nom = (row['nomBd'] as string) || '';
-    return perms.includes(`SAGE:${nom}:DELETE`);
+    return grantsDatabase(perms, 'sage', Number(row['id']), 'delete');
   }
 
   loadPage(): void {

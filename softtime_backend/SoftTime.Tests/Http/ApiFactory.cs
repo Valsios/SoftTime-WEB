@@ -6,12 +6,14 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.IdentityModel.Tokens;
 
 using SoftTime.Application.Abstractions.DataSources;
 using SoftTime.Application.Abstractions.ExternalData;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
+using SoftTime.Infrastructure.Services.Permissions;
 
 namespace SoftTime.Tests.Http;
 
@@ -28,6 +30,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
     public const string FakePointeusePassword = "FAKE-PTE-SECRET-PWD";
     public const string SageName = "SFOI_PAIE2025";
     public const string OtherSageName = "AUTRE_BASE";
+    public const int SageId = 3033;
 
     public static readonly string ReportPath = Path.Combine(Path.GetTempPath(), "softtime-http-report.txt");
 
@@ -51,6 +54,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         // Plusieurs classes de test créent leur fabrique en parallèle : même verrou que Report.
         lock (ReportPath) File.WriteAllText(ReportPath, string.Empty);
         Seed();
+        MigrateRights();
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -60,6 +64,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         {
             services.RemoveAll<IUnitOfWork>();
             services.AddSingleton<IUnitOfWork>(Store);
+            // Les jetons de test reçoivent les permissions et l'empreinte du compte, comme après une connexion.
+            services.AddSingleton<IStartupFilter, FreshTokenStartupFilter>();
             services.RemoveAll<IExternalDiscoveryService>();
             services.AddSingleton(NullObject.Create<IExternalDiscoveryService>());
             services.RemoveAll<IExternalSourceService>();
@@ -89,9 +95,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
 
         // Profil « comme joel » : portes 1 et 3 via le jeton, permissions fines de lecture seulement.
         var perms = Store.Get<UserPermission>().Items;
-        foreach (var code in new[] { $"SAGE:{SageName}:READ", "POINTEUSE:PTG:READ", "PROC:SHIFTS", "PROC:EMPLOYEE_PLANNING" })
+        foreach (var code in new[] { $"sage.{SageId}.read", "pointeuse.1.read", "shifts.read", "employee-planning.read", "punches.manage" })
             perms.Add(new UserPermission { IdResponsable = 10034, PermissionCode = code, IsGranted = true });
-        Store.Get<RolePermission>().Items.Add(new RolePermission { IdRole = 29, PermissionCode = "REPORTS:REPORTS", IsGranted = true });
+        Store.Get<RolePermission>().Items.Add(new RolePermission { IdRole = 29, PermissionCode = "reports.read", IsGranted = true });
 
         var sages = Store.Get<BddSage>().Items;
         sages.Add(new BddSage { Id = 3033, NomBd = SageName, Serveur = "invalid.host.test", TLogin = "x", TMdp = FakeSagePassword, TypeAuth = true });
@@ -108,7 +114,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         Store.Get<DroitRole>().Items.Add(new DroitRole { IdDroitRole = 2, IdRole = 10034, IdDroit = 3 });
         Store.Get<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = 1, IdResponsable = 14, IdBdd = 3033 });
         Store.Get<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = 2, IdResponsable = 10053, IdBdd = 3033 });
-        foreach (var code in new[] { "PROC:SHIFTS", "SAGE:SFOI_PAIE2025:READ" })
+        foreach (var code in new[] { "shifts.read", "sage.3033.read" })
             perms.Add(new UserPermission { IdResponsable = 10053, PermissionCode = code, IsGranted = true });
 
         // Étape 4b-5 : usage d'une base. joel a sa base cochée dans « Accès bases » (comme après la migration des données).
@@ -122,27 +128,34 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
             foreach (var code in codes)
                 perms.Add(new UserPermission { IdResponsable = id, PermissionCode = code, IsGranted = true });
         }
-        Account(10060, 10034, "nolink", false, $"SAGE:{SageName}:READ", "POINTEUSE:PTG:READ", "PROC:SHIFTS");        // base non cochée
-        Account(10061, 10034, "noread", true, "POINTEUSE:PTG:READ", "PROC:SHIFTS");                                   // cochée, sans lecture
-        Account(10062, 91, "nogate", true, "PROC:SHIFTS");                                                            // aucun droit sur les bases (pas de porte 1)
-        Account(10063, 10034, "ptenone", true, $"SAGE:{SageName}:READ", "PROC:SHIFTS");                               // sans droit pointeuse
+        Account(10060, 10034, "nolink", false, $"sage.{SageId}.read", "pointeuse.1.read", "shifts.read", "punches.manage");        // base non cochée
+        Account(10061, 10034, "noread", true, "pointeuse.1.read", "shifts.read", "punches.manage");                                   // cochée, sans lecture
+        Account(10062, 91, "nogate", true, "shifts.read", "punches.manage");                                                            // aucun droit sur les bases (pas de porte 1)
+        Account(10063, 10034, "ptenone", true, $"sage.{SageId}.read", "shifts.read", "punches.manage");                               // sans droit pointeuse
         // Étape 4b-9 : porte 2 (déduite de PARAMS:*) avec une seule permission fine, pour les lectures sensibles.
-        Account(10070, 91, "usersreader", false, "PARAMS:USERS");
-        Account(10071, 91, "rolesreader", false, "PARAMS:ROLES");
-        Account(10072, 91, "privreader", false, "PARAMS:PRIVILEGES");
-        Account(10073, 91, "dbreader", false, "PARAMS:DB_ACCESS");
-        Account(10074, 91, "paramsother", false, "PARAMS:CATEGORIES");
+        Account(10070, 91, "usersreader", false, "users.read");
+        Account(10071, 91, "rolesreader", false, "roles.read");
+        Account(10072, 91, "privreader", false, "privileges.read");
+        Account(10073, 91, "dbreader", false, "db-access.read");
+        Account(10074, 91, "paramsother", false, "categories.read");
         // Prévisions : porte 6 avec la permission fine, et porte 6 sans elle.
         // L'atterrissage se calcule sur les pointages : la pointeuse doit être lisible elle aussi.
-        Account(10090, 91, "predreader", true, "REPORTS:PREDICTIONS", $"SAGE:{SageName}:READ", "POINTEUSE:PTG:READ");
-        Account(10092, 91, "prednobase", false, "REPORTS:PREDICTIONS");                  // permission fine mais base non cochée
-        Account(10093, 91, "prednopte", true, "REPORTS:PREDICTIONS", $"SAGE:{SageName}:READ");   // sans droit pointeuse
-        Account(10091, 91, "gate6only", true, "REPORTS:REPORTS", $"SAGE:{SageName}:READ");
+        Account(10090, 91, "predreader", true, "predictions.read", $"sage.{SageId}.read", "pointeuse.1.read");
+        Account(10092, 91, "prednobase", false, "predictions.read");                  // permission fine mais base non cochée
+        Account(10093, 91, "prednopte", true, "predictions.read", $"sage.{SageId}.read");   // sans droit pointeuse
+        Account(10091, 91, "gate6only", true, "reports.read", $"sage.{SageId}.read");
         // Étape 4b-8 : comptes avec ajustements personnels (rôle 91 sans droits : chaque ligne est un ajout).
-        Account(10080, 91, "adjusted1", false, "PROC:SHIFTS", "PROC:PUNCHES");
-        Account(10081, 91, "adjusted2", false, "PROC:SHIFTS", "PROC:PUNCHES");
-        Account(10083, 91, "adjusted3", false, "PROC:SHIFTS", "PROC:PUNCHES");
+        Account(10080, 91, "adjusted1", false, "shifts.read", "punches.manage");
+        Account(10081, 91, "adjusted2", false, "shifts.read", "punches.manage");
+        Account(10083, 91, "adjusted3", false, "shifts.read", "punches.manage");
     }
+
+    /// <summary>
+    /// Comme au démarrage de l'API : le jeu de données historique (rôles à portes seules, listes complètes) est converti
+    /// en droits détaillés et en écarts AVANT tout test, pour que les instantanés ne voient jamais la conversion.
+    /// </summary>
+    private void MigrateRights()
+        => new RightsStorageMigration(Store, NullLogger<RightsStorageMigration>.Instance).RunAsync().GetAwaiter().GetResult();
 
     public static string Token(decimal userId, decimal roleId, params int[] rights)
     {
@@ -157,12 +170,41 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
             new("matricule", string.Empty),
             new("rights", string.Join(",", rights))
         };
+        return Mint(claims, DateTime.UtcNow.AddHours(1));
+    }
+
+    /// <summary>Jeton signé avec la clé de test, portant exactement ces claims.</summary>
+    public static string Mint(IEnumerable<Claim> claims, DateTime expires)
+    {
         var token = new JwtSecurityToken(
             TestIssuer, TestAudience, claims,
-            expires: DateTime.UtcNow.AddHours(1),
-            signingCredentials: new SigningCredentials(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestKey)), SecurityAlgorithms.HmacSha256));
+            expires: expires,
+            signingCredentials: new SigningCredentials(SigningKey(), SecurityAlgorithms.HmacSha256));
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
+
+    /// <summary>Vrai si le jeton est signé avec la clé de test, pour le bon émetteur, et n'a pas expiré.</summary>
+    public static bool IsValidToken(string token)
+    {
+        var parameters = new TokenValidationParameters
+        {
+            ValidIssuer = TestIssuer,
+            ValidAudience = TestAudience,
+            IssuerSigningKey = SigningKey(),
+            ClockSkew = TimeSpan.Zero
+        };
+        try
+        {
+            new JwtSecurityTokenHandler().ValidateToken(token, parameters, out _);
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private static SymmetricSecurityKey SigningKey() => new(Encoding.UTF8.GetBytes(TestKey));
 
     /// <summary>Profils de test : null = anonyme.</summary>
     public static string? TokenFor(string profile) => profile switch
@@ -215,5 +257,6 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
     {
         Store.Clear();
         Seed();
+        MigrateRights();
     }
 }

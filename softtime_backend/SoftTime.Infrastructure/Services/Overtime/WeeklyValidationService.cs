@@ -29,7 +29,7 @@ public sealed class WeeklyValidationService : IWeeklyValidationService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         EnsureMondayToSunday(request);
-        return await ComputeWeekAsync(request, persistNonValidated: true, ct);
+        return await ComputeWeekAsync(request, persistNonValidated: true, onlyActive: false, ct);
     }
 
     /// <summary>
@@ -43,7 +43,7 @@ public sealed class WeeklyValidationService : IWeeklyValidationService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         EnsureMondayToSunday(request);
-        var rows = await ComputeWeekAsync(request, persistNonValidated: false, ct);
+        var rows = await ComputeWeekAsync(request, persistNonValidated: false, request.OnlyWithHours, ct);
         var filtered = rows
             .Where(row => SearchText.Matches(request.Search, row.Matricule))
             .ToList();
@@ -66,7 +66,7 @@ public sealed class WeeklyValidationService : IWeeklyValidationService
         // Un recalcul est nécessaire pour obtenir les valeurs à valider (les semaines déjà validées
         // sont exclues du calcul et donc absentes de `rows`).
         if (validate)
-            await ComputeWeekAsync(request, persistNonValidated: true, ct);
+            await ComputeWeekAsync(request, persistNonValidated: true, onlyActive: false, ct);
         else
             await RefuserSiSemaineCalculeeAsync(_tenant.SageDb, request.From.Date, selected, ct);
 
@@ -179,8 +179,11 @@ public sealed class WeeklyValidationService : IWeeklyValidationService
     /// Calcul hebdomadaire (étape 1 de la chaîne). Les salariés dont la semaine est déjà validée
     /// (<c>VALIDATION_HS = true</c>) sont renvoyés tels quels : leur ligne est la source de vérité
     /// et n'est plus recalculée (elle doit rester visible pour pouvoir annuler la validation).
+    /// Avec <paramref name="onlyActive"/>, les salariés sans heure corrigée ni jour planifié sont omis
+    /// (<see cref="WeeklyActivityRules"/>), sauf s'ils ont déjà une semaine validée.
     /// </summary>
-    private async Task<List<WeeklyHsDto>> ComputeWeekAsync(PeriodRequest request, bool persistNonValidated, CancellationToken ct)
+    private async Task<List<WeeklyHsDto>> ComputeWeekAsync(
+        PeriodRequest request, bool persistNonValidated, bool onlyActive, CancellationToken ct)
     {
         var from = request.From.Date;
         var to = request.To.Date;
@@ -196,6 +199,8 @@ public sealed class WeeklyValidationService : IWeeklyValidationService
                 resultat.Add(DepuisEntite(existante));
                 continue;
             }
+            if (onlyActive && !ASemaineActive(ctx, card, cle))
+                continue;
 
             var config = _overtimeWeekContext.Configurer(ctx, card);
             var semaine = OvertimeCalculator.CalculerSemaine(config, _overtimeWeekContext.ConstruireJours(ctx, card, from, to));
@@ -212,6 +217,11 @@ public sealed class WeeklyValidationService : IWeeklyValidationService
             await _uow.SaveChangesAsync(ct);
         return resultat;
     }
+
+    private static bool ASemaineActive(WeeklyContext ctx, CardPaie card, string cle)
+        => WeeklyActivityRules.ASemaineActive(
+            ctx.Heures.GetValueOrDefault(cle) ?? new List<HeureCorrigee>(),
+            ctx.Planning.GetValueOrDefault(card.Id) ?? new List<PlanningSalarie>());
 
     private static WeeklyHsDto DepuisEntite(HsValidee ligne)
         => new(ligne.Id, ligne.Matricules, ligne.DateDeb, ligne.DateFin,

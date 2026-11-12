@@ -32,8 +32,8 @@ public class AccountDeletionTests
         _store.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 3, IdRole = 2, Login = "autre" });
         foreach (var id in new decimal[] { 2, 3 })
         {
-            _store.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = id, PermissionCode = "PROC:SHIFTS", IsGranted = true });
-            _store.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = id, PermissionCode = "REPORTS:REPORTS", IsGranted = false });
+            _store.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = id, PermissionCode = "shifts.read", IsGranted = true });
+            _store.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = id, PermissionCode = "reports.read", IsGranted = false });
             _store.Get<BddAutorisee>().Items.Add(new BddAutorisee { IdBddAutorise = (int)id, IdResponsable = id, IdBdd = 7 });
         }
         _store.Get<AuditDroit>().Items.Add(new AuditDroit { IdCible = 2, LoginOperateur = "admin" });
@@ -102,7 +102,7 @@ public class AccountDeletionTests
     public async Task DeleteUserAsync_LastAdministrator_IsRefusedAndRemovesNothing()
     {
         // Arrange
-        _store.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 1, PermissionCode = "PROC:SHIFTS", IsGranted = true });
+        _store.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 1, PermissionCode = "shifts.read", IsGranted = true });
         var before = _store.Snapshot();
 
         // Act
@@ -119,7 +119,7 @@ public class AccountDeletionTests
     {
         // Arrange
         _store.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 9, IdRole = 1, Login = "admin2" });
-        _store.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 9, PermissionCode = "PROC:SHIFTS", IsGranted = true });
+        _store.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 9, PermissionCode = "shifts.read", IsGranted = true });
 
         // Act
         await _auth.DeleteUserAsync(1, 9);

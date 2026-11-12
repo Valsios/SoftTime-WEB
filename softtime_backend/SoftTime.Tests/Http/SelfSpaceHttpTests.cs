@@ -20,7 +20,7 @@ using SoftTime.Domain.Entities.SoftTime;
 namespace SoftTime.Tests.Http;
 
 /// <summary>
-/// « Mon espace » (api/v1/me/space) : désactivé par défaut (404), puis garde dédiée (SELF:READ, matricule du jeton, une seule base
+/// « Mon espace » (api/v1/me/space) : désactivé par défaut (404), puis garde dédiée (self.read, matricule du jeton, une seule base
 /// autorisée, matricule connu), absence de fuite entre salariés et réponses sans identifiant. Données fictives.
 /// </summary>
 public class SelfSpaceHttpTests : IClassFixture<ApiFactory>
@@ -76,7 +76,7 @@ public class SelfSpaceHttpTests : IClassFixture<ApiFactory>
 
         // Rôle « Salarié » : une seule permission, aucune porte (aucune ligne DroitRole).
         store.Get<Role>().Items.Add(new Role { IdRole = 92, NomRole = "Salarié" });
-        store.Get<RolePermission>().Items.Add(new RolePermission { Id = 9201, IdRole = 92, PermissionCode = "SELF:READ", IsGranted = true });
+        store.Get<RolePermission>().Items.Add(new RolePermission { Id = 9201, IdRole = 92, PermissionCode = "self.read", IsGranted = true });
 
         void Compte(decimal id, decimal role, string login, string? matricule, params int[] bases)
         {
@@ -488,8 +488,7 @@ public class SelfSpaceHttpTests : IClassFixture<ApiFactory>
         droits.Has(PermissionCatalog.SelfRead).Should().BeTrue();
         droits.Gates.Should().BeEmpty();                                                // aucune porte, donc pas la porte 1
         droits.HasGate(1).Should().BeFalse();
-        droits.Permissions.Should().NotContain(p => p.StartsWith("SAGE:", StringComparison.OrdinalIgnoreCase)
-                                                    || p.StartsWith("POINTEUSE:", StringComparison.OrdinalIgnoreCase));
+        droits.Permissions.Should().NotContain(p => DatabasePermissionCodes.IsDatabaseCode(p));
         // La base cochée ne suffit pas à utiliser les services de données.
         droits.CanUseDatabase(DatabaseKind.Sage, ApiFactory.SageName).Should().BeFalse();
     }
@@ -508,10 +507,10 @@ public class SelfSpaceHttpTests : IClassFixture<ApiFactory>
         var sql = Regex.Replace(File.ReadAllText(script), "/\\*.*?\\*/|--[^\\n]*", string.Empty, RegexOptions.Singleline);
 
         // Assert
-        sql.Should().Contain("SELF:READ");
-        sql.Should().NotContain("SAGE:");
-        sql.Should().NotContain("POINTEUSE:");
-        sql.Should().NotContain("PARAMS:");
+        sql.Should().Contain("self.read");
+        sql.Should().NotContain("'sage.");
+        sql.Should().NotContain("'pointeuse.");
+        sql.Should().NotContain("users.read");
         sql.Should().NotContain("T_DROIT_ROLE");    // aucune porte pour ce rôle
         sql.Should().NotContain("T_BDD_AUTORISE");  // aucun accès base créé par le script
     }

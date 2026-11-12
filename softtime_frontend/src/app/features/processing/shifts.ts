@@ -79,9 +79,9 @@ export class ShiftsPage implements OnInit {
   private readonly confirm = inject(ConfirmService);
   private readonly session = inject(SessionStore);
 
-  readonly canCreate = computed(() => this.session.hasPermission('PROC:SHIFTS:CREATE', Droit.Processing));
-  readonly canUpdate = computed(() => this.session.hasPermission('PROC:SHIFTS:UPDATE', Droit.Processing));
-  readonly canDelete = computed(() => this.session.hasPermission('PROC:SHIFTS:DELETE', Droit.Processing));
+  readonly canCreate = computed(() => this.session.hasPermission('shifts.create', Droit.Processing));
+  readonly canUpdate = computed(() => this.session.hasPermission('shifts.update', Droit.Processing));
+  readonly canDelete = computed(() => this.session.hasPermission('shifts.delete', Droit.Processing));
 
   readonly loading = signal(true);
   readonly saving = signal(false);

@@ -159,6 +159,8 @@ export interface PeriodRequest {
   departement?: string | null;
   /** Terme de recherche du tableau. */
   search?: string | null;
+  /** Validation semaine : masque les salariés sans heure corrigée ni jour planifié. */
+  onlyWithHours?: boolean;
   /** Numéro de page (1-based), uniquement pour les listes paginées. */
   page?: number;
   /** Taille de page, plafonnée à 100 par le serveur. */

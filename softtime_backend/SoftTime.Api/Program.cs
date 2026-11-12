@@ -5,15 +5,18 @@ using System.Text;
 using System.Threading.RateLimiting;
 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
+using SoftTime.Api.Authorization;
 using SoftTime.Api.Middleware;
 using SoftTime.Api.Security;
 using SoftTime.Application;
 using SoftTime.Application.Abstractions.Authentication;
+using SoftTime.Application.Abstractions.Permissions;
 using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.Security;
 using SoftTime.Application.Serialization;
@@ -149,6 +152,9 @@ builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSc
         };
     });
 builder.Services.AddAuthorization();
+// Permissions fines : [HasPermission] fabrique sa règle à la demande, le handler lit les permissions du jeton.
+builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
+builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
 // Origines explicites seulement (Cors:AllowedOrigins) ; liste vide : appels de même origine uniquement.
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
@@ -188,6 +194,9 @@ using (var scope = app.Services.CreateScope())
     // Jetons de rafraîchissement et verrouillage des comptes : migration 004, sinon arrêt avec un message clair.
     await SchemaPresenceGuard.EnsureAccountSecurityAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
     await RolePermissionConfiguration.EnsureStorageAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
+    // Droits stockés en écarts au rôle (migration 006 pour le registre) : conversion unique, sous verrou, puis plus rien.
+    await SchemaPresenceGuard.EnsureDataMigrationsAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
+    await scope.ServiceProvider.GetRequiredService<IRightsStorageMigration>().RunAsync(CancellationToken.None);
 
     // Migration globale contrôlée des mots de passe en clair :
     // Par défaut, la migration est assurée de manière fluide et isolée à la connexion de chaque utilisateur (AuthService.LoginAsync),
@@ -216,6 +225,8 @@ if (app.Environment.IsDevelopment())
 }
 app.UseCors();
 app.UseAuthentication();
+// Avant l'autorisation : un jeton dont les droits ont changé est renouvelé (401), jamais jugé sur des droits périmés.
+app.UseMiddleware<TokenFreshnessMiddleware>();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.UseMiddleware<TenantMiddleware>();

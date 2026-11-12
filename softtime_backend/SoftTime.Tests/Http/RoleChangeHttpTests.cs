@@ -49,7 +49,7 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
         doc.RootElement.GetProperty("data").GetProperty("count").GetInt32().Should().Be(2);
         doc.RootElement.GetProperty("data").GetProperty("accountLogin").GetString().Should().Be("adjusted1");
         var codes = doc.RootElement.GetProperty("data").GetProperty("adjustmentsToClear").EnumerateArray().Select(e => e.GetString()).ToList();
-        codes.OrderBy(c => c).Should().Equal(new[] { "+PROC:PUNCHES", "+PROC:SHIFTS" });
+        codes.OrderBy(c => c).Should().Equal(new[] { "+punches.manage", "+shifts.read" });
         _f.Snapshot().Should().Be(before);
     }
 
@@ -117,7 +117,7 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
         using (var scope = _f.Services.CreateScope())
         {
             var rights = await scope.ServiceProvider.GetRequiredService<IEffectiveRightsService>().GetAsync(10081);   // met en cache
-            rights.Has("PROC:SHIFTS").Should().BeTrue();
+            rights.Has("shifts.read").Should().BeTrue();
         }
         var otherRows = Rows(10083);
         (otherRows > 0).Should().BeTrue();
@@ -131,7 +131,7 @@ public class RoleChangeHttpTests : IClassFixture<ApiFactory>
         _f.Store.Get<AuditDroit>().Items.Should().Contain(a => a.IdCible == 10081 && a.Action == "RESET_USER_PERMS");
         using var after = _f.Services.CreateScope();
         var fresh = await after.ServiceProvider.GetRequiredService<IEffectiveRightsService>().GetAsync(10081);
-        fresh.Has("PROC:SHIFTS").Should().BeFalse();                                     // le cache a été invalidé
+        fresh.Has("shifts.read").Should().BeFalse();                                     // le cache a été invalidé
     }
 
     [Fact]

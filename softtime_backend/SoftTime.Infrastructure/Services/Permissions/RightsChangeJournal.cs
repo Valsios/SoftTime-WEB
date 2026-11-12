@@ -1,4 +1,5 @@
 ﻿using SoftTime.Application.Abstractions.Permissions;
+using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
 
@@ -7,17 +8,12 @@ namespace SoftTime.Infrastructure.Services.Permissions;
 public sealed class RightsChangeJournal : IRightsChangeJournal
 {
     private readonly IUnitOfWork _uow;
+    private readonly ICurrentUser _currentUser;
 
-    public RightsChangeJournal(
-        IUnitOfWork uow)
+    public RightsChangeJournal(IUnitOfWork uow, ICurrentUser currentUser)
     {
         _uow = uow;
-    }
-
-    private static string? Truncate(string? value, int maxLength)
-    {
-        if (string.IsNullOrEmpty(value)) return value;
-        return value.Length <= maxLength ? value : value.Substring(0, maxLength);
+        _currentUser = currentUser;
     }
 
     public async Task EcrireAuditDroitAsync(
@@ -38,5 +34,18 @@ public sealed class RightsChangeJournal : IRightsChangeJournal
             PermsAvant = avant,
             PermsApres = apres
         }, cancellationToken);
+    }
+
+    public Task RecordAsync(RightsChangeEntry entry, CancellationToken cancellationToken)
+        => EcrireAuditDroitAsync(
+            new RightsChange(
+                _currentUser.UserId ?? 0, _currentUser.Login ?? string.Empty,
+                entry.TargetType, entry.TargetId, entry.TargetName, entry.Action, entry.Before, entry.After),
+            cancellationToken);
+
+    private static string? Truncate(string? value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+        return value.Length <= maxLength ? value : value.Substring(0, maxLength);
     }
 }

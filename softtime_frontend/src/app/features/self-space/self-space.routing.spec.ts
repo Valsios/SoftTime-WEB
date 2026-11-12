@@ -48,8 +48,8 @@ describe('Mon espace : redirection après connexion', () => {
     return navigate;
   }
 
-  it('profil Salarié (SELF:READ, aucune porte) : /mon-espace', () => {
-    expect(seConnecter(['SELF:READ'], [])).toHaveBeenCalledWith(['/mon-espace']);
+  it('profil Salarié (self.read, aucune porte) : /mon-espace', () => {
+    expect(seConnecter(['self.read'], [])).toHaveBeenCalledWith(['/mon-espace']);
   });
 
   it('administrateur : /dashboard comme avant', () => {
@@ -57,15 +57,15 @@ describe('Mon espace : redirection après connexion', () => {
   });
 
   it('compte de gestion : /dashboard comme avant', () => {
-    expect(seConnecter(['PROC:SHIFTS', 'PROC:PUNCHES'], [3])).toHaveBeenCalledWith(['/dashboard']);
+    expect(seConnecter(['shifts.read', 'punches.manage'], [3])).toHaveBeenCalledWith(['/dashboard']);
   });
 
   it('compte sans permission détaillée : /dashboard comme avant', () => {
     expect(seConnecter([], [])).toHaveBeenCalledWith(['/dashboard']);
   });
 
-  it('SELF:READ ajouté à un compte qui a une porte : /dashboard, comportement habituel conservé', () => {
-    expect(seConnecter(['SELF:READ', 'PROC:SHIFTS'], [3])).toHaveBeenCalledWith(['/dashboard']);
+  it('self.read ajouté à un compte qui a une porte : /dashboard, comportement habituel conservé', () => {
+    expect(seConnecter(['self.read', 'shifts.read'], [3])).toHaveBeenCalledWith(['/dashboard']);
   });
 });
 
@@ -102,15 +102,15 @@ describe('Mon espace : entrée de menu', () => {
   }
   const liens = (el: HTMLElement) => Array.from(el.querySelectorAll('nav.sidebar__nav a')).map((a) => a.getAttribute('href'));
 
-  it('visible avec SELF:READ ; le tableau de bord, inutilisable sans base, n’est pas proposé au profil Salarié', () => {
-    const { el } = monter(['SELF:READ'], []);
+  it('visible avec self.read ; le tableau de bord, inutilisable sans base, n’est pas proposé au profil Salarié', () => {
+    const { el } = monter(['self.read'], []);
 
     expect(liens(el)).toContain('/mon-espace');
     expect(liens(el)).not.toContain('/dashboard');
   });
 
   it('absente pour un compte de gestion et pour l’administrateur : menu inchangé, tableau de bord conservé', () => {
-    for (const [permissions, rights, role] of [[['PROC:SHIFTS'], [3], 2], [[], [1, 2, 3, 4, 5, 6], 1]] as const) {
+    for (const [permissions, rights, role] of [[['shifts.read'], [3], 2], [[], [1, 2, 3, 4, 5, 6], 1]] as const) {
       const { el } = monter([...permissions], [...rights], role);
       expect(liens(el)).not.toContain('/mon-espace');
       expect(liens(el)).toContain('/dashboard');
@@ -126,15 +126,15 @@ describe('Mon espace : entrée de menu', () => {
     }
   });
 
-  it('compte de gestion qui porte aussi SELF:READ : l’entrée apparaît mais le tableau de bord reste', () => {
-    const { el } = monter(['SELF:READ', 'PROC:SHIFTS'], [3]);
+  it('compte de gestion qui porte aussi self.read : l’entrée apparaît mais le tableau de bord reste', () => {
+    const { el } = monter(['self.read', 'shifts.read'], [3]);
 
     expect(liens(el)).toContain('/mon-espace');
     expect(liens(el)).toContain('/dashboard');
   });
 
   it('disparaît à la déconnexion', () => {
-    const { fixture, el, store } = monter(['SELF:READ'], []);
+    const { fixture, el, store } = monter(['self.read'], []);
     expect(liens(el)).toContain('/mon-espace');
 
     store.clear();

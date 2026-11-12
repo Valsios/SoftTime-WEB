@@ -12,7 +12,7 @@ namespace SoftTime.Api.Controllers;
 
 /// <summary>
 /// « Mon espace » : les données du salarié connecté, en lecture seule (GET uniquement ; toute autre méthode répond
-/// 405). Aucune porte n'est requise : l'accès repose sur la permission SELF:READ et sur le matricule du jeton (voir
+/// 405). Aucune porte n'est requise : l'accès repose sur la permission self.read et sur le matricule du jeton (voir
 /// <see cref="ISelfServiceGuard"/>). Aucun paramètre de route, de requête ou d'en-tête ne désigne un salarié : seule la
 /// période (from, to) est acceptée. Désactivé par défaut (SelfService:Enabled) : 404 tant que la fonction est coupée.
 /// </summary>

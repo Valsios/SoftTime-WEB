@@ -27,7 +27,7 @@ public class SelfSpaceAdversarialTests : IClassFixture<ApiFactory>
     private const string MatB = "B200";
     private const decimal CompteId = 10401;       // porteur du jeton de A
     private const decimal DoublonId = 10402;      // second compte, même matricule que A
-    private const decimal HybrideId = 10403;      // porte 1 + SELF:READ, une base
+    private const decimal HybrideId = 10403;      // porte 1 + self.read, une base
     private const decimal HybrideDeuxBasesId = 10404;
     private const decimal SupprimeId = 10405;         // compte supprimé en cours de test (matricule propre)
 
@@ -52,9 +52,9 @@ public class SelfSpaceAdversarialTests : IClassFixture<ApiFactory>
         if (users.Any(u => u.IdResponsable == CompteId))
             return;
         store.Get<Role>().Items.Add(new Role { IdRole = 92, NomRole = "Salarié" });
-        store.Get<RolePermission>().Items.Add(new RolePermission { Id = 9201, IdRole = 92, PermissionCode = "SELF:READ", IsGranted = true });
+        store.Get<RolePermission>().Items.Add(new RolePermission { Id = 9201, IdRole = 92, PermissionCode = "self.read", IsGranted = true });
         store.Get<Role>().Items.Add(new Role { IdRole = 94, NomRole = "Hybride" });
-        foreach (var (id, code) in new[] { (9401, "SELF:READ"), (9402, $"SAGE:{ApiFactory.SageName}:READ"), (9403, "POINTEUSE:PTG:READ") })
+        foreach (var (id, code) in new[] { (9401, "self.read"), (9402, $"sage.{ApiFactory.SageId}.read"), (9403, "pointeuse.1.read") })
             store.Get<RolePermission>().Items.Add(new RolePermission { Id = id, IdRole = 94, PermissionCode = code, IsGranted = true });
 
         users.Add(new Responsable { IdResponsable = CompteId, IdRole = 92, Login = "adv-1", NomResponsable = "x", Matricule = MatA });
@@ -275,7 +275,7 @@ public class SelfSpaceAdversarialTests : IClassFixture<ApiFactory>
 
         // Act
         var (ok, _) = await Lire(http, $"/api/v1/me/space/{route}?{Periode}", Jeton(CompteId, 92, MatA));
-        var (refus, _) = await Lire(http, $"/api/v1/me/space/{route}?{Periode}", Jeton(99999, 92, MatA));   // sans SELF:READ
+        var (refus, _) = await Lire(http, $"/api/v1/me/space/{route}?{Periode}", Jeton(99999, 92, MatA));   // sans self.read
         var (saisie, _) = await Lire(http, $"/api/v1/me/space/{route}?from=pas-une-date", Jeton(CompteId, 92, MatA));
         var (desactivee, _) = await Lire(_f.CreateClient(), $"/api/v1/me/space/{route}?{Periode}", Jeton(CompteId, 92, MatA));
 

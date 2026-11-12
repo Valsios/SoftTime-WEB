@@ -136,10 +136,10 @@ export class AuditPage implements OnInit {
   form: Partial<AuditConfig> = {};
   /** Modifier la configuration des déclencheurs : administrateur seulement (POST et PUT api/audit/config). */
   readonly isAdmin = computed(() => isAdministrator(this.session.accessContext()));
-  /** Journal central : administrateur, ou porte Traçabilité ET permission TRACE:AUDIT (comme le serveur). */
+  /** Journal central : administrateur, ou porte Traçabilité ET permission audit.read (comme le serveur). */
   readonly canViewJournal = computed(() => {
     this.session.session();
-    return this.session.hasPermission('TRACE:AUDIT', Droit.Traceability);
+    return this.session.hasPermission('audit.read', Droit.Traceability);
   });
   readonly activeTab = signal(this.canViewJournal() ? 'journal' : 'config');
   readonly tabs = computed(() => [

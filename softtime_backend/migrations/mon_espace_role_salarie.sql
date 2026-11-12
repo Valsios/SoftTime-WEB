@@ -1,7 +1,7 @@
 /* =====================================================================================
    Mon espace salarié — rôle « Salarié » (SCRIPT FOURNI, JAMAIS EXÉCUTÉ AUTOMATIQUEMENT)
 
-   Crée le rôle « Salarié » avec UNE seule permission, SELF:READ, et AUCUNE porte (aucune ligne T_DROIT_ROLE).
+   Crée le rôle « Salarié » avec UNE seule permission, self.read, et AUCUNE porte (aucune ligne T_DROIT_ROLE).
    Aucune permission SAGE: ni POINTEUSE: : elles donneraient la porte 1 (PermissionCatalog.DeduirePortes).
 
    Pourquoi ce fichier n'est PAS dans migrations/versions : les scripts de ce dossier sont embarqués et appliqués
@@ -29,8 +29,8 @@ GO
 
 DECLARE @idRole decimal(18,0) = (SELECT TOP (1) IDROLE FROM dbo.T_ROLE WHERE NOMROLE = N'Salarié' ORDER BY IDROLE);
 
-IF NOT EXISTS (SELECT 1 FROM dbo.T_ROLE_PERMISSION WHERE IDROLE = @idRole AND PERMISSION_CODE = N'SELF:READ')
-    INSERT INTO dbo.T_ROLE_PERMISSION (IDROLE, PERMISSION_CODE, IS_GRANTED) VALUES (@idRole, N'SELF:READ', 1);
+IF NOT EXISTS (SELECT 1 FROM dbo.T_ROLE_PERMISSION WHERE IDROLE = @idRole AND PERMISSION_CODE = N'self.read')
+    INSERT INTO dbo.T_ROLE_PERMISSION (IDROLE, PERMISSION_CODE, IS_GRANTED) VALUES (@idRole, N'self.read', 1);
 
 SELECT IDROLE, NOMROLE FROM dbo.T_ROLE WHERE IDROLE = @idRole;
 GO

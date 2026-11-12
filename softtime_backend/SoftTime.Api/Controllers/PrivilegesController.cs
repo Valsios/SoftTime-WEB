@@ -36,20 +36,16 @@ public class PrivilegesController : ApiControllerBase
         _user = user;
     }
 
+    [HasPermission(Permissions.Privileges.Read)]
+    [HttpGet("catalog")]
+    public IActionResult GetCatalog() => Ok(_privileges.GetCatalog());
+
     [HttpGet("droits")]
     public async Task<IActionResult> GetDroitsAsync(CancellationToken ct) => Ok(await _privileges.GetDroitsAsync(ct));
 
     [HttpGet]
     public async Task<IActionResult> GetByRoleAsync([FromQuery] decimal? roleId, CancellationToken ct)
         => Ok(await _privileges.GetPrivilegesAsync(roleId, ct));
-
-    [RequireAdmin]
-    [HttpPut("{roleId}")]
-    public async Task<IActionResult> ReplaceAsync(decimal roleId, [FromBody] List<decimal> droits, CancellationToken ct)
-    {
-        await _privileges.SetPrivilegesAsync(roleId, droits, ct);
-        return NoContent();
-    }
 
     [HttpGet("user/{userId}")]
     public async Task<IActionResult> GetUserPermissionsAsync(decimal userId, CancellationToken ct)
@@ -73,6 +69,7 @@ public class PrivilegesController : ApiControllerBase
     public async Task<IActionResult> GetRolePermissionsAsync(decimal roleId, CancellationToken ct)
         => Ok(await _rolePermissions.GetRoleDetailedPermissionsAsync(roleId, ct));
 
+    [RequireAdmin]
     [HttpPut("role/{roleId}")]
     public async Task<IActionResult> SaveRolePermissionsAsync(decimal roleId, [FromBody] SaveRoleDetailedPermissionsRequest request, CancellationToken ct)
     {

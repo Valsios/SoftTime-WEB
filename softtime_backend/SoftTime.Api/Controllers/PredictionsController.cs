@@ -12,7 +12,7 @@ namespace SoftTime.Api.Controllers;
 /// <summary>
 /// Prévisions d'heures supplémentaires : atterrissage de la semaine, calculé à la demande à partir
 /// des pointages traités et du planning. Lecture seule, ouverte à tout utilisateur authentifié
-/// disposant de <c>REPORTS:PREDICTIONS</c>.
+/// disposant de <c>predictions.read</c>.
 /// </summary>
 [ApiController]
 [Authorize]
@@ -47,7 +47,7 @@ public class PredictionsController : ApiControllerBase
         return Ok(await _landing.GetHorizonAsync(ct));
     }
 
-    /// <summary>Lecture des prévisions : administrateur, ou porte 6 ET permission REPORTS:PREDICTIONS effective.</summary>
+    /// <summary>Lecture des prévisions : administrateur, ou porte 6 ET permission predictions.read effective.</summary>
     private Task EnsureCanReadAsync(CancellationToken ct)
-        => FineReadAccess.EnsureAsync(_user, _rights, Rights.Reports, "REPORTS:PREDICTIONS", ct);
+        => FineReadAccess.EnsureAsync(_user, _rights, Rights.Reports, "predictions.read", ct);
 }

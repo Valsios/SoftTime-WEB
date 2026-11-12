@@ -70,8 +70,8 @@ describe('messages de la page Privilèges', () => {
     expect(buildResetToRoleMessage('Consultation', 2, false)).not.toContain('modifications non enregistrées');
   });
 
-  it('message d’application à la prochaine connexion', () => {
-    expect(appliesAtNextLoginNote('user')).toBe("Les changements s'appliquent à la prochaine connexion de la personne (jusqu'à 12 h).");
-    expect(appliesAtNextLoginNote('role')).toBe("Les changements s'appliquent à la prochaine connexion des personnes de ce rôle (jusqu'à 12 h).");
+  it('message d’application dès la prochaine action', () => {
+    expect(appliesAtNextLoginNote('user')).toBe("Les changements s'appliquent dès la prochaine action de la personne.");
+    expect(appliesAtNextLoginNote('role')).toBe("Les changements s'appliquent dès la prochaine action des personnes de ce rôle.");
   });
 });

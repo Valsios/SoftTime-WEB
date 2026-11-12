@@ -20,7 +20,7 @@ export const routes: Routes = [
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
       {
-        // Mon espace salarié : aucune base ni porte requises ; le serveur est la vraie barrière (SelfService:Enabled, SELF:READ, matricule du jeton).
+        // Mon espace salarié : aucune base ni porte requises ; le serveur est la vraie barrière (SelfService:Enabled, self.read, matricule du jeton).
         path: 'mon-espace',
         canActivate: [selfSpaceGuard],
         loadComponent: () => import('./features/self-space/self-space').then((m) => m.SelfSpacePage),
@@ -60,89 +60,89 @@ export const routes: Routes = [
       {
         path: 'users',
         canActivate: [droitGuard],
-        data: { droit: Droit.Parameters, permission: 'PARAMS:USERS' },
+        data: { droit: Droit.Parameters, permission: 'users.read' },
         loadComponent: () => import('./features/params/users').then((m) => m.UsersPage),
       },
       {
         path: 'roles',
         canActivate: [droitGuard],
-        data: { droit: Droit.Parameters, permission: 'PARAMS:ROLES' },
+        data: { droit: Droit.Parameters, permission: 'roles.read' },
         loadComponent: () => import('./features/params/roles').then((m) => m.RolesPage),
       },
       {
         path: 'privileges',
         canActivate: [droitGuard],
         canDeactivate: [privilegesLeaveGuard],
-        data: { droit: Droit.Parameters, permission: 'PARAMS:PRIVILEGES' },
+        data: { droit: Droit.Parameters, permission: 'privileges.read' },
         loadComponent: () => import('./features/params/privileges').then((m) => m.PrivilegesPage),
       },
       {
         path: 'db-access',
         canActivate: [droitGuard],
-        data: { droit: Droit.Parameters, permission: 'PARAMS:DB_ACCESS' },
+        data: { droit: Droit.Parameters, permission: 'db-access.read' },
         loadComponent: () => import('./features/params/db-access').then((m) => m.DbAccessPage),
       },
       {
         path: 'clock-params',
         canActivate: [droitGuard],
-        data: { droit: Droit.Parameters, permission: 'PARAMS:CLOCK_PARAMS' },
+        data: { droit: Droit.Parameters, permission: 'clock-params.manage' },
         loadComponent: () => import('./features/params/clock-params').then((m) => m.ClockParamsPage),
       },
       {
         path: 'correspondence',
         canActivate: [droitGuard, databaseGuard],
-        data: { droit: Droit.Parameters, permission: 'PARAMS:CORRESPONDENCE' },
+        data: { droit: Droit.Parameters, permission: 'correspondence.manage' },
         loadComponent: () =>
           import('./features/params/correspondence').then((m) => m.CorrespondencePage),
       },
       {
         path: 'cardpaie',
         canActivate: [droitGuard, databaseGuard],
-        data: { droit: Droit.Parameters, permission: 'PARAMS:CARDPAIE' },
+        data: { droit: Droit.Parameters, permission: 'card-paie.read' },
         loadComponent: () => import('./features/params/cardpaie').then((m) => m.CardPaiePage),
       },
       {
         path: 'categories',
         canActivate: [droitGuard, databaseGuard],
-        data: { droit: Droit.Parameters, permission: 'PARAMS:CATEGORIES' },
+        data: { droit: Droit.Parameters, permission: 'categories.read' },
         loadComponent: () => import('./features/params/categories').then((m) => m.CategoriesPage),
       },
       {
         path: 'affectations',
         canActivate: [droitGuard, databaseGuard],
-        data: { droit: Droit.Parameters, permission: 'PARAMS:AFFECTATIONS' },
+        data: { droit: Droit.Parameters, permission: 'affectations.read' },
         loadComponent: () =>
           import('./features/params/affectations').then((m) => m.AffectationsPage),
       },
       {
         path: 'tolerances',
         canActivate: [droitGuard],
-        data: { droit: Droit.Parameters, permission: 'PARAMS:TOLERANCES' },
+        data: { droit: Droit.Parameters, permission: 'tolerances.read' },
         loadComponent: () => import('./features/params/tolerances').then((m) => m.TolerancesPage),
       },
       {
         path: 'holidays',
         canActivate: [droitGuard, databaseGuard],
-        data: { droit: Droit.Parameters, permission: 'PARAMS:HOLIDAYS' },
+        data: { droit: Droit.Parameters, permission: 'holidays.read' },
         loadComponent: () => import('./features/params/holidays').then((m) => m.HolidaysPage),
       },
       {
         path: 'majorations',
         canActivate: [droitGuard],
-        data: { droit: Droit.Parameters, permission: 'PARAMS:MAJORATIONS' },
+        data: { droit: Droit.Parameters, permission: 'majorations.read' },
         loadComponent: () => import('./features/params/majorations').then((m) => m.MajorationsPage),
       },
       {
         path: 'code-constantes',
         canActivate: [droitGuard, databaseGuard],
-        data: { droit: Droit.Parameters, permission: 'PARAMS:CODE_CONSTANTES' },
+        data: { droit: Droit.Parameters, permission: 'code-constantes.manage' },
         loadComponent: () =>
           import('./features/params/code-constantes').then((m) => m.CodeConstantesPage),
       },
       {
         path: 'absence-codes',
         canActivate: [droitGuard, databaseGuard],
-        data: { droit: Droit.Parameters, permission: 'PARAMS:ABSENCE_CODES' },
+        data: { droit: Droit.Parameters, permission: 'absence-codes.read' },
         loadComponent: () =>
           import('./features/params/absence-codes').then((m) => m.AbsenceCodesPage),
       },
@@ -150,46 +150,46 @@ export const routes: Routes = [
       {
         path: 'shifts',
         canActivate: [droitGuard, databaseGuard],
-        data: { droit: Droit.Processing, permission: 'PROC:SHIFTS' },
+        data: { droit: Droit.Processing, permission: 'shifts.read' },
         loadComponent: () => import('./features/processing/shifts').then((m) => m.ShiftsPage),
       },
       {
         path: 'employee-planning',
         canActivate: [droitGuard, databaseGuard],
-        data: { droit: Droit.Processing, permission: 'PROC:EMPLOYEE_PLANNING' },
+        data: { droit: Droit.Processing, permission: 'employee-planning.read' },
         loadComponent: () =>
           import('./features/processing/employee-planning').then((m) => m.EmployeePlanningPage),
       },
       {
         path: 'punches',
         canActivate: [droitGuard, databaseGuard],
-        data: { droit: Droit.Processing, permission: 'PROC:PUNCHES' },
+        data: { droit: Droit.Processing, permission: 'punches.manage' },
         loadComponent: () => import('./features/processing/punches').then((m) => m.PunchesPage),
       },
       {
         path: 'anomalies',
         canActivate: [droitGuard, databaseGuard],
-        data: { droit: Droit.Processing, permission: 'PROC:ANOMALIES' },
+        data: { droit: Droit.Processing, permission: 'anomalies.manage' },
         loadComponent: () => import('./features/processing/anomalies').then((m) => m.AnomaliesPage),
       },
       {
         path: 'corrected-hours',
         canActivate: [droitGuard, databaseGuard],
-        data: { droit: Droit.Processing, permission: 'PROC:CORRECTED_HOURS' },
+        data: { droit: Droit.Processing, permission: 'corrected-hours.read' },
         loadComponent: () =>
           import('./features/processing/corrected-hours').then((m) => m.CorrectedHoursPage),
       },
       {
         path: 'weekly-validation',
         canActivate: [droitGuard, databaseGuard],
-        data: { droit: Droit.Processing, permission: 'PROC:WEEKLY_VALIDATION' },
+        data: { droit: Droit.Processing, permission: 'weekly-validation.manage' },
         loadComponent: () =>
           import('./features/processing/weekly-validation').then((m) => m.WeeklyValidationPage),
       },
       {
         path: 'overtime',
         canActivate: [droitGuard, databaseGuard],
-        data: { droit: Droit.Processing, permission: 'PROC:OVERTIME' },
+        data: { droit: Droit.Processing, permission: 'overtime.manage' },
         loadComponent: () => import('./features/processing/overtime').then((m) => m.OvertimePage),
       },
 
@@ -197,20 +197,20 @@ export const routes: Routes = [
       {
         path: 'reports',
         canActivate: [droitGuard, databaseGuard],
-        data: { droit: Droit.Reports, permission: 'REPORTS:REPORTS' },
+        data: { droit: Droit.Reports, permission: 'reports.read' },
         loadComponent: () => import('./features/reports/reports').then((m) => m.ReportsPage),
       },
       {
         path: 'predictions',
         canActivate: [droitGuard, databaseGuard],
-        data: { droit: Droit.Reports, permission: 'REPORTS:PREDICTIONS' },
+        data: { droit: Droit.Reports, permission: 'predictions.read' },
         loadComponent: () =>
           import('./features/predictions/predictions').then((m) => m.PredictionsPage),
       },
       {
         path: 'closing',
         canActivate: [droitGuard, databaseGuard],
-        data: { droit: Droit.Reports, permission: 'REPORTS:CLOSING' },
+        data: { droit: Droit.Reports, permission: 'closing.read' },
         loadComponent: () => import('./features/closing/closing').then((m) => m.ClosingPage),
       },
 
@@ -218,13 +218,13 @@ export const routes: Routes = [
       {
         path: 'canteen',
         canActivate: [droitGuard, databaseGuard],
-        data: { droit: Droit.Other, permission: 'OTHER:CANTEEN' },
+        data: { droit: Droit.Other, permission: 'canteen.manage' },
         loadComponent: () => import('./features/reports/canteen').then((m) => m.CanteenPage),
       },
       {
         path: 'travel-expenses',
         canActivate: [droitGuard, databaseGuard],
-        data: { droit: Droit.Other, permission: 'OTHER:TRAVEL_EXPENSES' },
+        data: { droit: Droit.Other, permission: 'travel-expenses.manage' },
         loadComponent: () => import('./features/reports/travel').then((m) => m.TravelPage),
       },
 
@@ -232,13 +232,13 @@ export const routes: Routes = [
       {
         path: 'history',
         canActivate: [droitGuard, databaseGuard],
-        data: { droit: Droit.Traceability },
+        data: { droit: Droit.Traceability, permission: 'audit.read' },
         loadComponent: () => import('./features/reports/history').then((m) => m.HistoryPage),
       },
       {
         path: 'audit',
         canActivate: [droitGuard],
-        data: { droit: Droit.Traceability, permission: 'TRACE:AUDIT' },
+        data: { droit: Droit.Traceability, permission: 'audit.read' },
         loadComponent: () => import('./features/reports/audit').then((m) => m.AuditPage),
       },
     ],

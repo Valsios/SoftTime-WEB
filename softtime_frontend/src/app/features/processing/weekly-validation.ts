@@ -1,17 +1,18 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { PeriodRequest, PageChangeEvent } from '../../shared/models';
 import { WeeklyValidationService } from '../../shared/services/processing.service';
 import { ClockParamsService } from '../../shared/services/catalog.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
-import { Column, DataTable, PageHeader, SoftButton, SoftCard, PeriodFilter } from '../../shared/components';
+import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftToggle, PeriodFilter } from '../../shared/components';
 import { asRow, fmtDate } from '../../shared/utils/date';
 
 @Component({
   selector: 'app-weekly-validation',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [PageHeader, SoftButton, SoftCard, DataTable, PeriodFilter],
+  imports: [FormsModule, PageHeader, SoftButton, SoftCard, SoftToggle, DataTable, PeriodFilter],
   template: `
     <page-header title="Validation semaine" subtitle="Calcul HT/HS lundi–dimanche — seules les lignes cochées sont validées">
       <soft-button variant="secondary" [loading]="excel.exporting()" (click)="exportExcel()">Export Excel</soft-button>
@@ -23,6 +24,10 @@ import { asRow, fmtDate } from '../../shared/utils/date';
     <period-filter [mondaySundayWeek]="true" searchLabel="Calculer" (search)="preview($event)"></period-filter>
 
     <soft-card>
+      <label class="toggle-row">
+        <span>Masquer les salariés sans heures (ni heure corrigée ni jour planifié sur la semaine)</span>
+        <soft-toggle [ngModel]="onlyWithHours()" (ngModelChange)="onOnlyWithHoursChange($event)" name="onlyWithHours"></soft-toggle>
+      </label>
       <p class="hint">
         @if (modeLabel()) { <strong>{{ modeLabel() }}</strong> — }
         {{ selectedKeys().length }} salarié(s) sélectionné(s) — la sélection est conservée entre les pages ;
@@ -45,7 +50,10 @@ import { asRow, fmtDate } from '../../shared/utils/date';
       ></data-table>
     </soft-card>
   `,
-  styles: [`.hint { margin: 0 0 12px; color: var(--text-muted); font-size: 13px; }`],
+  styles: [`
+    .hint { margin: 0 0 12px; color: var(--text-muted); font-size: 13px; }
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; font-weight: 600; }
+  `],
 })
 export class WeeklyValidationPage {
   private readonly svc = inject(WeeklyValidationService);
@@ -63,6 +71,8 @@ export class WeeklyValidationPage {
   readonly total = signal(0);
   readonly tableSearch = signal('');
   readonly selectedKeys = signal<string[]>([]);
+  /** Activé par défaut : l'écran liste sinon toute la base, salariés sans heures compris. */
+  readonly onlyWithHours = signal(true);
   private lastFilter: PeriodRequest | null = null;
   private requestSeq = 0;
 
@@ -100,6 +110,13 @@ export class WeeklyValidationPage {
     this.loadPage();
   }
 
+  onOnlyWithHoursChange(value: boolean): void {
+    this.onlyWithHours.set(value);
+    this.selectedKeys.set([]);
+    this.page.set(1);
+    this.loadPage();
+  }
+
   onPageChange(event: PageChangeEvent): void {
     this.page.set(event.page);
     this.pageSize = event.pageSize;
@@ -120,6 +137,7 @@ export class WeeklyValidationPage {
     this.svc.previewPaged({
       ...this.lastFilter,
       search: this.tableSearch(),
+      onlyWithHours: this.onlyWithHours(),
       page: this.page(),
       pageSize: this.pageSize,
     }).subscribe({

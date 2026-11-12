@@ -1,12 +1,14 @@
 using AutoMapper;
 
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging.Abstractions;
 
 using SoftTime.Application.Abstractions.Authentication;
 using SoftTime.Application.Abstractions.Notifications;
 using SoftTime.Application.Mapping;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
+using SoftTime.Infrastructure.Services.Permissions;
 using SoftTime.Tests.Http;
 
 namespace SoftTime.Tests;
@@ -19,8 +21,8 @@ public class DisplayedRightsTests
 {
     private static readonly string[] Configuration =
     {
-        "SAGE:CREATE", "SAGE:BASE1:UPDATE", "SAGE:BASE1:DELETE",
-        "POINTEUSE:CREATE", "POINTEUSE:PTG:UPDATE", "POINTEUSE:PTG:DELETE",
+        "sage.create", "sage.all.update", "sage.all.delete",
+        "pointeuse.create", "pointeuse.all.update", "pointeuse.all.delete",
     };
 
     private readonly InMemoryUnitOfWork _uow = new();
@@ -42,27 +44,30 @@ public class DisplayedRightsTests
             _uow.Get<DroitRole>().Items.Add(new DroitRole { IdRole = role, IdDroit = 1 });
             _uow.Get<DroitRole>().Items.Add(new DroitRole { IdRole = role, IdDroit = 3 });
         }
-        _uow.Get<RolePermission>().Items.Add(new RolePermission { IdRole = 6, PermissionCode = "SAGE:CREATE", IsGranted = true });
-        _uow.Get<RolePermission>().Items.Add(new RolePermission { IdRole = 6, PermissionCode = "PROC:SHIFTS", IsGranted = true });
+        _uow.Get<RolePermission>().Items.Add(new RolePermission { IdRole = 6, PermissionCode = "sage.create", IsGranted = true });
+        _uow.Get<RolePermission>().Items.Add(new RolePermission { IdRole = 6, PermissionCode = "shifts.read", IsGranted = true });
         _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 1, IdRole = 1, Login = "admin" });
         _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 15, IdRole = 5, Login = "sanslignes" });
         _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 16, IdRole = 6, Login = "aveclignes" });
         _uow.Get<Responsable>().Items.Add(new Responsable { IdResponsable = 17, IdRole = 5, Login = "ajustements" });
-        _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 17, PermissionCode = "SAGE:CREATE", IsGranted = true });
-        _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 17, PermissionCode = "SAGE:BASE1:READ", IsGranted = true });
+        _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 17, PermissionCode = "sage.create", IsGranted = true });
+        _uow.Get<UserPermission>().Items.Add(new UserPermission { IdResponsable = 17, PermissionCode = "sage.1.read", IsGranted = true });
     }
 
     [Fact]
-    public async Task GetRoleDetailedPermissionsAsync_RoleWithoutRows_ShowsReadButNoConfiguration()
+    public async Task GetRoleDetailedPermissionsAsync_RoleWithGatesOnly_AfterMigration_ShowsReadButNoConfiguration()
     {
+        // Arrange
+        await MigrateAsync();
+
         // Act
         var role = await _auth.GetRoleDetailedPermissionsAsync(5);
 
         // Assert
-        role.IsConfigured.Should().BeFalse();
-        role.GrantedPermissions.Should().Contain("SAGE:BASE1:READ");
-        role.GrantedPermissions.Should().Contain("POINTEUSE:PTG:READ");
-        role.GrantedPermissions.Should().Contain("PROC:SHIFTS");
+        role.IsConfigured.Should().BeTrue();
+        role.GrantedPermissions.Should().Contain("sage.all.read");
+        role.GrantedPermissions.Should().Contain("pointeuse.all.read");
+        role.GrantedPermissions.Should().Contain("shifts.read");
         Configuration.Should().AllSatisfy(c => role.GrantedPermissions.Should().NotContain(c));
     }
 
@@ -89,9 +94,9 @@ public class DisplayedRightsTests
 
         // Assert
         role.IsConfigured.Should().BeTrue();
-        role.GrantedPermissions.ToHashSet().SetEquals(new[] { "SAGE:CREATE", "PROC:SHIFTS" }).Should().BeTrue();
+        role.GrantedPermissions.ToHashSet().SetEquals(new[] { "sage.create", "shifts.read" }).Should().BeTrue();
         var user = await _auth.GetUserDetailedPermissionsAsync(16);
-        user.GrantedPermissions.ToHashSet().SetEquals(new[] { "SAGE:CREATE", "PROC:SHIFTS" }).Should().BeTrue();
+        user.GrantedPermissions.ToHashSet().SetEquals(new[] { "sage.create", "shifts.read" }).Should().BeTrue();
     }
 
     [Fact]
@@ -102,7 +107,7 @@ public class DisplayedRightsTests
 
         // Assert
         user.IsCustomized.Should().BeTrue();
-        user.GrantedPermissions.ToHashSet().SetEquals(new[] { "SAGE:CREATE", "SAGE:BASE1:READ" }).Should().BeTrue();
+        user.GrantedPermissions.ToHashSet().SetEquals(new[] { "sage.create", "sage.1.read" }).Should().BeTrue();
     }
 
     [Fact]
@@ -131,13 +136,14 @@ public class DisplayedRightsTests
     }
 
     [Fact]
-    public async Task GetRoleDetailedPermissionsAsync_DatabaseGateWithoutDatabase_IsNotDisplayed()
+    public async Task GetRoleDetailedPermissionsAsync_DatabaseGateWithoutDatabase_KeepsAllDatabasesReadJoker()
     {
         // Arrange
-        // Cas limite documenté : sans base, aucun droit SAGE/POINTEUSE n'est affiché, donc réenregistrer ces droits
-        // ne conserve pas la porte Bases (elle ne donnerait de toute façon accès à rien).
+        // Sans aucune base déclarée, la porte Bases devient quand même la lecture de toutes les bases (joker) :
+        // une base ajoutée plus tard sera lisible, et réenregistrer ces droits conserve la porte Bases.
         _uow.Get<BddSage>().Items.Clear();
         _uow.Get<BddPointeuse>().Items.Clear();
+        await MigrateAsync();
         var role = await _auth.GetRoleDetailedPermissionsAsync(5);
         await _auth.SaveRoleDetailedPermissionsAsync(1, 5, role.GrantedPermissions);
 
@@ -145,8 +151,11 @@ public class DisplayedRightsTests
         var gates = _uow.Get<DroitRole>().Items.Where(d => d.IdRole == 5).Select(d => (int)d.IdDroit).OrderBy(x => x);
 
         // Assert
-        gates.Should().Equal(new[] { 3 });
+        gates.Should().Equal(new[] { 1, 3 });
     }
+
+    private Task MigrateAsync()
+        => new RightsStorageMigration(_uow, NullLogger<RightsStorageMigration>.Instance).RunAsync();
 
     private sealed class Token : ITokenService
     {

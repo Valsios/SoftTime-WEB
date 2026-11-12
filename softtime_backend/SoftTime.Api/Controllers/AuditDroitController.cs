@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Security;
 using SoftTime.Application.Abstractions.Permissions;
 
 namespace SoftTime.Api.Controllers;
@@ -9,6 +10,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Traceability)]
+[HasPermission(Permissions.Audit.Read, Permissions.Privileges.Read)]
 [Route("api/v1/privileges/audit")]
 [Tags("Privileges")]
 public class AuditDroitController : ApiControllerBase

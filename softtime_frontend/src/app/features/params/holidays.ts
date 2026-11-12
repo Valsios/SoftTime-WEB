@@ -54,9 +54,9 @@ export class HolidaysPage implements OnInit {
   private readonly confirm = inject(ConfirmService);
   private readonly session = inject(SessionStore);
 
-  readonly canCreate = computed(() => this.session.hasPermission('PARAMS:HOLIDAYS:CREATE', Droit.Parameters));
-  readonly canUpdate = computed(() => this.session.hasPermission('PARAMS:HOLIDAYS:UPDATE', Droit.Parameters));
-  readonly canDelete = computed(() => this.session.hasPermission('PARAMS:HOLIDAYS:DELETE', Droit.Parameters));
+  readonly canCreate = computed(() => this.session.hasPermission('holidays.create', Droit.Parameters));
+  readonly canUpdate = computed(() => this.session.hasPermission('holidays.update', Droit.Parameters));
+  readonly canDelete = computed(() => this.session.hasPermission('holidays.delete', Droit.Parameters));
 
   readonly loading = signal(true);
   readonly saving = signal(false);

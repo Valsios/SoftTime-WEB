@@ -3,7 +3,7 @@
 *Anciennement : Clôture de paie.*
 
 Route de lecture : `GET api/closing/analysis?from=&to=&departement=&includeComparison=&includeInformation=&page=&pageSize=`
-(en-tête `X-Sage-Database` requis). Accès : administrateur, ou porte 6 + permission `REPORTS:CLOSING`
+(en-tête `X-Sage-Database` requis). Accès : administrateur, ou porte 6 + permission `closing.read`
 + lecture des bases SAGE et pointeuse actives. Sans dates : mois civil complet précédent.
 
 ## Réglages (section `Closing`, facultative)
@@ -107,7 +107,7 @@ Types d'anomalie (`<Type>`) : `PointageIncomplet`, `PointageManquant`, `Planning
   (`SoftTime.Domain/Services/PayrollClosingStatus.cs`). Prêt = 0 critique ; Bloquant = critiques ÷
   jours-employé contrôlés ≥ `CriticalRatioBlocking` ; sinon À corriger ; aucun statut sans jour contrôlé.
 - **Désactiver la fonction** : `Closing:Enabled = false` (route 404, aucune erreur 500), ou retirer
-  `REPORTS:CLOSING` aux comptes concernés (page Privilèges, catégorie États).
+  `closing.read` aux comptes concernés (page Privilèges, catégorie États).
 - **Ajouter un type d'anomalie** (4 endroits) :
   1. l'énumération `ClosingAnomalyType` (`SoftTime.Domain/Models/PayrollClosing.cs`) ;
   2. la règle dans `PayrollClosingRules` (liste en entrée, `ClosingAnomaly` triées en sortie), appelée

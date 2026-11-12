@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 using SoftTime.Api.Authorization;
+using SoftTime.Application.Security;
 using SoftTime.Application.Abstractions.Audit;
 using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.DTOs;
@@ -12,6 +13,7 @@ namespace SoftTime.Api.Controllers;
 [ApiController]
 [Authorize]
 [RequireDroit(Droit.Traceability)]
+[HasPermission(Permissions.Audit.Read)]
 [Route("api/v1/audit")]
 [Tags("Audit")]
 public class AuditController : ApiControllerBase
