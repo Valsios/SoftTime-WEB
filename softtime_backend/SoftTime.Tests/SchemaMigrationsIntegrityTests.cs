@@ -41,7 +41,7 @@ public class SchemaMigrationsIntegrityTests
         var scripts = new EmbeddedMigrationScriptSource().Load();
 
         // Assert
-        scripts.Select(s => s.Version).ToArray().Should().Equal(new[] { 1, 2, 3, 4, 5, 6 });
+        scripts.Select(s => s.Version).ToArray().Should().Equal(new[] { 1, 2, 3, 4, 5, 6, 7 });
         var journal = scripts.Should().ContainSingle(s => s.Version == 3).Which;
         journal.Name.Should().Be("003_journal_central.sql");
         foreach (var forbidden in new[] { "DROP ", "DELETE", "TRUNCATE", "ALTER COLUMN", "ALTER TABLE", "USE [", "CREATE DATABASE", "UPDATE ", "INSERT " })
@@ -122,6 +122,32 @@ public class SchemaMigrationsIntegrityTests
         // Rejouable ; lignes existantes = copies (0), converties par l'application au démarrage.
         deviations.Content.Should().Contain("COL_LENGTH(N'dbo.T_USER_PERMISSION', N'IS_DEVIATION') IS NULL");
         deviations.Content.Should().Contain("DEFAULT (0)");
+    }
+
+    // ---------- Script 007 ----------
+
+    [Fact]
+    public void Script007_PayrollVariables_CreatesTwoTablesOnlyByAdditions_AndIsReplayable()
+    {
+        // Act
+        var scripts = new EmbeddedMigrationScriptSource().Load();
+
+        // Assert
+        var variables = scripts.Should().ContainSingle(s => s.Version == 7).Which;
+        variables.Name.Should().Be("007_variables_paie.sql");
+        foreach (var forbidden in new[] { "DROP ", "DELETE", "TRUNCATE", "ALTER COLUMN", "ALTER TABLE", "USE [", "CREATE DATABASE", "UPDATE ", "INSERT " })
+            variables.Content.Should().NotContainEquivalentOf(forbidden);
+        // Rejouable : tables et index ne sont créés que s'ils n'existent pas.
+        variables.Content.Should().Contain("OBJECT_ID(N'dbo.T_PAIE_VARIABLE', N'U') IS NULL");
+        variables.Content.Should().Contain("OBJECT_ID(N'dbo.T_PAIE_ENVOI', N'U') IS NULL");
+        variables.Content.Should().Contain("name = N'UX_T_PAIE_VARIABLE_BDD_VARIABLE'");
+        variables.Content.Should().Contain("name = N'IX_T_PAIE_ENVOI_BDD_PERIODE'");
+        variables.Content.Should().Contain("PRINT");
+        variables.Content.Should().NotContainEquivalentOf("Password");
+        // Aucune autre table existante n'est touchée (hors en-tête de commentaire).
+        var code = variables.Content[(variables.Content.IndexOf("*/", StringComparison.Ordinal) + 2)..];
+        foreach (var other in new[] { "T_CUMSAL", "T_PAIE_ECRITURE", "T_CODE_CONSTANTE", "suivi_JOURNAL" })
+            code.Should().NotContainEquivalentOf(other);
     }
 
     // ---------- Journal de démarrage ----------
