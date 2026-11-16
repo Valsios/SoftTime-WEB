@@ -5,13 +5,18 @@ import { ConfirmService } from '../../core/confirm.service';
 import { Droit } from '../../core/rights';
 import { SessionStore } from '../../core/session.store';
 import { ToastService } from '../../core/toast.service';
-import { PayrollVariable, PayrollVariablesConfig } from '../../shared/models';
+import { PayrollTargetColumn, PayrollVariable, PayrollVariablesConfig, PayrollWriteTarget, PayrollWriteTargets } from '../../shared/models';
 import { PayrollVariablesService } from '../../shared/services/payroll-variables.service';
+import { PayrollDestinations } from './payroll-destinations';
 import { PayrollVariablesCard } from './payroll-variables';
 import {
   ACTIVES_PAR_DEFAUT,
   changements,
+  changementsDestinations,
+  choixColonnes,
   colonnesNonEnvoyees,
+  validerDestinations,
+  versDestinations,
   libelleColonne,
   peutCocher,
   raisonNonCochable,
@@ -25,10 +30,10 @@ const LIBELLES: Record<string, string> = {
 };
 
 function variable(nom: string, champs: Partial<PayrollVariable> = {}): PayrollVariable {
-  const sansEnvoi = nom === 'Retard' || nom === 'Absence';
+  const codePropre = nom === 'Retard' || nom === 'Absence';
   return {
-    variable: nom, libelle: LIBELLES[nom], actif: !sansEnvoi, codePaie: null, unite: null, colonneCible: null,
-    cibleExistante: sansEnvoi ? null : 'HS0X', sansEnvoi, ...champs,
+    variable: nom, libelle: LIBELLES[nom], actif: !codePropre, codePaie: null, unite: null, colonneCible: null,
+    cibleExistante: codePropre ? null : 'HS0X', sansEnvoi: nom === 'Absence', ...champs,
   };
 }
 
@@ -40,14 +45,22 @@ function config(champs: Partial<PayrollVariablesConfig> = {}): PayrollVariablesC
 }
 
 describe('Variables envoyées à la paie : règles de l\'écran', () => {
-  it('Retard et Absence ne sont cochables qu\'avec leur code (SAGE) ou leur colonne (autre base)', () => {
+  // Adapté au lot C2 (avant : Absence cochable avec sa colonne ; messages « Renseignez d'abord … »).
+  it('Retard n\'est cochable qu\'avec son code (SAGE) ou sa destination (autre base)', () => {
     expect(peutCocher(variable('Retard'), false, false)).toBe(false);
-    expect(raisonNonCochable(variable('Retard'), false, false)).toBe('Renseignez d’abord le code de paie.');
+    expect(raisonNonCochable(variable('Retard'), false, false)).toBe('Choisissez d’abord le code de paie.');
     expect(peutCocher(variable('Retard', { codePaie: 'RET01' }), false, false)).toBe(true);
-    expect(peutCocher(variable('Absence', { codePaie: 'ABS01' }), true, false)).toBe(false);
-    expect(raisonNonCochable(variable('Absence'), true, false)).toBe('Renseignez d’abord la colonne cible.');
-    expect(peutCocher(variable('Absence', { colonneCible: 'JoursAbsence' }), true, false)).toBe(true);
+    expect(peutCocher(variable('Retard', { colonneCible: 'X' }), true, false)).toBe(false);
+    expect(raisonNonCochable(variable('Retard'), true, false)).toBe('Choisissez d’abord sa colonne dans « Destinations dans la base de paie ».');
+    expect(peutCocher(variable('Retard', { cibleExistante: 'HeuresRetard' }), true, false)).toBe(true);
     expect(peutCocher(variable('Nuit'), false, false)).toBe(true);
+  });
+
+  it('Absence n\'est jamais cochable (prochaine étape) ; une Absence déjà cochée peut seulement être décochée', () => {
+    expect(peutCocher(variable('Absence', { codePaie: 'ABS01', unite: 'J' }), false, false)).toBe(false);
+    expect(peutCocher(variable('Absence', { colonneCible: 'JoursAbsence' }), true, false)).toBe(false);
+    expect(raisonNonCochable(variable('Absence'), false, false)).toBe('Envoi de l’absence : prochaine étape.');
+    expect(peutCocher(variable('Absence', { actif: true }), false, false)).toBe(true);
   });
 
   it('mois déjà envoyé : aucune case n\'est modifiable, avec la raison affichée', () => {
@@ -55,12 +68,16 @@ describe('Variables envoyées à la paie : règles de l\'écran', () => {
     expect(raisonNonCochable(variable('Nuit'), false, true)).toBe('Mois déjà envoyé : modification impossible.');
   });
 
-  it('validation identique au serveur : cible et unité exigées pour une variable sans envoi cochée', () => {
+  // Adapté au lot C2 (avant : unité de Retard exigée, Absence cochée acceptée).
+  it('validation identique au serveur : code de Retard exigé (unité heures par défaut), Absence cochée refusée', () => {
     const erreurs = validerBrouillon([variable('Retard', { actif: true }), variable('Absence', { actif: true, codePaie: 'ABS', unite: 'J' })], false);
     expect(erreurs).toEqual([
       'La variable Retard ne peut pas être cochée tant que son code de paie n\'est pas renseigné.',
-      'La variable Retard ne peut pas être cochée sans unité (heures ou jours).',
+      'La variable Absence ne peut pas encore être envoyée à la paie : son envoi est prévu dans une prochaine étape.',
     ]);
+    expect(validerBrouillon([variable('Retard', { actif: true, codePaie: 'RET01', unite: 'J' })], false))
+      .toEqual(['L\'unité de la variable Retard doit être « heures ».']);
+    expect(validerBrouillon([variable('Retard', { actif: true, cibleExistante: 'HeuresRetard' })], true)).toEqual([]);
     expect(validerBrouillon(config().variables, false)).toEqual([]);
   });
 
@@ -74,6 +91,47 @@ describe('Variables envoyées à la paie : règles de l\'écran', () => {
   it('enregistrement : neuf lignes, textes vides ramenés à null', () => {
     const lignes = versEnregistrement(config({ variables: [variable('Retard', { codePaie: ' ', unite: 'H' })] }).variables);
     expect(lignes).toEqual([{ variable: 'Retard', actif: false, codePaie: null, unite: 'H', colonneCible: null }]);
+    expect(versEnregistrement([variable('Retard', { codePaie: 'RET01' })])[0].unite).toBe('H');
+  });
+});
+
+describe('Destinations d\'une autre base : règles de l\'écran', () => {
+  const colonnes: PayrollTargetColumn[] = [
+    { nom: 'Matricule', type: 'nvarchar', numerique: false, accepteDecimales: false },
+    { nom: 'HeuresRetard', type: 'decimal(18,2)', numerique: true, accepteDecimales: true },
+    { nom: 'Entier', type: 'int', numerique: true, accepteDecimales: false },
+  ];
+  const cible = (nom: string, colonne: string | null, actif = true): PayrollWriteTarget =>
+    ({ variable: nom, libelle: LIBELLES[nom], actif, colonne, decimalesRequises: nom === 'Retard' ? 2 : 0 });
+
+  it('colonnes de Retard : non numériques et sans décimales désactivées, valeur introuvable conservée', () => {
+    expect(choixColonnes(colonnes, 2, null)).toEqual([
+      { nom: 'Matricule', libelle: 'Matricule (nvarchar, non numérique)', utilisable: false },
+      { nom: 'HeuresRetard', libelle: 'HeuresRetard (decimal(18,2))', utilisable: true },
+      { nom: 'Entier', libelle: 'Entier (int, sans décimales)', utilisable: false },
+    ]);
+    expect(choixColonnes(colonnes, 0, null).find((c) => c.nom === 'Entier')?.utilisable).toBe(true);
+    expect(choixColonnes(colonnes, 2, 'Ancienne')[0]).toEqual({ nom: 'Ancienne', libelle: 'Ancienne (introuvable dans la table)', utilisable: false });
+  });
+
+  it('validation : table, matricule, colonne d\'une variable envoyée, colonne en double', () => {
+    expect(validerDestinations({ table: null, colonneMatricule: null, variables: [cible('Nuit', null)] })).toEqual([
+      'Choisissez la table de destination.',
+      'Choisissez la colonne matricule.',
+      'La variable Nuit est envoyée à la paie : choisissez sa colonne de destination.',
+    ]);
+    expect(validerDestinations({ table: 'T', colonneMatricule: 'M', variables: [cible('Nuit', 'H'), cible('Retard', 'h', false)] }))
+      .toEqual(['La colonne H est choisie pour plusieurs variables (Nuit, Retard).']);
+    expect(validerDestinations({ table: 'T', colonneMatricule: 'M', variables: [cible('Retard', null, false)] })).toEqual([]);
+  });
+
+  it('changements et enregistrement : écarts lisibles, champs vides ramenés à null', () => {
+    const avant = { table: 'T', colonneMatricule: 'M', variables: [cible('Retard', null, false)] };
+    const apres = { ...avant, variables: [cible('Retard', 'HeuresRetard', false)] };
+    expect(changementsDestinations(avant, apres)).toEqual(['Retard : colonne HeuresRetard']);
+    expect(changementsDestinations(avant, avant)).toEqual([]);
+    expect(versDestinations({ table: ' T ', colonneMatricule: '', variables: [cible('Retard', ' ', false)] }))
+      .toEqual({ table: 'T', colonneMatricule: null, variables: [{ variable: 'Retard', colonne: null }] });
   });
 });
 
@@ -161,14 +219,14 @@ describe('Carte « Variables envoyées à la paie »', () => {
     expect(carte.modifie()).toBe(false);
   });
 
+  // Adapté au lot C2 (avant : unité de Retard manquante ; l'unité est désormais toujours « heures »).
   it('erreur de validation : message durable, aucune confirmation ni requête', async () => {
     const { carte, svc, confirm } = monter();
-    carte.changer('Retard', 'codePaie', 'RET01');
     carte.basculer('Retard', true);
 
     await carte.enregistrer();
 
-    expect(carte.erreurs()).toEqual(['La variable Retard ne peut pas être cochée sans unité (heures ou jours).']);
+    expect(carte.erreurs()).toEqual(['La variable Retard ne peut pas être cochée tant que son code de paie n\'est pas renseigné.']);
     expect(confirm.ask).not.toHaveBeenCalled();
     expect(svc.save).not.toHaveBeenCalled();
   });
@@ -193,11 +251,126 @@ describe('Carte « Variables envoyées à la paie »', () => {
     expect(carte.brouillon().find((v) => v.variable === 'Retard')?.actif).toBe(false);
   });
 
+  it('Retard avec un code de la liste SAGE : confirmé, la ligne part avec le code et l\'unité heures', async () => {
+    const { carte, svc } = monter({ reponse: config({ codesPaie: [{ code: 'RET01', intitule: 'Retard' }] }) });
+    carte.changer('Retard', 'codePaie', 'RET01');
+    carte.basculer('Retard', true);
+
+    await carte.enregistrer();
+
+    const envoyees = (svc.save.mock.calls[0] as unknown[])[0] as { variable: string; actif: boolean; codePaie: string; unite: string }[];
+    expect(envoyees.find((v) => v.variable === 'Retard')).toMatchObject({ actif: true, codePaie: 'RET01', unite: 'H' });
+  });
+
+  it('liste des codes : un code enregistré absent de SAGE reste visible et signalé', () => {
+    const { carte } = monter({ reponse: config({ codesPaie: [{ code: 'RET01', intitule: 'Retard' }] }) });
+    expect(carte.codes(variable('Retard', { codePaie: 'OLD9' })).map((o) => o.code)).toEqual(['OLD9', 'RET01']);
+    expect(carte.codes(variable('Retard', { codePaie: 'ret01' })).map((o) => o.code)).toEqual(['RET01']);
+  });
+
   it('mois déjà envoyé : enregistrer ne fait rien', async () => {
     const { carte, svc, confirm } = monter({ reponse: config({ moisEnvoye: true, dernierEnvoi: '2026-11-01 → 2026-11-30' }) });
     carte.basculer('Nuit', false);
     await carte.enregistrer();
     expect(confirm.ask).not.toHaveBeenCalled();
     expect(svc.save).not.toHaveBeenCalled();
+  });
+});
+
+/** Section des destinations sans rendu : confirmation, changement de table, enregistrement. */
+function monterDestinations(options: { confirme?: boolean; reponse?: Partial<PayrollWriteTargets> } = {}) {
+  TestBed.resetTestingModule();
+  const lues: PayrollWriteTargets = {
+    base: 'SAGE_AUTRE', table: 'PAIE_CUMULS', colonneMatricule: 'Matricule',
+    variables: [
+      { variable: 'Nuit', libelle: 'Nuit', actif: true, colonne: 'HeuresNuit', decimalesRequises: 0 },
+      { variable: 'Retard', libelle: 'Retard', actif: false, colonne: null, decimalesRequises: 2 },
+    ],
+    tables: ['PAIE_CUMULS', 'AUTRE_TABLE'],
+    colonnes: [
+      { nom: 'Matricule', type: 'nvarchar', numerique: false, accepteDecimales: false },
+      { nom: 'HeuresNuit', type: 'decimal(18,2)', numerique: true, accepteDecimales: true },
+      { nom: 'HeuresRetard', type: 'decimal(18,2)', numerique: true, accepteDecimales: true },
+    ],
+    moisEnvoye: false, dernierEnvoi: null, ...options.reponse,
+  };
+  const svc = {
+    destinations: vi.fn(() => of(lues)),
+    colonnes: vi.fn(() => of([{ nom: 'Mat', type: 'int', numerique: true, accepteDecimales: false }])),
+    saveDestinations: vi.fn(() => of(lues)),
+  };
+  const toast = { error: vi.fn(), success: vi.fn() };
+  const confirm = { ask: vi.fn(async (_message: string, _titre?: string, _ok?: string) => options.confirme ?? true) };
+  TestBed.configureTestingModule({
+    providers: [
+      { provide: PayrollVariablesService, useValue: svc },
+      { provide: ToastService, useValue: toast },
+      { provide: ConfirmService, useValue: confirm },
+    ],
+  });
+  const section = TestBed.runInInjectionContext(() => new PayrollDestinations());
+  section.ngOnInit();
+  return { section, svc, confirm };
+}
+
+describe('Destinations dans la base de paie (autre base)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('aucun envoi tant que l\'utilisateur n\'a pas confirmé', async () => {
+    const { section, svc, confirm } = monterDestinations({ confirme: false });
+    section.choisirColonne('Retard', 'HeuresRetard');
+
+    await section.enregistrer();
+
+    expect(confirm.ask.mock.calls[0][0]).toContain('Retard : colonne HeuresRetard');
+    expect(svc.saveDestinations).not.toHaveBeenCalled();
+  });
+
+  it('confirmé : la destination de Retard part, la carte est prévenue', async () => {
+    const { section, svc } = monterDestinations();
+    let prevenue = false;
+    section.enregistre.subscribe(() => (prevenue = true));
+    section.choisirColonne('Retard', 'HeuresRetard');
+
+    await section.enregistrer();
+
+    expect(svc.saveDestinations).toHaveBeenCalledWith({
+      table: 'PAIE_CUMULS', colonneMatricule: 'Matricule',
+      variables: [{ variable: 'Nuit', colonne: 'HeuresNuit' }, { variable: 'Retard', colonne: 'HeuresRetard' }],
+    });
+    expect(prevenue).toBe(true);
+  });
+
+  it('nouvelle table : matricule et colonnes remis à choisir, colonnes de la table lues', () => {
+    const { section, svc } = monterDestinations();
+
+    section.choisirTable('AUTRE_TABLE');
+
+    expect(svc.colonnes).toHaveBeenCalledWith('AUTRE_TABLE');
+    expect(section.brouillon()).toMatchObject({ table: 'AUTRE_TABLE', colonneMatricule: null });
+    expect(section.brouillon()!.variables.every((v) => v.colonne === null)).toBe(true);
+    expect(section.colonnes().map((c) => c.nom)).toEqual(['Mat']);
+  });
+
+  it('variable envoyée sans colonne : message durable, aucune confirmation', async () => {
+    const { section, svc, confirm } = monterDestinations();
+    section.choisirColonne('Nuit', '');
+
+    await section.enregistrer();
+
+    expect(section.erreurs()).toEqual(['La variable Nuit est envoyée à la paie : choisissez sa colonne de destination.']);
+    expect(confirm.ask).not.toHaveBeenCalled();
+    expect(svc.saveDestinations).not.toHaveBeenCalled();
+  });
+
+  it('mois déjà envoyé : enregistrer ne fait rien', async () => {
+    const { section, svc, confirm } = monterDestinations({ reponse: { moisEnvoye: true, dernierEnvoi: '2026-11-01 → 2026-11-30' } });
+    section.choisirColonne('Retard', 'HeuresRetard');
+
+    await section.enregistrer();
+
+    expect(section.bloque()).toBe(true);
+    expect(confirm.ask).not.toHaveBeenCalled();
+    expect(svc.saveDestinations).not.toHaveBeenCalled();
   });
 });

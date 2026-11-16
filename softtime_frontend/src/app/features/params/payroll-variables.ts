@@ -4,10 +4,12 @@ import { errorMessage } from '../../core/error.logic';
 import { Droit } from '../../core/rights';
 import { SessionStore } from '../../core/session.store';
 import { ToastService } from '../../core/toast.service';
-import { PayrollVariable, PayrollVariablesConfig } from '../../shared/models';
+import { PayrollVariable, PayrollVariablesConfig, SageConstantOption } from '../../shared/models';
 import { PayrollVariablesService } from '../../shared/services/payroll-variables.service';
 import { SoftButton, SoftCard } from '../../shared/components';
+import { PayrollDestinations } from './payroll-destinations';
 import {
+  aCodePropre,
   changements,
   estSansEnvoi,
   NON_ENVOYEE,
@@ -24,7 +26,7 @@ import {
 @Component({
   selector: 'app-payroll-variables',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [SoftButton, SoftCard],
+  imports: [SoftButton, SoftCard, PayrollDestinations],
   template: `
     <soft-card>
       <div class="pv-head">
@@ -93,7 +95,22 @@ import {
                   @if (raison(v); as r) { <div class="pv-hint">{{ r }}</div> }
                 </td>
                 <td>
-                  @if (sansEnvoi(v.variable)) {
+                  @if (codePropre(v.variable) && !sansEnvoi(v.variable)) {
+                    @if (autre()) {
+                      <span class="pv-readonly" title="Choisie dans « Destinations dans la base de paie »">
+                        {{ v.cibleExistante ?? '(à choisir dans les destinations)' }}
+                      </span>
+                    } @else {
+                      <select [attr.aria-label]="'Code de paie de ' + v.libelle" [disabled]="c.moisEnvoye || saving()"
+                        [value]="v.codePaie ?? ''" (change)="changer(v.variable, 'codePaie', $any($event.target).value)">
+                        <option value="">(aucun)</option>
+                        @for (o of codes(v); track o.code) {
+                          <option [value]="o.code">{{ o.code }}{{ o.intitule ? ' — ' + o.intitule : '' }}</option>
+                        }
+                      </select>
+                      @if (c.avertissementCodes) { <div class="pv-hint">{{ c.avertissementCodes }}</div> }
+                    }
+                  } @else if (sansEnvoi(v.variable)) {
                     @if (autre()) {
                       <select [attr.aria-label]="'Colonne cible de ' + v.libelle" [disabled]="c.moisEnvoye || saving()"
                         [value]="v.colonneCible ?? ''" (change)="changer(v.variable, 'colonneCible', $any($event.target).value)">
@@ -128,9 +145,14 @@ import {
           </tbody>
         </table>
         <p class="pv-note">
-          Retard et Absence : l'envoi réel vers la paie n'existe pas encore. Même cochées, elles ne sont pas écrites
-          tant que cette étape n'est pas livrée.
+          Retard est envoyé en heures, avec la valeur affichée dans la page Heures supplémentaires
+          ({{ autre() ? 'dans sa colonne de destination' : 'dans le code de paie choisi' }}).
+          Absence : l'envoi vers la paie n'existe pas encore (prochaine étape) ; elle ne peut pas être cochée et n'est
+          jamais écrite.
         </p>
+        @if (autre()) {
+          <app-payroll-destinations (enregistre)="charger()" />
+        }
       } @else if (erreurs().length) {
         <div class="pv-errors" role="alert">
           @for (e of erreurs(); track $index) { <p>{{ e }}</p> }
@@ -205,6 +227,18 @@ export class PayrollVariablesCard implements OnInit {
 
   sansEnvoi(variable: string): boolean {
     return estSansEnvoi(variable);
+  }
+
+  codePropre(variable: string): boolean {
+    return aCodePropre(variable);
+  }
+
+  /** Codes lus dans SAGE ; le code déjà enregistré reste visible même s'il n'y figure plus. */
+  codes(v: PayrollVariable): SageConstantOption[] {
+    const liste = this.config()?.codesPaie ?? [];
+    return v.codePaie && !liste.some((o) => o.code.toLowerCase() === v.codePaie!.toLowerCase())
+      ? [{ code: v.codePaie, intitule: 'introuvable dans SAGE' }, ...liste]
+      : liste;
   }
 
   cochable(v: PayrollVariable): boolean {

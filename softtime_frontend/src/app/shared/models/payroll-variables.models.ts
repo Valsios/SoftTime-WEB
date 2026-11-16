@@ -1,18 +1,20 @@
+import { SageConstantOption } from './catalog.models';
+
 /** Une des neuf variables de « Variables envoyées à la paie » (api/v1/payroll-variables). */
 export interface PayrollVariable {
   /** Exo130, Exo150, I130, I150, Ferie, Dimanche, Nuit, Retard, Absence. */
   variable: string;
   libelle: string;
   actif: boolean;
-  /** Base SAGE : code de paie (Retard, Absence). */
+  /** Base SAGE : code de paie propre à la base (Retard, Absence). */
   codePaie: string | null;
-  /** Retard, Absence : « H » (heures) ou « J » (jours). */
+  /** Retard : « H » (heures) ; Absence : « H » ou « J » (jours). */
   unite: string | null;
-  /** Autre base : colonne cible (Retard, Absence). */
+  /** Autre base : colonne saisie pour Absence (non envoyée). Retard utilise sa destination (cibleExistante). */
   colonneCible: string | null;
-  /** Heures supplémentaires : code constante (SAGE) ou colonne T_PAIE_ECRITURE (autre base), lecture seule. */
+  /** Lecture seule : code constante commun (SAGE, heures sup.) ou destination T_PAIE_ECRITURE (autre base). */
   cibleExistante: string | null;
-  /** Retard, Absence : l'envoi réel n'existe pas encore (lot C). */
+  /** Absence : l'envoi réel n'existe pas encore (prochaine étape). */
   sansEnvoi: boolean;
 }
 
@@ -24,6 +26,10 @@ export interface PayrollVariablesConfig {
   dernierEnvoi: string | null;
   variables: PayrollVariable[];
   colonnesCibles: string[];
+  /** Base SAGE : codes de paie lus dans SAGE (T_CST), pour la liste du code de Retard. */
+  codesPaie?: SageConstantOption[];
+  /** Base SAGE : message si les codes n'ont pas pu être lus. */
+  avertissementCodes?: string | null;
 }
 
 export interface PayrollVariableSave {
@@ -36,5 +42,44 @@ export interface PayrollVariableSave {
 
 export interface PayrollVariablesActive {
   base: string;
+  /** Variables réellement envoyées à la paie (cochées et envoyables). */
   actives: string[];
+}
+
+/** Colonne d'une table de la base de paie d'une autre base. */
+export interface PayrollTargetColumn {
+  nom: string;
+  /** Type SQL affiché, par ex. « decimal(18,2) ». */
+  type: string;
+  numerique: boolean;
+  /** Peut recevoir une valeur à deux décimales. */
+  accepteDecimales: boolean;
+}
+
+/** Destination d'une variable envoyable dans une autre base. */
+export interface PayrollWriteTarget {
+  variable: string;
+  libelle: string;
+  actif: boolean;
+  colonne: string | null;
+  /** Décimales que la colonne doit accepter (2 pour Retard, 0 sinon). */
+  decimalesRequises: number;
+}
+
+/** Destinations d'une autre base (T_PAIE_ECRITURE). */
+export interface PayrollWriteTargets {
+  base: string;
+  table: string | null;
+  colonneMatricule: string | null;
+  variables: PayrollWriteTarget[];
+  tables: string[];
+  colonnes: PayrollTargetColumn[];
+  moisEnvoye: boolean;
+  dernierEnvoi: string | null;
+}
+
+export interface PayrollWriteTargetsSave {
+  table: string | null;
+  colonneMatricule: string | null;
+  variables: { variable: string; colonne: string | null }[];
 }
