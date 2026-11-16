@@ -13,15 +13,18 @@ public sealed class PayrollWriteConfigurationService : IPayrollWriteConfiguratio
     private readonly IUnitOfWork _uow;
     private readonly ITenantConnectionService _tenant;
     private readonly IExternalDiscoveryService _discovery;
+    private readonly IPayrollVariableService? _variables;
 
     public PayrollWriteConfigurationService(
         IUnitOfWork uow,
         ITenantConnectionService tenant,
-        IExternalDiscoveryService discovery)
+        IExternalDiscoveryService discovery,
+        IPayrollVariableService? variables = null)
     {
         _uow = uow;
         _tenant = tenant;
         _discovery = discovery;
+        _variables = variables;
     }
 
     // --- Configuration de l'ecriture de paie dynamique (bases AUTRE) ---
@@ -108,14 +111,25 @@ public sealed class PayrollWriteConfigurationService : IPayrollWriteConfiguratio
         }
     }
 
-    /// <summary>Catégories toutes configurées sur une même table dbo existante, colonnes présentes.</summary>
+    /// <summary>
+    /// Catégories envoyées à la paie toutes configurées sur une même table dbo existante, colonnes présentes. Une
+    /// catégorie décochée dans « Variables envoyées à la paie » n'est pas exigée ; par défaut, les sept le sont.
+    /// </summary>
     private async Task<ConnectionTestResultDto> ValiderConfigurationAsync(BddSage database, CancellationToken ct)
     {
         await PayrollWritingConfiguration.EnsureStorageAsync(_uow, ct);
         var configs = await _uow.Repository<PaieEcriture>().ListReadOnlyAsync(c => c.BddSage == _tenant.SageDb, ct);
-        var missing = PayrollWritingConfiguration.Categories.FirstOrDefault(category => !configs.Any(c => string.Equals(c.Categorie, category, StringComparison.OrdinalIgnoreCase)));
+        var actives = _variables is null
+            ? PayrollVariableSelection.Default.HeuresSupActives
+            : (await _variables.GetSelectionAsync(_tenant.SageDb, ct)).HeuresSupActives;
+        if (actives.Count == 0)
+            return new ConnectionTestResultDto(true, "Aucune variable d'heures supplémentaires n'est envoyée à la paie pour cette base : rien à écrire.");
+        var missing = PayrollWritingConfiguration.Categories.Where(actives.Contains).FirstOrDefault(category => !configs.Any(c => string.Equals(c.Categorie, category, StringComparison.OrdinalIgnoreCase)));
         if (missing != null)
             return new ConnectionTestResultDto(false, $"La configuration d'écriture de la base AUTRE est incomplète : la catégorie {missing} n'est pas configurée.");
+        // Lignes des catégories décochées ignorées ; avec les sept actives, la liste d'origine est gardée telle quelle.
+        if (actives.Count < PayrollWritingConfiguration.Categories.Length)
+            configs = configs.Where(c => actives.Contains(c.Categorie, StringComparer.OrdinalIgnoreCase)).ToList();
         var first = configs.First();
         if (configs.Any(c => !string.Equals(c.TableCible, first.TableCible, StringComparison.OrdinalIgnoreCase)
             || !string.Equals(c.ColMatricule, first.ColMatricule, StringComparison.OrdinalIgnoreCase)))
