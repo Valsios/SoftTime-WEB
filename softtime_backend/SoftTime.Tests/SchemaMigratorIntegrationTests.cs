@@ -8,9 +8,11 @@ namespace SoftTime.Tests;
 [Trait("Category", "Integration")]
 public class SchemaMigratorIntegrationTests
 {
-    // Les 48 tables du modèle EF (SoftTimeDbContext) créées par 001, plus suivi_JOURNAL créée par 003.
+    // Les 48 tables du modèle EF (SoftTimeDbContext) créées par 001, plus suivi_JOURNAL créée par 003,
+    // plus T_PAIE_VARIABLE et T_PAIE_ENVOI créées par 007.
     private static readonly string[] ApplicationTables =
     {
+        "T_PAIE_VARIABLE", "T_PAIE_ENVOI",
         "T_ROLE", "T_RESPONSABLE", "T_DROIT", "T_DROIT_ROLE", "T_BDD_AUTORISE", "T_USER_PERMISSION",
         "T_BDD_SAGE", "T_BDD_POINTEUSE", "T_CARDPAIE", "T_CATEGORIE", "T_CAT_SAL", "T_TOLERANCES",
         "T_POINTAGE", "T_HEURECORRIGER", "T_HEUREANOMALIE", "T_HEUREDIMANCHE", "T_HS_VALIDER", "T_HSExoImp",
