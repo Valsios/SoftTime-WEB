@@ -36,7 +36,8 @@ function doublures(permissions: Permissions, porteBases: boolean) {
   const providers = [
     { provide: SageDatabasesService, useValue: svc },
     { provide: AuthService, useValue: { refreshMe: () => of({}) } },
-    { provide: SessionStore, useValue: { permissions: () => permissions, hasRight: (d: number) => porteBases && d === Droit.Databases } },
+    // activeSageDb : lu par la carte « Variables envoyées à la paie » (sans base active, elle n'appelle rien).
+    { provide: SessionStore, useValue: { permissions: () => permissions, hasRight: (d: number) => porteBases && d === Droit.Databases, activeSageDb: () => null } },
     { provide: ToastService, useValue: toast },
     { provide: ConfirmService, useValue: { ask: async () => true } },
   ];
@@ -139,7 +140,7 @@ describe('Bases SAGE : parcours réels de l\'écran', () => {
     TestBed.resetTestingModule();
     const d = doublures(null, false);
     TestBed.configureTestingModule({
-      providers: d.providers.map((x) => (x.provide === SessionStore ? { provide: SessionStore, useValue: { permissions: () => perms, hasRight: () => false } } : x)),
+      providers: d.providers.map((x) => (x.provide === SessionStore ? { provide: SessionStore, useValue: { permissions: () => perms, hasRight: () => false, activeSageDb: () => null } } : x)),
     });
     const p = TestBed.runInInjectionContext(() => new SageDatabasesPage());
 
