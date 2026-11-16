@@ -27,9 +27,10 @@ internal static class ClosingChecklistLines
             LigneSemaines(d.SemainesAttendues, d.SemainesValidees),
             LigneExoImpo(d.ExoExactes, d.ExoRecoupantes, d.PeriodesExoDistinctes)
         };
-        // Information : seulement si le calcul de la période existe.
-        if (d.ExoExactes > 0)
-            lignes.Add(LigneHeuresImposables(d.SalariesImposables));
+        // Information : seulement si le calcul de la période existe et qu'au moins une variable IMPO est envoyée à la paie
+        // (null : IMPO 130 et IMPO 150 décochées pour la base).
+        if (d.ExoExactes > 0 && d.SalariesImposables is int imposables)
+            lignes.Add(LigneHeuresImposables(imposables));
         lignes.Add(LigneSynchro(d.DernierResumeSynchro));
         return lignes;
     }
