@@ -407,6 +407,28 @@ Nuit, Dimanche, Retard, Absence) restent calculées et affichées ; seul l'envoi
 - **Base de données** : migration versionnée `migrations/versions/007_variables_paie.sql` (rejouable, aucune suppression), appliquée par
   `Database:AutoMigrate` ; sans elle, l'API refuse de démarrer avec un message clair.
 
+## 5 septies. Envoi de Retard à la paie (lots C1 et C2) — branche `feature/envoi-variables-paie`
+
+Complète la section précédente : Retard devient envoyable ; Absence reste non envoyée.
+
+- **Liste unique des variables (C1)** : un seul catalogue des neuf variables (identifiant, libellé, unités, valeur lue dans la ligne
+  `T_HSExoImp`, destination désignée par un code commun ou propre à la base) ; rien n'y est propre à SAGE. Les écritures de paie, la validation
+  et la configuration en dérivent. Sortie inchangée : une base sans configuration, ou avec Retard et Absence décochées, produit les mêmes
+  écritures (mêmes SQL, mêmes valeurs, même ordre, mêmes messages) qu'avant.
+- **Retard en base SAGE** : unité heures ; le code de paie se choisit dans une liste lue dans `T_CST` de la base active. L'enregistrement refuse
+  un code absent de `T_CST` (et refuse si `T_CST` ne peut pas être lu). Retard est écrit dans `T_CUMSAL` par la même commande que les heures
+  supplémentaires, après les sept, avec la valeur `T_HSExoImp.RETARD` affichée dans la page Heures supplémentaires.
+- **Retard en autre base** : section « Destinations dans la base de paie » de la carte : table, colonne matricule et colonne de chaque variable
+  envoyable, choisies dans des listes lues dans la base de paie (`INFORMATION_SCHEMA`). Le serveur vérifie que la table et les colonnes
+  existent, que les colonnes sont numériques et, pour Retard, qu'elles acceptent deux décimales. Les destinations sont enregistrées dans
+  `T_PAIE_ECRITURE` (catégorie `Retard`). Endpoints `GET`/`PUT api/v1/payroll-variables/destinations` et
+  `GET api/v1/payroll-variables/destinations/colonnes?table=` : mêmes droits que la configuration des variables, refus si le mois est envoyé,
+  journal central, caches du Contrôle avant paie vidés. Aucune migration (la colonne `CATEGORIE` accepte `Retard`).
+- **Absence** : case désactivée avec « Envoi de l'absence : prochaine étape » ; une Absence cochée est refusée à l'enregistrement. La page
+  Heures supplémentaires continue d'afficher Absence « (non envoyée à la paie) ».
+- **Défaut connu (non corrigé)** : un salarié sans ligne `T_HSExoImp` sur la période n'est pas écrit ; son cumul en paie (Retard compris) garde
+  la valeur d'un envoi précédent au lieu d'être remis à zéro.
+
 ---
 
 ## 6. Divers
