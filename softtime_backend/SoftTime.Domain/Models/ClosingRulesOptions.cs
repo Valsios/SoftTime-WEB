@@ -17,6 +17,12 @@ public sealed record ClosingRulesOptions
     /// <summary>Heures supplémentaires validées dans une semaine au-delà desquelles la semaine est signalée (défaut large).</summary>
     public const decimal DefaultHeuresSupHebdoSeuil = 40m;
 
+    /// <summary>
+    /// Ensemble vide partagé de <see cref="TypesIgnores"/> : deux options par défaut restent égales (égalité de record).
+    /// Déclaré avant <see cref="Default"/> : les initialiseurs statiques s'exécutent dans l'ordre du texte.
+    /// </summary>
+    private static readonly IReadOnlySet<ClosingAnomalyType> AucunTypeIgnore = new HashSet<ClosingAnomalyType>();
+
     public static ClosingRulesOptions Default { get; } = new();
 
     /// <summary>Deux pointages séparés de strictement moins de ce délai sont des quasi-doublons.</summary>
@@ -91,4 +97,10 @@ public sealed record ClosingRulesOptions
 
     /// <summary>Heures supplémentaires atypiques : seuil hebdomadaire, strictement dépassé.</summary>
     public decimal HeuresSupHebdoSeuil { get; init; } = DefaultHeuresSupHebdoSeuil;
+
+    /// <summary>
+    /// Types d'anomalie sans objet parce que la variable de paie qu'ils concernent n'est pas envoyée à la paie
+    /// (voir <see cref="Services.PayrollVariableRules.TypesSansObjet"/>) : ni signalés, ni comptés. Vide par défaut.
+    /// </summary>
+    public IReadOnlySet<ClosingAnomalyType> TypesIgnores { get; init; } = AucunTypeIgnore;
 }
