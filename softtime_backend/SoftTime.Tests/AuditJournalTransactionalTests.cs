@@ -9,6 +9,7 @@ using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.Services;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Infrastructure.Persistence;
+using SoftTime.Infrastructure.Persistence.Configurations.SoftTimeDb;
 
 namespace SoftTime.Tests;
 
@@ -16,7 +17,25 @@ namespace SoftTime.Tests;
 public class AuditJournalTransactionalTests
 {
     private const string ConnectionString =
-        "Server=(localdb)\\MSSQLLocalDB;Database=SoftTimeAuditJournalTransactionalTestsV2;Trusted_Connection=True;TrustServerCertificate=True";
+        "Server=(localdb)\\MSSQLLocalDB;Database=SoftTimeAuditJournalTransactionalTestsV3;Trusted_Connection=True;TrustServerCertificate=True";
+
+    /// <summary>Table visée par la panne simulée (<see cref="ThrowOnJournalInsertInterceptor"/>).</summary>
+    private const string JournalTable = "suivi_JOURNAL";
+
+    [Fact]
+    public void Model_JournalAudit_IsMappedToTheTableTargetedBySimulatedFailure()
+    {
+        // Arrange
+        using var db = CreatePlainContext();
+
+        // Act
+        var table = db.Model.FindEntityType(typeof(JournalAudit))!.GetTableName();
+
+        // Assert : un renommage futur rendrait la panne simulée inopérante sans bruit ; il échoue ici, clairement.
+        table.Should().Be(JournalTable, "la panne simulée ne vise que les commandes contenant [suivi_JOURNAL]");
+        db.Model.FindEntityType(typeof(CodeAbsence))!.GetTableName().Should().Be("T_CODEABSENCE");
+        db.Model.FindEntityType(typeof(FieldRole))!.GetTableName().Should().Be("T_FIELD_ROLE");
+    }
 
     private static readonly Lazy<bool> DatabaseInitialized = new(EnsureDatabase);
 
@@ -69,12 +88,14 @@ public class AuditJournalTransactionalTests
         var label = $"rollback-{Guid.NewGuid():N}";
         using (var db = CreateAuditedContext(new ThrowOnJournalInsertInterceptor()))
         {
+            db.Model.FindEntityType(typeof(JournalAudit))!.GetTableName().Should().Be(JournalTable, "sinon la panne simulée ne se déclenche pas");
             db.Add(new CodeAbsence { IntituleAbsence = label });
             FluentActions.Invoking(() => db.SaveChanges()).Should().ThrowExactly<DbUpdateException>();
         }
 
         using var verification = CreatePlainContext();
         verification.CodeAbsences.Any(item => item.IntituleAbsence == label).Should().BeFalse();
+        verification.JournalAudits.Any(item => item.Nouveaux == label).Should().BeFalse();
     }
 
     [Fact]
@@ -102,13 +123,18 @@ public class AuditJournalTransactionalTests
         EnsureInitialized();
         using var sut = CreateAuditedContext(options: new AuditJournalOptions { Enabled = false });
         using var transaction = sut.Database.BeginTransaction();
-        sut.Add(new CodeAbsence { IntituleAbsence = $"disabled-{Guid.NewGuid():N}" });
+        var label = $"disabled-{Guid.NewGuid():N}";
+        var entity = new CodeAbsence { IntituleAbsence = label };
+        sut.Add(entity);
 
         // Act
         sut.SaveChanges();
 
-        // Assert
-        sut.JournalAudits.Should().BeEmpty();
+        // Assert : aucune ligne de journal pour la ligne de CE test (libellé et clé uniques), quel que soit le contenu
+        // laissé par d'autres passages ; la ligne métier, elle, est bien écrite.
+        sut.CodeAbsences.Any(item => item.IntituleAbsence == label).Should().BeTrue();
+        sut.JournalAudits.Where(item => item.Nouveaux == label || item.Cles == $"ID_ABSENCE={entity.IdAbsence}")
+            .Should().BeEmpty();
         transaction.Rollback();
     }
 
@@ -146,6 +172,11 @@ public class AuditJournalTransactionalTests
             DbContextOptions<SoftTimeDbContext> options,
             AuditJournalSaveChangesInterceptor auditJournal) : base(options, auditJournal) { }
 
+        /// <summary>
+        /// Seules les trois entités du test sont gardées, avec leurs configurations EF RÉELLES (tables T_CODEABSENCE,
+        /// T_FIELD_ROLE, suivi_JOURNAL et leurs colonnes) : depuis le passage des entités en PascalCase, le nom de table
+        /// ne vient plus que de ces configurations, qu'un mapping écrit à la main ne reproduirait pas.
+        /// </summary>
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             var included = new HashSet<Type> { typeof(CodeAbsence), typeof(FieldRole), typeof(JournalAudit) };
@@ -155,33 +186,9 @@ public class AuditJournalTransactionalTests
                                             && !included.Contains(property.PropertyType.GenericTypeArguments[0])))
                 modelBuilder.Ignore(property.PropertyType.GenericTypeArguments[0]);
 
-            modelBuilder.Entity<CodeAbsence>(entity =>
-            {
-                entity.HasKey(item => item.IdAbsence);
-                entity.Property(item => item.IdAbsence).ValueGeneratedOnAdd();
-            });
-            modelBuilder.Entity<FieldRole>(entity =>
-            {
-                entity.HasKey(item => item.Code);
-                entity.Property(item => item.Code).HasMaxLength(64);
-                entity.Property(item => item.Label).HasMaxLength(128);
-                entity.Property(item => item.SystemType).HasMaxLength(16);
-                entity.Property(item => item.EntityKind).HasMaxLength(32);
-            });
-            modelBuilder.Entity<JournalAudit>(entity =>
-            {
-                entity.HasKey(item => item.Id);
-                entity.Property(item => item.Id).ValueGeneratedOnAdd();
-                entity.Property(item => item.DateUtc).HasColumnType("datetime2");
-                entity.Property(item => item.Tables).HasMaxLength(128);
-                entity.Property(item => item.Cles).HasMaxLength(450);
-                entity.Property(item => item.Colonnes).HasMaxLength(128);
-                entity.Property(item => item.Actions).HasMaxLength(32);
-                entity.Property(item => item.Users).HasMaxLength(256);
-                entity.Property(item => item.BaseSage).HasMaxLength(128);
-                entity.Property(item => item.BasePointeuse).HasMaxLength(128);
-                entity.Property(item => item.Source).HasMaxLength(64);
-            });
+            modelBuilder.ApplyConfiguration(new CodeAbsenceConfiguration());
+            modelBuilder.ApplyConfiguration(new FieldRoleConfiguration());
+            modelBuilder.ApplyConfiguration(new JournalAuditConfiguration());
         }
     }
 
