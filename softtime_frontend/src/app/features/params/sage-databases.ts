@@ -17,11 +17,12 @@ import {
   SourceMappingStepper,
 } from '../../shared/components';
 import { asRow } from '../../shared/utils/date';
+import { PayrollVariablesCard } from './payroll-variables';
 
 @Component({
   selector: 'app-sage-databases',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [PageHeader, SoftButton, SoftCard, DataTable, SourceMappingStepper],
+  imports: [PageHeader, SoftButton, SoftCard, DataTable, SourceMappingStepper, PayrollVariablesCard],
   template: `
     <page-header title="Bases SAGE" subtitle="Connexions aux bases SAGE (ou toute autre base)">
       @if (canCreate()) {
@@ -45,6 +46,8 @@ import { asRow } from '../../shared/utils/date';
         </ng-template>
       </data-table>
     </soft-card>
+
+    <app-payroll-variables />
 
     <soft-source-mapping-stepper
       [open]="modal()"
