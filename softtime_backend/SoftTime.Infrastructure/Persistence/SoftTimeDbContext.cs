@@ -75,6 +75,8 @@ public class SoftTimeDbContext : DbContext
     public DbSet<HsSalarie> HsSalaries => Set<HsSalarie>();
     public DbSet<CodeConstanteCategorie> CodeConstanteCategories => Set<CodeConstanteCategorie>();
     public DbSet<PaieEcriture> PaieEcritures => Set<PaieEcriture>();
+    public DbSet<PaieVariable> PaieVariables => Set<PaieVariable>();
+    public DbSet<PaieEnvoi> PaieEnvois => Set<PaieEnvoi>();
     public DbSet<FieldRole> FieldRoles => Set<FieldRole>();
     public DbSet<SourceEntityMapping> SourceEntityMappings => Set<SourceEntityMapping>();
     public DbSet<SourceFieldMapping> SourceFieldMappings => Set<SourceFieldMapping>();
