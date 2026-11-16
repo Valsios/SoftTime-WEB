@@ -10,6 +10,7 @@ using Microsoft.IdentityModel.Tokens;
 
 using SoftTime.Application.Abstractions.DataSources;
 using SoftTime.Application.Abstractions.ExternalData;
+using SoftTime.Application.Abstractions.Permissions;
 using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Repositories;
 
