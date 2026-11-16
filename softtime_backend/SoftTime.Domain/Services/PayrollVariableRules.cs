@@ -5,20 +5,21 @@ namespace SoftTime.Domain.Services;
 /// <summary>Une variable telle que l'utilisateur veut l'enregistrer pour une base.</summary>
 /// <param name="Variable">Nom canonique (voir <see cref="PayrollVariableSelection.Toutes"/>).</param>
 /// <param name="Actif">Envoyée à la paie.</param>
-/// <param name="CodePaie">Base SAGE : code constante (Retard, Absence seulement).</param>
-/// <param name="Unite">Retard, Absence : « H » (heures) ou « J » (jours).</param>
-/// <param name="ColonneCible">Autre base : colonne de la table d'écriture (Retard, Absence seulement).</param>
+/// <param name="CodePaie">Base SAGE : code de paie propre à la base (variables sans code commun).</param>
+/// <param name="Unite">Variables sans code commun : unité choisie (<see cref="PayrollUnits"/>).</param>
+/// <param name="ColonneCible">Autre base : colonne de la table d'écriture (variables sans code commun).</param>
 public sealed record PayrollVariableSetting(string Variable, bool Actif, string? CodePaie, string? Unite, string? ColonneCible);
 
 /// <summary>Règles pures de la configuration des variables envoyées à la paie.</summary>
 public static class PayrollVariableRules
 {
-    public const string UniteHeures = "H";
-    public const string UniteJours = "J";
+    public const string UniteHeures = PayrollUnits.Heures;
+    public const string UniteJours = PayrollUnits.Jours;
 
     /// <summary>
-    /// Erreurs de validation d'une configuration complète (neuf variables, une fois chacune). Retard et Absence ne
-    /// peuvent être actives que si leur code de paie (base SAGE) ou leur colonne cible (autre base) est renseigné.
+    /// Erreurs de validation d'une configuration complète (neuf variables, une fois chacune). Règle unique : une
+    /// variable cochée doit avoir une destination valide. Une variable du catalogue commun des codes a toujours la
+    /// sienne ; les autres exigent un code de paie (base SAGE) ou une colonne cible (autre base), et une unité admise.
     /// </summary>
     public static IReadOnlyList<string> Valider(IReadOnlyList<PayrollVariableSetting> lignes, bool baseSage)
     {
@@ -26,15 +27,15 @@ public static class PayrollVariableRules
         var noms = new List<string>();
         foreach (var ligne in lignes)
         {
-            var nom = PayrollVariableSelection.Toutes.FirstOrDefault(v => string.Equals(v, ligne.Variable?.Trim(), StringComparison.OrdinalIgnoreCase));
-            if (nom is null)
+            var definition = PayrollVariableCatalog.Trouver(ligne.Variable);
+            if (definition is null)
             {
                 erreurs.Add($"Variable de paie inconnue : « {ligne.Variable} ».");
                 continue;
             }
-            noms.Add(nom);
-            if (PayrollVariableSelection.SansEnvoi.Contains(nom))
-                erreurs.AddRange(ValiderSansEnvoi(nom, ligne, baseSage));
+            noms.Add(definition.Id);
+            if (!definition.CodeCommun)
+                erreurs.AddRange(ValiderDestination(definition, ligne, baseSage));
         }
         foreach (var doublon in noms.GroupBy(n => n).Where(g => g.Count() > 1))
             erreurs.Add($"La variable {Libelle(doublon.Key)} apparaît plusieurs fois.");
@@ -43,19 +44,22 @@ public static class PayrollVariableRules
         return erreurs;
     }
 
-    private static IEnumerable<string> ValiderSansEnvoi(string nom, PayrollVariableSetting ligne, bool baseSage)
+    /// <summary>Destination et unité d'une variable dont le code est propre à la base.</summary>
+    private static IEnumerable<string> ValiderDestination(PayrollVariableDefinition definition, PayrollVariableSetting ligne, bool baseSage)
     {
+        var nom = definition.Libelle;
         var unite = ligne.Unite?.Trim();
-        if (!string.IsNullOrEmpty(unite) && unite is not (UniteHeures or UniteJours))
-            yield return $"L'unité de la variable {Libelle(nom)} doit être « heures » ou « jours ».";
+        var unites = string.Join(" ou ", definition.Unites.Select(u => $"« {PayrollUnits.Libelle(u)} »"));
+        if (!string.IsNullOrEmpty(unite) && !definition.Unites.Contains(unite))
+            yield return $"L'unité de la variable {nom} doit être {unites}.";
         if (!ligne.Actif)
             yield break;
         if (baseSage && string.IsNullOrWhiteSpace(ligne.CodePaie))
-            yield return $"La variable {Libelle(nom)} ne peut pas être cochée tant que son code de paie n'est pas renseigné.";
+            yield return $"La variable {nom} ne peut pas être cochée tant que son code de paie n'est pas renseigné.";
         if (!baseSage && string.IsNullOrWhiteSpace(ligne.ColonneCible))
-            yield return $"La variable {Libelle(nom)} ne peut pas être cochée tant que sa colonne cible n'est pas renseignée.";
+            yield return $"La variable {nom} ne peut pas être cochée tant que sa colonne cible n'est pas renseignée.";
         if (string.IsNullOrEmpty(unite))
-            yield return $"La variable {Libelle(nom)} ne peut pas être cochée sans unité (heures ou jours).";
+            yield return $"La variable {nom} ne peut pas être cochée sans unité ({string.Join(" ou ", definition.Unites.Select(PayrollUnits.Libelle))}).";
     }
 
     /// <summary>
@@ -85,17 +89,5 @@ public static class PayrollVariableRules
     }
 
     /// <summary>Libellé affiché d'une variable (page Heures supplémentaires).</summary>
-    public static string Libelle(string variable) => variable switch
-    {
-        PayrollVariableSelection.Exo130 => "EXO 130",
-        PayrollVariableSelection.Exo150 => "EXO 150",
-        PayrollVariableSelection.I130 => "IMPO 130",
-        PayrollVariableSelection.I150 => "IMPO 150",
-        PayrollVariableSelection.Ferie => "Férié",
-        PayrollVariableSelection.Dimanche => "Dimanche",
-        PayrollVariableSelection.Nuit => "Nuit",
-        PayrollVariableSelection.Retard => "Retard",
-        PayrollVariableSelection.Absence => "Absence",
-        _ => variable
-    };
+    public static string Libelle(string variable) => PayrollVariableCatalog.Trouver(variable)?.Libelle ?? variable;
 }
