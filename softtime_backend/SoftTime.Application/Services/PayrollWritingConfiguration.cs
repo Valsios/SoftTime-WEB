@@ -37,14 +37,26 @@ public static class PayrollWritingConfiguration
     }
 
     public static void ValidateConfigurationRows(IReadOnlyList<PaieEcriture> configs)
+        => ValidateConfigurationRows(configs, Categories);
+
+    /// <summary>
+    /// Contrôle de la configuration d'écriture AUTRE pour les catégories envoyées à la paie : seules les catégories
+    /// actives doivent être configurées ; une catégorie inactive peut l'être ou non. Avec les sept catégories actives
+    /// (valeur par défaut), contrôles et messages sont ceux d'origine.
+    /// </summary>
+    public static void ValidateConfigurationRows(IReadOnlyList<PaieEcriture> configs, IReadOnlyCollection<string> activeCategories)
     {
-        var missing = Categories.Where(c => !configs.Any(x => string.Equals(x.Categorie, c, StringComparison.OrdinalIgnoreCase))).ToList();
+        var missing = Categories.Where(activeCategories.Contains)
+            .Where(c => !configs.Any(x => string.Equals(x.Categorie, c, StringComparison.OrdinalIgnoreCase))).ToList();
         if (missing.Count > 0)
             throw new DomainException($"La configuration d'écriture de la base AUTRE est incomplète : la catégorie {missing[0]} n'est pas configurée.");
+        if (configs.Count == 0)
+            throw new DomainException("La configuration d'écriture de la base AUTRE est vide.");
         var duplicate = configs.GroupBy(c => c.Categorie, StringComparer.OrdinalIgnoreCase).FirstOrDefault(g => g.Count() > 1);
         if (duplicate != null)
             throw new DomainException($"La configuration d'écriture contient plusieurs définitions pour la catégorie {duplicate.Key}.");
-        if (configs.Count != Categories.Length)
+        // Sans doublon, une ligne qui n'est pas l'une des sept catégories est inconnue (même règle que « 7 lignes exactement »).
+        if (configs.Any(c => !Categories.Any(k => string.Equals(k, c.Categorie, StringComparison.OrdinalIgnoreCase))))
             throw new DomainException("La configuration d'écriture contient des catégories inconnues.");
         var table = configs[0].TableCible;
         var matricule = configs[0].ColMatricule;
