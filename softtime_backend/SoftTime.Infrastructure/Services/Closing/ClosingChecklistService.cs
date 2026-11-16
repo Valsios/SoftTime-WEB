@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 using SoftTime.Application.Abstractions.Closing;
+using SoftTime.Application.Abstractions.Payroll;
 using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Services;
@@ -28,6 +29,7 @@ public sealed class ClosingChecklistService : IClosingChecklistService
     private readonly ClosingOptions _reglages;
     private readonly TimeProvider _horloge;
     private readonly ILogger<ClosingChecklistService> _logger;
+    private readonly IPayrollVariableService? _variables;
 
     public ClosingChecklistService(
         IUnitOfWork uow,
@@ -35,7 +37,8 @@ public sealed class ClosingChecklistService : IClosingChecklistService
         IClosingChecklistCache cache,
         IOptions<ClosingOptions> reglages,
         TimeProvider horloge,
-        ILogger<ClosingChecklistService> logger)
+        ILogger<ClosingChecklistService> logger,
+        IPayrollVariableService? variables = null)
     {
         _uow = uow;
         _tenant = tenant;
@@ -43,6 +46,7 @@ public sealed class ClosingChecklistService : IClosingChecklistService
         _reglages = reglages.Value;
         _horloge = horloge;
         _logger = logger;
+        _variables = variables;
     }
 
     /// <summary>
@@ -110,7 +114,21 @@ public sealed class ClosingChecklistService : IClosingChecklistService
             exactes.Count,
             recoupantes.Count,
             recoupantes.Select(h => (h.PeriodeDebut, h.PeriodeFin)).Distinct().Count(),
-            exactes.Count(h => (h.I130 ?? 0m) + (h.I150 ?? 0m) > 0m),
+            await SalariesImposablesAsync(exactes, ct),
             await ClosingChecklistQueries.DernierResumeSynchroAsync(_uow, scope, ct));
+    }
+
+    /// <summary>
+    /// Salariés avec des heures imposables envoyées à la paie. Null si IMPO 130 et IMPO 150 sont décochées pour la
+    /// base : la ligne n'a alors pas d'objet. Avec la configuration par défaut, comptage d'origine (I130 + I150).
+    /// </summary>
+    private async Task<int?> SalariesImposablesAsync(List<HsExoImp> exactes, CancellationToken ct)
+    {
+        var selection = _variables is null ? PayrollVariableSelection.Default : await _variables.GetSelectionAsync(_tenant.SageDb, ct);
+        var i130 = selection.EstActive(PayrollVariableSelection.I130);
+        var i150 = selection.EstActive(PayrollVariableSelection.I150);
+        if (!i130 && !i150)
+            return null;
+        return exactes.Count(h => (i130 ? h.I130 ?? 0m : 0m) + (i150 ? h.I150 ?? 0m : 0m) > 0m);
     }
 }
