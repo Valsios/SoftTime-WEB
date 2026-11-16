@@ -367,6 +367,48 @@ export ni lien vers un autre écran. Fonction **non validée** : tout est additi
 
 ---
 
+## 5 sexies. Variables envoyées à la paie (écran Bases SAGE) — branche `feature/config-paie`
+
+Chaque base SAGE (le « tenant » : il n'existe pas d'entité Entreprise) choisit, par case à cocher, quelles variables de la page Heures
+supplémentaires sont **envoyées** à la paie. **Le calcul ne change pas** : les neuf variables (EXO 130, EXO 150, IMPO 130, IMPO 150, Férié,
+Nuit, Dimanche, Retard, Absence) restent calculées et affichées ; seul l'envoi est filtré.
+
+- **Valeurs par défaut = comportement d'origine** : les sept variables d'heures supplémentaires cochées, Retard et Absence décochées. Une base
+  sans configuration (aucune ligne dans `T_PAIE_VARIABLE`) se comporte exactement comme avant (mêmes commandes SQL, mêmes valeurs, même ordre).
+- **Variable décochée = non écrite** : ni validée, ni écrite, ni comptée comme manquante. Aucune mise à 0 : la valeur déjà présente en paie
+  (`T_CUMSAL` en SAGE, colonne de la table d'écriture en autre base) n'est pas touchée. En autre base, une catégorie décochée n'a pas besoin de
+  ligne dans `T_PAIE_ECRITURE` ; l'écriture reste transactionnelle avec son préflight. Si aucune variable d'heures supplémentaires n'est cochée,
+  rien n'est écrit.
+- **Écran** : carte « Variables envoyées à la paie » sous la liste des bases SAGE, pour la **base active**. Base SAGE : codes HS01 à HS07 en lecture
+  seule (écran Codes constantes), code de paie et unité (heures ou jours) modifiables pour Retard et Absence. Autre base : colonnes de
+  `T_PAIE_ECRITURE` en lecture seule pour les heures supplémentaires, colonne cible (liste lue dans la table d'écriture configurée) et unité pour
+  Retard et Absence. Rien n'est envoyé au serveur avant la confirmation ; les erreurs restent affichées dans la carte.
+- **Droits** : les mêmes que la modification de la base dans l'écran Bases de données (porte Bases + `SAGE:{base}:UPDATE`, ou administrateur),
+  vérifiés par le serveur (`GET`/`PUT api/v1/payroll-variables`). `GET api/v1/payroll-variables/actives` (noms seulement) sert aux portes
+  Traitements, États et Bases. Aucun droit nouveau.
+- **Retard et Absence** : visibles, mais impossibles à cocher tant que leur code de paie (SAGE) ou leur colonne cible (autre base) et leur unité ne
+  sont pas renseignés. **Leur envoi réel n'existe pas encore (lot C)** : même cochées, elles ne sont jamais écrites.
+- **Mois déjà envoyé** : une modification est refusée (409) si une période déjà envoyée en paie recouvre le mois civil en cours de la base
+  active ; sinon elle s'applique au prochain envoi. Le marqueur est la table `T_PAIE_ENVOI` (base, période, date, auteur, statut, lignes), écrite
+  par les writers de paie indépendamment du journal central : en STANDARD dès la première ligne `T_CUMSAL` modifiée (un échec partiel compte
+  comme envoyé) ; en autre base juste avant la validation de la transaction de paie (si le marqueur ne peut pas être écrit, la paie est annulée ;
+  si la validation échoue ensuite, le marqueur reste au statut `INCERTAIN` et compte comme envoyé). Aucun marqueur si rien n'est écrit.
+  **Limite** : les envois faits avant la migration 007 ne sont pas repris (aucune reprise de l'historique) : un mois envoyé avant la mise en
+  service n'est pas détecté.
+- **Journal** : toute modification de la configuration passe par le journal central (qui, quand, avant, après, table `T_PAIE_VARIABLE`). Le
+  journal `SYNC_PAIE` des synchronisations est inchangé.
+- **Page Heures supplémentaires** : les colonnes des variables non envoyées sont grisées, avec la mention « non envoyée à la paie » dans
+  l'en-tête ; elles ne sont jamais masquées (par défaut : Retard et Absence).
+- **Contrôle avant paie** : aucune anomalie ni ligne de checklist pour une variable décochée (« férié non appliqué » si Férié est décochée ;
+  « heures supplémentaires atypiques » si les quatre variables EXO/IMPO le sont ; ligne « Heures imposables » si IMPO 130 et IMPO 150 le sont).
+  Les caches de l'analyse et de la checklist sont vidés à chaque enregistrement.
+- **STANDARD, cumul absent** : une mise à jour `T_CUMSAL` qui ne modifie aucune ligne (cumul absent dans SAGE pour le salarié) est maintenant
+  signalée dans le message de fin de synchronisation ; les cas valides gardent le message d'origine.
+- **Base de données** : migration versionnée `migrations/versions/007_variables_paie.sql` (rejouable, aucune suppression), appliquée par
+  `Database:AutoMigrate` ; sans elle, l'API refuse de démarrer avec un message clair.
+
+---
+
 ## 6. Divers
 
 - **Cantine** : jours avec pointage 11h–14h30 ; recherche sur `T_CANTINE`, **Calculer** pour régénérer.
