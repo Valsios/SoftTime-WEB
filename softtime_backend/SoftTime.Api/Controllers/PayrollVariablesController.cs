@@ -35,4 +35,21 @@ public class PayrollVariablesController : ApiControllerBase
     [HttpGet("actives")]
     [RequireAnyDroit(Droit.Processing, Droit.Reports, Droit.Databases)]
     public async Task<IActionResult> GetActivesAsync(CancellationToken ct) => Ok(await _svc.GetActivesAsync(ct));
+
+    /// <summary>Autre base : destinations des variables envoyables (T_PAIE_ECRITURE), tables et colonnes de la base de paie.</summary>
+    [HttpGet("destinations")]
+    [RequireDroit(Droit.Databases)]
+    public async Task<IActionResult> GetDestinationsAsync(CancellationToken ct) => Ok(await _svc.GetDestinationsAsync(ct));
+
+    /// <summary>Autre base : colonnes d'une table de la base de paie, avec leur type.</summary>
+    [HttpGet("destinations/colonnes")]
+    [RequireDroit(Droit.Databases)]
+    public async Task<IActionResult> GetColonnesAsync([FromQuery] string? table, CancellationToken ct)
+        => Ok(await _svc.GetColonnesAsync(table, ct));
+
+    /// <summary>Autre base : enregistrer les destinations (refusé si le mois est envoyé).</summary>
+    [HttpPut("destinations")]
+    [RequireDroit(Droit.Databases)]
+    public async Task<IActionResult> SaveDestinationsAsync([FromBody] PayrollWriteTargetsSaveDto destinations, CancellationToken ct)
+        => Ok(await _svc.SaveDestinationsAsync(destinations, ct));
 }
