@@ -6,6 +6,10 @@ namespace SoftTime.Infrastructure.Integrations;
 
 public class SagePayrollWriter : ISagePayrollWriter
 {
+    /// <summary>Commande historique d'écriture d'un cumul (inchangée).</summary>
+    internal const string UpdateCumulSql =
+        "UPDATE T_CUMSAL SET ElementCumul = dbo.SetValeurCstBinaire(0,0,@val) WHERE NumSalarie=@num AND OpCstCumul=@op";
+
     public async Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(SagePayrollTarget target, int numSal, OvertimeAmounts amounts, CancellationToken cancellationToken = default)
     {
         var (sageConnectionString, constants, codes) = target;
@@ -16,18 +20,22 @@ public class SagePayrollWriter : ISagePayrollWriter
         var updates = new Dictionary<string, int>(StringComparer.Ordinal);
         try
         {
-            // Toutes les constantes sont résolues avant la première écriture : une constante absente
-            // implique donc correctement zéro mise à jour pour ce salarié.
-            var commands = new (string Category, short Operand, decimal Value)[]
+            // Toutes les constantes des variables envoyées sont résolues avant la première écriture : une constante
+            // absente implique donc correctement zéro mise à jour pour ce salarié. Une variable décochée n'est ni
+            // résolue ni écrite : la valeur existante de T_CUMSAL n'est pas touchée.
+            var commands = new (string Category, Func<short> Operand, decimal Value)[]
             {
-                ("Exo130", Op(codes.Exo130), exo130),
-                ("Exo150", Op(codes.Exo150), exo150),
-                ("I130", Op(codes.I130), i130),
-                ("I150", Op(codes.I150), i150),
-                ("Ferie", Op(codes.Ferie), ferie),
-                ("Dimanche", Op(codes.Dim), dim),
-                ("Nuit", Op(codes.Nuit), nuit)
-            };
+                ("Exo130", () => Op(codes.Exo130), exo130),
+                ("Exo150", () => Op(codes.Exo150), exo150),
+                ("I130", () => Op(codes.I130), i130),
+                ("I150", () => Op(codes.I150), i150),
+                ("Ferie", () => Op(codes.Ferie), ferie),
+                ("Dimanche", () => Op(codes.Dim), dim),
+                ("Nuit", () => Op(codes.Nuit), nuit)
+            }
+                .Where(command => target.Variables.EstActive(command.Category))
+                .Select(command => (command.Category, Operand: command.Operand(), command.Value))
+                .ToList();
             foreach (var command in commands)
             {
                 updates[command.Category] = await UpdateCumulAsync(
@@ -46,9 +54,7 @@ public class SagePayrollWriter : ISagePayrollWriter
         var formatted = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
         await using var con = new SqlConnection(connectionString);
         await con.OpenAsync(cancellationToken);
-        await using var cmd = new SqlCommand(
-            "UPDATE T_CUMSAL SET ElementCumul = dbo.SetValeurCstBinaire(0,0,@val) WHERE NumSalarie=@num AND OpCstCumul=@op",
-            con);
+        await using var cmd = new SqlCommand(UpdateCumulSql, con);
         cmd.Parameters.AddWithValue("@val", formatted);
         cmd.Parameters.AddWithValue("@num", numSal);
         cmd.Parameters.AddWithValue("@op", opCst);
