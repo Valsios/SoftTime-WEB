@@ -90,6 +90,29 @@ public static class SchemaPresenceGuard
         }
     }
 
+    public const string MissingPayrollVariablesMessage =
+        "Les variables envoyées à la paie sont absentes (T_PAIE_VARIABLE, T_PAIE_ENVOI) : activez Database:AutoMigrate "
+        + "(développement) ou exécutez migrations/versions/007_variables_paie.sql.";
+
+    /// <summary>
+    /// Sans la migration 007, la synchronisation de paie ne pourrait ni lire la configuration des variables ni poser
+    /// le marqueur d'envoi : le démarrage s'arrête à la place avec un message qui indique la marche à suivre.
+    /// </summary>
+    public static async Task EnsurePayrollVariablesAsync(IUnitOfWork uow, CancellationToken ct)
+    {
+        try
+        {
+            await uow.ExecuteSqlAsync(GuardedSql("T_PAIE_VARIABLE", $"""
+                IF OBJECT_ID(N'dbo.T_PAIE_ENVOI', N'U') IS NULL
+                    THROW 51990, N'{Marker}: dbo.T_PAIE_ENVOI', 1;
+                """), ct);
+        }
+        catch (Exception ex) when (ex.Message.Contains(Marker, StringComparison.Ordinal))
+        {
+            throw new DomainException(MissingPayrollVariablesMessage);
+        }
+    }
+
     public static string GuardedSql(string table, string sql) => $"""
         IF OBJECT_ID(N'dbo.{table}', N'U') IS NULL
             THROW 51990, N'{Marker}: dbo.{table}', 1;
