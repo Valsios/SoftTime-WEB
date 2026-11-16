@@ -197,6 +197,8 @@ using (var scope = app.Services.CreateScope())
     // (rejouable, une seule sauvegarde, droits effectifs inchangés).
     await SchemaPresenceGuard.EnsureUserPermissionDeviationsAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
     await scope.ServiceProvider.GetRequiredService<IUserPermissionDeviationMigration>().RunAsync(CancellationToken.None);
+    // Variables envoyées à la paie et marqueur d'envoi : migration 007 obligatoire, sinon arrêt avec un message clair.
+    await SchemaPresenceGuard.EnsurePayrollVariablesAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
 
     // Migration globale contrôlée des mots de passe en clair :
     // Par défaut, la migration est assurée de manière fluide et isolée à la connexion de chaque utilisateur (AuthService.LoginAsync),
