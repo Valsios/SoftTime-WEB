@@ -1,0 +1,489 @@
+using Microsoft.Extensions.Logging.Abstractions;
+
+using Moq;
+
+using SoftTime.Application.Abstractions.Audit;
+using SoftTime.Application.Abstractions.Payroll;
+using SoftTime.Application.Abstractions.RequestContext;
+using SoftTime.Application.DTOs;
+using SoftTime.Application.Services;
+using SoftTime.Domain.Entities.Sage;
+using SoftTime.Domain.Entities.SoftTime;
+using SoftTime.Domain.Models;
+using SoftTime.Infrastructure.Integrations;
+using SoftTime.Infrastructure.Services.Payroll;
+
+namespace SoftTime.Tests;
+
+/// <summary>
+/// Envoi vers la paie filtré par les variables cochées (lot A) : caractérisation du comportement par défaut (mêmes
+/// commandes, mêmes valeurs, même ordre que dev-refonte), filtre, signalement des mises à jour sans ligne en STANDARD,
+/// et marqueur T_PAIE_ENVOI (atomicité AUTRE, échec partiel STANDARD, rien si rien n'est écrit).
+/// </summary>
+public class PayrollVariableWritersTests
+{
+    private static readonly HsExoDto Ligne = new(1, "MAT01", 101, 1.5m, 2m, 0.5m, 1.25m, 3m, 4m, 2.5m, 7m, 1m);
+    private static readonly HsExoDto Ligne2 = new(2, "MAT02", 102, 1m, 1m, 1m, 1m, 1m, 1m, 1m, 0m, 0m);
+
+    // ---------- STANDARD : caractérisation ----------
+
+    [Fact]
+    public void UpdateCumulSql_IsTheHistoricalCommand()
+        => SagePayrollWriter.UpdateCumulSql.Should().Be(
+            "UPDATE T_CUMSAL SET ElementCumul = dbo.SetValeurCstBinaire(0,0,@val) WHERE NumSalarie=@num AND OpCstCumul=@op");
+
+    [Fact]
+    public async Task SyncOvertime_DefaultSelection_WritesTheSevenCumulsInHistoricalOrder()
+    {
+        // Arrange
+        var sage = new CapturingSagePayrollWriter();
+
+        // Act
+        var updates = await sage.SyncOvertimeAsync(Cible(), 101, OvertimeAmounts.From(Ligne));
+
+        // Assert : opérandes 1..7 = HS01..HS07 ; valeurs EXO130, EXO150, I130, I150, Férié, Dimanche, Nuit.
+        sage.Calls.Should().Equal(
+            (101, (short)1, 1.5m), (101, (short)2, 2m), (101, (short)3, 0.5m), (101, (short)4, 1.25m),
+            (101, (short)5, 3m), (101, (short)6, 2.5m), (101, (short)7, 4m));
+        updates.Keys.Should().Equal("Exo130", "Exo150", "I130", "I150", "Ferie", "Dimanche", "Nuit");
+    }
+
+    [Fact]
+    public async Task StandardWrite_NoConfiguration_IsIdenticalToTheWriterWithoutVariableService()
+    {
+        // Arrange : service réel, base sans aucune ligne T_PAIE_VARIABLE.
+        var historique = new CapturingSagePayrollWriter();
+        var configure = new CapturingSagePayrollWriter();
+        var service = VariableService(new InMemoryUnitOfWork());
+
+        // Act
+        var avant = await new TestStandardWriter(historique, new NullAudit()).WriteAsync(Base(), [Ligne, Ligne2], Contexte());
+        var apres = await new TestStandardWriter(configure, new NullAudit(), service).WriteAsync(Base(), [Ligne, Ligne2], Contexte());
+
+        // Assert
+        configure.Calls.Should().Equal(historique.Calls);
+        apres.Should().Be(avant);
+        apres.Message.Should().Be("Synchronisation des heures supplémentaires vers SAGE terminée.");
+    }
+
+    // ---------- STANDARD : filtre ----------
+
+    [Fact]
+    public async Task SyncOvertime_UncheckedVariable_IsNeitherResolvedNorWritten()
+    {
+        // Arrange : Nuit décochée ET constante HS07 absente de SAGE.
+        var sage = new CapturingSagePayrollWriter();
+        var cible = Cible(sansCode: "HS07") with { Variables = Sans(PayrollVariableSelection.Nuit) };
+
+        // Act
+        var updates = await sage.SyncOvertimeAsync(cible, 101, OvertimeAmounts.From(Ligne));
+
+        // Assert : pas d'erreur « Constante SAGE HS07 introuvable », aucune écriture de l'opérande 7.
+        sage.Calls.Select(c => c.Operand).Should().Equal((short)1, 2, 3, 4, 5, 6);
+        updates.Keys.Should().NotContain("Nuit");
+    }
+
+    [Fact]
+    public async Task SyncOvertime_CheckedVariableWithMissingConstant_StillFailsBeforeAnyWrite()
+    {
+        // Arrange
+        var sage = new CapturingSagePayrollWriter();
+
+        // Act
+        var act = () => sage.SyncOvertimeAsync(Cible(sansCode: "HS07"), 101, OvertimeAmounts.From(Ligne));
+
+        // Assert
+        (await act.Should().ThrowAsync<PayrollSyncWriteException>()).Which.InnerException!.Message.Should().Contain("HS07");
+        sage.Calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task StandardWrite_RetardAndAbsenceActive_AreNeverWritten()
+    {
+        // Arrange : lot C absent, Retard et Absence actives ne changent rien.
+        var sage = new CapturingSagePayrollWriter();
+        var selection = PayrollVariableSelection.Avec([.. PayrollVariableSelection.HeuresSup, PayrollVariableSelection.Retard, PayrollVariableSelection.Absence]);
+
+        // Act
+        await new TestStandardWriter(sage, new NullAudit(), new FixedVariableService(selection)).WriteAsync(Base(), [Ligne], Contexte());
+
+        // Assert
+        sage.Calls.Should().HaveCount(7);
+        sage.Calls.Select(c => c.Value).Should().NotContain(7m);
+    }
+
+    // ---------- STANDARD : mises à jour sans ligne ----------
+
+    [Fact]
+    public async Task StandardWrite_UpdateWithoutRow_IsReportedWithoutChangingCounts()
+    {
+        // Arrange : le cumul de l'opérande 5 (Férié) n'existe pas dans SAGE.
+        var sage = new CapturingSagePayrollWriter(lignes: op => op == 5 ? 0 : 1);
+
+        // Act
+        var resultat = await new TestStandardWriter(sage, new NullAudit()).WriteAsync(Base(), [Ligne], Contexte());
+
+        // Assert
+        resultat.UpdatesWithoutRow.Should().Be(1);
+        resultat.CategoriesUpdated.Should().Be(6);
+        resultat.Message.Should().Contain("1 mise(s) à jour n'ont modifié aucune ligne T_CUMSAL");
+    }
+
+    [Fact]
+    public async Task StandardWrite_AllRowsUpdated_KeepsTheHistoricalMessage()
+    {
+        // Act
+        var resultat = await new TestStandardWriter(new CapturingSagePayrollWriter(), new NullAudit()).WriteAsync(Base(), [Ligne], Contexte());
+
+        // Assert
+        resultat.UpdatesWithoutRow.Should().Be(0);
+        resultat.Message.Should().Be("Synchronisation des heures supplémentaires vers SAGE terminée.");
+    }
+
+    // ---------- STANDARD : marqueur T_PAIE_ENVOI ----------
+
+    [Fact]
+    public async Task StandardWrite_Success_RecordsTheSendOnceThenCompletesIt()
+    {
+        // Arrange
+        var envois = new RecordingSendLog();
+
+        // Act
+        await new TestStandardWriter(new CapturingSagePayrollWriter(), new NullAudit(), sendLog: envois).WriteAsync(Base(), [Ligne, Ligne2], Contexte());
+
+        // Assert
+        var envoi = envois.Envois.Should().ContainSingle().Which;
+        envoi.Send.SageDatabase.Should().Be("SAGE_TEST");
+        envoi.Send.TypeBase.Should().Be("STANDARD");
+        envoi.Send.PeriodFrom.Should().Be(new DateTime(2026, 10, 1));
+        envoi.Send.PeriodTo.Should().Be(new DateTime(2026, 10, 31));
+        envoi.Send.Status.Should().Be("EN_COURS");
+        envoi.Send.Lines.Should().Be(7, "le marqueur est posé dès le premier salarié écrit");
+        envoi.Status.Should().Be("SUCCES");
+        envoi.Lines.Should().Be(14);
+    }
+
+    [Fact]
+    public async Task StandardWrite_PartialFailure_IsRecordedAsSent()
+    {
+        // Arrange : erreur SQL après trois cumuls du premier salarié.
+        var envois = new RecordingSendLog();
+        var sut = new TestStandardWriter(new CapturingSagePayrollWriter(echecApres: 3), new NullAudit(), sendLog: envois);
+
+        // Act
+        var act = () => sut.WriteAsync(Base(), [Ligne], Contexte());
+
+        // Assert
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        var envoi = envois.Envois.Should().ContainSingle().Which;
+        envoi.Status.Should().Be("ECHEC");
+        envoi.Lines.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task StandardWrite_NothingWritten_RecordsNothing()
+    {
+        // Arrange : constante absente (aucune écriture), puis aucune ligne à envoyer.
+        var envois = new RecordingSendLog();
+
+        // Act
+        var echec = () => new TestStandardWriter(new CapturingSagePayrollWriter(), new NullAudit(), sendLog: envois, sansCode: "HS01").WriteAsync(Base(), [Ligne], Contexte());
+        await echec.Should().ThrowAsync<DomainException>();
+        await new TestStandardWriter(new CapturingSagePayrollWriter(), new NullAudit(), sendLog: envois).WriteAsync(Base(), [], Contexte());
+        await new TestStandardWriter(new CapturingSagePayrollWriter(lignes: _ => 0), new NullAudit(), sendLog: envois).WriteAsync(Base(), [Ligne], Contexte());
+
+        // Assert
+        envois.Envois.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task StandardWrite_MarkerCannotBeRecorded_StopsBeforeTheNextEmployee()
+    {
+        // Arrange
+        var sage = new CapturingSagePayrollWriter();
+        var envois = new RecordingSendLog { EchecEnregistrement = true };
+        var audit = new CapturingAudit();
+
+        // Act
+        var act = () => new TestStandardWriter(sage, audit, sendLog: envois).WriteAsync(Base(), [Ligne, Ligne2], Contexte());
+
+        // Assert : seul le premier salarié a été écrit, l'envoi est journalisé en échec.
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        sage.Calls.Select(c => c.NumSal).Distinct().Should().Equal(101);
+        audit.Statuts.Should().Equal("ECHEC");
+    }
+
+    [Fact]
+    public async Task StandardWrite_MarkerCompletionFails_KeepsTheSuccessfulOutcome()
+    {
+        // Arrange
+        var envois = new RecordingSendLog { EchecFin = true };
+        var audit = new CapturingAudit();
+
+        // Act
+        var resultat = await new TestStandardWriter(new CapturingSagePayrollWriter(), audit, sendLog: envois).WriteAsync(Base(), [Ligne], Contexte());
+
+        // Assert : la paie est écrite ; le marqueur reste EN_COURS (compte comme envoyé).
+        resultat.CategoriesUpdated.Should().Be(7);
+        audit.Statuts.Should().Equal("SUCCES");
+        envois.Envois.Single().Status.Should().Be("EN_COURS");
+    }
+
+    // ---------- AUTRE : caractérisation ----------
+
+    [Fact]
+    public async Task OtherWrite_DefaultSelection_SendsTheHistoricalCommandsInOrder()
+    {
+        // Arrange
+        var (sut, db, _, _) = Autre(selection: null);
+
+        // Act
+        var resultat = await sut.WriteAsync(BaseAutre(), [Ligne], Contexte());
+
+        // Assert
+        db.CountSql.Should().Equal("SELECT COUNT_BIG(1) FROM [dbo].[PAIE_CUMULS] WHERE [MatriculeEmploye] = @matricule");
+        db.Updates.Should().Equal(
+            ("UPDATE [dbo].[PAIE_CUMULS] SET [HeuresExo130] = @value WHERE [MatriculeEmploye] = @matricule", 1.5m, "MAT01"),
+            ("UPDATE [dbo].[PAIE_CUMULS] SET [HeuresExo150] = @value WHERE [MatriculeEmploye] = @matricule", 2m, "MAT01"),
+            ("UPDATE [dbo].[PAIE_CUMULS] SET [HeuresI130] = @value WHERE [MatriculeEmploye] = @matricule", 0.5m, "MAT01"),
+            ("UPDATE [dbo].[PAIE_CUMULS] SET [HeuresI150] = @value WHERE [MatriculeEmploye] = @matricule", 1.25m, "MAT01"),
+            ("UPDATE [dbo].[PAIE_CUMULS] SET [HeuresFerie] = @value WHERE [MatriculeEmploye] = @matricule", 3m, "MAT01"),
+            ("UPDATE [dbo].[PAIE_CUMULS] SET [HeuresDimanche] = @value WHERE [MatriculeEmploye] = @matricule", 2.5m, "MAT01"),
+            ("UPDATE [dbo].[PAIE_CUMULS] SET [HeuresNuit] = @value WHERE [MatriculeEmploye] = @matricule", 4m, "MAT01"));
+        resultat.Should().Be(new PayrollWriteResultDto("SAGE_AUTRE", "AUTRE", 1, 7, "Synchronisation des heures supplémentaires terminée."));
+    }
+
+    [Fact]
+    public async Task OtherWrite_NoConfiguration_IsIdenticalToTheWriterWithoutVariableService()
+    {
+        // Arrange
+        var (historique, dbHistorique, _, _) = Autre(selection: null);
+        var (configure, dbConfigure, _, _) = Autre(selection: null, service: VariableService(new InMemoryUnitOfWork()));
+
+        // Act
+        var avant = await historique.WriteAsync(BaseAutre(), [Ligne, Ligne2], Contexte());
+        var apres = await configure.WriteAsync(BaseAutre(), [Ligne, Ligne2], Contexte());
+
+        // Assert
+        dbConfigure.Updates.Should().Equal(dbHistorique.Updates);
+        dbConfigure.CountSql.Should().Equal(dbHistorique.CountSql);
+        apres.Should().Be(avant);
+    }
+
+    // ---------- AUTRE : filtre ----------
+
+    [Fact]
+    public async Task OtherWrite_UncheckedVariable_IsNeitherRequiredValidatedNorWritten()
+    {
+        // Arrange : Dimanche décochée, sa ligne T_PAIE_ECRITURE absente et sa colonne inexistante.
+        var (sut, db, _, _) = Autre(selection: Sans(PayrollVariableSelection.Dimanche), sansCategorie: "Dimanche");
+
+        // Act
+        var validation = await sut.ValidateAsync(BaseAutre(), [Ligne]);
+        await sut.WriteAsync(BaseAutre(), [Ligne], Contexte());
+
+        // Assert
+        validation.Message.Should().Be("Configuration d'écriture valide.");
+        db.Updates.Should().HaveCount(6);
+        db.Updates.Should().NotContain(u => u.Sql.Contains("HeuresDimanche"));
+    }
+
+    [Fact]
+    public async Task OtherWrite_NoCheckedOvertimeVariable_TouchesNothing()
+    {
+        // Arrange
+        var (sut, db, journal, envois) = Autre(selection: PayrollVariableSelection.Avec([PayrollVariableSelection.Retard]));
+
+        // Act
+        var resultat = await sut.WriteAsync(BaseAutre(), [Ligne], Contexte());
+
+        // Assert
+        resultat.CategoriesUpdated.Should().Be(0);
+        journal.Should().BeEmpty();
+        db.Updates.Should().BeEmpty();
+        envois.Envois.Should().BeEmpty();
+    }
+
+    // ---------- AUTRE : marqueur et atomicité ----------
+
+    [Fact]
+    public async Task OtherWrite_Success_RecordsTheMarkerBeforeCommittingThePayroll()
+    {
+        // Arrange
+        var (sut, _, journal, envois) = Autre(selection: null);
+
+        // Act
+        await sut.WriteAsync(BaseAutre(), [Ligne], Contexte());
+
+        // Assert
+        journal.SkipWhile(e => e != "begin").Should().Equal(
+            "begin", "update", "update", "update", "update", "update", "update", "update", "marqueur", "commit");
+        var envoi = envois.Envois.Should().ContainSingle().Which;
+        envoi.Status.Should().Be("SUCCES");
+        envoi.Lines.Should().Be(7);
+        envoi.Send.TypeBase.Should().Be("AUTRE");
+    }
+
+    [Fact]
+    public async Task OtherWrite_UpdateDoesNotMatchOneRow_RollsBackWithoutMarker()
+    {
+        // Arrange : le deuxième salarié n'a aucune ligne pour Nuit.
+        var (sut, db, journal, envois) = Autre(selection: null);
+        db.Affected = (sql, matricule) => matricule == "MAT02" && sql.Contains("HeuresNuit") ? 0 : 1;
+
+        // Act
+        var act = () => sut.WriteAsync(BaseAutre(), [Ligne, Ligne2], Contexte());
+
+        // Assert
+        await act.Should().ThrowAsync<DomainException>();
+        journal.Should().Contain("rollback").And.NotContain("commit");
+        envois.Envois.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task OtherWrite_MarkerCannotBeRecorded_NothingIsCommitted()
+    {
+        // Arrange
+        var (sut, _, journal, envois) = Autre(selection: null);
+        envois.EchecEnregistrement = true;
+
+        // Act
+        var act = () => sut.WriteAsync(BaseAutre(), [Ligne], Contexte());
+
+        // Assert : sans marqueur, la paie est annulée.
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        journal.Should().Contain("rollback").And.NotContain("commit");
+        envois.Envois.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task OtherWrite_CommitFails_KeepsTheMarkerAsUncertain()
+    {
+        // Arrange
+        var (sut, db, journal, envois) = Autre(selection: null);
+        db.EchecCommit = true;
+
+        // Act
+        var act = () => sut.WriteAsync(BaseAutre(), [Ligne], Contexte());
+
+        // Assert : issue inconnue côté serveur, l'envoi compte comme envoyé.
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        journal.Should().Contain("rollback");
+        envois.Envois.Should().ContainSingle().Which.Status.Should().Be("INCERTAIN");
+    }
+
+    [Fact]
+    public async Task OtherWrite_NoRows_CommitsWithoutMarker()
+    {
+        // Arrange
+        var (sut, _, journal, envois) = Autre(selection: null);
+
+        // Act
+        await sut.WriteAsync(BaseAutre(), [], Contexte());
+
+        // Assert
+        journal.Should().Contain("commit");
+        envois.Envois.Should().BeEmpty();
+    }
+
+    // ---------- Validation de configuration AUTRE ----------
+
+    [Fact]
+    public void ValidateConfigurationRows_InactiveCategoryMissing_IsAccepted()
+    {
+        // Arrange
+        var configuration = Configuration().Where(c => c.Categorie != "Nuit").ToList();
+
+        // Act
+        var act = () => PayrollWritingConfiguration.ValidateConfigurationRows(configuration, Sans(PayrollVariableSelection.Nuit).HeuresSupActives);
+
+        // Assert
+        act.Should().NotThrow();
+        FluentActions.Invoking(() => PayrollWritingConfiguration.ValidateConfigurationRows(configuration))
+            .Should().ThrowExactly<DomainException>().WithMessage("*catégorie Nuit n'est pas configurée*");
+    }
+
+    [Fact]
+    public void ValidateConfigurationRows_UnknownCategory_KeepsTheHistoricalMessage()
+    {
+        // Arrange
+        var configuration = Configuration();
+        configuration.Add(new PaieEcriture { BddSage = "SAGE_AUTRE", TableCible = "PAIE_CUMULS", ColMatricule = "MatriculeEmploye", Categorie = "Autre", ColValeur = "X" });
+
+        // Act
+        var act = () => PayrollWritingConfiguration.ValidateConfigurationRows(configuration);
+
+        // Assert
+        act.Should().ThrowExactly<DomainException>().WithMessage("La configuration d'écriture contient des catégories inconnues.");
+    }
+
+    // ---------- Aides ----------
+
+    private static PayrollVariableSelection Sans(string variable) =>
+        PayrollVariableSelection.Avec(PayrollVariableSelection.HeuresSup.Where(v => v != variable));
+
+    private static BddSage Base() => new() { NomBd = "SAGE_TEST", TypeBase = "STANDARD" };
+    private static BddSage BaseAutre() => new() { NomBd = "SAGE_AUTRE", TypeBase = "AUTRE" };
+    private static PayrollSyncContext Contexte() => new(new DateTime(2026, 10, 1), new DateTime(2026, 10, 31), "rh", Guid.NewGuid());
+
+    private static SagePayrollTarget Cible(string? sansCode = null) => new("test",
+        Enumerable.Range(1, 7)
+            .Select(i => new ConstanteSage { CodeConstante = $"HS0{i}", CodeOperande1 = (short)i })
+            .Where(c => c.CodeConstante != sansCode)
+            .ToArray(),
+        new OvertimeSageCodes());
+
+    private static List<PaieEcriture> Configuration(string? sansCategorie = null) => PayrollWritingConfiguration.Categories
+        .Where(c => c != sansCategorie)
+        .Select(c => new PaieEcriture { BddSage = "SAGE_AUTRE", TableCible = "PAIE_CUMULS", ColMatricule = "MatriculeEmploye", Categorie = c, ColValeur = $"Heures{c}" })
+        .ToList();
+
+    private static (OtherPayrollWriter Sut, FakeOtherPayrollDatabase Db, List<string> Journal, RecordingSendLog Envois) Autre(
+        PayrollVariableSelection? selection, IPayrollVariableService? service = null, string? sansCategorie = null)
+    {
+        var journal = new List<string>();
+        var db = new FakeOtherPayrollDatabase(journal);
+        db.Columns["MatriculeEmploye"] = new OtherPayrollColumn("nvarchar", null, null);
+        foreach (var c in PayrollWritingConfiguration.Categories.Where(c => c != sansCategorie))
+            db.Columns[$"Heures{c}"] = new OtherPayrollColumn("decimal", 18, 4);
+        var uow = new InMemoryUnitOfWork();
+        uow.Get<PaieEcriture>().Items.AddRange(Configuration(sansCategorie));
+        var envois = new RecordingSendLog(journal);
+        var variables = service ?? (selection is null ? null : new FixedVariableService(selection));
+        var sut = new OtherPayrollWriter(uow, Mock.Of<ITenantConnectionService>(), new NullAudit(),
+            NullLogger<OtherPayrollWriter>.Instance, variables, envois, _ => Task.FromResult<IOtherPayrollDatabase>(db));
+        return (sut, db, journal, envois);
+    }
+
+    /// <summary>Service réel de variables sur une unité de travail en mémoire (sans droit, lecture de la sélection).</summary>
+    internal static PayrollVariableService VariableService(InMemoryUnitOfWork uow) => new(
+        uow, Mock.Of<ITenantConnectionService>(), Mock.Of<Application.Abstractions.DataSources.IDatabaseConfigurationAuthorizer>(),
+        new TestCurrentUser(1, 1), new RecordingSendLog(), Mock.Of<Application.Abstractions.Settings.ICodeConstanteService>(),
+        Mock.Of<Application.Abstractions.DataSources.IExternalDiscoveryService>(), new PayrollVariableCache(),
+        new Infrastructure.Services.Closing.ClosingAnalysisCache(), new Infrastructure.Services.Closing.ClosingChecklistCache(),
+        TimeProvider.System, NullLogger<PayrollVariableService>.Instance);
+
+    private sealed class TestStandardWriter(
+        ISagePayrollWriter sageWriter, IAuditTrail auditTrail, IPayrollVariableService? variables = null,
+        IPayrollSendLog? sendLog = null, string? sansCode = null)
+        : StandardPayrollWriter(sageWriter, null!, null!, null!, auditTrail, variables, sendLog)
+    {
+        protected override Task<SagePayrollTarget> GetInputAsync(CancellationToken ct) => Task.FromResult(Cible(sansCode));
+    }
+
+    private sealed class NullAudit : IAuditTrail
+    {
+        public Task WritePayrollSyncAsync(PayrollSyncAudit audit, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    private sealed class CapturingAudit : IAuditTrail
+    {
+        public List<string> Statuts { get; } = new();
+
+        public Task WritePayrollSyncAsync(PayrollSyncAudit audit, CancellationToken cancellationToken = default)
+        {
+            Statuts.Add(audit.Status);
+            return Task.CompletedTask;
+        }
+    }
+}
