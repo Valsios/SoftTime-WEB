@@ -141,6 +141,10 @@ public static class DependencyInjection
         services.AddScoped<IHolidayService, HolidayService>();
         services.AddScoped<IMajorationService, MajorationService>();
         services.AddScoped<IPayrollWriteConfigurationService, PayrollWriteConfigurationService>();
+        // Variables envoyées à la paie (T_PAIE_VARIABLE) et marqueur d'envoi (T_PAIE_ENVOI).
+        services.AddSingleton<PayrollVariableCache>();
+        services.AddScoped<IPayrollVariableService, PayrollVariableService>();
+        services.AddScoped<IPayrollSendLog, PayrollSendLog>();
         services.AddScoped<IPointeuseDatabaseService, PointeuseDatabaseService>();
         services.AddScoped<ISageDatabaseService, SageDatabaseService>();
         services.AddScoped<IDepartementServiceLookup, DepartementServiceLookup>();
