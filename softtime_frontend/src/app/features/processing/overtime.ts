@@ -1,18 +1,20 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { OvertimeDetail, PeriodRequest, PageChangeEvent } from '../../shared/models';
 import { OvertimeService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
-import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftModal, PeriodFilter } from '../../shared/components';
+import { Column, DataTable, DataTableCell, PageHeader, SoftButton, SoftCard, SoftModal, PeriodFilter } from '../../shared/components';
 import { asRow, fmtDate, isMaxOneMonth } from '../../shared/utils/date';
 import { SessionStore } from '../../core/session.store';
+import { PayrollVariablesService } from '../../shared/services/payroll-variables.service';
+import { ACTIVES_PAR_DEFAUT, colonnesNonEnvoyees, libelleColonne, NON_ENVOYEE } from '../params/payroll-variables.logic';
 
 @Component({
   selector: 'app-overtime',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DatePipe, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, PeriodFilter],
+  imports: [DatePipe, PageHeader, SoftButton, SoftCard, DataTable, DataTableCell, SoftModal, PeriodFilter],
   template: `
     <page-header title="Heures supplémentaires" subtitle="Calcul EXO/IMPO — période maximale d'un mois">
       <soft-button variant="danger" [loading]="busy()" (click)="purge()">Purger</soft-button>
@@ -25,7 +27,7 @@ import { SessionStore } from '../../core/session.store';
 
     <soft-card>
       <data-table
-        [columns]="columns"
+        [columns]="displayColumns()"
         [rows]="rows()"
         [loading]="loading()"
         [serverSide]="true"
@@ -39,6 +41,12 @@ import { SessionStore } from '../../core/session.store';
         <ng-template #actions let-row>
           <soft-button size="sm" variant="ghost" (click)="openDetail(row)">Détail</soft-button>
         </ng-template>
+        <!-- Variables non envoyées à la paie : colonnes grisées, jamais masquées. -->
+        @for (key of nonEnvoyees(); track key) {
+          <ng-template [dataTableCell]="key" let-value="value">
+            <span class="non-envoyee" [title]="nonEnvoyeeLabel">{{ value ?? '' }}</span>
+          </ng-template>
+        }
       </data-table>
     </soft-card>
 
@@ -72,14 +80,26 @@ import { SessionStore } from '../../core/session.store';
   styles: [`
     .detail-head { margin: 0 0 12px; }
     .detail-title { font-size: 15px; margin: 18px 0 10px; }
+    .non-envoyee { color: var(--text-muted); opacity: 0.7; }
   `],
 })
-export class OvertimePage {
+export class OvertimePage implements OnInit {
   private readonly svc = inject(OvertimeService);
   protected readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly session = inject(SessionStore);
+  private readonly variables = inject(PayrollVariablesService);
+
+  protected readonly nonEnvoyeeLabel = NON_ENVOYEE;
+  /** Variables envoyées à la paie pour la base active ; sans réponse, comportement d'origine (7 HS). */
+  readonly actives = signal<readonly string[]>(ACTIVES_PAR_DEFAUT);
+  readonly nonEnvoyeesSet = computed(() => colonnesNonEnvoyees(this.actives()));
+  readonly nonEnvoyees = computed(() => [...this.nonEnvoyeesSet()]);
+  /** Colonnes affichées : la mention « non envoyée à la paie » est ajoutée à l'en-tête, la colonne reste. */
+  readonly displayColumns = computed<Column[]>(() =>
+    this.columns.map((c) => ({ ...c, label: libelleColonne(c.label, !this.nonEnvoyeesSet().has(c.key)) })),
+  );
 
   readonly busy = signal(false);
   readonly loading = signal(false);
@@ -110,6 +130,13 @@ export class OvertimePage {
     { key: 'retard', label: 'Retard' },
     { key: 'absence', label: 'Absence' },
   ];
+
+  ngOnInit(): void {
+    this.variables.actives().subscribe({
+      next: (r) => this.actives.set(r.actives),
+      error: () => this.actives.set(ACTIVES_PAR_DEFAUT),
+    });
+  }
 
   private validatePeriod(filter: PeriodRequest | null): filter is PeriodRequest {
     if (!filter) {
