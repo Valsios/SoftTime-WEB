@@ -58,6 +58,9 @@ public sealed class ClosingAnalysisCache
         _entrees[cle] = new Entree(expire > limite ? limite : expire, limite, valeur);
     }
 
+    /// <summary>Retire toutes les entrées (changement de la configuration des variables envoyées à la paie).</summary>
+    internal void Vider() => _entrees.Clear();
+
     internal static string Cle(string sageDb, string pointeuseDb, ClosingAnalysisRequest r)
     {
         var o = r.Options ?? ClosingRulesOptions.Default;
@@ -76,6 +79,8 @@ public sealed class ClosingAnalysisCache
             .Append(o.HeuresSupHebdoSeuil.ToString(c)).Append('|');
         foreach (var (type, gravite) in o.Gravites.OrderBy(g => g.Key))
             s.Append(type).Append('=').Append(gravite).Append(';');
+        if (o.TypesIgnores.Count > 0)
+            s.Append("|sans:").Append(string.Join(',', o.TypesIgnores.OrderBy(t => t)));
         return s.ToString();
     }
 }
