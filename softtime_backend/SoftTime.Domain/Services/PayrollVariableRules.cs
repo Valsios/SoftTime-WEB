@@ -54,6 +54,12 @@ public static class PayrollVariableRules
             yield return $"L'unité de la variable {nom} doit être {unites}.";
         if (!ligne.Actif)
             yield break;
+        if (!definition.Envoyable)
+        {
+            // Aucune destination n'est valide tant que l'écriture de la variable n'existe pas (Absence : lot C3).
+            yield return $"La variable {nom} ne peut pas encore être envoyée à la paie : son envoi est prévu dans une prochaine étape.";
+            yield break;
+        }
         if (baseSage && string.IsNullOrWhiteSpace(ligne.CodePaie))
             yield return $"La variable {nom} ne peut pas être cochée tant que son code de paie n'est pas renseigné.";
         if (!baseSage && string.IsNullOrWhiteSpace(ligne.ColonneCible))

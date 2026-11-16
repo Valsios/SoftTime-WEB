@@ -77,7 +77,9 @@ public static class PayrollVariableCatalog
         new(PayrollVariableSelection.Ferie, "Férié", true, Services.OvertimeCodeKeys.Ferie, HeuresSeules, true, l => l.Ferie),
         new(PayrollVariableSelection.Dimanche, "Dimanche", true, Services.OvertimeCodeKeys.Dim, HeuresSeules, true, l => l.Dimanche),
         new(PayrollVariableSelection.Nuit, "Nuit", true, Services.OvertimeCodeKeys.Nuit, HeuresSeules, true, l => l.Nuit),
-        new(PayrollVariableSelection.Retard, "Retard", false, null, HeuresOuJours, false, l => l.Retard),
+        // Retard (lot C2) : envoyé en heures, code ou colonne propre à chaque base.
+        new(PayrollVariableSelection.Retard, "Retard", false, null, HeuresSeules, true, l => l.Retard),
+        // Absence : jamais envoyée tant que la définition des absences non justifiées n'est pas arrêtée (lot C3).
         new(PayrollVariableSelection.Absence, "Absence", false, null, HeuresOuJours, false, l => l.Absence),
     ];
 

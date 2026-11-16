@@ -98,18 +98,67 @@ public class PayrollVariableWritersTests
     }
 
     [Fact]
-    public async Task StandardWrite_RetardAndAbsenceActive_AreNeverWritten()
+    public async Task StandardWrite_RetardActiveWithCode_IsWrittenAfterTheSeven_AbsenceNever()
     {
-        // Arrange : lot C absent, Retard et Absence actives ne changent rien.
+        // Arrange : adapté au lot C2 (avant : Retard et Absence jamais écrites). Retard a son code RET01 (opérande 8).
         var sage = new CapturingSagePayrollWriter();
-        var selection = PayrollVariableSelection.Avec([.. PayrollVariableSelection.HeuresSup, PayrollVariableSelection.Retard, PayrollVariableSelection.Absence]);
+        var selection = PayrollVariableSelection.Avec([.. PayrollVariableSelection.HeuresSup, PayrollVariableSelection.Retard, PayrollVariableSelection.Absence])
+            with { CodesPaie = new Dictionary<string, string> { [PayrollVariableSelection.Retard] = "RET01", [PayrollVariableSelection.Absence] = "HS01" } };
 
         // Act
-        await new TestStandardWriter(sage, new NullAudit(), new FixedVariableService(selection)).WriteAsync(Base(), [Ligne], Contexte());
+        var resultat = await new TestStandardWriter(sage, new NullAudit(), new FixedVariableService(selection)).WriteAsync(Base(), [Ligne], Contexte());
+
+        // Assert : les sept dans l'ordre historique, puis Retard avec la valeur T_HSExoImp.RETARD (7) ; Absence jamais.
+        sage.Calls.Should().Equal(
+            (101, (short)1, 1.5m), (101, (short)2, 2m), (101, (short)3, 0.5m), (101, (short)4, 1.25m),
+            (101, (short)5, 3m), (101, (short)6, 2.5m), (101, (short)7, 4m), (101, (short)8, 7m));
+        resultat.CategoriesUpdated.Should().Be(8);
+    }
+
+    [Fact]
+    public async Task StandardWrite_RetardActiveWithoutCode_IsRefusedBeforeAnyWrite()
+    {
+        // Arrange : sélection incohérente (Retard coché sans code) : refus clair, rien d'écrit.
+        var sage = new CapturingSagePayrollWriter();
+        var selection = PayrollVariableSelection.Avec([.. PayrollVariableSelection.HeuresSup, PayrollVariableSelection.Retard]);
+
+        // Act
+        var act = () => new TestStandardWriter(sage, new NullAudit(), new FixedVariableService(selection)).WriteAsync(Base(), [Ligne], Contexte());
 
         // Assert
-        sage.Calls.Should().HaveCount(7);
-        sage.Calls.Select(c => c.Value).Should().NotContain(7m);
+        await act.Should().ThrowAsync<Exception>().Where(e => e.ToString().Contains("Aucun code de paie n'est choisi pour la variable Retard"));
+        sage.Calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task StandardWrite_EmployeeWithoutHsExoRow_IsNotWritten_KnownStaleCumulDefect()
+    {
+        // Défaut connu, documenté et non corrigé (lot C2) : un salarié sans ligne T_HSExoImp sur la période n'est pas
+        // écrit, son cumul (Retard compris) garde donc la valeur d'un envoi précédent au lieu d'être remis à zéro.
+        var sage = new CapturingSagePayrollWriter();
+        var selection = PayrollVariableSelection.Avec([PayrollVariableSelection.Retard])
+            with { CodesPaie = new Dictionary<string, string> { [PayrollVariableSelection.Retard] = "RET01" } };
+
+        await new TestStandardWriter(sage, new NullAudit(), new FixedVariableService(selection)).WriteAsync(Base(), [Ligne], Contexte());
+
+        sage.Calls.Select(c => c.NumSal).Should().OnlyContain(n => n == 101, "le salarié 102, sans ligne, n'est pas touché");
+    }
+
+    [Fact]
+    public async Task StandardWrite_RetardValueIsTheDisplayedValue_ZeroWhenAbsent()
+    {
+        // Arrange : la valeur écrite est celle de la ligne T_HSExoImp affichée (2,75 h) ; une valeur absente vaut 0.
+        var sage = new CapturingSagePayrollWriter();
+        var selection = PayrollVariableSelection.Avec([PayrollVariableSelection.Retard])
+            with { CodesPaie = new Dictionary<string, string> { [PayrollVariableSelection.Retard] = "RET01" } };
+        var affichee = Ligne with { Retard = 2.75m };
+        var sansValeur = Ligne2 with { Retard = null };
+
+        // Act
+        await new TestStandardWriter(sage, new NullAudit(), new FixedVariableService(selection)).WriteAsync(Base(), [affichee, sansValeur], Contexte());
+
+        // Assert
+        sage.Calls.Should().Equal((101, (short)8, 2.75m), (102, (short)8, 0m));
     }
 
     // ---------- STANDARD : mises à jour sans ligne ----------
@@ -291,8 +340,8 @@ public class PayrollVariableWritersTests
     [Fact]
     public async Task OtherWrite_NoCheckedOvertimeVariable_TouchesNothing()
     {
-        // Arrange
-        var (sut, db, journal, envois) = Autre(selection: PayrollVariableSelection.Avec([PayrollVariableSelection.Retard]));
+        // Arrange : adapté au lot C2 (avant : Retard seule). Absence seule cochée : jamais envoyée, rien à écrire.
+        var (sut, db, journal, envois) = Autre(selection: PayrollVariableSelection.Avec([PayrollVariableSelection.Absence]));
 
         // Act
         var resultat = await sut.WriteAsync(BaseAutre(), [Ligne], Contexte());
@@ -300,6 +349,54 @@ public class PayrollVariableWritersTests
         // Assert
         resultat.CategoriesUpdated.Should().Be(0);
         journal.Should().BeEmpty();
+        db.Updates.Should().BeEmpty();
+        envois.Envois.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task OtherWrite_RetardCheckedWithoutDestination_IsRefusedBeforeAnyWrite()
+    {
+        // Arrange : Retard seule cochée, aucune ligne Retard dans T_PAIE_ECRITURE.
+        var (sut, db, _, envois) = Autre(selection: PayrollVariableSelection.Avec([PayrollVariableSelection.Retard]));
+
+        // Act
+        var act = () => sut.WriteAsync(BaseAutre(), [Ligne], Contexte());
+
+        // Assert
+        await act.Should().ThrowAsync<DomainException>().WithMessage("*la catégorie Retard n'est pas configurée*");
+        db.Updates.Should().BeEmpty();
+        envois.Envois.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task OtherWrite_RetardWithDestination_WritesTheDisplayedValueAfterTheSeven()
+    {
+        // Arrange : les sept + Retard vers la colonne decimal(18,2) HeuresRetard.
+        var selection = PayrollVariableSelection.Avec([.. PayrollVariableSelection.HeuresSup, PayrollVariableSelection.Retard]);
+        var (sut, db, _, _) = Autre(selection: selection, retard: new OtherPayrollColumn("decimal", 18, 2));
+
+        // Act
+        var resultat = await sut.WriteAsync(BaseAutre(), [Ligne with { Retard = 2.75m }], Contexte());
+
+        // Assert
+        resultat.CategoriesUpdated.Should().Be(8);
+        db.Updates.Should().HaveCount(8);
+        db.Updates.Last().Sql.Should().Contain("HeuresRetard");
+        db.Updates.Last().Value.Should().Be(2.75m);
+    }
+
+    [Fact]
+    public async Task OtherWrite_RetardDecimalIntoIntegerColumn_IsRefusedBeforeAnyWrite()
+    {
+        // Arrange : destination Retard de type int, valeur 2,75 h.
+        var selection = PayrollVariableSelection.Avec([PayrollVariableSelection.Retard]);
+        var (sut, db, _, envois) = Autre(selection: selection, retard: new OtherPayrollColumn("int", 10, 0));
+
+        // Act
+        var act = () => sut.WriteAsync(BaseAutre(), [Ligne with { Retard = 2.75m }], Contexte());
+
+        // Assert
+        await act.Should().ThrowAsync<DomainException>();
         db.Updates.Should().BeEmpty();
         envois.Envois.Should().BeEmpty();
     }
@@ -429,6 +526,7 @@ public class PayrollVariableWritersTests
     private static SagePayrollTarget Cible(string? sansCode = null) => new("test",
         Enumerable.Range(1, 7)
             .Select(i => new ConstanteSage { CodeConstante = $"HS0{i}", CodeOperande1 = (short)i })
+            .Append(new ConstanteSage { CodeConstante = "RET01", CodeOperande1 = 8 })
             .Where(c => c.CodeConstante != sansCode)
             .ToArray(),
         new OvertimeSageCodes());
@@ -439,7 +537,8 @@ public class PayrollVariableWritersTests
         .ToList();
 
     private static (OtherPayrollWriter Sut, FakeOtherPayrollDatabase Db, List<string> Journal, RecordingSendLog Envois) Autre(
-        PayrollVariableSelection? selection, IPayrollVariableService? service = null, string? sansCategorie = null)
+        PayrollVariableSelection? selection, IPayrollVariableService? service = null, string? sansCategorie = null,
+        OtherPayrollColumn? retard = null)
     {
         var journal = new List<string>();
         var db = new FakeOtherPayrollDatabase(journal);
@@ -448,6 +547,14 @@ public class PayrollVariableWritersTests
             db.Columns[$"Heures{c}"] = new OtherPayrollColumn("decimal", 18, 4);
         var uow = new InMemoryUnitOfWork();
         uow.Get<PaieEcriture>().Items.AddRange(Configuration(sansCategorie));
+        if (retard is not null)
+        {
+            db.Columns["HeuresRetard"] = retard;
+            uow.Get<PaieEcriture>().Items.Add(new PaieEcriture
+            {
+                BddSage = "SAGE_AUTRE", TableCible = "PAIE_CUMULS", ColMatricule = "MatriculeEmploye", Categorie = "Retard", ColValeur = "HeuresRetard"
+            });
+        }
         var envois = new RecordingSendLog(journal);
         var variables = service ?? (selection is null ? null : new FixedVariableService(selection));
         var sut = new OtherPayrollWriter(uow, Mock.Of<ITenantConnectionService>(), new NullAudit(),
