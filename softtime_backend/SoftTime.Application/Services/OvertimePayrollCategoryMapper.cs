@@ -1,18 +1,12 @@
+using SoftTime.Application.Abstractions.Payroll;
 using SoftTime.Application.DTOs;
 
 namespace SoftTime.Application.Services;
 
+/// <summary>Valeur d'une catégorie d'écriture (variable de paie) dans une ligne EXO/IMPO, lue par le catalogue.</summary>
 public static class OvertimePayrollCategoryMapper
 {
-    public static decimal ValueFor(string category, HsExoDto row) => PayrollWritingConfiguration.NormalizeCategory(category) switch
-    {
-        "Exo130" => row.Exo130 ?? 0,
-        "Exo150" => row.Exo150 ?? 0,
-        "I130" => row.I130 ?? 0,
-        "I150" => row.I150 ?? 0,
-        "Ferie" => row.Ferie ?? 0,
-        "Dimanche" => row.Dim ?? 0,
-        "Nuit" => row.Nuit ?? 0,
-        _ => throw new DomainException("Catégorie inconnue.")
-    };
+    public static decimal ValueFor(string category, HsExoDto row)
+        => PayrollVariableCatalog.Definition(PayrollWritingConfiguration.NormalizeCategory(category))
+            .ValeurEnvoyee(PayrollRows.Valeurs(row));
 }

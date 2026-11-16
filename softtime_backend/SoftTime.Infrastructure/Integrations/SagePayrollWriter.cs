@@ -12,8 +12,7 @@ public class SagePayrollWriter : ISagePayrollWriter
 
     public async Task<IReadOnlyDictionary<string, int>> SyncOvertimeAsync(SagePayrollTarget target, int numSal, OvertimeAmounts amounts, CancellationToken cancellationToken = default)
     {
-        var (sageConnectionString, constants, codes) = target;
-        var (exo130, exo150, i130, i150, ferie, nuit, dim) = amounts;
+        var (sageConnectionString, constants, _) = target;
         short Op(string code) => constants.FirstOrDefault(c => string.Equals(c.CodeConstante?.Trim(), code, StringComparison.Ordinal))?.CodeOperande1
             ?? throw new DomainException($"Constante SAGE {code} introuvable.");
 
@@ -22,19 +21,10 @@ public class SagePayrollWriter : ISagePayrollWriter
         {
             // Toutes les constantes des variables envoyées sont résolues avant la première écriture : une constante
             // absente implique donc correctement zéro mise à jour pour ce salarié. Une variable décochée n'est ni
-            // résolue ni écrite : la valeur existante de T_CUMSAL n'est pas touchée.
-            var commands = new (string Category, Func<short> Operand, decimal Value)[]
-            {
-                ("Exo130", () => Op(codes.Exo130), exo130),
-                ("Exo150", () => Op(codes.Exo150), exo150),
-                ("I130", () => Op(codes.I130), i130),
-                ("I150", () => Op(codes.I150), i150),
-                ("Ferie", () => Op(codes.Ferie), ferie),
-                ("Dimanche", () => Op(codes.Dim), dim),
-                ("Nuit", () => Op(codes.Nuit), nuit)
-            }
-                .Where(command => target.Variables.EstActive(command.Category))
-                .Select(command => (command.Category, Operand: command.Operand(), command.Value))
+            // résolue ni écrite : la valeur existante de T_CUMSAL n'est pas touchée. Ordre : celui du catalogue
+            // (EXO 130, EXO 150, IMPO 130, IMPO 150, Férié, Dimanche, Nuit pour les heures supplémentaires).
+            var commands = target.Variables.Envoyees
+                .Select(variable => (Category: variable, Operand: Op(target.CodeDe(variable)), Value: amounts.ValeurDe(variable)))
                 .ToList();
             foreach (var command in commands)
             {

@@ -34,19 +34,23 @@ public class PayrollWritersCharacterizationTests
         => PayrollWritingConfiguration.Categories.Should().Equal("Exo130", "Exo150", "I130", "I150", "Ferie", "Dimanche", "Nuit");
 
     [Fact]
-    public void OvertimeAmounts_From_ReadsTheSevenColumnsAndIgnoresRetardAndAbsence()
+    public void OvertimeAmounts_From_ReadsTheSevenColumns()
     {
         // Act
         var montants = OvertimeAmounts.From(Ligne);
 
-        // Assert : EXO 130, EXO 150, IMPO 130, IMPO 150, Férié, Nuit, Dimanche.
-        montants.Should().Be(new OvertimeAmounts(1.5m, 2m, 0.5m, 1.25m, 3m, 4m, 2.5m));
+        // Assert : EXO 130, EXO 150, IMPO 130, IMPO 150, Férié, Dimanche, Nuit (colonnes EXO130, EXO150, I130, I150,
+        // FERIE, DIM, NUIT de la ligne).
+        PayrollWritingConfiguration.Categories.Select(montants.ValeurDe).Should().Equal(1.5m, 2m, 0.5m, 1.25m, 3m, 2.5m, 4m);
     }
 
     [Fact]
     public void OvertimeAmounts_From_MissingValuesAreZero()
-        => OvertimeAmounts.From(new HsExoDto(2, "MAT02", 102, null, null, null, null, null, null, null, null, null))
-            .Should().Be(new OvertimeAmounts(0m, 0m, 0m, 0m, 0m, 0m, 0m));
+    {
+        var montants = OvertimeAmounts.From(new HsExoDto(2, "MAT02", 102, null, null, null, null, null, null, null, null, null));
+
+        PayrollWritingConfiguration.Categories.Select(montants.ValeurDe).Should().AllBeEquivalentTo(0m);
+    }
 
     // ---------- STANDARD : synthèse du journal et message ----------
 

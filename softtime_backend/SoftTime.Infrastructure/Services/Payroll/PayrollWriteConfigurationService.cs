@@ -120,15 +120,15 @@ public sealed class PayrollWriteConfigurationService : IPayrollWriteConfiguratio
         await PayrollWritingConfiguration.EnsureStorageAsync(_uow, ct);
         var configs = await _uow.Repository<PaieEcriture>().ListReadOnlyAsync(c => c.BddSage == _tenant.SageDb, ct);
         var actives = _variables is null
-            ? PayrollVariableSelection.Default.HeuresSupActives
-            : (await _variables.GetSelectionAsync(_tenant.SageDb, ct)).HeuresSupActives;
+            ? PayrollVariableSelection.Default.Envoyees
+            : (await _variables.GetSelectionAsync(_tenant.SageDb, ct)).Envoyees;
         if (actives.Count == 0)
             return new ConnectionTestResultDto(true, "Aucune variable d'heures supplémentaires n'est envoyée à la paie pour cette base : rien à écrire.");
-        var missing = PayrollWritingConfiguration.Categories.Where(actives.Contains).FirstOrDefault(category => !configs.Any(c => string.Equals(c.Categorie, category, StringComparison.OrdinalIgnoreCase)));
+        var missing = PayrollWritingConfiguration.CategoriesConnues.Where(actives.Contains).FirstOrDefault(category => !configs.Any(c => string.Equals(c.Categorie, category, StringComparison.OrdinalIgnoreCase)));
         if (missing != null)
             return new ConnectionTestResultDto(false, $"La configuration d'écriture de la base AUTRE est incomplète : la catégorie {missing} n'est pas configurée.");
-        // Lignes des catégories décochées ignorées ; avec les sept actives, la liste d'origine est gardée telle quelle.
-        if (actives.Count < PayrollWritingConfiguration.Categories.Length)
+        // Lignes des catégories décochées ignorées ; avec exactement les sept actives, la liste d'origine est gardée telle quelle.
+        if (!actives.SequenceEqual(PayrollWritingConfiguration.Categories))
             configs = configs.Where(c => actives.Contains(c.Categorie, StringComparer.OrdinalIgnoreCase)).ToList();
         var first = configs.First();
         if (configs.Any(c => !string.Equals(c.TableCible, first.TableCible, StringComparison.OrdinalIgnoreCase)

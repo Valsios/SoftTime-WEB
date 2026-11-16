@@ -63,7 +63,7 @@ public sealed class OtherPayrollWriter : IPayrollWriter
 
     public async Task<PayrollWriteResultDto> ValidateAsync(BddSage database, IReadOnlyList<HsExoDto> rows, CancellationToken ct = default)
     {
-        var categories = (await SelectionAsync(database, ct)).HeuresSupActives;
+        var categories = (await SelectionAsync(database, ct)).Envoyees;
         if (categories.Count == 0)
             return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "AUTRE", 0, 0, AucuneVariableMessage);
         await PreflightAsync(database, rows, categories, ct);
@@ -75,13 +75,14 @@ public sealed class OtherPayrollWriter : IPayrollWriter
 
     public async Task<PayrollWriteResultDto> WriteAsync(BddSage database, IReadOnlyList<HsExoDto> rows, PayrollSyncContext auditContext, CancellationToken ct = default)
     {
-        var categories = (await SelectionAsync(database, ct)).HeuresSupActives;
+        var selection = await SelectionAsync(database, ct);
+        var categories = selection.Envoyees;
         if (categories.Count == 0)
             return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "AUTRE", 0, 0, AucuneVariableMessage);
         var plan = await PreflightAsync(database, rows, categories, ct); // aucune écriture avant la fin du préflight
         await using var db = await _openDatabase(ct);
         await db.BeginTransactionAsync(ct);
-        var categoryCounts = PayrollWritingConfiguration.Categories.ToDictionary(category => category, _ => 0, StringComparer.Ordinal);
+        var categoryCounts = PayrollWritingConfiguration.CompteursParCategorie(selection);
         var updates = 0;
         try
         {
@@ -217,7 +218,7 @@ public sealed class OtherPayrollWriter : IPayrollWriter
                 ? "Un résultat d'heures supplémentaires ne contient pas de matricule."
                 : $"Plusieurs résultats d'heures supplémentaires correspondent au matricule {sourceDuplicates.Key}.");
         foreach (var row in rows)
-        foreach (var category in PayrollWritingConfiguration.Categories.Where(plan.ValueColumns.ContainsKey))
+        foreach (var category in PayrollWritingConfiguration.CategoriesConnues.Where(plan.ValueColumns.ContainsKey))
         {
             var value = OvertimePayrollCategoryMapper.ValueFor(category, row);
             var target = columns[plan.ValueColumns[category]];

@@ -51,8 +51,9 @@ public class StandardPayrollWriter : IPayrollWriter
         var constants = sage.Constants.ToArray();
         var codes = await _catalog.GetOvertimeSageCodesAsync(ct);
         var selection = await SelectionAsync(database, ct);
-        // Une variable décochée n'est ni validée ni comptée comme manquante.
-        foreach (var code in selection.HeuresSupActives.Select(codes.CodePour))
+        var cible = new SagePayrollTarget(string.Empty, constants, codes) { Variables = selection };
+        // Une variable décochée (ou non envoyable) n'est ni validée ni comptée comme manquante.
+        foreach (var code in selection.Envoyees.Select(cible.CodeDe))
             if (!constants.Any(c => string.Equals(c.CodeConstante?.Trim(), code, StringComparison.OrdinalIgnoreCase)))
                 throw new DomainException($"Constante SAGE {code} introuvable.");
         return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "STANDARD", 0, 0, "Configuration SAGE valide.");
@@ -62,7 +63,7 @@ public class StandardPayrollWriter : IPayrollWriter
     {
         // Le flux ci-dessous est intentionnellement celui qui existait dans OvertimeService.
         var input = (await GetInputAsync(ct)) with { Variables = await SelectionAsync(database, ct) };
-        var categoryCounts = PayrollWritingConfiguration.Categories.ToDictionary(category => category, _ => 0, StringComparer.Ordinal);
+        var categoryCounts = PayrollWritingConfiguration.CompteursParCategorie(input.Variables);
         var envoi = new SendMarker(_sendLog, database, auditContext);
         var sansLigne = 0;
         try
