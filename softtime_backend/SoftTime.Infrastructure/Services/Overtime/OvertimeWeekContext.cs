@@ -1,4 +1,6 @@
-﻿using SoftTime.Application.Abstractions.Employees;
+﻿using System.Linq.Expressions;
+
+using SoftTime.Application.Abstractions.Employees;
 using SoftTime.Application.Abstractions.ExternalData;
 using SoftTime.Application.Abstractions.Overtime;
 using SoftTime.Application.Abstractions.RequestContext;
@@ -172,6 +174,24 @@ public sealed class OvertimeWeekContext : IOvertimeWeekContext
     }
 
     /// <summary>
+    /// Filtre SQL des cartes du périmètre (base SAGE, département, plage de matricules). Le département se compare
+    /// sans tenir compte de la casse par <c>UPPER</c> des deux côtés : <c>string.Equals(…, StringComparison)</c> n'est
+    /// pas traduisible par EF Core (500 sur la page Heures supplémentaires avec un département), et une égalité directe
+    /// dépendrait de la collation de <c>T_CARDPAIE.DEPARTEMENT</c> (nvarchar(max) sans COLLATE : collation de la base).
+    /// </summary>
+    internal static Expression<Func<CardPaie, bool>> CartesDuPerimetre(string sageDb, PeriodRequest request)
+    {
+        var departement = request.Departement?.ToUpperInvariant();
+        var matriculeFrom = request.MatriculeFrom;
+        var matriculeTo = request.MatriculeTo;
+        return c =>
+            c.SageBdd == sageDb
+            && (string.IsNullOrEmpty(departement) || (c.Departement != null && c.Departement.ToUpper() == departement))
+            && (string.IsNullOrEmpty(matriculeFrom) || string.Compare(c.SageMatricule, matriculeFrom) >= 0)
+            && (string.IsNullOrEmpty(matriculeTo) || string.Compare(c.SageMatricule, matriculeTo) <= 0);
+    }
+
+    /// <summary>
     /// Cartes du périmètre. Le filtre pointeuse est tolérant (lignes héritées sans base renseignée)
     /// et identique à celui du pré-traitement des pointages.
     /// </summary>
@@ -179,12 +199,7 @@ public sealed class OvertimeWeekContext : IOvertimeWeekContext
     {
         var sageDb = _tenant.SageDb;
         var pointeuseDb = _tenant.PointeuseDb;
-        var cards = await _uow.Repository<CardPaie>().ListAsync(c =>
-            c.SageBdd == sageDb
-            && (string.IsNullOrEmpty(request.Departement)
-                || string.Equals(c.Departement, request.Departement, StringComparison.OrdinalIgnoreCase))
-            && (string.IsNullOrEmpty(request.MatriculeFrom) || string.Compare(c.SageMatricule, request.MatriculeFrom) >= 0)
-            && (string.IsNullOrEmpty(request.MatriculeTo) || string.Compare(c.SageMatricule, request.MatriculeTo) <= 0), ct);
+        var cards = await _uow.Repository<CardPaie>().ListAsync(CartesDuPerimetre(sageDb, request), ct);
         return cards
             .Where(c => string.IsNullOrWhiteSpace(c.PointeuseBdd)
                         || string.Equals(c.PointeuseBdd.Trim(), pointeuseDb.Trim(), StringComparison.OrdinalIgnoreCase))
