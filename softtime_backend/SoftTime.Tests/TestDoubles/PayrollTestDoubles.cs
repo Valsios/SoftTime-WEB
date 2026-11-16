@@ -99,10 +99,13 @@ internal sealed class FakeOtherPayrollDatabase : IOtherPayrollDatabase
         return Task.FromResult<IReadOnlyDictionary<string, OtherPayrollColumn>>(Columns);
     }
 
+    /// <summary>Lignes de paie trouvées par matricule (1 par défaut).</summary>
+    public Func<string, long> LignesParMatricule { get; set; } = _ => 1L;
+
     public Task<long> CountAsync(string sql, string matricule, CancellationToken ct)
     {
         CountSql.Add(sql);
-        return Task.FromResult(1L);
+        return Task.FromResult(LignesParMatricule(matricule));
     }
 
     public Task BeginTransactionAsync(CancellationToken ct)
