@@ -23,4 +23,19 @@ public interface IPayrollVariableService
     /// Journalisé dans le journal central ; invalide les caches de la sélection et du Contrôle avant paie.
     /// </summary>
     Task<PayrollVariablesConfigDto> SaveAsync(IReadOnlyList<PayrollVariableSaveDto> variables, CancellationToken ct = default);
+
+    /// <summary>
+    /// Autre base : table, colonne matricule et colonne de chaque variable envoyable (T_PAIE_ECRITURE), avec les tables et
+    /// colonnes lues dans la base de paie (droit de configuration vérifié).
+    /// </summary>
+    Task<PayrollWriteTargetsDto> GetDestinationsAsync(CancellationToken ct = default);
+
+    /// <summary>Autre base : colonnes d'une table de la base de paie, avec leur type (droit de configuration vérifié).</summary>
+    Task<IReadOnlyList<PayrollTargetColumnDto>> GetColonnesAsync(string? table, CancellationToken ct = default);
+
+    /// <summary>
+    /// Autre base : enregistre les destinations. Table et colonnes vérifiées dans la base de paie (existence, type numérique,
+    /// décimales), refus si le mois en cours est déjà envoyé ; journal central et caches du Contrôle avant paie.
+    /// </summary>
+    Task<PayrollWriteTargetsDto> SaveDestinationsAsync(PayrollWriteTargetsSaveDto destinations, CancellationToken ct = default);
 }

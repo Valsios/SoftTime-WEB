@@ -4,12 +4,13 @@ namespace SoftTime.Application.DTOs;
 /// <param name="Variable">Nom technique (Exo130, Exo150, I130, I150, Ferie, Dimanche, Nuit, Retard, Absence).</param>
 /// <param name="Libelle">Libellé affiché (EXO 130, …).</param>
 /// <param name="Actif">Envoyée à la paie.</param>
-/// <param name="CodePaie">Base SAGE : code constante modifiable (Retard, Absence).</param>
-/// <param name="Unite">Retard, Absence : « H » ou « J ».</param>
-/// <param name="ColonneCible">Autre base : colonne cible modifiable (Retard, Absence).</param>
-/// <param name="CibleExistante">Heures supplémentaires, lecture seule : code constante (SAGE) ou colonne de
-/// T_PAIE_ECRITURE (autre base) déjà configurés ailleurs ; null si absent.</param>
-/// <param name="SansEnvoi">Retard, Absence : l'envoi réel n'existe pas encore (lot C).</param>
+/// <param name="CodePaie">Base SAGE : code de paie propre à la base (variables hors catalogue commun : Retard, Absence).</param>
+/// <param name="Unite">Variables hors catalogue commun : « H » ou « J ».</param>
+/// <param name="ColonneCible">Ancienne colonne saisie dans la configuration des variables (lot B) ; plus utilisée, la
+/// colonne d'une autre base est désormais une destination de <c>T_PAIE_ECRITURE</c> (voir <c>CibleExistante</c>).</param>
+/// <param name="CibleExistante">Lecture seule : code commun (base SAGE, heures supplémentaires) ou colonne de
+/// <c>T_PAIE_ECRITURE</c> (autre base, toute variable envoyable) ; null si absent.</param>
+/// <param name="SansEnvoi">L'envoi réel de la variable n'existe pas encore (Absence : lot C3).</param>
 public sealed record PayrollVariableDto(
     string Variable,
     string Libelle,
@@ -34,10 +35,43 @@ public sealed record PayrollVariablesConfigDto(
     bool MoisEnvoye,
     string? DernierEnvoi,
     IReadOnlyList<PayrollVariableDto> Variables,
-    IReadOnlyList<string> ColonnesCibles);
+    IReadOnlyList<string> ColonnesCibles)
+{
+    /// <summary>Base SAGE : codes de paie lus dans SAGE (liste déroulante du code de Retard). Vide pour une autre base.</summary>
+    public IReadOnlyList<SageConstantOptionDto> CodesPaie { get; init; } = Array.Empty<SageConstantOptionDto>();
+
+    /// <summary>Base SAGE : message si la liste des codes n'a pas pu être lue (null sinon).</summary>
+    public string? AvertissementCodes { get; init; }
+}
 
 /// <summary>Ligne envoyée par l'écran pour l'enregistrement.</summary>
 public sealed record PayrollVariableSaveDto(string Variable, bool Actif, string? CodePaie, string? Unite, string? ColonneCible);
 
-/// <summary>Variables actives de la base active (page Heures supplémentaires, Contrôle avant paie).</summary>
+/// <summary>Variables envoyées à la paie de la base active : actives ET envoyables (page Heures supplémentaires).</summary>
 public sealed record PayrollVariablesActiveDto(string Base, IReadOnlyList<string> Actives);
+
+/// <summary>Colonne d'une table de destination, telle que l'écran la propose.</summary>
+/// <param name="AccepteDecimales">Peut recevoir une valeur à deux décimales (Retard, en heures).</param>
+public sealed record PayrollTargetColumnDto(string Nom, string Type, bool Numerique, bool AccepteDecimales);
+
+/// <summary>Destination d'une variable envoyable dans une autre base.</summary>
+/// <param name="Colonne">Colonne de la table d'écriture, ou null si aucune.</param>
+/// <param name="DecimalesRequises">Nombre de décimales que la colonne doit accepter (2 pour Retard, 0 sinon).</param>
+public sealed record PayrollWriteTargetDto(string Variable, string Libelle, bool Actif, string? Colonne, int DecimalesRequises);
+
+/// <summary>Destinations d'une autre base (T_PAIE_ECRITURE) : table, colonne matricule, colonne de chaque variable.</summary>
+public sealed record PayrollWriteTargetsDto(
+    string Base,
+    string? Table,
+    string? ColonneMatricule,
+    IReadOnlyList<PayrollWriteTargetDto> Variables,
+    IReadOnlyList<string> Tables,
+    IReadOnlyList<PayrollTargetColumnDto> Colonnes,
+    bool MoisEnvoye,
+    string? DernierEnvoi);
+
+/// <summary>Destination demandée pour une variable.</summary>
+public sealed record PayrollWriteTargetSaveDto(string Variable, string? Colonne);
+
+/// <summary>Destinations envoyées par l'écran pour l'enregistrement.</summary>
+public sealed record PayrollWriteTargetsSaveDto(string? Table, string? ColonneMatricule, IReadOnlyList<PayrollWriteTargetSaveDto>? Variables);

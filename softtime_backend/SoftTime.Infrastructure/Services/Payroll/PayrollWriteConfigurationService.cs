@@ -34,7 +34,9 @@ public sealed class PayrollWriteConfigurationService : IPayrollWriteConfiguratio
         await _tenant.EnsureAuthorizedAsync(ct);
         await PayrollWritingConfiguration.EnsureStorageAsync(_uow, ct);
         var list = await _uow.Repository<PaieEcriture>().ListReadOnlyAsync(c => c.BddSage == _tenant.SageDb, ct);
-        return list.OrderBy(c => Array.IndexOf(PayrollWritingConfiguration.Categories, c.Categorie))
+        // Ordre du catalogue : les sept heures supplémentaires (ordre historique), puis Retard.
+        var ordre = PayrollWritingConfiguration.CategoriesConnues.ToList();
+        return list.OrderBy(c => ordre.IndexOf(c.Categorie))
             .Select(c => new PayrollWriteConfigurationDto(c.Id, c.TableCible, c.ColMatricule, c.Categorie, c.ColValeur)).ToList();
     }
 

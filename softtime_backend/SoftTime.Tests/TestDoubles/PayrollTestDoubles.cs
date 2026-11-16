@@ -53,6 +53,24 @@ internal sealed class FixedVariableService(PayrollVariableSelection selection) :
     public Task<Application.DTOs.PayrollVariablesActiveDto> GetActivesAsync(CancellationToken ct = default) => throw new NotSupportedException();
     public Task<Application.DTOs.PayrollVariablesConfigDto> GetConfigurationAsync(CancellationToken ct = default) => throw new NotSupportedException();
     public Task<Application.DTOs.PayrollVariablesConfigDto> SaveAsync(IReadOnlyList<Application.DTOs.PayrollVariableSaveDto> variables, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<Application.DTOs.PayrollWriteTargetsDto> GetDestinationsAsync(CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<IReadOnlyList<Application.DTOs.PayrollTargetColumnDto>> GetColonnesAsync(string? table, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<Application.DTOs.PayrollWriteTargetsDto> SaveDestinationsAsync(Application.DTOs.PayrollWriteTargetsSaveDto destinations, CancellationToken ct = default) => throw new NotSupportedException();
+}
+
+/// <summary>Schéma de base de paie en mémoire : tables et colonnes typées, ou erreur de lecture.</summary>
+internal sealed class FakePayrollTargetSchema : IPayrollTargetSchema
+{
+    public Dictionary<string, List<PayrollTargetColumn>> Tables { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public bool Illisible { get; set; }
+
+    public Task<IReadOnlyList<string>> ListTablesAsync(CancellationToken ct = default) =>
+        Illisible ? throw new SoftTime.Application.Abstractions.DataSources.ExternalConnectionException("serveur SQL injoignable (nom, instance ou réseau).", new InvalidOperationException())
+                  : Task.FromResult<IReadOnlyList<string>>(Tables.Keys.ToList());
+
+    public Task<IReadOnlyList<PayrollTargetColumn>> ListColumnsAsync(string table, CancellationToken ct = default) =>
+        Illisible ? throw new SoftTime.Application.Abstractions.DataSources.ExternalConnectionException("serveur SQL injoignable (nom, instance ou réseau).", new InvalidOperationException())
+                  : Task.FromResult<IReadOnlyList<PayrollTargetColumn>>(Tables.TryGetValue(table, out var c) ? c : new List<PayrollTargetColumn>());
 }
 
 /// <summary>Writer SAGE réel dont seule l'exécution SQL est remplacée : capture chaque mise à jour T_CUMSAL.</summary>
