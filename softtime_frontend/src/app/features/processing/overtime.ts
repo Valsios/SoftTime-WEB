@@ -14,7 +14,7 @@ import { ACTIVES_PAR_DEFAUT, colonnesNonEnvoyees, libelleColonne, NON_ENVOYEE } 
 /** Précisé avant l'envoi : les salariés du périmètre sans valeur sont remis à 0 pour les variables envoyées. */
 export const REMISE_A_ZERO =
   'Les salariés de la sélection sans valeur sur la période seront remis à 0 pour les variables envoyées à la paie '
-  + '(une variable non envoyée n'est jamais modifiée).';
+  + "(une variable non envoyée n'est jamais modifiée).";
 
 @Component({
   selector: 'app-overtime',
