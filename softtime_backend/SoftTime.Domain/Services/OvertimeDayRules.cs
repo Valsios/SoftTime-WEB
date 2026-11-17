@@ -45,9 +45,12 @@ public static class OvertimeDayRules
     /// <summary>Civilité SAGE (0 = homme) vers l'indicateur de la règle du 8 mars.</summary>
     public static bool EstFemme(byte? civilite) => civilite is > 0;
 
-    /// <summary>Journée du calcul : paires, planning (reconstruit s'il manque), férié, congé, retard saisi.</summary>
+    /// <summary>
+    /// Journée du calcul : paires, planning (reconstruit s'il manque), férié, congé, retard saisi. <paramref name="codes"/> :
+    /// codes d'absence comptés comme non justifiés (sans réglage : <see cref="AbsenceCodesComptes.Default"/>).
+    /// </summary>
     public static OvertimeDayInput Construire(
-        CalendarDay journee, IEnumerable<HeureCorrigee> lignesDuJour, PlanningSalarie? plan)
+        CalendarDay journee, IEnumerable<HeureCorrigee> lignesDuJour, PlanningSalarie? plan, AbsenceCodesComptes? codes = null)
     {
         var (jour, ferie, congeValeur) = journee;
         var lignes = lignesDuJour
@@ -56,6 +59,7 @@ public static class OvertimeDayRules
         var paires = Paires(lignes);
 
         var (off, ha, hd) = HeuresPlanifiees(plan, paires);
+        var presence = lignes.Any(EstPresence);
 
         return new OvertimeDayInput(
             jour.Date,
@@ -65,10 +69,19 @@ public static class OvertimeDayRules
             off ? null : plan?.Pause,
             off,
             ferie,
-            lignes.Any(EstPresence),
+            presence,
             congeValeur,
-            lignes.FirstOrDefault(h => h.Retard.HasValue)?.Retard);
+            lignes.FirstOrDefault(h => h.Retard.HasValue)?.Retard,
+            !presence && EstJustifiee(lignes, codes ?? AbsenceCodesComptes.Default));
     }
+
+    /// <summary>
+    /// Journée sans présence couverte par des absences arbitrées : justifiée si aucune de ces lignes ne porte un code
+    /// compté (lot C3). Une seule ligne au code compté suffit à compter la journée entière (demi-journées inchangées :
+    /// une demi-journée arbitrée sans heure compte pour la journée). Sans ligne : jamais justifiée (toujours comptée).
+    /// </summary>
+    public static bool EstJustifiee(IReadOnlyCollection<HeureCorrigee> lignesSansPresence, AbsenceCodesComptes codes)
+        => lignesSansPresence.Count > 0 && !lignesSansPresence.Any(l => codes.Compte(l.IntituleAbsence));
 
     /// <summary>Paires entrée / sortie complètes des heures corrigées du jour.</summary>
     private static List<PunchPair> Paires(List<HeureCorrigee> lignes)

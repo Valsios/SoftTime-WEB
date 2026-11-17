@@ -65,7 +65,8 @@ public sealed class OvertimeWeekContext : IOvertimeWeekContext
             Existantes = existantes,
             Civilites = OvertimeDayRules.ContientHuitMars(from, to)
                 ? await ChargerCivilitesAsync(ct)
-                : new Dictionary<string, byte?>(StringComparer.Ordinal)
+                : new Dictionary<string, byte?>(StringComparer.Ordinal),
+            AbsenceCodes = PayrollOptions.AbsenceCodes(await _uow.Repository<PaieOption>().ListAsync(o => o.BddSage == sageDb, ct))
         };
     }
 
@@ -149,7 +150,8 @@ public sealed class OvertimeWeekContext : IOvertimeWeekContext
             jours.Add(OvertimeDayRules.Construire(
                 new CalendarDay(jour, ctx.Feries.Any(f => f.Date.HasValue && f.Date.Value.Date == jour), LeaveRules.Valeur(conges, jour)),
                 heures.Where(h => h.DatePointageIn.HasValue && h.DatePointageIn.Value.Date == jour),
-                OvertimeDayRules.PlanDuJour(planning.Where(p => p.DateP.HasValue && p.DateP.Value.Date == jour))));
+                OvertimeDayRules.PlanDuJour(planning.Where(p => p.DateP.HasValue && p.DateP.Value.Date == jour)),
+                ctx.AbsenceCodes));
         }
         return jours;
     }
