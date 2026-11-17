@@ -66,7 +66,7 @@ public sealed class OtherPayrollWriter : IPayrollWriter
         var categories = (await SelectionAsync(database, ct)).Envoyees;
         if (categories.Count == 0)
             return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "AUTRE", 0, 0, AucuneVariableMessage);
-        await PreflightAsync(database, rows, categories, ct);
+        await PreflightAsync(database, rows, await SelectionAsync(database, ct), ct);
         return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "AUTRE", 0, 0, "Configuration d'écriture valide.");
     }
 
@@ -79,7 +79,7 @@ public sealed class OtherPayrollWriter : IPayrollWriter
         var categories = selection.Envoyees;
         if (categories.Count == 0)
             return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "AUTRE", 0, 0, AucuneVariableMessage);
-        var plan = await PreflightAsync(database, rows, categories, ct); // aucune écriture avant la fin du préflight
+        var plan = await PreflightAsync(database, rows, selection, ct); // aucune écriture avant la fin du préflight
         await using var db = await _openDatabase(ct);
         await db.BeginTransactionAsync(ct);
         var categoryCounts = PayrollWritingConfiguration.CompteursParCategorie(selection);
@@ -96,7 +96,7 @@ public sealed class OtherPayrollWriter : IPayrollWriter
                 if (row.SansValeur) remisAZero++; else ecrits++;
             foreach (var category in categories)
             {
-                var affected = await db.ExecuteUpdateAsync(UpdateSql(plan, category), OvertimePayrollCategoryMapper.ValueFor(category, row), row.Matricule!.Trim(), ct);
+                var affected = await db.ExecuteUpdateAsync(UpdateSql(plan, category), OvertimePayrollCategoryMapper.ValueFor(category, row, selection), row.Matricule!.Trim(), ct);
                 if (affected != 1)
                     throw new DomainException($"La synchronisation a été annulée : {affected} ligne(s) mise(s) à jour pour le matricule {row.Matricule} et la catégorie {category}; une seule ligne était attendue.");
                 updates++;
@@ -178,8 +178,9 @@ public sealed class OtherPayrollWriter : IPayrollWriter
             ? PayrollVariableSelection.Default
             : await _variables.GetSelectionAsync(database.NomBd, ct);
 
-    private async Task<WritePlan> PreflightAsync(BddSage database, IReadOnlyList<HsExoDto> rows, IReadOnlyList<string> categories, CancellationToken ct)
+    private async Task<WritePlan> PreflightAsync(BddSage database, IReadOnlyList<HsExoDto> rows, PayrollVariableSelection selection, CancellationToken ct)
     {
+        var categories = selection.Envoyees;
         await PayrollWritingConfiguration.EnsureStorageAsync(_uow, ct);
         var configs = await _uow.Repository<PaieEcriture>().ListAsync(c => c.BddSage == database.NomBd, ct);
         var plan = BuildPlan(database.NomBd, configs, categories);
@@ -188,7 +189,7 @@ public sealed class OtherPayrollWriter : IPayrollWriter
         if (columns.Count == 0)
             throw new DomainException($"La table {plan.Table} n'existe pas.");
         ValidateColumns(plan, columns);
-        ValidateValues(rows, plan, columns);
+        ValidateValues(rows, plan, columns, selection);
         var ignores = await ValidateMatriculesAsync(db, plan, rows, ct);
         return plan with { IgnoredMatricules = ignores };
     }
@@ -226,7 +227,8 @@ public sealed class OtherPayrollWriter : IPayrollWriter
         }
     }
 
-    private static void ValidateValues(IReadOnlyList<HsExoDto> rows, WritePlan plan, IReadOnlyDictionary<string, OtherPayrollColumn> columns)
+    private static void ValidateValues(
+        IReadOnlyList<HsExoDto> rows, WritePlan plan, IReadOnlyDictionary<string, OtherPayrollColumn> columns, PayrollVariableSelection selection)
     {
         var sourceDuplicates = rows.GroupBy(r => r.Matricule?.Trim(), StringComparer.OrdinalIgnoreCase).FirstOrDefault(g => string.IsNullOrWhiteSpace(g.Key) || g.Count() > 1);
         if (sourceDuplicates != null)
@@ -236,7 +238,7 @@ public sealed class OtherPayrollWriter : IPayrollWriter
         foreach (var row in rows)
         foreach (var category in PayrollWritingConfiguration.CategoriesConnues.Where(plan.ValueColumns.ContainsKey))
         {
-            var value = OvertimePayrollCategoryMapper.ValueFor(category, row);
+            var value = OvertimePayrollCategoryMapper.ValueFor(category, row, selection);
             var target = columns[plan.ValueColumns[category]];
             if (!CanStore(value, target))
                 throw new DomainException($"La valeur {value} du matricule {row.Matricule} n'est pas compatible avec la colonne {plan.ValueColumns[category]}.");

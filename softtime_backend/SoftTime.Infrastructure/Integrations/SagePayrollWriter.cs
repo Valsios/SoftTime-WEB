@@ -22,9 +22,10 @@ public class SagePayrollWriter : ISagePayrollWriter
             // Toutes les constantes des variables envoyées sont résolues avant la première écriture : une constante
             // absente implique donc correctement zéro mise à jour pour ce salarié. Une variable décochée n'est ni
             // résolue ni écrite : la valeur existante de T_CUMSAL n'est pas touchée. Ordre : celui du catalogue
-            // (EXO 130, EXO 150, IMPO 130, IMPO 150, Férié, Dimanche, Nuit pour les heures supplémentaires).
+            // (EXO 130, EXO 150, IMPO 130, IMPO 150, Férié, Dimanche, Nuit pour les heures supplémentaires). Valeur : celle
+            // affichée, en heures, convertie en jours pour une variable envoyée en jours (Absence, lot C3).
             var commands = target.Variables.Envoyees
-                .Select(variable => (Category: variable, Operand: Op(target.CodeDe(variable)), Value: amounts.ValeurDe(variable)))
+                .Select(variable => (Category: variable, Operand: Op(target.CodeDe(variable)), Value: target.Variables.ValeurEnvoyee(variable, amounts.Valeurs)))
                 .ToList();
             foreach (var command in commands)
             {

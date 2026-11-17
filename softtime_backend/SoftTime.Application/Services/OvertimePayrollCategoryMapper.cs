@@ -9,4 +9,8 @@ public static class OvertimePayrollCategoryMapper
     public static decimal ValueFor(string category, HsExoDto row)
         => PayrollVariableCatalog.Definition(PayrollWritingConfiguration.NormalizeCategory(category))
             .ValeurEnvoyee(PayrollRows.Valeurs(row));
+
+    /// <summary>Valeur écrite selon la configuration de la base : en jours pour une variable envoyée en jours (Absence).</summary>
+    public static decimal ValueFor(string category, HsExoDto row, PayrollVariableSelection selection)
+        => selection.ValeurEnvoyee(PayrollWritingConfiguration.NormalizeCategory(category), PayrollRows.Valeurs(row));
 }

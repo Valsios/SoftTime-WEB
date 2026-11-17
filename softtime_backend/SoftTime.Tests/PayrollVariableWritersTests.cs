@@ -98,11 +98,12 @@ public class PayrollVariableWritersTests
     }
 
     [Fact]
-    public async Task StandardWrite_RetardActiveWithCode_IsWrittenAfterTheSeven_AbsenceNever()
+    public async Task StandardWrite_RetardActiveWithCode_IsWrittenAfterTheSeven_AbsenceUncheckedNever()
     {
-        // Arrange : adapté au lot C2 (avant : Retard et Absence jamais écrites). Retard a son code RET01 (opérande 8).
+        // Arrange : adapté au lot C2 (avant : Retard et Absence jamais écrites) puis au lot C3 (Absence envoyable : elle est
+        // ici décochée, avec un code, et n'est donc pas écrite). Retard a son code RET01 (opérande 8).
         var sage = new CapturingSagePayrollWriter();
-        var selection = PayrollVariableSelection.Avec([.. PayrollVariableSelection.HeuresSup, PayrollVariableSelection.Retard, PayrollVariableSelection.Absence])
+        var selection = PayrollVariableSelection.Avec([.. PayrollVariableSelection.HeuresSup, PayrollVariableSelection.Retard])
             with { CodesPaie = new Dictionary<string, string> { [PayrollVariableSelection.Retard] = "RET01", [PayrollVariableSelection.Absence] = "HS01" } };
 
         // Act
@@ -340,8 +341,9 @@ public class PayrollVariableWritersTests
     [Fact]
     public async Task OtherWrite_NoCheckedOvertimeVariable_TouchesNothing()
     {
-        // Arrange : adapté au lot C2 (avant : Retard seule). Absence seule cochée : jamais envoyée, rien à écrire.
-        var (sut, db, journal, envois) = Autre(selection: PayrollVariableSelection.Avec([PayrollVariableSelection.Absence]));
+        // Arrange : adapté au lot C2 (avant : Retard seule) puis au lot C3 (avant : Absence seule, jamais envoyée ; elle est
+        // désormais envoyable). Aucune variable cochée : rien à écrire.
+        var (sut, db, journal, envois) = Autre(selection: PayrollVariableSelection.Avec([]));
 
         // Act
         var resultat = await sut.WriteAsync(BaseAutre(), [Ligne], Contexte());
