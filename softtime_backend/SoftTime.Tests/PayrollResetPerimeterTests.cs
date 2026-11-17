@@ -1,3 +1,5 @@
+using Moq;
+
 using SoftTime.Application.Abstractions.ExternalData;
 using SoftTime.Application.Abstractions.Payroll;
 using SoftTime.Application.DTOs;
@@ -40,7 +42,7 @@ public class PayrollResetPerimeterTests
         public CapturingWriter Writer { get; } = new();
         public OvertimeServices Service { get; }
 
-        public Contexte()
+        public Contexte(IExternalSourceService? source = null)
         {
             Uow.Get<BddSage>().Items.Add(new BddSage { Id = 1, NomBd = "SAGE_TEST", TypeBase = "STANDARD" });
             Carte(1, "04634", "BR704");
@@ -52,7 +54,7 @@ public class PayrollResetPerimeterTests
                 new ExternalEmployee("09999", 103, "N", "P", null, false)]);
             var tenant = new TenantConnectionService(Uow, new FakeCompanyContext(), new FakeCurrentUser(), SoftTime.Tests.Http.TestRights.Service(Uow),
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<TenantConnectionService>.Instance);
-            Service = new OvertimeServices(Uow, tenant, Source, new PayrollWriterResolver([Writer]),
+            Service = new OvertimeServices(Uow, tenant, source ?? Source, new PayrollWriterResolver([Writer]),
                 new HistoryArchiveService(Uow), new SageLeaveCalendar(tenant, Source));
         }
 
@@ -120,6 +122,31 @@ public class PayrollResetPerimeterTests
         await c.Envoyer("BR704");
 
         c.Writer.Recues.Single(r => r.Matricule == "04700").NumSal.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SageEmployeeReadFails_SendIsNotBlocked_AndZeroRowsCarryNoEmployeeNumber()
+    {
+        var source = new Mock<IExternalSourceService>();
+        source.Setup(s => s.GetEmployeesAsync(It.IsAny<BddSage>(), It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("SAGE injoignable"));
+        var c = new Contexte(source.Object);
+        c.Ligne("04634", 101, 9m);
+
+        await c.Envoyer("BR704");
+
+        c.Writer.Recues.Single(r => !r.SansValeur).NumSal.Should().Be(101);
+        c.Writer.Recues.Single(r => r.SansValeur).NumSal.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SageEmployeeListEmpty_ZeroRowsCarryNoEmployeeNumber()
+    {
+        var c = new Contexte();
+        c.Source.Employees.Clear();
+
+        await c.Envoyer("BR704");
+
+        c.Writer.Recues.Should().OnlyContain(r => r.SansValeur && r.NumSal == null);
     }
 
     [Fact]

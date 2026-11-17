@@ -75,6 +75,8 @@ public sealed class AuditTrail : IAuditTrail
         var summary = $"Statut={audit.Status}; Période={audit.PeriodFrom:yyyy-MM-dd}..{audit.PeriodTo:yyyy-MM-dd}; "
             + $"Salariés={audit.Employees}; LignesMisesÀJour={audit.UpdatedRows}; "
             + (audit.CancelledRows > 0 ? $"LignesAnnulées={audit.CancelledRows}; " : string.Empty)
+            + (audit.EmployeesReset > 0 ? $"SalariésRemisÀ0={audit.EmployeesReset}; " : string.Empty)
+            + (audit.EmployeesNotReset > 0 ? $"AVERTISSEMENT SalariésNonRemisÀ0={audit.EmployeesNotReset}; " : string.Empty)
             + $"Catégories={categoryCounts}";
         return summary;
     }

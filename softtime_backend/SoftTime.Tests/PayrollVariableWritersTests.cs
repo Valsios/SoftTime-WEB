@@ -585,6 +585,35 @@ public class PayrollVariableWritersTests
     }
 
     [Fact]
+    public async Task StandardWrite_ZeroRowWithoutEmployeeNumber_IsReportedAsNotReset_WithoutBlockingTheOthers()
+    {
+        var sage = new CapturingSagePayrollWriter();
+        var audit = new CapturingAudit();
+
+        var resultat = await new TestStandardWriter(sage, audit).WriteAsync(
+            Base(), [Ligne, SansValeur("MAT02", null), SansValeur("MAT03", null)], Contexte());
+
+        sage.Calls.Select(c => c.NumSal).Distinct().Should().Equal(101);
+        resultat.EmployeesUpdated.Should().Be(1);
+        resultat.EmployeesNotReset.Should().Be(2);
+        resultat.Message.Should().Contain("Attention : 2 salarié(s) sans valeur n'ont PAS été remis à 0")
+            .And.Contain("leurs anciens cumuls restent dans SAGE");
+        var journal = audit.Audits.Should().ContainSingle().Which;
+        journal.EmployeesNotReset.Should().Be(2);
+        journal.Status.Should().Be("SUCCES");
+    }
+
+    [Fact]
+    public async Task StandardWrite_AllZeroed_HasNoNotResetWarning()
+    {
+        var resultat = await new TestStandardWriter(new CapturingSagePayrollWriter(), new NullAudit())
+            .WriteAsync(Base(), [SansValeur("MAT02", 102)], Contexte());
+
+        resultat.EmployeesNotReset.Should().Be(0);
+        resultat.Message.Should().NotContain("PAS été remis à 0");
+    }
+
+    [Fact]
     public async Task OtherWrite_EmployeeWithoutValue_ZeroIsWrittenInTheSameTransactionAfterThePreflight()
     {
         var (sut, db, journal, _) = Autre(selection: null);
@@ -724,9 +753,11 @@ public class PayrollVariableWritersTests
     private sealed class CapturingAudit : IAuditTrail
     {
         public List<string> Statuts { get; } = new();
+        public List<PayrollSyncAudit> Audits { get; } = new();
 
         public Task WritePayrollSyncAsync(PayrollSyncAudit audit, CancellationToken cancellationToken = default)
         {
+            Audits.Add(audit);
             Statuts.Add(audit.Status);
             return Task.CompletedTask;
         }

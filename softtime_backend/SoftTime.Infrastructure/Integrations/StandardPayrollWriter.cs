@@ -105,11 +105,17 @@ public class StandardPayrollWriter : IPayrollWriter
         // « Écrits » : salariés avec valeurs ; « remis à 0 » : salariés du périmètre sans ligne de valeurs.
         var written = rows.Count(h => h.NumSal.HasValue && !h.SansValeur);
         var remisAZero = rows.Count(h => h.NumSal.HasValue && h.SansValeur);
+        // Salariés du périmètre sans valeur dont le numéro SAGE est introuvable (lecture impossible ou salarié absent) :
+        // l'envoi n'est pas bloqué, mais leur ancien cumul reste dans SAGE : à signaler.
+        var nonRemis = rows.Count(h => !h.NumSal.HasValue && h.SansValeur);
         await envoi.TerminerAsync("SUCCES", categoryCounts.Values.Sum());
-        await WriteAuditAsync(database, auditContext, new PayrollSyncOutcome(written + remisAZero, categoryCounts.Values.Sum(), 0, categoryCounts, "SUCCES"));
+        await WriteAuditAsync(database, auditContext, new PayrollSyncOutcome(written + remisAZero, categoryCounts.Values.Sum(), 0, categoryCounts, "SUCCES", remisAZero, nonRemis));
         var message = "Synchronisation des heures supplémentaires vers SAGE terminée.";
         if (remisAZero > 0)
             message += $" {remisAZero} salarié(s) sans valeur sur la période ont été remis à 0 pour les variables envoyées.";
+        if (nonRemis > 0)
+            message += $" Attention : {nonRemis} salarié(s) sans valeur n'ont PAS été remis à 0 (numéro de salarié introuvable dans SAGE : "
+                       + "lecture des salariés impossible ou salarié absent) : leurs anciens cumuls restent dans SAGE.";
         if (sansLigne > 0)
             message += $" Attention : {sansLigne} mise(s) à jour n'ont modifié aucune ligne T_CUMSAL "
                        + "(cumul absent dans SAGE pour le salarié)"
@@ -118,7 +124,8 @@ public class StandardPayrollWriter : IPayrollWriter
         return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "STANDARD", written, categoryCounts.Values.Sum(), message)
         {
             UpdatesWithoutRow = sansLigne,
-            EmployeesReset = remisAZero
+            EmployeesReset = remisAZero,
+            EmployeesNotReset = nonRemis
         };
     }
 
@@ -139,7 +146,8 @@ public class StandardPayrollWriter : IPayrollWriter
     private Task WriteAuditAsync(BddSage database, PayrollSyncContext context, PayrollSyncOutcome bilan)
         => _auditTrail.WritePayrollSyncAsync(new PayrollSyncAudit(
             "T_CUMSAL", database.NomBd, context.PeriodFrom, context.PeriodTo, bilan.Employees, bilan.UpdatedRows, 0,
-            bilan.Categories, bilan.Status, context.UserLogin, "SYNC_PAIE:STANDARD", context.Correlation), CancellationToken.None);
+            bilan.Categories, bilan.Status, context.UserLogin, "SYNC_PAIE:STANDARD", context.Correlation,
+            bilan.EmployeesReset, bilan.EmployeesNotReset), CancellationToken.None);
 
     /// <summary>
     /// Marqueur T_PAIE_ENVOI d'un envoi STANDARD : posé (EN_COURS) à la première ligne modifiée, puis terminé. Les

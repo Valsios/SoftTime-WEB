@@ -389,6 +389,9 @@ Nuit, Dimanche, Retard, Absence) restent calculées et affichées ; seul l'envoi
   Le message de fin et le résultat distinguent les salariés écrits des salariés remis à 0 ; la synthèse du journal `SYNC_PAIE` et la ligne
   `T_PAIE_ENVOI` comptent des **catégories** mises à jour (valeurs et zéros ensemble). La page Heures supplémentaires l'annonce dans la
   confirmation de l'envoi.
+  **Avertissement** : en STANDARD, si le numéro de salarié SAGE d'un salarié sans valeur est introuvable (lecture des salariés SAGE impossible, liste
+  vide, salarié absent), l'envoi des salariés avec valeurs n'est pas bloqué, mais le message de fin dit « N salarié(s) sans valeur n'ont PAS été remis à 0 ...
+  leurs anciens cumuls restent dans SAGE » et la synthèse du journal `SYNC_PAIE` porte `AVERTISSEMENT SalariésNonRemisÀ0=N` (et `SalariésRemisÀ0=N`).
   **Hypothèse à confirmer par le RH** : personne ne saisit à la main ces mêmes codes (HS01 à HS07, code de Retard) dans SAGE. Sinon, le 0 écraserait
   cette saisie pour les salariés sans valeur.
 - **Écran** : carte « Variables envoyées à la paie » sous la liste des bases SAGE, pour la **base active**. Base SAGE : codes HS01 à HS07 en lecture

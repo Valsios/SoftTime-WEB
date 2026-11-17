@@ -12,4 +12,6 @@ public sealed record PayrollSyncAudit(
     string Status,
     string? UserLogin,
     string Source,
-    Guid Correlation);
+    Guid Correlation,
+    int EmployeesReset = 0,
+    int EmployeesNotReset = 0);
