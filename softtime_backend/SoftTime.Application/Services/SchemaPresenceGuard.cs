@@ -113,6 +113,26 @@ public static class SchemaPresenceGuard
         }
     }
 
+    public const string MissingPayrollOptionsMessage =
+        "Les options de paie sont absentes (T_PAIE_OPTION) : activez Database:AutoMigrate "
+        + "(développement) ou exécutez migrations/versions/008_options_paie.sql.";
+
+    /// <summary>
+    /// Sans la migration 008, la lecture des options de paie (remise à 0 des salariés sans valeur) échouerait sur une erreur SQL
+    /// obscure à chaque envoi : le démarrage s'arrête à la place avec un message qui indique la marche à suivre.
+    /// </summary>
+    public static async Task EnsurePayrollOptionsAsync(IUnitOfWork uow, CancellationToken ct)
+    {
+        try
+        {
+            await uow.ExecuteSqlAsync(GuardedSql("T_PAIE_OPTION", "SELECT 1;"), ct);
+        }
+        catch (Exception ex) when (ex.Message.Contains(Marker, StringComparison.Ordinal))
+        {
+            throw new DomainException(MissingPayrollOptionsMessage);
+        }
+    }
+
     public static string GuardedSql(string table, string sql) => $"""
         IF OBJECT_ID(N'dbo.{table}', N'U') IS NULL
             THROW 51990, N'{Marker}: dbo.{table}', 1;

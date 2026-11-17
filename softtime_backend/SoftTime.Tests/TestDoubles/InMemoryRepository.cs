@@ -121,6 +121,9 @@ public sealed class InMemoryRepository<T> : IRepository<T> where T : class
             case PaieEnvoi envoi:
                 envoi.Id = (int)next;
                 break;
+            case PaieOption option:
+                option.Id = (int)next;
+                break;
             case PaieVariable variable:
                 variable.Id = (int)next;
                 break;

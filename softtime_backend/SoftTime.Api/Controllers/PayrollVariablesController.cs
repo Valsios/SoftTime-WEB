@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -26,10 +28,40 @@ public class PayrollVariablesController : ApiControllerBase
     [RequireDroit(Droit.Databases)]
     public async Task<IActionResult> GetAsync(CancellationToken ct) => Ok(await _svc.GetConfigurationAsync(ct));
 
+    /// <summary>
+    /// Enregistre les neuf variables et, facultatif, l'option « remettre à 0 les salariés sans valeur à l'envoi ». Deux formes de
+    /// corps : le tableau historique de variables (option inchangée), ou l'objet <c>{ variables, remiseAZeroSansValeur }</c>
+    /// (champ absent ou null : option inchangée). Une seule confirmation, un seul enregistrement.
+    /// </summary>
     [HttpPut]
     [RequireDroit(Droit.Databases)]
-    public async Task<IActionResult> SaveAsync([FromBody] List<PayrollVariableSaveDto> variables, CancellationToken ct)
-        => Ok(await _svc.SaveAsync(variables ?? new List<PayrollVariableSaveDto>(), ct));
+    public async Task<IActionResult> SaveAsync([FromBody] JsonElement corps, CancellationToken ct)
+    {
+        var demande = LireCorps(corps);
+        return Ok(await _svc.SaveAsync(demande.Variables ?? new List<PayrollVariableSaveDto>(), demande.RemiseAZeroSansValeur, ct));
+    }
+
+    private static readonly JsonSerializerOptions JsonWeb = new(JsonSerializerDefaults.Web);
+
+    /// <summary>Corps de l'enregistrement : tableau de variables (ancien client) ou objet avec l'option.</summary>
+    internal static PayrollVariablesSaveRequest LireCorps(JsonElement corps)
+    {
+        try
+        {
+            return corps.ValueKind switch
+            {
+                JsonValueKind.Array => new PayrollVariablesSaveRequest(corps.Deserialize<List<PayrollVariableSaveDto>>(JsonWeb), null),
+                JsonValueKind.Object => corps.Deserialize<PayrollVariablesSaveRequest>(JsonWeb)
+                    ?? new PayrollVariablesSaveRequest(null, null),
+                JsonValueKind.Null or JsonValueKind.Undefined => new PayrollVariablesSaveRequest(null, null),
+                _ => throw new DomainException("Le corps de la requête doit être un tableau de variables ou un objet { variables, remiseAZeroSansValeur }."),
+            };
+        }
+        catch (JsonException)
+        {
+            throw new DomainException("Le corps de la requête n'est pas valide : variables ou option de remise à 0 illisibles.");
+        }
+    }
 
     /// <summary>Variables actives (noms seulement) : page Heures supplémentaires, Contrôle avant paie, écran Bases.</summary>
     [HttpGet("actives")]

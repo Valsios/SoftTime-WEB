@@ -69,7 +69,7 @@ public sealed class PayrollVariableService : IPayrollVariableService
     {
         if (_cache.TryGet(sageDb, out var selection))
             return selection;
-        selection = Selection(await LireAsync(sageDb, ct));
+        selection = Selection(await LireAsync(sageDb, ct), await LireOptionsAsync(sageDb, ct));
         _cache.Set(sageDb, selection);
         return selection;
     }
@@ -85,10 +85,11 @@ public sealed class PayrollVariableService : IPayrollVariableService
     public async Task<PayrollVariablesConfigDto> GetConfigurationAsync(CancellationToken ct = default)
     {
         var database = await AutoriserAsync(ct);
-        return await ConstruireAsync(database, await LireAsync(database.NomBd!, ct), ct);
+        return await ConstruireAsync(database, await LireAsync(database.NomBd!, ct), await LireOptionsAsync(database.NomBd!, ct), ct);
     }
 
-    public async Task<PayrollVariablesConfigDto> SaveAsync(IReadOnlyList<PayrollVariableSaveDto> variables, CancellationToken ct = default)
+    public async Task<PayrollVariablesConfigDto> SaveAsync(
+        IReadOnlyList<PayrollVariableSaveDto> variables, bool? remiseAZeroSansValeur = null, CancellationToken ct = default)
     {
         var database = await AutoriserAsync(ct);
         var sageDb = database.NomBd!;
@@ -138,14 +139,42 @@ public sealed class PayrollVariableService : IPayrollVariableService
             entite.ModifiePar = _user.Login;
             repo.Update(entite);
         }
+        // Option de la base, enregistrée dans le même appel (une seule confirmation, une seule sauvegarde) ; champ absent :
+        // inchangée. Une base sans ligne vaut « vrai » : décocher crée la ligne, recocher la met à jour (jamais de suppression).
+        if (remiseAZeroSansValeur is { } souhaitee)
+            await EnregistrerOptionAsync(sageDb, PayrollOptions.RemiseAZeroSansValeur, PayrollOptions.Texte(souhaitee), maintenant, ct);
         await _uow.SaveChangesAsync(ct);
 
         _cache.Invalider(sageDb);
         _closingCache.Vider();
         _checklistCache.Vider();
         _logger.LogInformation("Variables envoyées à la paie de la base {Base} modifiées par {Login}.", sageDb, _user.Login);
-        return await ConstruireAsync(database, await LireAsync(sageDb, ct), ct);
+        return await ConstruireAsync(database, await LireAsync(sageDb, ct), await LireOptionsAsync(sageDb, ct), ct);
     }
+
+    /// <summary>Crée ou met à jour une option de la base ; sans changement de valeur, rien n'est écrit.</summary>
+    private async Task EnregistrerOptionAsync(string sageDb, string cle, string valeur, DateTime maintenant, CancellationToken ct)
+    {
+        var repo = _uow.Repository<PaieOption>();
+        var existante = (await repo.ListAsync(o => o.BddSage == sageDb && o.Cle == cle, ct)).FirstOrDefault();
+        if (existante is null)
+        {
+            // Sans ligne, la valeur est celle par défaut : enregistrer la valeur par défaut ne crée rien.
+            if (valeur == PayrollOptions.Texte(OptionParDefaut(cle)))
+                return;
+            await repo.AddAsync(new PaieOption { BddSage = sageDb, Cle = cle, Valeur = valeur, ModifieLe = maintenant, ModifiePar = _user.Login }, ct);
+            return;
+        }
+        if (existante.Valeur == valeur)
+            return;
+        existante.Valeur = valeur;
+        existante.ModifieLe = maintenant;
+        existante.ModifiePar = _user.Login;
+        repo.Update(existante);
+    }
+
+    private static bool OptionParDefaut(string cle) =>
+        cle != PayrollOptions.RemiseAZeroSansValeur || PayrollVariableSelection.Default.RemiseAZeroSansValeur;
 
     /// <summary>
     /// Ligne à valider et enregistrer. Variable à code propre : unité unique (Retard : heures) prise par défaut ; base
@@ -444,14 +473,22 @@ public sealed class PayrollVariableService : IPayrollVariableService
     private Task<List<PaieVariable>> LireAsync(string sageDb, CancellationToken ct) =>
         _uow.Repository<PaieVariable>().ListReadOnlyAsync(v => v.BddSage == sageDb, ct);
 
+    private Task<List<PaieOption>> LireOptionsAsync(string sageDb, CancellationToken ct) =>
+        _uow.Repository<PaieOption>().ListReadOnlyAsync(o => o.BddSage == sageDb, ct);
+
     /// <summary>
     /// Sans ligne : valeurs par défaut. Variable sans ligne : sa valeur par défaut. Les codes de paie propres à la base
     /// (variables hors catalogue commun : Retard, Absence) accompagnent la sélection.
     /// </summary>
-    internal static PayrollVariableSelection Selection(IReadOnlyList<PaieVariable> lignes)
+    internal static PayrollVariableSelection Selection(IReadOnlyList<PaieVariable> lignes, IReadOnlyList<PaieOption>? options = null)
     {
+        // Option de la base : absente = vraie (comportement de C2b) ; indépendante des lignes de variables.
+        var remiseAZero = PayrollOptions.Booleen(options ?? Array.Empty<PaieOption>(), PayrollOptions.RemiseAZeroSansValeur,
+            PayrollVariableSelection.Default.RemiseAZeroSansValeur);
         if (lignes.Count == 0)
-            return PayrollVariableSelection.Default;
+            return remiseAZero == PayrollVariableSelection.Default.RemiseAZeroSansValeur
+                ? PayrollVariableSelection.Default
+                : PayrollVariableSelection.Default with { RemiseAZeroSansValeur = remiseAZero };
         var actives = PayrollVariableSelection.Toutes.Where(nom =>
         {
             var ligne = lignes.FirstOrDefault(l => string.Equals(l.Variable, nom, StringComparison.OrdinalIgnoreCase));
@@ -461,14 +498,15 @@ public sealed class PayrollVariableService : IPayrollVariableService
             .Where(l => !string.IsNullOrWhiteSpace(l.CodePaie) && PayrollVariableCatalog.Trouver(l.Variable) is { CodeCommun: false })
             .GroupBy(l => PayrollVariableCatalog.Definition(l.Variable).Id)
             .ToDictionary(g => g.Key, g => g.First().CodePaie!.Trim(), StringComparer.Ordinal);
-        return PayrollVariableSelection.Avec(actives) with { CodesPaie = codes };
+        return PayrollVariableSelection.Avec(actives) with { CodesPaie = codes, RemiseAZeroSansValeur = remiseAZero };
     }
 
-    private async Task<PayrollVariablesConfigDto> ConstruireAsync(BddSage database, IReadOnlyList<PaieVariable> lignes, CancellationToken ct)
+    private async Task<PayrollVariablesConfigDto> ConstruireAsync(
+        BddSage database, IReadOnlyList<PaieVariable> lignes, IReadOnlyList<PaieOption> options, CancellationToken ct)
     {
         var sageDb = database.NomBd!;
         var autre = EstAutre(database);
-        var selection = Selection(lignes);
+        var selection = Selection(lignes, options);
         var cibles = autre ? await CiblesAutreAsync(sageDb, ct) : CiblesSage(await _codes.GetOvertimeSageCodesAsync(ct));
         var variables = PayrollVariableCatalog.Toutes.Select(definition =>
         {
@@ -490,7 +528,8 @@ public sealed class PayrollVariableService : IPayrollVariableService
             bloquante is not null, bloquante, variables, colonnes)
         {
             CodesPaie = codesPaie,
-            AvertissementCodes = avertissement
+            AvertissementCodes = avertissement,
+            RemiseAZeroSansValeur = selection.RemiseAZeroSansValeur
         };
     }
 

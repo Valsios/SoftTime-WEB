@@ -46,6 +46,12 @@ public sealed record PayrollVariableSelection
     public string? CodeDe(string variable) =>
         CodesPaie.TryGetValue(variable, out var code) && !string.IsNullOrWhiteSpace(code) ? code.Trim() : null;
 
+    /// <summary>
+    /// Option de la base : à l'envoi, remettre à 0 les salariés du périmètre sans valeur (pour les variables envoyées).
+    /// Vrai par défaut (comportement de C2b) : une base sans ligne d'option garde ce comportement.
+    /// </summary>
+    public bool RemiseAZeroSansValeur { get; init; } = true;
+
     /// <summary>Noms canoniques des variables actives.</summary>
     public IReadOnlySet<string> Actives { get; init; } = new HashSet<string>(HeuresSup, StringComparer.Ordinal);
 

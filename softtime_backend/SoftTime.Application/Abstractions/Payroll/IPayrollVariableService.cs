@@ -19,10 +19,12 @@ public interface IPayrollVariableService
     Task<PayrollVariablesConfigDto> GetConfigurationAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// Enregistre les neuf variables de la base active. Refusé si une période envoyée recouvre le mois civil en cours.
-    /// Journalisé dans le journal central ; invalide les caches de la sélection et du Contrôle avant paie.
+    /// Enregistre les neuf variables de la base active et, si elle est fournie, l'option « remettre à 0 les salariés sans valeur
+    /// à l'envoi » (null : inchangée). Refusé si une période envoyée recouvre le mois civil en cours. Journalisé dans le journal
+    /// central ; invalide les caches de la sélection et du Contrôle avant paie.
     /// </summary>
-    Task<PayrollVariablesConfigDto> SaveAsync(IReadOnlyList<PayrollVariableSaveDto> variables, CancellationToken ct = default);
+    Task<PayrollVariablesConfigDto> SaveAsync(
+        IReadOnlyList<PayrollVariableSaveDto> variables, bool? remiseAZeroSansValeur = null, CancellationToken ct = default);
 
     /// <summary>
     /// Autre base : table, colonne matricule et colonne de chaque variable envoyable (T_PAIE_ECRITURE), avec les tables et

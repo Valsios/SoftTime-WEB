@@ -42,10 +42,22 @@ public sealed record PayrollVariablesConfigDto(
 
     /// <summary>Base SAGE : message si la liste des codes n'a pas pu être lue (null sinon).</summary>
     public string? AvertissementCodes { get; init; }
+
+    /// <summary>
+    /// Option de la base : à l'envoi vers la paie, remettre à 0 les salariés du périmètre sans valeur (variables cochées).
+    /// Vrai par défaut (aucune ligne d'option enregistrée).
+    /// </summary>
+    public bool RemiseAZeroSansValeur { get; init; } = true;
 }
 
 /// <summary>Ligne envoyée par l'écran pour l'enregistrement.</summary>
 public sealed record PayrollVariableSaveDto(string Variable, bool Actif, string? CodePaie, string? Unite, string? ColonneCible);
+
+/// <summary>
+/// Corps de l'enregistrement : les neuf variables et, facultatif, l'option « remettre à 0 les salariés sans valeur à l'envoi »
+/// (champ absent ou null : option inchangée). L'ancien corps, un simple tableau de variables, reste accepté.
+/// </summary>
+public sealed record PayrollVariablesSaveRequest(IReadOnlyList<PayrollVariableSaveDto>? Variables, bool? RemiseAZeroSansValeur);
 
 /// <summary>Variables envoyées à la paie de la base active : actives ET envoyables (page Heures supplémentaires).</summary>
 public sealed record PayrollVariablesActiveDto(string Base, IReadOnlyList<string> Actives);

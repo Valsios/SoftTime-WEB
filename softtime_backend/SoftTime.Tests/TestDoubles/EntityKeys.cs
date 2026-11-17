@@ -9,7 +9,7 @@ internal static class EntityKeys
     {
         typeof(Responsable), typeof(Role), typeof(BddSage), typeof(BddPointeuse),
         typeof(RolePermission), typeof(AuditDroit), typeof(UserPermission), typeof(SuiviConfiguration),
-        typeof(PaieEnvoi), typeof(PaieVariable),
+        typeof(PaieEnvoi), typeof(PaieVariable), typeof(PaieOption),
     };
 
     /// <summary>Vrai si le type est recherché par sa clé ; sinon la doublure renvoie la première ligne.</summary>
@@ -28,6 +28,7 @@ internal static class EntityKeys
         SuiviConfiguration configuration => configuration.Id,
         PaieEnvoi envoi => envoi.Id,
         PaieVariable variable => variable.Id,
+        PaieOption option => option.Id,
         _ => null,
     };
 }
