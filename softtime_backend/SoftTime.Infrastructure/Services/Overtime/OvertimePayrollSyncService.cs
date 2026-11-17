@@ -17,6 +17,7 @@ public sealed class OvertimePayrollSyncService : IOvertimePayrollSyncService
     private readonly ICurrentUser? _user;
     private readonly IOvertimeWeekContext _overtimeWeekContext;
     private readonly IExternalSourceService? _externalSource;
+    private readonly IPayrollVariableService? _variables;
 
     public OvertimePayrollSyncService(
         IUnitOfWork uow,
@@ -24,9 +25,11 @@ public sealed class OvertimePayrollSyncService : IOvertimePayrollSyncService
         IPayrollWriterResolver payrollWriters,
         ICurrentUser? user,
         IOvertimeWeekContext overtimeWeekContext,
-        IExternalSourceService? externalSource = null)
+        IExternalSourceService? externalSource = null,
+        IPayrollVariableService? variables = null)
     {
         _externalSource = externalSource;
+        _variables = variables;
         _uow = uow;
         _tenant = tenant;
         _payrollWriters = payrollWriters;
@@ -84,10 +87,17 @@ public sealed class OvertimePayrollSyncService : IOvertimePayrollSyncService
             .Select(h => new HsExoDto(h.Oid, h.Matricule, h.NumSal, h.Exo130, h.Exo150, h.I130, h.I150,
                 h.Ferie, h.Nuit, h.Dim, h.Retard, h.Absence))
             .ToList();
-        dtos.AddRange(await LignesSansValeurAsync(sageRow, cards, rows, ct));
+        // Option de la base « remettre à 0 les salariés sans valeur » (vraie par défaut) : décochée, aucune ligne synthétique,
+        // donc aucun salarié remis à 0 ni avertissement ; les salariés avec valeurs sont écrits comme avant.
+        if (await RemiseAZeroActiveAsync(ct))
+            dtos.AddRange(await LignesSansValeurAsync(sageRow, cards, rows, ct));
         var auditContext = new PayrollSyncContext(request.From.Date, request.To.Date, _user?.Login, Guid.NewGuid());
         return await _payrollWriters.Resolve(sageRow).WriteAsync(sageRow, dtos, auditContext, ct);
     }
+
+    private async Task<bool> RemiseAZeroActiveAsync(CancellationToken ct) =>
+        _variables is null
+        || (await _variables.GetSelectionAsync(_tenant.SageDb, ct)).RemiseAZeroSansValeur;
 
     /// <summary>
     /// Une ligne synthétique par carte du périmètre sans ligne de valeurs sur la période. Le numéro de salarié (base

@@ -79,7 +79,7 @@ public sealed class PayrollVariableService : IPayrollVariableService
         await _tenant.EnsureAuthorizedAsync(ct);
         var selection = await GetSelectionAsync(_tenant.SageDb, ct);
         // Variables réellement écrites : une variable cochée mais pas encore envoyable (Absence) reste grisée.
-        return new PayrollVariablesActiveDto(_tenant.SageDb, selection.Envoyees);
+        return new PayrollVariablesActiveDto(_tenant.SageDb, selection.Envoyees) { RemiseAZeroSansValeur = selection.RemiseAZeroSansValeur };
     }
 
     public async Task<PayrollVariablesConfigDto> GetConfigurationAsync(CancellationToken ct = default)

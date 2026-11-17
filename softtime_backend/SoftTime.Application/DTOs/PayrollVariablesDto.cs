@@ -60,7 +60,14 @@ public sealed record PayrollVariableSaveDto(string Variable, bool Actif, string?
 public sealed record PayrollVariablesSaveRequest(IReadOnlyList<PayrollVariableSaveDto>? Variables, bool? RemiseAZeroSansValeur);
 
 /// <summary>Variables envoyées à la paie de la base active : actives ET envoyables (page Heures supplémentaires).</summary>
-public sealed record PayrollVariablesActiveDto(string Base, IReadOnlyList<string> Actives);
+public sealed record PayrollVariablesActiveDto(string Base, IReadOnlyList<string> Actives)
+{
+    /// <summary>
+    /// Option de la base : l'envoi remet à 0 les salariés du périmètre sans valeur. La page Heures supplémentaires n'annonce
+    /// la remise à 0 dans sa confirmation que lorsqu'elle est active. Vrai par défaut.
+    /// </summary>
+    public bool RemiseAZeroSansValeur { get; init; } = true;
+}
 
 /// <summary>Colonne d'une table de destination, telle que l'écran la propose.</summary>
 /// <param name="AccepteDecimales">Peut recevoir une valeur à deux décimales (Retard, en heures).</param>
