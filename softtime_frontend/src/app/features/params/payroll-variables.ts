@@ -72,7 +72,7 @@ import {
           </div>
         }
 
-        <div class="soft-table-wrap">
+        <div class="soft-table-wrap pv-wrap">
           <table class="soft-table pv-table">
             <thead>
               <tr>
@@ -89,7 +89,7 @@ import {
                     {{ v.libelle }}
                     @if (!v.actif) { <soft-badge variant="muted">{{ nonEnvoyee }}</soft-badge> }
                   </td>
-                  <td>
+                  <td data-label="Envoyée">
                     <label class="soft-toggle pv-toggle">
                       <input type="checkbox" [attr.aria-label]="'Envoyer ' + v.libelle + ' à la paie'"
                         [checked]="v.actif" [disabled]="!cochable(v) || saving()"
@@ -98,7 +98,7 @@ import {
                     </label>
                     @if (raison(v); as r) { <div class="soft-field__hint pv-hint">{{ r }}</div> }
                   </td>
-                  <td>
+                  <td [attr.data-label]="autre() ? 'Colonne cible' : 'Code de paie'">
                     @if (codePropre(v.variable) && !sansEnvoi(v.variable)) {
                       @if (autre()) {
                         <span class="pv-readonly" title="Choisie dans « Destinations dans la base de paie »">
@@ -140,7 +140,7 @@ import {
                       </span>
                     }
                   </td>
-                  <td>
+                  <td data-label="Unité">
                     @if (sansEnvoi(v.variable)) {
                       <div class="soft-select pv-field pv-field--unit">
                         <div class="soft-select__control">
@@ -202,9 +202,29 @@ import {
     .pv-toggle:focus-within .soft-toggle__track { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
     .pv-toggle:has(input:disabled) { cursor: not-allowed; }
     .pv-toggle input:disabled + .soft-toggle__track { opacity: 0.5; }
+    /* Largeur étroite : la règle globale masque .soft-table-wrap (les data-table affichent alors leur vue en cartes).
+       La carte garde son tableau, présenté en cartes (une par variable, comme .soft-table-card) : mêmes contrôles,
+       mêmes états désactivé et verrouillé, mêmes messages d'aide. */
     @media (max-width: 767px) {
-      .pv-table thead th, .pv-table tbody td { padding: var(--space-md); }
-      .pv-field, .pv-field--unit { min-width: 150px; }
+      .soft-table-wrap.pv-wrap { display: block; overflow: visible; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+      .pv-table, .pv-table tbody, .pv-table tr, .pv-table td { display: block; }
+      .pv-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+      .pv-table tbody { display: grid; gap: 12px; }
+      .pv-table tbody tr { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+        background: var(--app-surface); box-shadow: var(--shadow-xs); }
+      .pv-table tbody tr:hover { background: var(--app-surface); }
+      .pv-table tbody td { display: grid; grid-template-columns: minmax(0, 42%) minmax(0, 1fr); gap: 4px 12px; align-items: center;
+        min-width: 0; padding: 0; border: 0; }
+      .pv-table tbody td::before { content: attr(data-label); color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+      .pv-table tbody td.pv-name { display: block; font-weight: 600; }
+      .pv-table tbody td.pv-name::before { content: none; }
+      .pv-table .pv-hint { grid-column: 2; margin-top: 0; }
+      /* Listes et champ de code : étiquette au-dessus, contrôle sur toute la largeur (libellés de codes longs). */
+      .pv-table tbody td:has(.pv-field) { grid-template-columns: minmax(0, 1fr); }
+      .pv-table tbody td:has(.pv-field) .pv-hint { grid-column: 1; }
+      .pv-toggle { margin-top: 0; }
+      .pv-readonly { line-height: 1.5; }
+      .pv-field, .pv-field--unit { min-width: 0; max-width: none; width: 100%; }
     }
   `],
 })

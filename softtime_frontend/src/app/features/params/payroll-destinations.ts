@@ -77,7 +77,7 @@ import {
             </span></span>
           </label>
         </div>
-        <div class="soft-table-wrap">
+        <div class="soft-table-wrap pd-wrap">
         <table class="soft-table pd-table">
           <thead>
             <tr><th>Variable</th><th>Envoyée</th><th>Colonne</th></tr>
@@ -85,9 +85,9 @@ import {
           <tbody>
             @for (v of d.variables; track v.variable) {
               <tr>
-                <td>{{ v.libelle }}</td>
-                <td>{{ v.actif ? 'oui' : 'non' }}</td>
-                <td>
+                <td class="pd-name">{{ v.libelle }}</td>
+                <td data-label="Envoyée">{{ v.actif ? 'oui' : 'non' }}</td>
+                <td data-label="Colonne">
                   <div class="soft-select pd-select"><div class="soft-select__control">
                     <select [attr.aria-label]="'Colonne de ' + v.libelle" [disabled]="bloque() || !d.table"
                       (change)="choisirColonne(v.variable, $any($event.target).value)">
@@ -121,7 +121,26 @@ import {
     .pd-select { min-width: 200px; max-width: 320px; }
     .pd select:disabled { background: var(--surface-dark); color: var(--text-muted); cursor: not-allowed; }
     .pd-table td { vertical-align: top; }
-    @media (max-width: 767px) { .pd-table thead th, .pd-table tbody td { padding: var(--space-md); } }
+    /* Largeur étroite : la règle globale masque .soft-table-wrap ; le tableau des destinations est présenté en cartes
+       (une par variable, comme .soft-table-card), avec les mêmes listes et les mêmes états désactivés. */
+    @media (max-width: 767px) {
+      .soft-table-wrap.pd-wrap { display: block; overflow: visible; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+      .pd-table, .pd-table tbody, .pd-table tr, .pd-table td { display: block; }
+      .pd-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+      .pd-table tbody { display: grid; gap: 12px; }
+      .pd-table tbody tr { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+        background: var(--app-surface); box-shadow: var(--shadow-xs); }
+      .pd-table tbody tr:hover { background: var(--app-surface); }
+      .pd-table tbody td { display: grid; grid-template-columns: minmax(0, 42%) minmax(0, 1fr); gap: 4px 12px; align-items: center;
+        min-width: 0; padding: 0; border: 0; }
+      .pd-table tbody td::before { content: attr(data-label); color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+      .pd-table tbody td.pd-name { display: block; font-weight: 600; }
+      .pd-table tbody td.pd-name::before { content: none; }
+      /* Liste de colonne : étiquette au-dessus, liste sur toute la largeur (libellés « colonne (type) » longs). */
+      .pd-table tbody td:has(.pd-select) { grid-template-columns: minmax(0, 1fr); }
+      .pd-select { min-width: 0; max-width: none; width: 100%; }
+      .pd-field { min-width: 0; max-width: none; flex-basis: 100%; }
+    }
   `],
 })
 export class PayrollDestinations implements OnInit {

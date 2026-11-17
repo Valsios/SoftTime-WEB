@@ -476,3 +476,95 @@ describe('Carte « Variables envoyées à la paie » : états désactivé et ver
     expect(racine.querySelectorAll('select:not(.soft-select select)').length).toBe(0);
   });
 });
+
+describe('Largeur étroite (< 768 px) : variables présentées en cartes, jamais masquées', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  /** Styles du composant injectés par Angular (encapsulation émulée). */
+  function stylesInjectes(): string {
+    return [...document.head.querySelectorAll('style')].map((s) => s.textContent ?? '').join('\n').replace(/\s+/g, ' ');
+  }
+
+  /** La règle globale masque .soft-table-wrap sous 768 px : le composant doit la contredire pour son propre tableau. */
+  function reaffiche(classe: string): boolean {
+    const css = stylesInjectes();
+    const media = css.split(/@media/).filter((bloc) => /\(max-width: ?767px\)/.test(bloc));
+    const selecteur = `.soft-table-wrap.${classe}`;
+    return media.some((bloc) => {
+      const i = bloc.indexOf(selecteur);
+      return i >= 0 && /^(\[[^\]]+\])? ?\{ ?display: ?block/.test(bloc.slice(i + selecteur.length));
+    });
+  }
+
+  function rendreCarte(reponse: PayrollVariablesConfig) {
+    monter({ reponse });
+    const fixture = TestBed.createComponent(PayrollVariablesCard);
+    fixture.componentInstance.ngOnInit();
+    fixture.detectChanges();
+    return { fixture, racine: fixture.nativeElement as HTMLElement, carte: fixture.componentInstance };
+  }
+
+  it('carte : le tableau est réaffiché sous 768 px et chaque variable a ses quatre éléments étiquetés', () => {
+    const { racine } = rendreCarte(config({ codesPaie: [{ code: 'RET01', intitule: 'Retard' }] }));
+
+    expect(racine.querySelector('.soft-table-wrap')?.classList.contains('pv-wrap')).toBe(true);
+    expect(reaffiche('pv-wrap')).toBe(true);
+    const lignes = [...racine.querySelectorAll('tbody tr')];
+    expect(lignes.map((l) => l.querySelector('td.pv-name')?.textContent?.trim().split(/\s+non envoyée/)[0])).toEqual(Object.values(LIBELLES));
+    for (const ligne of lignes) {
+      expect(ligne.querySelector('td[data-label="Envoyée"] .soft-toggle input[type="checkbox"]')).not.toBeNull();
+      expect(ligne.querySelector('td[data-label="Code de paie"]')).not.toBeNull();
+      expect(ligne.querySelector('td[data-label="Unité"]')).not.toBeNull();
+    }
+  });
+
+  it('carte : contrôles interactifs, état désactivé et message d\'aide conservés', () => {
+    const { fixture, racine, carte } = rendreCarte(config({ codesPaie: [{ code: 'RET01', intitule: 'Retard' }] }));
+    const ligne = (nom: string) => [...racine.querySelectorAll('tbody tr')].find((l) => l.querySelector('td.pv-name')?.textContent?.includes(nom))!;
+
+    const nuit = ligne('Nuit').querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    nuit.click();
+    fixture.detectChanges();
+    expect(carte.modifie()).toBe(true);
+    expect(carte.brouillon().find((v) => v.variable === 'Nuit')?.actif).toBe(false);
+
+    const retard = ligne('Retard');
+    expect(retard.querySelector<HTMLInputElement>('input[type="checkbox"]')!.disabled).toBe(true);
+    expect(retard.querySelector('td[data-label="Envoyée"]')?.textContent).toContain('Choisissez d’abord le code de paie.');
+    const liste = retard.querySelector<HTMLSelectElement>('td[data-label="Code de paie"] select')!;
+    expect(liste.disabled).toBe(false);
+    liste.value = 'RET01';
+    liste.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    expect(retard.querySelector<HTMLInputElement>('input[type="checkbox"]')!.disabled).toBe(false);
+  });
+
+  it('carte : mois verrouillé, chaque carte de variable porte son message et ses contrôles désactivés', () => {
+    const { racine } = rendreCarte(config({ moisEnvoye: true, dernierEnvoi: '2026-11-01 → 2026-11-30', codesPaie: [{ code: 'RET01', intitule: 'Retard' }] }));
+
+    const lignes = [...racine.querySelectorAll('tbody tr')];
+    expect(lignes.length).toBe(9);
+    for (const ligne of lignes) {
+      expect(ligne.querySelector<HTMLInputElement>('input[type="checkbox"]')!.disabled).toBe(true);
+      expect(ligne.querySelector('td[data-label="Envoyée"]')?.textContent).toContain('Mois déjà envoyé : modification impossible.');
+      for (const champ of ligne.querySelectorAll<HTMLInputElement | HTMLSelectElement>('select, input[type="text"]')) expect(champ.disabled).toBe(true);
+    }
+  });
+
+  it('destinations d\'une autre base : tableau réaffiché sous 768 px, cellules étiquetées, listes désactivées si verrouillé', () => {
+    monterDestinations({ reponse: { moisEnvoye: true, dernierEnvoi: '2026-11-01 → 2026-11-30' } });
+    const fixture = TestBed.createComponent(PayrollDestinations);
+    fixture.componentInstance.ngOnInit();
+    fixture.detectChanges();
+    const racine = fixture.nativeElement as HTMLElement;
+
+    expect(racine.querySelector('.soft-table-wrap')?.classList.contains('pd-wrap')).toBe(true);
+    expect(reaffiche('pd-wrap')).toBe(true);
+    const lignes = [...racine.querySelectorAll('tbody tr')];
+    expect(lignes.map((l) => l.querySelector('td.pd-name')?.textContent?.trim())).toEqual(['Nuit', 'Retard']);
+    for (const ligne of lignes) {
+      expect(ligne.querySelector('td[data-label="Envoyée"]')).not.toBeNull();
+      expect(ligne.querySelector<HTMLSelectElement>('td[data-label="Colonne"] select')!.disabled).toBe(true);
+    }
+  });
+});
