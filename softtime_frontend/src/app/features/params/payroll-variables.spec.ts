@@ -426,3 +426,53 @@ describe('Carte « Variables envoyées à la paie » : décocher Retard conserve
     expect(carte).toBeTruthy();
   });
 });
+
+/** Demande 2 : états désactivé et verrouillé de la carte (rendu réel, composants de la charte). */
+describe('Carte « Variables envoyées à la paie » : états désactivé et verrouillé', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  function rendre(reponse: PayrollVariablesConfig, permissions = ['SAGE:SAGE_DEMO:UPDATE']) {
+    monter({ reponse, permissions });
+    const fixture = TestBed.createComponent(PayrollVariablesCard);
+    fixture.componentInstance.ngOnInit();
+    fixture.detectChanges();
+    const racine = fixture.nativeElement as HTMLElement;
+    return { racine, champ: (libelle: string) => racine.querySelector<HTMLInputElement | HTMLSelectElement>(`[aria-label="${libelle}"]`)! };
+  }
+
+  it('mois déjà envoyé : bandeau d\'avertissement, listes, champ de code et cases désactivés, boutons absents', () => {
+    const { racine, champ } = rendre(config({ moisEnvoye: true, dernierEnvoi: '2026-11-01 → 2026-11-30', codesPaie: [{ code: 'RET01', intitule: 'Retard' }] }));
+
+    expect(racine.querySelector('.pv-banner--warning')?.textContent).toContain('Mois déjà envoyé en paie');
+    expect(champ('Code de paie de Retard').disabled).toBe(true);
+    expect(champ('Code de paie de Absence').disabled).toBe(true);
+    expect(champ('Unité de Absence').disabled).toBe(true);
+    expect(champ('Envoyer Nuit à la paie').disabled).toBe(true);
+    expect(racine.querySelector('.pv-actions')).toBeNull();
+  });
+
+  it('Absence : case désactivée avec sa raison, champ de code au style de l\'application', () => {
+    const { racine, champ } = rendre(config());
+
+    expect(champ('Envoyer Absence à la paie').disabled).toBe(true);
+    expect(racine.textContent).toContain('Envoi de l’absence : prochaine étape.');
+    expect(champ('Code de paie de Absence').classList.contains('soft-input')).toBe(true);
+    expect(champ('Code de paie de Absence').disabled).toBe(false);
+  });
+
+  it('sans permission : message de permission, aucun tableau ni requête', () => {
+    const { racine } = rendre(config(), ['SAGE:AUTRE:UPDATE']);
+
+    expect(racine.textContent).toContain('Vous n\'avez pas la permission de modifier la base SAGE_DEMO');
+    expect(racine.querySelector('table')).toBeNull();
+  });
+
+  it('les listes de la carte utilisent les composants de la charte', () => {
+    const { racine } = rendre(config());
+
+    expect(racine.querySelectorAll('.soft-select select').length).toBeGreaterThan(0);
+    expect(racine.querySelector('table.soft-table')).not.toBeNull();
+    expect(racine.querySelector('.soft-toggle input[type="checkbox"]')).not.toBeNull();
+    expect(racine.querySelectorAll('select:not(.soft-select select)').length).toBe(0);
+  });
+});

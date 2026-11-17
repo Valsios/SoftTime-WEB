@@ -43,12 +43,12 @@ import {
         <p class="pd-note">Chargement…</p>
       } @else if (brouillon(); as d) {
         @if (config()!.moisEnvoye) {
-          <p class="pd-alert" role="status">
+          <p class="pd-banner pd-banner--warning" role="status">
             Mois déjà envoyé en paie (période {{ config()!.dernierEnvoi }}) : modification impossible.
           </p>
         }
         @if (erreurs().length) {
-          <div class="pd-errors" role="alert">
+          <div class="pd-banner pd-banner--danger" role="alert">
             @for (e of erreurs(); track $index) { <p>{{ e }}</p> }
           </div>
         }
@@ -56,24 +56,29 @@ import {
           <p class="pd-note">La liste des tables de la base de paie n'a pas pu être lue.</p>
         }
         <div class="pd-fields">
-          <label>
-            Table
-            <select aria-label="Table de destination" [disabled]="bloque()" [value]="d.table ?? ''"
-              (change)="choisirTable($any($event.target).value)">
-              <option value="">(aucune)</option>
-              @for (t of tables(); track t) { <option [value]="t">{{ t }}</option> }
-            </select>
+          <label class="soft-field pd-field">
+            <span class="soft-field__label">Table</span>
+            <span class="soft-select"><span class="soft-select__control">
+              <select aria-label="Table de destination" [disabled]="bloque()"
+                (change)="choisirTable($any($event.target).value)">
+                <option value="" [selected]="!d.table">(aucune)</option>
+                @for (t of tables(); track t) { <option [value]="t" [selected]="t === d.table">{{ t }}</option> }
+              </select>
+            </span></span>
           </label>
-          <label>
-            Colonne matricule
-            <select aria-label="Colonne matricule" [disabled]="bloque() || !d.table" [value]="d.colonneMatricule ?? ''"
-              (change)="choisirMatricule($any($event.target).value)">
-              <option value="">(aucune)</option>
-              @for (c of colonnesMatricule(); track c) { <option [value]="c">{{ c }}</option> }
-            </select>
+          <label class="soft-field pd-field">
+            <span class="soft-field__label">Colonne matricule</span>
+            <span class="soft-select"><span class="soft-select__control">
+              <select aria-label="Colonne matricule" [disabled]="bloque() || !d.table"
+                (change)="choisirMatricule($any($event.target).value)">
+                <option value="" [selected]="!d.colonneMatricule">(aucune)</option>
+                @for (c of colonnesMatricule(); track c) { <option [value]="c" [selected]="c === d.colonneMatricule">{{ c }}</option> }
+              </select>
+            </span></span>
           </label>
         </div>
-        <table class="pd-table">
+        <div class="soft-table-wrap">
+        <table class="soft-table pd-table">
           <thead>
             <tr><th>Variable</th><th>Envoyée</th><th>Colonne</th></tr>
           </thead>
@@ -83,35 +88,40 @@ import {
                 <td>{{ v.libelle }}</td>
                 <td>{{ v.actif ? 'oui' : 'non' }}</td>
                 <td>
-                  <select [attr.aria-label]="'Colonne de ' + v.libelle" [disabled]="bloque() || !d.table" [value]="v.colonne ?? ''"
-                    (change)="choisirColonne(v.variable, $any($event.target).value)">
-                    <option value="">(aucune)</option>
-                    @for (c of choix(v.decimalesRequises, v.colonne); track c.nom) {
-                      <option [value]="c.nom" [disabled]="!c.utilisable">{{ c.libelle }}</option>
-                    }
-                  </select>
+                  <div class="soft-select pd-select"><div class="soft-select__control">
+                    <select [attr.aria-label]="'Colonne de ' + v.libelle" [disabled]="bloque() || !d.table"
+                      (change)="choisirColonne(v.variable, $any($event.target).value)">
+                      <option value="" [selected]="!v.colonne">(aucune)</option>
+                      @for (c of choix(v.decimalesRequises, v.colonne); track c.nom) {
+                        <option [value]="c.nom" [disabled]="!c.utilisable" [selected]="c.nom === v.colonne">{{ c.libelle }}</option>
+                      }
+                    </select>
+                  </div></div>
                 </td>
               </tr>
             }
           </tbody>
         </table>
+        </div>
       }
     </section>
   `,
   styles: [`
-    .pd { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
-    .pd-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
-    .pd-title { font-size: 15px; margin: 0; }
-    .pd-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-    .pd-note { color: var(--text-muted); margin: 10px 0; font-size: 13px; }
-    .pd-alert, .pd-errors { border: 1px solid var(--danger-border); border-left: 4px solid var(--danger);
-      background: var(--danger-bg); padding: 8px 12px; margin: 10px 0; border-radius: 6px; }
-    .pd-errors p { margin: 2px 0; }
-    .pd-fields { display: flex; gap: 16px; flex-wrap: wrap; margin: 8px 0; }
-    .pd-fields label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
-    .pd-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-    .pd-table th, .pd-table td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border-subtle); }
-    .pd select { max-width: 260px; width: 100%; }
+    .pd { margin-top: var(--space-xl); padding-top: var(--space-lg); border-top: 1px solid var(--border-subtle); }
+    .pd-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-md); flex-wrap: wrap; }
+    .pd-title { margin: 0; font-family: var(--font-heading); font-size: 16px; font-weight: 600; color: var(--app-text-strong); }
+    .pd-actions { display: flex; gap: var(--space-sm); flex-wrap: wrap; }
+    .pd-note { color: var(--text-muted); margin: var(--space-md) 0; font-size: 13px; }
+    .pd-banner { margin: var(--space-md) 0; padding: 10px 14px; font-size: 13px; border-radius: var(--radius-md); border: 1px solid; }
+    .pd-banner p { margin: 2px 0; }
+    .pd-banner--danger { color: var(--danger); background: var(--danger-bg); border-color: var(--danger-border); }
+    .pd-banner--warning { color: var(--warning); background: var(--warning-bg); border-color: var(--warning-border); }
+    .pd-fields { display: flex; gap: var(--space-lg); flex-wrap: wrap; margin: var(--space-md) 0; }
+    .pd-field { min-width: 200px; max-width: 280px; flex: 1 1 200px; }
+    .pd-select { min-width: 200px; max-width: 320px; }
+    .pd select:disabled { background: var(--surface-dark); color: var(--text-muted); cursor: not-allowed; }
+    .pd-table td { vertical-align: top; }
+    @media (max-width: 767px) { .pd-table thead th, .pd-table tbody td { padding: var(--space-md); } }
   `],
 })
 export class PayrollDestinations implements OnInit {

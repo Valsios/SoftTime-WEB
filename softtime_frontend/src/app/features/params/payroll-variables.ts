@@ -6,7 +6,7 @@ import { SessionStore } from '../../core/session.store';
 import { ToastService } from '../../core/toast.service';
 import { PayrollVariable, PayrollVariablesConfig, SageConstantOption } from '../../shared/models';
 import { PayrollVariablesService } from '../../shared/services/payroll-variables.service';
-import { SoftButton, SoftCard } from '../../shared/components';
+import { SoftBadge, SoftButton, SoftCard } from '../../shared/components';
 import { PayrollDestinations } from './payroll-destinations';
 import {
   aCodePropre,
@@ -26,7 +26,7 @@ import {
 @Component({
   selector: 'app-payroll-variables',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [SoftButton, SoftCard, PayrollDestinations],
+  imports: [SoftBadge, SoftButton, SoftCard, PayrollDestinations],
   template: `
     <soft-card>
       <div class="pv-head">
@@ -48,7 +48,7 @@ import {
       @if (!base()) {
         <p class="pv-note">Choisissez une base active dans la barre du haut pour configurer ses variables de paie.</p>
       } @else if (!autorise()) {
-        <p class="pv-note">Vous n'avez pas la permission de modifier la base {{ base() }} : configuration non disponible.</p>
+        <p class="pv-banner pv-banner--info" role="status">Vous n'avez pas la permission de modifier la base {{ base() }} : configuration non disponible.</p>
       } @else if (loading()) {
         <p class="pv-note">Chargement…</p>
       } @else if (config(); as c) {
@@ -58,92 +58,109 @@ import {
           Le changement s'applique au prochain envoi.
         </p>
         @if (c.parDefaut) {
-          <p class="pv-note">Aucune configuration enregistrée : comportement d'origine (7 variables d'heures supplémentaires envoyées).</p>
+          <p class="pv-banner pv-banner--info" role="status">Aucune configuration enregistrée : comportement d'origine (7 variables d'heures supplémentaires envoyées).</p>
         }
         @if (c.moisEnvoye) {
-          <p class="pv-alert" role="status">
+          <p class="pv-banner pv-banner--warning" role="status">
             Mois déjà envoyé en paie (période {{ c.dernierEnvoi }}) : modification impossible. La configuration pourra être
             modifiée le mois prochain.
           </p>
         }
         @if (erreurs().length) {
-          <div class="pv-errors" role="alert">
+          <div class="pv-banner pv-banner--danger" role="alert">
             @for (e of erreurs(); track $index) { <p>{{ e }}</p> }
           </div>
         }
 
-        <table class="pv-table">
-          <thead>
-            <tr>
-              <th>Variable</th>
-              <th>Envoyée</th>
-              <th>{{ autre() ? 'Colonne cible' : 'Code de paie' }}</th>
-              <th>Unité</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (v of brouillon(); track v.variable) {
-              <tr [class.pv-off]="!v.actif">
-                <td>
-                  {{ v.libelle }}
-                  @if (!v.actif) { <span class="pv-tag">{{ nonEnvoyee }}</span> }
-                </td>
-                <td>
-                  <input type="checkbox" [attr.aria-label]="'Envoyer ' + v.libelle + ' à la paie'"
-                    [checked]="v.actif" [disabled]="!cochable(v) || saving()"
-                    (change)="basculer(v.variable, $any($event.target).checked)" />
-                  @if (raison(v); as r) { <div class="pv-hint">{{ r }}</div> }
-                </td>
-                <td>
-                  @if (codePropre(v.variable) && !sansEnvoi(v.variable)) {
-                    @if (autre()) {
-                      <span class="pv-readonly" title="Choisie dans « Destinations dans la base de paie »">
-                        {{ v.cibleExistante ?? '(à choisir dans les destinations)' }}
-                      </span>
-                    } @else {
-                      <select [attr.aria-label]="'Code de paie de ' + v.libelle" [disabled]="c.moisEnvoye || saving()"
-                        (change)="changer(v.variable, 'codePaie', $any($event.target).value)">
-                        <option value="" [selected]="!v.codePaie">(aucun)</option>
-                        @for (o of codes(v); track o.code) {
-                          <option [value]="o.code" [selected]="o.code.toLowerCase() === (v.codePaie ?? '').toLowerCase()">{{ o.code }}{{ o.intitule ? ' — ' + o.intitule : '' }}</option>
-                        }
-                      </select>
-                      @if (c.avertissementCodes) { <div class="pv-hint">{{ c.avertissementCodes }}</div> }
-                    }
-                  } @else if (sansEnvoi(v.variable)) {
-                    @if (autre()) {
-                      <select [attr.aria-label]="'Colonne cible de ' + v.libelle" [disabled]="c.moisEnvoye || saving()"
-                        (change)="changer(v.variable, 'colonneCible', $any($event.target).value)">
-                        <option value="" [selected]="!v.colonneCible">(aucune)</option>
-                        @for (col of colonnes(v); track col) { <option [value]="col" [selected]="col === v.colonneCible">{{ col }}</option> }
-                      </select>
-                    } @else {
-                      <input type="text" maxlength="32" [attr.aria-label]="'Code de paie de ' + v.libelle"
-                        [disabled]="c.moisEnvoye || saving()" [value]="v.codePaie ?? ''"
-                        (input)="changer(v.variable, 'codePaie', $any($event.target).value)" />
-                    }
-                  } @else {
-                    <span class="pv-readonly" title="Configuré dans {{ autre() ? 'l’écriture de paie de la base' : 'Codes constantes' }}">
-                      {{ v.cibleExistante ?? '(non configuré)' }}
-                    </span>
-                  }
-                </td>
-                <td>
-                  @if (sansEnvoi(v.variable)) {
-                    <select [attr.aria-label]="'Unité de ' + v.libelle" [disabled]="c.moisEnvoye || saving()"
-                      [value]="v.unite ?? ''" (change)="changer(v.variable, 'unite', $any($event.target).value)">
-                      <option value="">(aucune)</option>
-                      <option value="H">heures</option>
-                      <option value="J">jours</option>
-                    </select>
-                  } @else {
-                    <span class="pv-readonly">heures</span>
-                  }
-                </td>
+        <div class="soft-table-wrap">
+          <table class="soft-table pv-table">
+            <thead>
+              <tr>
+                <th>Variable</th>
+                <th>Envoyée</th>
+                <th>{{ autre() ? 'Colonne cible' : 'Code de paie' }}</th>
+                <th>Unité</th>
               </tr>
-            }
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              @for (v of brouillon(); track v.variable) {
+                <tr [class.pv-off]="!v.actif">
+                  <td class="pv-name">
+                    {{ v.libelle }}
+                    @if (!v.actif) { <soft-badge variant="muted">{{ nonEnvoyee }}</soft-badge> }
+                  </td>
+                  <td>
+                    <label class="soft-toggle pv-toggle">
+                      <input type="checkbox" [attr.aria-label]="'Envoyer ' + v.libelle + ' à la paie'"
+                        [checked]="v.actif" [disabled]="!cochable(v) || saving()"
+                        (change)="basculer(v.variable, $any($event.target).checked)" />
+                      <span class="soft-toggle__track"><span class="soft-toggle__thumb"></span></span>
+                    </label>
+                    @if (raison(v); as r) { <div class="soft-field__hint pv-hint">{{ r }}</div> }
+                  </td>
+                  <td>
+                    @if (codePropre(v.variable) && !sansEnvoi(v.variable)) {
+                      @if (autre()) {
+                        <span class="pv-readonly" title="Choisie dans « Destinations dans la base de paie »">
+                          {{ v.cibleExistante ?? '(à choisir dans les destinations)' }}
+                        </span>
+                      } @else {
+                        <div class="soft-select pv-field">
+                          <div class="soft-select__control">
+                            <select [attr.aria-label]="'Code de paie de ' + v.libelle" [disabled]="c.moisEnvoye || saving()"
+                              (change)="changer(v.variable, 'codePaie', $any($event.target).value)">
+                              <option value="" [selected]="!v.codePaie">(aucun)</option>
+                              @for (o of codes(v); track o.code) {
+                                <option [value]="o.code" [selected]="o.code.toLowerCase() === (v.codePaie ?? '').toLowerCase()">{{ o.code }}{{ o.intitule ? ' — ' + o.intitule : '' }}</option>
+                              }
+                            </select>
+                          </div>
+                        </div>
+                        @if (c.avertissementCodes) { <div class="soft-field__hint pv-hint">{{ c.avertissementCodes }}</div> }
+                      }
+                    } @else if (sansEnvoi(v.variable)) {
+                      @if (autre()) {
+                        <div class="soft-select pv-field">
+                          <div class="soft-select__control">
+                            <select [attr.aria-label]="'Colonne cible de ' + v.libelle" [disabled]="c.moisEnvoye || saving()"
+                              (change)="changer(v.variable, 'colonneCible', $any($event.target).value)">
+                              <option value="" [selected]="!v.colonneCible">(aucune)</option>
+                              @for (col of colonnes(v); track col) { <option [value]="col" [selected]="col === v.colonneCible">{{ col }}</option> }
+                            </select>
+                          </div>
+                        </div>
+                      } @else {
+                        <input type="text" class="soft-input pv-field" maxlength="32" [attr.aria-label]="'Code de paie de ' + v.libelle"
+                          [disabled]="c.moisEnvoye || saving()" [value]="v.codePaie ?? ''"
+                          (input)="changer(v.variable, 'codePaie', $any($event.target).value)" />
+                      }
+                    } @else {
+                      <span class="pv-readonly" title="Configuré dans {{ autre() ? 'l’écriture de paie de la base' : 'Codes constantes' }}">
+                        {{ v.cibleExistante ?? '(non configuré)' }}
+                      </span>
+                    }
+                  </td>
+                  <td>
+                    @if (sansEnvoi(v.variable)) {
+                      <div class="soft-select pv-field pv-field--unit">
+                        <div class="soft-select__control">
+                          <select [attr.aria-label]="'Unité de ' + v.libelle" [disabled]="c.moisEnvoye || saving()"
+                            (change)="changer(v.variable, 'unite', $any($event.target).value)">
+                            <option value="" [selected]="!v.unite">(aucune)</option>
+                            <option value="H" [selected]="v.unite === 'H'">heures</option>
+                            <option value="J" [selected]="v.unite === 'J'">jours</option>
+                          </select>
+                        </div>
+                      </div>
+                    } @else {
+                      <span class="pv-readonly">heures</span>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
         <p class="pv-note">
           Retard est envoyé en heures, avec la valeur affichée dans la page Heures supplémentaires
           ({{ autre() ? 'dans sa colonne de destination' : 'dans le code de paie choisi' }}).
@@ -154,29 +171,41 @@ import {
           <app-payroll-destinations (enregistre)="charger()" />
         }
       } @else if (erreurs().length) {
-        <div class="pv-errors" role="alert">
+        <div class="pv-banner pv-banner--danger" role="alert">
           @for (e of erreurs(); track $index) { <p>{{ e }}</p> }
         </div>
       }
     </soft-card>
   `,
   styles: [`
-    :host { display: block; margin-top: 16px; }
-    .pv-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
-    .pv-title { font-size: 16px; margin: 0; }
-    .pv-sub { margin: 4px 0 0; color: var(--text-muted); }
-    .pv-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-    .pv-note { color: var(--text-muted); margin: 10px 0; font-size: 13px; }
-    .pv-alert, .pv-errors { border: 1px solid var(--danger-border); border-left: 4px solid var(--danger);
-      background: var(--danger-bg); padding: 8px 12px; margin: 10px 0; border-radius: 6px; }
-    .pv-errors p { margin: 2px 0; }
-    .pv-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-    .pv-table th, .pv-table td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border-subtle); vertical-align: top; }
-    .pv-off td:first-child { color: var(--text-muted); }
-    .pv-tag { margin-left: 6px; font-size: 12px; color: var(--text-muted); font-style: italic; }
-    .pv-hint { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
-    .pv-readonly { color: var(--text-muted); }
-    .pv-table input[type='text'], .pv-table select { max-width: 220px; width: 100%; }
+    :host { display: block; margin-top: var(--space-lg); }
+    .pv-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-md); flex-wrap: wrap;
+      margin-bottom: var(--space-md); }
+    .pv-title { margin: 0; font-family: var(--font-heading); font-size: 16px; font-weight: 600; color: var(--app-text-strong); }
+    .pv-sub { margin: var(--space-xs) 0 0; color: var(--text-secondary); font-size: 14px; }
+    .pv-actions { display: flex; gap: var(--space-sm); flex-wrap: wrap; }
+    .pv-note { color: var(--text-muted); margin: var(--space-md) 0; font-size: 13px; }
+    .pv-banner { margin: var(--space-md) 0; padding: 10px 14px; font-size: 13px; border-radius: var(--radius-md); border: 1px solid; }
+    .pv-banner p { margin: 2px 0; }
+    .pv-banner--danger { color: var(--danger); background: var(--danger-bg); border-color: var(--danger-border); }
+    .pv-banner--warning { color: var(--warning); background: var(--warning-bg); border-color: var(--warning-border); }
+    .pv-banner--info { color: var(--info); background: var(--info-bg); border-color: var(--info-border); }
+    .pv-table td { vertical-align: top; }
+    .pv-off .pv-name { color: var(--text-muted); }
+    .pv-name soft-badge { margin-left: var(--space-sm); }
+    .pv-hint { margin-top: var(--space-xs); }
+    .pv-readonly { color: var(--text-muted); line-height: 44px; }
+    .pv-field { min-width: 180px; max-width: 280px; }
+    .pv-field--unit { min-width: 140px; max-width: 180px; }
+    .pv-table select:disabled { background: var(--surface-dark); color: var(--text-muted); cursor: not-allowed; }
+    .pv-toggle { margin-top: 10px; }
+    .pv-toggle:focus-within .soft-toggle__track { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+    .pv-toggle:has(input:disabled) { cursor: not-allowed; }
+    .pv-toggle input:disabled + .soft-toggle__track { opacity: 0.5; }
+    @media (max-width: 767px) {
+      .pv-table thead th, .pv-table tbody td { padding: var(--space-md); }
+      .pv-field, .pv-field--unit { min-width: 150px; }
+    }
   `],
 })
 export class PayrollVariablesCard implements OnInit {
