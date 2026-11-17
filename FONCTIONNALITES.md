@@ -388,7 +388,7 @@ Nuit, Dimanche, Retard, Absence) restent calculées et affichées ; seul l'envoi
   **absent de la table de paie** (ou présent plusieurs fois) est ignoré sans erreur et signalé dans le message : aucune ligne n'est créée.
   Le message de fin et le résultat distinguent les salariés écrits des salariés remis à 0 ; la synthèse du journal `SYNC_PAIE` et la ligne
   `T_PAIE_ENVOI` comptent des **catégories** mises à jour (valeurs et zéros ensemble). La page Heures supplémentaires l'annonce dans la
-  confirmation de l'envoi.
+  confirmation de l'envoi (**tant que l'option de la base est cochée**, voir la section « 5 octies »).
   **Refus d'une sélection sans heure calculée** : avant toute écriture, si la sélection de l'envoi (période exacte, base, département, plage de
   matricules) n'a **aucune ligne `T_HSExoImp`**, la synchronisation est refusée (400, STANDARD comme autre base) : « Aucune heure calculée sur cette période pour
   cette sélection : lancez le calcul avant d'envoyer à la paie. ». Rien n'est écrit (ni valeur, ni zéro), aucun marqueur `T_PAIE_ENVOI`, aucune synthèse de
@@ -398,7 +398,8 @@ Nuit, Dimanche, Retard, Absence) restent calculées et affichées ; seul l'envoi
   vide, salarié absent), l'envoi des salariés avec valeurs n'est pas bloqué, mais le message de fin dit « N salarié(s) sans valeur n'ont PAS été remis à 0 ...
   leurs anciens cumuls restent dans SAGE » et la synthèse du journal `SYNC_PAIE` porte `AVERTISSEMENT SalariésNonRemisÀ0=N` (et `SalariésRemisÀ0=N`).
   **Hypothèse à confirmer par le RH** : personne ne saisit à la main ces mêmes codes (HS01 à HS07, code de Retard) dans SAGE. Sinon, le 0 écraserait
-  cette saisie pour les salariés sans valeur.
+  cette saisie pour les salariés sans valeur. **Réglable depuis C2c** : l'option « Remettre à 0 les salariés sans valeur à l'envoi » (cochée par
+  défaut) se décoche par base, sans attendre la réponse du RH (section « 5 octies »).
 - **Écran** : carte « Variables envoyées à la paie » sous la liste des bases SAGE, pour la **base active**. Base SAGE : codes HS01 à HS07 en lecture
   seule (écran Codes constantes), code de paie et unité (heures ou jours) modifiables pour Retard et Absence. Autre base : colonnes de
   `T_PAIE_ECRITURE` en lecture seule pour les heures supplémentaires, colonne cible (liste lue dans la table d'écriture configurée) et unité pour
@@ -446,8 +447,47 @@ Complète la section précédente : Retard devient envoyable ; Absence reste non
   journal central, caches du Contrôle avant paie vidés. Aucune migration (la colonne `CATEGORIE` accepte `Retard`).
 - **Absence** : case désactivée avec « Envoi de l'absence : prochaine étape » ; une Absence cochée est refusée à l'enregistrement. La page
   Heures supplémentaires continue d'afficher Absence « (non envoyée à la paie) ».
-- **Défaut connu (non corrigé)** : un salarié sans ligne `T_HSExoImp` sur la période n'est pas écrit ; son cumul en paie (Retard compris) garde
-  la valeur d'un envoi précédent au lieu d'être remis à zéro.
+- **Défaut connu (corrigé en C2b)** : un salarié sans ligne `T_HSExoImp` sur la période n'était pas écrit ; son cumul en paie (Retard compris)
+  gardait la valeur d'un envoi précédent. Il est désormais remis à 0 (variables cochées), sauf si l'option de la base (C2c) est décochée.
+
+## 5 octies. Option par base « Remettre à 0 les salariés sans valeur à l'envoi » (lot C2c) — branche `feature/envoi-variables-paie`
+
+Le RH règle lui-même, **par base**, ce que l'envoi fait des salariés du périmètre qui n'ont plus de valeur (comportement de C2b, section
+précédente). L'hypothèse « personne ne saisit à la main ces codes dans SAGE » n'étant pas confirmée, l'option évite d'écraser une saisie manuelle.
+
+- **Valeur et défaut** : option **cochée par défaut**. Une base **sans ligne de configuration** vaut « cochée » : aucun changement de comportement
+  pour une base existante (comportement de C2b : zéros pour les variables cochées).
+- **Option cochée** : comportement de C2b inchangé (lignes synthétiques à 0, message « N salarié(s) sans valeur ont été remis à 0 », avertissement
+  « n'ont PAS été remis à 0 » si leur numéro SAGE est introuvable).
+- **Option décochée** : l'envoi n'ajoute aucune ligne synthétique. Aucun salarié n'est remis à 0 (`EmployeesReset = 0`) ; les salariés avec valeurs
+  sont écrits comme avant (mêmes variables cochées, mêmes valeurs) ; ni la phrase « remis à 0 » ni l'avertissement « non remis à 0 » n'apparaissent
+  dans le message, le résultat ou la synthèse du journal `SYNC_PAIE` (rien n'était demandé). STANDARD et autre base.
+- **Inchangé dans les deux cas** : le calcul des heures, le filtre à l'envoi (variable cochée), le **refus d'une période sans aucune ligne calculée**,
+  le verrou du mois, le marqueur `T_PAIE_ENVOI`, le journal `SYNC_PAIE`, les droits et le statut `INCERTAIN` d'une autre base.
+- **Écran** : sur la carte « Variables envoyées à la paie », sous le tableau, un interrupteur (style des autres interrupteurs de la carte) libellé
+  « Remettre à 0 les salariés sans valeur à l'envoi », avec l'aide « Évite qu'un ancien cumul reste dans la paie quand un salarié n'a plus d'heures. À
+  décocher si quelqu'un saisit ces codes à la main dans la paie. ». Mêmes états que la carte : brouillon et « Annuler les changements », désactivé pendant
+  l'enregistrement et quand le mois est envoyé (« Mois déjà envoyé : modification impossible. »), absent sans permission. Il part **dans le même
+  enregistrement que les variables** (une seule confirmation) ; la confirmation cite « Remise à 0 des salariés sans valeur : activée / désactivée ».
+  Compatible largeur étroite (le tableau passe en cartes sous 768 px, l'option reste sous les cartes) et thème sombre.
+- **Confirmation de « Synchroniser vers SAGE »** (page Heures supplémentaires) : option cochée, la question annonce la remise à 0 (texte de C2b) ;
+  option décochée, elle se limite à « Pousser les HS vers SAGE (T_CUMSAL) ? » (ou « Écrire les HS dans la base X ? »). L'option est relue au moment de
+  confirmer.
+- **API** : `GET api/v1/payroll-variables` renvoie `remiseAZeroSansValeur` (vrai sans ligne) ; `GET …/actives` aussi. `PUT api/v1/payroll-variables`
+  accepte l'**ancien corps** (tableau de variables : option inchangée) ou l'objet `{ "variables": [...], "remiseAZeroSansValeur": true|false }`
+  (champ absent ou `null` : option inchangée). Mêmes contrôles que les variables : droit (porte Bases + `SAGE:{base}:UPDATE`, ou administrateur), refus
+  409 si une période envoyée recoupe le mois en cours, caches de la sélection et du Contrôle avant paie vidés, atomicité avec les variables (une
+  validation qui échoue n'écrit rien).
+- **Stockage** : table générique **`T_PAIE_OPTION`** (`BDD_SAGE`, `CLE`, `VALEUR`, `MODIFIE_LE`, `MODIFIE_PAR`, index unique sur base et clé), clé
+  **`RemiseAZeroSansValeur`**, valeur « 1 » ou « 0 ». Une table générique plutôt qu'une colonne de `T_PAIE_VARIABLE` : l'option n'appartient à aucune
+  variable, et le lot C3 y ajoutera d'autres réglages (heures par jour, liste de codes d'absence) sans nouvelle migration. Rien n'est inséré par la
+  migration : l'absence de ligne vaut la valeur par défaut ; cocher à nouveau met la ligne à jour (jamais de suppression). Journal central avec l'auteur
+  (comme `T_PAIE_VARIABLE`).
+- **Migration 008** : `migrations/versions/008_options_paie.sql` (additive, rejouable : `T_PAIE_OPTION` et son index ne sont créés que s'ils n'existent pas,
+  aucune donnée insérée), appliquée par `Database:AutoMigrate`. Sans elle, l'API refuse de démarrer avec « Les options de paie sont absentes
+  (T_PAIE_OPTION) : activez Database:AutoMigrate (développement) ou exécutez migrations/versions/008_options_paie.sql. » (contrôle comparable à celui de
+  007). **Production sans AutoMigrate** : exécuter une fois ce script sur la base SoftTime, avant de déployer l'API :
+  `sqlcmd -S <serveur> -d <base SoftTime> -E -b -i 008_options_paie.sql` (rejouable sans risque). Les futurs lots de clôture prendront 009 et suivants.
 
 ---
 
