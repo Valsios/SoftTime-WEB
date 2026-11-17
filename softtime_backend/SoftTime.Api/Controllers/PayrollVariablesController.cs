@@ -38,7 +38,7 @@ public class PayrollVariablesController : ApiControllerBase
     public async Task<IActionResult> SaveAsync([FromBody] JsonElement corps, CancellationToken ct)
     {
         var demande = LireCorps(corps);
-        return Ok(await _svc.SaveAsync(demande.Variables ?? new List<PayrollVariableSaveDto>(), demande.RemiseAZeroSansValeur, ct));
+        return Ok(await _svc.SaveAsync(demande with { Variables = demande.Variables ?? new List<PayrollVariableSaveDto>() }, ct));
     }
 
     private static readonly JsonSerializerOptions JsonWeb = new(JsonSerializerDefaults.Web);

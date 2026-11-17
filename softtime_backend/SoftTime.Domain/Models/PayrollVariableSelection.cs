@@ -1,9 +1,12 @@
+using SoftTime.Domain.Entities.SoftTime;
+
 namespace SoftTime.Domain.Models;
 
 /// <summary>
 /// Variables envoyées à la paie pour une base SAGE. Le calcul ne dépend jamais de ce choix : les neuf variables
 /// restent calculées et affichées, seul l'envoi vers la paie est filtré. Les valeurs par défaut reproduisent le
 /// comportement historique (les sept variables d'heures supplémentaires actives, Retard et Absence inactives).
+/// Retard est envoyé en heures ; Absence en heures ou en jours (lot C3).
 /// Le Domain ne lit aucune configuration : l'appelant fournit la sélection, comme <see cref="ClosingRulesOptions"/>.
 /// Les listes de variables dérivent de <see cref="PayrollVariableCatalog"/>.
 /// </summary>
@@ -51,6 +54,32 @@ public sealed record PayrollVariableSelection
     /// Vrai par défaut (comportement de C2b) : une base sans ligne d'option garde ce comportement.
     /// </summary>
     public bool RemiseAZeroSansValeur { get; init; } = true;
+
+    /// <summary>
+    /// Unités choisies dans la configuration de la base (variable → <see cref="PayrollUnits"/>), pour les variables qui
+    /// en admettent plusieurs (Absence). Sans unité : la première unité de la variable (heures).
+    /// </summary>
+    public IReadOnlyDictionary<string, string> Unites { get; init; } = AucunCode;
+
+    /// <summary>Absence envoyée en jours : nombre d'heures d'une journée (option de la base, 8 par défaut).</summary>
+    public decimal HeuresParJour { get; init; } = PayrollOptions.HeuresParJourParDefaut;
+
+    /// <summary>Unité d'envoi d'une variable.</summary>
+    public string UniteDe(string variable)
+    {
+        var definition = PayrollVariableCatalog.Definition(variable);
+        return Unites.TryGetValue(definition.Id, out var unite) && definition.Unites.Contains(unite) ? unite : definition.Unites[0];
+    }
+
+    /// <summary>
+    /// Valeur écrite en paie pour une variable : la valeur de la ligne (en heures, celle affichée par la page Heures
+    /// supplémentaires ; absente = 0), convertie en jours quand l'unité choisie est « J » (<see cref="PayrollUnits.EnJours"/>).
+    /// </summary>
+    public decimal ValeurEnvoyee(string variable, PayrollRowValues ligne)
+    {
+        var heures = PayrollVariableCatalog.Definition(variable).ValeurEnvoyee(ligne);
+        return UniteDe(variable) == PayrollUnits.Jours ? PayrollUnits.EnJours(heures, HeuresParJour) : heures;
+    }
 
     /// <summary>Noms canoniques des variables actives.</summary>
     public IReadOnlySet<string> Actives { get; init; } = new HashSet<string>(HeuresSup, StringComparer.Ordinal);

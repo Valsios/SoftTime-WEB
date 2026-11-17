@@ -6,6 +6,18 @@ public static class PayrollUnits
     public const string Heures = "H";
     public const string Jours = "J";
 
+    /// <summary>
+    /// Conversion d'un nombre d'heures en jours : heures ÷ heures par jour, arrondi au centième le plus proche, la moitié
+    /// arrondie vers le haut (<see cref="MidpointRounding.AwayFromZero"/>) : 24 h à 8 h = 3 j ; 25,5 h à 8 h = 3,19 j ;
+    /// 1 h à 8 h = 0,125 → 0,13 j.
+    /// </summary>
+    public static decimal EnJours(decimal heures, decimal heuresParJour)
+    {
+        if (heuresParJour <= 0m)
+            throw new DomainException("Le nombre d'heures par jour doit être positif.");
+        return Math.Round(heures / heuresParJour, 2, MidpointRounding.AwayFromZero);
+    }
+
     /// <summary>Libellé affiché d'une unité.</summary>
     public static string Libelle(string unite) => unite switch
     {
@@ -79,8 +91,8 @@ public static class PayrollVariableCatalog
         new(PayrollVariableSelection.Nuit, "Nuit", true, Services.OvertimeCodeKeys.Nuit, HeuresSeules, true, l => l.Nuit),
         // Retard (lot C2) : envoyé en heures, code ou colonne propre à chaque base.
         new(PayrollVariableSelection.Retard, "Retard", false, null, HeuresSeules, true, l => l.Retard),
-        // Absence : jamais envoyée tant que la définition des absences non justifiées n'est pas arrêtée (lot C3).
-        new(PayrollVariableSelection.Absence, "Absence", false, null, HeuresOuJours, false, l => l.Absence),
+        // Absence (lot C3) : absence non justifiée, envoyée en heures ou en jours, code ou colonne propre à chaque base.
+        new(PayrollVariableSelection.Absence, "Absence", false, null, HeuresOuJours, true, l => l.Absence),
     ];
 
     /// <summary>Définition d'une variable ; une variable inconnue est refusée.</summary>

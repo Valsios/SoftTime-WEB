@@ -234,13 +234,15 @@ public class PayrollResetOptionTests
     public async Task Put_LegacyArrayBody_IsAccepted_AndLeavesTheOptionUnchanged()
     {
         var svc = new Mock<IPayrollVariableService>();
-        svc.Setup(s => s.SaveAsync(It.IsAny<IReadOnlyList<PayrollVariableSaveDto>>(), It.IsAny<bool?>(), It.IsAny<CancellationToken>())).ReturnsAsync(Config);
+        // Adapté au lot C3 : le contrôleur passe le corps complet (variables, option, Absence) en un seul appel.
+        svc.Setup(s => s.SaveAsync(It.IsAny<PayrollVariablesSaveRequest>(), It.IsAny<CancellationToken>())).ReturnsAsync(Config);
 
         await new PayrollVariablesController(svc.Object).SaveAsync(Json("""[{"variable":"Nuit","actif":false}]"""), default);
 
         svc.Verify(s => s.SaveAsync(
-            It.Is<IReadOnlyList<PayrollVariableSaveDto>>(l => l.Count == 1 && l[0].Variable == "Nuit" && !l[0].Actif),
-            null, It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<PayrollVariablesSaveRequest>(d => d.Variables!.Count == 1 && d.Variables[0].Variable == "Nuit" && !d.Variables[0].Actif
+                                                    && d.RemiseAZeroSansValeur == null && d.HeuresParJour == null && d.AbsenceCodes == null),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]
@@ -249,11 +251,13 @@ public class PayrollResetOptionTests
     public async Task Put_ObjectBody_CarriesTheVariablesAndTheOptionInOneCall(string corps, bool attendu)
     {
         var svc = new Mock<IPayrollVariableService>();
-        svc.Setup(s => s.SaveAsync(It.IsAny<IReadOnlyList<PayrollVariableSaveDto>>(), It.IsAny<bool?>(), It.IsAny<CancellationToken>())).ReturnsAsync(Config);
+        // Adapté au lot C3 : le contrôleur passe le corps complet (variables, option, Absence) en un seul appel.
+        svc.Setup(s => s.SaveAsync(It.IsAny<PayrollVariablesSaveRequest>(), It.IsAny<CancellationToken>())).ReturnsAsync(Config);
 
         await new PayrollVariablesController(svc.Object).SaveAsync(Json(corps), default);
 
-        svc.Verify(s => s.SaveAsync(It.Is<IReadOnlyList<PayrollVariableSaveDto>>(l => l.Count == 1), attendu, It.IsAny<CancellationToken>()), Times.Once);
+        svc.Verify(s => s.SaveAsync(It.Is<PayrollVariablesSaveRequest>(d => d.Variables!.Count == 1 && d.RemiseAZeroSansValeur == attendu),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]
@@ -262,11 +266,13 @@ public class PayrollResetOptionTests
     public async Task Put_ObjectBody_OptionAbsentOrNull_MeansUnchanged(string corps)
     {
         var svc = new Mock<IPayrollVariableService>();
-        svc.Setup(s => s.SaveAsync(It.IsAny<IReadOnlyList<PayrollVariableSaveDto>>(), It.IsAny<bool?>(), It.IsAny<CancellationToken>())).ReturnsAsync(Config);
+        // Adapté au lot C3 : le contrôleur passe le corps complet (variables, option, Absence) en un seul appel.
+        svc.Setup(s => s.SaveAsync(It.IsAny<PayrollVariablesSaveRequest>(), It.IsAny<CancellationToken>())).ReturnsAsync(Config);
 
         await new PayrollVariablesController(svc.Object).SaveAsync(Json(corps), default);
 
-        svc.Verify(s => s.SaveAsync(It.IsAny<IReadOnlyList<PayrollVariableSaveDto>>(), null, It.IsAny<CancellationToken>()), Times.Once);
+        svc.Verify(s => s.SaveAsync(It.Is<PayrollVariablesSaveRequest>(d => d.Variables != null && d.RemiseAZeroSansValeur == null),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]

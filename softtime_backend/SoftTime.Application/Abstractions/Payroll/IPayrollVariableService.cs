@@ -27,6 +27,13 @@ public interface IPayrollVariableService
         IReadOnlyList<PayrollVariableSaveDto> variables, bool? remiseAZeroSansValeur = null, CancellationToken ct = default);
 
     /// <summary>
+    /// Enregistrement complet de la carte en un seul appel et une seule sauvegarde : variables, option de remise à 0, heures
+    /// par jour de l'Absence et codes d'absence comptés (champ null : inchangé). Mêmes droit, verrou de mois (409), journal
+    /// et caches que <see cref="SaveAsync(IReadOnlyList{PayrollVariableSaveDto}, bool?, CancellationToken)"/>.
+    /// </summary>
+    Task<PayrollVariablesConfigDto> SaveAsync(PayrollVariablesSaveRequest demande, CancellationToken ct = default);
+
+    /// <summary>
     /// Autre base : table, colonne matricule et colonne de chaque variable envoyable (T_PAIE_ECRITURE), avec les tables et
     /// colonnes lues dans la base de paie (droit de configuration vérifié).
     /// </summary>

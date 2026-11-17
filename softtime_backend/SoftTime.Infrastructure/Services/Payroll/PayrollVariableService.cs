@@ -16,7 +16,8 @@ namespace SoftTime.Infrastructure.Services.Payroll;
 
 /// <summary>
 /// Variables envoyées à la paie, par base SAGE (T_PAIE_VARIABLE), et destinations d'une autre base (T_PAIE_ECRITURE).
-/// Le calcul n'en dépend jamais : seuls les writers de paie et le Contrôle avant paie lisent la sélection. Les
+/// Le calcul ne dépend que du réglage des codes d'absence comptés (lot C3, lu par le calcul de l'Absence) ; la sélection
+/// des variables n'est lue que par les writers de paie et le Contrôle avant paie. Les
 /// modifications passent par EF, donc par le journal central (qui, quand, avant, après).
 /// </summary>
 public sealed class PayrollVariableService : IPayrollVariableService
@@ -79,7 +80,12 @@ public sealed class PayrollVariableService : IPayrollVariableService
         await _tenant.EnsureAuthorizedAsync(ct);
         var selection = await GetSelectionAsync(_tenant.SageDb, ct);
         // Variables réellement écrites : une variable cochée mais pas encore envoyable (Absence) reste grisée.
-        return new PayrollVariablesActiveDto(_tenant.SageDb, selection.Envoyees) { RemiseAZeroSansValeur = selection.RemiseAZeroSansValeur };
+        return new PayrollVariablesActiveDto(_tenant.SageDb, selection.Envoyees)
+        {
+            RemiseAZeroSansValeur = selection.RemiseAZeroSansValeur,
+            UniteAbsence = selection.UniteDe(PayrollVariableSelection.Absence),
+            HeuresParJour = selection.HeuresParJour
+        };
     }
 
     public async Task<PayrollVariablesConfigDto> GetConfigurationAsync(CancellationToken ct = default)
@@ -88,9 +94,14 @@ public sealed class PayrollVariableService : IPayrollVariableService
         return await ConstruireAsync(database, await LireAsync(database.NomBd!, ct), await LireOptionsAsync(database.NomBd!, ct), ct);
     }
 
-    public async Task<PayrollVariablesConfigDto> SaveAsync(
+    public Task<PayrollVariablesConfigDto> SaveAsync(
         IReadOnlyList<PayrollVariableSaveDto> variables, bool? remiseAZeroSansValeur = null, CancellationToken ct = default)
+        => SaveAsync(new PayrollVariablesSaveRequest(variables, remiseAZeroSansValeur), ct);
+
+    public async Task<PayrollVariablesConfigDto> SaveAsync(PayrollVariablesSaveRequest demande, CancellationToken ct = default)
     {
+        var variables = demande.Variables;
+        var remiseAZeroSansValeur = demande.RemiseAZeroSansValeur;
         var database = await AutoriserAsync(ct);
         var sageDb = database.NomBd!;
         var baseSage = !EstAutre(database);
@@ -102,6 +113,12 @@ public sealed class PayrollVariableService : IPayrollVariableService
             lignes = await VerifierCodesSageAsync(lignes, erreurs, ct);
         else
             erreurs.AddRange(await ValiderColonnesAsync(database, lignes, ct));
+        if (demande.HeuresParJour is { } heuresParJour && PayrollVariableRules.ErreurHeuresParJour(heuresParJour) is { } erreurHeures)
+            erreurs.Add(erreurHeures);
+        var optionsActuelles = await _uow.Repository<PaieOption>().ListAsync(o => o.BddSage == sageDb, ct);
+        var codesAbsence = demande.AbsenceCodes is null
+            ? null
+            : await CodesAbsenceDemandesAsync(demande.AbsenceCodes, PayrollOptions.AbsenceCodes(optionsActuelles), erreurs, ct);
         if (erreurs.Count > 0)
             throw new DomainException(string.Join(" ", erreurs));
 
@@ -142,7 +159,14 @@ public sealed class PayrollVariableService : IPayrollVariableService
         // Option de la base, enregistrée dans le même appel (une seule confirmation, une seule sauvegarde) ; champ absent :
         // inchangée. Une base sans ligne vaut « vrai » : décocher crée la ligne, recocher la met à jour (jamais de suppression).
         if (remiseAZeroSansValeur is { } souhaitee)
-            await EnregistrerOptionAsync(sageDb, PayrollOptions.RemiseAZeroSansValeur, PayrollOptions.Texte(souhaitee), maintenant, ct);
+            await EnregistrerOptionAsync(sageDb, PayrollOptions.RemiseAZeroSansValeur, PayrollOptions.Texte(souhaitee),
+                PayrollOptions.Texte(PayrollVariableSelection.Default.RemiseAZeroSansValeur), maintenant, ct);
+        // Absence (lot C3) : heures par jour et codes comptés, dans la même sauvegarde (atomique avec les variables).
+        if (demande.HeuresParJour is { } heures)
+            await EnregistrerOptionAsync(sageDb, PayrollOptions.AbsenceHeuresParJour, PayrollOptions.TexteHeures(heures),
+                PayrollOptions.TexteHeures(PayrollOptions.HeuresParJourParDefaut), maintenant, ct);
+        if (codesAbsence is not null)
+            await EnregistrerCodesAbsenceAsync(sageDb, optionsActuelles, codesAbsence, maintenant, ct);
         await _uow.SaveChangesAsync(ct);
 
         _cache.Invalider(sageDb);
@@ -153,14 +177,15 @@ public sealed class PayrollVariableService : IPayrollVariableService
     }
 
     /// <summary>Crée ou met à jour une option de la base ; sans changement de valeur, rien n'est écrit.</summary>
-    private async Task EnregistrerOptionAsync(string sageDb, string cle, string valeur, DateTime maintenant, CancellationToken ct)
+    private async Task EnregistrerOptionAsync(
+        string sageDb, string cle, string valeur, string valeurParDefaut, DateTime maintenant, CancellationToken ct)
     {
         var repo = _uow.Repository<PaieOption>();
         var existante = (await repo.ListAsync(o => o.BddSage == sageDb && o.Cle == cle, ct)).FirstOrDefault();
         if (existante is null)
         {
             // Sans ligne, la valeur est celle par défaut : enregistrer la valeur par défaut ne crée rien.
-            if (valeur == PayrollOptions.Texte(OptionParDefaut(cle)))
+            if (valeur == valeurParDefaut)
                 return;
             await repo.AddAsync(new PaieOption { BddSage = sageDb, Cle = cle, Valeur = valeur, ModifieLe = maintenant, ModifiePar = _user.Login }, ct);
             return;
@@ -173,8 +198,70 @@ public sealed class PayrollVariableService : IPayrollVariableService
         repo.Update(existante);
     }
 
-    private static bool OptionParDefaut(string cle) =>
-        cle != PayrollOptions.RemiseAZeroSansValeur || PayrollVariableSelection.Default.RemiseAZeroSansValeur;
+    /// <summary>
+    /// Codes d'absence demandés : chaque libellé doit exister dans <c>T_CODEABSENCE</c> (comparaison tolérante) ou figurer
+    /// déjà dans le réglage (code devenu introuvable : conservé sans bloquer). Libellé retenu : celui de
+    /// <c>T_CODEABSENCE</c>, sinon celui enregistré. Doublons (à la normalisation près) ignorés.
+    /// </summary>
+    private async Task<AbsenceCodesComptes> CodesAbsenceDemandesAsync(
+        PayrollAbsenceCodesSaveDto demande, AbsenceCodesComptes actuels, List<string> erreurs, CancellationToken ct)
+    {
+        var existants = (await _uow.Repository<CodeAbsence>().ListReadOnlyAsync(_ => true, ct))
+            .Select(c => c.IntituleAbsence?.Trim())
+            .Where(l => !string.IsNullOrEmpty(l))
+            .Select(l => l!)
+            .ToList();
+        var retenus = new List<string>();
+        var cles = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var libelle in demande.Codes ?? Array.Empty<string>())
+        {
+            var cle = AbsenceCodesComptes.Normaliser(libelle);
+            if (cle.Length == 0 || !cles.Add(cle))
+                continue;
+            var retenu = existants.FirstOrDefault(e => AbsenceCodesComptes.Normaliser(e) == cle)
+                         ?? actuels.Codes.FirstOrDefault(e => AbsenceCodesComptes.Normaliser(e) == cle);
+            if (retenu is null)
+                erreurs.Add($"Le code d'absence « {libelle.Trim()} » n'existe pas dans les codes d'absence.");
+            else if (retenu.Length > 256)
+                erreurs.Add($"Le libellé du code d'absence « {retenu[..40]}… » est trop long (256 caractères au plus).");
+            else
+                retenus.Add(retenu);
+        }
+        return new AbsenceCodesComptes(retenus, demande.SansCode);
+    }
+
+    /// <summary>
+    /// Enregistre les codes comptés : ligne <c>AbsenceSansCodeCompte</c> (marqueur du réglage) puis une ligne par code
+    /// (<c>AbsenceCodeCompte.N</c>), les lignes en trop étant retirées. Réglage inchangé (à la normalisation près) : rien
+    /// n'est écrit ; sans réglage, enregistrer la valeur par défaut ne crée rien.
+    /// </summary>
+    private async Task EnregistrerCodesAbsenceAsync(
+        string sageDb, IReadOnlyList<PaieOption> options, AbsenceCodesComptes demande, DateTime maintenant, CancellationToken ct)
+    {
+        if (demande.Equivaut(PayrollOptions.AbsenceCodes(options)))
+            return;
+        var repo = _uow.Repository<PaieOption>();
+        var voulues = new List<(string Cle, string Valeur)> { (PayrollOptions.AbsenceSansCodeCompte, PayrollOptions.Texte(demande.SansCode)) };
+        voulues.AddRange(demande.Codes.Select((code, i) => (PayrollOptions.CleAbsenceCode(i + 1), code)));
+        foreach (var (cle, valeur) in voulues)
+        {
+            var existante = options.FirstOrDefault(o => string.Equals(o.Cle, cle, StringComparison.OrdinalIgnoreCase));
+            if (existante is null)
+            {
+                await repo.AddAsync(new PaieOption { BddSage = sageDb, Cle = cle, Valeur = valeur, ModifieLe = maintenant, ModifiePar = _user.Login }, ct);
+                continue;
+            }
+            if (existante.Valeur == valeur)
+                continue;
+            existante.Valeur = valeur;
+            existante.ModifieLe = maintenant;
+            existante.ModifiePar = _user.Login;
+            repo.Update(existante);
+        }
+        foreach (var enTrop in options.Where(o => o.Cle.StartsWith(PayrollOptions.PrefixeAbsenceCodeCompte, StringComparison.OrdinalIgnoreCase)
+                                                  && !voulues.Any(v => string.Equals(v.Cle, o.Cle, StringComparison.OrdinalIgnoreCase))))
+            repo.Remove(enTrop);
+    }
 
     /// <summary>
     /// Ligne à valider et enregistrer. Variable à code propre : unité unique (Retard : heures) prise par défaut ; base
@@ -485,10 +572,11 @@ public sealed class PayrollVariableService : IPayrollVariableService
         // Option de la base : absente = vraie (comportement de C2b) ; indépendante des lignes de variables.
         var remiseAZero = PayrollOptions.Booleen(options ?? Array.Empty<PaieOption>(), PayrollOptions.RemiseAZeroSansValeur,
             PayrollVariableSelection.Default.RemiseAZeroSansValeur);
+        var heuresParJour = PayrollOptions.HeuresParJour(options ?? Array.Empty<PaieOption>());
         if (lignes.Count == 0)
-            return remiseAZero == PayrollVariableSelection.Default.RemiseAZeroSansValeur
+            return remiseAZero == PayrollVariableSelection.Default.RemiseAZeroSansValeur && heuresParJour == PayrollVariableSelection.Default.HeuresParJour
                 ? PayrollVariableSelection.Default
-                : PayrollVariableSelection.Default with { RemiseAZeroSansValeur = remiseAZero };
+                : PayrollVariableSelection.Default with { RemiseAZeroSansValeur = remiseAZero, HeuresParJour = heuresParJour };
         var actives = PayrollVariableSelection.Toutes.Where(nom =>
         {
             var ligne = lignes.FirstOrDefault(l => string.Equals(l.Variable, nom, StringComparison.OrdinalIgnoreCase));
@@ -498,7 +586,14 @@ public sealed class PayrollVariableService : IPayrollVariableService
             .Where(l => !string.IsNullOrWhiteSpace(l.CodePaie) && PayrollVariableCatalog.Trouver(l.Variable) is { CodeCommun: false })
             .GroupBy(l => PayrollVariableCatalog.Definition(l.Variable).Id)
             .ToDictionary(g => g.Key, g => g.First().CodePaie!.Trim(), StringComparer.Ordinal);
-        return PayrollVariableSelection.Avec(actives) with { CodesPaie = codes, RemiseAZeroSansValeur = remiseAZero };
+        var unites = lignes
+            .Where(l => !string.IsNullOrWhiteSpace(l.Unite) && PayrollVariableCatalog.Trouver(l.Variable) is { CodeCommun: false })
+            .GroupBy(l => PayrollVariableCatalog.Definition(l.Variable).Id)
+            .ToDictionary(g => g.Key, g => g.First().Unite!.Trim().ToUpperInvariant(), StringComparer.Ordinal);
+        return PayrollVariableSelection.Avec(actives) with
+        {
+            CodesPaie = codes, Unites = unites, RemiseAZeroSansValeur = remiseAZero, HeuresParJour = heuresParJour
+        };
     }
 
     private async Task<PayrollVariablesConfigDto> ConstruireAsync(
@@ -529,8 +624,38 @@ public sealed class PayrollVariableService : IPayrollVariableService
         {
             CodesPaie = codesPaie,
             AvertissementCodes = avertissement,
-            RemiseAZeroSansValeur = selection.RemiseAZeroSansValeur
+            RemiseAZeroSansValeur = selection.RemiseAZeroSansValeur,
+            HeuresParJour = selection.HeuresParJour,
+            AbsenceCodes = await CodesAbsenceDtoAsync(options, ct)
         };
+    }
+
+    /// <summary>
+    /// Codes proposés dans la carte : ceux de <c>T_CODEABSENCE</c> (ordre de leur identifiant), cochés s'ils sont comptés,
+    /// puis les codes du réglage qui n'y figurent plus (« introuvable »).
+    /// </summary>
+    private async Task<PayrollAbsenceCodesDto> CodesAbsenceDtoAsync(IReadOnlyList<PaieOption> options, CancellationToken ct)
+    {
+        var reglage = PayrollOptions.AbsenceCodes(options);
+        var codes = (await _uow.Repository<CodeAbsence>().ListReadOnlyAsync(_ => true, ct))
+            .Where(c => !string.IsNullOrWhiteSpace(c.IntituleAbsence))
+            .OrderBy(c => c.IdAbsence)
+            .GroupBy(c => AbsenceCodesComptes.Normaliser(c.IntituleAbsence))
+            .Select(g => g.First())
+            .Select(c => new PayrollAbsenceCodeDto(c.IntituleAbsence!.Trim(), reglage.Compte(c.IntituleAbsence), false, c.NotPay == true,
+                SuggereNonJustifie(c.IntituleAbsence)))
+            .ToList();
+        foreach (var code in reglage.Codes.Where(r => !codes.Any(c => AbsenceCodesComptes.Normaliser(c.Libelle) == AbsenceCodesComptes.Normaliser(r))))
+            codes.Add(new PayrollAbsenceCodeDto(code, true, true, false, SuggereNonJustifie(code)));
+        var parDefaut = !options.Any(o => string.Equals(o.Cle, PayrollOptions.AbsenceSansCodeCompte, StringComparison.OrdinalIgnoreCase));
+        return new PayrollAbsenceCodesDto(parDefaut, reglage.SansCode, codes);
+    }
+
+    /// <summary>Suggestion visuelle (jamais une décision) : libellé évoquant « non justifiée » ou « non payé ».</summary>
+    internal static bool SuggereNonJustifie(string? libelle)
+    {
+        var cle = AbsenceCodesComptes.Normaliser(libelle);
+        return cle.Contains("NON JUSTIF", StringComparison.Ordinal) || cle.Contains("NON PAY", StringComparison.Ordinal);
     }
 
     /// <summary>Codes de paie lus dans SAGE (T_CST) pour la liste déroulante ; en cas d'échec, liste vide et message.</summary>

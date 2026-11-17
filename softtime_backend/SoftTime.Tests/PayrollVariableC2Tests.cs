@@ -39,8 +39,9 @@ public class PayrollVariableC2Tests
     }
 
     [Fact]
-    public void Catalog_RetardIsSendableInHours_AbsenceIsNot()
+    public void Catalog_RetardIsSendableInHours_AbsenceInHoursOrDays()
     {
+        // Adapté au lot C3 (avant : Absence non envoyable).
         var retard = PayrollVariableCatalog.Definition(PayrollVariableSelection.Retard);
         var absence = PayrollVariableCatalog.Definition(PayrollVariableSelection.Absence);
 
@@ -48,8 +49,9 @@ public class PayrollVariableC2Tests
         retard.Unites.Should().Equal(PayrollUnits.Heures);
         retard.CodeCommun.Should().BeFalse("le code de Retard est propre à chaque base");
         retard.ValeurEnvoyee(new PayrollRowValues(1, 2, 3, 4, 5, 6, 7, 2.75m, 9)).Should().Be(2.75m);
-        absence.Envoyable.Should().BeFalse();
-        PayrollVariableSelection.SansEnvoi.Should().Equal(PayrollVariableSelection.Absence);
+        absence.Envoyable.Should().BeTrue();
+        absence.Unites.Should().Equal(PayrollUnits.Heures, PayrollUnits.Jours);
+        PayrollVariableSelection.SansEnvoi.Should().BeEmpty();
     }
 
     // ---------- Base SAGE : code de Retard ----------
@@ -117,14 +119,15 @@ public class PayrollVariableC2Tests
     }
 
     [Fact]
-    public async Task Save_AbsenceChecked_IsRefusedWithTheNextStepMessage()
+    public async Task Save_AbsenceChecked_WithACodeUnknownToSage_IsRefused()
     {
+        // Adapté au lot C3 (avant : Absence cochée refusée, « prochaine étape ») : refusée seulement si le code est inconnu.
         var c = Creer();
 
         var act = () => c.Sut.SaveAsync(Saisie(("Absence", true, "ABS01", "J")));
 
         (await act.Should().ThrowExactlyAsync<DomainException>()).Which.Message
-            .Should().Contain("Absence ne peut pas encore être envoyée à la paie");
+            .Should().Be("Le code de paie ABS01 de la variable Absence n'existe pas dans la base SAGE SAGE_TEST.");
         c.Uow.Get<PaieVariable>().Items.Should().BeEmpty();
     }
 
@@ -151,9 +154,9 @@ public class PayrollVariableC2Tests
     }
 
     [Fact]
-    public async Task GetActives_LegacyCheckedAbsence_IsNotReportedAsSent()
+    public async Task GetActives_CheckedAbsence_IsReportedAsSent_WithItsUnit()
     {
-        // Arrange : ligne Absence active héritée du lot B.
+        // Arrange : adapté au lot C3 (avant : Absence active héritée du lot B, jamais annoncée comme envoyée).
         var c = Creer();
         c.Uow.Get<PaieVariable>().Items.Add(new PaieVariable { BddSage = "SAGE_TEST", Variable = "Absence", Actif = true, CodePaie = "ABS01", Unite = "J" });
 
@@ -161,7 +164,9 @@ public class PayrollVariableC2Tests
         var actives = await c.Sut.GetActivesAsync();
 
         // Assert
-        actives.Actives.Should().Equal(PayrollVariableSelection.HeuresSup);
+        actives.Actives.Should().Equal([.. PayrollVariableSelection.HeuresSup, PayrollVariableSelection.Absence]);
+        actives.UniteAbsence.Should().Be("J");
+        actives.HeuresParJour.Should().Be(8m);
     }
 
     // ---------- Autre base : Retard dans la configuration des variables ----------
@@ -210,8 +215,10 @@ public class PayrollVariableC2Tests
         // Assert
         destinations.Table.Should().Be("PAIE_CUMULS");
         destinations.ColonneMatricule.Should().Be("Matricule");
-        destinations.Variables.Select(v => v.Variable).Should().Equal([.. PayrollVariableSelection.HeuresSup, PayrollVariableSelection.Retard]);
-        destinations.Variables.Last().Should().Be(new PayrollWriteTargetDto("Retard", "Retard", false, null, 2));
+        // Adapté au lot C3 : Absence est une variable envoyable (deux décimales, comme Retard).
+        destinations.Variables.Select(v => v.Variable).Should().Equal([.. PayrollVariableSelection.HeuresSup, PayrollVariableSelection.Retard, PayrollVariableSelection.Absence]);
+        destinations.Variables.Single(v => v.Variable == "Retard").Should().Be(new PayrollWriteTargetDto("Retard", "Retard", false, null, 2));
+        destinations.Variables.Last().Should().Be(new PayrollWriteTargetDto("Absence", "Absence", false, null, 2));
         destinations.Tables.Should().Contain("PAIE_CUMULS");
         destinations.Colonnes.Single(col => col.Nom == "HeuresRetard").Should().Be(new PayrollTargetColumnDto("HeuresRetard", "decimal(18,2)", true, true));
         destinations.Colonnes.Single(col => col.Nom == "Entier").Should().Be(new PayrollTargetColumnDto("Entier", "int", true, false));
@@ -297,14 +304,16 @@ public class PayrollVariableC2Tests
     }
 
     [Fact]
-    public async Task SaveDestinations_Absence_IsRefused()
+    public async Task SaveDestinations_Absence_InADecimalColumn_IsAccepted()
     {
+        // Adapté au lot C3 (avant : Absence refusée, « prochaine étape »).
         var c = Creer(typeBase: "AUTRE");
         c.Uow.Get<PaieEcriture>().Items.AddRange(Configuration());
 
-        var act = () => c.Sut.SaveDestinationsAsync(Destinations(("Absence", "HeuresRetard")));
+        var resultat = await c.Sut.SaveDestinationsAsync(Destinations(("Absence", "HeuresRetard")));
 
-        (await act.Should().ThrowExactlyAsync<DomainException>()).Which.Message.Should().Contain("Absence ne peut pas encore être envoyée à la paie");
+        c.Uow.Get<PaieEcriture>().Items.Single(e => e.Categorie == "Absence").ColValeur.Should().Be("HeuresRetard");
+        resultat.Variables.Single(v => v.Variable == "Absence").Colonne.Should().Be("HeuresRetard");
     }
 
     [Fact]

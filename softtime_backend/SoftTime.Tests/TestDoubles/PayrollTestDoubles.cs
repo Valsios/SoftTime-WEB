@@ -53,6 +53,7 @@ internal sealed class FixedVariableService(PayrollVariableSelection selection) :
     public Task<Application.DTOs.PayrollVariablesActiveDto> GetActivesAsync(CancellationToken ct = default) => throw new NotSupportedException();
     public Task<Application.DTOs.PayrollVariablesConfigDto> GetConfigurationAsync(CancellationToken ct = default) => throw new NotSupportedException();
     public Task<Application.DTOs.PayrollVariablesConfigDto> SaveAsync(IReadOnlyList<Application.DTOs.PayrollVariableSaveDto> variables, bool? remiseAZeroSansValeur = null, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<Application.DTOs.PayrollVariablesConfigDto> SaveAsync(Application.DTOs.PayrollVariablesSaveRequest demande, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<Application.DTOs.PayrollWriteTargetsDto> GetDestinationsAsync(CancellationToken ct = default) => throw new NotSupportedException();
     public Task<IReadOnlyList<Application.DTOs.PayrollTargetColumnDto>> GetColonnesAsync(string? table, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<Application.DTOs.PayrollWriteTargetsDto> SaveDestinationsAsync(Application.DTOs.PayrollWriteTargetsSaveDto destinations, CancellationToken ct = default) => throw new NotSupportedException();

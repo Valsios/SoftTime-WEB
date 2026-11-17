@@ -1,3 +1,4 @@
+using SoftTime.Domain.Entities.SoftTime;
 using SoftTime.Domain.Models;
 
 namespace SoftTime.Domain.Services;
@@ -56,7 +57,7 @@ public static class PayrollVariableRules
             yield break;
         if (!definition.Envoyable)
         {
-            // Aucune destination n'est valide tant que l'écriture de la variable n'existe pas (Absence : lot C3).
+            // Aucune destination n'est valide tant que l'écriture de la variable n'existe pas.
             yield return $"La variable {nom} ne peut pas encore être envoyée à la paie : son envoi est prévu dans une prochaine étape.";
             yield break;
         }
@@ -67,6 +68,17 @@ public static class PayrollVariableRules
         if (string.IsNullOrEmpty(unite))
             yield return $"La variable {nom} ne peut pas être cochée sans unité ({string.Join(" ou ", definition.Unites.Select(PayrollUnits.Libelle))}).";
     }
+
+    /// <summary>
+    /// Nombre d'heures d'une journée pour l'Absence envoyée en jours : entre 1 et 24, une décimale au plus.
+    /// Retourne le message d'erreur, ou <c>null</c> si la valeur est valide.
+    /// </summary>
+    public static string? ErreurHeuresParJour(decimal heuresParJour) =>
+        PayrollOptions.HeuresParJourValide(heuresParJour)
+            ? null
+            : $"Le nombre d'heures par jour de l'absence doit être compris entre {PayrollOptions.TexteHeures(PayrollOptions.HeuresParJourMin)} "
+              + $"et {PayrollOptions.TexteHeures(PayrollOptions.HeuresParJourMax)}, avec une décimale au plus (valeur reçue : "
+              + $"{heuresParJour.ToString(System.Globalization.CultureInfo.InvariantCulture)}).";
 
     /// <summary>
     /// Vrai si une période déjà envoyée en paie recouvre le mois civil de <paramref name="aujourdHui"/>

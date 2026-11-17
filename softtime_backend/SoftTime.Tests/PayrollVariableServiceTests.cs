@@ -60,9 +60,11 @@ public class PayrollVariableServiceTests
         // Assert
         sage.Should().ContainSingle().Which.Should().Contain("Retard ne peut pas être cochée tant que son code de paie n'est pas renseigné");
         autre.Should().ContainSingle().Which.Should().Contain("Retard ne peut pas être cochée tant que sa colonne cible n'est pas renseignée");
-        // Adapté au lot C2 (avant : Absence cochée acceptée, jamais écrite) : Absence cochée est désormais refusée.
-        PayrollVariableRules.Valider(Lignes(("Absence", true, "ABS01", "J", null)), baseSage: true).Should().ContainSingle()
-            .Which.Should().Be("La variable Absence ne peut pas encore être envoyée à la paie : son envoi est prévu dans une prochaine étape.");
+        // Adapté au lot C3 (avant : Absence cochée refusée, « prochaine étape ») : Absence cochée avec code et unité est
+        // acceptée ; sans code, elle est refusée comme Retard.
+        PayrollVariableRules.Valider(Lignes(("Absence", true, "ABS01", "J", null)), baseSage: true).Should().BeEmpty();
+        PayrollVariableRules.Valider(Lignes(("Absence", true, null, "J", null)), baseSage: true).Should().ContainSingle()
+            .Which.Should().Contain("Absence ne peut pas être cochée tant que son code de paie n'est pas renseigné");
     }
 
     [Fact]
@@ -227,7 +229,8 @@ public class PayrollVariableServiceTests
         config.Variables.Take(7).Select(v => v.CibleExistante).Should().Equal("HS01", "HS02", "HS03", "HS04", "HS05", "HS06", "HS07");
         // Adapté au lot C2 (avant : Retard et Absence « sans envoi ») : Retard est envoyable, Absence pas encore.
         config.Variables.Skip(7).Should().AllSatisfy(v => v.Actif.Should().BeFalse());
-        config.Variables.Skip(7).Select(v => v.SansEnvoi).Should().Equal(false, true);
+        // Adapté au lot C3 : Absence est envoyable (avant : sans envoi).
+        config.Variables.Skip(7).Select(v => v.SansEnvoi).Should().Equal(false, false);
     }
 
     // ---------- Journal central ----------
