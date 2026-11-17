@@ -46,6 +46,7 @@ let uid = 0;
               type="text"
               role="combobox"
               autocomplete="off"
+              [attr.aria-label]="ariaLabel() || null"
               spellcheck="false"
               [id]="id"
               [value]="inputValue()"
@@ -135,6 +136,7 @@ let uid = 0;
             <select
               #select
               [id]="id"
+              [attr.aria-label]="ariaLabel() || null"
               [disabled]="disabled()"
               [required]="required()"
               [attr.aria-required]="required() ? 'true' : null"
@@ -180,6 +182,8 @@ export class SoftSelect implements ControlValueAccessor {
   readonly filterable = input<boolean | 'auto'>('auto');
   readonly filterThreshold = input(8);
   readonly filterPlaceholder = input('Rechercher…');
+  /** Nom accessible quand le champ n'a pas d'étiquette visible (liste dans une cellule de tableau). */
+  readonly ariaLabel = input('');
 
   private readonly inputEl = viewChild<ElementRef<HTMLInputElement>>('comboboxInput');
   private readonly controlEl = viewChild<ElementRef<HTMLElement>>('comboboxControl');

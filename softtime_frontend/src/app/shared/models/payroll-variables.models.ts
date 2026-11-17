@@ -10,11 +10,11 @@ export interface PayrollVariable {
   codePaie: string | null;
   /** Retard : « H » (heures) ; Absence : « H » ou « J » (jours). */
   unite: string | null;
-  /** Autre base : colonne saisie pour Absence (non envoyée). Retard utilise sa destination (cibleExistante). */
+  /** Ancienne colonne saisie (lot B), plus utilisée : Retard et Absence utilisent leur destination (cibleExistante). */
   colonneCible: string | null;
   /** Lecture seule : code constante commun (SAGE, heures sup.) ou destination T_PAIE_ECRITURE (autre base). */
   cibleExistante: string | null;
-  /** Absence : l'envoi réel n'existe pas encore (prochaine étape). */
+  /** L'envoi réel de la variable n'existe pas encore (aucune depuis le lot C3). */
   sansEnvoi: boolean;
 }
 
@@ -32,6 +32,45 @@ export interface PayrollVariablesConfig {
   avertissementCodes?: string | null;
   /** Option de la base : l'envoi remet à 0 les salariés du périmètre sans valeur. Absent : vrai (défaut). */
   remiseAZeroSansValeur?: boolean;
+  /** Absence en jours : nombre d'heures d'une journée. Absent : 8. */
+  heuresParJour?: number;
+  /** Codes d'absence comptés comme non justifiés dans l'Absence (lot C3). */
+  absenceCodes?: PayrollAbsenceCodes | null;
+}
+
+/** Réglage « Codes d'absence comptés comme non justifiés » de la base. */
+export interface PayrollAbsenceCodes {
+  /** Aucun réglage enregistré : « ABSENCE NON JUSTIFIEE » et l'arbitrage sans code. */
+  parDefaut: boolean;
+  /** Un arbitrage sans code est compté. */
+  sansCode: boolean;
+  codes: PayrollAbsenceCode[];
+}
+
+/** Un code d'absence proposé dans la carte. */
+export interface PayrollAbsenceCode {
+  libelle: string;
+  /** Compté comme non justifié. */
+  compte: boolean;
+  /** Enregistré dans le réglage mais absent de T_CODEABSENCE. */
+  introuvable: boolean;
+  /** NOT_PAY = 1 dans T_CODEABSENCE. */
+  nonPaye: boolean;
+  /** Le libellé évoque « non justifiée » ou « non payé » (simple suggestion). */
+  suggere: boolean;
+}
+
+/** Réglage des codes d'absence comptés tel qu'il est enregistré. */
+export interface PayrollAbsenceCodesSave {
+  sansCode: boolean;
+  codes: string[];
+}
+
+/** Champs facultatifs de l'enregistrement de la carte (absents : inchangés). */
+export interface PayrollVariablesSaveOptions {
+  remiseAZeroSansValeur?: boolean;
+  heuresParJour?: number | null;
+  absenceCodes?: PayrollAbsenceCodesSave | null;
 }
 
 export interface PayrollVariableSave {
@@ -48,6 +87,10 @@ export interface PayrollVariablesActive {
   actives: string[];
   /** Option de la base : l'envoi remet à 0 les salariés sans valeur (annoncé dans la confirmation de l'envoi). Absent : vrai. */
   remiseAZeroSansValeur?: boolean;
+  /** Unité d'envoi de l'Absence (« H » ou « J »). Absent : heures. */
+  uniteAbsence?: string;
+  /** Absence en jours : nombre d'heures d'une journée. Absent : 8. */
+  heuresParJour?: number;
 }
 
 /** Colonne d'une table de la base de paie d'une autre base. */
@@ -66,7 +109,7 @@ export interface PayrollWriteTarget {
   libelle: string;
   actif: boolean;
   colonne: string | null;
-  /** Décimales que la colonne doit accepter (2 pour Retard, 0 sinon). */
+  /** Décimales que la colonne doit accepter (2 pour Retard et Absence, 0 sinon). */
   decimalesRequises: number;
 }
 

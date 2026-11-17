@@ -7,6 +7,7 @@ import {
   PayrollTargetColumn,
   PayrollVariableSave,
   PayrollVariablesActive,
+  PayrollVariablesSaveOptions,
   PayrollVariablesConfig,
   PayrollWriteTargets,
   PayrollWriteTargetsSave,
@@ -21,11 +22,14 @@ export class PayrollVariablesService extends ApiService {
   }
 
   /**
-   * Enregistre les neuf variables et l'option « remettre à 0 les salariés sans valeur à l'envoi » en un seul appel ;
-   * refusé (409) si le mois en cours a déjà été envoyé en paie.
+   * Enregistre les neuf variables, l'option « remettre à 0 les salariés sans valeur à l'envoi » et, s'ils ont changé, les
+   * heures par jour et les codes d'absence comptés, en un seul appel ; refusé (409) si le mois en cours a déjà été envoyé.
    */
-  save(variables: PayrollVariableSave[], remiseAZeroSansValeur?: boolean): Observable<PayrollVariablesConfig> {
-    return this.http.put<PayrollVariablesConfig>(this.url('/api/v1/payroll-variables'), { variables, remiseAZeroSansValeur });
+  save(variables: PayrollVariableSave[], remiseAZeroSansValeur?: boolean, absence: Omit<PayrollVariablesSaveOptions, 'remiseAZeroSansValeur'> = {}): Observable<PayrollVariablesConfig> {
+    const corps: Record<string, unknown> = { variables, remiseAZeroSansValeur };
+    if (absence.heuresParJour !== undefined && absence.heuresParJour !== null) corps['heuresParJour'] = absence.heuresParJour;
+    if (absence.absenceCodes) corps['absenceCodes'] = absence.absenceCodes;
+    return this.http.put<PayrollVariablesConfig>(this.url('/api/v1/payroll-variables'), corps);
   }
 
   /** Noms des variables envoyées (silencieux : un échec laisse la page Heures supplémentaires inchangée). */

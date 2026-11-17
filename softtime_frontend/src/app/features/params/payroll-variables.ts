@@ -1,24 +1,39 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { ConfirmService } from '../../core/confirm.service';
 import { errorMessage } from '../../core/error.logic';
 import { Droit } from '../../core/rights';
 import { SessionStore } from '../../core/session.store';
 import { ToastService } from '../../core/toast.service';
-import { PayrollVariable, PayrollVariablesConfig, SageConstantOption } from '../../shared/models';
+import { PayrollAbsenceCode, PayrollVariable, PayrollVariablesConfig, SageConstantOption } from '../../shared/models';
 import { PayrollVariablesService } from '../../shared/services/payroll-variables.service';
-import { SoftBadge, SoftButton, SoftCard } from '../../shared/components';
+import { SoftBadge, SoftButton, SoftCard, SoftSelect } from '../../shared/components';
+import { SelectOption } from '../../shared/components/soft-select';
 import { PayrollDestinations } from './payroll-destinations';
 import {
   aCodePropre,
+  AIDE_CODES_ABSENCE,
+  AIDE_HEURES_PAR_JOUR,
+  aUniteAuChoix,
+  changementHeuresParJour,
   changementOption,
   changements,
+  changementsCodesAbsence,
+  cleCode,
+  CodesAbsenceBrouillon,
+  codesAbsenceLus,
   estSansEnvoi,
+  HEURES_PAR_JOUR_DEFAUT,
   NON_ENVOYEE,
   peutCocher,
   raisonNonCochable,
+  TITRE_CODES_ABSENCE,
   validerBrouillon,
   versEnregistrement,
 } from './payroll-variables.logic';
+
+/** Variables dont la liste des codes propose la recherche en tapant (lot C3 : Absence). */
+const CODES_AVEC_RECHERCHE: readonly string[] = ['Absence'];
 
 /**
  * « Variables envoyées à la paie » de la base SAGE active. Rien n'est envoyé au serveur avant la confirmation ; les
@@ -27,7 +42,7 @@ import {
 @Component({
   selector: 'app-payroll-variables',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [SoftBadge, SoftButton, SoftCard, PayrollDestinations],
+  imports: [FormsModule, SoftBadge, SoftButton, SoftCard, SoftSelect, PayrollDestinations],
   template: `
     <soft-card>
       <div class="pv-head">
@@ -54,9 +69,10 @@ import {
         <p class="pv-note">Chargement…</p>
       } @else if (config(); as c) {
         <p class="pv-note">
-          Le calcul ne change pas : les neuf variables restent calculées et affichées. Seul l'envoi vers la paie est filtré ;
-          une variable décochée n'est pas écrite (la valeur déjà présente en paie n'est pas modifiée).
-          Le changement s'applique au prochain envoi.
+          Cocher ou décocher une variable ne change pas le calcul : les neuf variables restent calculées et affichées. Seul
+          l'envoi vers la paie est filtré ; une variable décochée n'est pas écrite (la valeur déjà présente en paie n'est pas
+          modifiée). Le changement s'applique au prochain envoi. Seuls les codes d'absence comptés changent le calcul de
+          l'Absence, au prochain calcul.
         </p>
         @if (c.parDefaut) {
           <p class="pv-banner pv-banner--info" role="status">Aucune configuration enregistrée : comportement d'origine (7 variables d'heures supplémentaires envoyées).</p>
@@ -105,6 +121,13 @@ import {
                         <span class="pv-readonly" title="Choisie dans « Destinations dans la base de paie »">
                           {{ v.cibleExistante ?? '(à choisir dans les destinations)' }}
                         </span>
+                      } @else if (avecRecherche(v.variable)) {
+                        <!-- Absence : liste des codes lus dans SAGE, avec recherche en tapant (aucune saisie libre). -->
+                        <soft-select class="pv-field pv-field--search" [ariaLabel]="'Code de paie de ' + v.libelle" placeholder="(aucun)"
+                          filterPlaceholder="Rechercher un code…" [filterable]="true" [options]="optionsCodes(v)"
+                          [ngModel]="v.codePaie" [ngModelOptions]="{ standalone: true }" [disabled]="c.moisEnvoye || saving()"
+                          (ngModelChange)="changer(v.variable, 'codePaie', $event ?? '')" />
+                        @if (c.avertissementCodes) { <div class="soft-field__hint pv-hint">{{ c.avertissementCodes }}</div> }
                       } @else {
                         <div class="soft-select pv-field">
                           <div class="soft-select__control">
@@ -119,22 +142,6 @@ import {
                         </div>
                         @if (c.avertissementCodes) { <div class="soft-field__hint pv-hint">{{ c.avertissementCodes }}</div> }
                       }
-                    } @else if (sansEnvoi(v.variable)) {
-                      @if (autre()) {
-                        <div class="soft-select pv-field">
-                          <div class="soft-select__control">
-                            <select [attr.aria-label]="'Colonne cible de ' + v.libelle" [disabled]="c.moisEnvoye || saving()"
-                              (change)="changer(v.variable, 'colonneCible', $any($event.target).value)">
-                              <option value="" [selected]="!v.colonneCible">(aucune)</option>
-                              @for (col of colonnes(v); track col) { <option [value]="col" [selected]="col === v.colonneCible">{{ col }}</option> }
-                            </select>
-                          </div>
-                        </div>
-                      } @else {
-                        <input type="text" class="soft-input pv-field" maxlength="32" [attr.aria-label]="'Code de paie de ' + v.libelle"
-                          [disabled]="c.moisEnvoye || saving()" [value]="v.codePaie ?? ''"
-                          (input)="changer(v.variable, 'codePaie', $any($event.target).value)" />
-                      }
                     } @else {
                       <span class="pv-readonly" title="Configuré dans {{ autre() ? 'l’écriture de paie de la base' : 'Codes constantes' }}">
                         {{ v.cibleExistante ?? '(non configuré)' }}
@@ -142,7 +149,7 @@ import {
                     }
                   </td>
                   <td data-label="Unité">
-                    @if (sansEnvoi(v.variable)) {
+                    @if (uniteAuChoix(v.variable)) {
                       <div class="soft-select pv-field pv-field--unit">
                         <div class="soft-select__control">
                           <select [attr.aria-label]="'Unité de ' + v.libelle" [disabled]="c.moisEnvoye || saving()"
@@ -153,11 +160,50 @@ import {
                           </select>
                         </div>
                       </div>
+                      @if (v.unite === 'J') {
+                        <label class="pv-hpj">
+                          <span class="pv-hpj__label">Heures par jour</span>
+                          <input type="number" class="soft-input pv-hpj__input" min="1" max="24" step="0.5" inputmode="decimal"
+                            aria-label="Heures par jour de l'absence" [disabled]="c.moisEnvoye || saving()"
+                            [value]="heuresParJour() ?? ''" (input)="changerHeuresParJour($any($event.target).value)" />
+                        </label>
+                        <div class="soft-field__hint pv-hint">{{ aideHeuresParJour }}</div>
+                      }
                     } @else {
                       <span class="pv-readonly">heures</span>
                     }
                   </td>
                 </tr>
+                @if (v.variable === 'Absence') {
+                  <tr class="pv-codes-row" [class.pv-off]="!v.actif">
+                    <td colspan="4" class="pv-codes-cell">
+                      <fieldset class="pv-codes" [disabled]="c.moisEnvoye || saving()">
+                        <legend class="pv-codes__title">{{ titreCodes }}</legend>
+                        <label class="pv-code">
+                          <input type="checkbox" [checked]="codesAbsence().sansCode"
+                            (change)="basculerSansCode($any($event.target).checked)" />
+                          <span class="pv-code__label">Arbitrage d'absence sans code</span>
+                        </label>
+                        @for (code of listeCodesAbsence(); track code.libelle) {
+                          <label class="pv-code" [class.pv-code--missing]="code.introuvable">
+                            <input type="checkbox" [checked]="estCompte(code.libelle)"
+                              (change)="basculerCode(code.libelle, $any($event.target).checked)" />
+                            <span class="pv-code__label">{{ code.libelle }}</span>
+                            @if (code.introuvable) { <soft-badge variant="warning">code introuvable</soft-badge> }
+                            @if (code.nonPaye) { <soft-badge variant="muted">non payé</soft-badge> }
+                            @if (code.suggere && !estCompte(code.libelle)) { <soft-badge variant="info">à envisager</soft-badge> }
+                          </label>
+                        }
+                      </fieldset>
+                      @if (aCodeIntrouvable()) {
+                        <div class="soft-field__hint pv-codes__warn" role="status">
+                          Un code enregistré n'existe plus dans les codes d'absence : il reste compté tant qu'il n'est pas décoché.
+                        </div>
+                      }
+                      <div class="soft-field__hint pv-codes__hint">{{ aideCodes }}</div>
+                    </td>
+                  </tr>
+                }
               }
             </tbody>
           </table>
@@ -177,10 +223,10 @@ import {
           @if (c.moisEnvoye) { <div class="soft-field__hint pv-option__hint">Mois déjà envoyé : modification impossible.</div> }
         </div>
         <p class="pv-note">
-          Retard est envoyé en heures, avec la valeur affichée dans la page Heures supplémentaires
-          ({{ autre() ? 'dans sa colonne de destination' : 'dans le code de paie choisi' }}).
-          Absence : l'envoi vers la paie n'existe pas encore (prochaine étape) ; elle ne peut pas être cochée et n'est
-          jamais écrite.
+          Retard est envoyé en heures et Absence en heures ou en jours, avec la valeur affichée dans la page Heures
+          supplémentaires ({{ autre() ? 'dans leur colonne de destination' : 'dans le code de paie choisi' }}) ; en jours,
+          l'absence est divisée par les heures par jour et arrondie au centième. L'Absence ne compte que les absences non
+          justifiées : jours planifiés sans aucune ligne et absences arbitrées dont le code est coché ci-dessus.
         </p>
         @if (autre()) {
           <app-payroll-destinations (enregistre)="charger()" />
@@ -214,6 +260,24 @@ import {
     .pv-field--unit { min-width: 140px; max-width: 180px; }
     .pv-table select:disabled { background: var(--surface-dark); color: var(--text-muted); cursor: not-allowed; }
     .pv-toggle { margin-top: 10px; }
+    .pv-field--search { display: block; }
+    .pv-hpj { display: flex; align-items: center; gap: var(--space-sm); margin-top: var(--space-sm); }
+    .pv-hpj__label { font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
+    .pv-hpj__input { width: 96px; }
+    .pv-hpj__input:disabled { background: var(--surface-dark); color: var(--text-muted); cursor: not-allowed; }
+    .pv-codes-row > td { border-top: 0; padding-top: 0; }
+    .pv-codes { margin: 0; padding: var(--space-md); border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+      background: var(--app-surface); display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--space-sm) var(--space-md); }
+    .pv-codes__title { padding: 0 var(--space-xs); font-weight: 600; font-size: 14px; color: var(--app-text-strong); }
+    .pv-code { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-xs) var(--space-sm); min-width: 0; cursor: pointer;
+      font-size: 13px; color: var(--app-text); }
+    .pv-code input { width: 18px; height: 18px; margin: 0; flex: 0 0 auto; accent-color: var(--accent); cursor: pointer; }
+    .pv-code__label { min-width: 0; overflow-wrap: anywhere; }
+    .pv-code--missing .pv-code__label { color: var(--warning); }
+    .pv-codes:disabled .pv-code, .pv-codes:disabled .pv-code input { cursor: not-allowed; }
+    .pv-codes:disabled .pv-code { color: var(--text-muted); }
+    .pv-codes__hint, .pv-codes__warn { margin-top: var(--space-xs); }
+    .pv-codes__warn { color: var(--warning); }
     .pv-option { margin-top: var(--space-md); padding: var(--space-md); border: 1px solid var(--color-border); border-radius: var(--radius-lg);
       background: var(--app-surface); }
     .pv-option__row { display: flex; align-items: center; gap: var(--space-md); cursor: pointer; }
@@ -248,6 +312,13 @@ import {
       .pv-option__hint { margin-left: 0; }
       .pv-readonly { line-height: 1.5; }
       .pv-field, .pv-field--unit { min-width: 0; max-width: none; width: 100%; }
+      /* Codes d'absence comptés : une carte à part, sous la carte de l'Absence, une case par ligne. */
+      .pv-table tbody tr.pv-codes-row { padding: 12px; }
+      .pv-table tbody td.pv-codes-cell { display: block; }
+      .pv-table tbody td.pv-codes-cell::before { content: none; }
+      .pv-codes { grid-template-columns: minmax(0, 1fr); padding: var(--space-sm); }
+      .pv-table tbody td:has(.pv-hpj) { grid-template-columns: minmax(0, 1fr); }
+      .pv-table tbody td:has(.pv-hpj) .pv-hint { grid-column: 1; }
     }
   `],
 })
@@ -258,12 +329,19 @@ export class PayrollVariablesCard implements OnInit {
   private readonly confirm = inject(ConfirmService);
 
   protected readonly nonEnvoyee = NON_ENVOYEE;
+  protected readonly aideHeuresParJour = AIDE_HEURES_PAR_JOUR;
+  protected readonly aideCodes = AIDE_CODES_ABSENCE;
+  protected readonly titreCodes = TITRE_CODES_ABSENCE;
   readonly loading = signal(false);
   readonly saving = signal(false);
   readonly config = signal<PayrollVariablesConfig | null>(null);
   readonly brouillon = signal<PayrollVariable[]>([]);
   /** Brouillon de l'option « remettre à 0 les salariés sans valeur à l'envoi » (vraie par défaut). */
   readonly remiseAZero = signal(true);
+  /** Brouillon du nombre d'heures par jour de l'Absence en jours (null : champ vidé). */
+  readonly heuresParJour = signal<number | null>(HEURES_PAR_JOUR_DEFAUT);
+  /** Brouillon des codes d'absence comptés comme non justifiés. */
+  readonly codesAbsence = signal<CodesAbsenceBrouillon>({ sansCode: true, codes: [] });
   /** Erreurs durables : visibles jusqu'à la prochaine modification, annulation ou tentative d'enregistrement. */
   readonly erreurs = signal<string[]>([]);
 
@@ -271,8 +349,13 @@ export class PayrollVariablesCard implements OnInit {
   readonly autre = computed(() => this.config()?.typeBase === 'AUTRE');
   readonly modifie = computed(() => {
     const c = this.config();
-    return !!c && (changements(c.variables, this.brouillon()).length > 0 || this.remiseAZero() !== (c.remiseAZeroSansValeur ?? true));
+    return !!c && (changements(c.variables, this.brouillon()).length > 0 || this.remiseAZero() !== (c.remiseAZeroSansValeur ?? true)
+      || this.heuresParJour() !== this.heuresLues() || changementsCodesAbsence(codesAbsenceLus(c.absenceCodes), this.codesAbsence()).length > 0);
   });
+
+  /** Codes proposés : ceux lus (T_CODEABSENCE puis codes introuvables). */
+  readonly listeCodesAbsence = computed<PayrollAbsenceCode[]>(() => this.config()?.absenceCodes?.codes ?? []);
+  readonly aCodeIntrouvable = computed(() => this.listeCodesAbsence().some((c) => c.introuvable && this.estCompte(c.libelle)));
 
   /** Même règle que le bouton « Modifier » de la base active (le serveur vérifie de nouveau). */
   readonly autorise = computed(() => {
@@ -305,6 +388,53 @@ export class PayrollVariablesCard implements OnInit {
 
   codePropre(variable: string): boolean {
     return aCodePropre(variable);
+  }
+
+  uniteAuChoix(variable: string): boolean {
+    return aUniteAuChoix(variable);
+  }
+
+  avecRecherche(variable: string): boolean {
+    return CODES_AVEC_RECHERCHE.includes(variable);
+  }
+
+  /** Options de la liste avec recherche : codes lus dans SAGE (le code enregistré reste visible même s'il n'y figure plus). */
+  optionsCodes(v: PayrollVariable): SelectOption[] {
+    return this.codes(v).map((o) => ({ value: o.code, label: o.intitule ? `${o.code} — ${o.intitule}` : o.code }));
+  }
+
+  estCompte(libelle: string): boolean {
+    const cle = cleCode(libelle);
+    return this.codesAbsence().codes.some((c) => cleCode(c) === cle);
+  }
+
+  basculerCode(libelle: string, compte: boolean): void {
+    this.codesAbsence.update((b) => {
+      const autres = b.codes.filter((c) => cleCode(c) !== cleCode(libelle));
+      return { ...b, codes: compte ? [...autres, libelle] : autres };
+    });
+    this.erreurs.set([]);
+  }
+
+  basculerSansCode(compte: boolean): void {
+    this.codesAbsence.update((b) => ({ ...b, sansCode: compte }));
+    this.erreurs.set([]);
+  }
+
+  changerHeuresParJour(valeur: string): void {
+    const texte = (valeur ?? '').trim().replace(',', '.');
+    const nombre = texte === '' ? null : Number(texte);
+    this.heuresParJour.set(nombre === null || Number.isNaN(nombre) ? null : nombre);
+    this.erreurs.set([]);
+  }
+
+  private heuresLues(): number {
+    return this.config()?.heuresParJour ?? HEURES_PAR_JOUR_DEFAUT;
+  }
+
+  /** L'Absence est-elle en jours dans le brouillon (le champ « Heures par jour » est alors affiché et contrôlé) ? */
+  private absenceEnJours(): boolean {
+    return this.brouillon().some((v) => v.variable === 'Absence' && v.unite === 'J');
   }
 
   /** Codes lus dans SAGE ; le code déjà enregistré reste visible même s'il n'y figure plus. */
@@ -346,6 +476,8 @@ export class PayrollVariablesCard implements OnInit {
     if (!c) return;
     this.brouillon.set(c.variables.map((v) => ({ ...v })));
     this.remiseAZero.set(c.remiseAZeroSansValeur ?? true);
+    this.heuresParJour.set(c.heuresParJour ?? HEURES_PAR_JOUR_DEFAUT);
+    this.codesAbsence.set(codesAbsenceLus(c.absenceCodes));
     this.erreurs.set([]);
   }
 
@@ -357,16 +489,32 @@ export class PayrollVariablesCard implements OnInit {
   async enregistrer(): Promise<void> {
     const c = this.config();
     if (!c || this.saving() || c.moisEnvoye) return;
-    const erreurs = validerBrouillon(this.brouillon(), this.autre());
+    // Heures par jour contrôlées quand l'Absence est en jours, ou quand le champ a été modifié.
+    const heures = this.heuresParJour();
+    const heuresModifiees = heures !== this.heuresLues();
+    const erreurs = validerBrouillon(this.brouillon(), this.autre(), this.absenceEnJours() || heuresModifiees ? heures : undefined);
     this.erreurs.set(erreurs);
     if (erreurs.length) return;
     const option = changementOption(c.remiseAZeroSansValeur ?? true, this.remiseAZero());
-    const liste = [...changements(c.variables, this.brouillon()), ...(option ? [option] : [])];
+    const lignesHeures = heuresModifiees ? changementHeuresParJour(this.heuresLues(), heures) : null;
+    const lignesCodes = changementsCodesAbsence(codesAbsenceLus(c.absenceCodes), this.codesAbsence());
+    const liste = [
+      ...changements(c.variables, this.brouillon()),
+      ...(lignesHeures ? [lignesHeures] : []),
+      ...lignesCodes,
+      ...(option ? [option] : []),
+    ];
     if (!liste.length) return;
-    const question = `Enregistrer pour la base ${c.base} : ${liste.join(' ; ')} ? Le changement s'appliquera au prochain envoi en paie.`;
+    const suite = lignesCodes.length
+      ? ' Le changement s\'appliquera au prochain envoi en paie ; les codes d\'absence comptés, au prochain calcul (recalculez les périodes déjà calculées avant de les envoyer).'
+      : ' Le changement s\'appliquera au prochain envoi en paie.';
+    const question = `Enregistrer pour la base ${c.base} : ${liste.join(' ; ')} ?${suite}`;
     if (!(await this.confirm.ask(question, 'Variables envoyées à la paie', 'Enregistrer'))) return;
     this.saving.set(true);
-    this.svc.save(versEnregistrement(this.brouillon()), this.remiseAZero()).subscribe({
+    this.svc.save(versEnregistrement(this.brouillon()), this.remiseAZero(), {
+      heuresParJour: heuresModifiees ? heures : null,
+      absenceCodes: lignesCodes.length ? { sansCode: this.codesAbsence().sansCode, codes: this.codesAbsence().codes } : null,
+    }).subscribe({
       next: (resultat) => {
         this.saving.set(false);
         this.appliquer(resultat);
@@ -383,6 +531,8 @@ export class PayrollVariablesCard implements OnInit {
     this.config.set(c);
     this.brouillon.set(c.variables.map((v) => ({ ...v })));
     this.remiseAZero.set(c.remiseAZeroSansValeur ?? true);
+    this.heuresParJour.set(c.heuresParJour ?? HEURES_PAR_JOUR_DEFAUT);
+    this.codesAbsence.set(codesAbsenceLus(c.absenceCodes));
     this.loading.set(false);
     this.erreurs.set([]);
   }

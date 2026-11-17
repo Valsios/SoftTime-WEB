@@ -35,7 +35,7 @@ function variable(nom: string, champs: Partial<PayrollVariable> = {}): PayrollVa
   const codePropre = nom === 'Retard' || nom === 'Absence';
   return {
     variable: nom, libelle: LIBELLES[nom], actif: !codePropre, codePaie: null, unite: null, colonneCible: null,
-    cibleExistante: codePropre ? null : 'HS0X', sansEnvoi: nom === 'Absence', ...champs,
+    cibleExistante: codePropre ? null : 'HS0X', sansEnvoi: false, ...champs,
   };
 }
 
@@ -58,10 +58,13 @@ describe('Variables envoyées à la paie : règles de l\'écran', () => {
     expect(peutCocher(variable('Nuit'), false, false)).toBe(true);
   });
 
-  it('Absence n\'est jamais cochable (prochaine étape) ; une Absence déjà cochée peut seulement être décochée', () => {
-    expect(peutCocher(variable('Absence', { codePaie: 'ABS01', unite: 'J' }), false, false)).toBe(false);
+  // Adapté au lot C3 (avant : Absence jamais cochable, « prochaine étape ») : comme Retard.
+  it('Absence n\'est cochable qu\'avec son code (SAGE) ou sa destination (autre base), comme Retard', () => {
+    expect(peutCocher(variable('Absence'), false, false)).toBe(false);
+    expect(raisonNonCochable(variable('Absence'), false, false)).toBe('Choisissez d’abord le code de paie.');
+    expect(peutCocher(variable('Absence', { codePaie: 'ABS01', unite: 'J' }), false, false)).toBe(true);
     expect(peutCocher(variable('Absence', { colonneCible: 'JoursAbsence' }), true, false)).toBe(false);
-    expect(raisonNonCochable(variable('Absence'), false, false)).toBe('Envoi de l’absence : prochaine étape.');
+    expect(peutCocher(variable('Absence', { cibleExistante: 'JoursAbsence' }), true, false)).toBe(true);
     expect(peutCocher(variable('Absence', { actif: true }), false, false)).toBe(true);
   });
 
@@ -70,13 +73,15 @@ describe('Variables envoyées à la paie : règles de l\'écran', () => {
     expect(raisonNonCochable(variable('Nuit'), false, true)).toBe('Mois déjà envoyé : modification impossible.');
   });
 
-  // Adapté au lot C2 (avant : unité de Retard exigée, Absence cochée acceptée).
-  it('validation identique au serveur : code de Retard exigé (unité heures par défaut), Absence cochée refusée', () => {
-    const erreurs = validerBrouillon([variable('Retard', { actif: true }), variable('Absence', { actif: true, codePaie: 'ABS', unite: 'J' })], false);
+  // Adapté au lot C2 (avant : unité de Retard exigée, Absence cochée acceptée) puis au lot C3 (Absence cochée avec code et
+  // unité acceptée ; sans unité, refusée).
+  it('validation identique au serveur : code de Retard exigé (unité heures par défaut), unité d\'Absence exigée', () => {
+    const erreurs = validerBrouillon([variable('Retard', { actif: true }), variable('Absence', { actif: true, codePaie: 'ABS' })], false);
     expect(erreurs).toEqual([
       'La variable Retard ne peut pas être cochée tant que son code de paie n\'est pas renseigné.',
-      'La variable Absence ne peut pas encore être envoyée à la paie : son envoi est prévu dans une prochaine étape.',
+      'La variable Absence ne peut pas être cochée sans unité (heures ou jours).',
     ]);
+    expect(validerBrouillon([variable('Absence', { actif: true, codePaie: 'ABS', unite: 'J' })], false)).toEqual([]);
     expect(validerBrouillon([variable('Retard', { actif: true, codePaie: 'RET01', unite: 'J' })], false))
       .toEqual(['L\'unité de la variable Retard doit être « heures ».']);
     expect(validerBrouillon([variable('Retard', { actif: true, cibleExistante: 'HeuresRetard' })], true)).toEqual([]);
@@ -439,11 +444,14 @@ describe('Carte « Variables envoyées à la paie » : états désactivé et ver
     fixture.componentInstance.ngOnInit();
     fixture.detectChanges();
     const racine = fixture.nativeElement as HTMLElement;
-    return { racine, champ: (libelle: string) => racine.querySelector<HTMLInputElement | HTMLSelectElement>(`[aria-label="${libelle}"]`)! };
+    return { fixture, racine, champ: (libelle: string) => racine.querySelector<HTMLInputElement | HTMLSelectElement>(`[aria-label="${libelle}"]`)! };
   }
 
-  it('mois déjà envoyé : bandeau d\'avertissement, listes, champ de code et cases désactivés, boutons absents', () => {
-    const { racine, champ } = rendre(config({ moisEnvoye: true, dernierEnvoi: '2026-11-01 → 2026-11-30', codesPaie: [{ code: 'RET01', intitule: 'Retard' }] }));
+  it('mois déjà envoyé : bandeau d\'avertissement, listes, champ de code et cases désactivés, boutons absents', async () => {
+    const { racine, champ, fixture } = rendre(config({ moisEnvoye: true, dernierEnvoi: '2026-11-01 → 2026-11-30', codesPaie: [{ code: 'RET01', intitule: 'Retard' }] }));
+    // La liste avec recherche (Absence) reçoit son état désactivé de ngModel, de façon asynchrone.
+    await fixture.whenStable();
+    fixture.detectChanges();
 
     expect(racine.querySelector('.pv-banner--warning')?.textContent).toContain('Mois déjà envoyé en paie');
     expect(champ('Code de paie de Retard').disabled).toBe(true);
@@ -453,11 +461,13 @@ describe('Carte « Variables envoyées à la paie » : états désactivé et ver
     expect(racine.querySelector('.pv-actions')).toBeNull();
   });
 
-  it('Absence : case désactivée avec sa raison, champ de code au style de l\'application', () => {
+  // Adapté au lot C3 (avant : case toujours désactivée, « prochaine étape », champ de code libre).
+  it('Absence sans code : case désactivée avec sa raison, liste des codes avec recherche au style de l\'application', () => {
     const { racine, champ } = rendre(config());
 
     expect(champ('Envoyer Absence à la paie').disabled).toBe(true);
-    expect(racine.textContent).toContain('Envoi de l’absence : prochaine étape.');
+    expect(racine.textContent).not.toContain('prochaine étape');
+    expect(champ('Code de paie de Absence').getAttribute('role')).toBe('combobox');
     expect(champ('Code de paie de Absence').classList.contains('soft-input')).toBe(true);
     expect(champ('Code de paie de Absence').disabled).toBe(false);
   });
@@ -511,7 +521,8 @@ describe('Largeur étroite (< 768 px) : variables présentées en cartes, jamais
 
     expect(racine.querySelector('.soft-table-wrap')?.classList.contains('pv-wrap')).toBe(true);
     expect(reaffiche('pv-wrap')).toBe(true);
-    const lignes = [...racine.querySelectorAll('tbody tr')];
+    // Adapté au lot C3 : la liste des codes d'absence comptés forme une ligne à part, sous l'Absence.
+    const lignes = [...racine.querySelectorAll('tbody tr:not(.pv-codes-row)')];
     expect(lignes.map((l) => l.querySelector('td.pv-name')?.textContent?.trim().split(/\s+non envoyée/)[0])).toEqual(Object.values(LIBELLES));
     for (const ligne of lignes) {
       expect(ligne.querySelector('td[data-label="Envoyée"] .soft-toggle input[type="checkbox"]')).not.toBeNull();
@@ -541,10 +552,13 @@ describe('Largeur étroite (< 768 px) : variables présentées en cartes, jamais
     expect(retard.querySelector<HTMLInputElement>('input[type="checkbox"]')!.disabled).toBe(false);
   });
 
-  it('carte : mois verrouillé, chaque carte de variable porte son message et ses contrôles désactivés', () => {
-    const { racine } = rendreCarte(config({ moisEnvoye: true, dernierEnvoi: '2026-11-01 → 2026-11-30', codesPaie: [{ code: 'RET01', intitule: 'Retard' }] }));
+  it('carte : mois verrouillé, chaque carte de variable porte son message et ses contrôles désactivés', async () => {
+    const { racine, fixture } = rendreCarte(config({ moisEnvoye: true, dernierEnvoi: '2026-11-01 → 2026-11-30', codesPaie: [{ code: 'RET01', intitule: 'Retard' }] }));
+    // Adapté au lot C3 : la liste avec recherche (Absence) reçoit son état désactivé de ngModel, de façon asynchrone.
+    await fixture.whenStable();
+    fixture.detectChanges();
 
-    const lignes = [...racine.querySelectorAll('tbody tr')];
+    const lignes = [...racine.querySelectorAll('tbody tr:not(.pv-codes-row)')];
     expect(lignes.length).toBe(9);
     for (const ligne of lignes) {
       expect(ligne.querySelector<HTMLInputElement>('input[type="checkbox"]')!.disabled).toBe(true);

@@ -11,6 +11,7 @@ import { asRow, fmtDate, isMaxOneMonth } from '../../shared/utils/date';
 import { SessionStore } from '../../core/session.store';
 import { PayrollVariablesService } from '../../shared/services/payroll-variables.service';
 import { ACTIVES_PAR_DEFAUT, colonnesNonEnvoyees, libelleColonne, NON_ENVOYEE, questionEnvoi } from '../params/payroll-variables.logic';
+import { PayrollVariablesActive } from '../../shared/models';
 
 @Component({
   selector: 'app-overtime',
@@ -229,11 +230,13 @@ export class OvertimePage implements OnInit {
     if (this.busy() || !this.validatePeriod(this.lastFilter)) return;
     const database = this.currentDatabase()?.nomBd ?? this.session.activeSageDb() ?? 'la base active';
     // Option relue au moment de confirmer : le texte annonce la remise à 0 seulement si elle est active pour la base (elle a
-    // pu être changée depuis le chargement de la page) ; sans réponse, la dernière valeur connue.
-    const remiseAZero = await firstValueFrom(this.variables.actives())
-      .then((r) => r.remiseAZeroSansValeur ?? true, () => this.remiseAZero());
+    // pu être changée depuis le chargement de la page) ; sans réponse, la dernière valeur connue. Absence envoyée en jours
+    // (lot C3) : l'unité est précisée ; sans réponse, rien n'est précisé.
+    const lu = await firstValueFrom(this.variables.actives()).then((r): PayrollVariablesActive | null => r, () => null);
+    const remiseAZero = lu ? lu.remiseAZeroSansValeur ?? true : this.remiseAZero();
     this.remiseAZero.set(remiseAZero);
-    const question = questionEnvoi(this.isStandard(), database, remiseAZero);
+    const absenceEnJours = lu && lu.actives.includes('Absence') && lu.uniteAbsence === 'J' ? lu.heuresParJour ?? 8 : null;
+    const question = questionEnvoi(this.isStandard(), database, remiseAZero, absenceEnJours);
     if (!(await this.confirm.ask(question))) return;
     this.busy.set(true);
     this.svc.syncPayroll(this.lastFilter).subscribe({

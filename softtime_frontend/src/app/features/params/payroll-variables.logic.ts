@@ -1,4 +1,5 @@
 import {
+  PayrollAbsenceCodes,
   PayrollTargetColumn,
   PayrollVariable,
   PayrollVariableSave,
@@ -12,8 +13,8 @@ export const HEURES_SUP = ['Exo130', 'Exo150', 'I130', 'I150', 'Ferie', 'Dimanch
 /** Variables dont le code (base SAGE) ou la colonne (autre base) est propre à la base. */
 export const CODE_PROPRE = ['Retard', 'Absence'] as const;
 
-/** Variables sans envoi réel : Absence (prochaine étape, après décision RH). */
-export const SANS_ENVOI = ['Absence'] as const;
+/** Variables sans envoi réel : aucune depuis le lot C3 (Absence envoyable en heures ou en jours). */
+export const SANS_ENVOI: readonly string[] = [];
 
 /** Unités admises par variable à code propre (la première est celle par défaut). */
 export const UNITES: Readonly<Record<string, readonly string[]>> = { Retard: ['H'], Absence: ['H', 'J'] };
@@ -21,8 +22,20 @@ export const UNITES: Readonly<Record<string, readonly string[]>> = { Retard: ['H
 /** Mention affichée à côté d'une variable non envoyée à la paie (jamais masquée). */
 export const NON_ENVOYEE = 'non envoyée à la paie';
 
-/** Raison affichée sous la case d'Absence. */
-export const ENVOI_ABSENCE = 'Envoi de l’absence : prochaine étape.';
+/** Absence en jours : nombre d'heures d'une journée par défaut. */
+export const HEURES_PAR_JOUR_DEFAUT = 8;
+
+/** Aide affichée sous le champ « Heures par jour ». */
+export const AIDE_HEURES_PAR_JOUR =
+  'L’absence est convertie en jours : heures ÷ heures par jour, arrondi au centième.';
+
+/** Titre de la liste des codes d'absence comptés. */
+export const TITRE_CODES_ABSENCE = 'Codes d’absence comptés comme non justifiés';
+
+/** Aide affichée sous la liste des codes d'absence comptés. */
+export const AIDE_CODES_ABSENCE =
+  'Les jours planifiés sans aucune ligne sont toujours comptés. Le changement s’applique au prochain calcul : '
+  + 'recalculez les périodes déjà calculées avant de les envoyer.';
 
 /** Clé de colonne de la page Heures supplémentaires de chaque variable. */
 export const COLONNE_HEURES_SUP: Readonly<Record<string, string>> = {
@@ -50,9 +63,14 @@ export function aCodePropre(variable: string): boolean {
   return (CODE_PROPRE as readonly string[]).includes(variable);
 }
 
+/** Variable dont l'unité est au choix (Absence : heures ou jours). */
+export function aUniteAuChoix(variable: string): boolean {
+  return (UNITES[variable]?.length ?? 0) > 1;
+}
+
 /**
  * Destination renseignée d'une variable à code propre : code de paie (base SAGE) ; autre base : destination
- * T_PAIE_ECRITURE (Retard) ou colonne saisie (Absence).
+ * T_PAIE_ECRITURE (Retard, Absence).
  */
 export function cibleRenseignee(v: PayrollVariable, baseAutre: boolean): boolean {
   const cible = !baseAutre ? v.codePaie : estSansEnvoi(v.variable) ? v.colonneCible : v.cibleExistante;
@@ -60,8 +78,8 @@ export function cibleRenseignee(v: PayrollVariable, baseAutre: boolean): boolean
 }
 
 /**
- * Case cochable ? Jamais si le mois en cours est déjà envoyé. Absence : jamais (une case déjà cochée peut seulement être
- * décochée). Retard : seulement une fois sa destination renseignée (on peut toujours la DÉcocher).
+ * Case cochable ? Jamais si le mois en cours est déjà envoyé. Retard et Absence : seulement une fois leur destination
+ * renseignée (on peut toujours les DÉcocher).
  */
 export function peutCocher(v: PayrollVariable, baseAutre: boolean, moisEnvoye: boolean): boolean {
   if (moisEnvoye) return false;
@@ -73,7 +91,7 @@ export function peutCocher(v: PayrollVariable, baseAutre: boolean, moisEnvoye: b
 /** Raison affichée sous une case non cochable. */
 export function raisonNonCochable(v: PayrollVariable, baseAutre: boolean, moisEnvoye: boolean): string | null {
   if (moisEnvoye) return 'Mois déjà envoyé : modification impossible.';
-  if (estSansEnvoi(v.variable)) return ENVOI_ABSENCE;
+  if (estSansEnvoi(v.variable)) return 'Envoi de cette variable : prochaine étape.';
   if (aCodePropre(v.variable) && !v.actif && !cibleRenseignee(v, baseAutre))
     return baseAutre
       ? 'Choisissez d’abord sa colonne dans « Destinations dans la base de paie ».'
@@ -85,8 +103,29 @@ function unitesLibelle(variable: string, separateur: string, guillemets: boolean
   return (UNITES[variable] ?? ['H', 'J']).map((u) => (guillemets ? `« ${uniteLibelle(u)} »` : uniteLibelle(u))).join(separateur);
 }
 
-/** Mêmes contrôles que le serveur (PayrollVariableRules.Valider) : messages durables affichés avant l'envoi. */
-export function validerBrouillon(variables: PayrollVariable[], baseAutre: boolean): string[] {
+/** Heures par jour valides : entre 1 et 24, une décimale au plus (même règle que le serveur). */
+export function heuresParJourValide(valeur: number | null | undefined): boolean {
+  return typeof valeur === 'number' && Number.isFinite(valeur) && valeur >= 1 && valeur <= 24
+    && Math.abs(Math.round(valeur * 10) - valeur * 10) < 1e-9;
+}
+
+/** Texte d'un nombre d'heures (virgule décimale, comme à l'écran). */
+export function texteHeures(valeur: number | null | undefined): string {
+  return valeur === null || valeur === undefined || Number.isNaN(valeur) ? '(vide)' : String(valeur).replace('.', ',');
+}
+
+/** Message du serveur pour un nombre d'heures par jour invalide. */
+export function erreurHeuresParJour(valeur: number | null | undefined): string | null {
+  if (heuresParJourValide(valeur)) return null;
+  const recu = valeur === null || valeur === undefined || Number.isNaN(valeur) ? '(vide)' : String(valeur);
+  return `Le nombre d'heures par jour de l'absence doit être compris entre 1 et 24, avec une décimale au plus (valeur reçue : ${recu}).`;
+}
+
+/**
+ * Mêmes contrôles que le serveur (PayrollVariableRules.Valider) : messages durables affichés avant l'envoi. Le nombre
+ * d'heures par jour n'est contrôlé que s'il est fourni (champ affiché quand l'Absence est en jours).
+ */
+export function validerBrouillon(variables: PayrollVariable[], baseAutre: boolean, heuresParJour?: number | null): string[] {
   const erreurs: string[] = [];
   for (const v of variables) {
     if (!aCodePropre(v.variable)) continue;
@@ -107,7 +146,56 @@ export function validerBrouillon(variables: PayrollVariable[], baseAutre: boolea
     if (!unite && unites.length > 1)
       erreurs.push(`La variable ${v.libelle} ne peut pas être cochée sans unité (${unitesLibelle(v.variable, ' ou ', false)}).`);
   }
+  if (heuresParJour !== undefined) {
+    const erreur = erreurHeuresParJour(heuresParJour);
+    if (erreur) erreurs.push(erreur);
+  }
   return erreurs;
+}
+
+// ---------- Codes d'absence comptés comme non justifiés (lot C3) ----------
+
+/** Brouillon du réglage : arbitrage sans code compté, libellés des codes comptés. */
+export interface CodesAbsenceBrouillon {
+  sansCode: boolean;
+  codes: string[];
+}
+
+/** Forme comparable d'un libellé : espaces en trop, accents et casse ignorés (même règle que le serveur). */
+export function cleCode(libelle: string | null | undefined): string {
+  return (libelle ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toUpperCase();
+}
+
+/** Brouillon lu dans la configuration (codes cochés). */
+export function codesAbsenceLus(c: PayrollAbsenceCodes | null | undefined): CodesAbsenceBrouillon {
+  return { sansCode: c?.sansCode ?? true, codes: (c?.codes ?? []).filter((x) => x.compte).map((x) => x.libelle) };
+}
+
+/** Codes ajoutés et retirés entre deux réglages (comparaison tolérante). */
+export function ecartCodes(avant: CodesAbsenceBrouillon, apres: CodesAbsenceBrouillon): { ajoutes: string[]; retires: string[] } {
+  const cles = (l: string[]) => new Set(l.map(cleCode));
+  const avantCles = cles(avant.codes);
+  const apresCles = cles(apres.codes);
+  return {
+    ajoutes: apres.codes.filter((c) => !avantCles.has(cleCode(c))),
+    retires: avant.codes.filter((c) => !apresCles.has(cleCode(c))),
+  };
+}
+
+/** Lignes de la confirmation pour les codes d'absence comptés (vide : réglage inchangé). */
+export function changementsCodesAbsence(avant: CodesAbsenceBrouillon, apres: CodesAbsenceBrouillon): string[] {
+  const lignes: string[] = [];
+  const { ajoutes, retires } = ecartCodes(avant, apres);
+  if (ajoutes.length) lignes.push(`Codes d'absence comptés ajoutés : ${ajoutes.join(', ')}`);
+  if (retires.length) lignes.push(`Codes d'absence comptés retirés : ${retires.join(', ')}`);
+  if (avant.sansCode !== apres.sansCode)
+    lignes.push(`Arbitrage d'absence sans code : ${apres.sansCode ? 'compté' : 'non compté'}`);
+  return lignes;
+}
+
+/** Ligne de la confirmation pour les heures par jour (null : inchangées). */
+export function changementHeuresParJour(avant: number, apres: number | null): string | null {
+  return avant === apres ? null : `Absence : ${texteHeures(apres)} heures par jour`;
 }
 
 /** Valeur comparable d'un texte facultatif (vide = absent). */
@@ -158,13 +246,22 @@ export const REMISE_A_ZERO =
   'Les salariés de la sélection sans valeur sur la période seront remis à 0 pour les variables envoyées à la paie '
   + "(une variable non envoyée n'est jamais modifiée).";
 
+/** Absence envoyée en jours : précision ajoutée à la confirmation de l'envoi. */
+export function precisionAbsenceEnJours(heuresParJour: number): string {
+  return `L'absence est envoyée en jours (heures ÷ ${texteHeures(heuresParJour)} h par jour, arrondi au centième).`;
+}
+
 /**
  * Question de « Synchroniser vers SAGE / la base » : la remise à 0 n'est annoncée que si l'option de la base est cochée
- * (option décochée : aucun salarié sans valeur n'est touché, rien à annoncer).
+ * (option décochée : aucun salarié sans valeur n'est touché, rien à annoncer). Absence envoyée en jours : l'unité est
+ * précisée (<paramref>absenceEnJours</paramref> : heures par jour, ou null si l'Absence n'est pas envoyée en jours).
  */
-export function questionEnvoi(standard: boolean, base: string, remiseAZero: boolean): string {
+export function questionEnvoi(standard: boolean, base: string, remiseAZero: boolean, absenceEnJours: number | null = null): string {
   const question = standard ? 'Pousser les HS vers SAGE (T_CUMSAL) ?' : `Écrire les HS dans la base ${base} ?`;
-  return remiseAZero ? `${question} ${REMISE_A_ZERO}` : question;
+  const parties = [question];
+  if (remiseAZero) parties.push(REMISE_A_ZERO);
+  if (absenceEnJours !== null) parties.push(precisionAbsenceEnJours(absenceEnJours));
+  return parties.join(' ');
 }
 
 export function uniteLibelle(unite: string | null): string {
@@ -201,7 +298,7 @@ export interface ChoixColonne {
 }
 
 /**
- * Colonnes proposées pour une variable : toutes, les non numériques et (Retard) celles qui n'acceptent pas les
+ * Colonnes proposées pour une variable : toutes, les non numériques et (Retard, Absence) celles qui n'acceptent pas les
  * décimales étant désactivées. La valeur déjà enregistrée reste visible même si la table ne la contient plus.
  */
 export function choixColonnes(colonnes: PayrollTargetColumn[], decimalesRequises: number, actuelle: string | null): ChoixColonne[] {
