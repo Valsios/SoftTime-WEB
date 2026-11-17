@@ -389,6 +389,11 @@ Nuit, Dimanche, Retard, Absence) restent calculées et affichées ; seul l'envoi
   Le message de fin et le résultat distinguent les salariés écrits des salariés remis à 0 ; la synthèse du journal `SYNC_PAIE` et la ligne
   `T_PAIE_ENVOI` comptent des **catégories** mises à jour (valeurs et zéros ensemble). La page Heures supplémentaires l'annonce dans la
   confirmation de l'envoi.
+  **Refus d'une sélection sans heure calculée** : avant toute écriture, si la sélection de l'envoi (période exacte, base, département, plage de
+  matricules) n'a **aucune ligne `T_HSExoImp`**, la synchronisation est refusée (400, STANDARD comme autre base) : « Aucune heure calculée sur cette période pour
+  cette sélection : lancez le calcul avant d'envoyer à la paie. ». Rien n'est écrit (ni valeur, ni zéro), aucun marqueur `T_PAIE_ENVOI`, aucune synthèse de
+  succès au journal. Le message du serveur est affiché tel quel par la page Heures supplémentaires. Un département ou une plage de matricules sans ligne est refusé même si
+  le reste de la base en a. Avec au moins une ligne dans la sélection, la remise à 0 des autres salariés du périmètre s'applique comme décrit ci-dessus.
   **Avertissement** : en STANDARD, si le numéro de salarié SAGE d'un salarié sans valeur est introuvable (lecture des salariés SAGE impossible, liste
   vide, salarié absent), l'envoi des salariés avec valeurs n'est pas bloqué, mais le message de fin dit « N salarié(s) sans valeur n'ont PAS été remis à 0 ...
   leurs anciens cumuls restent dans SAGE » et la synthèse du journal `SYNC_PAIE` porte `AVERTISSEMENT SalariésNonRemisÀ0=N` (et `SalariésRemisÀ0=N`).

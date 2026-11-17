@@ -57,4 +57,9 @@ describe('error.logic', () => {
     expect(isBaseAccessDenied({ status: 403, error: { error: 'Cette opération est réservée aux administrateurs.' } })).toBe(false);
     expect(isBaseAccessDenied({ status: 401, error: { error: BASE_ACCESS_DENIED_MESSAGE } })).toBe(false);
   });
+
+  it('le refus d’un envoi sans heure calculée (400) est affiché tel quel, sans message interne', () => {
+    const refus = "Aucune heure calculée sur cette période pour cette sélection : lancez le calcul avant d'envoyer à la paie.";
+    expect(errorMessage({ status: 400, error: { success: false, error: refus } })).toBe(refus);
+  });
 });

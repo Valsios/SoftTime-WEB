@@ -45,6 +45,13 @@ public sealed class OvertimePayrollSyncService : IOvertimePayrollSyncService
         await SyncPayrollAsync(request, ct);
     }
 
+    /// <summary>Refus d'un envoi dont la sélection n'a aucune ligne de valeurs calculée (STANDARD et AUTRE).</summary>
+    public const string AucuneHeureCalculee =
+        "Aucune heure calculée sur cette période pour cette sélection : lancez le calcul avant d'envoyer à la paie.";
+
+    private static bool SelectionAvecFiltreMatricule(PeriodRequest request) =>
+        !string.IsNullOrEmpty(request.MatriculeFrom) || !string.IsNullOrEmpty(request.MatriculeTo);
+
     // Ecriture de paie unifiee : le resolveur choisit le writer STANDARD (T_CUMSAL) ou AUTRE (T_PAIE_ECRITURE).
     public async Task<PayrollWriteResultDto> SyncPayrollAsync(PeriodRequest request, CancellationToken ct = default)
     {
@@ -64,6 +71,14 @@ public sealed class OvertimePayrollSyncService : IOvertimePayrollSyncService
             var targetMatricules = cards.Select(c => c.SageMatricule).Where(m => !string.IsNullOrEmpty(m)).ToHashSet(StringComparer.OrdinalIgnoreCase);
             rows = rows.Where(h => h.Matricule != null && targetMatricules.Contains(h.Matricule)).ToList();
         }
+
+        // Garde : une sélection sans AUCUNE ligne calculée (période mal saisie, calcul oublié) remettrait tout son
+        // périmètre à 0 dans la paie. Refus avant toute écriture : ni valeur, ni marqueur d'envoi, ni synthèse de succès.
+        var dansLaSelection = SelectionAvecFiltreMatricule(request)
+            ? rows.Where(h => cards.Any(c => MatriculeIdentity.MemeSalarie(c.SageMatricule, h.Matricule))).ToList()
+            : rows;
+        if (dansLaSelection.Count == 0)
+            throw new DomainException(AucuneHeureCalculee);
 
         var dtos = rows
             .Select(h => new HsExoDto(h.Oid, h.Matricule, h.NumSal, h.Exo130, h.Exo150, h.I130, h.I150,

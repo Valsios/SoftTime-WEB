@@ -24,12 +24,14 @@ public class PayrollResetPerimeterTests
     private sealed class CapturingWriter : IPayrollWriter
     {
         public List<HsExoDto> Recues { get; private set; } = new();
+        public int Appels { get; private set; }
         public bool CanHandle(BddSage database) => true;
         public Task<PayrollWriteResultDto> ValidateAsync(BddSage database, IReadOnlyList<HsExoDto> rows, CancellationToken ct = default)
             => Task.FromResult(new PayrollWriteResultDto("SAGE_TEST", "STANDARD", 0, 0, "ok"));
 
         public Task<PayrollWriteResultDto> WriteAsync(BddSage database, IReadOnlyList<HsExoDto> rows, PayrollSyncContext auditContext, CancellationToken ct = default)
         {
+            Appels++;
             Recues = rows.ToList();
             return Task.FromResult(new PayrollWriteResultDto("SAGE_TEST", "STANDARD", rows.Count, 0, "ok"));
         }
@@ -42,9 +44,9 @@ public class PayrollResetPerimeterTests
         public CapturingWriter Writer { get; } = new();
         public OvertimeServices Service { get; }
 
-        public Contexte(IExternalSourceService? source = null)
+        public Contexte(IExternalSourceService? source = null, string typeBase = "STANDARD")
         {
-            Uow.Get<BddSage>().Items.Add(new BddSage { Id = 1, NomBd = "SAGE_TEST", TypeBase = "STANDARD" });
+            Uow.Get<BddSage>().Items.Add(new BddSage { Id = 1, NomBd = "SAGE_TEST", TypeBase = typeBase });
             Carte(1, "04634", "BR704");
             Carte(2, "04700", "BR704");
             Carte(3, "09999", "AUTRE_DEPT");
@@ -86,6 +88,7 @@ public class PayrollResetPerimeterTests
     public async Task EmployeeOutsideTheDepartment_IsNotTouched()
     {
         var c = new Contexte();
+        c.Ligne("04634", 101, 9m);
 
         await c.Envoyer("BR704");
 
@@ -96,6 +99,7 @@ public class PayrollResetPerimeterTests
     public async Task EmployeeOutsideTheMatriculeRange_IsNotTouched()
     {
         var c = new Contexte();
+        c.Ligne("04634", 101, 9m);
 
         await c.Envoyer(de: "04600", a: "04650");
 
@@ -106,11 +110,13 @@ public class PayrollResetPerimeterTests
     public async Task RowOfAnotherPeriod_DoesNotCountAsAValueRow()
     {
         var c = new Contexte();
+        c.Ligne("04700", 102, 4m);
         c.Uow.Get<HsExoImp>().Items.Add(new HsExoImp { Oid = 50, Matricule = "04634", NumSal = 101, Nuit = 5m, PeriodeDebut = Debut.AddDays(-7), PeriodeFin = Fin.AddDays(-7), BddSage = "SAGE_TEST" });
 
         await c.Envoyer("BR704");
 
-        c.Writer.Recues.Should().OnlyContain(r => r.SansValeur);
+        c.Writer.Recues.Single(r => r.Matricule == "04634").SansValeur.Should().BeTrue();
+        c.Writer.Recues.Single(r => r.Matricule == "04700").SansValeur.Should().BeFalse();
     }
 
     [Fact]
@@ -118,6 +124,7 @@ public class PayrollResetPerimeterTests
     {
         var c = new Contexte();
         c.Source.Employees.RemoveAll(e => e.Matricule == "04700");
+        c.Ligne("04634", 101, 9m);
 
         await c.Envoyer("BR704");
 
@@ -143,10 +150,77 @@ public class PayrollResetPerimeterTests
     {
         var c = new Contexte();
         c.Source.Employees.Clear();
+        c.Ligne("04634", 101, 9m);
 
         await c.Envoyer("BR704");
 
-        c.Writer.Recues.Should().OnlyContain(r => r.SansValeur && r.NumSal == null);
+        c.Writer.Recues.Where(r => r.SansValeur).Should().OnlyContain(r => r.NumSal == null).And.NotBeEmpty();
+    }
+
+    // ---------- Refus d'une sélection sans aucune heure calculée ----------
+
+    [Theory]
+    [InlineData("STANDARD")]
+    [InlineData("AUTRE")]
+    public async Task PeriodWithoutAnyRow_IsRefused_BeforeAnyWrite(string typeBase)
+    {
+        var c = new Contexte(typeBase: typeBase);
+
+        var act = () => c.Envoyer("BR704");
+
+        (await act.Should().ThrowAsync<DomainException>())
+            .WithMessage("Aucune heure calculée sur cette période pour cette sélection : lancez le calcul avant d'envoyer à la paie.");
+        c.Writer.Appels.Should().Be(0, "ni valeur, ni zéro, ni marqueur d'envoi, ni synthèse de succès");
+    }
+
+    [Fact]
+    public async Task PeriodWithoutAnyRow_IsRefused_ForTheWholeBaseToo()
+    {
+        var c = new Contexte();
+
+        var act = () => c.Envoyer();
+
+        await act.Should().ThrowAsync<DomainException>().WithMessage(SoftTime.Infrastructure.Services.Overtime.OvertimePayrollSyncService.AucuneHeureCalculee);
+        c.Writer.Appels.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task DepartmentWithoutRow_IsRefused_EvenThoughTheWholeBaseWouldBeAccepted()
+    {
+        var c = new Contexte();
+        c.Ligne("09999", 103, 5m);
+
+        await c.Envoyer();                                  // base entière : une ligne, acceptée
+        c.Writer.Appels.Should().Be(1);
+
+        var act = () => c.Envoyer("BR704");                 // département sans ligne : refusé
+        await act.Should().ThrowAsync<DomainException>().WithMessage(SoftTime.Infrastructure.Services.Overtime.OvertimePayrollSyncService.AucuneHeureCalculee);
+        c.Writer.Appels.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task MatriculeRangeWithoutRow_IsRefused_EvenThoughThePeriodHasRows()
+    {
+        var c = new Contexte();
+        c.Ligne("04634", 101, 9m);
+
+        var act = () => c.Envoyer(de: "04700", a: "04800");
+
+        await act.Should().ThrowAsync<DomainException>().WithMessage(SoftTime.Infrastructure.Services.Overtime.OvertimePayrollSyncService.AucuneHeureCalculee);
+        c.Writer.Appels.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task PeriodWithAtLeastOneRow_IsAccepted_AndResetsTheOthers()
+    {
+        var c = new Contexte();
+        c.Ligne("04634", 101, 9m);
+
+        var resultat = await c.Envoyer("BR704");
+
+        c.Writer.Appels.Should().Be(1);
+        c.Writer.Recues.Should().HaveCount(2).And.ContainSingle(r => r.SansValeur && r.Matricule == "04700");
+        resultat.Should().NotBeNull();
     }
 
     [Fact]
