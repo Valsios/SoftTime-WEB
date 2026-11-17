@@ -1,4 +1,5 @@
 import { DatePipe } from '@angular/common';
+import { firstValueFrom } from 'rxjs';
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
@@ -9,12 +10,7 @@ import { Column, DataTable, DataTableCell, PageHeader, SoftButton, SoftCard, Sof
 import { asRow, fmtDate, isMaxOneMonth } from '../../shared/utils/date';
 import { SessionStore } from '../../core/session.store';
 import { PayrollVariablesService } from '../../shared/services/payroll-variables.service';
-import { ACTIVES_PAR_DEFAUT, colonnesNonEnvoyees, libelleColonne, NON_ENVOYEE } from '../params/payroll-variables.logic';
-
-/** Précisé avant l'envoi : les salariés du périmètre sans valeur sont remis à 0 pour les variables envoyées. */
-export const REMISE_A_ZERO =
-  'Les salariés de la sélection sans valeur sur la période seront remis à 0 pour les variables envoyées à la paie '
-  + "(une variable non envoyée n'est jamais modifiée).";
+import { ACTIVES_PAR_DEFAUT, colonnesNonEnvoyees, libelleColonne, NON_ENVOYEE, questionEnvoi } from '../params/payroll-variables.logic';
 
 @Component({
   selector: 'app-overtime',
@@ -99,6 +95,8 @@ export class OvertimePage implements OnInit {
   protected readonly nonEnvoyeeLabel = NON_ENVOYEE;
   /** Variables envoyées à la paie pour la base active ; sans réponse, comportement d'origine (7 HS). */
   readonly actives = signal<readonly string[]>(ACTIVES_PAR_DEFAUT);
+  /** Option de la base : l'envoi remet à 0 les salariés sans valeur (vraie par défaut, comme sans réponse du serveur). */
+  readonly remiseAZero = signal(true);
   readonly nonEnvoyeesSet = computed(() => colonnesNonEnvoyees(this.actives()));
   readonly nonEnvoyees = computed(() => [...this.nonEnvoyeesSet()]);
   /** Colonnes affichées : la mention « non envoyée à la paie » est ajoutée à l'en-tête, la colonne reste. */
@@ -138,8 +136,8 @@ export class OvertimePage implements OnInit {
 
   ngOnInit(): void {
     this.variables.actives().subscribe({
-      next: (r) => this.actives.set(r.actives),
-      error: () => this.actives.set(ACTIVES_PAR_DEFAUT),
+      next: (r) => { this.actives.set(r.actives); this.remiseAZero.set(r.remiseAZeroSansValeur ?? true); },
+      error: () => { this.actives.set(ACTIVES_PAR_DEFAUT); this.remiseAZero.set(true); },
     });
   }
 
@@ -230,9 +228,12 @@ export class OvertimePage implements OnInit {
   async syncPayroll(): Promise<void> {
     if (this.busy() || !this.validatePeriod(this.lastFilter)) return;
     const database = this.currentDatabase()?.nomBd ?? this.session.activeSageDb() ?? 'la base active';
-    const question = (this.isStandard()
-      ? 'Pousser les HS vers SAGE (T_CUMSAL) ?'
-      : `Écrire les HS dans la base ${database} ?`) + ' ' + REMISE_A_ZERO;
+    // Option relue au moment de confirmer : le texte annonce la remise à 0 seulement si elle est active pour la base (elle a
+    // pu être changée depuis le chargement de la page) ; sans réponse, la dernière valeur connue.
+    const remiseAZero = await firstValueFrom(this.variables.actives())
+      .then((r) => r.remiseAZeroSansValeur ?? true, () => this.remiseAZero());
+    this.remiseAZero.set(remiseAZero);
+    const question = questionEnvoi(this.isStandard(), database, remiseAZero);
     if (!(await this.confirm.ask(question))) return;
     this.busy.set(true);
     this.svc.syncPayroll(this.lastFilter).subscribe({

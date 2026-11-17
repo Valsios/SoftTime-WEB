@@ -10,6 +10,7 @@ import { SoftBadge, SoftButton, SoftCard } from '../../shared/components';
 import { PayrollDestinations } from './payroll-destinations';
 import {
   aCodePropre,
+  changementOption,
   changements,
   estSansEnvoi,
   NON_ENVOYEE,
@@ -161,6 +162,20 @@ import {
             </tbody>
           </table>
         </div>
+        <div class="pv-option" [class.pv-off]="!remiseAZero()">
+          <label class="pv-option__row">
+            <span class="soft-toggle pv-toggle">
+              <input type="checkbox" [checked]="remiseAZero()" [disabled]="c.moisEnvoye || saving()"
+                (change)="basculerRemiseAZero($any($event.target).checked)" />
+              <span class="soft-toggle__track"><span class="soft-toggle__thumb"></span></span>
+            </span>
+            <span class="pv-option__label">Remettre à 0 les salariés sans valeur à l'envoi</span>
+          </label>
+          <div class="soft-field__hint pv-option__hint">
+            Évite qu'un ancien cumul reste dans la paie quand un salarié n'a plus d'heures. À décocher si quelqu'un saisit ces codes à la main dans la paie.
+          </div>
+          @if (c.moisEnvoye) { <div class="soft-field__hint pv-option__hint">Mois déjà envoyé : modification impossible.</div> }
+        </div>
         <p class="pv-note">
           Retard est envoyé en heures, avec la valeur affichée dans la page Heures supplémentaires
           ({{ autre() ? 'dans sa colonne de destination' : 'dans le code de paie choisi' }}).
@@ -199,6 +214,13 @@ import {
     .pv-field--unit { min-width: 140px; max-width: 180px; }
     .pv-table select:disabled { background: var(--surface-dark); color: var(--text-muted); cursor: not-allowed; }
     .pv-toggle { margin-top: 10px; }
+    .pv-option { margin-top: var(--space-md); padding: var(--space-md); border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+      background: var(--app-surface); }
+    .pv-option__row { display: flex; align-items: center; gap: var(--space-md); cursor: pointer; }
+    .pv-option__row .pv-toggle { margin-top: 0; flex: 0 0 auto; }
+    .pv-option__label { font-weight: 600; color: var(--app-text-strong); font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+    .pv-option__hint { margin: var(--space-xs) 0 0 calc(44px + var(--space-md)); }
+    .pv-option:has(input:disabled) .pv-option__row { cursor: not-allowed; }
     .pv-toggle:focus-within .soft-toggle__track { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
     .pv-toggle:has(input:disabled) { cursor: not-allowed; }
     .pv-toggle input:disabled + .soft-toggle__track { opacity: 0.5; }
@@ -223,6 +245,7 @@ import {
       .pv-table tbody td:has(.pv-field) { grid-template-columns: minmax(0, 1fr); }
       .pv-table tbody td:has(.pv-field) .pv-hint { grid-column: 1; }
       .pv-toggle { margin-top: 0; }
+      .pv-option__hint { margin-left: 0; }
       .pv-readonly { line-height: 1.5; }
       .pv-field, .pv-field--unit { min-width: 0; max-width: none; width: 100%; }
     }
@@ -239,6 +262,8 @@ export class PayrollVariablesCard implements OnInit {
   readonly saving = signal(false);
   readonly config = signal<PayrollVariablesConfig | null>(null);
   readonly brouillon = signal<PayrollVariable[]>([]);
+  /** Brouillon de l'option « remettre à 0 les salariés sans valeur à l'envoi » (vraie par défaut). */
+  readonly remiseAZero = signal(true);
   /** Erreurs durables : visibles jusqu'à la prochaine modification, annulation ou tentative d'enregistrement. */
   readonly erreurs = signal<string[]>([]);
 
@@ -246,7 +271,7 @@ export class PayrollVariablesCard implements OnInit {
   readonly autre = computed(() => this.config()?.typeBase === 'AUTRE');
   readonly modifie = computed(() => {
     const c = this.config();
-    return !!c && changements(c.variables, this.brouillon()).length > 0;
+    return !!c && (changements(c.variables, this.brouillon()).length > 0 || this.remiseAZero() !== (c.remiseAZeroSansValeur ?? true));
   });
 
   /** Même règle que le bouton « Modifier » de la base active (le serveur vérifie de nouveau). */
@@ -320,6 +345,12 @@ export class PayrollVariablesCard implements OnInit {
     const c = this.config();
     if (!c) return;
     this.brouillon.set(c.variables.map((v) => ({ ...v })));
+    this.remiseAZero.set(c.remiseAZeroSansValeur ?? true);
+    this.erreurs.set([]);
+  }
+
+  basculerRemiseAZero(actif: boolean): void {
+    this.remiseAZero.set(actif);
     this.erreurs.set([]);
   }
 
@@ -329,12 +360,13 @@ export class PayrollVariablesCard implements OnInit {
     const erreurs = validerBrouillon(this.brouillon(), this.autre());
     this.erreurs.set(erreurs);
     if (erreurs.length) return;
-    const liste = changements(c.variables, this.brouillon());
+    const option = changementOption(c.remiseAZeroSansValeur ?? true, this.remiseAZero());
+    const liste = [...changements(c.variables, this.brouillon()), ...(option ? [option] : [])];
     if (!liste.length) return;
     const question = `Enregistrer pour la base ${c.base} : ${liste.join(' ; ')} ? Le changement s'appliquera au prochain envoi en paie.`;
     if (!(await this.confirm.ask(question, 'Variables envoyées à la paie', 'Enregistrer'))) return;
     this.saving.set(true);
-    this.svc.save(versEnregistrement(this.brouillon())).subscribe({
+    this.svc.save(versEnregistrement(this.brouillon()), this.remiseAZero()).subscribe({
       next: (resultat) => {
         this.saving.set(false);
         this.appliquer(resultat);
@@ -350,6 +382,7 @@ export class PayrollVariablesCard implements OnInit {
   private appliquer(c: PayrollVariablesConfig): void {
     this.config.set(c);
     this.brouillon.set(c.variables.map((v) => ({ ...v })));
+    this.remiseAZero.set(c.remiseAZeroSansValeur ?? true);
     this.loading.set(false);
     this.erreurs.set([]);
   }

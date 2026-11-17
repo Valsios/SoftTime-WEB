@@ -30,6 +30,8 @@ export interface PayrollVariablesConfig {
   codesPaie?: SageConstantOption[];
   /** Base SAGE : message si les codes n'ont pas pu être lus. */
   avertissementCodes?: string | null;
+  /** Option de la base : l'envoi remet à 0 les salariés du périmètre sans valeur. Absent : vrai (défaut). */
+  remiseAZeroSansValeur?: boolean;
 }
 
 export interface PayrollVariableSave {
@@ -44,6 +46,8 @@ export interface PayrollVariablesActive {
   base: string;
   /** Variables réellement envoyées à la paie (cochées et envoyables). */
   actives: string[];
+  /** Option de la base : l'envoi remet à 0 les salariés sans valeur (annoncé dans la confirmation de l'envoi). Absent : vrai. */
+  remiseAZeroSansValeur?: boolean;
 }
 
 /** Colonne d'une table de la base de paie d'une autre base. */

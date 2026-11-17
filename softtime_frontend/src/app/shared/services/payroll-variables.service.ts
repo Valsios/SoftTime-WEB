@@ -20,9 +20,12 @@ export class PayrollVariablesService extends ApiService {
     return this.http.get<PayrollVariablesConfig>(this.url('/api/v1/payroll-variables'));
   }
 
-  /** Enregistre les neuf variables ; refusé (409) si le mois en cours a déjà été envoyé en paie. */
-  save(variables: PayrollVariableSave[]): Observable<PayrollVariablesConfig> {
-    return this.http.put<PayrollVariablesConfig>(this.url('/api/v1/payroll-variables'), variables);
+  /**
+   * Enregistre les neuf variables et l'option « remettre à 0 les salariés sans valeur à l'envoi » en un seul appel ;
+   * refusé (409) si le mois en cours a déjà été envoyé en paie.
+   */
+  save(variables: PayrollVariableSave[], remiseAZeroSansValeur?: boolean): Observable<PayrollVariablesConfig> {
+    return this.http.put<PayrollVariablesConfig>(this.url('/api/v1/payroll-variables'), { variables, remiseAZeroSansValeur });
   }
 
   /** Noms des variables envoyées (silencieux : un échec laisse la page Heures supplémentaires inchangée). */

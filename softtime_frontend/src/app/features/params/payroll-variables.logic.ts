@@ -148,6 +148,25 @@ export function changements(initiales: PayrollVariable[], brouillon: PayrollVari
   return lignes;
 }
 
+/** Texte de la confirmation d'enregistrement pour l'option de la base (null : option inchangée). */
+export function changementOption(avant: boolean, apres: boolean): string | null {
+  return avant === apres ? null : `Remise à 0 des salariés sans valeur : ${apres ? 'activée' : 'désactivée'}`;
+}
+
+/** Précisé avant l'envoi : les salariés du périmètre sans valeur sont remis à 0 pour les variables envoyées. */
+export const REMISE_A_ZERO =
+  'Les salariés de la sélection sans valeur sur la période seront remis à 0 pour les variables envoyées à la paie '
+  + "(une variable non envoyée n'est jamais modifiée).";
+
+/**
+ * Question de « Synchroniser vers SAGE / la base » : la remise à 0 n'est annoncée que si l'option de la base est cochée
+ * (option décochée : aucun salarié sans valeur n'est touché, rien à annoncer).
+ */
+export function questionEnvoi(standard: boolean, base: string, remiseAZero: boolean): string {
+  const question = standard ? 'Pousser les HS vers SAGE (T_CUMSAL) ?' : `Écrire les HS dans la base ${base} ?`;
+  return remiseAZero ? `${question} ${REMISE_A_ZERO}` : question;
+}
+
 export function uniteLibelle(unite: string | null): string {
   return unite === 'H' ? 'heures' : unite === 'J' ? 'jours' : '(vide)';
 }
