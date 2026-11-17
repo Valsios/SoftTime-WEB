@@ -84,9 +84,16 @@ public sealed class OtherPayrollWriter : IPayrollWriter
         await db.BeginTransactionAsync(ct);
         var categoryCounts = PayrollWritingConfiguration.CompteursParCategorie(selection);
         var updates = 0;
+        var ecrits = 0;
+        var remisAZero = 0;
         try
         {
             foreach (var row in rows)
+            {
+                // Salarié sans valeur absent de la table de paie : ignoré (aucune ligne n'est créée, pas d'erreur).
+                if (row.SansValeur && plan.IgnoredMatricules.Contains(row.Matricule!.Trim()))
+                    continue;
+                if (row.SansValeur) remisAZero++; else ecrits++;
             foreach (var category in categories)
             {
                 var affected = await db.ExecuteUpdateAsync(UpdateSql(plan, category), OvertimePayrollCategoryMapper.ValueFor(category, row), row.Matricule!.Trim(), ct);
@@ -95,16 +102,25 @@ public sealed class OtherPayrollWriter : IPayrollWriter
                 updates++;
                 categoryCounts[category] += affected;
             }
+            }
             await ValiderAvecMarqueurAsync(db, database, auditContext, updates, ct);
-            await WriteAuditAsync(database, plan, auditContext, new PayrollSyncOutcome(rows.Count, categoryCounts.Values.Sum(), 0, categoryCounts, "SUCCES"));
-            return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "AUTRE", rows.Count, updates,
-                "Synchronisation des heures supplémentaires terminée.");
+            await WriteAuditAsync(database, plan, auditContext, new PayrollSyncOutcome(ecrits + remisAZero, categoryCounts.Values.Sum(), 0, categoryCounts, "SUCCES"));
+            var message = "Synchronisation des heures supplémentaires terminée.";
+            if (remisAZero > 0)
+                message += $" {remisAZero} salarié(s) sans valeur sur la période ont été remis à 0 pour les variables envoyées.";
+            if (plan.IgnoredMatricules.Count > 0)
+                message += $" {plan.IgnoredMatricules.Count} salarié(s) sans valeur absent(s) de la table de paie n'ont pas été touchés.";
+            return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "AUTRE", ecrits, updates, message)
+            {
+                EmployeesReset = remisAZero,
+                UpdatesWithoutRow = plan.IgnoredMatricules.Count
+            };
         }
         catch
         {
             await RollbackQuietlyAsync(db);
             await QuietlyAsync(
-                () => WriteAuditAsync(database, plan, auditContext, new PayrollSyncOutcome(rows.Count, 0, updates, categoryCounts, "ECHEC")),
+                () => WriteAuditAsync(database, plan, auditContext, new PayrollSyncOutcome(ecrits + remisAZero, 0, updates, categoryCounts, "ECHEC")),
                 "Impossible d'écrire la synthèse d'échec de synchronisation de paie AUTRE.");
             throw;
         }
@@ -173,8 +189,8 @@ public sealed class OtherPayrollWriter : IPayrollWriter
             throw new DomainException($"La table {plan.Table} n'existe pas.");
         ValidateColumns(plan, columns);
         ValidateValues(rows, plan, columns);
-        await ValidateMatriculesAsync(db, plan, rows, ct);
-        return plan;
+        var ignores = await ValidateMatriculesAsync(db, plan, rows, ct);
+        return plan with { IgnoredMatricules = ignores };
     }
 
     internal static WritePlan BuildPlan(string? database, IReadOnlyList<PaieEcriture> configs)
@@ -241,17 +257,29 @@ public sealed class OtherPayrollWriter : IPayrollWriter
 
     private static int GetScale(decimal value) => (decimal.GetBits(value)[3] >> 16) & 0x7F;
 
-    private static async Task ValidateMatriculesAsync(IOtherPayrollDatabase db, WritePlan plan, IReadOnlyList<HsExoDto> rows, CancellationToken ct)
+    /// <summary>
+    /// Une ligne de paie exactement par matricule. Exception : un salarié sans valeur (remise à 0) absent de la table
+    /// ou présent plusieurs fois n'est pas une erreur, il est ignoré ; son matricule est rendu à l'appelant.
+    /// </summary>
+    private static async Task<IReadOnlySet<string>> ValidateMatriculesAsync(IOtherPayrollDatabase db, WritePlan plan, IReadOnlyList<HsExoDto> rows, CancellationToken ct)
     {
         var sql = CountSql(plan);
+        var ignores = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var row in rows)
         {
             var count = await db.CountAsync(sql, row.Matricule!.Trim(), ct);
+            if (row.SansValeur)
+            {
+                if (count != 1)
+                    ignores.Add(row.Matricule!.Trim());
+                continue;
+            }
             if (count == 0)
                 throw new DomainException($"Aucune ligne de paie trouvée pour le matricule {row.Matricule}.");
             if (count > 1)
                 throw new DomainException($"Plusieurs lignes de paie correspondent au matricule {row.Matricule}.");
         }
+        return ignores;
     }
 
     /// <summary>Commande historique de comptage d'un matricule (inchangée).</summary>
@@ -271,5 +299,9 @@ public sealed class OtherPayrollWriter : IPayrollWriter
         return $"UPDATE {table} SET {valueColumn} = @value WHERE {matriculeColumn} = @matricule";
     }
 
-    internal sealed record WritePlan(string Database, string Schema, string Table, string MatriculeColumn, IReadOnlyDictionary<string, string> ValueColumns);
+    internal sealed record WritePlan(string Database, string Schema, string Table, string MatriculeColumn, IReadOnlyDictionary<string, string> ValueColumns)
+    {
+        /// <summary>Matricules sans valeur à ne pas toucher (absents de la table de paie).</summary>
+        public IReadOnlySet<string> IgnoredMatricules { get; init; } = new HashSet<string>();
+    }
 }

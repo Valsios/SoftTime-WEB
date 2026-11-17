@@ -4,4 +4,7 @@ public record PayrollWriteResultDto(string Database, string TypeBase, int Employ
 {
     /// <summary>STANDARD : mises à jour T_CUMSAL qui n'ont modifié aucune ligne (cumul absent dans SAGE).</summary>
     public int UpdatesWithoutRow { get; init; }
+
+    /// <summary>Salariés du périmètre sans valeur dont les variables cochées ont été remises à 0 (inclus dans le total, pas dans <see cref="PayrollWriteResultDto.EmployeesUpdated"/>).</summary>
+    public int EmployeesReset { get; init; }
 }

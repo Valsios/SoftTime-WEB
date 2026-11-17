@@ -375,10 +375,22 @@ Nuit, Dimanche, Retard, Absence) restent calculées et affichées ; seul l'envoi
 
 - **Valeurs par défaut = comportement d'origine** : les sept variables d'heures supplémentaires cochées, Retard et Absence décochées. Une base
   sans configuration (aucune ligne dans `T_PAIE_VARIABLE`) se comporte exactement comme avant (mêmes commandes SQL, mêmes valeurs, même ordre).
-- **Variable décochée = non écrite** : ni validée, ni écrite, ni comptée comme manquante. Aucune mise à 0 : la valeur déjà présente en paie
+- **Variable décochée = non écrite** : ni validée, ni écrite, ni mise à 0, ni comptée comme manquante : la valeur déjà présente en paie
   (`T_CUMSAL` en SAGE, colonne de la table d'écriture en autre base) n'est pas touchée. En autre base, une catégorie décochée n'a pas besoin de
   ligne dans `T_PAIE_ECRITURE` ; l'écriture reste transactionnelle avec son préflight. Si aucune variable d'heures supplémentaires n'est cochée,
   rien n'est écrit.
+- **Remise à 0 des salariés sans valeur (C2b)** : l'envoi écrit **0** pour chaque variable **cochée** des salariés du périmètre qui n'ont plus de
+  ligne de valeurs sur la période (exemple : 9 h de Nuit envoyées, puis la Nuit retombe à 0 après correction de pointage : le renvoi remet 0 dans la
+  paie au lieu de laisser 9 h). Le **périmètre** est celui de la requête de synchronisation : cartes de la base, filtrées par département et plage de
+  matricules ; un salarié hors périmètre n'est jamais touché. Les salariés avec valeurs sont écrits comme avant ; l'envoi est idempotent.
+  STANDARD : sur les lignes `T_CUMSAL` existantes seulement (le compteur « mise(s) à jour sans ligne » compte aussi les cumuls absents des salariés
+  remis à 0) ; un salarié absent de SAGE n'est pas touché. Autre base : mêmes colonnes, même préflight, même transaction ; un salarié sans valeur
+  **absent de la table de paie** (ou présent plusieurs fois) est ignoré sans erreur et signalé dans le message : aucune ligne n'est créée.
+  Le message de fin et le résultat distinguent les salariés écrits des salariés remis à 0 ; la synthèse du journal `SYNC_PAIE` et la ligne
+  `T_PAIE_ENVOI` comptent des **catégories** mises à jour (valeurs et zéros ensemble). La page Heures supplémentaires l'annonce dans la
+  confirmation de l'envoi.
+  **Hypothèse à confirmer par le RH** : personne ne saisit à la main ces mêmes codes (HS01 à HS07, code de Retard) dans SAGE. Sinon, le 0 écraserait
+  cette saisie pour les salariés sans valeur.
 - **Écran** : carte « Variables envoyées à la paie » sous la liste des bases SAGE, pour la **base active**. Base SAGE : codes HS01 à HS07 en lecture
   seule (écran Codes constantes), code de paie et unité (heures ou jours) modifiables pour Retard et Absence. Autre base : colonnes de
   `T_PAIE_ECRITURE` en lecture seule pour les heures supplémentaires, colonne cible (liste lue dans la table d'écriture configurée) et unité pour

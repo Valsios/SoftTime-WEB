@@ -26,7 +26,7 @@ internal sealed class OvertimeServices
         WeeklyValidation = new WeeklyValidationService(uow, tenant, context);
         ExoImpo = new OvertimeExoImpoService(uow, tenant, externalSource, context);
         Detail = new OvertimeDetailService(uow, tenant, history, context);
-        PayrollSync = new OvertimePayrollSyncService(uow, tenant, payrollWriters, user, context);
+        PayrollSync = new OvertimePayrollSyncService(uow, tenant, payrollWriters, user, context, externalSource);
     }
 
     public WeeklyValidationService WeeklyValidation { get; }

@@ -11,6 +11,11 @@ import { SessionStore } from '../../core/session.store';
 import { PayrollVariablesService } from '../../shared/services/payroll-variables.service';
 import { ACTIVES_PAR_DEFAUT, colonnesNonEnvoyees, libelleColonne, NON_ENVOYEE } from '../params/payroll-variables.logic';
 
+/** Précisé avant l'envoi : les salariés du périmètre sans valeur sont remis à 0 pour les variables envoyées. */
+export const REMISE_A_ZERO =
+  'Les salariés de la sélection sans valeur sur la période seront remis à 0 pour les variables envoyées à la paie '
+  + '(une variable non envoyée n'est jamais modifiée).';
+
 @Component({
   selector: 'app-overtime',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -225,9 +230,9 @@ export class OvertimePage implements OnInit {
   async syncPayroll(): Promise<void> {
     if (this.busy() || !this.validatePeriod(this.lastFilter)) return;
     const database = this.currentDatabase()?.nomBd ?? this.session.activeSageDb() ?? 'la base active';
-    const question = this.isStandard()
+    const question = (this.isStandard()
       ? 'Pousser les HS vers SAGE (T_CUMSAL) ?'
-      : `Écrire les HS dans la base ${database} ?`;
+      : `Écrire les HS dans la base ${database} ?`) + ' ' + REMISE_A_ZERO;
     if (!(await this.confirm.ask(question))) return;
     this.busy.set(true);
     this.svc.syncPayroll(this.lastFilter).subscribe({

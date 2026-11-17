@@ -131,10 +131,10 @@ public class PayrollVariableWritersTests
     }
 
     [Fact]
-    public async Task StandardWrite_EmployeeWithoutHsExoRow_IsNotWritten_KnownStaleCumulDefect()
+    public async Task StandardWrite_RowsGivenToTheWriter_AreTheOnlyEmployeesTouched()
     {
-        // Défaut connu, documenté et non corrigé (lot C2) : un salarié sans ligne T_HSExoImp sur la période n'est pas
-        // écrit, son cumul (Retard compris) garde donc la valeur d'un envoi précédent au lieu d'être remis à zéro.
+        // Adapté à C2b : le rédacteur n'écrit que les lignes reçues. La remise à 0 d'un salarié sans ligne de valeurs
+        // passe par une ligne synthétique ajoutée par le service de synchronisation (voir PayrollResetPerimeterTests).
         var sage = new CapturingSagePayrollWriter();
         var selection = PayrollVariableSelection.Avec([PayrollVariableSelection.Retard])
             with { CodesPaie = new Dictionary<string, string> { [PayrollVariableSelection.Retard] = "RET01" } };
@@ -512,6 +512,144 @@ public class PayrollVariableWritersTests
 
         // Assert
         act.Should().ThrowExactly<DomainException>().WithMessage("La configuration d'écriture contient des catégories inconnues.");
+    }
+
+    // ---------- C2b : remise à zéro des salariés du périmètre sans valeur ----------
+
+    private static HsExoDto SansValeur(string matricule, int? numSal) =>
+        new(0, matricule, numSal, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m, 0m) { SansValeur = true };
+
+    [Fact]
+    public async Task StandardWrite_EmployeeWithoutValue_ZeroIsWrittenForEveryCheckedVariable()
+    {
+        var sage = new CapturingSagePayrollWriter();
+
+        var resultat = await new TestStandardWriter(sage, new NullAudit()).WriteAsync(Base(), [Ligne, SansValeur("MAT02", 102)], Contexte());
+
+        sage.Calls.Where(c => c.NumSal == 102).Should().Equal(
+            Enumerable.Range(1, 7).Select(op => (102, (short)op, 0m)));
+        resultat.EmployeesUpdated.Should().Be(1);
+        resultat.EmployeesReset.Should().Be(1);
+        resultat.CategoriesUpdated.Should().Be(14);
+        resultat.UpdatesWithoutRow.Should().Be(0);
+        resultat.Message.Should().Be("Synchronisation des heures supplémentaires vers SAGE terminée."
+            + " 1 salarié(s) sans valeur sur la période ont été remis à 0 pour les variables envoyées.");
+    }
+
+    [Fact]
+    public async Task StandardWrite_UncheckedVariable_IsNeverZeroed()
+    {
+        var sage = new CapturingSagePayrollWriter();
+        var writer = new TestStandardWriter(sage, new NullAudit(), new FixedVariableService(Sans(PayrollVariableSelection.Nuit)));
+
+        await writer.WriteAsync(Base(), [SansValeur("MAT02", 102)], Contexte());
+
+        sage.Calls.Select(c => c.Operand).Should().Equal((short)1, (short)2, (short)3, (short)4, (short)5, (short)6);
+    }
+
+    [Fact]
+    public async Task StandardWrite_ZeroedEmployeeWithoutCumul_IsCountedNotAnError()
+    {
+        var sage = new CapturingSagePayrollWriter(lignes: op => op == 7 ? 0 : 1);
+
+        var resultat = await new TestStandardWriter(sage, new NullAudit()).WriteAsync(Base(), [SansValeur("MAT02", 102)], Contexte());
+
+        resultat.UpdatesWithoutRow.Should().Be(1);
+        resultat.CategoriesUpdated.Should().Be(6);
+        resultat.Message.Should().Contain("1 mise(s) à jour n'ont modifié aucune ligne T_CUMSAL (cumul absent dans SAGE pour le salarié), dont 1 pour des salariés remis à 0");
+    }
+
+    [Fact]
+    public async Task StandardWrite_ZeroRowWithoutEmployeeNumber_IsNotTouched()
+    {
+        var sage = new CapturingSagePayrollWriter();
+
+        var resultat = await new TestStandardWriter(sage, new NullAudit()).WriteAsync(Base(), [SansValeur("INCONNU", null)], Contexte());
+
+        sage.Calls.Should().BeEmpty();
+        resultat.EmployeesReset.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task StandardWrite_SentTwice_GivesTheSameResult()
+    {
+        var premier = new CapturingSagePayrollWriter();
+        var second = new CapturingSagePayrollWriter();
+        HsExoDto[] lignes = [Ligne, SansValeur("MAT02", 102)];
+
+        var a = await new TestStandardWriter(premier, new NullAudit()).WriteAsync(Base(), lignes, Contexte());
+        var b = await new TestStandardWriter(second, new NullAudit()).WriteAsync(Base(), lignes, Contexte());
+
+        second.Calls.Should().Equal(premier.Calls);
+        b.Should().Be(a);
+    }
+
+    [Fact]
+    public async Task OtherWrite_EmployeeWithoutValue_ZeroIsWrittenInTheSameTransactionAfterThePreflight()
+    {
+        var (sut, db, journal, _) = Autre(selection: null);
+
+        var resultat = await sut.WriteAsync(BaseAutre(), [Ligne, SansValeur("MAT02", null)], Contexte());
+
+        db.Updates.Where(u => u.Matricule == "MAT02").Select(u => u.Value).Should().OnlyContain(v => v == 0m).And.HaveCount(7);
+        resultat.EmployeesUpdated.Should().Be(1);
+        resultat.EmployeesReset.Should().Be(1);
+        resultat.CategoriesUpdated.Should().Be(14);
+        journal.IndexOf("begin").Should().BeGreaterThan(journal.IndexOf("colonnes:dbo.PAIE_CUMULS"));
+        journal.Last().Should().Be("commit");
+        journal.Count(j => j == "begin").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task OtherWrite_UncheckedVariable_IsNeverZeroed()
+    {
+        var (sut, db, _, _) = Autre(Sans(PayrollVariableSelection.Nuit));
+
+        await sut.WriteAsync(BaseAutre(), [SansValeur("MAT02", null)], Contexte());
+
+        db.Updates.Should().HaveCount(6).And.NotContain(u => u.Sql.Contains("HeuresNuit"));
+    }
+
+    [Fact]
+    public async Task OtherWrite_ZeroedEmployeeAbsentFromThePayrollTable_IsSkippedWithoutError()
+    {
+        var (sut, db, _, envois) = Autre(selection: null);
+        db.LignesParMatricule = matricule => matricule == "ABSENT" ? 0 : 1;
+
+        var resultat = await sut.WriteAsync(BaseAutre(), [Ligne, SansValeur("ABSENT", null)], Contexte());
+
+        db.Updates.Should().OnlyContain(u => u.Matricule == "MAT01");
+        resultat.UpdatesWithoutRow.Should().Be(1);
+        resultat.EmployeesReset.Should().Be(0);
+        resultat.Message.Should().Contain("1 salarié(s) sans valeur absent(s) de la table de paie n'ont pas été touchés.");
+        envois.Envois.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task OtherWrite_ZeroUpdateMatchingNoRow_RollsBackEverything()
+    {
+        var (sut, db, journal, envois) = Autre(selection: null);
+        db.Affected = (_, matricule) => matricule == "MAT02" ? 0 : 1;
+
+        var act = () => sut.WriteAsync(BaseAutre(), [Ligne, SansValeur("MAT02", null)], Contexte());
+
+        await act.Should().ThrowAsync<DomainException>();
+        journal.Should().Contain("rollback").And.NotContain("commit");
+        envois.Envois.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task OtherWrite_SentTwice_GivesTheSameUpdates()
+    {
+        var (premier, db1, _, _) = Autre(selection: null);
+        var (second, db2, _, _) = Autre(selection: null);
+        HsExoDto[] lignes = [Ligne, SansValeur("MAT02", null)];
+
+        var a = await premier.WriteAsync(BaseAutre(), lignes, Contexte());
+        var b = await second.WriteAsync(BaseAutre(), lignes, Contexte());
+
+        db2.Updates.Should().Equal(db1.Updates);
+        b.Should().Be(a);
     }
 
     // ---------- Aides ----------

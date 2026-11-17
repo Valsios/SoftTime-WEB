@@ -66,6 +66,7 @@ public class StandardPayrollWriter : IPayrollWriter
         var categoryCounts = PayrollWritingConfiguration.CompteursParCategorie(input.Variables);
         var envoi = new SendMarker(_sendLog, database, auditContext);
         var sansLigne = 0;
+        var sansLigneRemisesAZero = 0;
         try
         {
             foreach (var hs in rows.Where(h => h.NumSal.HasValue))
@@ -75,7 +76,11 @@ public class StandardPayrollWriter : IPayrollWriter
                 {
                     categoryCounts[category] += count;
                     if (count == 0)
+                    {
                         sansLigne++;
+                        if (hs.SansValeur)
+                            sansLigneRemisesAZero++;
+                    }
                 }
                 // Marqueur posé dès la première ligne T_CUMSAL modifiée ; s'il ne peut pas l'être, l'envoi s'arrête.
                 await envoi.SignalerAsync(categoryCounts.Values.Sum(), ct);
@@ -97,16 +102,23 @@ public class StandardPayrollWriter : IPayrollWriter
             throw;
         }
 
-        var written = rows.Count(h => h.NumSal.HasValue);
+        // « Écrits » : salariés avec valeurs ; « remis à 0 » : salariés du périmètre sans ligne de valeurs.
+        var written = rows.Count(h => h.NumSal.HasValue && !h.SansValeur);
+        var remisAZero = rows.Count(h => h.NumSal.HasValue && h.SansValeur);
         await envoi.TerminerAsync("SUCCES", categoryCounts.Values.Sum());
-        await WriteAuditAsync(database, auditContext, new PayrollSyncOutcome(written, categoryCounts.Values.Sum(), 0, categoryCounts, "SUCCES"));
+        await WriteAuditAsync(database, auditContext, new PayrollSyncOutcome(written + remisAZero, categoryCounts.Values.Sum(), 0, categoryCounts, "SUCCES"));
         var message = "Synchronisation des heures supplémentaires vers SAGE terminée.";
+        if (remisAZero > 0)
+            message += $" {remisAZero} salarié(s) sans valeur sur la période ont été remis à 0 pour les variables envoyées.";
         if (sansLigne > 0)
             message += $" Attention : {sansLigne} mise(s) à jour n'ont modifié aucune ligne T_CUMSAL "
-                       + "(cumul absent dans SAGE pour le salarié) : vérifiez ces cumuls dans SAGE.";
+                       + "(cumul absent dans SAGE pour le salarié)"
+                       + (sansLigneRemisesAZero > 0 ? $", dont {sansLigneRemisesAZero} pour des salariés remis à 0" : string.Empty)
+                       + " : vérifiez ces cumuls dans SAGE.";
         return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "STANDARD", written, categoryCounts.Values.Sum(), message)
         {
-            UpdatesWithoutRow = sansLigne
+            UpdatesWithoutRow = sansLigne,
+            EmployeesReset = remisAZero
         };
     }
 
