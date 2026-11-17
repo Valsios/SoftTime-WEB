@@ -374,3 +374,55 @@ describe('Destinations dans la base de paie (autre base)', () => {
     expect(svc.saveDestinations).not.toHaveBeenCalled();
   });
 });
+
+/** Point 2 (essai à l'écran des lots C1/C2) : le code d'une variable décochée n'est jamais effacé par la carte. */
+describe('Carte « Variables envoyées à la paie » : décocher Retard conserve son code', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const CODES = [{ code: 'HS01', intitule: 'HS 130' }, { code: 'RET01', intitule: 'Retard' }];
+  const retardActif = () => config({
+    parDefaut: false,
+    codesPaie: CODES,
+    variables: Object.keys(LIBELLES).map((n) => n === 'Retard' ? variable(n, { actif: true, codePaie: 'RET01', unite: 'H' }) : variable(n)),
+  });
+  const retardDecoche = () => config({
+    parDefaut: false,
+    codesPaie: CODES,
+    variables: Object.keys(LIBELLES).map((n) => n === 'Retard' ? variable(n, { actif: false, codePaie: 'RET01', unite: 'H' }) : variable(n)),
+  });
+
+  it('décochage, enregistrement, rechargement : le PUT porte RET01 et le brouillon le garde', async () => {
+    const { carte, svc } = monter({ reponse: retardActif() });
+    svc.save.mockReturnValueOnce(of(retardDecoche()));
+
+    carte.basculer('Retard', false);
+    await carte.enregistrer();
+
+    const envoyees = (svc.save.mock.calls[0] as unknown[])[0] as { variable: string; actif: boolean; codePaie: string | null }[];
+    expect(envoyees.find((v) => v.variable === 'Retard')).toMatchObject({ actif: false, codePaie: 'RET01' });
+    expect(carte.brouillon().find((v) => v.variable === 'Retard')).toMatchObject({ actif: false, codePaie: 'RET01' });
+
+    svc.get.mockReturnValueOnce(of(retardDecoche()));
+    carte.charger();
+    expect(carte.brouillon().find((v) => v.variable === 'Retard')).toMatchObject({ actif: false, codePaie: 'RET01' });
+  });
+
+  it('la liste déroulante montre RET01 sélectionné, avant et après l\'enregistrement du décochage', async () => {
+    const { carte, svc } = monter({ reponse: retardActif() });
+    svc.save.mockReturnValueOnce(of(retardDecoche()));
+    const fixture = TestBed.createComponent(PayrollVariablesCard);
+    fixture.componentInstance.ngOnInit();
+    fixture.detectChanges();
+    const selection = () => (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLSelectElement>('select[aria-label="Code de paie de Retard"]')!;
+
+    expect(selection().value).toBe('RET01');
+
+    fixture.componentInstance.basculer('Retard', false);
+    await fixture.componentInstance.enregistrer();
+    fixture.detectChanges();
+
+    expect(selection().value).toBe('RET01');
+    expect(carte).toBeTruthy();
+  });
+});

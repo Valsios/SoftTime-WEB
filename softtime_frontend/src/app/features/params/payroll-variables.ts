@@ -102,10 +102,10 @@ import {
                       </span>
                     } @else {
                       <select [attr.aria-label]="'Code de paie de ' + v.libelle" [disabled]="c.moisEnvoye || saving()"
-                        [value]="v.codePaie ?? ''" (change)="changer(v.variable, 'codePaie', $any($event.target).value)">
-                        <option value="">(aucun)</option>
+                        (change)="changer(v.variable, 'codePaie', $any($event.target).value)">
+                        <option value="" [selected]="!v.codePaie">(aucun)</option>
                         @for (o of codes(v); track o.code) {
-                          <option [value]="o.code">{{ o.code }}{{ o.intitule ? ' — ' + o.intitule : '' }}</option>
+                          <option [value]="o.code" [selected]="o.code.toLowerCase() === (v.codePaie ?? '').toLowerCase()">{{ o.code }}{{ o.intitule ? ' — ' + o.intitule : '' }}</option>
                         }
                       </select>
                       @if (c.avertissementCodes) { <div class="pv-hint">{{ c.avertissementCodes }}</div> }
@@ -113,9 +113,9 @@ import {
                   } @else if (sansEnvoi(v.variable)) {
                     @if (autre()) {
                       <select [attr.aria-label]="'Colonne cible de ' + v.libelle" [disabled]="c.moisEnvoye || saving()"
-                        [value]="v.colonneCible ?? ''" (change)="changer(v.variable, 'colonneCible', $any($event.target).value)">
-                        <option value="">(aucune)</option>
-                        @for (col of colonnes(v); track col) { <option [value]="col">{{ col }}</option> }
+                        (change)="changer(v.variable, 'colonneCible', $any($event.target).value)">
+                        <option value="" [selected]="!v.colonneCible">(aucune)</option>
+                        @for (col of colonnes(v); track col) { <option [value]="col" [selected]="col === v.colonneCible">{{ col }}</option> }
                       </select>
                     } @else {
                       <input type="text" maxlength="32" [attr.aria-label]="'Code de paie de ' + v.libelle"
