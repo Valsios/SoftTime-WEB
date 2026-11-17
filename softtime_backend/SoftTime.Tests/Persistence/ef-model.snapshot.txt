@@ -362,6 +362,14 @@ ENTITY PaieEnvoi table=.T_PAIE_ENVOI key=[Id]
   P Statut col=STATUT type=nvarchar(16) null=False max=16 fixed= unicode= prec=, gen=Never
   P TypeBase col=TYPE_BASE type=nvarchar(16) null=False max=16 fixed= unicode= prec=, gen=Never
   I IX_T_PAIE_ENVOI_BDD_PERIODE [BddSage,PeriodeDebut,PeriodeFin] unique=False filter= desc=
+ENTITY PaieOption table=.T_PAIE_OPTION key=[Id]
+  P BddSage col=BDD_SAGE type=nvarchar(128) null=False max=128 fixed= unicode= prec=, gen=Never
+  P Cle col=CLE type=nvarchar(64) null=False max=64 fixed= unicode= prec=, gen=Never
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P ModifieLe col=MODIFIE_LE type=datetime2 null=True max= fixed= unicode= prec=, gen=Never
+  P ModifiePar col=MODIFIE_PAR type=nvarchar(256) null=True max=256 fixed= unicode= prec=, gen=Never
+  P Valeur col=VALEUR type=nvarchar(256) null=False max=256 fixed= unicode= prec=, gen=Never
+  I UX_T_PAIE_OPTION_BDD_CLE [BddSage,Cle] unique=True filter= desc=
 ENTITY PaieVariable table=.T_PAIE_VARIABLE key=[Id]
   P Actif col=ACTIF type=bit null=False max= fixed= unicode= prec=, gen=Never
   P BddSage col=BDD_SAGE type=nvarchar(128) null=False max=128 fixed= unicode= prec=, gen=Never

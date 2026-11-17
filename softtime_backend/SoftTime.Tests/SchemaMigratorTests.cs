@@ -254,6 +254,22 @@ public class SchemaMigratorTests
     }
 
     [Fact]
+    public async Task EnsurePayrollOptions_WithoutTheTable_ThrowsClearFrenchMessageNamingMigration008()
+    {
+        // Arrange
+        var uow = new MissingSchemaUnitOfWork();
+
+        // Act
+        Func<Task> act = () =>
+            SchemaPresenceGuard.EnsurePayrollOptionsAsync(uow, CancellationToken.None);
+
+        // Assert
+        var ex = (await act.Should().ThrowExactlyAsync<DomainException>()).Which;
+        ex.Message.Should().Be("Les options de paie sont absentes (T_PAIE_OPTION) : activez Database:AutoMigrate (développement) ou exécutez migrations/versions/008_options_paie.sql.");
+        uow.LastSql.Should().Contain("OBJECT_ID(N'dbo.T_PAIE_OPTION', N'U') IS NULL");
+    }
+
+    [Fact]
     public void GuardedSql_AnyStatement_KeepsItAfterTheCheck()
     {
         // Act

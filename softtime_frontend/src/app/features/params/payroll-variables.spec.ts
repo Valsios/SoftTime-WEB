@@ -11,6 +11,7 @@ import { PayrollDestinations } from './payroll-destinations';
 import { PayrollVariablesCard } from './payroll-variables';
 import {
   ACTIVES_PAR_DEFAUT,
+  changementOption,
   changements,
   changementsDestinations,
   choixColonnes,
@@ -20,6 +21,7 @@ import {
   libelleColonne,
   peutCocher,
   raisonNonCochable,
+  questionEnvoi,
   validerBrouillon,
   versEnregistrement,
 } from './payroll-variables.logic';
@@ -566,5 +568,157 @@ describe('Largeur étroite (< 768 px) : variables présentées en cartes, jamais
       expect(ligne.querySelector('td[data-label="Envoyée"]')).not.toBeNull();
       expect(ligne.querySelector<HTMLSelectElement>('td[data-label="Colonne"] select')!.disabled).toBe(true);
     }
+  });
+});
+
+describe('Option « Remettre à 0 les salariés sans valeur à l\'envoi »', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const LIBELLE = 'Remettre à 0 les salariés sans valeur à l\'envoi';
+
+  function rendre(reponse: PayrollVariablesConfig, options: { confirme?: boolean; permissions?: string[] } = {}) {
+    const m = monter({ reponse, confirme: options.confirme, permissions: options.permissions });
+    // Autre base : la section « Destinations » est rendue dans la carte et lit ses propres données.
+    Object.assign(m.svc, { destinations: vi.fn(() => of({
+      base: 'SAGE_DEMO', table: null, colonneMatricule: null, variables: [], tables: [], colonnes: [], moisEnvoye: false, dernierEnvoi: null,
+    })) });
+    const fixture = TestBed.createComponent(PayrollVariablesCard);
+    fixture.componentInstance.ngOnInit();
+    fixture.detectChanges();
+    const racine = fixture.nativeElement as HTMLElement;
+    const interrupteur = () => racine.querySelector<HTMLInputElement>('.pv-option input[type="checkbox"]');
+    return { svc: m.svc, confirm: m.confirm, fixture, racine, carte: fixture.componentInstance, interrupteur };
+  }
+
+  it('cochée par défaut (aucune option enregistrée), avec son libellé, son texte d\'aide et le style des interrupteurs', () => {
+    const { racine, interrupteur, carte } = rendre(config());
+
+    expect(carte.remiseAZero()).toBe(true);
+    expect(interrupteur()!.checked).toBe(true);
+    expect(interrupteur()!.disabled).toBe(false);
+    expect(racine.querySelector('.pv-option .soft-toggle .soft-toggle__track')).not.toBeNull();
+    expect(racine.querySelector('.pv-option')?.textContent).toContain(LIBELLE);
+    expect(racine.querySelector('.pv-option')?.textContent).toContain(
+      'Évite qu\'un ancien cumul reste dans la paie quand un salarié n\'a plus d\'heures. À décocher si quelqu\'un saisit ces codes à la main dans la paie.');
+    // Le libellé visible nomme la case (clic sur le texte).
+    expect(interrupteur()!.closest('label')?.textContent).toContain(LIBELLE);
+  });
+
+  it('option enregistrée décochée : l\'interrupteur est décoché à l\'ouverture', () => {
+    const { interrupteur, carte } = rendre(config({ remiseAZeroSansValeur: false, parDefaut: false }));
+
+    expect(carte.remiseAZero()).toBe(false);
+    expect(interrupteur()!.checked).toBe(false);
+  });
+
+  it('décocher crée un brouillon (bouton Enregistrer actif), Annuler le remet à la valeur lue', () => {
+    const { fixture, interrupteur, carte } = rendre(config());
+    expect(carte.modifie()).toBe(false);
+
+    interrupteur()!.click();
+    fixture.detectChanges();
+    expect(carte.remiseAZero()).toBe(false);
+    expect(carte.modifie()).toBe(true);
+
+    carte.annuler();
+    fixture.detectChanges();
+    expect(carte.remiseAZero()).toBe(true);
+    expect(carte.modifie()).toBe(false);
+    expect(interrupteur()!.checked).toBe(true);
+  });
+
+  it('confirmation : « Remise à 0 des salariés sans valeur : désactivée », envoyée avec les variables en un seul appel', async () => {
+    const { carte, svc, confirm } = rendre(config());
+    carte.basculerRemiseAZero(false);
+
+    await carte.enregistrer();
+
+    expect(confirm.ask).toHaveBeenCalledTimes(1);
+    expect(confirm.ask.mock.calls[0][0]).toBe(
+      'Enregistrer pour la base SAGE_DEMO : Remise à 0 des salariés sans valeur : désactivée ? Le changement s\'appliquera au prochain envoi en paie.');
+    expect(svc.save).toHaveBeenCalledTimes(1);
+    const [variables, option] = svc.save.mock.calls[0] as unknown as [{ variable: string }[], boolean];
+    expect(variables.length).toBe(9);
+    expect(option).toBe(false);
+  });
+
+  it('activée de nouveau : la confirmation dit « activée » et cite aussi les variables modifiées', async () => {
+    const { carte, confirm } = rendre(config({ remiseAZeroSansValeur: false, parDefaut: false }));
+    carte.basculer('Nuit', false);
+    carte.basculerRemiseAZero(true);
+
+    await carte.enregistrer();
+
+    expect(confirm.ask.mock.calls[0][0]).toContain('Nuit : non envoyée à la paie ; Remise à 0 des salariés sans valeur : activée ?');
+  });
+
+  it('annulée à la confirmation : rien n\'est envoyé', async () => {
+    const { carte, svc } = rendre(config(), { confirme: false });
+    carte.basculerRemiseAZero(false);
+
+    await carte.enregistrer();
+
+    expect(svc.save).not.toHaveBeenCalled();
+    expect(carte.remiseAZero()).toBe(false);
+  });
+
+  it('sans changement de l\'option, elle est renvoyée telle quelle (la valeur lue)', async () => {
+    const { carte, svc } = rendre(config({ remiseAZeroSansValeur: false, parDefaut: false }));
+    carte.basculer('Nuit', false);
+
+    await carte.enregistrer();
+
+    expect((svc.save.mock.calls[0] as unknown[])[1]).toBe(false);
+  });
+
+  it('mois déjà envoyé : interrupteur désactivé avec son message, aucun bouton', () => {
+    const { racine, interrupteur } = rendre(config({ moisEnvoye: true, dernierEnvoi: '2026-11-01 → 2026-11-30' }));
+
+    expect(interrupteur()!.disabled).toBe(true);
+    expect(racine.querySelector('.pv-option')?.textContent).toContain('Mois déjà envoyé : modification impossible.');
+    expect(racine.querySelector('.pv-actions')).toBeNull();
+  });
+
+  it('sans permission : ni l\'interrupteur ni le tableau, seulement le message de permission', () => {
+    const { racine, interrupteur } = rendre(config(), { permissions: ['SAGE:AUTRE:UPDATE'] });
+
+    expect(interrupteur()).toBeNull();
+    expect(racine.querySelector('.pv-option')).toBeNull();
+    expect(racine.textContent).toContain('Vous n\'avez pas la permission de modifier la base SAGE_DEMO');
+  });
+
+  it('autre base : l\'option est proposée aussi', () => {
+    const { interrupteur } = rendre(config({ typeBase: 'AUTRE' }));
+
+    expect(interrupteur()).not.toBeNull();
+  });
+
+  it('largeur étroite : l\'option est hors du tableau (jamais masquée par la règle des tableaux sous 768 px)', () => {
+    const { racine } = rendre(config());
+
+    expect(racine.querySelector('.soft-table-wrap .pv-option')).toBeNull();
+    expect(racine.querySelector('.pv-option')).not.toBeNull();
+  });
+
+  it('changementOption : texte seulement quand la valeur change', () => {
+    expect(changementOption(true, true)).toBeNull();
+    expect(changementOption(false, false)).toBeNull();
+    expect(changementOption(true, false)).toBe('Remise à 0 des salariés sans valeur : désactivée');
+    expect(changementOption(false, true)).toBe('Remise à 0 des salariés sans valeur : activée');
+  });
+});
+
+describe('Confirmation de « Synchroniser vers SAGE » selon l\'option', () => {
+  const REMISE = 'Les salariés de la sélection sans valeur sur la période seront remis à 0 pour les variables envoyées à la paie '
+    + '(une variable non envoyée n\'est jamais modifiée).';
+
+  it('option cochée : la remise à 0 est annoncée (texte inchangé), base standard et autre base', () => {
+    expect(questionEnvoi(true, 'SAGE_DEMO', true)).toBe(`Pousser les HS vers SAGE (T_CUMSAL) ? ${REMISE}`);
+    expect(questionEnvoi(false, 'AUTRE_BASE', true)).toBe(`Écrire les HS dans la base AUTRE_BASE ? ${REMISE}`);
+  });
+
+  it('option décochée : la remise à 0 n\'est pas annoncée', () => {
+    expect(questionEnvoi(true, 'SAGE_DEMO', false)).toBe('Pousser les HS vers SAGE (T_CUMSAL) ?');
+    expect(questionEnvoi(false, 'AUTRE_BASE', false)).toBe('Écrire les HS dans la base AUTRE_BASE ?');
   });
 });

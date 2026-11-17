@@ -44,7 +44,7 @@ public class PayrollVariablesController : ApiControllerBase
     private static readonly JsonSerializerOptions JsonWeb = new(JsonSerializerDefaults.Web);
 
     /// <summary>Corps de l'enregistrement : tableau de variables (ancien client) ou objet avec l'option.</summary>
-    internal static PayrollVariablesSaveRequest LireCorps(JsonElement corps)
+    public static PayrollVariablesSaveRequest LireCorps(JsonElement corps)
     {
         try
         {

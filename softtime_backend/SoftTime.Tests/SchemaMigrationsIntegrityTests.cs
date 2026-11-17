@@ -150,6 +150,32 @@ public class SchemaMigrationsIntegrityTests
             code.Should().NotContainEquivalentOf(other);
     }
 
+    // ---------- Script 008 ----------
+
+    [Fact]
+    public void Script008_PayrollOptions_CreatesOneTableOnlyByAdditions_AndIsReplayable()
+    {
+        // Act
+        var scripts = new EmbeddedMigrationScriptSource().Load();
+
+        // Assert
+        var options = scripts.Should().ContainSingle(s => s.Version == 8).Which;
+        options.Name.Should().Be("008_options_paie.sql");
+        foreach (var forbidden in new[] { "DROP ", "DELETE", "TRUNCATE", "ALTER COLUMN", "ALTER TABLE", "USE [", "CREATE DATABASE", "UPDATE ", "INSERT " })
+            options.Content.Should().NotContainEquivalentOf(forbidden, "additive : aucune donnée n'est insérée, la valeur par défaut vient de l'absence de ligne");
+        // Rejouable : table et index ne sont créés que s'ils n'existent pas.
+        options.Content.Should().Contain("OBJECT_ID(N'dbo.T_PAIE_OPTION', N'U') IS NULL");
+        options.Content.Should().Contain("name = N'UX_T_PAIE_OPTION_BDD_CLE'");
+        options.Content.Should().Contain("PRINT");
+        options.Content.Should().NotContainEquivalentOf("Password");
+        foreach (var colonne in new[] { "BDD_SAGE", "CLE", "VALEUR", "MODIFIE_LE", "MODIFIE_PAR" })
+            options.Content.Should().Contain(colonne);
+        // Aucune autre table n'est touchée (hors en-tête de commentaire).
+        var code = options.Content[(options.Content.IndexOf("*/", StringComparison.Ordinal) + 2)..];
+        foreach (var autre in new[] { "T_PAIE_VARIABLE", "T_PAIE_ENVOI", "T_CUMSAL", "T_PAIE_ECRITURE", "suivi_JOURNAL" })
+            code.Should().NotContainEquivalentOf(autre);
+    }
+
     // ---------- Journal de démarrage ----------
 
     [Fact]

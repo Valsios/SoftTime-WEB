@@ -281,6 +281,197 @@ public class PayrollVariableServiceTests
         (await sut.ListPeriodsAsync("SAGE_TEST")).Should().Equal((new DateTime(2026, 10, 1), new DateTime(2026, 10, 31)));
     }
 
+    // ---------- C2c : option « remettre à 0 les salariés sans valeur à l'envoi » ----------
+
+    [Fact]
+    public async Task Option_NoRow_IsCheckedByDefault_AndTheDefaultSelectionIsKept()
+    {
+        var (sut, uow, _) = Creer();
+
+        (await sut.GetConfigurationAsync()).RemiseAZeroSansValeur.Should().BeTrue();
+        (await sut.GetSelectionAsync("SAGE_TEST")).Should().BeSameAs(PayrollVariableSelection.Default);
+        (await sut.GetSelectionAsync("SAGE_TEST")).RemiseAZeroSansValeur.Should().BeTrue();
+        (await sut.GetActivesAsync()).RemiseAZeroSansValeur.Should().BeTrue();
+        uow.Get<PaieOption>().Items.Should().BeEmpty("une lecture n'écrit rien");
+    }
+
+    [Theory]
+    [InlineData("0", false)]
+    [InlineData("1", true)]
+    [InlineData("false", false)]
+    [InlineData("True", true)]
+    [InlineData("n'importe quoi", true)]   // valeur illisible : la valeur par défaut
+    [InlineData("", true)]
+    public void Option_StoredValue_IsReadWithTheDefaultWhenUnreadable(string valeur, bool attendu)
+    {
+        var lignes = new[] { new PaieOption { BddSage = "SAGE_TEST", Cle = PayrollOptions.RemiseAZeroSansValeur, Valeur = valeur } };
+
+        PayrollOptions.Booleen(lignes, PayrollOptions.RemiseAZeroSansValeur, parDefaut: true).Should().Be(attendu);
+        PayrollVariableService.Selection([], lignes).RemiseAZeroSansValeur.Should().Be(attendu);
+    }
+
+    [Fact]
+    public async Task Save_OptionUnchecked_CreatesTheRowWithAuthor_AndInvalidatesTheCaches()
+    {
+        // Arrange
+        var (sut, uow, contexte) = Creer();
+        (await sut.GetSelectionAsync("SAGE_TEST")).RemiseAZeroSansValeur.Should().BeTrue(); // mis en cache
+        var cle = new ClosingChecklistRequest(new DateTime(2026, 10, 1), new DateTime(2026, 10, 31), null);
+        contexte.Checklist.Set("cle", new ClosingChecklistDto(cle.From, cle.To, null, []), Maintenant, TimeSpan.FromMinutes(5));
+
+        // Act
+        var resultat = await sut.SaveAsync(Saisie(), remiseAZeroSansValeur: false);
+
+        // Assert
+        var option = uow.Get<PaieOption>().Items.Should().ContainSingle().Which;
+        option.Should().Match<PaieOption>(o => o.BddSage == "SAGE_TEST" && o.Cle == "RemiseAZeroSansValeur" && o.Valeur == "0"
+            && o.ModifiePar == "u1" && o.ModifieLe == Maintenant.UtcDateTime);
+        resultat.RemiseAZeroSansValeur.Should().BeFalse("la réponse renvoie l'option enregistrée");
+        (await sut.GetConfigurationAsync()).RemiseAZeroSansValeur.Should().BeFalse("valeur enregistrée relue");
+        (await sut.GetSelectionAsync("SAGE_TEST")).RemiseAZeroSansValeur.Should().BeFalse("le cache de la base est invalidé");
+        (await sut.GetActivesAsync()).RemiseAZeroSansValeur.Should().BeFalse();
+        contexte.Checklist.TryGet("cle", Maintenant, out _).Should().BeFalse("le cache du Contrôle avant paie est vidé");
+        uow.Get<PaieVariable>().Items.Should().HaveCount(9, "les variables partent dans le même enregistrement");
+    }
+
+    [Fact]
+    public async Task Save_OptionRechecked_UpdatesTheSameRow_NeverDeletes()
+    {
+        var (sut, uow, _) = Creer();
+        await sut.SaveAsync(Saisie(), remiseAZeroSansValeur: false);
+        uow.Get<PaieOption>().Items.Single().ModifiePar = "ancien";
+
+        await sut.SaveAsync(Saisie(), remiseAZeroSansValeur: true);
+
+        var option = uow.Get<PaieOption>().Items.Should().ContainSingle().Which;
+        option.Valeur.Should().Be("1");
+        option.ModifiePar.Should().Be("u1");
+        (await sut.GetSelectionAsync("SAGE_TEST")).RemiseAZeroSansValeur.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Save_OptionChecked_WithoutAnyRow_CreatesNothing()
+    {
+        var (sut, uow, _) = Creer();
+
+        await sut.SaveAsync(Saisie(), remiseAZeroSansValeur: true);
+
+        uow.Get<PaieOption>().Items.Should().BeEmpty("la valeur par défaut n'a pas besoin de ligne");
+    }
+
+    [Fact]
+    public async Task Save_OptionAbsentFromTheRequest_LeavesItUnchanged()
+    {
+        var (sut, uow, _) = Creer();
+        await sut.SaveAsync(Saisie(), remiseAZeroSansValeur: false);
+        var option = uow.Get<PaieOption>().Items.Single();
+        option.ModifiePar = "ancien";
+
+        await sut.SaveAsync(Saisie(("Nuit", false, null, null, null)));          // champ absent (null)
+
+        option.Valeur.Should().Be("0");
+        option.ModifiePar.Should().Be("ancien", "ligne non réécrite");
+        (await sut.GetConfigurationAsync()).RemiseAZeroSansValeur.Should().BeFalse();
+        uow.Get<PaieVariable>().Items.Single(v => v.Variable == "Nuit").Actif.Should().BeFalse("les variables restent enregistrées");
+    }
+
+    [Fact]
+    public async Task Save_OptionOnlyChange_LeavesTheVariablesAsTheyWere()
+    {
+        var (sut, uow, _) = Creer();
+        await sut.SaveAsync(Saisie(("Nuit", false, null, null, null)));
+        var avant = uow.Get<PaieVariable>().Items.Select(v => (v.Variable, v.Actif, v.ModifieLe, v.ModifiePar)).ToList();
+
+        await sut.SaveAsync(Saisie(("Nuit", false, null, null, null)), remiseAZeroSansValeur: false);
+
+        uow.Get<PaieVariable>().Items.Select(v => (v.Variable, v.Actif, v.ModifieLe, v.ModifiePar)).Should().Equal(avant);
+        uow.Get<PaieOption>().Items.Should().ContainSingle().Which.Valeur.Should().Be("0");
+    }
+
+    [Fact]
+    public async Task Option_IsPerBase_AnotherBaseKeepsTheDefault()
+    {
+        var (sut, uow, _) = Creer();
+        uow.Get<PaieOption>().Items.Add(new PaieOption { BddSage = "SAGE_A", Cle = PayrollOptions.RemiseAZeroSansValeur, Valeur = "0" });
+
+        (await sut.GetSelectionAsync("SAGE_A")).RemiseAZeroSansValeur.Should().BeFalse();
+        (await sut.GetSelectionAsync("SAGE_B")).Should().BeSameAs(PayrollVariableSelection.Default);
+        (await sut.GetConfigurationAsync()).RemiseAZeroSansValeur.Should().BeTrue("la base active (SAGE_TEST) n'a pas de ligne");
+    }
+
+    [Fact]
+    public async Task Save_OptionOnOtherBase_IsStoredToo()
+    {
+        var (sut, uow, _) = Creer("AUTRE");
+
+        await sut.SaveAsync(Saisie(), remiseAZeroSansValeur: false);
+
+        uow.Get<PaieOption>().Items.Should().ContainSingle().Which.Valeur.Should().Be("0");
+    }
+
+    [Fact]
+    public async Task Save_OptionWhileCurrentMonthSent_IsRefusedWith409_AndWritesNothing()
+    {
+        var (sut, uow, contexte) = Creer();
+        contexte.Envois.Periodes.Add((new DateTime(2026, 11, 1), new DateTime(2026, 11, 30)));
+
+        var act = () => sut.SaveAsync(Saisie(), remiseAZeroSansValeur: false);
+
+        (await act.Should().ThrowExactlyAsync<ConflictException>()).Which.Message.Should().StartWith("Mois déjà envoyé en paie");
+        uow.Get<PaieOption>().Items.Should().BeEmpty();
+        uow.Get<PaieVariable>().Items.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Save_OptionWithoutTheRightToModifyTheBase_IsForbidden()
+    {
+        var (sut, uow, contexte) = Creer();
+        contexte.Autorisation.Setup(a => a.EnsureCanConfigureAsync(DatabaseKind.Sage, DatabaseConfigAction.Update, "SAGE_TEST", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ForbiddenException("refus"));
+
+        var act = () => sut.SaveAsync(Saisie(), remiseAZeroSansValeur: false);
+
+        await act.Should().ThrowExactlyAsync<ForbiddenException>();
+        uow.Get<PaieOption>().Items.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Save_InvalidVariables_WithTheOption_WritesNeitherOfThem()
+    {
+        var (sut, uow, _) = Creer();
+
+        var act = () => sut.SaveAsync(Saisie(("Retard", true, null, "H", null)), remiseAZeroSansValeur: false);
+
+        await act.Should().ThrowExactlyAsync<DomainException>();
+        uow.Get<PaieOption>().Items.Should().BeEmpty();
+        uow.Get<PaieVariable>().Items.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Journal_ModifiedOption_RecordsWhoBeforeAndAfter()
+    {
+        // Arrange
+        using var db = new SoftTimeDbContext(new DbContextOptionsBuilder<SoftTimeDbContext>()
+            .UseSqlServer("Server=(localdb)\\MSSQLLocalDB;Database=SoftTimePayrollVariablesJournal;Trusted_Connection=True;TrustServerCertificate=True")
+            .Options);
+        var option = new PaieOption { Id = 2, BddSage = "SAGE_TEST", Cle = PayrollOptions.RemiseAZeroSansValeur, Valeur = "1" };
+        db.Attach(option);
+        option.Valeur = "0";
+        db.Entry(option).Property(o => o.Valeur).IsModified = true;
+
+        // Act
+        new AuditJournalSaveChangesInterceptor(new TestCurrentUser(1, 1), Mock.Of<ICompanyContext>(), Options.Create(new AuditJournalOptions()))
+            .CaptureChanges(db);
+
+        // Assert
+        var entree = db.ChangeTracker.Entries<JournalAudit>().Select(e => e.Entity).Should().ContainSingle().Which;
+        entree.Tables.Should().Be("T_PAIE_OPTION");
+        entree.Colonnes.Should().Be("VALEUR");
+        entree.Anciens.Should().Be("1");
+        entree.Nouveaux.Should().Be("0");
+        entree.Users.Should().Be("u1");
+    }
+
     // ---------- Aides ----------
 
     private sealed record Contexte(RecordingSendLog Envois, Mock<IDatabaseConfigurationAuthorizer> Autorisation, ClosingChecklistCache Checklist);

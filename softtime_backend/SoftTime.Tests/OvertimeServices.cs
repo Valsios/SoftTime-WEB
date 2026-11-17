@@ -20,13 +20,14 @@ internal sealed class OvertimeServices
         IPayrollWriterResolver payrollWriters,
         IHistoryArchiveService history,
         ISageLeaveCalendar leaves,
-        ICurrentUser? user = null)
+        ICurrentUser? user = null,
+        IPayrollVariableService? variables = null)
     {
         var context = new OvertimeWeekContext(uow, tenant, externalSource, leaves);
         WeeklyValidation = new WeeklyValidationService(uow, tenant, context);
         ExoImpo = new OvertimeExoImpoService(uow, tenant, externalSource, context);
         Detail = new OvertimeDetailService(uow, tenant, history, context);
-        PayrollSync = new OvertimePayrollSyncService(uow, tenant, payrollWriters, user, context, externalSource);
+        PayrollSync = new OvertimePayrollSyncService(uow, tenant, payrollWriters, user, context, externalSource, variables);
     }
 
     public WeeklyValidationService WeeklyValidation { get; }
