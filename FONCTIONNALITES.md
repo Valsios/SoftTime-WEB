@@ -610,10 +610,49 @@ La clôture **fige une période déjà envoyée à la paie**, définitivement. D
   périodes envoyées, état (Envoyée, Clôturée avec date et auteur), dernier envoi et filtre, empreinte raccourcie et copiable, bouton « Clôturer »
   (droit de clôture) avec confirmation rappelant la période, l'absence de retour en arrière et la correction sur la période suivante ; refus du
   serveur affiché tel quel ; vue en cartes sous 768 px. Bandeau « Période clôturée » et boutons de modification désactivés (avec explication) sur
-  Heures supplémentaires, Heures corrigées, Pointages, Anomalies et Validation semaine quand la sélection recoupe une période close.
-- **Migrations** : `009_instantanes_paie.sql` puis `010_cloture_paie.sql`, additives et rejouables, contrôlées au démarrage comme 007 et 008.
-  **Production sans AutoMigrate** : sauvegarde, puis `sqlcmd -S <serveur> -d <base SoftTime> -i migrations/versions/009_instantanes_paie.sql`, puis la
-  même commande avec `010_cloture_paie.sql` (dans cet ordre).
+  Heures supplémentaires, Heures corrigées, Pointages, Anomalies et Validation semaine quand la sélection recoupe une période close. Le titre du
+  bandeau dit « Période clôturée » ; son texte, en une phrase, ne le répète pas : « Du jj/mm/aaaa au jj/mm/aaaa, aucune modification n'est
+  possible : les corrections se font sur la période suivante. »
+- **Cantine et frais de déplacement (D5)** : ils sont aussi envoyés à la paie (cumuls `T_CUMSAL` des constantes `CANTINE_CODE` et `HA06`, base
+  **STANDARD** seulement ; une base AUTRE est refusée comme avant) et ont désormais la **même preuve** que les heures.
+  - **Domaines** : chaque envoi et chaque instantané portent un domaine, `HEURES` (seul domaine avant D5, valeur par défaut), `CANTINE` ou
+    `FRAIS`. Les périodes de la carte de clôture sont celles des envois d'**heures** ; le verrou de mois de la configuration ne compte que les envois
+    d'heures.
+  - **Envoi** : marqueur `EN_COURS` posé **avant la première écriture** `T_CUMSAL` (écritures non transactionnelles) ; à la fin, statut `SUCCES` et
+    instantané (exactement les lignes écrites : matricule, numéro de salarié, variable `CANTINE` ou `FRAIS`, destination = code de constante, unité
+    `N` (nombre), valeur ; plage de matricules de l'envoi) dans **une seule transaction SoftTime** ; échec d'une écriture : `ECHEC` ; instantané non
+    écrit (période clôturée entre-temps, base indisponible) : `INCERTAIN` et avertissement dans le message. Le message, la confirmation et le
+    périmètre de l'envoi ne changent pas. Un salarié absent de SAGE n'est ni écrit ni figé ; une mise à jour sans ligne de cumul est comptée.
+  - **Empreinte (format 2)** : le format 1 des heures **ne change pas**. Le format 2, propre à la cantine et aux frais, ne diffère que par la
+    première ligne, qui nomme le domaine après la version : `SOFTTIME-PAIE-INSTANTANE|2|{CANTINE ou FRAIS}|{base}|{début}|{fin}|{TYPE}` ; lignes,
+    tri, séparateurs, encodage et arrondi sont ceux du format 1. Un couple format / domaine incohérent (1 hors heures, 2 pour les heures) est
+    compté comme une altération.
+  - **Activation par base** : options `DomaineCantineActif` et `DomaineFraisActif` de `T_PAIE_OPTION`, **désactivées par défaut** ; cases
+    « Cantine » et « Frais de déplacement » du bloc « Domaines envoyés à la paie » sous les variables (écran Bases SAGE), enregistrement séparé et
+    confirmé, `PUT api/v1/payroll-variables/domains`, même droit que la configuration (administrateur ou `SAGE:{base}:UPDATE`), auteur et date dans
+    `T_PAIE_OPTION` et journal central. Pas de verrou de mois : le réglage ne change rien à ce qui est envoyé, seulement ce que la clôture exige.
+    Activation refusée pour une base AUTRE. Les droits d'écran `OTHER:CANTEEN` et `OTHER:TRAVEL_EXPENSES` ne changent pas.
+  - **Règle de clôture par domaine** : en plus des heures (règles inchangées, contrôlées en premier), chaque domaine **exigé** doit avoir, sur les
+    **bornes exactes** de la période, un dernier envoi `SUCCES` (non `INCERTAIN`), **sans plage de matricules**, avec instantané intègre et concordant
+    avec les totaux actuels (`T_CANTINE.TOTAL_CANTINE`, `T_FRAIS.TOTAL_POINT` des mêmes bornes : un « Calculer » relancé après l'envoi est détecté).
+    Un domaine est exigé s'il est **activé** pour la base, ou s'il a été **envoyé sur une période qui recoupe** la période même sans être activé
+    (sécurité) ; jamais pour une base AUTRE. Refus 409 qui nomme le domaine, par exemple « Cantine : aucun envoi en paie sur les bornes exactes de la
+    période (du … au …). Calculez puis envoyez la cantine sur ces bornes, sans plage de matricules, avant de clôturer. » La clôture enregistre
+    l'envoi, l'instantané, le format et l'empreinte de chaque domaine exigé dans `T_PAIE_CLOTURE_DOMAINE` (les heures restent dans
+    `T_PAIE_CLOTURE`), et le journal `CLOTURE_PAIE` les cite (`Domaines=HEURES, CANTINE:Envoi=…:Format=2:Empreinte=…, FRAIS:…`). Verrous D3
+    inchangés.
+  - **Écran** : la carte de clôture affiche, par période, l'état de chaque domaine (heures, cantine, frais : envoyé, figé, manquant avec le motif du
+    serveur, non exigé), les empreintes à figer dans la confirmation, et toujours aucun bouton de déblocage.
+  - **Lecture** : `GET api/v1/payroll-snapshots` rend les envois de tous les domaines, avec leur domaine ; la vérification recalcule l'empreinte
+    dans le format du domaine.
+  - **Limites** : l'instantané prouve les **lignes écrites**, pas l'état des salariés **sans ligne** : l'envoi de la cantine et des frais ne remet pas
+    à 0 le cumul d'un salarié qui n'a pas de total sur la période (il garde la valeur précédente dans SAGE). Les envois de cantine et de frais
+    antérieurs à la migration 011 n'ont ni marqueur ni instantané.
+- **Migrations** : `009_instantanes_paie.sql`, `010_cloture_paie.sql` puis `011_domaines_paie.sql` (colonne `DOMAINE` sur `T_PAIE_ENVOI` et
+  `T_PAIE_INSTANTANE`, défaut `HEURES`, contrainte CHECK ; table `T_PAIE_CLOTURE_DOMAINE` immuable, erreur 51992), additives et rejouables,
+  contrôlées au démarrage comme 007 et 008. **Production sans AutoMigrate** : sauvegarde, puis
+  `sqlcmd -S <serveur> -d <base SoftTime> -i migrations/versions/009_instantanes_paie.sql`, puis la même commande avec `010_cloture_paie.sql`, puis
+  avec `011_domaines_paie.sql` (dans cet ordre). Sans 011, l'API refuse de démarrer avec un message qui nomme le script.
 
 ---
 
