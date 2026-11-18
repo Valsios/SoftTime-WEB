@@ -176,6 +176,25 @@ public sealed class PayrollVariableService : IPayrollVariableService
         return await ConstruireAsync(database, await LireAsync(sageDb, ct), await LireOptionsAsync(sageDb, ct), ct);
     }
 
+    public async Task<PayrollVariablesConfigDto> SaveDomainsAsync(PayrollDomainsDto domaines, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(domaines);
+        var database = await AutoriserAsync(ct);
+        var sageDb = database.NomBd!;
+        if (EstAutre(database) && (domaines.Cantine || domaines.Frais))
+            throw new DomainException(
+                "La cantine et les frais de déplacement ne s'envoient qu'à une base SAGE STANDARD : ils ne peuvent pas être activés pour une base AUTRE.");
+        var maintenant = _horloge.GetUtcNow().UtcDateTime;
+        await EnregistrerOptionAsync(sageDb, PayrollOptions.DomaineCantineActif, PayrollOptions.Texte(domaines.Cantine),
+            PayrollOptions.Faux, maintenant, ct);
+        await EnregistrerOptionAsync(sageDb, PayrollOptions.DomaineFraisActif, PayrollOptions.Texte(domaines.Frais),
+            PayrollOptions.Faux, maintenant, ct);
+        await _uow.SaveChangesAsync(ct);
+        _logger.LogInformation("Domaines envoyés à la paie de la base {Base} : cantine {Cantine}, frais {Frais}, par {Login}.",
+            sageDb, domaines.Cantine, domaines.Frais, _user.Login);
+        return await ConstruireAsync(database, await LireAsync(sageDb, ct), await LireOptionsAsync(sageDb, ct), ct);
+    }
+
     /// <summary>Crée ou met à jour une option de la base ; sans changement de valeur, rien n'est écrit.</summary>
     private async Task EnregistrerOptionAsync(
         string sageDb, string cle, string valeur, string valeurParDefaut, DateTime maintenant, CancellationToken ct)
@@ -626,7 +645,9 @@ public sealed class PayrollVariableService : IPayrollVariableService
             AvertissementCodes = avertissement,
             RemiseAZeroSansValeur = selection.RemiseAZeroSansValeur,
             HeuresParJour = selection.HeuresParJour,
-            AbsenceCodes = await CodesAbsenceDtoAsync(options, ct)
+            AbsenceCodes = await CodesAbsenceDtoAsync(options, ct),
+            Domaines = new PayrollDomainsDto(
+                PayrollOptions.DomaineActif(options, PayrollDomains.Cantine), PayrollOptions.DomaineActif(options, PayrollDomains.Frais))
         };
     }
 

@@ -54,7 +54,18 @@ public sealed record PayrollVariablesConfigDto(
 
     /// <summary>Codes d'absence comptés comme non justifiés dans l'Absence (lot C3).</summary>
     public PayrollAbsenceCodesDto? AbsenceCodes { get; init; }
+
+    /// <summary>
+    /// Domaines optionnels envoyés à la paie par la base (lot D5) : la cantine et les frais de déplacement activés sont exigés à
+    /// la clôture. Désactivés par défaut ; seule une base STANDARD peut les activer.
+    /// </summary>
+    public PayrollDomainsDto Domaines { get; init; } = new(false, false);
 }
+
+/// <summary>Activation des domaines optionnels de la base (T_PAIE_OPTION : DomaineCantineActif, DomaineFraisActif).</summary>
+/// <param name="Cantine">La base envoie la cantine à la paie : la clôture l'exige.</param>
+/// <param name="Frais">La base envoie les frais de déplacement à la paie : la clôture les exige.</param>
+public sealed record PayrollDomainsDto(bool Cantine, bool Frais);
 
 /// <summary>
 /// Réglage « Codes d'absence comptés comme non justifiés » de la base : un code par ligne de <c>T_CODEABSENCE</c>, plus les

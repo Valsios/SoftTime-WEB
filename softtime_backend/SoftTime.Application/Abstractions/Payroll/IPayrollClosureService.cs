@@ -55,15 +55,44 @@ public sealed record PayrollClosureDto(
     int InstantaneId,
     string Empreinte,
     string StatutControle,
-    string ResumeControle);
+    string ResumeControle)
+{
+    /// <summary>Domaines CANTINE et FRAIS figés par la clôture (migration 011) ; vide si aucun n'était exigé.</summary>
+    public IReadOnlyList<PayrollClosureDomainDto> Domaines { get; init; } = Array.Empty<PayrollClosureDomainDto>();
+}
 
-/// <summary>État d'une période envoyée de la base active : « ENVOYEE » ou « CLOTUREE ».</summary>
+/// <summary>Envoi, instantané et empreinte d'un domaine figés par une clôture (T_PAIE_CLOTURE_DOMAINE).</summary>
+public sealed record PayrollClosureDomainDto(string Domaine, int EnvoiId, int InstantaneId, int VersionFormat, string Empreinte);
+
+/// <summary>
+/// État d'un domaine pour une période envoyée : « FIGE » (clôture faite, domaine figé), « ENVOYE » (dernier envoi réussi, sans
+/// filtre, avec instantané, sur les bornes exactes), « MANQUANT » (exigé mais pas encore envoyé ainsi : <c>Motif</c> dit
+/// pourquoi) ou « NON_EXIGE » (domaine non activé pour la base et jamais envoyé sur la période). Le serveur reste seul juge à
+/// la clôture (intégrité de l'empreinte et concordance ne sont vérifiées qu'à ce moment).
+/// </summary>
+public sealed record PayrollDomainStateDto(
+    string Domaine,
+    string Libelle,
+    bool Actif,
+    bool Exige,
+    string Etat,
+    PayrollSendSummaryDto? DernierEnvoi,
+    string? Empreinte,
+    string? Motif);
+
+/// <summary>
+/// État d'une période envoyée (heures) de la base active : « ENVOYEE » ou « CLOTUREE », dernier envoi d'heures et, par
+/// domaine (heures, cantine, frais), l'état envoyé, figé, manquant ou non exigé.
+/// </summary>
 public sealed record PayrollPeriodStateDto(
     DateTime PeriodeDebut,
     DateTime PeriodeFin,
     string Etat,
     PayrollSendSummaryDto DernierEnvoi,
-    PayrollClosureDto? Cloture);
+    PayrollClosureDto? Cloture)
+{
+    public IReadOnlyList<PayrollDomainStateDto> Domaines { get; init; } = Array.Empty<PayrollDomainStateDto>();
+}
 
 /// <summary>Périodes envoyées de la base active et droit de clôturer de l'appelant.</summary>
 public sealed record PayrollPeriodsDto(string BddSage, bool PeutCloturer, IReadOnlyList<PayrollPeriodStateDto> Periodes);
@@ -79,8 +108,10 @@ public interface IPayrollClosureService
 {
     /// <summary>
     /// Clôture la période exacte [from, to] : période terminée ; dernier envoi réussi (SUCCES, non INCERTAIN), sans filtre,
-    /// avec instantané intègre et concordant avec les heures actuelles ; Contrôle avant paie « Prêt » sur la base entière
-    /// (sans département, sans cache) ; aucune autre clôture qui recoupe la période. Journalisée.
+    /// avec instantané intègre et concordant avec les heures actuelles ; même exigence, sur les bornes exactes, pour chaque
+    /// domaine CANTINE ou FRAIS activé pour la base (ou déjà envoyé sur la période ; jamais pour une base AUTRE) ; Contrôle
+    /// avant paie « Prêt » sur la base entière (sans département, sans cache) ; aucune autre clôture qui recoupe la période.
+    /// Journalisée, avec l'empreinte de chaque domaine.
     /// </summary>
     Task<PayrollClosureDto> CloseAsync(PayrollClosureRequest request, CancellationToken ct = default);
 

@@ -59,6 +59,25 @@ public static class PayrollOptions
 
     public static string Texte(bool valeur) => valeur ? Vrai : Faux;
 
+    /// <summary>
+    /// Domaine CANTINE envoyé à la paie par cette base (lot D5) : « 1 » l'exige à la clôture. Défaut : désactivé (« 0 »).
+    /// </summary>
+    public const string DomaineCantineActif = "DomaineCantineActif";
+
+    /// <summary>Domaine FRAIS (frais de déplacement) envoyé à la paie par cette base : « 1 » l'exige à la clôture. Défaut : « 0 ».</summary>
+    public const string DomaineFraisActif = "DomaineFraisActif";
+
+    /// <summary>Clé d'activation d'un domaine optionnel (CANTINE, FRAIS).</summary>
+    public static string CleDomaine(string domaine) => domaine switch
+    {
+        PayrollDomains.Cantine => DomaineCantineActif,
+        PayrollDomains.Frais => DomaineFraisActif,
+        _ => throw new DomainException($"Le domaine {domaine} ne s'active pas : seuls la cantine et les frais sont optionnels.")
+    };
+
+    /// <summary>Domaine optionnel activé pour la base ; sans ligne : désactivé.</summary>
+    public static bool DomaineActif(IEnumerable<PaieOption> options, string domaine) => Booleen(options, CleDomaine(domaine), false);
+
     /// <summary>Valeur booléenne d'une option ; absente ou illisible : la valeur par défaut.</summary>
     public static bool Booleen(IEnumerable<PaieOption> options, string cle, bool parDefaut)
     {

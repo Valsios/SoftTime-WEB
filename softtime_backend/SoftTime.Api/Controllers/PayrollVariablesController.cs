@@ -79,6 +79,15 @@ public class PayrollVariablesController : ApiControllerBase
     public async Task<IActionResult> GetColonnesAsync([FromQuery] string? table, CancellationToken ct)
         => Ok(await _svc.GetColonnesAsync(table, ct));
 
+    /// <summary>
+    /// Domaines optionnels envoyés à la paie (cantine, frais de déplacement) : activés, ils sont exigés à la clôture. Même
+    /// droit que la configuration ; refusé pour une base AUTRE.
+    /// </summary>
+    [HttpPut("domains")]
+    [RequireDroit(Droit.Databases)]
+    public async Task<IActionResult> SaveDomainsAsync([FromBody] PayrollDomainsDto domaines, CancellationToken ct)
+        => Ok(await _svc.SaveDomainsAsync(domaines, ct));
+
     /// <summary>Autre base : enregistrer les destinations (refusé si le mois est envoyé).</summary>
     [HttpPut("destinations")]
     [RequireDroit(Droit.Databases)]

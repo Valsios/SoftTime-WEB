@@ -84,6 +84,7 @@ internal sealed class FixedVariableService(PayrollVariableSelection selection) :
     public Task<Application.DTOs.PayrollWriteTargetsDto> GetDestinationsAsync(CancellationToken ct = default) => throw new NotSupportedException();
     public Task<IReadOnlyList<Application.DTOs.PayrollTargetColumnDto>> GetColonnesAsync(string? table, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<Application.DTOs.PayrollWriteTargetsDto> SaveDestinationsAsync(Application.DTOs.PayrollWriteTargetsSaveDto destinations, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<Application.DTOs.PayrollVariablesConfigDto> SaveDomainsAsync(Application.DTOs.PayrollDomainsDto domaines, CancellationToken ct = default) => throw new NotSupportedException();
 }
 
 /// <summary>Schéma de base de paie en mémoire : tables et colonnes typées, ou erreur de lecture.</summary>

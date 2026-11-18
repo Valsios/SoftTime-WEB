@@ -38,6 +38,30 @@ public sealed class PayrollClosureService : IPayrollClosureService
     internal const string ControleDesactive = "Le Contrôle avant paie est désactivé : la clôture, qui exige son statut « Prêt », est impossible.";
     internal const string DejaCloturee = "Période déjà clôturée ({0}) : une clôture est définitive.";
     internal const string Recouvrement = "La période recoupe une période déjà clôturée ({0}) : clôture refusée.";
+    // Domaines CANTINE et FRAIS (lot D5) : {0} = libellé du domaine, {1} = « la cantine » / « les frais de déplacement »,
+    // {2} = bornes de la période.
+    internal const string DomaineAucunEnvoi =
+        "{0} : aucun envoi en paie sur les bornes exactes de la période ({2}). Calculez puis envoyez {1} sur ces bornes, sans plage de matricules, avant de clôturer.";
+    internal const string DomaineIncertain =
+        "{0} : le dernier envoi de la période ({2}) est INCERTAIN (son issue ou son instantané n'est pas garanti). Calculez puis envoyez {1} sur ces bornes, sans plage de matricules, avant de clôturer.";
+    internal const string DomaineNonReussi =
+        "{0} : le dernier envoi de la période ({2}) n'a pas réussi (statut {3}). Calculez puis envoyez {1} sur ces bornes, sans plage de matricules, avant de clôturer.";
+    internal const string DomaineSansInstantane =
+        "{0} : le dernier envoi de la période ({2}) n'a pas d'instantané. Calculez puis envoyez {1} sur ces bornes, sans plage de matricules, avant de clôturer.";
+    internal const string DomaineFiltre =
+        "{0} : le dernier envoi de la période ({2}) porte une plage de matricules. Calculez puis envoyez {1} sur ces bornes, sans plage de matricules, avant de clôturer.";
+    internal const string DomaineAltere =
+        "{0} : l'instantané du dernier envoi de la période ({2}) est altéré (l'empreinte recalculée diffère de l'empreinte enregistrée). Clôture refusée ; calculez puis envoyez {1} sur ces bornes, sans plage de matricules.";
+    internal const string DomaineNonConcordant =
+        "{0} : les totaux actuels de la période ({2}) ne correspondent plus à l'envoi figé ({3} valeur(s) différente(s)) : ils ont été recalculés depuis l'envoi. Envoyez {1} sur ces bornes, sans plage de matricules, avant de clôturer.";
+    internal const string DomaineNouvelEnvoi =
+        "Un nouvel envoi de la cantine ou des frais de la période a eu lieu pendant la clôture : relancez la clôture.";
+
+    public const string Fige = "FIGE";
+    public const string EnvoyeDomaine = "ENVOYE";
+    public const string Manquant = "MANQUANT";
+    public const string NonExige = "NON_EXIGE";
+
     internal const string NonConcordant =
         "Les heures actuelles de la période ne correspondent plus à l'envoi figé ({0} valeur(s) différente(s), par exemple {1}) : "
         + "elles ont été recalculées depuis l'envoi. Relancez l'envoi sans filtre avant de clôturer.";
@@ -96,6 +120,7 @@ public sealed class PayrollClosureService : IPayrollClosureService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         var baseSage = await BaseAsync(ct);
+        var typeBase = (await _tenant.GetSageRowAsync(ct)).TypeBase;
         await FinePermissionAccess.EnsureAsync(_user, _rights, new FinePermission(Rights.Databases, Permission(baseSage)),
             FinePermissionAccess.ActionDenied, ct);
         var (debut, fin) = (request.From.Date, request.To.Date);
@@ -112,6 +137,10 @@ public sealed class PayrollClosureService : IPayrollClosureService
         if (!PayrollSnapshotService.Verifier(instantane, lignes).Integre)
             throw new ConflictException(InstantaneAltere);
         await VerifierConcordanceAsync(baseSage, instantane, lignes, ct);
+        // Cantine et frais : chaque domaine exigé doit avoir son dernier envoi valide, intègre et concordant (bornes exactes).
+        var domaines = new List<DomaineFige>();
+        foreach (var domaine in await DomainesExigesAsync(baseSage, typeBase, debut, fin, ct))
+            domaines.Add(await DomaineValideAsync(baseSage, domaine, debut, fin, ct));
         var (statut, resume) = await ControleAsync(debut, fin, ct);
 
         var login = string.IsNullOrWhiteSpace(_user.Login) ? "SYSTEME" : _user.Login!;
@@ -122,6 +151,12 @@ public sealed class PayrollClosureService : IPayrollClosureService
             var (dernier, _) = await DernierEnvoiValideAsync(baseSage, debut, fin, token);
             if (dernier.Id != envoi.Id)
                 throw new ConflictException("Un nouvel envoi de la période a eu lieu pendant la clôture : relancez la clôture.");
+            var exigesSousVerrou = await DomainesExigesAsync(baseSage, typeBase, debut, fin, token);
+            if (!exigesSousVerrou.SequenceEqual(domaines.Select(d => d.Domaine)))
+                throw new ConflictException(DomaineNouvelEnvoi);
+            foreach (var d in domaines)
+                if ((await DernierEnvoiAsync(baseSage, d.Domaine, debut, fin, token))?.Id != d.EnvoiId)
+                    throw new ConflictException(DomaineNouvelEnvoi);
             var nouvelle = new PaieCloture
             {
                 BddSage = baseSage,
@@ -136,10 +171,22 @@ public sealed class PayrollClosureService : IPayrollClosureService
                 ResumeControle = resume
             };
             await _uow.Repository<PaieCloture>().AddAsync(nouvelle, token);
-            if (_journal.Enabled)
-                await _uow.Repository<JournalAudit>().AddAsync(Journal(nouvelle), token);
             await _uow.SaveChangesAsync(token);
-            return nouvelle;
+            var figes = domaines.Select(d => new PaieClotureDomaine
+            {
+                ClotureId = nouvelle.Id,
+                Domaine = d.Domaine,
+                EnvoiId = d.EnvoiId,
+                InstantaneId = d.InstantaneId,
+                VersionFormat = d.VersionFormat,
+                Empreinte = d.Empreinte
+            }).ToList();
+            if (figes.Count > 0)
+                await _uow.Repository<PaieClotureDomaine>().AddRangeAsync(figes, token);
+            if (_journal.Enabled)
+                await _uow.Repository<JournalAudit>().AddAsync(Journal(nouvelle, figes), token);
+            await _uow.SaveChangesAsync(token);
+            return (Cloture: nouvelle, Domaines: figes);
         }, ct);
 
         // Les analyses, checklists et sélections en cache ne doivent pas survivre à la clôture.
@@ -147,9 +194,9 @@ public sealed class PayrollClosureService : IPayrollClosureService
         _analysisCache.Vider();
         _checklistCache.Vider();
         (_guard as PayrollClosureGuard)?.Oublier();
-        _logger.LogInformation("Clôture de paie {Base} {Debut:yyyy-MM-dd} → {Fin:yyyy-MM-dd} par {Auteur}, empreinte {Empreinte}.",
-            baseSage, debut, fin, login, cloture.Empreinte);
-        return Dto(cloture);
+        _logger.LogInformation("Clôture de paie {Base} {Debut:yyyy-MM-dd} → {Fin:yyyy-MM-dd} par {Auteur}, empreinte {Empreinte}, domaines {Domaines}.",
+            baseSage, debut, fin, login, cloture.Cloture.Empreinte, Domaines(cloture.Domaines));
+        return Dto(cloture.Cloture, cloture.Domaines);
     }
 
     public async Task<PayrollPeriodsDto> ListPeriodsAsync(CancellationToken ct = default)
@@ -160,18 +207,30 @@ public sealed class PayrollClosureService : IPayrollClosureService
         if (!peutCloturer && !await PeutAsync($"SAGE:{baseSage}:UPDATE", ct))
             throw new ForbiddenException(FinePermissionAccess.ActionDenied);
 
+        var typeBase = (await _tenant.GetSageRowAsync(ct)).TypeBase;
         var envois = await _uow.Repository<PaieEnvoi>().ListReadOnlyAsync(e => e.BddSage == baseSage, ct);
         var instantanes = await _uow.Repository<PaieInstantane>().ListReadOnlyAsync(i => i.BddSage == baseSage, ct);
         var clotures = await _uow.Repository<PaieCloture>().ListReadOnlyAsync(c => c.BddSage == baseSage, ct);
+        var idsClotures = clotures.Select(c => c.Id).ToList();
+        var figes = idsClotures.Count == 0
+            ? new List<PaieClotureDomaine>()
+            : await _uow.Repository<PaieClotureDomaine>().ListReadOnlyAsync(d => idsClotures.Contains(d.ClotureId), ct);
+        var options = await _uow.Repository<PaieOption>().ListReadOnlyAsync(o => o.BddSage == baseSage, ct);
+        // Les périodes sont celles des envois d'heures : un envoi de cantine ou de frais seul ne crée pas de période à clôturer.
         var periodes = envois
+            .Where(e => e.Domaine == PayrollDomains.Heures)
             .GroupBy(e => (Debut: e.PeriodeDebut.Date, Fin: e.PeriodeFin.Date))
             .Select(g =>
             {
                 var dernier = g.OrderByDescending(e => e.EnvoyeLe).ThenByDescending(e => e.Id).First();
                 var cloture = clotures.FirstOrDefault(c => c.PeriodeDebut.Date == g.Key.Debut && c.PeriodeFin.Date == g.Key.Fin);
+                var figesCloture = cloture is null ? new List<PaieClotureDomaine>() : figes.Where(d => d.ClotureId == cloture.Id).ToList();
                 return new PayrollPeriodStateDto(g.Key.Debut, g.Key.Fin, cloture is null ? Envoye : Cloturee,
                     PayrollSnapshotService.Resume(dernier, instantanes.FirstOrDefault(i => i.EnvoiId == dernier.Id)),
-                    cloture is null ? null : Dto(cloture));
+                    cloture is null ? null : Dto(cloture, figesCloture))
+                {
+                    Domaines = EtatsDomaines(g.Key.Debut, g.Key.Fin, typeBase, envois, instantanes, options, cloture, figesCloture)
+                };
             })
             .OrderByDescending(p => p.PeriodeDebut).ThenByDescending(p => p.PeriodeFin)
             .ToList();
@@ -221,9 +280,7 @@ public sealed class PayrollClosureService : IPayrollClosureService
     private async Task<(PaieEnvoi Envoi, PaieInstantane Instantane)> DernierEnvoiValideAsync(
         string baseSage, DateTime debut, DateTime fin, CancellationToken ct)
     {
-        var envois = await _uow.Repository<PaieEnvoi>().ListReadOnlyAsync(
-            e => e.BddSage == baseSage && e.PeriodeDebut == debut && e.PeriodeFin == fin, ct);
-        var dernier = envois.OrderByDescending(e => e.EnvoyeLe).ThenByDescending(e => e.Id).FirstOrDefault()
+        var dernier = await DernierEnvoiAsync(baseSage, PayrollDomains.Heures, debut, fin, ct)
                       ?? throw new ConflictException(AucunEnvoi);
         if (string.Equals(dernier.Statut, "INCERTAIN", StringComparison.OrdinalIgnoreCase))
             throw new ConflictException(EnvoiIncertain);
@@ -304,14 +361,14 @@ public sealed class PayrollClosureService : IPayrollClosureService
 
     private static string Tronquer(string texte, int max) => texte.Length <= max ? texte : texte[..(max - 1)] + "…";
 
-    private JournalAudit Journal(PaieCloture c) => new()
+    private JournalAudit Journal(PaieCloture c, IReadOnlyList<PaieClotureDomaine> domaines) => new()
     {
         DateUtc = DateTime.UtcNow,
-        Tables = "T_PAIE_CLOTURE",
+        Tables = domaines.Count == 0 ? "T_PAIE_CLOTURE" : "T_PAIE_CLOTURE, T_PAIE_CLOTURE_DOMAINE",
         Actions = "CLOTURE_PAIE",
         Nouveaux = Tronquer(string.Create(CultureInfo.InvariantCulture,
             $"Période={c.PeriodeDebut:yyyy-MM-dd}..{c.PeriodeFin:yyyy-MM-dd}; Envoi={c.EnvoiId}; Empreinte={c.Empreinte}; "
-            + $"Contrôle={c.ResumeControle}"), 4000),
+            + $"Domaines={Domaines(domaines)}; Contrôle={c.ResumeControle}"), 4000),
         Users = c.CloturePar,
         BaseSage = c.BddSage,
         BasePointeuse = _company.PointeuseDatabase,
@@ -319,7 +376,162 @@ public sealed class PayrollClosureService : IPayrollClosureService
         Source = "CLOTURE_PAIE"
     };
 
-    internal static PayrollClosureDto Dto(PaieCloture c) => new(
+    /// <summary>Domaines figés pour le journal : « HEURES » seul, ou « HEURES, CANTINE:Envoi=…:Empreinte=… ».</summary>
+    internal static string Domaines(IEnumerable<PaieClotureDomaine> domaines) => string.Join(", ",
+        new[] { PayrollDomains.Heures }.Concat(domaines.OrderBy(d => d.Domaine, StringComparer.Ordinal).Select(d =>
+            string.Create(CultureInfo.InvariantCulture, $"{d.Domaine}:Envoi={d.EnvoiId}:Format={d.VersionFormat}:Empreinte={d.Empreinte.Trim()}"))));
+
+    internal static PayrollClosureDto Dto(PaieCloture c, IEnumerable<PaieClotureDomaine>? domaines = null) => new(
         c.Id, c.BddSage, c.PeriodeDebut, c.PeriodeFin, c.ClotureLe, c.CloturePar, c.EnvoiId, c.InstantaneId,
-        c.Empreinte.Trim(), c.StatutControle, c.ResumeControle);
+        c.Empreinte.Trim(), c.StatutControle, c.ResumeControle)
+    {
+        Domaines = (domaines ?? Array.Empty<PaieClotureDomaine>())
+            .OrderBy(d => d.Domaine, StringComparer.Ordinal)
+            .Select(d => new PayrollClosureDomainDto(d.Domaine, d.EnvoiId, d.InstantaneId, d.VersionFormat, d.Empreinte.Trim()))
+            .ToList()
+    };
+
+    // ---------- Domaines CANTINE et FRAIS (lot D5) ----------
+
+    /// <summary>Domaine validé pour la clôture : envoi, instantané et empreinte à figer.</summary>
+    private sealed record DomaineFige(string Domaine, int EnvoiId, int InstantaneId, int VersionFormat, string Empreinte);
+
+    /// <summary>
+    /// Domaines optionnels exigés pour la période, dans l'ordre CANTINE puis FRAIS : rien pour une base qui n'est pas STANDARD
+    /// (la cantine et les frais ne s'y envoient pas) ; sinon un domaine activé pour la base, ou envoyé sur une période qui
+    /// recoupe [debut, fin] même s'il n'est pas activé (sécurité).
+    /// </summary>
+    private async Task<IReadOnlyList<string>> DomainesExigesAsync(string baseSage, string? typeBase, DateTime debut, DateTime fin, CancellationToken ct)
+    {
+        if (!EstStandard(typeBase))
+            return Array.Empty<string>();
+        var options = await _uow.Repository<PaieOption>().ListReadOnlyAsync(o => o.BddSage == baseSage, ct);
+        var optionnels = PayrollDomains.Optionnels;
+        var envois = await _uow.Repository<PaieEnvoi>().ListReadOnlyAsync(
+            e => e.BddSage == baseSage && optionnels.Contains(e.Domaine) && e.PeriodeDebut <= fin && e.PeriodeFin >= debut, ct);
+        return optionnels.Where(d => PayrollOptions.DomaineActif(options, d) || envois.Any(e => e.Domaine == d)).ToList();
+    }
+
+    private static bool EstStandard(string? typeBase) => string.Equals(typeBase?.Trim(), "STANDARD", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Dernier envoi d'un domaine sur la période exacte, ou null.</summary>
+    private async Task<PaieEnvoi?> DernierEnvoiAsync(string baseSage, string domaine, DateTime debut, DateTime fin, CancellationToken ct) =>
+        (await _uow.Repository<PaieEnvoi>().ListReadOnlyAsync(
+            e => e.BddSage == baseSage && e.Domaine == domaine && e.PeriodeDebut == debut && e.PeriodeFin == fin, ct))
+        .OrderByDescending(e => e.EnvoyeLe).ThenByDescending(e => e.Id).FirstOrDefault();
+
+    /// <summary>
+    /// Motif qui empêche un domaine d'être figé (aucun envoi sur les bornes exactes, INCERTAIN, autre statut que SUCCES, sans
+    /// instantané, plage de matricules), ou null. Sert au refus de la clôture et à l'état affiché à l'écran.
+    /// </summary>
+    internal static string? Motif(string domaine, DateTime debut, DateTime fin, PaieEnvoi? dernier, PaieInstantane? instantane)
+    {
+        var libelle = PayrollDomains.Libelle(domaine);
+        var objet = domaine == PayrollDomains.Cantine ? "la cantine" : "les frais de déplacement";
+        var bornes = new ClosedPeriod(debut, fin).Libelle;
+        string F(string modele, object? statut = null) => string.Format(CultureInfo.InvariantCulture, modele, libelle, objet, bornes, statut);
+        if (dernier is null)
+            return F(DomaineAucunEnvoi);
+        if (string.Equals(dernier.Statut, "INCERTAIN", StringComparison.OrdinalIgnoreCase))
+            return F(DomaineIncertain);
+        if (!string.Equals(dernier.Statut, "SUCCES", StringComparison.OrdinalIgnoreCase))
+            return F(DomaineNonReussi, dernier.Statut);
+        if (instantane is null)
+            return F(DomaineSansInstantane);
+        if (instantane.AvecFiltre)
+            return F(DomaineFiltre);
+        return null;
+    }
+
+    /// <summary>Dernier envoi valide d'un domaine exigé, instantané intègre et concordant avec les totaux actuels (sinon refus 409).</summary>
+    private async Task<DomaineFige> DomaineValideAsync(string baseSage, string domaine, DateTime debut, DateTime fin, CancellationToken ct)
+    {
+        var dernier = await DernierEnvoiAsync(baseSage, domaine, debut, fin, ct);
+        var instantane = dernier is null
+            ? null
+            : (await _uow.Repository<PaieInstantane>().ListReadOnlyAsync(i => i.EnvoiId == dernier.Id, ct)).FirstOrDefault();
+        if (Motif(domaine, debut, fin, dernier, instantane) is { } motif)
+            throw new ConflictException(motif);
+        var libelle = PayrollDomains.Libelle(domaine);
+        var objet = domaine == PayrollDomains.Cantine ? "la cantine" : "les frais de déplacement";
+        var bornes = new ClosedPeriod(debut, fin).Libelle;
+        var lignes = await PayrollSnapshotService.LignesAsync(_uow, instantane!.Id, ct);
+        if (instantane.Domaine != domaine || !PayrollSnapshotService.Verifier(instantane, lignes).Integre)
+            throw new ConflictException(string.Format(CultureInfo.InvariantCulture, DomaineAltere, libelle, objet, bornes));
+        var ecarts = await EcartsTotauxAsync(baseSage, domaine, debut, fin, lignes, ct);
+        if (ecarts > 0)
+            throw new ConflictException(string.Format(CultureInfo.InvariantCulture, DomaineNonConcordant, libelle, objet, bornes, ecarts));
+        return new DomaineFige(domaine, dernier!.Id, instantane.Id, instantane.VersionFormat, instantane.Empreinte.Trim());
+    }
+
+    /// <summary>
+    /// Concordance avec les totaux actuels (T_CANTINE.TOTAL_CANTINE, T_FRAIS.TOTAL_POINT) des bornes exactes : chaque valeur
+    /// figée doit être le total actuel du salarié (0 s'il n'a plus de ligne). Détecte un « Calculer » relancé après l'envoi.
+    /// Comme pour les heures, seules les valeurs figées sont comparées.
+    /// </summary>
+    private async Task<int> EcartsTotauxAsync(
+        string baseSage, string domaine, DateTime debut, DateTime fin, IReadOnlyList<Domain.Models.PayrollSnapshotLine> lignes, CancellationToken ct)
+    {
+        var totaux = domaine == PayrollDomains.Cantine
+            ? (await _uow.Repository<Cantine>().ListReadOnlyAsync(c => c.NomBddSage == baseSage && c.DateDeb == debut && c.DateFin == fin, ct))
+                .Select(c => (Cle: MatriculeIdentity.Cle(c.MatriculeSage), Total: (decimal)(c.TotalCantine ?? 0)))
+            : (await _uow.Repository<Frais>().ListReadOnlyAsync(c => c.NomBddSage == baseSage && c.DateDeb == debut && c.DateFin == fin, ct))
+                .Select(c => (Cle: MatriculeIdentity.Cle(c.MatriculeSage), Total: (decimal)(c.TotalPoint ?? 0)));
+        var parSalarie = totaux.GroupBy(t => t.Cle, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First().Total, StringComparer.Ordinal);
+        return lignes.Count(l => Domain.Models.PayrollSnapshotFingerprint.Arrondir(
+            parSalarie.TryGetValue(MatriculeIdentity.Cle(l.Matricule), out var total) ? total : 0m) != l.Valeur);
+    }
+
+    /// <summary>État affiché de chaque domaine pour une période envoyée (heures, puis cantine et frais).</summary>
+    private static IReadOnlyList<PayrollDomainStateDto> EtatsDomaines(
+        DateTime debut, DateTime fin, string? typeBase, IReadOnlyList<PaieEnvoi> envois, IReadOnlyList<PaieInstantane> instantanes,
+        IReadOnlyList<PaieOption> options, PaieCloture? cloture, IReadOnlyList<PaieClotureDomaine> figes)
+    {
+        PaieEnvoi? Dernier(string domaine) => envois
+            .Where(e => e.Domaine == domaine && e.PeriodeDebut.Date == debut && e.PeriodeFin.Date == fin)
+            .OrderByDescending(e => e.EnvoyeLe).ThenByDescending(e => e.Id).FirstOrDefault();
+        PaieInstantane? De(PaieEnvoi? e) => e is null ? null : instantanes.FirstOrDefault(i => i.EnvoiId == e.Id);
+
+        var etats = new List<PayrollDomainStateDto>();
+        var heures = Dernier(PayrollDomains.Heures);
+        var instantaneHeures = De(heures);
+        var motifHeures = MotifHeures(heures, instantaneHeures);
+        etats.Add(new PayrollDomainStateDto(PayrollDomains.Heures, PayrollDomains.Libelle(PayrollDomains.Heures), true, true,
+            cloture is not null ? Fige : motifHeures is null ? EnvoyeDomaine : Manquant,
+            heures is null ? null : PayrollSnapshotService.Resume(heures, instantaneHeures),
+            cloture?.Empreinte.Trim() ?? instantaneHeures?.Empreinte?.Trim(), cloture is null ? motifHeures : null));
+
+        foreach (var domaine in PayrollDomains.Optionnels)
+        {
+            var actif = PayrollOptions.DomaineActif(options, domaine);
+            var dernier = Dernier(domaine);
+            var instantane = De(dernier);
+            var fige = figes.FirstOrDefault(f => f.Domaine == domaine);
+            var envoyeSurLaPeriode = envois.Any(e => e.Domaine == domaine && e.PeriodeDebut.Date <= fin && e.PeriodeFin.Date >= debut);
+            var exige = EstStandard(typeBase) && (actif || envoyeSurLaPeriode);
+            var motif = Motif(domaine, debut, fin, dernier, instantane);
+            var etat = cloture is not null
+                ? fige is not null ? Fige : NonExige
+                : !exige ? NonExige : motif is null ? EnvoyeDomaine : Manquant;
+            etats.Add(new PayrollDomainStateDto(domaine, PayrollDomains.Libelle(domaine), actif, cloture is not null ? fige is not null : exige,
+                etat, dernier is null ? null : PayrollSnapshotService.Resume(dernier, instantane),
+                fige?.Empreinte.Trim() ?? (motif is null ? instantane?.Empreinte?.Trim() : null),
+                etat == Manquant ? motif : null));
+        }
+        return etats;
+    }
+
+    /// <summary>Motif d'un envoi d'heures qui ne permet pas de clôturer (mêmes règles que le refus), ou null.</summary>
+    private static string? MotifHeures(PaieEnvoi? dernier, PaieInstantane? instantane)
+    {
+        if (dernier is null)
+            return AucunEnvoi;
+        if (string.Equals(dernier.Statut, "INCERTAIN", StringComparison.OrdinalIgnoreCase))
+            return EnvoiIncertain;
+        if (!string.Equals(dernier.Statut, "SUCCES", StringComparison.OrdinalIgnoreCase))
+            return string.Format(CultureInfo.InvariantCulture, EnvoiNonReussi, dernier.Statut);
+        if (instantane is null)
+            return SansInstantane;
+        return instantane.AvecFiltre ? EnvoiFiltre : null;
+    }
 }

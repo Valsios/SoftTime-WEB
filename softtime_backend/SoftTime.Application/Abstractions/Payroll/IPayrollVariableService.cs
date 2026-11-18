@@ -47,4 +47,12 @@ public interface IPayrollVariableService
     /// décimales), refus si le mois en cours est déjà envoyé ; journal central et caches du Contrôle avant paie.
     /// </summary>
     Task<PayrollWriteTargetsDto> SaveDestinationsAsync(PayrollWriteTargetsSaveDto destinations, CancellationToken ct = default);
+
+    /// <summary>
+    /// Active ou désactive la cantine et les frais de déplacement pour la base active (domaines exigés à la clôture). Même
+    /// droit que la configuration (administrateur ou SAGE:{base}:UPDATE) ; auteur et date dans T_PAIE_OPTION, journal
+    /// central. Activation refusée pour une base AUTRE (la cantine et les frais ne s'y envoient pas). Pas de verrou de mois :
+    /// le réglage ne change rien à ce qui est écrit en paie, seulement ce que la clôture exige.
+    /// </summary>
+    Task<PayrollVariablesConfigDto> SaveDomainsAsync(PayrollDomainsDto domaines, CancellationToken ct = default);
 }
