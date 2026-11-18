@@ -146,6 +146,8 @@ public static class DependencyInjection
         services.AddScoped<IPayrollVariableService, PayrollVariableService>();
         services.AddScoped<IPayrollSendLog, PayrollSendLog>();
         services.AddScoped<IPayrollSnapshotService, PayrollSnapshotService>();
+        services.AddScoped<IPayrollClosureGuard, PayrollClosureGuard>();
+        services.AddScoped<IPayrollClosureService, PayrollClosureService>();
         // Schéma de la table de destination d'une base AUTRE (destinations des variables).
         services.AddScoped<SoftTime.Application.Abstractions.Payroll.IPayrollTargetSchema, SoftTime.Infrastructure.Integrations.PayrollTargetSchema>();
         services.AddScoped<IPointeuseDatabaseService, PointeuseDatabaseService>();
