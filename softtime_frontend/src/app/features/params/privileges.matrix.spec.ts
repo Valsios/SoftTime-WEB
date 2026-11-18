@@ -93,3 +93,24 @@ describe('Privilèges : matrice par domaine', () => {
     expect(page.isDirty()).toBe(false);
   });
 });
+
+describe('Privilèges : droit « Clôturer la paie » par base SAGE', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('« Tout cocher » n’accorde jamais la clôture ; la case se coche à part ; « Tout décocher » la retire', () => {
+    const { page } = monter();
+    page.sageDbs.set([{ id: 1, nomBd: 'SAGE_DEMO' } as never]);
+    page.onRoleChange(3);
+
+    page.toggleGroup('SAGE', true);
+    expect(page.has('SAGE:SAGE_DEMO:UPDATE')).toBe(true);
+    expect(page.has('SAGE:SAGE_DEMO:CLOTURE')).toBe(false);
+
+    page.toggle('SAGE:SAGE_DEMO:CLOTURE', coche(true));
+    expect(page.has('SAGE:SAGE_DEMO:CLOTURE')).toBe(true);
+    expect(page.countActiveCategory('SAGE')).toBe(5); // CREATE, READ, UPDATE, DELETE, CLOTURE
+
+    page.toggleGroup('SAGE', false);
+    expect(page.has('SAGE:SAGE_DEMO:CLOTURE')).toBe(false);
+  });
+});
