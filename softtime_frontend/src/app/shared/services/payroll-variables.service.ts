@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import { ApiService } from '../../core/api';
 import { silentContext } from '../../core/silent-request';
 import {
+  PayrollDomains,
   PayrollTargetColumn,
   PayrollVariableSave,
   PayrollVariablesActive,
@@ -49,6 +50,14 @@ export class PayrollVariablesService extends ApiService {
     return this.http.get<PayrollTargetColumn[]>(this.url('/api/v1/payroll-variables/destinations/colonnes'), {
       params: new HttpParams().set('table', table),
     });
+  }
+
+  /**
+   * Active ou désactive la cantine et les frais de déplacement pour la base active (domaines exigés à la clôture). Même droit
+   * que la configuration ; refusé pour une base AUTRE.
+   */
+  saveDomains(domaines: PayrollDomains): Observable<PayrollVariablesConfig> {
+    return this.http.put<PayrollVariablesConfig>(this.url('/api/v1/payroll-variables/domains'), domaines);
   }
 
   /** Autre base : enregistre les destinations ; refusé (409) si le mois en cours a déjà été envoyé en paie. */

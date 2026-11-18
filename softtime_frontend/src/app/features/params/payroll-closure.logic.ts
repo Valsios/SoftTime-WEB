@@ -1,4 +1,4 @@
-import { PayrollPeriodState, PayrollSendSummary } from '../../shared/models';
+import { PayrollDomainState, PayrollPeriodState, PayrollSendSummary } from '../../shared/models';
 
 /** Date ISO (aaaa-mm-jj…) en jj/mm/aaaa. */
 export function dateFr(iso: string | null | undefined): string {
@@ -57,15 +57,48 @@ export function avertissement(p: PayrollPeriodState, aujourdhui: string): string
   }
   if (!e.instantaneId) return "Dernier envoi sans instantané : relancez l'envoi sans filtre avant de clôturer.";
   if (e.avecFiltre) return 'Dernier envoi filtré : lancez un envoi sans filtre avant de clôturer.';
+  const manquants = (p.domaines ?? []).filter((d) => d.domaine !== 'HEURES' && d.etat === 'MANQUANT');
+  if (manquants.length) {
+    return `${manquants.map((d) => d.libelle).join(' et ')} : calculez puis envoyez sur les bornes exactes de la période, `
+      + 'sans plage de matricules, avant de clôturer.';
+  }
   return null;
+}
+
+/** Libellé de l'état d'un domaine dans la carte. */
+export function libelleEtatDomaine(d: PayrollDomainState): string {
+  switch (d.etat) {
+    case 'FIGE': return 'figé';
+    case 'ENVOYE': return 'envoyé';
+    case 'MANQUANT': return 'manquant';
+    default: return 'non exigé';
+  }
+}
+
+/** Couleur du badge d'état d'un domaine. */
+export function varianteDomaine(d: PayrollDomainState): 'success' | 'info' | 'warning' | 'muted' {
+  switch (d.etat) {
+    case 'FIGE': return 'success';
+    case 'ENVOYE': return 'info';
+    case 'MANQUANT': return 'warning';
+    default: return 'muted';
+  }
+}
+
+/** Empreintes à figer, pour la confirmation : heures, puis cantine et frais envoyés. */
+export function empreintesAFiger(p: PayrollPeriodState): string {
+  const autres = (p.domaines ?? [])
+    .filter((d) => d.domaine !== 'HEURES' && d.etat === 'ENVOYE' && d.empreinte)
+    .map((d) => `${d.libelle.toLowerCase()} ${empreinteCourte(d.empreinte)}`);
+  return [`heures ${empreinteCourte(p.dernierEnvoi.empreinte)}`, ...autres].join(' ; ');
 }
 
 /** Texte de la fenêtre de confirmation : période, irréversibilité, corrections sur la période suivante. */
 export function questionCloture(base: string, p: PayrollPeriodState): string {
   return `Clôturer la période ${libellePeriode(p)} de la base ${base} ? `
     + "La clôture est définitive : il n'y a pas de retour en arrière. Les valeurs envoyées en paie sont figées "
-    + `(empreinte ${empreinteCourte(p.dernierEnvoi.empreinte)}) et aucune donnée de la période ne pourra plus être modifiée `
-    + '(pointages, heures corrigées, anomalies, planning, validation, calcul, envoi). Les corrections se feront sur la période suivante.';
+    + `(empreintes : ${empreintesAFiger(p)}) et aucune donnée de la période ne pourra plus être modifiée `
+    + '(pointages, heures corrigées, anomalies, planning, validation, calcul, cantine, frais, envoi). Les corrections se feront sur la période suivante.';
 }
 
 /** Jour local au format aaaa-mm-jj. */

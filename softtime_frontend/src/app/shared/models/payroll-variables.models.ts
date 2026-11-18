@@ -36,6 +36,14 @@ export interface PayrollVariablesConfig {
   heuresParJour?: number;
   /** Codes d'absence comptés comme non justifiés dans l'Absence (lot C3). */
   absenceCodes?: PayrollAbsenceCodes | null;
+  /** Domaines envoyés à la paie par la base, exigés à la clôture (lot D5). Absent : désactivés. */
+  domaines?: PayrollDomains | null;
+}
+
+/** Activation de la cantine et des frais de déplacement pour la base active (désactivés par défaut). */
+export interface PayrollDomains {
+  cantine: boolean;
+  frais: boolean;
 }
 
 /** Réglage « Codes d'absence comptés comme non justifiés » de la base. */

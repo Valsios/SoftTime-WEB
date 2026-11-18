@@ -4,7 +4,7 @@ import { errorMessage } from '../../core/error.logic';
 import { Droit } from '../../core/rights';
 import { SessionStore } from '../../core/session.store';
 import { ToastService } from '../../core/toast.service';
-import { PayrollPeriods, PayrollPeriodState } from '../../shared/models';
+import { PayrollDomainState, PayrollPeriods, PayrollPeriodState } from '../../shared/models';
 import { PayrollClosureService } from '../../shared/services/payroll-closure.service';
 import { SoftBadge, SoftButton, SoftCard } from '../../shared/components';
 import {
@@ -13,9 +13,11 @@ import {
   dateHeureFr,
   empreinteCourte,
   libelleEtat,
+  libelleEtatDomaine,
   libelleFiltre,
   libellePeriode,
   questionCloture,
+  varianteDomaine,
 } from './payroll-closure.logic';
 
 /**
@@ -43,8 +45,10 @@ import {
         <p class="pc-note">
           La clôture fige une période déjà envoyée en paie : les valeurs envoyées sont conservées avec leur empreinte et plus
           aucune donnée de la période ne peut être modifiée (pointages, heures corrigées, anomalies, planning, validation,
-          calcul, nouvel envoi). Elle exige un envoi sans filtre réussi et le Contrôle avant paie « Prêt » sur la base entière.
-          Elle est définitive : il n'existe pas de retour en arrière, les corrections se font sur la période suivante.
+          calcul, nouvel envoi). Elle exige un envoi sans filtre réussi et le Contrôle avant paie « Prêt » sur la base entière,
+          ainsi qu'un envoi sans plage de matricules, sur les bornes exactes de la période, de la cantine et des frais de
+          déplacement quand la base les envoie à la paie. Elle est définitive : il n'existe pas de retour en arrière, les
+          corrections se font sur la période suivante.
         </p>
         @if (erreur(); as e) {
           <div class="pc-banner pc-banner--danger" role="alert"><p>{{ e }}</p></div>
@@ -61,6 +65,7 @@ import {
                   <tr>
                     <th>Période</th>
                     <th>État</th>
+                    <th>Domaines</th>
                     <th>Dernier envoi</th>
                     <th>Empreinte</th>
                     <th><span class="pc-sr">Action</span></th>
@@ -74,6 +79,24 @@ import {
                         <soft-badge [variant]="p.etat === 'CLOTUREE' ? 'success' : 'info'">{{ etat(p) }}</soft-badge>
                         @if (p.cloture; as c) {
                           <div class="pc-meta">le {{ quand(c.clotureLe) }} par {{ c.cloturePar }}</div>
+                        }
+                      </td>
+                      <td data-label="Domaines">
+                        @if (p.domaines?.length) {
+                          <ul class="pc-domains" [attr.aria-label]="'Domaines de la période ' + periode(p)">
+                            @for (d of p.domaines; track d.domaine) {
+                              <li class="pc-domain">
+                                <span class="pc-domain__name">{{ d.libelle }}<span class="pc-sr"> : </span></span>
+                                <soft-badge [variant]="variante(d)">{{ etatDomaine(d) }}</soft-badge>
+                                @if (d.empreinte && d.etat !== 'NON_EXIGE') {
+                                  <span class="pc-hash pc-hash--small" [attr.title]="d.empreinte">{{ court(d.empreinte) }}</span>
+                                }
+                                @if (d.motif) { <div class="pc-meta pc-domain__why">{{ d.motif }}</div> }
+                              </li>
+                            }
+                          </ul>
+                        } @else {
+                          <span class="pc-meta">Heures seulement</span>
                         }
                       </td>
                       <td data-label="Dernier envoi">
@@ -130,6 +153,11 @@ import {
     .pc-hash { font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace); font-size: 13px;
       color: var(--app-text); margin-right: var(--space-xs); }
     .pc-action { min-width: 150px; }
+    .pc-domains { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; min-width: 180px; }
+    .pc-domain { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+    .pc-domain__name { font-size: 13px; color: var(--app-text); min-width: 0; }
+    .pc-domain__why { flex-basis: 100%; max-width: 320px; }
+    .pc-hash--small { font-size: 12px; color: var(--text-muted); margin-right: 0; }
     .pc-hint { margin-top: var(--space-xs); max-width: 260px; }
     .pc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
     /* Largeur étroite : une carte par période (comme la carte des variables), étiquette à gauche, valeur à droite. */
@@ -149,6 +177,8 @@ import {
       .pc-table tbody td.pc-period::before { content: none; }
       .pc-action { min-width: 0; }
       .pc-hint { max-width: none; }
+      .pc-domains { min-width: 0; }
+      .pc-domain__why { max-width: none; }
     }
   `],
 })
@@ -196,6 +226,8 @@ export class PayrollClosureCard implements OnInit {
   court(e: string): string { return empreinteCourte(e); }
   cle(p: PayrollPeriodState): string { return `${p.periodeDebut}|${p.periodeFin}`; }
   aide(p: PayrollPeriodState): string | null { return avertissement(p, aujourdhuiIso()); }
+  etatDomaine(d: PayrollDomainState): string { return libelleEtatDomaine(d); }
+  variante(d: PayrollDomainState): 'success' | 'info' | 'warning' | 'muted' { return varianteDomaine(d); }
 
   /** Empreinte de la clôture (figée) ou du dernier envoi. */
   empreinte(p: PayrollPeriodState): string | null {

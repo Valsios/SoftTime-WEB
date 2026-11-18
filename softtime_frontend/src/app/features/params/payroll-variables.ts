@@ -10,6 +10,7 @@ import { PayrollVariablesService } from '../../shared/services/payroll-variables
 import { SoftBadge, SoftButton, SoftCard, SoftSelect } from '../../shared/components';
 import { SelectOption } from '../../shared/components/soft-select';
 import { PayrollDestinations } from './payroll-destinations';
+import { PayrollDomainsSetting } from './payroll-domains';
 import {
   aCodePropre,
   AIDE_CODES_ABSENCE,
@@ -44,7 +45,7 @@ const LIBELLE_CODE_LONG = 24;
 @Component({
   selector: 'app-payroll-variables',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, SoftBadge, SoftButton, SoftCard, SoftSelect, PayrollDestinations],
+  imports: [FormsModule, SoftBadge, SoftButton, SoftCard, SoftSelect, PayrollDestinations, PayrollDomainsSetting],
   template: `
     <soft-card>
       <div class="pv-head">
@@ -226,6 +227,7 @@ const LIBELLE_CODE_LONG = 24;
           </div>
           @if (c.moisEnvoye) { <div class="soft-field__hint pv-option__hint">Mois déjà envoyé : modification impossible.</div> }
         </div>
+        <app-payroll-domains [config]="c" (enregistre)="charger()" />
         <p class="pv-note">
           Retard est envoyé en heures et Absence en heures ou en jours, avec la valeur affichée dans la page Heures
           supplémentaires ({{ autre() ? 'dans leur colonne de destination' : 'dans le code de paie choisi' }}) ; en jours,
