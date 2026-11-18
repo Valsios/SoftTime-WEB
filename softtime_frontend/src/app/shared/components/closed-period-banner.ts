@@ -12,10 +12,12 @@ function jour(iso: string): string {
 export const VERROU_CLOTURE =
   'Période clôturée : action désactivée. La clôture est définitive ; les corrections se font sur la période suivante.';
 
-/** Texte du bandeau : message commun du serveur, puis l'effet sur la page. */
-export function texteBandeau(message: string | null | undefined, debut: string, fin: string): string {
-  const base = message?.trim() || `Période clôturée (du ${jour(debut)} au ${jour(fin)}) : modification impossible.`;
-  return `${base.replace(/ Les corrections se font sur la période suivante\.$/, '')} Les actions qui modifient la période sont désactivées ; `
+/**
+ * Texte du bandeau, en une phrase qui suit le titre « Période clôturée » sans le répéter : la période, aucune
+ * modification possible, correction sur la période suivante.
+ */
+export function texteBandeau(debut: string, fin: string): string {
+  return `Du ${jour(debut)} au ${jour(fin)}, aucune modification n'est possible : `
     + 'les corrections se font sur la période suivante.';
 }
 
@@ -66,7 +68,7 @@ export class ClosedPeriodBanner {
 
   texte(e: PayrollClosureState): string {
     const p = e.periodes[0];
-    return texteBandeau(e.message, p.debut, p.fin);
+    return texteBandeau(p.debut, p.fin);
   }
 
   private lire(p: { from: string; to: string } | null): void {

@@ -63,12 +63,11 @@ describe('Clôture de paie : règles de l\'écran', () => {
     expect(avertissement(periode({ etat: 'CLOTUREE' }), jour)).toBeNull();
   });
 
-  it('le bandeau reprend le message commun du serveur et annonce les boutons désactivés', () => {
-    const t = texteBandeau('Période clôturée (du 17/08/2026 au 23/08/2026) : modification impossible. Les corrections se font sur la période suivante.',
-      '2026-08-17', '2026-08-23');
-    expect(t).toBe('Période clôturée (du 17/08/2026 au 23/08/2026) : modification impossible. Les actions qui modifient la période sont '
-      + 'désactivées ; les corrections se font sur la période suivante.');
-    expect(texteBandeau(null, '2026-08-17', '2026-08-23')).toContain('du 17/08/2026 au 23/08/2026');
+  it('le texte du bandeau ne répète pas le titre et tient en une phrase', () => {
+    const t = texteBandeau('2026-08-17', '2026-08-23');
+    expect(t).toBe("Du 17/08/2026 au 23/08/2026, aucune modification n'est possible : les corrections se font sur la période suivante.");
+    expect(t).not.toContain('Période clôturée');
+    expect(t.match(/\./g)?.length).toBe(1);
     expect(VERROU_CLOTURE).toContain('définitive');
   });
 });
@@ -193,10 +192,12 @@ describe('Bandeau « Période clôturée »', () => {
   }
 
   it('sélection qui recoupe une période clôturée : bandeau affiché et pages averties', () => {
-    const { texte, emis, svc } = bandeau(true);
+    const { fixture, texte, emis, svc } = bandeau(true);
     expect(svc.state).toHaveBeenCalledWith('2026-08-01', '2026-08-31');
-    expect(texte()).toContain('Période clôturée');
-    expect(texte()).toContain('Les actions qui modifient la période sont désactivées');
+    expect((fixture.nativeElement as HTMLElement).querySelector('.cpb__title')?.textContent?.trim()).toBe('Période clôturée');
+    expect((fixture.nativeElement as HTMLElement).querySelector('.cpb__text')?.textContent?.trim())
+      .toBe("Du 17/08/2026 au 23/08/2026, aucune modification n'est possible : les corrections se font sur la période suivante.");
+    expect(texte().match(/Période clôturée/g)?.length).toBe(1);
     expect(emis.at(-1)).toBe(true);
   });
 
