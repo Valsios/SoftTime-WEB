@@ -1,5 +1,4 @@
-﻿using SoftTime.Application.Abstractions.Payroll;
-using SoftTime.Application.Abstractions.EmployeePlanning;
+﻿using SoftTime.Application.Abstractions.EmployeePlanning;
 using SoftTime.Application.Abstractions.PlanningImport;
 using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.DTOs;
@@ -7,21 +6,21 @@ using SoftTime.Domain.Repositories;
 
 namespace SoftTime.Infrastructure.Services.PlanningImport;
 
+/// <summary>
+/// Imports et générations de planning. Clôture de paie : ces lots sont protégés par le filet commun à l'enregistrement
+/// (<c>ClosedPeriodWriteCheck</c>) : une journée dans une période clôturée fait refuser tout le lot (409), rien n'est écrit.
+/// </summary>
 public sealed class PlanningImportService : IPlanningImportService
 {
     private readonly IUnitOfWork _uow;
     private readonly ITenantConnectionService _tenant;
     private readonly IPlanningDatabaseFilter _planningDatabaseFilter;
 
-    private readonly IPayrollClosureGuard? _closures;
-
     public PlanningImportService(
         IUnitOfWork uow,
         ITenantConnectionService tenant,
-        IPlanningDatabaseFilter planningDatabaseFilter,
-        IPayrollClosureGuard? closures = null)
+        IPlanningDatabaseFilter planningDatabaseFilter)
     {
-        _closures = closures;
         _uow = uow;
         _tenant = tenant;
         _planningDatabaseFilter = planningDatabaseFilter;
