@@ -6,7 +6,7 @@ import { ToastService } from '../../core/toast.service';
 import { PunchUpdate, PeriodRequest, PageChangeEvent } from '../../shared/models';
 import { PunchesService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
-import { Column, DataTable, ImportTemplatesModal, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, PeriodFilter } from '../../shared/components';
+import { Column, DataTable, ImportTemplatesModal, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, PeriodFilter, ClosedPeriodBanner, VERROU_CLOTURE } from '../../shared/components';
 import { asRow, fmtDate } from '../../shared/utils/date';
 import { computed, input } from '@angular/core';
 import { readDeepLink } from '../../shared/utils/deep-link';
@@ -15,13 +15,13 @@ import { toastImportResult } from '../../shared/utils/import-result';
 @Component({
   selector: 'app-punches',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftInput, SoftModal, PeriodFilter, ImportTemplatesModal],
+  imports: [FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftInput, SoftModal, PeriodFilter, ClosedPeriodBanner, ImportTemplatesModal],
   template: `
     <page-header title="Pointages" subtitle="Liste, import et traitement des pointages">
       <soft-button variant="secondary" [loading]="excel.exporting()" (click)="exportExcel()">Export Excel</soft-button>
-      <soft-button variant="secondary" [loading]="importingClock()" [disabled]="processing()" (click)="importClock()">Import pointeuse</soft-button>
-      <soft-button [loading]="processing()" (click)="preprocess()">Traiter les pointages</soft-button>
-      <soft-button variant="danger" [loading]="busy()" (click)="purge()">Purger la période</soft-button>
+      <soft-button variant="secondary" [loading]="importingClock()" [disabled]="processing() || cloturee()" [attr.title]="cloturee() ? verrou : null" (click)="importClock()">Import pointeuse</soft-button>
+      <soft-button [loading]="processing()" [disabled]="cloturee()" [attr.title]="cloturee() ? verrou : null" (click)="preprocess()">Traiter les pointages</soft-button>
+      <soft-button variant="danger" [loading]="busy()" [disabled]="cloturee()" [attr.title]="cloturee() ? verrou : null" (click)="purge()">Purger la période</soft-button>
       <label class="file-btn">
         <input #punchFile type="file" accept=".xlsx,.xls" hidden (change)="onFile($event)" />
         <soft-button variant="accent" [loading]="importing()" (click)="punchFile.click()">Import Excel</soft-button>
@@ -30,6 +30,7 @@ import { toastImportResult } from '../../shared/utils/import-result';
     </page-header>
 
     <period-filter [initial]="link()" (search)="onSearch($event)"></period-filter>
+    <closed-period-banner [period]="periode()" (closedChange)="cloturee.set($event)" />
 
     <soft-card>
       <data-table
@@ -45,7 +46,7 @@ import { toastImportResult } from '../../shared/utils/import-result';
         (pageChange)="onPageChange($event)"
       >
         <ng-template #actions let-row>
-          <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
+          <soft-button size="sm" variant="ghost" [disabled]="cloturee()" [attr.title]="cloturee() ? verrou : null" (click)="openEdit(row)">Modifier</soft-button>
         </ng-template>
       </data-table>
     </soft-card>
@@ -71,6 +72,12 @@ import { toastImportResult } from '../../shared/utils/import-result';
   styles: [`.file-btn { cursor: pointer; } .form-grid { display: grid; gap: 14px; }`],
 })
 export class PunchesPage {
+  /** Sélection courante (bandeau « Période clôturée »). */
+  readonly periode = signal<PeriodRequest | null>(null);
+  /** La sélection recoupe une période clôturée : boutons de modification désactivés (le serveur refuse aussi). */
+  readonly cloturee = signal(false);
+  protected readonly verrou = VERROU_CLOTURE;
+
   // Lien profond facultatif (?du=&au=&matricule=), lié par withComponentInputBinding ; validé avant tout usage.
   readonly du = input<unknown>();
   readonly au = input<unknown>();
@@ -110,6 +117,7 @@ export class PunchesPage {
 
   onSearch(filter: PeriodRequest): void {
     this.lastFilter = filter;
+    this.periode.set(filter);
     this.page.set(1);
     this.loadPage();
   }

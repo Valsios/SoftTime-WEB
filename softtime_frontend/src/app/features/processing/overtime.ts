@@ -6,7 +6,7 @@ import { ToastService } from '../../core/toast.service';
 import { OvertimeDetail, PeriodRequest, PageChangeEvent } from '../../shared/models';
 import { OvertimeService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
-import { Column, DataTable, DataTableCell, PageHeader, SoftButton, SoftCard, SoftModal, PeriodFilter } from '../../shared/components';
+import { Column, DataTable, DataTableCell, PageHeader, SoftButton, SoftCard, SoftModal, PeriodFilter, ClosedPeriodBanner, VERROU_CLOTURE } from '../../shared/components';
 import { asRow, fmtDate, isMaxOneMonth } from '../../shared/utils/date';
 import { SessionStore } from '../../core/session.store';
 import { PayrollVariablesService } from '../../shared/services/payroll-variables.service';
@@ -16,16 +16,17 @@ import { PayrollVariablesActive } from '../../shared/models';
 @Component({
   selector: 'app-overtime',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DatePipe, PageHeader, SoftButton, SoftCard, DataTable, DataTableCell, SoftModal, PeriodFilter],
+  imports: [DatePipe, PageHeader, SoftButton, SoftCard, DataTable, DataTableCell, SoftModal, PeriodFilter, ClosedPeriodBanner],
   template: `
     <page-header title="Heures supplémentaires" subtitle="Calcul EXO/IMPO — période maximale d'un mois">
-      <soft-button variant="danger" [loading]="busy()" (click)="purge()">Purger</soft-button>
+      <soft-button variant="danger" [loading]="busy()" [disabled]="cloturee()" [attr.title]="cloturee() ? verrou : null" (click)="purge()">Purger</soft-button>
       <soft-button variant="secondary" [loading]="excel.exporting()" (click)="exportExcel()">Export Excel</soft-button>
-      <soft-button variant="accent" [loading]="busy()" (click)="syncPayroll()">{{ syncLabel() }}</soft-button>
-      <soft-button [loading]="busy()" (click)="calculate()">Calculer</soft-button>
+      <soft-button variant="accent" [loading]="busy()" [disabled]="cloturee()" [attr.title]="cloturee() ? verrou : null" (click)="syncPayroll()">{{ syncLabel() }}</soft-button>
+      <soft-button [loading]="busy()" [disabled]="cloturee()" [attr.title]="cloturee() ? verrou : null" (click)="calculate()">Calculer</soft-button>
     </page-header>
 
     <period-filter [autoSearch]="true" [showDepartement]="true" (search)="onSearch($event)"></period-filter>
+    <closed-period-banner [period]="periode()" (closedChange)="cloturee.set($event)" />
 
     <soft-card>
       <data-table
@@ -86,6 +87,12 @@ import { PayrollVariablesActive } from '../../shared/models';
   `],
 })
 export class OvertimePage implements OnInit {
+  /** Sélection courante (bandeau « Période clôturée »). */
+  readonly periode = signal<PeriodRequest | null>(null);
+  /** La sélection recoupe une période clôturée : boutons de modification désactivés (le serveur refuse aussi). */
+  readonly cloturee = signal(false);
+  protected readonly verrou = VERROU_CLOTURE;
+
   private readonly svc = inject(OvertimeService);
   protected readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
@@ -160,6 +167,7 @@ export class OvertimePage implements OnInit {
 
   onSearch(filter: PeriodRequest): void {
     this.lastFilter = filter;
+    this.periode.set(filter);
     if (!this.validatePeriod(filter)) {
       this.rows.set([]);
       this.total.set(0);
