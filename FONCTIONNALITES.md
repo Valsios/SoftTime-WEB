@@ -546,6 +546,77 @@ période sans ligne calculée, le verrou de mois, le journal, les droits et le s
 
 ---
 
+## 5 decies. Clôture de paie (lot D) — branche `feature/cloture-paie-lot-d`
+
+La clôture **fige une période déjà envoyée à la paie**, définitivement. Deux actions distinctes : **envoyer** (rejouable), puis **clôturer**
+(irréversible). Une clôture par (base, début, fin), sur la **base entière**. Tant que rien n'est clôturé, aucun comportement existant ne change.
+
+- **Principe** : chaque envoi réussi fige un **instantané** des valeurs réellement écrites ; la clôture choisit le dernier envoi de la période,
+  vérifie son empreinte et le Contrôle avant paie, puis interdit toute modification des données de la période.
+- **Instantané (D1)** : `T_PAIE_INSTANTANE` (entête : base, période, type de base, date et auteur de l'envoi, filtre de l'envoi, option de remise
+  à 0, heures par jour, version du format, empreinte, nombre de lignes, mises à jour sans ligne, salariés non remis à 0) et
+  `T_PAIE_INSTANTANE_LIGNE` (matricule, numéro de salarié SAGE, variable, destination = code de constante SAGE ou `schéma.table.colonne`, unité
+  `H`/`J`, valeur, indicateur « zéro de remise à 0 »). Contenu : **exactement les valeurs écrites** (zéros de remise à 0 compris, Absence dans
+  l'unité choisie) ; jamais les variables décochées ni les salariés hors périmètre ; une mise à jour qui n'a modifié **aucune ligne** (cumul absent
+  dans SAGE) n'est pas figée, elle est comptée dans l'entête. Un renvoi crée un nouvel instantané et ne remplace rien.
+- **Transactions** : STANDARD (SAGE, écritures non transactionnelles) : statut `SUCCES` et instantané écrits **dans une seule transaction
+  SoftTime** à la fin de l'envoi ; si elle échoue, l'envoi passe à `INCERTAIN` et le message de fin le signale (renvoyer la période, les valeurs SAGE
+  étant réécrites à l'identique). AUTRE : instantané écrit dans la **même transaction que le marqueur**, avant la validation de la paie ; s'il échoue,
+  la paie est annulée ; si la validation de la paie échoue, l'envoi est `INCERTAIN`. Un envoi en échec n'a pas d'instantané.
+- **Empreinte (format 1)** : SHA-256 du texte UTF-8 sans BOM, lignes séparées par `\n` (aucune en fin) : première ligne
+  `SOFTTIME-PAIE-INSTANTANE|1|{base}|{début aaaa-MM-jj}|{fin aaaa-MM-jj}|{TYPE}`, puis une ligne par valeur
+  `{matricule}|{numéro de salarié ou vide}|{variable}|{destination}|{unité}|{valeur}|{0 ou 1}` (valeur en culture invariante, point décimal,
+  exactement 4 décimales, arrondi au plus proche, milieu loin de zéro), triées en ordinal sur matricule, variable, destination, numéro de salarié ;
+  résultat en 64 caractères hexadécimaux minuscules. Ni la date ni l'auteur n'y entrent : deux envois identiques ont la même empreinte. Tout
+  changement de format exige une nouvelle version.
+- **Immuabilité** : aucun chemin de modification ni de suppression dans l'application ; déclencheurs `INSTEAD OF UPDATE, DELETE` sur les tables
+  d'instantané (erreur 51991) et de clôture (51992) ; clés étrangères vers `T_PAIE_ENVOI` (un envoi figé ne peut plus être supprimé). Un
+  administrateur de la base qui désactiverait les déclencheurs serait détecté par la vérification d'empreinte.
+- **Lecture (D1)** : `GET api/v1/payroll-snapshots?from&to` (envois de la période), `/{envoiId}` (détail), `/{envoiId}/verification` (empreinte
+  recalculée, « Instantané ALTÉRÉ » sinon). Mêmes droits que la lecture des variables (porte Bases + `SAGE:{base}:UPDATE`, ou administrateur).
+- **Clôturer (D2)** : `POST api/v1/payroll-closures { from, to }`, droit **`SAGE:{base}:CLOTURE`** (porte Bases), **jamais accordé par défaut**
+  (ni rôle par défaut, ni « Tout cocher ») : case « Clôturer la paie » de la base dans l'écran des droits ; l'administrateur est toujours autorisé.
+  Refus 409, dans cet ordre : période non terminée (fin ≥ aujourd'hui) ; déjà clôturée ou recoupant une clôture ; aucun envoi de la période exacte ;
+  dernier envoi `INCERTAIN`, en échec ou inachevé ; sans instantané ; **filtré** (« Lancez un envoi sans filtre avant de clôturer ») ; empreinte
+  altérée ; heures recalculées depuis l'envoi (valeurs figées ≠ `T_HSExoImp` actuel) ; Contrôle avant paie désactivé ; Contrôle **sans département,
+  sans cache** autre que « Prêt » (« À corriger » et « Bloquant » refusés, message avec le nombre d'anomalies critiques, leurs types et les dix
+  premières). Succès : ligne `T_PAIE_CLOTURE` (date, auteur, envoi et instantané, empreinte, statut et résumé du Contrôle), entrée `CLOTURE_PAIE` du
+  journal central avec l'auteur (filtrable par action dans l'onglet Journal), caches de l'analyse, de la checklist et des variables vidés.
+  Lectures : `GET …/periods` (périodes envoyées et état), `GET …/state?from&to` (bandeau des pages).
+- **Aucun déblocage** : ni bouton, ni route (PUT, PATCH, DELETE → 405), ni service. **Correction d'un mois clos** : sur la **période suivante**, par
+  une ligne de régularisation (valeur négative ou complémentaire) avec motif écrit — procédure manuelle à ce jour (saisie de la régularisation dans
+  la paie ou sur la période suivante), la fonction dédiée n'existe pas encore. **Dernier recours** (erreur grave) : restauration d'une sauvegarde de
+  la base SoftTime antérieure à la clôture, décidée par la direction, consignée hors application ; elle annule aussi tout ce qui a été saisi depuis.
+- **Nouvel envoi** : refusé (409) si la période recoupe une période clôturée : « Période clôturée (du … au …) : nouvel envoi en paie impossible. Les
+  corrections se font sur la période suivante. » Un envoi commencé avant la clôture ne peut plus figer son instantané (STANDARD : `INCERTAIN`).
+- **Verrous sur les sources (D3)** : contrôle commun (`PayrollClosureGuard`), refus 409 « Période clôturée (du … au …) : modification impossible. Les
+  corrections se font sur la période suivante. », **rien n'est écrit** : import de pointages (pointeuse : plage ; Excel : une ligne dans une période
+  close refuse **tout le fichier**, y compris les pointages tardifs), pré-traitement, modification et purge de pointages (la purge porte jusqu'au
+  lendemain de la fin), anomalies (arbitrage, conversion en lot, suppression), heures corrigées (saisie, modification, suppression, import en lot),
+  planning (saisie, déplacement d'une journée, suppression ; imports et générations en lot), validation, annulation et purge de semaine (l'aperçu
+  d'une semaine close n'écrit plus rien), calcul et purge des heures supplémentaires, **cantine et frais** (calcul, purge, envoi vers `T_CUMSAL`).
+  En plus, un **filet commun à l'enregistrement** refuse tout ajout, modification ou suppression d'une ligne datée de ces tables dans une période
+  close (dates avant et après modification), quel que soit le chemin. Une période voisine et une autre base restent modifiables.
+- **Restent modifiables** (paramètres généraux, non datés ou globaux) : tolérances, catégories, affectations, majorations, jours fériés, codes
+  d'absence, shifts, mode de pointage, cartes salariés, configuration des variables (soumise à son **verrou de mois**, distinct et inchangé). Leur
+  changement n'a **aucun effet** sur une période close : son recalcul et son renvoi sont refusés, et la paie garde l'instantané.
+- **Articulation avec le verrou de mois** : le verrou de mois (lot B) empêche de changer la configuration des variables tant qu'une période envoyée
+  recoupe le mois civil en cours ; la clôture fige une période précise, sans limite de durée. Ils sont indépendants : la clôture n'a pas besoin du
+  verrou de mois (un envoi clos ne peut plus être refait, quelle que soit la configuration), et le verrou de mois reste la règle de la configuration.
+- **Limites** : les **congés SAGE** sont lus en direct dans SAGE et **ne peuvent pas être verrouillés** par SoftTime ; un congé modifié après la
+  clôture ne change rien à la paie figée (instantané) mais peut faire diverger l'affichage recalculé (rapports, Mon espace) : à régulariser sur la
+  période suivante. Les périodes envoyées avant la migration 009 n'ont pas d'instantané : il faut les renvoyer pour pouvoir les clôturer.
+- **Écran (D4)** : écran **Bases SAGE**, carte « Clôture de paie » sous « Variables envoyées à la paie » (mêmes droits de base que l'envoi) :
+  périodes envoyées, état (Envoyée, Clôturée avec date et auteur), dernier envoi et filtre, empreinte raccourcie et copiable, bouton « Clôturer »
+  (droit de clôture) avec confirmation rappelant la période, l'absence de retour en arrière et la correction sur la période suivante ; refus du
+  serveur affiché tel quel ; vue en cartes sous 768 px. Bandeau « Période clôturée » et boutons de modification désactivés (avec explication) sur
+  Heures supplémentaires, Heures corrigées, Pointages, Anomalies et Validation semaine quand la sélection recoupe une période close.
+- **Migrations** : `009_instantanes_paie.sql` puis `010_cloture_paie.sql`, additives et rejouables, contrôlées au démarrage comme 007 et 008.
+  **Production sans AutoMigrate** : sauvegarde, puis `sqlcmd -S <serveur> -d <base SoftTime> -i migrations/versions/009_instantanes_paie.sql`, puis la
+  même commande avec `010_cloture_paie.sql` (dans cet ordre).
+
+---
+
 ## 6. Divers
 
 - **Cantine** : jours avec pointage 11h–14h30 ; recherche sur `T_CANTINE`, **Calculer** pour régénérer.
