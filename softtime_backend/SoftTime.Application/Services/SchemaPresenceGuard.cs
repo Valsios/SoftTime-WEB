@@ -156,6 +156,26 @@ public static class SchemaPresenceGuard
         }
     }
 
+    public const string MissingPayrollClosuresMessage =
+        "La clôture de paie est absente (T_PAIE_CLOTURE) : activez Database:AutoMigrate (développement) "
+        + "ou exécutez migrations/versions/010_cloture_paie.sql.";
+
+    /// <summary>
+    /// Sans la migration 010, chaque contrôle « période clôturée » (envoi, pointages, heures corrigées…) échouerait sur une
+    /// erreur SQL obscure : le démarrage s'arrête à la place avec un message qui indique la marche à suivre.
+    /// </summary>
+    public static async Task EnsurePayrollClosuresAsync(IUnitOfWork uow, CancellationToken ct)
+    {
+        try
+        {
+            await uow.ExecuteSqlAsync(GuardedSql("T_PAIE_CLOTURE", "SELECT 1;"), ct);
+        }
+        catch (Exception ex) when (ex.Message.Contains(Marker, StringComparison.Ordinal))
+        {
+            throw new DomainException(MissingPayrollClosuresMessage);
+        }
+    }
+
     public static string GuardedSql(string table, string sql) => $"""
         IF OBJECT_ID(N'dbo.{table}', N'U') IS NULL
             THROW 51990, N'{Marker}: dbo.{table}', 1;

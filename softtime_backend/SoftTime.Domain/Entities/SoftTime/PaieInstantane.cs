@@ -90,3 +90,37 @@ public class PaieInstantaneLigne
     /// <summary>Vrai pour un zéro de la remise à 0 (salarié du périmètre sans ligne de valeurs).</summary>
     public bool RemiseAZero { get; set; }
 }
+
+/// <summary>
+/// T_PAIE_CLOTURE : période clôturée d'une base SAGE (une par base, début, fin). Définitive : aucun déblocage, ni dans
+/// l'application ni dans la base (déclencheur de la migration 010). Les corrections se font sur la période suivante.
+/// </summary>
+public class PaieCloture
+{
+    public int Id { get; set; }
+
+    public string BddSage { get; set; } = string.Empty;
+
+    public DateTime PeriodeDebut { get; set; }
+
+    public DateTime PeriodeFin { get; set; }
+
+    /// <summary>Date UTC de la clôture.</summary>
+    public DateTime ClotureLe { get; set; }
+
+    public string CloturePar { get; set; } = string.Empty;
+
+    /// <summary>Envoi figé (dernier envoi réussi, sans filtre, de la période).</summary>
+    public int EnvoiId { get; set; }
+
+    public int InstantaneId { get; set; }
+
+    /// <summary>Empreinte de l'instantané figé, vérifiée au moment de la clôture.</summary>
+    public string Empreinte { get; set; } = string.Empty;
+
+    /// <summary>Statut du Contrôle avant paie au moment de la clôture (toujours « Pret »).</summary>
+    public string StatutControle { get; set; } = string.Empty;
+
+    /// <summary>Résumé du Contrôle avant paie au moment de la clôture.</summary>
+    public string ResumeControle { get; set; } = string.Empty;
+}

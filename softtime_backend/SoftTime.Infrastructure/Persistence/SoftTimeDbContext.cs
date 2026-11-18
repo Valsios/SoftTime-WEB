@@ -80,6 +80,7 @@ public class SoftTimeDbContext : DbContext
     public DbSet<PaieOption> PaieOptions => Set<PaieOption>();
     public DbSet<PaieInstantane> PaieInstantanes => Set<PaieInstantane>();
     public DbSet<PaieInstantaneLigne> PaieInstantaneLignes => Set<PaieInstantaneLigne>();
+    public DbSet<PaieCloture> PaieClotures => Set<PaieCloture>();
     public DbSet<FieldRole> FieldRoles => Set<FieldRole>();
     public DbSet<SourceEntityMapping> SourceEntityMappings => Set<SourceEntityMapping>();
     public DbSet<SourceFieldMapping> SourceFieldMappings => Set<SourceFieldMapping>();

@@ -59,3 +59,25 @@ public sealed class PaieInstantaneLigneConfiguration : IEntityTypeConfiguration<
         builder.HasIndex(x => x.InstantaneId).HasDatabaseName("IX_T_PAIE_INSTANTANE_LIGNE_INSTANTANE");
     }
 }
+
+/// <summary>Schéma créé par migrations/versions/010_cloture_paie.sql (déclencheur d'immuabilité déclaré à EF Core).</summary>
+public sealed class PaieClotureConfiguration : IEntityTypeConfiguration<PaieCloture>
+{
+    public void Configure(EntityTypeBuilder<PaieCloture> builder)
+    {
+        builder.ToTable("T_PAIE_CLOTURE", t => t.HasTrigger("TR_T_PAIE_CLOTURE_IMMUABLE"));
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).HasColumnName("ID").ValueGeneratedOnAdd();
+        builder.Property(x => x.BddSage).HasColumnName("BDD_SAGE").HasMaxLength(128).IsRequired();
+        builder.Property(x => x.PeriodeDebut).HasColumnName("PERIODE_DEBUT").HasColumnType("date");
+        builder.Property(x => x.PeriodeFin).HasColumnName("PERIODE_FIN").HasColumnType("date");
+        builder.Property(x => x.ClotureLe).HasColumnName("CLOTURE_LE").HasColumnType("datetime2");
+        builder.Property(x => x.CloturePar).HasColumnName("CLOTURE_PAR").HasMaxLength(256).IsRequired();
+        builder.Property(x => x.EnvoiId).HasColumnName("ENVOI_ID");
+        builder.Property(x => x.InstantaneId).HasColumnName("INSTANTANE_ID");
+        builder.Property(x => x.Empreinte).HasColumnName("EMPREINTE").HasColumnType("char(64)").IsRequired();
+        builder.Property(x => x.StatutControle).HasColumnName("STATUT_CONTROLE").HasMaxLength(16).IsRequired();
+        builder.Property(x => x.ResumeControle).HasColumnName("RESUME_CONTROLE").HasMaxLength(1000).IsRequired();
+        builder.HasIndex(x => new { x.BddSage, x.PeriodeDebut, x.PeriodeFin }).IsUnique().HasDatabaseName("UX_T_PAIE_CLOTURE_BDD_PERIODE");
+    }
+}

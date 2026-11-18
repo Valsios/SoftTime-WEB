@@ -203,6 +203,8 @@ using (var scope = app.Services.CreateScope())
     await SchemaPresenceGuard.EnsurePayrollOptionsAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
     // Instantanés des envois en paie (empreinte) : migration 009 obligatoire, sinon arrêt avec un message clair.
     await SchemaPresenceGuard.EnsurePayrollSnapshotsAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
+    // Clôture de paie : migration 010 obligatoire, sinon arrêt avec un message clair.
+    await SchemaPresenceGuard.EnsurePayrollClosuresAsync(scope.ServiceProvider.GetRequiredService<IUnitOfWork>(), CancellationToken.None);
 
     // Migration globale contrôlée des mots de passe en clair :
     // Par défaut, la migration est assurée de manière fluide et isolée à la connexion de chaque utilisateur (AuthService.LoginAsync),
