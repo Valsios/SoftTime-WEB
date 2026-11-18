@@ -254,6 +254,19 @@ public class SchemaMigratorTests
     }
 
     [Fact]
+    public async Task EnsurePayrollSnapshots_WithoutTheTables_ThrowsClearFrenchMessageNamingMigration009()
+    {
+        var uow = new MissingSchemaUnitOfWork();
+
+        var ex = (await FluentActions.Awaiting(() => SchemaPresenceGuard.EnsurePayrollSnapshotsAsync(uow, CancellationToken.None))
+            .Should().ThrowExactlyAsync<DomainException>()).Which;
+
+        ex.Message.Should().Be("Les instantanés des envois en paie sont absents (T_PAIE_INSTANTANE, T_PAIE_INSTANTANE_LIGNE) : activez "
+                               + "Database:AutoMigrate (développement) ou exécutez migrations/versions/009_instantanes_paie.sql.");
+        uow.LastSql.Should().Contain("OBJECT_ID(N'dbo.T_PAIE_INSTANTANE', N'U') IS NULL").And.Contain("T_PAIE_INSTANTANE_LIGNE");
+    }
+
+    [Fact]
     public async Task EnsurePayrollOptions_WithoutTheTable_ThrowsClearFrenchMessageNamingMigration008()
     {
         // Arrange

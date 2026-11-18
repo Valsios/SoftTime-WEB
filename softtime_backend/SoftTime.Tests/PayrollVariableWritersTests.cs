@@ -20,7 +20,7 @@ namespace SoftTime.Tests;
 /// commandes, mêmes valeurs, même ordre que dev-refonte), filtre, signalement des mises à jour sans ligne en STANDARD,
 /// et marqueur T_PAIE_ENVOI (atomicité AUTRE, échec partiel STANDARD, rien si rien n'est écrit).
 /// </summary>
-public class PayrollVariableWritersTests
+public partial class PayrollVariableWritersTests
 {
     private static readonly HsExoDto Ligne = new(1, "MAT01", 101, 1.5m, 2m, 0.5m, 1.25m, 3m, 4m, 2.5m, 7m, 1m);
     private static readonly HsExoDto Ligne2 = new(2, "MAT02", 102, 1m, 1m, 1m, 1m, 1m, 1m, 1m, 0m, 0m);

@@ -25,6 +25,7 @@ public class PayrollResetPerimeterTests
     {
         public List<HsExoDto> Recues { get; private set; } = new();
         public int Appels { get; private set; }
+        public PayrollSyncContext? Contexte { get; private set; }
         public bool CanHandle(BddSage database) => true;
         public Task<PayrollWriteResultDto> ValidateAsync(BddSage database, IReadOnlyList<HsExoDto> rows, CancellationToken ct = default)
             => Task.FromResult(new PayrollWriteResultDto("SAGE_TEST", "STANDARD", 0, 0, "ok"));
@@ -33,6 +34,7 @@ public class PayrollResetPerimeterTests
         {
             Appels++;
             Recues = rows.ToList();
+            Contexte = auditContext;
             return Task.FromResult(new PayrollWriteResultDto("SAGE_TEST", "STANDARD", rows.Count, 0, "ok"));
         }
     }
@@ -82,6 +84,20 @@ public class PayrollResetPerimeterTests
         c.Writer.Recues.Single(r => !r.SansValeur).Should().Match<HsExoDto>(r => r.Matricule == "04634" && r.Nuit == 9m);
         c.Writer.Recues.Single(r => r.SansValeur).Should().Match<HsExoDto>(r =>
             r.Matricule == "04700" && r.NumSal == 102 && r.Nuit == 0m && r.Exo130 == 0m && r.Retard == 0m);
+    }
+
+    [Fact]
+    public async Task SendFilter_IsPassedToTheWriter_ForTheSnapshot()
+    {
+        var c = new Contexte();
+        c.Ligne("04634", 101, 9m);
+
+        await c.Envoyer("BR704");
+        c.Writer.Contexte!.Filtre.Should().Be(new PayrollSendFilter("BR704", null, null));
+        await c.Envoyer(de: "04600", a: "04650");
+        c.Writer.Contexte!.Filtre.Should().Be(new PayrollSendFilter(null, "04600", "04650"));
+        await c.Envoyer();
+        c.Writer.Contexte!.Filtre.AvecFiltre.Should().BeFalse();
     }
 
     [Fact]

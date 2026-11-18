@@ -1,4 +1,5 @@
 using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 using SoftTime.Infrastructure.SchemaMigrations;
@@ -9,10 +10,10 @@ namespace SoftTime.Tests;
 public class SchemaMigratorIntegrationTests
 {
     // Les 48 tables du modèle EF (SoftTimeDbContext) créées par 001, plus suivi_JOURNAL créée par 003,
-    // plus T_PAIE_VARIABLE et T_PAIE_ENVOI créées par 007.
+    // plus T_PAIE_VARIABLE et T_PAIE_ENVOI créées par 007, T_PAIE_OPTION par 008, les instantanés par 009.
     private static readonly string[] ApplicationTables =
     {
-        "T_PAIE_VARIABLE", "T_PAIE_ENVOI",
+        "T_PAIE_VARIABLE", "T_PAIE_ENVOI", "T_PAIE_OPTION", "T_PAIE_INSTANTANE", "T_PAIE_INSTANTANE_LIGNE",
         "T_ROLE", "T_RESPONSABLE", "T_DROIT", "T_DROIT_ROLE", "T_BDD_AUTORISE", "T_USER_PERMISSION",
         "T_BDD_SAGE", "T_BDD_POINTEUSE", "T_CARDPAIE", "T_CATEGORIE", "T_CAT_SAL", "T_TOLERANCES",
         "T_POINTAGE", "T_HEURECORRIGER", "T_HEUREANOMALIE", "T_HEUREDIMANCHE", "T_HS_VALIDER", "T_HSExoImp",
@@ -45,6 +46,93 @@ public class SchemaMigratorIntegrationTests
             (await ScalarAsync<int>(connection, $"SELECT CASE WHEN OBJECT_ID(N'dbo.{table}', N'U') IS NULL THEN 0 ELSE 1 END;") == 1).Should().BeTrue($"Table dbo.{table} absente après la migration.");
         (await ScalarAsync<int>(connection, "SELECT COUNT(*) FROM dbo.T_ROLE WHERE IDROLE = 1;")).Should().Be(1);
         (await ScalarAsync<int>(connection, "SELECT COUNT(*) FROM dbo.T_DROIT WHERE IDDROIT BETWEEN 1 AND 6;")).Should().Be(6);
+    }
+
+    [MigrationIntegrationFact]
+    public async Task Script009_Snapshots_AreImmutable_AndProtectTheirSend()
+    {
+        var connectionString = DisposableConnectionString();
+        await Migrator(connectionString, lockTimeoutSeconds: 60).RunAsync();
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+        var envoi = await ScalarAsync<int>(connection, """
+            INSERT INTO dbo.T_PAIE_ENVOI (BDD_SAGE, PERIODE_DEBUT, PERIODE_FIN, ENVOYE_LE, ENVOYE_PAR, STATUT, LIGNES, TYPE_BASE)
+            VALUES (N'MIGTEST', '2026-01-01', '2026-01-31', SYSUTCDATETIME(), N'test', N'SUCCES', 1, N'STANDARD');
+            SELECT CAST(SCOPE_IDENTITY() AS int);
+            """);
+        var instantane = await ScalarAsync<int>(connection, $"""
+            INSERT INTO dbo.T_PAIE_INSTANTANE (ENVOI_ID, BDD_SAGE, PERIODE_DEBUT, PERIODE_FIN, TYPE_BASE, ENVOYE_LE, AVEC_FILTRE, REMISE_A_ZERO,
+                HEURES_PAR_JOUR, VERSION_FORMAT, EMPREINTE, NB_LIGNES, NB_SANS_LIGNE, NB_NON_REMIS, CREE_LE)
+            VALUES ({envoi}, N'MIGTEST', '2026-01-01', '2026-01-31', N'STANDARD', SYSUTCDATETIME(), 0, 1, 8, 1, REPLICATE('a', 64), 1, 0, 0, SYSUTCDATETIME());
+            SELECT CAST(SCOPE_IDENTITY() AS int);
+            """);
+        await ScalarAsync<int>(connection, $"""
+            INSERT INTO dbo.T_PAIE_INSTANTANE_LIGNE (INSTANTANE_ID, MATRICULE, NUM_SAL, VARIABLE, DESTINATION, UNITE, VALEUR, REMISE_A_ZERO)
+            VALUES ({instantane}, N'M1', 1, N'Exo130', N'HS01', N'H', 1.5, 0);
+            SELECT 1;
+            """);
+
+        foreach (var interdit in new[]
+                 {
+                     "UPDATE dbo.T_PAIE_INSTANTANE SET EMPREINTE = REPLICATE('b', 64);",
+                     "DELETE FROM dbo.T_PAIE_INSTANTANE;",
+                     "UPDATE dbo.T_PAIE_INSTANTANE_LIGNE SET VALEUR = 9;",
+                     "DELETE FROM dbo.T_PAIE_INSTANTANE_LIGNE;",
+                 })
+        {
+            var ex = await FluentActions.Awaiting(() => ScalarAsync<int>(connection, interdit + " SELECT 1;")).Should().ThrowAsync<SqlException>();
+            ex.Which.Number.Should().Be(51991, interdit);
+        }
+        await FluentActions.Awaiting(() => ScalarAsync<int>(connection, $"DELETE FROM dbo.T_PAIE_ENVOI WHERE ID = {envoi}; SELECT 1;"))
+            .Should().ThrowAsync<SqlException>("la clé étrangère protège un envoi qui a un instantané");
+        (await ScalarAsync<decimal>(connection, $"SELECT SUM(VALEUR) FROM dbo.T_PAIE_INSTANTANE_LIGNE WHERE INSTANTANE_ID = {instantane};")).Should().Be(1.5m);
+        (await ScalarAsync<int>(connection, $"SELECT COUNT(*) FROM dbo.T_PAIE_INSTANTANE WHERE ENVOI_ID = {envoi};")).Should().Be(1);
+        // Statut de l'envoi toujours modifiable (INCERTAIN après un échec).
+        (await ScalarAsync<int>(connection, $"UPDATE dbo.T_PAIE_ENVOI SET STATUT = N'INCERTAIN' WHERE ID = {envoi}; SELECT @@ROWCOUNT;")).Should().Be(1);
+    }
+
+    [MigrationIntegrationFact]
+    public async Task Script009_EfCoreWritesASnapshotDespiteTheTriggers_AndTheVerificationHolds()
+    {
+        var connectionString = DisposableConnectionString();
+        await Migrator(connectionString, lockTimeoutSeconds: 60).RunAsync();
+        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<SoftTime.Infrastructure.Persistence.SoftTimeDbContext>()
+            .UseSqlServer(connectionString).Options;
+        var lignes = new SoftTime.Domain.Models.PayrollSnapshotLine[] { new("M1", 1, "Exo130", "HS01", "H", 1.5m, false), new("M2", 2, "Exo130", "HS01", "H", 0m, true) };
+
+        int envoiId;
+        await using (var db = new SoftTime.Infrastructure.Persistence.SoftTimeDbContext(options))
+        {
+            var uow = new SoftTime.Infrastructure.Repositories.UnitOfWork(db);
+            var log = new SoftTime.Infrastructure.Services.Payroll.PayrollSendLog(new SingleScopeFactory(uow),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<SoftTime.Infrastructure.Services.Payroll.PayrollSendLog>.Instance);
+            envoiId = await log.RecordWithSnapshotAsync(
+                new SoftTime.Application.Abstractions.Payroll.PayrollSend("MIGTEST_EF", "AUTRE", new DateTime(2026, 2, 1), new DateTime(2026, 2, 28), "rh", "SUCCES", 2),
+                new SoftTime.Application.Abstractions.Payroll.PayrollSnapshotDraft(lignes, 0, 0, SoftTime.Application.Abstractions.Payroll.PayrollSendFilter.Aucun, true, 8m));
+        }
+
+        await using (var db = new SoftTime.Infrastructure.Persistence.SoftTimeDbContext(options))
+        {
+            var uow = new SoftTime.Infrastructure.Repositories.UnitOfWork(db);
+            var entete = (await uow.Repository<SoftTime.Domain.Entities.SoftTime.PaieInstantane>().ListReadOnlyAsync(i => i.EnvoiId == envoiId)).Single();
+            var relues = (await uow.Repository<SoftTime.Domain.Entities.SoftTime.PaieInstantaneLigne>().ListReadOnlyAsync(l => l.InstantaneId == entete.Id))
+                .Select(l => new SoftTime.Domain.Models.PayrollSnapshotLine(l.Matricule, l.NumSal, l.Variable, l.Destination, l.Unite, l.Valeur, l.RemiseAZero))
+                .ToList();
+            SoftTime.Infrastructure.Services.Payroll.PayrollSnapshotService.Verifier(entete, relues).Integre.Should().BeTrue();
+            entete.Empreinte.Should().Be(SoftTime.Domain.Models.PayrollSnapshotFingerprint.Calculer("MIGTEST_EF", new DateTime(2026, 2, 1), new DateTime(2026, 2, 28), "AUTRE", lignes));
+        }
+    }
+
+    private sealed class SingleScopeFactory(SoftTime.Domain.Repositories.IUnitOfWork uow) : Microsoft.Extensions.DependencyInjection.IServiceScopeFactory
+    {
+        public Microsoft.Extensions.DependencyInjection.IServiceScope CreateScope() => new Scope(uow);
+
+        private sealed class Scope(SoftTime.Domain.Repositories.IUnitOfWork uow) : Microsoft.Extensions.DependencyInjection.IServiceScope, IServiceProvider
+        {
+            public IServiceProvider ServiceProvider => this;
+            public object? GetService(Type serviceType) => serviceType == typeof(SoftTime.Domain.Repositories.IUnitOfWork) ? uow : null;
+            public void Dispose() { }
+        }
     }
 
     [MigrationIntegrationFact]

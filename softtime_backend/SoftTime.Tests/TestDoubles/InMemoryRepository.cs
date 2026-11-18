@@ -127,6 +127,12 @@ public sealed class InMemoryRepository<T> : IRepository<T> where T : class
             case PaieVariable variable:
                 variable.Id = (int)next;
                 break;
+            case PaieInstantane instantane:
+                instantane.Id = (int)next;
+                break;
+            case PaieInstantaneLigne ligne:
+                ligne.Id = (long)next;
+                break;
         }
     }
 }
