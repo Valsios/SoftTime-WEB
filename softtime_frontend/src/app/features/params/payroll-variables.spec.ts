@@ -5,7 +5,7 @@ import { ConfirmService } from '../../core/confirm.service';
 import { Droit } from '../../core/rights';
 import { SessionStore } from '../../core/session.store';
 import { ToastService } from '../../core/toast.service';
-import { PayrollTargetColumn, PayrollVariable, PayrollVariablesConfig, PayrollWriteTarget, PayrollWriteTargets } from '../../shared/models';
+import { PayrollAbsenceCode, PayrollTargetColumn, PayrollVariable, PayrollVariablesConfig, PayrollWriteTarget, PayrollWriteTargets } from '../../shared/models';
 import { PayrollVariablesService } from '../../shared/services/payroll-variables.service';
 import { PayrollDestinations } from './payroll-destinations';
 import { PayrollVariablesCard } from './payroll-variables';
@@ -13,6 +13,12 @@ import {
   ACTIVES_PAR_DEFAUT,
   changementOption,
   changements,
+  changementHeuresParJour,
+  changementsCodesAbsence,
+  codesAbsenceLus,
+  erreurHeuresParJour,
+  heuresParJourValide,
+  texteHeures,
   changementsDestinations,
   choixColonnes,
   colonnesNonEnvoyees,
@@ -734,5 +740,310 @@ describe('Confirmation de « Synchroniser vers SAGE » selon l\'option', () => {
   it('option décochée : la remise à 0 n\'est pas annoncée', () => {
     expect(questionEnvoi(true, 'SAGE_DEMO', false)).toBe('Pousser les HS vers SAGE (T_CUMSAL) ?');
     expect(questionEnvoi(false, 'AUTRE_BASE', false)).toBe('Écrire les HS dans la base AUTRE_BASE ?');
+  });
+});
+
+// =====================================================================================================
+// Lot C3 : Absence envoyable (unité, heures par jour, codes d'absence comptés, confirmations)
+// =====================================================================================================
+
+const CODES_SAGE = [
+  { code: 'ABS01', intitule: 'Absences' },
+  { code: 'RET01', intitule: 'Retard' },
+  ...Array.from({ length: 10 }, (_, i) => ({ code: `HS${String(i + 10)}`, intitule: `Heures ${i + 10}` })),
+];
+
+const CODES_ABSENCE: PayrollAbsenceCode[] = [
+  { libelle: 'Abs non payés', compte: false, introuvable: false, nonPaye: true, suggere: true },
+  { libelle: 'PERMISSION', compte: false, introuvable: false, nonPaye: false, suggere: false },
+  { libelle: 'ABSENCE NON JUSTIFIEE', compte: true, introuvable: false, nonPaye: false, suggere: false },
+];
+
+/** Carte avec l'Absence cochée (code ABS01) ; unité et réglage au choix. */
+function configAbsence(unite: 'H' | 'J', champs: Partial<PayrollVariablesConfig> = {}): PayrollVariablesConfig {
+  return config({
+    codesPaie: CODES_SAGE,
+    variables: Object.keys(LIBELLES).map((n) => (n === 'Absence'
+      ? variable(n, { actif: true, codePaie: 'ABS01', unite, cibleExistante: 'ABS01' })
+      : variable(n))),
+    heuresParJour: 8,
+    absenceCodes: { parDefaut: true, sansCode: true, codes: CODES_ABSENCE },
+    ...champs,
+  });
+}
+
+function rendreAbsence(reponse: PayrollVariablesConfig, options: { confirme?: boolean } = {}) {
+  const m = monter({ reponse, confirme: options.confirme });
+  const fixture = TestBed.createComponent(PayrollVariablesCard);
+  fixture.componentInstance.ngOnInit();
+  fixture.detectChanges();
+  const racine = fixture.nativeElement as HTMLElement;
+  return { ...m, fixture, racine, carte: fixture.componentInstance };
+}
+
+type OptionsAbsence = { heuresParJour?: number | null; absenceCodes?: { sansCode: boolean; codes: string[] } | null };
+
+function sauvegarde(svc: { save: { mock: { calls: unknown[][] } } }) {
+  const [variables, remise, absence] = svc.save.mock.calls[0] as [{ variable: string; unite: string | null }[], boolean, OptionsAbsence];
+  return { variables, remise, absence };
+}
+
+describe('Absence : liste des codes de paie avec recherche', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('les options affichent « code — intitulé » ; le code enregistré absent de SAGE reste proposé', () => {
+    const { carte } = rendreAbsence(configAbsence('H'));
+    const absence = carte.brouillon().find((v) => v.variable === 'Absence')!;
+
+    expect(carte.optionsCodes(absence)[0]).toEqual({ value: 'ABS01', label: 'ABS01 — Absences' });
+    expect(carte.optionsCodes({ ...absence, codePaie: 'OLD9' })[0]).toEqual({ value: 'OLD9', label: 'OLD9 — introuvable dans SAGE' });
+    expect(carte.avecRecherche('Absence')).toBe(true);
+    expect(carte.avecRecherche('Retard')).toBe(false);
+  });
+
+  it('taper dans le champ filtre la liste (code ou intitulé), « Aucun résultat » sinon', () => {
+    const { racine, fixture } = rendreAbsence(configAbsence('H'));
+    const champ = racine.querySelector<HTMLInputElement>('input[aria-label="Code de paie de Absence"]')!;
+    expect(champ.getAttribute('role')).toBe('combobox');
+
+    const saisir = (texte: string) => {
+      champ.focus();
+      champ.click();
+      champ.value = texte;
+      champ.dispatchEvent(new Event('input', { bubbles: true }));
+      fixture.detectChanges();
+      return Array.from(racine.querySelectorAll('[role="option"]')).map((o) => o.textContent!.trim());
+    };
+
+    expect(saisir('retard')).toEqual(['RET01 — Retard']);
+    expect(saisir('HS1')).toHaveLength(10);
+    expect(saisir('zzz')).toEqual([]);
+    expect(racine.querySelector('.soft-combobox__empty')?.textContent).toContain('Aucun résultat');
+  });
+});
+
+describe('Absence : unité et heures par jour', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const champHeures = (racine: HTMLElement) => racine.querySelector<HTMLInputElement>('input[aria-label="Heures par jour de l\'absence"]');
+  const MESSAGE = (recu: string) =>
+    `Le nombre d'heures par jour de l'absence doit être compris entre 1 et 24, avec une décimale au plus (valeur reçue : ${recu}).`;
+
+  it('en heures : aucun champ « Heures par jour »', () => {
+    expect(champHeures(rendreAbsence(configAbsence('H')).racine)).toBeNull();
+  });
+
+  it('en jours : champ à 8 par défaut avec son aide', () => {
+    const { racine } = rendreAbsence(configAbsence('J'));
+
+    expect(champHeures(racine)!.value).toBe('8');
+    expect(racine.textContent).toContain('Heures par jour');
+    expect(racine.textContent).toContain('L’absence est convertie en jours : heures ÷ heures par jour, arrondi au centième.');
+  });
+
+  it('passer l\'unité à « jours » affiche le champ ; la valeur lue (6,5) est reprise', () => {
+    const { racine, fixture, carte } = rendreAbsence(configAbsence('H', { heuresParJour: 6.5 }));
+    carte.changer('Absence', 'unite', 'J');
+    fixture.detectChanges();
+
+    expect(champHeures(racine)!.value).toBe('6.5');
+  });
+
+  it('saisie avec virgule acceptée ; champ vidé : erreur du serveur reprise à l\'identique, aucune confirmation', async () => {
+    const { carte, confirm, svc } = rendreAbsence(configAbsence('J'));
+    carte.changerHeuresParJour('6,5');
+    expect(carte.heuresParJour()).toBe(6.5);
+    expect(carte.modifie()).toBe(true);
+
+    carte.changerHeuresParJour('');
+    await carte.enregistrer();
+
+    expect(carte.heuresParJour()).toBeNull();
+    expect(carte.erreurs()).toEqual([MESSAGE('(vide)')]);
+    expect(confirm.ask).not.toHaveBeenCalled();
+    expect(svc.save).not.toHaveBeenCalled();
+  });
+
+  it.each([['0'], ['25'], ['7,25']])('valeur %s refusée avant l\'envoi, message du serveur', async (saisie) => {
+    const { carte, svc } = rendreAbsence(configAbsence('J'));
+    carte.changerHeuresParJour(saisie);
+
+    await carte.enregistrer();
+
+    expect(carte.erreurs()).toEqual([MESSAGE(saisie.replace(',', '.'))]);
+    expect(svc.save).not.toHaveBeenCalled();
+  });
+
+  it('règle de validité : 1 à 24, une décimale', () => {
+    expect([1, 7.5, 8, 24].every(heuresParJourValide)).toBe(true);
+    expect([0, 0.5, 24.5, 7.25, null, undefined, Number.NaN].some((v) => heuresParJourValide(v))).toBe(false);
+    expect(erreurHeuresParJour(8)).toBeNull();
+    expect(texteHeures(7.5)).toBe('7,5');
+    expect(texteHeures(null)).toBe('(vide)');
+  });
+
+  it('enregistrement : la confirmation cite « Absence : 6,5 heures par jour » ; le service reçoit les heures', async () => {
+    const { carte, confirm, svc } = rendreAbsence(configAbsence('J'));
+    carte.changerHeuresParJour('6,5');
+
+    await carte.enregistrer();
+
+    expect(confirm.ask.mock.calls[0][0]).toBe('Enregistrer pour la base SAGE_DEMO : Absence : 6,5 heures par jour ? Le changement s\'appliquera au prochain envoi en paie.');
+    expect(sauvegarde(svc).absence).toEqual({ heuresParJour: 6.5, absenceCodes: null });
+  });
+
+  it('heures par jour inchangées : non renvoyées', async () => {
+    const { carte, svc } = rendreAbsence(configAbsence('J'));
+    carte.basculer('Nuit', false);
+
+    await carte.enregistrer();
+
+    expect(sauvegarde(svc).absence.heuresParJour).toBeNull();
+  });
+
+  it('changementHeuresParJour : texte seulement quand la valeur change', () => {
+    expect(changementHeuresParJour(8, 8)).toBeNull();
+    expect(changementHeuresParJour(8, 7.5)).toBe('Absence : 7,5 heures par jour');
+  });
+
+  it('mois déjà envoyé : champ « Heures par jour » désactivé', () => {
+    const { racine } = rendreAbsence(configAbsence('J', { moisEnvoye: true, dernierEnvoi: '2026-11-01 → 2026-11-30' }));
+
+    expect(champHeures(racine)!.disabled).toBe(true);
+  });
+});
+
+describe('Absence : codes d\'absence comptés comme non justifiés', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const cases = (racine: HTMLElement) => Array.from(racine.querySelectorAll<HTMLLabelElement>('.pv-codes .pv-code'));
+  const ligne = (racine: HTMLElement, libelle: string) => cases(racine).find((l) => l.textContent!.includes(libelle))!;
+
+  it('liste : arbitrage sans code puis un code par ligne, cochés selon le réglage, avec les mentions', () => {
+    const { racine } = rendreAbsence(configAbsence('H'));
+
+    expect(racine.querySelector('.pv-codes__title')?.textContent).toBe('Codes d’absence comptés comme non justifiés');
+    expect(cases(racine).map((l) => l.querySelector('.pv-code__label')!.textContent)).toEqual([
+      'Arbitrage d\'absence sans code', 'Abs non payés', 'PERMISSION', 'ABSENCE NON JUSTIFIEE']);
+    expect(ligne(racine, 'Arbitrage').querySelector('input')!.checked).toBe(true);
+    expect(ligne(racine, 'ABSENCE NON JUSTIFIEE').querySelector('input')!.checked).toBe(true);
+    expect(ligne(racine, 'PERMISSION').querySelector('input')!.checked).toBe(false);
+    expect(ligne(racine, 'Abs non payés').textContent).toContain('non payé');
+    expect(ligne(racine, 'Abs non payés').textContent).toContain('à envisager');
+    expect(ligne(racine, 'PERMISSION').textContent).not.toContain('à envisager');
+    expect(racine.querySelector('.pv-codes__hint')?.textContent).toContain('Le changement s’applique au prochain calcul');
+  });
+
+  it('code enregistré mais absent de T_CODEABSENCE : badge « code introuvable » et avertissement tant qu\'il est compté', () => {
+    const introuvable: PayrollAbsenceCode = { libelle: 'ANCIEN CODE', compte: true, introuvable: true, nonPaye: false, suggere: false };
+    const { racine, fixture, carte } = rendreAbsence(configAbsence('H', {
+      absenceCodes: { parDefaut: false, sansCode: true, codes: [...CODES_ABSENCE, introuvable] },
+    }));
+
+    expect(ligne(racine, 'ANCIEN CODE').textContent).toContain('code introuvable');
+    expect(racine.querySelector('.pv-codes__warn')?.textContent).toContain('Un code enregistré n\'existe plus dans les codes d\'absence : il reste compté tant qu\'il n\'est pas décoché.');
+    expect(racine.querySelector('.pv-codes__warn')?.getAttribute('role')).toBe('status');
+
+    carte.basculerCode('ANCIEN CODE', false);
+    fixture.detectChanges();
+    expect(racine.querySelector('.pv-codes__warn')).toBeNull();
+    expect(ligne(racine, 'ANCIEN CODE').textContent).toContain('code introuvable');
+  });
+
+  it('cocher crée un brouillon (comparaison tolérante), Annuler revient au réglage lu', () => {
+    const { racine, fixture, carte } = rendreAbsence(configAbsence('H'));
+    expect(carte.modifie()).toBe(false);
+
+    ligne(racine, 'PERMISSION').querySelector('input')!.click();
+    fixture.detectChanges();
+    expect(carte.estCompte('permission')).toBe(true);
+    expect(carte.modifie()).toBe(true);
+
+    carte.annuler();
+    fixture.detectChanges();
+    expect(carte.estCompte('PERMISSION')).toBe(false);
+    expect(carte.modifie()).toBe(false);
+  });
+
+  it('mois déjà envoyé : les cases sont désactivées', () => {
+    const { racine } = rendreAbsence(configAbsence('H', { moisEnvoye: true, dernierEnvoi: '2026-11-01 → 2026-11-30' }));
+
+    expect(racine.querySelector<HTMLFieldSetElement>('fieldset.pv-codes')!.disabled).toBe(true);
+  });
+
+  it('codesAbsenceLus et changementsCodesAbsence : accents, casse et espaces ignorés ; arbitrage sans code', () => {
+    const lus = codesAbsenceLus({ parDefaut: false, sansCode: true, codes: CODES_ABSENCE });
+    expect(lus).toEqual({ sansCode: true, codes: ['ABSENCE NON JUSTIFIEE'] });
+    expect(codesAbsenceLus(null)).toEqual({ sansCode: true, codes: [] });
+    expect(changementsCodesAbsence(lus, { sansCode: true, codes: ['  absence non justifiée '] })).toEqual([]);
+    expect(changementsCodesAbsence(lus, { sansCode: false, codes: ['PERMISSION'] })).toEqual([
+      'Codes d\'absence comptés ajoutés : PERMISSION',
+      'Codes d\'absence comptés retirés : ABSENCE NON JUSTIFIEE',
+      'Arbitrage d\'absence sans code : non compté',
+    ]);
+  });
+
+  it('confirmation d\'enregistrement : codes ajoutés, rappel « prochain calcul » ; le service reçoit les codes et l\'arbitrage sans code', async () => {
+    const { racine, carte, confirm, svc } = rendreAbsence(configAbsence('H'));
+    ligne(racine, 'PERMISSION').querySelector('input')!.click();
+    carte.basculerSansCode(false);
+
+    await carte.enregistrer();
+
+    expect(confirm.ask).toHaveBeenCalledTimes(1);
+    expect(confirm.ask.mock.calls[0][0]).toBe(
+      'Enregistrer pour la base SAGE_DEMO : Codes d\'absence comptés ajoutés : PERMISSION ; Arbitrage d\'absence sans code : non compté ? '
+      + 'Le changement s\'appliquera au prochain envoi en paie ; les codes d\'absence comptés, au prochain calcul '
+      + '(recalculez les périodes déjà calculées avant de les envoyer).');
+    expect(sauvegarde(svc).absence).toEqual({ heuresParJour: null, absenceCodes: { sansCode: false, codes: ['ABSENCE NON JUSTIFIEE', 'PERMISSION'] } });
+  });
+
+  it('annulée à la confirmation : rien n\'est envoyé', async () => {
+    const { carte, svc } = rendreAbsence(configAbsence('H'), { confirme: false });
+    carte.basculerCode('PERMISSION', true);
+
+    await carte.enregistrer();
+
+    expect(svc.save).not.toHaveBeenCalled();
+  });
+
+  it('réglage de codes inchangé : non renvoyé, pas de rappel « prochain calcul »', async () => {
+    const { carte, svc, confirm } = rendreAbsence(configAbsence('H'));
+    carte.basculer('Nuit', false);
+
+    await carte.enregistrer();
+
+    expect(sauvegarde(svc).absence.absenceCodes).toBeNull();
+    expect(confirm.ask.mock.calls[0][0]).not.toContain('prochain calcul');
+  });
+
+  it('après enregistrement : brouillon remplacé par la réponse du serveur, carte non modifiée', async () => {
+    const { carte, svc, toast } = rendreAbsence(configAbsence('H'));
+    svc.save.mockReturnValueOnce(of(configAbsence('H', {
+      absenceCodes: { parDefaut: false, sansCode: true, codes: CODES_ABSENCE.map((c) => ({ ...c, compte: true })) },
+    })));
+    carte.basculerCode('PERMISSION', true);
+
+    await carte.enregistrer();
+
+    expect(toast.success).toHaveBeenCalled();
+    expect(carte.modifie()).toBe(false);
+    expect(carte.estCompte('PERMISSION')).toBe(true);
+  });
+});
+
+describe('Confirmation de « Synchroniser » : Absence envoyée en jours', () => {
+  it('Absence en jours : l\'unité et les heures par jour sont précisées, avec ou sans remise à 0', () => {
+    expect(questionEnvoi(true, 'SAGE_DEMO', false, 8)).toBe(
+      'Pousser les HS vers SAGE (T_CUMSAL) ? L\'absence est envoyée en jours (heures ÷ 8 h par jour, arrondi au centième).');
+    expect(questionEnvoi(false, 'AUTRE_BASE', false, 7.5)).toBe(
+      'Écrire les HS dans la base AUTRE_BASE ? L\'absence est envoyée en jours (heures ÷ 7,5 h par jour, arrondi au centième).');
+    expect(questionEnvoi(true, 'SAGE_DEMO', true, 6)).toContain(
+      'remis à 0 pour les variables envoyées à la paie (une variable non envoyée n\'est jamais modifiée). L\'absence est envoyée en jours (heures ÷ 6 h par jour');
+  });
+
+  it('Absence en heures, décochée ou configuration illisible : rien n\'est ajouté', () => {
+    expect(questionEnvoi(true, 'SAGE_DEMO', false, null)).toBe('Pousser les HS vers SAGE (T_CUMSAL) ?');
+    expect(questionEnvoi(true, 'SAGE_DEMO', false)).toBe('Pousser les HS vers SAGE (T_CUMSAL) ?');
   });
 });
