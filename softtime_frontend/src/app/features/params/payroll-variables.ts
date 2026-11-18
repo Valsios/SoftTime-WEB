@@ -34,6 +34,8 @@ import {
 
 /** Variables dont la liste des codes propose la recherche en tapant (lot C3 : Absence). */
 const CODES_AVEC_RECHERCHE: readonly string[] = ['Absence'];
+/** Au-delà de ce nombre de caractères, le libellé d'un code est répété en entier sous le champ sur écran étroit. */
+const LIBELLE_CODE_LONG = 24;
 
 /**
  * « Variables envoyées à la paie » de la base SAGE active. Rien n'est envoyé au serveur avant la confirmation ; les
@@ -127,6 +129,7 @@ const CODES_AVEC_RECHERCHE: readonly string[] = ['Absence'];
                           filterPlaceholder="Rechercher un code…" [filterable]="true" [options]="optionsCodes(v)"
                           [ngModel]="v.codePaie" [ngModelOptions]="{ standalone: true }" [disabled]="c.moisEnvoye || saving()"
                           (ngModelChange)="changer(v.variable, 'codePaie', $event ?? '')" />
+                        @if (libelleLong(v); as t) { <div class="soft-field__hint pv-hint pv-codefull">{{ t }}</div> }
                         @if (c.avertissementCodes) { <div class="soft-field__hint pv-hint">{{ c.avertissementCodes }}</div> }
                       } @else {
                         <div class="soft-select pv-field">
@@ -140,6 +143,7 @@ const CODES_AVEC_RECHERCHE: readonly string[] = ['Absence'];
                             </select>
                           </div>
                         </div>
+                        @if (libelleLong(v); as t) { <div class="soft-field__hint pv-hint pv-codefull">{{ t }}</div> }
                         @if (c.avertissementCodes) { <div class="soft-field__hint pv-hint">{{ c.avertissementCodes }}</div> }
                       }
                     } @else {
@@ -259,6 +263,7 @@ const CODES_AVEC_RECHERCHE: readonly string[] = ['Absence'];
     .pv-name__text { display: block; line-height: 44px; }
     .pv-name soft-badge { display: block; width: fit-content; margin: -6px 0 0; }
     .pv-hint { margin-top: var(--space-xs); }
+    .pv-codefull { display: none; overflow-wrap: anywhere; }
     .pv-readonly { color: var(--text-muted); line-height: 44px; }
     /* Libellés de codes longs (« ABS01 — Essai Absence », « HS-FERIE — … ») : champ plus large ; le libellé complet est aussi
        dans l'infobulle (title) quand il dépasse encore. */
@@ -311,6 +316,8 @@ const CODES_AVEC_RECHERCHE: readonly string[] = ['Absence'];
       .pv-table tbody td.pv-name { display: block; font-weight: 600; }
       .pv-table tbody td.pv-name::before { content: none; }
       .pv-name__text { display: inline; line-height: inherit; }
+      /* Le champ de code fait toute la largeur de la carte mais reste étroit : un libellé long est répété en entier dessous. */
+      .pv-codefull { display: block; }
       .pv-name soft-badge { display: inline-block; margin: 0 0 0 var(--space-sm); }
       .pv-table .pv-hint { grid-column: 2; margin-top: 0; }
       /* Listes et champ de code : étiquette au-dessus, contrôle sur toute la largeur (libellés de codes longs). */
@@ -415,6 +422,12 @@ export class PayrollVariablesCard implements OnInit {
   titreCode(v: PayrollVariable): string | null {
     const choisi = (v.codePaie ?? '').toLowerCase();
     return choisi ? this.optionsCodes(v).find((o) => String(o.value).toLowerCase() === choisi)?.label ?? v.codePaie : null;
+  }
+
+  /** Libellé complet à répéter sous le champ sur écran étroit (infobulle inutilisable au doigt) : seulement s'il est long. */
+  libelleLong(v: PayrollVariable): string | null {
+    const t = this.titreCode(v);
+    return t && t.length > LIBELLE_CODE_LONG ? t : null;
   }
 
   estCompte(libelle: string): boolean {

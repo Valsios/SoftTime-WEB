@@ -1094,6 +1094,22 @@ describe('Carte : libellé de code complet et alignement vertical', () => {
     expect(racine.querySelector('soft-select[title]')).toBeNull();
   });
 
+  it('libellé long : répété en entier sous le champ (masqué au-delà de 768 px) ; libellé court : aucune répétition', () => {
+    const long = rendre(configAbsence('H', {
+      codesPaie: [LONG, ...CODES_SAGE],
+      variables: Object.keys(LIBELLES).map((n) => (n === 'Absence' ? variable(n, { actif: true, codePaie: 'HS-FERIE', unite: 'H', cibleExistante: 'HS-FERIE' })
+        : n === 'Retard' ? variable(n, { codePaie: 'HS-FERIE', unite: 'H' }) : variable(n))),
+    }));
+    expect([...long.racine.querySelectorAll('.pv-codefull')].map((e) => e.textContent?.trim())).toEqual([LIBELLE_LONG, LIBELLE_LONG]);
+    expect(css()).toMatch(/\.pv-codefull(\[[^\]]+\])? ?\{ ?display: none;/);
+    expect(css()).toMatch(/\.pv-codefull(\[[^\]]+\])? ?\{ ?display: block;/);
+    TestBed.resetTestingModule();
+
+    const court = rendre(configAbsence('H'));
+    expect(court.racine.querySelectorAll('.pv-codefull')).toHaveLength(0);
+    expect(court.carte.libelleLong(variable('Absence', { codePaie: 'ABS01' }))).toBeNull();
+  });
+
   it('nom de la variable dans son propre élément, pastille « non envoyée » à part (même axe que les contrôles)', () => {
     const { racine } = rendre(config());
     const retard = [...racine.querySelectorAll('tbody tr')].find((l) => l.querySelector('td.pv-name')?.textContent?.includes('Retard'))!;
