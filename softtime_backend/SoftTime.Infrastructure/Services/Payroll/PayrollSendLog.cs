@@ -95,6 +95,7 @@ public sealed class PayrollSendLog : IPayrollSendLog
             PeriodeDebut = envoi.PeriodeDebut,
             PeriodeFin = envoi.PeriodeFin,
             TypeBase = envoi.TypeBase,
+            Domaine = envoi.Domaine,
             EnvoyeLe = envoi.EnvoyeLe,
             EnvoyePar = envoi.EnvoyePar,
             Departement = snapshot.Filtre.Departement,
@@ -103,8 +104,9 @@ public sealed class PayrollSendLog : IPayrollSendLog
             AvecFiltre = snapshot.Filtre.AvecFiltre,
             RemiseAZero = snapshot.RemiseAZero,
             HeuresParJour = snapshot.HeuresParJour,
-            VersionFormat = PayrollSnapshotFingerprint.Version,
-            Empreinte = PayrollSnapshotFingerprint.Calculer(envoi.BddSage, envoi.PeriodeDebut, envoi.PeriodeFin, envoi.TypeBase, lignes),
+            // Format 1 pour les heures (inchangé), format 2 pour la cantine et les frais.
+            VersionFormat = PayrollDomains.VersionEmpreinte(envoi.Domaine),
+            Empreinte = PayrollSnapshotFingerprint.CalculerDomaine(envoi.Domaine, envoi.BddSage, envoi.PeriodeDebut, envoi.PeriodeFin, envoi.TypeBase, lignes),
             NbLignes = lignes.Count,
             NbSansLigne = snapshot.SansLigne,
             NbNonRemis = snapshot.NonRemis,
@@ -135,7 +137,8 @@ public sealed class PayrollSendLog : IPayrollSendLog
         EnvoyeLe = DateTime.UtcNow,
         EnvoyePar = string.IsNullOrWhiteSpace(send.UserLogin) ? "SYSTEME" : send.UserLogin,
         Statut = send.Status,
-        Lignes = send.Lines
+        Lignes = send.Lines,
+        Domaine = send.Domain
     };
 
     public Task RemoveAsync(int id, CancellationToken ct = default) => LoggedAsync(async uow =>
@@ -153,7 +156,8 @@ public sealed class PayrollSendLog : IPayrollSendLog
     {
         using var scope = _scopeFactory.CreateScope();
         var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-        var envois = await uow.Repository<PaieEnvoi>().ListReadOnlyAsync(e => e.BddSage == sageDb, ct);
+        // Heures seulement : un envoi de cantine ou de frais ne verrouille pas la configuration des variables d'heures.
+        var envois = await uow.Repository<PaieEnvoi>().ListReadOnlyAsync(e => e.BddSage == sageDb && e.Domaine == PayrollDomains.Heures, ct);
         return envois.Select(e => (e.PeriodeDebut, e.PeriodeFin)).ToList();
     }
 

@@ -1,7 +1,9 @@
 namespace SoftTime.Application.Abstractions.Payroll;
 
-/// <summary>Envoi en paie à enregistrer dans T_PAIE_ENVOI.</summary>
-public sealed record PayrollSend(string SageDatabase, string TypeBase, DateTime PeriodFrom, DateTime PeriodTo, string? UserLogin, string Status, int Lines);
+/// <summary>Envoi en paie à enregistrer dans T_PAIE_ENVOI (domaine : HEURES, CANTINE ou FRAIS, migration 011).</summary>
+public sealed record PayrollSend(
+    string SageDatabase, string TypeBase, DateTime PeriodFrom, DateTime PeriodTo, string? UserLogin, string Status, int Lines,
+    string Domain = PayrollDomains.Heures);
 
 /// <summary>
 /// Marqueur « période envoyée en paie » (T_PAIE_ENVOI), écrit par les writers indépendamment du journal central.
@@ -31,6 +33,6 @@ public interface IPayrollSendLog
     /// <summary>Supprime un envoi qui n'a finalement rien écrit (validation de la paie AUTRE annulée).</summary>
     Task RemoveAsync(int id, CancellationToken ct = default);
 
-    /// <summary>Périodes envoyées d'une base.</summary>
+    /// <summary>Périodes envoyées d'une base (envois d'heures seulement : le verrou de configuration des variables).</summary>
     Task<IReadOnlyList<(DateTime Debut, DateTime Fin)>> ListPeriodsAsync(string sageDb, CancellationToken ct = default);
 }

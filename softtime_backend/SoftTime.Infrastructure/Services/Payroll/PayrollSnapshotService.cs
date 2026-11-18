@@ -31,7 +31,7 @@ public sealed class PayrollSnapshotService : IPayrollSnapshotService
         return await EnvoisAsync(_uow, baseSage, from.Date, to.Date, ct);
     }
 
-    /// <summary>Envois d'une base pour une période exacte, du plus récent au plus ancien, avec leur instantané.</summary>
+    /// <summary>Envois d'une base pour une période exacte, tous domaines, du plus récent au plus ancien, avec leur instantané.</summary>
     internal static async Task<IReadOnlyList<PayrollSendSummaryDto>> EnvoisAsync(
         IUnitOfWork uow, string baseSage, DateTime debut, DateTime fin, CancellationToken ct)
     {
@@ -71,8 +71,9 @@ public sealed class PayrollSnapshotService : IPayrollSnapshotService
         string recalculee;
         try
         {
-            recalculee = PayrollSnapshotFingerprint.Calculer(instantane.VersionFormat, instantane.BddSage, instantane.PeriodeDebut,
-                instantane.PeriodeFin, instantane.TypeBase, lignes);
+            // Le domaine choisit la première ligne du format (1 : HEURES ; 2 : CANTINE, FRAIS) ; un couple incohérent lève.
+            recalculee = PayrollSnapshotFingerprint.Calculer(instantane.VersionFormat, instantane.Domaine, instantane.BddSage,
+                instantane.PeriodeDebut, instantane.PeriodeFin, instantane.TypeBase, lignes);
         }
         catch (DomainException)
         {
@@ -115,5 +116,5 @@ public sealed class PayrollSnapshotService : IPayrollSnapshotService
     internal static PayrollSendSummaryDto Resume(PaieEnvoi e, PaieInstantane? i) => new(
         e.Id, e.BddSage, e.PeriodeDebut, e.PeriodeFin, e.TypeBase, e.EnvoyeLe, e.EnvoyePar, e.Statut, e.Lignes,
         i?.Id, i?.AvecFiltre, i?.Departement, i?.MatriculeDe, i?.MatriculeA, i?.VersionFormat, i?.Empreinte?.Trim(),
-        i?.NbLignes, i?.NbSansLigne, i?.NbNonRemis);
+        i?.NbLignes, i?.NbSansLigne, i?.NbNonRemis, e.Domaine);
 }

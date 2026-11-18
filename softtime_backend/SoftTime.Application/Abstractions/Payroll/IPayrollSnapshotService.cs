@@ -1,6 +1,9 @@
 namespace SoftTime.Application.Abstractions.Payroll;
 
-/// <summary>Envoi en paie d'une période, avec son instantané s'il en a un (envois réussis depuis la migration 009).</summary>
+/// <summary>
+/// Envoi en paie d'une période, avec son instantané s'il en a un (envois réussis depuis la migration 009), et son domaine
+/// (HEURES, CANTINE ou FRAIS, migration 011).
+/// </summary>
 public sealed record PayrollSendSummaryDto(
     int EnvoiId,
     string BddSage,
@@ -20,7 +23,8 @@ public sealed record PayrollSendSummaryDto(
     string? Empreinte,
     int? NbLignes,
     int? NbSansLigne,
-    int? NbNonRemis);
+    int? NbNonRemis,
+    string Domaine = PayrollDomains.Heures);
 
 /// <summary>Ligne figée d'un instantané.</summary>
 public sealed record PayrollSnapshotLineDto(
@@ -47,7 +51,7 @@ public sealed record PayrollSnapshotVerificationDto(
 /// </summary>
 public interface IPayrollSnapshotService
 {
-    /// <summary>Envois de la base active pour la période exacte, du plus récent au plus ancien.</summary>
+    /// <summary>Envois de la base active pour la période exacte, tous domaines, du plus récent au plus ancien.</summary>
     Task<IReadOnlyList<PayrollSendSummaryDto>> ListAsync(DateTime from, DateTime to, CancellationToken ct = default);
 
     /// <summary>Instantané d'un envoi de la base active (404 s'il n'existe pas ou appartient à une autre base).</summary>
