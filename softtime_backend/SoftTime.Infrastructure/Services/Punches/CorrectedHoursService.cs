@@ -73,8 +73,9 @@ public sealed class CorrectedHoursService : ICorrectedHoursService
         var repo = _uow.Repository<HeureCorrigee>();
         var sageDb = _tenant.SageDb;
         // La semaine cible ne doit pas être validée (ni, pour une modification, la semaine d'origine).
-        await _validatedWeekGuard.RefuserSiSemaineValideeAsync(sageDb, dto.Matricule, dto.DateIn, ct);
+        // Clôture de paie d'abord : sur une période clôturée, c'est le motif du refus (la validation ne peut plus être annulée).
         await ClosureChecks.OuverteAsync(_closures, new[] { dto.DateIn, dto.DateOut }, ct);
+        await _validatedWeekGuard.RefuserSiSemaineValideeAsync(sageDb, dto.Matricule, dto.DateIn, ct);
         HeureCorrigee entity;
         if (dto.Id == 0)
         {
@@ -92,8 +93,8 @@ public sealed class CorrectedHoursService : ICorrectedHoursService
         else
         {
             entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
-            await _validatedWeekGuard.RefuserSiSemaineValideeAsync(sageDb, entity.MatriculeSage, entity.DatePointageIn, ct);
             await ClosureChecks.OuverteAsync(_closures, new[] { entity.DatePointageIn, entity.DatePointageOut }, ct);
+            await _validatedWeekGuard.RefuserSiSemaineValideeAsync(sageDb, entity.MatriculeSage, entity.DatePointageIn, ct);
             entity.Origine = PunchProcessingConfiguration.OrigineManuel;
             Apply(dto, entity);
             repo.Update(entity);
@@ -109,8 +110,8 @@ public sealed class CorrectedHoursService : ICorrectedHoursService
         var sageDb = _tenant.SageDb;
         var e = (await repo.ListAsync(h => h.Id == id && h.BddSage == sageDb, ct)).FirstOrDefault()
                 ?? throw new NotFoundException();
-        await _validatedWeekGuard.RefuserSiSemaineValideeAsync(sageDb, e.MatriculeSage, e.DatePointageIn, ct);
         await ClosureChecks.OuverteAsync(_closures, new[] { e.DatePointageIn, e.DatePointageOut }, ct);
+        await _validatedWeekGuard.RefuserSiSemaineValideeAsync(sageDb, e.MatriculeSage, e.DatePointageIn, ct);
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
     }

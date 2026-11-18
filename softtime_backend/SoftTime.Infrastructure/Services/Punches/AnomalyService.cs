@@ -135,9 +135,9 @@ public sealed class AnomalyService : IAnomalyService
             .ToList();
         if (anomalies.Count == 0)
             throw new DomainException("Aucune anomalie trouvée pour les identifiants fournis.");
-        await EnsureValidableAsync(anomalies, ct);
-        // Clôture de paie : une sélection qui touche une période clôturée est refusée en bloc.
+        // Clôture de paie d'abord : une sélection qui touche une période clôturée est refusée en bloc.
         await ClosureChecks.OuverteAsync(_closures, anomalies.SelectMany(a => new[] { a.DatePointageIn, a.DatePointageOut }), ct);
+        await EnsureValidableAsync(anomalies, ct);
 
         var corrRepo = _uow.Repository<HeureCorrigee>();
         foreach (var anomalie in anomalies)
