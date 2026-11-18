@@ -396,6 +396,19 @@ interface FeatureCategory {
                           <span class="sw-lock-dot" title="Obligatoire pour l'administrateur"></span>
                         }
                       </label>
+
+                      <!-- Clôture de paie (définitive) : jamais accordée par défaut ni par « Tout cocher », seulement ici. -->
+                      <label class="sw-check-label" [class.is-disabled]="isReadOnly('SAGE:' + db.nomBd + ':CLOTURE')"
+                        title="Clôturer définitivement une période de paie de cette base (sans retour en arrière). Jamais accordé par défaut.">
+                        <input
+                          type="checkbox"
+                          [checked]="has('SAGE:' + db.nomBd + ':CLOTURE')"
+                          [disabled]="isReadOnly('SAGE:' + db.nomBd + ':CLOTURE')"
+                          (change)="toggle('SAGE:' + db.nomBd + ':CLOTURE', $event)"
+                        />
+                        <perm-mark [kind]="mark('SAGE:' + db.nomBd + ':CLOTURE')"></perm-mark>
+                        <span>Clôturer la paie</span>
+                      </label>
                     </div>
                   </div>
                 }
@@ -1605,6 +1618,7 @@ export class PrivilegesPage implements OnInit {
         if (this.has(`SAGE:${db.nomBd}:READ`)) count++;
         if (this.has(`SAGE:${db.nomBd}:UPDATE`)) count++;
         if (this.has(`SAGE:${db.nomBd}:DELETE`)) count++;
+        if (this.has(`SAGE:${db.nomBd}:CLOTURE`)) count++;
       }
       return count;
     }
@@ -1652,6 +1666,8 @@ export class PrivilegesPage implements OnInit {
             if (enable) next.add(c);
             else next.delete(c);
           }
+          // « Tout décocher » retire aussi la clôture ; « Tout cocher » ne l'accorde jamais (droit explicite).
+          if (!enable) next.delete(`SAGE:${db.nomBd}:CLOTURE`);
         }
       } else if (prefix === 'POINTEUSE') {
         if (enable) next.add('POINTEUSE:CREATE');
