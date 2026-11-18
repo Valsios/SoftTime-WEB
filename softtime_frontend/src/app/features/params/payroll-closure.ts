@@ -89,7 +89,7 @@ import {
                       <td data-label="Empreinte">
                         @if (empreinte(p); as e) {
                           <span class="pc-hash" [attr.title]="e">{{ court(e) }}</span>
-                          <soft-button size="sm" variant="ghost" [attr.aria-label]="'Copier l’empreinte de la période ' + periode(p)" (click)="copier(e)">Copier</soft-button>
+                          <soft-button size="sm" variant="ghost" [ariaLabel]="'Copier l’empreinte de la période ' + periode(p)" (click)="copier(e)">Copier</soft-button>
                         } @else {
                           <span class="pc-meta">aucune (envoi sans instantané)</span>
                         }
@@ -97,7 +97,7 @@ import {
                       <td class="pc-action" data-label="Action">
                         @if (p.etat === 'ENVOYEE' && d.peutCloturer) {
                           <soft-button variant="danger" size="sm" [loading]="enCours() === cle(p)" [disabled]="enCours() !== null"
-                            [attr.aria-label]="'Clôturer la période ' + periode(p)" (click)="cloturer(p)">Clôturer</soft-button>
+                            [ariaLabel]="'Clôturer la période ' + periode(p)" (click)="cloturer(p)">Clôturer</soft-button>
                           @if (aide(p); as a) { <div class="soft-field__hint pc-hint">{{ a }}</div> }
                         } @else if (p.etat === 'ENVOYEE') {
                           <span class="pc-meta">Clôture réservée au droit « Clôturer la paie » de la base.</span>

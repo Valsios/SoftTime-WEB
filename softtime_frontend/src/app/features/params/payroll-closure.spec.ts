@@ -206,3 +206,13 @@ describe('Bandeau « Période clôturée »', () => {
     expect(emis.at(-1)).toBe(false);
   });
 });
+
+describe('Carte « Clôture de paie » : noms accessibles', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('le bouton Clôturer porte le nom de sa période sur le <button> lui-même', () => {
+    const { fixture } = monter();
+    const bouton = [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Clôturer')!;
+    expect(bouton.getAttribute('aria-label')).toBe('Clôturer la période du 17/08/2026 au 23/08/2026');
+  });
+});
