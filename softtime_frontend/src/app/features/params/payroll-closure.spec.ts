@@ -5,7 +5,7 @@ import { ConfirmService } from '../../core/confirm.service';
 import { Droit } from '../../core/rights';
 import { SessionStore } from '../../core/session.store';
 import { ToastService } from '../../core/toast.service';
-import { PayrollPeriods, PayrollPeriodState, PayrollSendSummary } from '../../shared/models';
+import { PayrollDomainState, PayrollPeriods, PayrollPeriodState, PayrollSendSummary } from '../../shared/models';
 import { PayrollClosureService } from '../../shared/services/payroll-closure.service';
 import { ClosedPeriodBanner, texteBandeau, VERROU_CLOTURE } from '../../shared/components/closed-period-banner';
 import { PayrollClosureCard } from './payroll-closure';
@@ -15,8 +15,10 @@ import {
   dateFr,
   empreinteCourte,
   libelleEtat,
+  libelleEtatDomaine,
   libelleFiltre,
   questionCloture,
+  varianteDomaine,
 } from './payroll-closure.logic';
 
 const EMPREINTE = 'a'.repeat(20) + 'b'.repeat(44);
@@ -49,7 +51,7 @@ describe('Clôture de paie : règles de l\'écran', () => {
     expect(q).toContain('Clôturer la période du 17/08/2026 au 23/08/2026 de la base SAGE_DEMO ?');
     expect(q).toContain("il n'y a pas de retour en arrière");
     expect(q).toContain('Les corrections se feront sur la période suivante.');
-    expect(q).toContain('empreinte aaaaaaaaaaaa…');
+    expect(q).toContain('empreintes : heures aaaaaaaaaaaa…');
   });
 
   it('avertit des conditions connues qui manquent (le serveur reste seul juge)', () => {
@@ -225,5 +227,87 @@ describe('Carte « Clôture de paie » : visibilité', () => {
     const { texte, svc } = monter({ permissions: ['SAGE:SAGE_DEMO:READ'] });
     expect(texte().trim()).toBe('');
     expect(svc.periods).not.toHaveBeenCalled();
+  });
+});
+
+function domaine(champs: Partial<PayrollDomainState> & Pick<PayrollDomainState, 'domaine' | 'etat'>): PayrollDomainState {
+  const libelles = { HEURES: 'Heures', CANTINE: 'Cantine', FRAIS: 'Frais de déplacement' } as const;
+  return { libelle: libelles[champs.domaine], actif: true, exige: champs.etat !== 'NON_EXIGE', empreinte: null, motif: null, ...champs };
+}
+
+describe('Clôture de paie : domaines (heures, cantine, frais)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const CANTINE = 'c'.repeat(64);
+  const MOTIF = 'Cantine : aucun envoi en paie sur les bornes exactes de la période (du 17/08/2026 au 23/08/2026). '
+    + 'Calculez puis envoyez la cantine sur ces bornes, sans plage de matricules, avant de clôturer.';
+
+  it('libellés et couleurs : envoyé, figé, manquant, non exigé', () => {
+    expect(libelleEtatDomaine(domaine({ domaine: 'CANTINE', etat: 'ENVOYE' }))).toBe('envoyé');
+    expect(libelleEtatDomaine(domaine({ domaine: 'CANTINE', etat: 'FIGE' }))).toBe('figé');
+    expect(libelleEtatDomaine(domaine({ domaine: 'CANTINE', etat: 'MANQUANT' }))).toBe('manquant');
+    expect(libelleEtatDomaine(domaine({ domaine: 'FRAIS', etat: 'NON_EXIGE' }))).toBe('non exigé');
+    expect(varianteDomaine(domaine({ domaine: 'CANTINE', etat: 'MANQUANT' }))).toBe('warning');
+    expect(varianteDomaine(domaine({ domaine: 'CANTINE', etat: 'FIGE' }))).toBe('success');
+  });
+
+  it('un domaine manquant est annoncé sous le bouton, après les règles des heures', () => {
+    const jour = '2026-11-18';
+    const p = periode({ domaines: [domaine({ domaine: 'HEURES', etat: 'ENVOYE' }), domaine({ domaine: 'CANTINE', etat: 'MANQUANT', motif: MOTIF }),
+      domaine({ domaine: 'FRAIS', etat: 'MANQUANT' })] });
+    expect(avertissement(p, jour)).toBe('Cantine et Frais de déplacement : calculez puis envoyez sur les bornes exactes de la période, '
+      + 'sans plage de matricules, avant de clôturer.');
+    expect(avertissement({ ...p, dernierEnvoi: envoi({ statut: 'INCERTAIN' }) }, jour)).toContain('incertain');
+    expect(avertissement(periode({ domaines: [domaine({ domaine: 'FRAIS', etat: 'NON_EXIGE' })] }), jour)).toBeNull();
+  });
+
+  it('la confirmation cite l\'empreinte de chaque domaine envoyé', () => {
+    const q = questionCloture('SAGE_DEMO', periode({ domaines: [domaine({ domaine: 'HEURES', etat: 'ENVOYE', empreinte: EMPREINTE }),
+      domaine({ domaine: 'CANTINE', etat: 'ENVOYE', empreinte: CANTINE }), domaine({ domaine: 'FRAIS', etat: 'NON_EXIGE' })] }));
+    expect(q).toContain('empreintes : heures aaaaaaaaaaaa… ; cantine cccccccccccc…)');
+    expect(q).not.toContain('frais de déplacement');
+  });
+
+  it('la carte affiche l\'état de chaque domaine et le motif d\'un domaine manquant', () => {
+    const p = periode({ domaines: [domaine({ domaine: 'HEURES', etat: 'ENVOYE', empreinte: EMPREINTE }),
+      domaine({ domaine: 'CANTINE', etat: 'MANQUANT', motif: MOTIF }), domaine({ domaine: 'FRAIS', etat: 'NON_EXIGE', actif: false })] });
+    const { fixture, texte } = monter({ donnees: { bddSage: 'SAGE_DEMO', peutCloturer: true, periodes: [p] } });
+    const items = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.pc-domain')].map((li) => (li.textContent ?? '').replace(/\s+/g, ' ').trim());
+    expect(items[0]).toContain('Heures');
+    expect(items[0]).toContain('envoyé');
+    expect(items[1]).toContain('Cantine');
+    expect(items[1]).toContain('manquant');
+    expect(items[1]).toContain(MOTIF);
+    expect(items[2]).toBe('Frais de déplacement : non exigé');
+    expect((fixture.nativeElement as HTMLElement).querySelector('.pc-domains')?.getAttribute('aria-label')).toBe('Domaines de la période du 17/08/2026 au 23/08/2026');
+  });
+
+  it('période clôturée : domaines figés, aucun bouton de déblocage', () => {
+    const p = periode({
+      etat: 'CLOTUREE',
+      domaines: [domaine({ domaine: 'HEURES', etat: 'FIGE', empreinte: EMPREINTE }), domaine({ domaine: 'CANTINE', etat: 'FIGE', empreinte: CANTINE }),
+        domaine({ domaine: 'FRAIS', etat: 'NON_EXIGE', exige: false })],
+      cloture: { id: 1, bddSage: 'SAGE_DEMO', periodeDebut: '2026-08-17', periodeFin: '2026-08-23', clotureLe: '2026-11-18T09:00:00',
+        cloturePar: 'paie.rh', envoiId: 7, instantaneId: 4, empreinte: EMPREINTE, statutControle: 'Pret', resumeControle: 'Statut=Prêt',
+        domaines: [{ domaine: 'CANTINE', envoiId: 8, instantaneId: 5, versionFormat: 2, empreinte: CANTINE }] },
+    });
+    const { fixture } = monter({ donnees: { bddSage: 'SAGE_DEMO', peutCloturer: true, periodes: [p] } });
+    const el = fixture.nativeElement as HTMLElement;
+    expect([...el.querySelectorAll('.pc-domain')].filter((li) => li.textContent?.includes('figé'))).toHaveLength(2);
+    expect(el.querySelector('.pc-domain .pc-hash--small')?.getAttribute('title')).toBe(EMPREINTE);
+    const boutons = [...el.querySelectorAll('button')].map((b) => (b.textContent ?? '').trim().toLowerCase());
+    expect(boutons.some((b) => /débloq|rouvrir|annuler la clôture|déclôtur|clôturer/.test(b))).toBe(false);
+  });
+
+  it('serveur antérieur (sans domaines) : « Heures seulement »', () => {
+    const { texte } = monter();
+    expect(texte()).toContain('Heures seulement');
+  });
+
+  it('le refus du serveur qui nomme un domaine est affiché tel quel', async () => {
+    const { carte, fixture, texte } = monter({ refus: MOTIF });
+    await carte.cloturer(periode());
+    fixture.detectChanges();
+    expect(texte()).toContain(MOTIF);
   });
 });
