@@ -310,6 +310,8 @@ const LIBELLE_CODE_LONG = 24;
       .pv-table th:nth-child(3) { width: 97%; }
       .pv-hpj { flex-wrap: wrap; }
       .pv-hpj__input { width: 84px; }
+      /* Dans cette plage la colonne du code reste plus étroite qu'un libellé long : il est répété en entier sous le champ. */
+      .pv-codefull { display: block; }
     }
     /* Largeur étroite : la règle globale masque .soft-table-wrap (les data-table affichent alors leur vue en cartes).
        La carte garde son tableau, présenté en cartes (une par variable, comme .soft-table-card) : mêmes contrôles,
