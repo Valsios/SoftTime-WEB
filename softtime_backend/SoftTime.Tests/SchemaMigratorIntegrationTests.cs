@@ -13,7 +13,7 @@ public class SchemaMigratorIntegrationTests
     // plus T_PAIE_VARIABLE et T_PAIE_ENVOI créées par 007, T_PAIE_OPTION par 008, les instantanés par 009.
     private static readonly string[] ApplicationTables =
     {
-        "T_PAIE_VARIABLE", "T_PAIE_ENVOI", "T_PAIE_OPTION", "T_PAIE_INSTANTANE", "T_PAIE_INSTANTANE_LIGNE",
+        "T_PAIE_VARIABLE", "T_PAIE_ENVOI", "T_PAIE_OPTION", "T_PAIE_INSTANTANE", "T_PAIE_INSTANTANE_LIGNE", "T_PAIE_CLOTURE",
         "T_ROLE", "T_RESPONSABLE", "T_DROIT", "T_DROIT_ROLE", "T_BDD_AUTORISE", "T_USER_PERMISSION",
         "T_BDD_SAGE", "T_BDD_POINTEUSE", "T_CARDPAIE", "T_CATEGORIE", "T_CAT_SAL", "T_TOLERANCES",
         "T_POINTAGE", "T_HEURECORRIGER", "T_HEUREANOMALIE", "T_HEUREDIMANCHE", "T_HS_VALIDER", "T_HSExoImp",
@@ -121,6 +121,39 @@ public class SchemaMigratorIntegrationTests
             SoftTime.Infrastructure.Services.Payroll.PayrollSnapshotService.Verifier(entete, relues).Integre.Should().BeTrue();
             entete.Empreinte.Should().Be(SoftTime.Domain.Models.PayrollSnapshotFingerprint.Calculer("MIGTEST_EF", new DateTime(2026, 2, 1), new DateTime(2026, 2, 28), "AUTRE", lignes));
         }
+    }
+
+    [MigrationIntegrationFact]
+    public async Task Script010_Closure_IsDefinitive_NoUpdateNoDelete()
+    {
+        var connectionString = DisposableConnectionString();
+        await Migrator(connectionString, lockTimeoutSeconds: 60).RunAsync();
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+        var suffixe = Guid.NewGuid().ToString("N")[..8];
+        var envoi = await ScalarAsync<int>(connection, $"""
+            INSERT INTO dbo.T_PAIE_ENVOI (BDD_SAGE, PERIODE_DEBUT, PERIODE_FIN, ENVOYE_LE, ENVOYE_PAR, STATUT, LIGNES, TYPE_BASE)
+            VALUES (N'MIGTEST_{suffixe}', '2026-03-01', '2026-03-31', SYSUTCDATETIME(), N'test', N'SUCCES', 1, N'STANDARD');
+            SELECT CAST(SCOPE_IDENTITY() AS int);
+            """);
+        var instantane = await ScalarAsync<int>(connection, $"""
+            INSERT INTO dbo.T_PAIE_INSTANTANE (ENVOI_ID, BDD_SAGE, PERIODE_DEBUT, PERIODE_FIN, TYPE_BASE, ENVOYE_LE, AVEC_FILTRE, REMISE_A_ZERO,
+                HEURES_PAR_JOUR, VERSION_FORMAT, EMPREINTE, NB_LIGNES, NB_SANS_LIGNE, NB_NON_REMIS, CREE_LE)
+            VALUES ({envoi}, N'MIGTEST_{suffixe}', '2026-03-01', '2026-03-31', N'STANDARD', SYSUTCDATETIME(), 0, 1, 8, 1, REPLICATE('a', 64), 0, 0, 0, SYSUTCDATETIME());
+            SELECT CAST(SCOPE_IDENTITY() AS int);
+            """);
+        var insertion = $"""
+            INSERT INTO dbo.T_PAIE_CLOTURE (BDD_SAGE, PERIODE_DEBUT, PERIODE_FIN, CLOTURE_LE, CLOTURE_PAR, ENVOI_ID, INSTANTANE_ID, EMPREINTE, STATUT_CONTROLE, RESUME_CONTROLE)
+            VALUES (N'MIGTEST_{suffixe}', '2026-03-01', '2026-03-31', SYSUTCDATETIME(), N'test', {envoi}, {instantane}, REPLICATE('a', 64), N'Pret', N'r');
+            SELECT 1;
+            """;
+        await ScalarAsync<int>(connection, insertion);
+
+        foreach (var interdit in new[] { $"UPDATE dbo.T_PAIE_CLOTURE SET STATUT_CONTROLE = N'X' WHERE BDD_SAGE = N'MIGTEST_{suffixe}';", $"DELETE FROM dbo.T_PAIE_CLOTURE WHERE BDD_SAGE = N'MIGTEST_{suffixe}';" })
+            (await FluentActions.Awaiting(() => ScalarAsync<int>(connection, interdit + " SELECT 1;")).Should().ThrowAsync<SqlException>())
+                .Which.Number.Should().Be(51992, interdit);
+        await FluentActions.Awaiting(() => ScalarAsync<int>(connection, insertion)).Should().ThrowAsync<SqlException>("une seule clôture par base et période");
+        (await ScalarAsync<int>(connection, $"SELECT COUNT(*) FROM dbo.T_PAIE_CLOTURE WHERE BDD_SAGE = N'MIGTEST_{suffixe}';")).Should().Be(1);
     }
 
     private sealed class SingleScopeFactory(SoftTime.Domain.Repositories.IUnitOfWork uow) : Microsoft.Extensions.DependencyInjection.IServiceScopeFactory

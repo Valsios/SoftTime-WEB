@@ -343,6 +343,19 @@ ENTITY Majoration table=.T_MAJORATION key=[Id]
   P Cotation col=Cotation type=decimal(18,2) null=True max= fixed= unicode= prec=18,2 gen=Never
   P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
   P Mojoration col=Mojoration type=nvarchar(max) null=True max= fixed= unicode= prec=, gen=Never
+ENTITY PaieCloture table=.T_PAIE_CLOTURE key=[Id]
+  P BddSage col=BDD_SAGE type=nvarchar(128) null=False max=128 fixed= unicode= prec=, gen=Never
+  P ClotureLe col=CLOTURE_LE type=datetime2 null=False max= fixed= unicode= prec=, gen=Never
+  P CloturePar col=CLOTURE_PAR type=nvarchar(256) null=False max=256 fixed= unicode= prec=, gen=Never
+  P Empreinte col=EMPREINTE type=char(64) null=False max= fixed= unicode= prec=, gen=Never
+  P EnvoiId col=ENVOI_ID type=int null=False max= fixed= unicode= prec=, gen=Never
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P InstantaneId col=INSTANTANE_ID type=int null=False max= fixed= unicode= prec=, gen=Never
+  P PeriodeDebut col=PERIODE_DEBUT type=date null=False max= fixed= unicode= prec=, gen=Never
+  P PeriodeFin col=PERIODE_FIN type=date null=False max= fixed= unicode= prec=, gen=Never
+  P ResumeControle col=RESUME_CONTROLE type=nvarchar(1000) null=False max=1000 fixed= unicode= prec=, gen=Never
+  P StatutControle col=STATUT_CONTROLE type=nvarchar(16) null=False max=16 fixed= unicode= prec=, gen=Never
+  I UX_T_PAIE_CLOTURE_BDD_PERIODE [BddSage,PeriodeDebut,PeriodeFin] unique=True filter= desc=
 ENTITY PaieEcriture table=.T_PAIE_ECRITURE key=[Id]
   P BddSage col=BDD_SAGE type=nvarchar(128) null=False max=128 fixed= unicode= prec=, gen=Never
   P Categorie col=CATEGORIE type=nvarchar(32) null=False max=32 fixed= unicode= prec=, gen=Never
@@ -362,6 +375,40 @@ ENTITY PaieEnvoi table=.T_PAIE_ENVOI key=[Id]
   P Statut col=STATUT type=nvarchar(16) null=False max=16 fixed= unicode= prec=, gen=Never
   P TypeBase col=TYPE_BASE type=nvarchar(16) null=False max=16 fixed= unicode= prec=, gen=Never
   I IX_T_PAIE_ENVOI_BDD_PERIODE [BddSage,PeriodeDebut,PeriodeFin] unique=False filter= desc=
+ENTITY PaieInstantane table=.T_PAIE_INSTANTANE key=[Id]
+  P AvecFiltre col=AVEC_FILTRE type=bit null=False max= fixed= unicode= prec=, gen=Never
+  P BddSage col=BDD_SAGE type=nvarchar(128) null=False max=128 fixed= unicode= prec=, gen=Never
+  P CreeLe col=CREE_LE type=datetime2 null=False max= fixed= unicode= prec=, gen=Never
+  P Departement col=DEPARTEMENT type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P Empreinte col=EMPREINTE type=char(64) null=False max= fixed= unicode= prec=, gen=Never
+  P EnvoiId col=ENVOI_ID type=int null=False max= fixed= unicode= prec=, gen=Never
+  P EnvoyeLe col=ENVOYE_LE type=datetime2 null=False max= fixed= unicode= prec=, gen=Never
+  P EnvoyePar col=ENVOYE_PAR type=nvarchar(256) null=True max=256 fixed= unicode= prec=, gen=Never
+  P HeuresParJour col=HEURES_PAR_JOUR type=decimal(9,4) null=False max= fixed= unicode= prec=, gen=Never
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P MatriculeA col=MATRICULE_A type=nvarchar(64) null=True max=64 fixed= unicode= prec=, gen=Never
+  P MatriculeDe col=MATRICULE_DE type=nvarchar(64) null=True max=64 fixed= unicode= prec=, gen=Never
+  P NbLignes col=NB_LIGNES type=int null=False max= fixed= unicode= prec=, gen=Never
+  P NbNonRemis col=NB_NON_REMIS type=int null=False max= fixed= unicode= prec=, gen=Never
+  P NbSansLigne col=NB_SANS_LIGNE type=int null=False max= fixed= unicode= prec=, gen=Never
+  P PeriodeDebut col=PERIODE_DEBUT type=date null=False max= fixed= unicode= prec=, gen=Never
+  P PeriodeFin col=PERIODE_FIN type=date null=False max= fixed= unicode= prec=, gen=Never
+  P RemiseAZero col=REMISE_A_ZERO type=bit null=False max= fixed= unicode= prec=, gen=Never
+  P TypeBase col=TYPE_BASE type=nvarchar(16) null=False max=16 fixed= unicode= prec=, gen=Never
+  P VersionFormat col=VERSION_FORMAT type=int null=False max= fixed= unicode= prec=, gen=Never
+  I IX_T_PAIE_INSTANTANE_BDD_PERIODE [BddSage,PeriodeDebut,PeriodeFin] unique=False filter= desc=
+  I UX_T_PAIE_INSTANTANE_ENVOI [EnvoiId] unique=True filter= desc=
+ENTITY PaieInstantaneLigne table=.T_PAIE_INSTANTANE_LIGNE key=[Id]
+  P Destination col=DESTINATION type=nvarchar(128) null=False max=128 fixed= unicode= prec=, gen=Never
+  P Id col=ID type=bigint null=False max= fixed= unicode= prec=, gen=OnAdd
+  P InstantaneId col=INSTANTANE_ID type=int null=False max= fixed= unicode= prec=, gen=Never
+  P Matricule col=MATRICULE type=nvarchar(64) null=False max=64 fixed= unicode= prec=, gen=Never
+  P NumSal col=NUM_SAL type=int null=True max= fixed= unicode= prec=, gen=Never
+  P RemiseAZero col=REMISE_A_ZERO type=bit null=False max= fixed= unicode= prec=, gen=Never
+  P Unite col=UNITE type=nvarchar(1) null=False max=1 fixed= unicode= prec=, gen=Never
+  P Valeur col=VALEUR type=decimal(18,4) null=False max= fixed= unicode= prec=, gen=Never
+  P Variable col=VARIABLE type=nvarchar(32) null=False max=32 fixed= unicode= prec=, gen=Never
+  I IX_T_PAIE_INSTANTANE_LIGNE_INSTANTANE [InstantaneId] unique=False filter= desc=
 ENTITY PaieOption table=.T_PAIE_OPTION key=[Id]
   P BddSage col=BDD_SAGE type=nvarchar(128) null=False max=128 fixed= unicode= prec=, gen=Never
   P Cle col=CLE type=nvarchar(64) null=False max=64 fixed= unicode= prec=, gen=Never

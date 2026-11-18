@@ -41,7 +41,7 @@ public class SchemaMigrationsIntegrityTests
         var scripts = new EmbeddedMigrationScriptSource().Load();
 
         // Assert
-        scripts.Select(s => s.Version).ToArray().Should().Equal(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9 });
+        scripts.Select(s => s.Version).ToArray().Should().Equal(new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 });
         var journal = scripts.Should().ContainSingle(s => s.Version == 3).Which;
         journal.Name.Should().Be("003_journal_central.sql");
         foreach (var forbidden in new[] { "DROP ", "DELETE", "TRUNCATE", "ALTER COLUMN", "ALTER TABLE", "USE [", "CREATE DATABASE", "UPDATE ", "INSERT " })

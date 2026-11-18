@@ -133,6 +133,9 @@ public sealed class InMemoryRepository<T> : IRepository<T> where T : class
             case PaieInstantaneLigne ligne:
                 ligne.Id = (long)next;
                 break;
+            case PaieCloture cloture:
+                cloture.Id = (int)next;
+                break;
         }
     }
 }
