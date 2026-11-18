@@ -47,6 +47,7 @@ public sealed class PayrollSendLog : IPayrollSendLog
     public Task<int> RecordWithSnapshotAsync(PayrollSend send, PayrollSnapshotDraft snapshot, CancellationToken ct = default) => LoggedAsync(
         uow => uow.RunExclusiveAsync(SnapshotLock, async token =>
         {
+            await RefuserSiClotureeAsync(uow, send.SageDatabase, send.PeriodFrom, send.PeriodTo, token);
             var envoi = Nouveau(send);
             await uow.Repository<PaieEnvoi>().AddAsync(envoi, token);
             await uow.SaveChangesAsync(token);
@@ -60,6 +61,7 @@ public sealed class PayrollSendLog : IPayrollSendLog
         {
             var repo = uow.Repository<PaieEnvoi>();
             var envoi = await repo.GetByIdAsync(id, token) ?? throw new NotFoundException();
+            await RefuserSiClotureeAsync(uow, envoi.BddSage, envoi.PeriodeDebut, envoi.PeriodeFin, token);
             envoi.Statut = status;
             envoi.Lignes = lines;
             repo.Update(envoi);
@@ -68,6 +70,19 @@ public sealed class PayrollSendLog : IPayrollSendLog
             return id;
         }, ct),
         "Impossible de terminer l'envoi en paie {Base} et d'écrire son instantané.", id.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+    /// <summary>
+    /// Sous le verrou partagé avec la clôture : un envoi commencé avant la clôture de sa période ne peut plus figer son
+    /// instantané ni se terminer en SUCCES (AUTRE : la paie est annulée ; STANDARD : l'envoi devient INCERTAIN).
+    /// </summary>
+    private static async Task RefuserSiClotureeAsync(IUnitOfWork uow, string baseSage, DateTime from, DateTime to, CancellationToken ct)
+    {
+        var (debut, fin) = (from.Date, to.Date);
+        var clotures = await uow.Repository<PaieCloture>().ListReadOnlyAsync(
+            c => c.BddSage == baseSage && c.PeriodeDebut <= fin && c.PeriodeFin >= debut, ct);
+        if (clotures.FirstOrDefault() is { } c)
+            throw new ConflictException(new ClosedPeriod(c.PeriodeDebut, c.PeriodeFin).MessageEnvoi);
+    }
 
     /// <summary>Entête (empreinte au format courant) puis lignes, dans la transaction de l'appelant.</summary>
     private static async Task EcrireInstantaneAsync(IUnitOfWork uow, PaieEnvoi envoi, PayrollSnapshotDraft snapshot, CancellationToken ct)

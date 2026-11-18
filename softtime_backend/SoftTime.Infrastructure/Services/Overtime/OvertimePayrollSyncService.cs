@@ -18,6 +18,7 @@ public sealed class OvertimePayrollSyncService : IOvertimePayrollSyncService
     private readonly IOvertimeWeekContext _overtimeWeekContext;
     private readonly IExternalSourceService? _externalSource;
     private readonly IPayrollVariableService? _variables;
+    private readonly IPayrollClosureGuard? _closures;
 
     public OvertimePayrollSyncService(
         IUnitOfWork uow,
@@ -26,10 +27,12 @@ public sealed class OvertimePayrollSyncService : IOvertimePayrollSyncService
         ICurrentUser? user,
         IOvertimeWeekContext overtimeWeekContext,
         IExternalSourceService? externalSource = null,
-        IPayrollVariableService? variables = null)
+        IPayrollVariableService? variables = null,
+        IPayrollClosureGuard? closures = null)
     {
         _externalSource = externalSource;
         _variables = variables;
+        _closures = closures;
         _uow = uow;
         _tenant = tenant;
         _payrollWriters = payrollWriters;
@@ -60,6 +63,9 @@ public sealed class OvertimePayrollSyncService : IOvertimePayrollSyncService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         _overtimeWeekContext.EnsureMaxOneMonth(request);
+        // Période clôturée (lot D) : aucun nouvel envoi, avant toute lecture ou écriture. Sans clôture, rien ne change.
+        if (_closures is not null && await _closures.FindOverlapAsync(request.From, request.To, ct) is { } cloturee)
+            throw new ConflictException(cloturee.MessageEnvoi);
         var sageRow = await _tenant.GetSageRowAsync(ct);
         var rows = await _uow.Repository<HsExoImp>().ListReadOnlyAsync(h =>
             h.BddSage == _tenant.SageDb && h.PeriodeDebut == request.From.Date && h.PeriodeFin == request.To.Date, ct);
