@@ -21,6 +21,7 @@ public sealed class PaieInstantaneConfiguration : IEntityTypeConfiguration<PaieI
         builder.Property(x => x.PeriodeDebut).HasColumnName("PERIODE_DEBUT").HasColumnType("date");
         builder.Property(x => x.PeriodeFin).HasColumnName("PERIODE_FIN").HasColumnType("date");
         builder.Property(x => x.TypeBase).HasColumnName("TYPE_BASE").HasMaxLength(16).IsRequired();
+        builder.Property(x => x.Domaine).HasColumnName("DOMAINE").HasMaxLength(16).IsRequired();
         builder.Property(x => x.EnvoyeLe).HasColumnName("ENVOYE_LE").HasColumnType("datetime2");
         builder.Property(x => x.EnvoyePar).HasColumnName("ENVOYE_PAR").HasMaxLength(256);
         builder.Property(x => x.Departement).HasColumnName("DEPARTEMENT").HasMaxLength(128);
@@ -79,5 +80,23 @@ public sealed class PaieClotureConfiguration : IEntityTypeConfiguration<PaieClot
         builder.Property(x => x.StatutControle).HasColumnName("STATUT_CONTROLE").HasMaxLength(16).IsRequired();
         builder.Property(x => x.ResumeControle).HasColumnName("RESUME_CONTROLE").HasMaxLength(1000).IsRequired();
         builder.HasIndex(x => new { x.BddSage, x.PeriodeDebut, x.PeriodeFin }).IsUnique().HasDatabaseName("UX_T_PAIE_CLOTURE_BDD_PERIODE");
+    }
+}
+
+/// <summary>Schéma créé par migrations/versions/011_domaines_paie.sql (déclencheur d'immuabilité déclaré à EF Core).</summary>
+public sealed class PaieClotureDomaineConfiguration : IEntityTypeConfiguration<PaieClotureDomaine>
+{
+    public void Configure(EntityTypeBuilder<PaieClotureDomaine> builder)
+    {
+        builder.ToTable("T_PAIE_CLOTURE_DOMAINE", t => t.HasTrigger("TR_T_PAIE_CLOTURE_DOMAINE_IMMUABLE"));
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Id).HasColumnName("ID").ValueGeneratedOnAdd();
+        builder.Property(x => x.ClotureId).HasColumnName("CLOTURE_ID");
+        builder.Property(x => x.Domaine).HasColumnName("DOMAINE").HasMaxLength(16).IsRequired();
+        builder.Property(x => x.EnvoiId).HasColumnName("ENVOI_ID");
+        builder.Property(x => x.InstantaneId).HasColumnName("INSTANTANE_ID");
+        builder.Property(x => x.VersionFormat).HasColumnName("VERSION_FORMAT");
+        builder.Property(x => x.Empreinte).HasColumnName("EMPREINTE").HasColumnType("char(64)").IsRequired();
+        builder.HasIndex(x => new { x.ClotureId, x.Domaine }).IsUnique().HasDatabaseName("UX_T_PAIE_CLOTURE_DOMAINE");
     }
 }

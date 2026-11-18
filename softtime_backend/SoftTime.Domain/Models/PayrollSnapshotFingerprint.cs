@@ -32,21 +32,43 @@ public sealed record PayrollSnapshotLine(
 /// </list>
 /// Ni la date ni l'auteur de l'envoi n'entrent dans l'empreinte : deux envois identiques ont la même empreinte. Tout
 /// changement de ce format exige une nouvelle version (les anciennes restent vérifiables avec leur version).
+/// <para>
+/// Le format 1 est celui des HEURES et ne change pas. Le format 2 (<see cref="VersionDomaine"/>, migration 011) est celui
+/// des domaines CANTINE et FRAIS : seule la première ligne diffère, elle nomme le domaine après la version :
+/// <c>SOFTTIME-PAIE-INSTANTANE|2|{domaine}|{base}|{début}|{fin}|{type de base}</c> ; les lignes de valeurs, leur tri, les
+/// séparateurs, l'encodage et l'arrondi sont ceux du format 1. Un format qui ne correspond pas au domaine (1 hors HEURES,
+/// 2 pour HEURES) est refusé : la vérification le compte comme une altération.
+/// </para>
 /// </summary>
 public static class PayrollSnapshotFingerprint
 {
+    /// <summary>Format des heures (domaine HEURES), inchangé depuis la migration 009.</summary>
     public const int Version = 1;
+
+    /// <summary>Format des domaines CANTINE et FRAIS (migration 011).</summary>
+    public const int VersionDomaine = 2;
 
     private const string Entete = "SOFTTIME-PAIE-INSTANTANE";
 
     public static decimal Arrondir(decimal valeur) => Math.Round(valeur, 4, MidpointRounding.AwayFromZero);
 
-    /// <summary>Représentation canonique (exposée pour la documentation et les tests).</summary>
+    /// <summary>Représentation canonique des heures (exposée pour la documentation et les tests).</summary>
     public static string Canonique(
         int version, string baseSage, DateTime debut, DateTime fin, string typeBase, IEnumerable<PayrollSnapshotLine> lignes)
+        => Canonique(version, PayrollDomains.Heures, baseSage, debut, fin, typeBase, lignes);
+
+    /// <summary>Représentation canonique d'un domaine dans une version donnée (1 : HEURES ; 2 : CANTINE, FRAIS).</summary>
+    public static string Canonique(
+        int version, string domaine, string baseSage, DateTime debut, DateTime fin, string typeBase, IEnumerable<PayrollSnapshotLine> lignes)
     {
-        if (version != Version)
-            throw new DomainException($"Format d'empreinte d'instantané inconnu : {version}.");
+        var entete = version switch
+        {
+            Version when domaine == PayrollDomains.Heures => new[] { Entete, version.ToString(CultureInfo.InvariantCulture) },
+            VersionDomaine when domaine is PayrollDomains.Cantine or PayrollDomains.Frais
+                => new[] { Entete, version.ToString(CultureInfo.InvariantCulture), domaine },
+            Version or VersionDomaine => throw new DomainException($"Format d'empreinte {version} incompatible avec le domaine {domaine}."),
+            _ => throw new DomainException($"Format d'empreinte d'instantané inconnu : {version}.")
+        };
         var triees = lignes
             .Select(l => l.Normalisee())
             .OrderBy(l => l.Matricule, StringComparer.Ordinal)
@@ -64,9 +86,9 @@ public static class PayrollSnapshotFingerprint
                 l.Unite,
                 l.Valeur.ToString("F4", CultureInfo.InvariantCulture),
                 l.RemiseAZero ? "1" : "0"));
-        var premiere = string.Join('|', Entete, version.ToString(CultureInfo.InvariantCulture), (baseSage ?? string.Empty).Trim(),
+        var premiere = string.Join('|', entete.Concat(new[] { (baseSage ?? string.Empty).Trim(),
             debut.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), fin.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-            (typeBase ?? string.Empty).Trim().ToUpperInvariant());
+            (typeBase ?? string.Empty).Trim().ToUpperInvariant() }));
         return string.Join('\n', new[] { premiere }.Concat(triees));
     }
 
@@ -74,10 +96,19 @@ public static class PayrollSnapshotFingerprint
     public static string Calculer(string baseSage, DateTime debut, DateTime fin, string typeBase, IEnumerable<PayrollSnapshotLine> lignes)
         => Calculer(Version, baseSage, debut, fin, typeBase, lignes);
 
-    /// <summary>Empreinte dans une version donnée du format.</summary>
+    /// <summary>Empreinte des heures dans une version donnée du format.</summary>
     public static string Calculer(int version, string baseSage, DateTime debut, DateTime fin, string typeBase, IEnumerable<PayrollSnapshotLine> lignes)
+        => Calculer(version, PayrollDomains.Heures, baseSage, debut, fin, typeBase, lignes);
+
+    /// <summary>Empreinte d'un domaine dans une version donnée du format.</summary>
+    public static string Calculer(
+        int version, string domaine, string baseSage, DateTime debut, DateTime fin, string typeBase, IEnumerable<PayrollSnapshotLine> lignes)
     {
-        var octets = new UTF8Encoding(false).GetBytes(Canonique(version, baseSage, debut, fin, typeBase, lignes));
+        var octets = new UTF8Encoding(false).GetBytes(Canonique(version, domaine, baseSage, debut, fin, typeBase, lignes));
         return Convert.ToHexString(SHA256.HashData(octets)).ToLowerInvariant();
     }
+
+    /// <summary>Empreinte d'un domaine dans son format courant (1 pour les heures, 2 pour la cantine et les frais).</summary>
+    public static string CalculerDomaine(string domaine, string baseSage, DateTime debut, DateTime fin, string typeBase, IEnumerable<PayrollSnapshotLine> lignes)
+        => Calculer(PayrollDomains.VersionEmpreinte(domaine), domaine, baseSage, debut, fin, typeBase, lignes);
 }

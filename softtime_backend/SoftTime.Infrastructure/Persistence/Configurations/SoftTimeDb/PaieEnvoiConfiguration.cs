@@ -5,7 +5,7 @@ using SoftTime.Domain.Entities.SoftTime;
 
 namespace SoftTime.Infrastructure.Persistence.Configurations.SoftTimeDb;
 
-/// <summary>Schéma créé par migrations/versions/007_variables_paie.sql.</summary>
+/// <summary>Schéma créé par migrations/versions/007_variables_paie.sql (colonne DOMAINE : 011_domaines_paie.sql).</summary>
 public sealed class PaieEnvoiConfiguration : IEntityTypeConfiguration<PaieEnvoi>
 {
     public void Configure(EntityTypeBuilder<PaieEnvoi> builder)
@@ -21,7 +21,11 @@ public sealed class PaieEnvoiConfiguration : IEntityTypeConfiguration<PaieEnvoi>
         builder.Property(x => x.Statut).HasColumnName("STATUT").HasMaxLength(16).IsRequired(true);
         builder.Property(x => x.Lignes).HasColumnName("LIGNES");
         builder.Property(x => x.TypeBase).HasColumnName("TYPE_BASE").HasMaxLength(16).IsRequired(true);
+        // Migration 011 : valeur par défaut « HEURES » en base ; l'application écrit toujours le domaine explicitement.
+        builder.Property(x => x.Domaine).HasColumnName("DOMAINE").HasMaxLength(16).IsRequired(true);
         builder.HasIndex(x => new { x.BddSage, x.PeriodeDebut, x.PeriodeFin })
             .HasDatabaseName("IX_T_PAIE_ENVOI_BDD_PERIODE");
+        builder.HasIndex(x => new { x.BddSage, x.Domaine, x.PeriodeDebut, x.PeriodeFin })
+            .HasDatabaseName("IX_T_PAIE_ENVOI_BDD_DOMAINE_PERIODE");
     }
 }

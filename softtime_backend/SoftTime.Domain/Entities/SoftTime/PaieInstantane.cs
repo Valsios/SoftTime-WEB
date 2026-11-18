@@ -21,6 +21,9 @@ public class PaieInstantane
     /// <summary>« STANDARD » ou « AUTRE ».</summary>
     public string TypeBase { get; set; } = string.Empty;
 
+    /// <summary>Domaine de l'envoi figé (migration 011) : « HEURES » (format 1), « CANTINE » ou « FRAIS » (format 2).</summary>
+    public string Domaine { get; set; } = Models.PayrollDomains.Heures;
+
     /// <summary>Date UTC de l'envoi.</summary>
     public DateTime EnvoyeLe { get; set; }
 
@@ -123,4 +126,28 @@ public class PaieCloture
 
     /// <summary>Résumé du Contrôle avant paie au moment de la clôture.</summary>
     public string ResumeControle { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// T_PAIE_CLOTURE_DOMAINE (migration 011) : pour une clôture, l'envoi, l'instantané et l'empreinte figés d'un domaine
+/// CANTINE ou FRAIS exigé au moment de la clôture (les heures restent dans <see cref="PaieCloture"/>). Immuable.
+/// </summary>
+public class PaieClotureDomaine
+{
+    public int Id { get; set; }
+
+    public int ClotureId { get; set; }
+
+    /// <summary>« CANTINE » ou « FRAIS ».</summary>
+    public string Domaine { get; set; } = string.Empty;
+
+    public int EnvoiId { get; set; }
+
+    public int InstantaneId { get; set; }
+
+    /// <summary>Version du format de l'empreinte figée (2 pour la cantine et les frais).</summary>
+    public int VersionFormat { get; set; }
+
+    /// <summary>Empreinte de l'instantané du domaine, vérifiée au moment de la clôture.</summary>
+    public string Empreinte { get; set; } = string.Empty;
 }

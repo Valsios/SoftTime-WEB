@@ -356,6 +356,15 @@ ENTITY PaieCloture table=.T_PAIE_CLOTURE key=[Id]
   P ResumeControle col=RESUME_CONTROLE type=nvarchar(1000) null=False max=1000 fixed= unicode= prec=, gen=Never
   P StatutControle col=STATUT_CONTROLE type=nvarchar(16) null=False max=16 fixed= unicode= prec=, gen=Never
   I UX_T_PAIE_CLOTURE_BDD_PERIODE [BddSage,PeriodeDebut,PeriodeFin] unique=True filter= desc=
+ENTITY PaieClotureDomaine table=.T_PAIE_CLOTURE_DOMAINE key=[Id]
+  P ClotureId col=CLOTURE_ID type=int null=False max= fixed= unicode= prec=, gen=Never
+  P Domaine col=DOMAINE type=nvarchar(16) null=False max=16 fixed= unicode= prec=, gen=Never
+  P Empreinte col=EMPREINTE type=char(64) null=False max= fixed= unicode= prec=, gen=Never
+  P EnvoiId col=ENVOI_ID type=int null=False max= fixed= unicode= prec=, gen=Never
+  P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
+  P InstantaneId col=INSTANTANE_ID type=int null=False max= fixed= unicode= prec=, gen=Never
+  P VersionFormat col=VERSION_FORMAT type=int null=False max= fixed= unicode= prec=, gen=Never
+  I UX_T_PAIE_CLOTURE_DOMAINE [ClotureId,Domaine] unique=True filter= desc=
 ENTITY PaieEcriture table=.T_PAIE_ECRITURE key=[Id]
   P BddSage col=BDD_SAGE type=nvarchar(128) null=False max=128 fixed= unicode= prec=, gen=Never
   P Categorie col=CATEGORIE type=nvarchar(32) null=False max=32 fixed= unicode= prec=, gen=Never
@@ -366,6 +375,7 @@ ENTITY PaieEcriture table=.T_PAIE_ECRITURE key=[Id]
   I IX_T_PAIE_ECRITURE_BDD_SAGE_CATEGORIE [BddSage,Categorie] unique=True filter= desc=
 ENTITY PaieEnvoi table=.T_PAIE_ENVOI key=[Id]
   P BddSage col=BDD_SAGE type=nvarchar(128) null=False max=128 fixed= unicode= prec=, gen=Never
+  P Domaine col=DOMAINE type=nvarchar(16) null=False max=16 fixed= unicode= prec=, gen=Never
   P EnvoyeLe col=ENVOYE_LE type=datetime2 null=False max= fixed= unicode= prec=, gen=Never
   P EnvoyePar col=ENVOYE_PAR type=nvarchar(256) null=True max=256 fixed= unicode= prec=, gen=Never
   P Id col=ID type=int null=False max= fixed= unicode= prec=, gen=OnAdd
@@ -374,12 +384,14 @@ ENTITY PaieEnvoi table=.T_PAIE_ENVOI key=[Id]
   P PeriodeFin col=PERIODE_FIN type=date null=False max= fixed= unicode= prec=, gen=Never
   P Statut col=STATUT type=nvarchar(16) null=False max=16 fixed= unicode= prec=, gen=Never
   P TypeBase col=TYPE_BASE type=nvarchar(16) null=False max=16 fixed= unicode= prec=, gen=Never
+  I IX_T_PAIE_ENVOI_BDD_DOMAINE_PERIODE [BddSage,Domaine,PeriodeDebut,PeriodeFin] unique=False filter= desc=
   I IX_T_PAIE_ENVOI_BDD_PERIODE [BddSage,PeriodeDebut,PeriodeFin] unique=False filter= desc=
 ENTITY PaieInstantane table=.T_PAIE_INSTANTANE key=[Id]
   P AvecFiltre col=AVEC_FILTRE type=bit null=False max= fixed= unicode= prec=, gen=Never
   P BddSage col=BDD_SAGE type=nvarchar(128) null=False max=128 fixed= unicode= prec=, gen=Never
   P CreeLe col=CREE_LE type=datetime2 null=False max= fixed= unicode= prec=, gen=Never
   P Departement col=DEPARTEMENT type=nvarchar(128) null=True max=128 fixed= unicode= prec=, gen=Never
+  P Domaine col=DOMAINE type=nvarchar(16) null=False max=16 fixed= unicode= prec=, gen=Never
   P Empreinte col=EMPREINTE type=char(64) null=False max= fixed= unicode= prec=, gen=Never
   P EnvoiId col=ENVOI_ID type=int null=False max= fixed= unicode= prec=, gen=Never
   P EnvoyeLe col=ENVOYE_LE type=datetime2 null=False max= fixed= unicode= prec=, gen=Never

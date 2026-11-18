@@ -108,9 +108,9 @@ public class PayrollSnapshotD1Tests
     [Fact]
     public void Fingerprint_UnknownVersion_IsRefused()
     {
-        var act = () => PayrollSnapshotFingerprint.Calculer(2, "B", Debut, Fin, "STANDARD", Lignes);
+        var act = () => PayrollSnapshotFingerprint.Calculer(3, "B", Debut, Fin, "STANDARD", Lignes);
 
-        act.Should().Throw<DomainException>().WithMessage("Format d'empreinte d'instantané inconnu : 2.");
+        act.Should().Throw<DomainException>().WithMessage("Format d'empreinte d'instantané inconnu : 3.");
     }
 
     // ---------- Marqueur et instantané (PayrollSendLog réel, unité de travail en mémoire) ----------

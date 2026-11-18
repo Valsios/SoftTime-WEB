@@ -136,6 +136,9 @@ public sealed class InMemoryRepository<T> : IRepository<T> where T : class
             case PaieCloture cloture:
                 cloture.Id = (int)next;
                 break;
+            case PaieClotureDomaine domaine:
+                domaine.Id = (int)next;
+                break;
         }
     }
 }

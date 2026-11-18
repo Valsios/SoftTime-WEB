@@ -19,7 +19,7 @@ public class PaieEnvoi
 
     public string? EnvoyePar { get; set; }
 
-    /// <summary>« EN_COURS », « SUCCES » ou « ECHEC ».</summary>
+    /// <summary>« EN_COURS », « SUCCES », « ECHEC » ou « INCERTAIN ».</summary>
     public string Statut { get; set; } = string.Empty;
 
     /// <summary>Lignes de paie mises à jour connues au dernier enregistrement.</summary>
@@ -27,4 +27,7 @@ public class PaieEnvoi
 
     /// <summary>« STANDARD » ou « AUTRE ».</summary>
     public string TypeBase { get; set; } = string.Empty;
+
+    /// <summary>Domaine de l'envoi (migration 011) : « HEURES », « CANTINE » ou « FRAIS » (<c>PayrollDomains</c>).</summary>
+    public string Domaine { get; set; } = Models.PayrollDomains.Heures;
 }

@@ -176,6 +176,31 @@ public static class SchemaPresenceGuard
         }
     }
 
+    public const string MissingPayrollDomainsMessage =
+        "Les domaines des envois en paie sont absents (T_PAIE_ENVOI.DOMAINE, T_PAIE_INSTANTANE.DOMAINE, T_PAIE_CLOTURE_DOMAINE) : "
+        + "activez Database:AutoMigrate (développement) ou exécutez migrations/versions/011_domaines_paie.sql.";
+
+    /// <summary>
+    /// Sans la migration 011, chaque lecture ou écriture d'un envoi en paie échouerait sur une colonne DOMAINE inconnue
+    /// (envoi des heures compris) : le démarrage s'arrête à la place avec un message qui indique la marche à suivre.
+    /// </summary>
+    public static async Task EnsurePayrollDomainsAsync(IUnitOfWork uow, CancellationToken ct)
+    {
+        try
+        {
+            await uow.ExecuteSqlAsync(GuardedSql("T_PAIE_CLOTURE_DOMAINE", $"""
+                IF COL_LENGTH(N'dbo.T_PAIE_ENVOI', N'DOMAINE') IS NULL
+                    THROW 51990, N'{Marker}: dbo.T_PAIE_ENVOI.DOMAINE', 1;
+                IF COL_LENGTH(N'dbo.T_PAIE_INSTANTANE', N'DOMAINE') IS NULL
+                    THROW 51990, N'{Marker}: dbo.T_PAIE_INSTANTANE.DOMAINE', 1;
+                """), ct);
+        }
+        catch (Exception ex) when (ex.Message.Contains(Marker, StringComparison.Ordinal))
+        {
+            throw new DomainException(MissingPayrollDomainsMessage);
+        }
+    }
+
     public static string GuardedSql(string table, string sql) => $"""
         IF OBJECT_ID(N'dbo.{table}', N'U') IS NULL
             THROW 51990, N'{Marker}: dbo.{table}', 1;
