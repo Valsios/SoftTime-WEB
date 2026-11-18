@@ -133,6 +133,29 @@ public static class SchemaPresenceGuard
         }
     }
 
+    public const string MissingPayrollSnapshotsMessage =
+        "Les instantanés des envois en paie sont absents (T_PAIE_INSTANTANE, T_PAIE_INSTANTANE_LIGNE) : activez Database:AutoMigrate "
+        + "(développement) ou exécutez migrations/versions/009_instantanes_paie.sql.";
+
+    /// <summary>
+    /// Sans la migration 009, chaque envoi en paie échouerait à figer son instantané (AUTRE : envoi annulé ; STANDARD : envoi
+    /// INCERTAIN) : le démarrage s'arrête à la place avec un message qui indique la marche à suivre.
+    /// </summary>
+    public static async Task EnsurePayrollSnapshotsAsync(IUnitOfWork uow, CancellationToken ct)
+    {
+        try
+        {
+            await uow.ExecuteSqlAsync(GuardedSql("T_PAIE_INSTANTANE", $"""
+                IF OBJECT_ID(N'dbo.T_PAIE_INSTANTANE_LIGNE', N'U') IS NULL
+                    THROW 51990, N'{Marker}: dbo.T_PAIE_INSTANTANE_LIGNE', 1;
+                """), ct);
+        }
+        catch (Exception ex) when (ex.Message.Contains(Marker, StringComparison.Ordinal))
+        {
+            throw new DomainException(MissingPayrollSnapshotsMessage);
+        }
+    }
+
     public static string GuardedSql(string table, string sql) => $"""
         IF OBJECT_ID(N'dbo.{table}', N'U') IS NULL
             THROW 51990, N'{Marker}: dbo.{table}', 1;
