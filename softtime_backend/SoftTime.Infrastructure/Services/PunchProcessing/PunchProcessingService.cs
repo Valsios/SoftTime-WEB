@@ -1,3 +1,4 @@
+using SoftTime.Application.Abstractions.Payroll;
 using SoftTime.Application.Abstractions.PunchProcessing;
 using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.DTOs;
@@ -38,8 +39,11 @@ public class PunchProcessingService : IPunchProcessingService
     private readonly IUnitOfWork _uow;
     private readonly ITenantConnectionService _tenant;
 
-    public PunchProcessingService(IUnitOfWork uow, ITenantConnectionService tenant)
+    private readonly IPayrollClosureGuard? _closures;
+
+    public PunchProcessingService(IUnitOfWork uow, ITenantConnectionService tenant, IPayrollClosureGuard? closures = null)
     {
+        _closures = closures;
         _uow = uow;
         _tenant = tenant;
     }
@@ -49,6 +53,8 @@ public class PunchProcessingService : IPunchProcessingService
         await _tenant.EnsureAuthorizedAsync(ct);
         await PunchProcessingConfiguration.EnsureStorageAsync(_uow, ct);
         ValidatePeriod(request);
+        // Clôture de paie : le pré-traitement régénère heures corrigées et anomalies : refusé si la plage recoupe une période clôturée.
+        await ClosureChecks.OuverteAsync(_closures, request.From, request.To, ct);
 
         var data = await LoadDataAsync(request, ct);
         var protection = new PunchProtection(data);

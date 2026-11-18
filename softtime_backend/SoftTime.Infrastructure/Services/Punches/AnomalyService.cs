@@ -1,5 +1,6 @@
 ﻿using System.Linq.Expressions;
 
+using SoftTime.Application.Abstractions.Payroll;
 using SoftTime.Application.Abstractions.History;
 using SoftTime.Application.Abstractions.Punches;
 using SoftTime.Application.Abstractions.RequestContext;
@@ -18,12 +19,16 @@ public sealed class AnomalyService : IAnomalyService
     private readonly IHistoryArchiveService _history;
     private readonly IValidatedWeekGuard _validatedWeekGuard;
 
+    private readonly IPayrollClosureGuard? _closures;
+
     public AnomalyService(
         IUnitOfWork uow,
         ITenantConnectionService tenant,
         IHistoryArchiveService history,
-        IValidatedWeekGuard validatedWeekGuard)
+        IValidatedWeekGuard validatedWeekGuard,
+        IPayrollClosureGuard? closures = null)
     {
+        _closures = closures;
         _uow = uow;
         _tenant = tenant;
         _history = history;
@@ -89,6 +94,8 @@ public sealed class AnomalyService : IAnomalyService
             dto.DateOut?.Date ?? entity.DatePointageOut?.Date,
             dto.HSortie ?? entity.HSortie);
         heures.Valider();
+        await ClosureChecks.OuverteAsync(_closures,
+            new[] { entity.DatePointageIn, entity.DatePointageOut, heures.DateIn, heures.DateOut }, ct);
 
         entity.DatePointageIn = heures.DateIn;
         entity.DatePointageOut = heures.DateOut;
@@ -129,6 +136,8 @@ public sealed class AnomalyService : IAnomalyService
         if (anomalies.Count == 0)
             throw new DomainException("Aucune anomalie trouvée pour les identifiants fournis.");
         await EnsureValidableAsync(anomalies, ct);
+        // Clôture de paie : une sélection qui touche une période clôturée est refusée en bloc.
+        await ClosureChecks.OuverteAsync(_closures, anomalies.SelectMany(a => new[] { a.DatePointageIn, a.DatePointageOut }), ct);
 
         var corrRepo = _uow.Repository<HeureCorrigee>();
         foreach (var anomalie in anomalies)
@@ -201,6 +210,7 @@ public sealed class AnomalyService : IAnomalyService
         await _tenant.EnsureAuthorizedAsync(ct);
         var repo = _uow.Repository<HeureAnomalie>();
         var e = await LoadAnomalyAsync(id, ct) ?? throw new NotFoundException();
+        await ClosureChecks.OuverteAsync(_closures, new[] { e.DatePointageIn, e.DatePointageOut }, ct);
         await _history.ArchiveAnomaliesAsync(new[] { e }, ct);
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);

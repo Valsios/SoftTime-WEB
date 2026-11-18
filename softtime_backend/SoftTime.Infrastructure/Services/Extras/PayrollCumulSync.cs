@@ -17,12 +17,16 @@ public sealed class PayrollCumulSync : IPayrollCumulSync
     private readonly IExternalSourceService _externalSource;
     private readonly ISagePayrollWriter _sageWriter;
 
+    private readonly IPayrollClosureGuard? _closures;
+
     public PayrollCumulSync(
         IUnitOfWork uow,
         ITenantConnectionService tenant,
         IExternalSourceService externalSource,
-        ISagePayrollWriter sageWriter)
+        ISagePayrollWriter sageWriter,
+        IPayrollClosureGuard? closures = null)
     {
+        _closures = closures;
         _uow = uow;
         _tenant = tenant;
         _externalSource = externalSource;
@@ -33,6 +37,8 @@ public sealed class PayrollCumulSync : IPayrollCumulSync
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         ExtraPeriods.EnsurePeriode(request);
+        // Clôture de paie : aucun envoi de cantine ou de frais (T_CUMSAL) sur une période qui recoupe une période clôturée.
+        await ClosureChecks.OuverteAsync(_closures, request.From, request.To, ct);
         var sageRow = await _tenant.GetSageRowAsync(ct);
         if (!string.Equals(sageRow.TypeBase, "STANDARD", StringComparison.OrdinalIgnoreCase))
             throw new DomainException(

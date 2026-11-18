@@ -90,3 +90,15 @@ public interface IPayrollClosureService
     /// <summary>Périodes clôturées qui recoupent [from, to] (lecture pour les bandeaux, tout utilisateur de la base).</summary>
     Task<PayrollClosureStateDto> StateAsync(DateTime from, DateTime to, CancellationToken ct = default);
 }
+
+/// <summary>Appels du contrôle commun depuis les services (garde facultative : absente dans certains doubles de test).</summary>
+public static class ClosureChecks
+{
+    /// <summary>Refuse (409) si [from, to] recoupe une période clôturée de la base active.</summary>
+    public static Task OuverteAsync(IPayrollClosureGuard? guard, DateTime from, DateTime to, CancellationToken ct)
+        => guard is null ? Task.CompletedTask : guard.EnsureOpenAsync(from, to, ct);
+
+    /// <summary>Refuse (409) si l'une des dates renseignées tombe dans une période clôturée de la base active.</summary>
+    public static Task OuverteAsync(IPayrollClosureGuard? guard, IEnumerable<DateTime?> dates, CancellationToken ct)
+        => guard is null ? Task.CompletedTask : guard.EnsureOpenAsync(dates.Where(d => d.HasValue).Select(d => d!.Value).ToList(), ct);
+}

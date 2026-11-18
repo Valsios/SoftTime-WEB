@@ -1,5 +1,6 @@
 ﻿using System.Linq.Expressions;
 
+using SoftTime.Application.Abstractions.Payroll;
 using SoftTime.Application.Abstractions.Punches;
 using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.DTOs;
@@ -16,11 +17,15 @@ public sealed class CorrectedHoursService : ICorrectedHoursService
     private readonly ITenantConnectionService _tenant;
     private readonly IValidatedWeekGuard _validatedWeekGuard;
 
+    private readonly IPayrollClosureGuard? _closures;
+
     public CorrectedHoursService(
         IUnitOfWork uow,
         ITenantConnectionService tenant,
-        IValidatedWeekGuard validatedWeekGuard)
+        IValidatedWeekGuard validatedWeekGuard,
+        IPayrollClosureGuard? closures = null)
     {
+        _closures = closures;
         _uow = uow;
         _tenant = tenant;
         _validatedWeekGuard = validatedWeekGuard;
@@ -69,6 +74,7 @@ public sealed class CorrectedHoursService : ICorrectedHoursService
         var sageDb = _tenant.SageDb;
         // La semaine cible ne doit pas être validée (ni, pour une modification, la semaine d'origine).
         await _validatedWeekGuard.RefuserSiSemaineValideeAsync(sageDb, dto.Matricule, dto.DateIn, ct);
+        await ClosureChecks.OuverteAsync(_closures, new[] { dto.DateIn, dto.DateOut }, ct);
         HeureCorrigee entity;
         if (dto.Id == 0)
         {
@@ -87,6 +93,7 @@ public sealed class CorrectedHoursService : ICorrectedHoursService
         {
             entity = await repo.GetByIdAsync(dto.Id, ct) ?? throw new NotFoundException();
             await _validatedWeekGuard.RefuserSiSemaineValideeAsync(sageDb, entity.MatriculeSage, entity.DatePointageIn, ct);
+            await ClosureChecks.OuverteAsync(_closures, new[] { entity.DatePointageIn, entity.DatePointageOut }, ct);
             entity.Origine = PunchProcessingConfiguration.OrigineManuel;
             Apply(dto, entity);
             repo.Update(entity);
@@ -103,6 +110,7 @@ public sealed class CorrectedHoursService : ICorrectedHoursService
         var e = (await repo.ListAsync(h => h.Id == id && h.BddSage == sageDb, ct)).FirstOrDefault()
                 ?? throw new NotFoundException();
         await _validatedWeekGuard.RefuserSiSemaineValideeAsync(sageDb, e.MatriculeSage, e.DatePointageIn, ct);
+        await ClosureChecks.OuverteAsync(_closures, new[] { e.DatePointageIn, e.DatePointageOut }, ct);
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
     }
@@ -112,6 +120,9 @@ public sealed class CorrectedHoursService : ICorrectedHoursService
         await _tenant.EnsureAuthorizedAsync(ct);
         var semainesValidees = await _validatedWeekGuard.ChargerSemainesValideesAsync(_tenant.SageDb, ct);
         var (imported, sansMatricule, verrouillees) = (0, 0, 0);
+        // Clôture de paie : un fichier dont une ligne tombe dans une période clôturée est refusé en bloc (rien d'importé).
+        await ClosureChecks.OuverteAsync(_closures, rows.Select(LireCorrection).Where(c => c is not null)
+            .SelectMany(c => new[] { c!.DatePointageIn, c.DatePointageOut }), ct);
         foreach (var row in rows)
         {
             var correction = LireCorrection(row);

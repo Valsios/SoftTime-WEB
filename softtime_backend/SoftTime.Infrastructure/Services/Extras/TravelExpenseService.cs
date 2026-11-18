@@ -1,4 +1,5 @@
-﻿using SoftTime.Application.Abstractions.Extras;
+﻿using SoftTime.Application.Abstractions.Payroll;
+using SoftTime.Application.Abstractions.Extras;
 using SoftTime.Application.Abstractions.Punches;
 using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.DTOs;
@@ -15,12 +16,16 @@ public sealed class TravelExpenseService : ITravelExpenseService
     private readonly IPunchAggregate _punches;
     private readonly IPayrollCumulSync _payrollCumulSync;
 
+    private readonly IPayrollClosureGuard? _closures;
+
     public TravelExpenseService(
         IUnitOfWork uow,
         ITenantConnectionService tenant,
         IPunchAggregate punches,
-        IPayrollCumulSync payrollCumulSync)
+        IPayrollCumulSync payrollCumulSync,
+        IPayrollClosureGuard? closures = null)
     {
+        _closures = closures;
         _uow = uow;
         _tenant = tenant;
         _punches = punches;
@@ -74,6 +79,8 @@ public sealed class TravelExpenseService : ITravelExpenseService
     public async Task<IReadOnlyList<TravelDto>> ComputeTravelAsync(PeriodRequest request, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
+        // Clôture de paie : les frais d'une période qui recoupe une période clôturée ne se recalculent plus.
+        await ClosureChecks.OuverteAsync(_closures, request.From, request.To, ct);
         var from = request.From.Date;
         var to = request.To.Date;
         var counts = await _punches.CountTravelPunchesAsync(_tenant.SageDb, from, to.AddDays(1), ct);

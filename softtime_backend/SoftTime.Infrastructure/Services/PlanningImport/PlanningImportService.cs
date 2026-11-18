@@ -1,4 +1,5 @@
-﻿using SoftTime.Application.Abstractions.EmployeePlanning;
+﻿using SoftTime.Application.Abstractions.Payroll;
+using SoftTime.Application.Abstractions.EmployeePlanning;
 using SoftTime.Application.Abstractions.PlanningImport;
 using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.DTOs;
@@ -12,11 +13,15 @@ public sealed class PlanningImportService : IPlanningImportService
     private readonly ITenantConnectionService _tenant;
     private readonly IPlanningDatabaseFilter _planningDatabaseFilter;
 
+    private readonly IPayrollClosureGuard? _closures;
+
     public PlanningImportService(
         IUnitOfWork uow,
         ITenantConnectionService tenant,
-        IPlanningDatabaseFilter planningDatabaseFilter)
+        IPlanningDatabaseFilter planningDatabaseFilter,
+        IPayrollClosureGuard? closures = null)
     {
+        _closures = closures;
         _uow = uow;
         _tenant = tenant;
         _planningDatabaseFilter = planningDatabaseFilter;

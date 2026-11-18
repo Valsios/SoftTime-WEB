@@ -1,4 +1,5 @@
-﻿using SoftTime.Application.Abstractions.ExternalData;
+﻿using SoftTime.Application.Abstractions.Payroll;
+using SoftTime.Application.Abstractions.ExternalData;
 using SoftTime.Application.Abstractions.Punches;
 using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.DTOs;
@@ -15,11 +16,15 @@ public sealed class PunchImportService : IPunchImportService
     private readonly ITenantConnectionService _tenant;
     private readonly IExternalSourceService _externalSource;
 
+    private readonly IPayrollClosureGuard? _closures;
+
     public PunchImportService(
         IUnitOfWork uow,
         ITenantConnectionService tenant,
-        IExternalSourceService externalSource)
+        IExternalSourceService externalSource,
+        IPayrollClosureGuard? closures = null)
     {
+        _closures = closures;
         _uow = uow;
         _tenant = tenant;
         _externalSource = externalSource;
@@ -29,6 +34,8 @@ public sealed class PunchImportService : IPunchImportService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         await ValiderAsync(request, ct);
+        // Clôture de paie : un import (même tardif) dont la période recoupe une période clôturée est refusé en bloc.
+        await ClosureChecks.OuverteAsync(_closures, request.From, request.To, ct);
         var pteRow = await _tenant.GetPointeuseRowAsync(ct);
         var (badgeMap, ambiguousBadges) = BadgeMap(await LoadCardsAsync(request, ct));
         var users = await _externalSource.GetPunchUsersAsync(pteRow, ct);
@@ -75,6 +82,8 @@ public sealed class PunchImportService : IPunchImportService
         var parsed = rows.Select(ParseExcelRow).ToList();
         var valides = parsed.OfType<(string Matricule, DateTime Jour, TimeSpan Heure)>().ToList();
         var skipped = parsed.Count - valides.Count;
+        // Clôture de paie : un fichier dont une ligne tombe dans une période clôturée est refusé en bloc (rien d'importé).
+        await ClosureChecks.OuverteAsync(_closures, valides.Select(v => (DateTime?)v.Jour), ct);
         if (valides.Count == 0)
             return new ImportResultDto(0, skipped,
                 $"Aucun pointage valide : {skipped} ligne(s) ignorée(s) (matricule, date ou heure manquants).");

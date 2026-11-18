@@ -1,4 +1,5 @@
-﻿using SoftTime.Application.Abstractions.Extras;
+﻿using SoftTime.Application.Abstractions.Payroll;
+using SoftTime.Application.Abstractions.Extras;
 using SoftTime.Application.Abstractions.Punches;
 using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.DTOs;
@@ -17,12 +18,16 @@ public sealed class CanteenService : ICanteenService
     private readonly IPunchAggregate _punches;
     private readonly IPayrollCumulSync _payrollCumulSync;
 
+    private readonly IPayrollClosureGuard? _closures;
+
     public CanteenService(
         IUnitOfWork uow,
         ITenantConnectionService tenant,
         IPunchAggregate punches,
-        IPayrollCumulSync payrollCumulSync)
+        IPayrollCumulSync payrollCumulSync,
+        IPayrollClosureGuard? closures = null)
     {
+        _closures = closures;
         _uow = uow;
         _tenant = tenant;
         _punches = punches;
@@ -76,6 +81,8 @@ public sealed class CanteenService : ICanteenService
     public async Task<IReadOnlyList<CanteenDto>> ComputeCanteenAsync(PeriodRequest request, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
+        // Clôture de paie : la cantine d'une période qui recoupe une période clôturée ne se recalcule plus.
+        await ClosureChecks.OuverteAsync(_closures, request.From, request.To, ct);
         var from = request.From.Date;
         var to = request.To.Date;
         var jours = await _punches.ListCanteenDaysAsync(_tenant.SageDb, from, to.AddDays(1), ct);
@@ -170,6 +177,7 @@ public sealed class CanteenService : ICanteenService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         ExtraPeriods.EnsurePeriode(request);
+        await ClosureChecks.OuverteAsync(_closures, request.From, request.To, ct);
         var repo = _uow.Repository<Cantine>();
         var from = request.From.Date;
         var to = request.To.Date;
