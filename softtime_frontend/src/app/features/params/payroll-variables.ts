@@ -299,6 +299,18 @@ const LIBELLE_CODE_LONG = 24;
     .pv-toggle:focus-within .soft-toggle__track { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
     .pv-toggle:has(input:disabled) { cursor: not-allowed; }
     .pv-toggle input:disabled + .soft-toggle__track { opacity: 0.5; }
+    /* Largeur moyenne (menu latéral affiché, carte d'environ 670 px à 1024 px) : largeurs minimales resserrées pour que le
+       tableau tienne dans sa carte sans défilement horizontal ; le champ « Heures par jour » passe à la ligne sous son libellé. */
+    @media (min-width: 768px) and (max-width: 1180px) {
+      .pv-field { min-width: 190px; }
+      .pv-field--unit { min-width: 110px; }
+      /* La colonne du code de paie prend toute la largeur libre (libellés « CODE — intitulé »), les trois autres restent à leur
+         largeur minimale. */
+      .pv-table th:nth-child(1), .pv-table th:nth-child(2), .pv-table th:nth-child(4) { width: 1%; }
+      .pv-table th:nth-child(3) { width: 97%; }
+      .pv-hpj { flex-wrap: wrap; }
+      .pv-hpj__input { width: 84px; }
+    }
     /* Largeur étroite : la règle globale masque .soft-table-wrap (les data-table affichent alors leur vue en cartes).
        La carte garde son tableau, présenté en cartes (une par variable, comme .soft-table-card) : mêmes contrôles,
        mêmes états désactivé et verrouillé, mêmes messages d'aide. */
