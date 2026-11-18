@@ -98,7 +98,9 @@ L’accès est filtré par **rôle** (6 droits) et par **société SAGE** active
 - **Crédits** : un férié non travaillé crédite la journée (`HEURESEMAINE / 5`) ; un congé SAGE crédite la journée
   (ou la demi-journée) ; le 8 mars crédite la journée des salariées (`T_SAL.Civilite` renseignée et ≠ 0).
 - **Absence** : jour planifié non chômé sans aucune heure de présence, hors congé et hors férié → `(HD − HA) − pause`.
-  Une ligne qui ne fait que déclarer une absence (`ABSENCE_AM` / `ABSENCE_PM` sans heure) n'est pas une présence.
+  Une ligne qui ne fait que déclarer une absence (`ABSENCE_AM` / `ABSENCE_PM` sans heure) n'est pas une présence. Depuis le lot C3, une journée
+  couverte **seulement** par de telles absences arbitrées n'est comptée que si l'une porte un code d'absence réglé « compté comme non justifié »
+  (section 5 nonies) ; un jour planifié sans aucune ligne reste toujours compté.
 - **Validation** : seules les lignes cochées passent `VALIDATION_HS = true` et verrouillent `VALIDER_HS` ; une
   semaine validée reste affichée (elle n'est plus recalculée) et peut être annulée, voire purgée — sauf si elle
   est déjà incluse dans un calcul EXO/IMPO : purger d'abord les heures supplémentaires de cette période.
@@ -430,7 +432,7 @@ Nuit, Dimanche, Retard, Absence) restent calculées et affichées ; seul l'envoi
 
 ## 5 septies. Envoi de Retard à la paie (lots C1 et C2) — branche `feature/envoi-variables-paie`
 
-Complète la section précédente : Retard devient envoyable ; Absence reste non envoyée.
+Complète la section précédente : Retard devient envoyable. (Absence : envoyable depuis le lot C3, section 5 nonies.)
 
 - **Liste unique des variables (C1)** : un seul catalogue des neuf variables (identifiant, libellé, unités, valeur lue dans la ligne
   `T_HSExoImp`, destination désignée par un code commun ou propre à la base) ; rien n'y est propre à SAGE. Les écritures de paie, la validation
@@ -445,8 +447,8 @@ Complète la section précédente : Retard devient envoyable ; Absence reste non
   `T_PAIE_ECRITURE` (catégorie `Retard`). Endpoints `GET`/`PUT api/v1/payroll-variables/destinations` et
   `GET api/v1/payroll-variables/destinations/colonnes?table=` : mêmes droits que la configuration des variables, refus si le mois est envoyé,
   journal central, caches du Contrôle avant paie vidés. Aucune migration (la colonne `CATEGORIE` accepte `Retard`).
-- **Absence** : case désactivée avec « Envoi de l'absence : prochaine étape » ; une Absence cochée est refusée à l'enregistrement. La page
-  Heures supplémentaires continue d'afficher Absence « (non envoyée à la paie) ».
+- **Absence (état à la fin de C2)** : case désactivée avec « Envoi de l'absence : prochaine étape » ; une Absence cochée était refusée à
+  l'enregistrement. Remplacé par le lot C3 (section 5 nonies).
 - **Défaut connu (corrigé en C2b)** : un salarié sans ligne `T_HSExoImp` sur la période n'était pas écrit ; son cumul en paie (Retard compris)
   gardait la valeur d'un envoi précédent. Il est désormais remis à 0 (variables cochées), sauf si l'option de la base (C2c) est décochée.
 
@@ -488,6 +490,59 @@ précédente). L'hypothèse « personne ne saisit à la main ces codes dans SAGE
   (T_PAIE_OPTION) : activez Database:AutoMigrate (développement) ou exécutez migrations/versions/008_options_paie.sql. » (contrôle comparable à celui de
   007). **Production sans AutoMigrate** : exécuter une fois ce script sur la base SoftTime, avant de déployer l'API :
   `sqlcmd -S <serveur> -d <base SoftTime> -E -b -i 008_options_paie.sql` (rejouable sans risque). Les futurs lots de clôture prendront 009 et suivants.
+
+## 5 nonies. Envoi de l'Absence à la paie (lot C3) — branche `feature/envoi-variables-paie`
+
+L'Absence (non justifiée) devient envoyable à la paie comme Retard, en **heures** ou en **jours**, avec deux réglages par base : le nombre d'heures
+d'une journée et les codes d'absence comptés comme non justifiés. Le filtre à l'envoi (variable cochée), la remise à 0 (option C2c), le refus d'une
+période sans ligne calculée, le verrou de mois, le journal, les droits et le statut `INCERTAIN` d'une autre base sont inchangés.
+
+- **Envoi** : Absence **décochée par défaut** (une base existante envoie exactement ce qu'elle envoyait). Cochée, elle exige un code de paie (base
+  SAGE : liste lue dans `T_CST`, code inconnu refusé avec « Le code de paie XX99 de la variable Absence n'existe pas dans la base SAGE … ») ou une
+  colonne (autre base : section « Destinations », colonne numérique avec décimales, catégorie `Absence` de `T_PAIE_ECRITURE`), et une unité.
+  Décochée, elle n'est jamais écrite ni résolue, même avec un code enregistré (le code, l'unité et les heures par jour sont conservés).
+  L'Absence est écrite après les sept variables d'heures supplémentaires et Retard ; elle compte dans la synthèse du journal `SYNC_PAIE`.
+- **Unités** : « heures » = la valeur affichée dans la page Heures supplémentaires. « Jours » = **heures ÷ heures par jour, arrondi au centième, la
+  moitié vers le haut** (24 h à 8 h par jour : 3 ; 25,5 h : 3,19 ; 24 h à 6 h par jour : 4 ; 1 h : 0,13). Retard reste en heures. En autre base, une
+  colonne à une décimale refuse une valeur en jours à deux décimales (« La valeur … du matricule … n'est pas compatible avec la colonne … »), comme
+  Retard.
+- **Heures par jour** : défaut **8**, entre **1 et 24**, **une décimale au plus** (« Le nombre d'heures par jour de l'absence doit être compris
+  entre 1 et 24, avec une décimale au plus (valeur reçue : … ). »). Champ affiché sur la carte quand l'unité est « jours ». Valeur 8 : aucune ligne
+  stockée (clé `AbsenceHeuresParJour` créée seulement pour une autre valeur).
+- **Codes d'absence comptés comme non justifiés** : liste des codes de `T_CODEABSENCE` (libellé), cochés ou non, plus « Arbitrage d'absence sans
+  code ». **Défaut** (aucun réglage enregistré) : `ABSENCE NON JUSTIFIEE` et l'arbitrage sans code, soit le comportement d'avant C3 pour une
+  absence arbitrée sans code. Un code marqué « non payé » (`NOT_PAY`) n'est jamais coché d'office : il est seulement signalé « non payé » et
+  « à envisager ». Comparaison tolérante sur le libellé (casse, accents, espaces en trop). Un code enregistré qui n'existe plus dans
+  `T_CODEABSENCE` reste affiché avec « code introuvable » et reste compté tant qu'il n'est pas décoché ; un code renommé n'est plus reconnu tant
+  qu'il n'est pas coché sous son nouveau libellé.
+- **Règle de calcul** : un jour planifié non chômé, hors congé et hors férié, **sans aucune ligne** est toujours compté. Une journée sans présence
+  couverte par des absences arbitrées (`ABSENCE_AM` / `ABSENCE_PM` sans heure) n'est comptée que si **au moins une** de ces lignes porte un code
+  compté (ou n'a pas de code et que l'arbitrage sans code est compté) ; sinon elle est « justifiée » et n'entre pas dans l'Absence. Demi-journées
+  inchangées : une demi-journée arbitrée sans heure compte pour la journée entière ; une présence sur l'autre moitié donne 0.
+- **Limite à connaître** : la règle ne s'applique qu'au **prochain « Calculer »**. Les valeurs déjà stockées dans `T_HS_VALIDER` / `T_HSExoImp` ne
+  changent pas quand le RH modifie les codes comptés : il faut **recalculer les périodes déjà calculées avant de les envoyer**. La confirmation
+  d'enregistrement et l'aide de la carte le rappellent.
+- **Écran** : sur la carte « Variables envoyées à la paie », ligne Absence comme Retard (liste des codes de paie **avec recherche en tapant**,
+  unité heures ou jours, champ « Heures par jour » en jours) et, sous elle, le groupe « Codes d'absence comptés comme non justifiés ». Brouillon,
+  « Annuler les changements », verrou de mois, absence de permission et largeur étroite comme le reste de la carte. La confirmation d'enregistrement
+  cite les changements (« Absence : 6 heures par jour », « Codes d'absence comptés ajoutés : … », « Arbitrage d'absence sans code : non compté »).
+  La confirmation de « Synchroniser vers SAGE » précise, si l'Absence est cochée en jours : « L'absence est envoyée en jours (heures ÷ 8 h par jour,
+  arrondi au centième). »
+- **Stockage** (table `T_PAIE_OPTION` du lot C2c, **aucune migration**) : `AbsenceHeuresParJour` ; `AbsenceSansCodeCompte` (« 1 » ou « 0 »,
+  marqueur « un réglage est enregistré » : sans lui, c'est le défaut) ; une ligne **`AbsenceCodeCompte.N`** par code compté, `VALEUR` = libellé
+  de `T_CODEABSENCE`. L'unité de l'Absence est dans `T_PAIE_VARIABLE.UNITE` (`H` ou `J`). Journal central avec l'auteur.
+- **API** : `GET api/v1/payroll-variables` renvoie `heuresParJour` et `absenceCodes` (`parDefaut`, `sansCode`, `codes[]` : `libelle`, `compte`,
+  `introuvable`, `nonPaye`, `suggere`) ; `GET …/actives` renvoie `uniteAbsence` et `heuresParJour`. `PUT` accepte en plus `heuresParJour` et
+  `absenceCodes` (`{ sansCode, codes[] }`), champs absents ou `null` : inchangés ; un seul appel, une seule sauvegarde, atomique (une validation
+  qui échoue n'écrit rien), mêmes droit, verrou de mois (409), journal et caches vidés.
+- **Lecteurs de l'Absence** : `WeeklyValidationService`, `OvertimeExoImpoService` (Calculer) et `OvertimeDetailService` passent par le **même
+  chargement du réglage** (`OvertimeWeekContext`) : le calcul, la validation de la semaine et le détail d'un salarié donnent le même résultat. La
+  **clôture** et le **tableau de bord** ont leurs propres règles (jours planifiés sans pointage, absences déclarées) et ne lisent pas ce réglage.
+  L'**export**, les **rapports** (état des absences) et **Mon espace** lisent les valeurs stockées ou leurs propres règles : ils ne changent qu'après
+  un nouveau calcul.
+- **Effet du réglage par défaut** : après un recalcul, l'Absence affichée n'inclut plus une journée dont les absences arbitrées portent un code
+  autre que `ABSENCE NON JUSTIFIEE` (par exemple un congé exceptionnel arbitré) ; les jours sans ligne et les arbitrages sans code sont inchangés.
+  Le RH peut cocher d'autres codes dans la carte pour les compter.
 
 ---
 
