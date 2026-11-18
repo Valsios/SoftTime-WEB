@@ -14,6 +14,7 @@ public class SchemaMigratorIntegrationTests
     private static readonly string[] ApplicationTables =
     {
         "T_PAIE_VARIABLE", "T_PAIE_ENVOI", "T_PAIE_OPTION", "T_PAIE_INSTANTANE", "T_PAIE_INSTANTANE_LIGNE", "T_PAIE_CLOTURE",
+        "T_PAIE_CLOTURE_DOMAINE",
         "T_ROLE", "T_RESPONSABLE", "T_DROIT", "T_DROIT_ROLE", "T_BDD_AUTORISE", "T_USER_PERMISSION",
         "T_BDD_SAGE", "T_BDD_POINTEUSE", "T_CARDPAIE", "T_CATEGORIE", "T_CAT_SAL", "T_TOLERANCES",
         "T_POINTAGE", "T_HEURECORRIGER", "T_HEUREANOMALIE", "T_HEUREDIMANCHE", "T_HS_VALIDER", "T_HSExoImp",
@@ -154,6 +155,75 @@ public class SchemaMigratorIntegrationTests
                 .Which.Number.Should().Be(51992, interdit);
         await FluentActions.Awaiting(() => ScalarAsync<int>(connection, insertion)).Should().ThrowAsync<SqlException>("une seule clôture par base et période");
         (await ScalarAsync<int>(connection, $"SELECT COUNT(*) FROM dbo.T_PAIE_CLOTURE WHERE BDD_SAGE = N'MIGTEST_{suffixe}';")).Should().Be(1);
+    }
+
+    [MigrationIntegrationFact]
+    public async Task Script011_Domains_ReplayTwice_DefaultToHours_AndFrozenDomainsAreDefinitive()
+    {
+        var connectionString = DisposableConnectionString();
+        await Migrator(connectionString, lockTimeoutSeconds: 60).RunAsync();
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+        // Rejeu direct du script (déjà appliqué par l'exécuteur) : aucune erreur, aucun objet en double.
+        var script = new EmbeddedMigrationScriptSource().Load().Single(s => s.Version == 11);
+        for (var passe = 0; passe < 2; passe++)
+            foreach (var batch in SqlBatchSplitter.Split(script.Content))
+            {
+                await using var command = new SqlCommand(batch, connection);
+                await command.ExecuteNonQueryAsync();
+            }
+        (await ScalarAsync<int>(connection, "SELECT COUNT(*) FROM sys.check_constraints WHERE name IN (N'CK_T_PAIE_ENVOI_DOMAINE', N'CK_T_PAIE_INSTANTANE_DOMAINE');")).Should().Be(2);
+
+        var suffixe = Guid.NewGuid().ToString("N")[..8];
+        // Écriture sans la colonne (version précédente de l'application) : domaine HEURES par défaut.
+        var heures = await ScalarAsync<int>(connection, $"""
+            INSERT INTO dbo.T_PAIE_ENVOI (BDD_SAGE, PERIODE_DEBUT, PERIODE_FIN, ENVOYE_LE, ENVOYE_PAR, STATUT, LIGNES, TYPE_BASE)
+            VALUES (N'MIGTEST_D5_{suffixe}', '2026-04-01', '2026-04-30', SYSUTCDATETIME(), N'test', N'SUCCES', 1, N'STANDARD');
+            SELECT CAST(SCOPE_IDENTITY() AS int);
+            """);
+        (await ScalarAsync<string>(connection, $"SELECT DOMAINE FROM dbo.T_PAIE_ENVOI WHERE ID = {heures};")).Should().Be("HEURES");
+        var instantaneHeures = await ScalarAsync<int>(connection, $"""
+            INSERT INTO dbo.T_PAIE_INSTANTANE (ENVOI_ID, BDD_SAGE, PERIODE_DEBUT, PERIODE_FIN, TYPE_BASE, ENVOYE_LE, AVEC_FILTRE, REMISE_A_ZERO,
+                HEURES_PAR_JOUR, VERSION_FORMAT, EMPREINTE, NB_LIGNES, NB_SANS_LIGNE, NB_NON_REMIS, CREE_LE)
+            VALUES ({heures}, N'MIGTEST_D5_{suffixe}', '2026-04-01', '2026-04-30', N'STANDARD', SYSUTCDATETIME(), 0, 1, 8, 1, REPLICATE('a', 64), 0, 0, 0, SYSUTCDATETIME());
+            SELECT CAST(SCOPE_IDENTITY() AS int);
+            """);
+        (await ScalarAsync<string>(connection, $"SELECT DOMAINE FROM dbo.T_PAIE_INSTANTANE WHERE ID = {instantaneHeures};")).Should().Be("HEURES");
+        var cantine = await ScalarAsync<int>(connection, $"""
+            INSERT INTO dbo.T_PAIE_ENVOI (BDD_SAGE, PERIODE_DEBUT, PERIODE_FIN, ENVOYE_LE, ENVOYE_PAR, STATUT, LIGNES, TYPE_BASE, DOMAINE)
+            VALUES (N'MIGTEST_D5_{suffixe}', '2026-04-01', '2026-04-30', SYSUTCDATETIME(), N'test', N'SUCCES', 1, N'STANDARD', N'CANTINE');
+            SELECT CAST(SCOPE_IDENTITY() AS int);
+            """);
+        var instantaneCantine = await ScalarAsync<int>(connection, $"""
+            INSERT INTO dbo.T_PAIE_INSTANTANE (ENVOI_ID, BDD_SAGE, PERIODE_DEBUT, PERIODE_FIN, TYPE_BASE, ENVOYE_LE, AVEC_FILTRE, REMISE_A_ZERO,
+                HEURES_PAR_JOUR, VERSION_FORMAT, EMPREINTE, NB_LIGNES, NB_SANS_LIGNE, NB_NON_REMIS, CREE_LE, DOMAINE)
+            VALUES ({cantine}, N'MIGTEST_D5_{suffixe}', '2026-04-01', '2026-04-30', N'STANDARD', SYSUTCDATETIME(), 0, 0, 0, 2, REPLICATE('b', 64), 0, 0, 0, SYSUTCDATETIME(), N'CANTINE');
+            SELECT CAST(SCOPE_IDENTITY() AS int);
+            """);
+        (await FluentActions.Awaiting(() => ScalarAsync<int>(connection, $"""
+            INSERT INTO dbo.T_PAIE_ENVOI (BDD_SAGE, PERIODE_DEBUT, PERIODE_FIN, ENVOYE_LE, STATUT, LIGNES, TYPE_BASE, DOMAINE)
+            VALUES (N'MIGTEST_D5_{suffixe}', '2026-04-01', '2026-04-30', SYSUTCDATETIME(), N'SUCCES', 1, N'STANDARD', N'PRIMES'); SELECT 1;
+            """)).Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(547, "domaine inconnu refusé par la contrainte CHECK");
+        var cloture = await ScalarAsync<int>(connection, $"""
+            INSERT INTO dbo.T_PAIE_CLOTURE (BDD_SAGE, PERIODE_DEBUT, PERIODE_FIN, CLOTURE_LE, CLOTURE_PAR, ENVOI_ID, INSTANTANE_ID, EMPREINTE, STATUT_CONTROLE, RESUME_CONTROLE)
+            VALUES (N'MIGTEST_D5_{suffixe}', '2026-04-01', '2026-04-30', SYSUTCDATETIME(), N'test', {heures}, {instantaneHeures}, REPLICATE('a', 64), N'Pret', N'r');
+            SELECT CAST(SCOPE_IDENTITY() AS int);
+            """);
+        await ScalarAsync<int>(connection, $"""
+            INSERT INTO dbo.T_PAIE_CLOTURE_DOMAINE (CLOTURE_ID, DOMAINE, ENVOI_ID, INSTANTANE_ID, VERSION_FORMAT, EMPREINTE)
+            VALUES ({cloture}, N'CANTINE', {cantine}, {instantaneCantine}, 2, REPLICATE('b', 64)); SELECT 1;
+            """);
+
+        foreach (var interdit in new[] { $"UPDATE dbo.T_PAIE_CLOTURE_DOMAINE SET VERSION_FORMAT = 3 WHERE CLOTURE_ID = {cloture};", $"DELETE FROM dbo.T_PAIE_CLOTURE_DOMAINE WHERE CLOTURE_ID = {cloture};" })
+            (await FluentActions.Awaiting(() => ScalarAsync<int>(connection, interdit + " SELECT 1;")).Should().ThrowAsync<SqlException>())
+                .Which.Number.Should().Be(51992, interdit);
+        (await FluentActions.Awaiting(() => ScalarAsync<int>(connection, $"UPDATE dbo.T_PAIE_INSTANTANE SET DOMAINE = N'FRAIS' WHERE ID = {instantaneCantine}; SELECT 1;"))
+            .Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(51991, "l'instantané d'un domaine reste immuable (009)");
+        (await FluentActions.Awaiting(() => ScalarAsync<int>(connection, $"""
+            INSERT INTO dbo.T_PAIE_CLOTURE_DOMAINE (CLOTURE_ID, DOMAINE, ENVOI_ID, INSTANTANE_ID, VERSION_FORMAT, EMPREINTE)
+            VALUES ({cloture}, N'HEURES', {heures}, {instantaneHeures}, 1, REPLICATE('a', 64)); SELECT 1;
+            """)).Should().ThrowAsync<SqlException>()).Which.Number.Should().Be(547, "les heures restent dans T_PAIE_CLOTURE");
+        (await ScalarAsync<int>(connection, $"SELECT COUNT(*) FROM dbo.T_PAIE_CLOTURE_DOMAINE WHERE CLOTURE_ID = {cloture};")).Should().Be(1);
     }
 
     [MigrationIntegrationFact]
