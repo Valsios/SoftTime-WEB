@@ -18,11 +18,12 @@ import {
 } from '../../shared/components';
 import { asRow } from '../../shared/utils/date';
 import { PayrollVariablesCard } from './payroll-variables';
+import { PayrollClosureCard } from './payroll-closure';
 
 @Component({
   selector: 'app-sage-databases',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [PageHeader, SoftButton, SoftCard, DataTable, SourceMappingStepper, PayrollVariablesCard],
+  imports: [PageHeader, SoftButton, SoftCard, DataTable, SourceMappingStepper, PayrollVariablesCard, PayrollClosureCard],
   template: `
     <page-header title="Bases SAGE" subtitle="Connexions aux bases SAGE (ou toute autre base)">
       @if (canCreate()) {
@@ -48,6 +49,8 @@ import { PayrollVariablesCard } from './payroll-variables';
     </soft-card>
 
     <app-payroll-variables />
+
+    <app-payroll-closure />
 
     <soft-source-mapping-stepper
       [open]="modal()"

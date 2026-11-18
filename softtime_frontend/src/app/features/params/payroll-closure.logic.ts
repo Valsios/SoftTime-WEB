@@ -1,0 +1,75 @@
+import { PayrollPeriodState, PayrollSendSummary } from '../../shared/models';
+
+/** Date ISO (aaaa-mm-jj…) en jj/mm/aaaa. */
+export function dateFr(iso: string | null | undefined): string {
+  const s = (iso ?? '').slice(0, 10);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : s;
+}
+
+/** Date et heure locales d'un horodatage UTC du serveur, en jj/mm/aaaa hh:mm. */
+export function dateHeureFr(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const texte = /[zZ]$|[+-]\d{2}:\d{2}$/.test(iso) ? iso : `${iso}Z`;
+  const d = new Date(texte);
+  if (Number.isNaN(d.getTime())) return dateFr(iso);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/** Libellé d'une période. */
+export function libellePeriode(p: { periodeDebut: string; periodeFin: string }): string {
+  return `du ${dateFr(p.periodeDebut)} au ${dateFr(p.periodeFin)}`;
+}
+
+/** Empreinte raccourcie pour l'affichage (12 premiers caractères) ; l'empreinte complète se copie. */
+export function empreinteCourte(empreinte: string | null | undefined): string {
+  const e = (empreinte ?? '').trim();
+  return e.length > 12 ? `${e.slice(0, 12)}…` : e;
+}
+
+export const ETAT_ENVOYEE = 'Envoyée';
+export const ETAT_CLOTUREE = 'Clôturée';
+
+export function libelleEtat(etat: PayrollPeriodState['etat']): string {
+  return etat === 'CLOTUREE' ? ETAT_CLOTUREE : ETAT_ENVOYEE;
+}
+
+/** Filtre du dernier envoi, en clair (vide s'il n'y en a pas). */
+export function libelleFiltre(e: PayrollSendSummary): string {
+  const morceaux: string[] = [];
+  if (e.departement) morceaux.push(`département ${e.departement}`);
+  if (e.matriculeDe || e.matriculeA) morceaux.push(`matricules ${e.matriculeDe ?? '…'} à ${e.matriculeA ?? '…'}`);
+  return morceaux.join(', ');
+}
+
+/**
+ * Indication affichée sous le bouton « Clôturer » quand une condition connue manque. Le serveur reste seul juge : il
+ * contrôle aussi le Contrôle avant paie et l'empreinte, et son refus est affiché tel quel.
+ */
+export function avertissement(p: PayrollPeriodState, aujourdhui: string): string | null {
+  if (p.etat === 'CLOTUREE') return null;
+  const e = p.dernierEnvoi;
+  if (p.periodeFin.slice(0, 10) >= aujourdhui) return 'Période non terminée : clôture possible à partir du lendemain de sa fin.';
+  if (e.statut === 'INCERTAIN') return "Dernier envoi incertain : relancez l'envoi sans filtre avant de clôturer.";
+  if (e.statut !== 'SUCCES') {
+    return `Dernier envoi ${e.statut === 'ECHEC' ? 'en échec' : 'inachevé'} : relancez l'envoi sans filtre avant de clôturer.`;
+  }
+  if (!e.instantaneId) return "Dernier envoi sans instantané : relancez l'envoi sans filtre avant de clôturer.";
+  if (e.avecFiltre) return 'Dernier envoi filtré : lancez un envoi sans filtre avant de clôturer.';
+  return null;
+}
+
+/** Texte de la fenêtre de confirmation : période, irréversibilité, corrections sur la période suivante. */
+export function questionCloture(base: string, p: PayrollPeriodState): string {
+  return `Clôturer la période ${libellePeriode(p)} de la base ${base} ? `
+    + "La clôture est définitive : il n'y a pas de retour en arrière. Les valeurs envoyées en paie sont figées "
+    + `(empreinte ${empreinteCourte(p.dernierEnvoi.empreinte)}) et aucune donnée de la période ne pourra plus être modifiée `
+    + '(pointages, heures corrigées, anomalies, planning, validation, calcul, envoi). Les corrections se feront sur la période suivante.';
+}
+
+/** Jour local au format aaaa-mm-jj. */
+export function aujourdhuiIso(maintenant = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${maintenant.getFullYear()}-${p(maintenant.getMonth() + 1)}-${p(maintenant.getDate())}`;
+}
