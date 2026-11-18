@@ -16,6 +16,18 @@ public interface IPayrollSendLog
     /// <summary>Met à jour le statut et le nombre de lignes d'un envoi déjà enregistré.</summary>
     Task CompleteAsync(int id, string status, int lines, CancellationToken ct = default);
 
+    /// <summary>
+    /// Base AUTRE : crée l'envoi ET son instantané (entête, lignes, empreinte) dans UNE transaction SoftTime, avant la
+    /// validation de la transaction de paie. Un échec lève : l'appelant annule alors la paie (rien n'est envoyé).
+    /// </summary>
+    Task<int> RecordWithSnapshotAsync(PayrollSend send, PayrollSnapshotDraft snapshot, CancellationToken ct = default);
+
+    /// <summary>
+    /// Base STANDARD : termine l'envoi (statut, lignes) ET écrit son instantané dans UNE transaction SoftTime. Un échec lève :
+    /// l'appelant marque alors l'envoi INCERTAIN (la paie SAGE est déjà écrite).
+    /// </summary>
+    Task CompleteWithSnapshotAsync(int id, string status, int lines, PayrollSnapshotDraft snapshot, CancellationToken ct = default);
+
     /// <summary>Supprime un envoi qui n'a finalement rien écrit (validation de la paie AUTRE annulée).</summary>
     Task RemoveAsync(int id, CancellationToken ct = default);
 

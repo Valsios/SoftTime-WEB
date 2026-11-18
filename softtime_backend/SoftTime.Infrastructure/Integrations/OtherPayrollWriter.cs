@@ -86,6 +86,7 @@ public sealed class OtherPayrollWriter : IPayrollWriter
         var updates = 0;
         var ecrits = 0;
         var remisAZero = 0;
+        var instantane = new PayrollSnapshotBuilder();
         try
         {
             foreach (var row in rows)
@@ -101,9 +102,13 @@ public sealed class OtherPayrollWriter : IPayrollWriter
                     throw new DomainException($"La synchronisation a été annulée : {affected} ligne(s) mise(s) à jour pour le matricule {row.Matricule} et la catégorie {category}; une seule ligne était attendue.");
                 updates++;
                 categoryCounts[category] += affected;
+                instantane.Ecrite(row.Matricule, null, category, $"{plan.Schema}.{plan.Table}.{plan.ValueColumns[category]}",
+                    selection.UniteDe(category), OvertimePayrollCategoryMapper.ValueFor(category, row, selection), row.SansValeur);
             }
             }
-            await ValiderAvecMarqueurAsync(db, database, auditContext, updates, ct);
+            // Instantané : salariés sans valeur absents de la table de paie = non remis à 0 (rien d'écrit pour eux).
+            await ValiderAvecMarqueurAsync(db, database, auditContext, updates,
+                instantane.Construire(0, plan.IgnoredMatricules.Count, auditContext.Filtre, selection), ct);
             await WriteAuditAsync(database, plan, auditContext, new PayrollSyncOutcome(ecrits + remisAZero, categoryCounts.Values.Sum(), 0, categoryCounts, "SUCCES"));
             var message = "Synchronisation des heures supplémentaires terminée.";
             if (remisAZero > 0)
@@ -128,16 +133,18 @@ public sealed class OtherPayrollWriter : IPayrollWriter
 
     /// <summary>
     /// Le marqueur T_PAIE_ENVOI (base SoftTime) est enregistré AVANT la validation de la transaction de paie (base
-    /// cible) : s'il ne peut pas l'être, l'exception annule toute la paie. Si la validation échoue ensuite, son issue
-    /// est incertaine côté serveur : le marqueur reste, au statut INCERTAIN (il compte comme envoyé). Rien n'est
-    /// enregistré si aucune ligne n'a été écrite.
+    /// cible) avec son instantané, dans UNE transaction SoftTime : si l'un ou l'autre ne peut pas l'être, l'exception
+    /// annule toute la paie. Si la validation échoue ensuite, son issue est incertaine côté serveur : le marqueur reste,
+    /// au statut INCERTAIN (il compte comme envoyé, mais ne permet pas de clôturer). Rien n'est enregistré si aucune
+    /// ligne n'a été écrite.
     /// </summary>
-    private async Task ValiderAvecMarqueurAsync(IOtherPayrollDatabase db, BddSage database, PayrollSyncContext context, int updates, CancellationToken ct)
+    private async Task ValiderAvecMarqueurAsync(IOtherPayrollDatabase db, BddSage database, PayrollSyncContext context, int updates,
+        PayrollSnapshotDraft instantane, CancellationToken ct)
     {
         int? envoi = null;
         if (updates > 0 && _sendLog is not null)
-            envoi = await _sendLog.RecordAsync(new PayrollSend(database.NomBd ?? string.Empty, "AUTRE",
-                context.PeriodFrom, context.PeriodTo, context.UserLogin, "SUCCES", updates), CancellationToken.None);
+            envoi = await _sendLog.RecordWithSnapshotAsync(new PayrollSend(database.NomBd ?? string.Empty, "AUTRE",
+                context.PeriodFrom, context.PeriodTo, context.UserLogin, "SUCCES", updates), instantane, CancellationToken.None);
         try
         {
             await db.CommitAsync(ct);

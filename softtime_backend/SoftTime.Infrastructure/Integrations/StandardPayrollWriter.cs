@@ -67,14 +67,20 @@ public class StandardPayrollWriter : IPayrollWriter
         var envoi = new SendMarker(_sendLog, database, auditContext);
         var sansLigne = 0;
         var sansLigneRemisesAZero = 0;
+        var instantane = new PayrollSnapshotBuilder();
         try
         {
             foreach (var hs in rows.Where(h => h.NumSal.HasValue))
             {
-                var updates = await _sageWriter.SyncOvertimeAsync(input, hs.NumSal!.Value, OvertimeAmounts.From(hs), ct);
+                var montants = OvertimeAmounts.From(hs);
+                var updates = await _sageWriter.SyncOvertimeAsync(input, hs.NumSal!.Value, montants, ct);
                 foreach (var (category, count) in updates)
                 {
                     categoryCounts[category] += count;
+                    // Instantané : seules les valeurs qui ont réellement modifié une ligne T_CUMSAL.
+                    if (count > 0)
+                        instantane.Ecrite(hs.Matricule, hs.NumSal, category, input.CodeDe(category), input.Variables.UniteDe(category),
+                            input.Variables.ValeurEnvoyee(category, montants.Valeurs), hs.SansValeur);
                     if (count == 0)
                     {
                         sansLigne++;
@@ -108,7 +114,8 @@ public class StandardPayrollWriter : IPayrollWriter
         // Salariés du périmètre sans valeur dont le numéro SAGE est introuvable (lecture impossible ou salarié absent) :
         // l'envoi n'est pas bloqué, mais leur ancien cumul reste dans SAGE : à signaler.
         var nonRemis = rows.Count(h => !h.NumSal.HasValue && h.SansValeur);
-        await envoi.TerminerAsync("SUCCES", categoryCounts.Values.Sum());
+        var instantaneEcrit = await envoi.TerminerAvecInstantaneAsync(categoryCounts.Values.Sum(),
+            instantane.Construire(sansLigne, nonRemis, auditContext.Filtre, input.Variables));
         await WriteAuditAsync(database, auditContext, new PayrollSyncOutcome(written + remisAZero, categoryCounts.Values.Sum(), 0, categoryCounts, "SUCCES", remisAZero, nonRemis));
         var message = "Synchronisation des heures supplémentaires vers SAGE terminée.";
         if (remisAZero > 0)
@@ -121,6 +128,8 @@ public class StandardPayrollWriter : IPayrollWriter
                        + "(cumul absent dans SAGE pour le salarié)"
                        + (sansLigneRemisesAZero > 0 ? $", dont {sansLigneRemisesAZero} pour des salariés remis à 0" : string.Empty)
                        + " : vérifiez ces cumuls dans SAGE.";
+        if (!instantaneEcrit)
+            message += " " + InstantaneNonEcrit;
         return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "STANDARD", written, categoryCounts.Values.Sum(), message)
         {
             UpdatesWithoutRow = sansLigne,
@@ -128,6 +137,11 @@ public class StandardPayrollWriter : IPayrollWriter
             EmployeesNotReset = nonRemis
         };
     }
+
+    /// <summary>Avertissement rendu quand la paie SAGE est écrite mais que son instantané n'a pas pu l'être.</summary>
+    public const string InstantaneNonEcrit =
+        "Attention : l'instantané de cet envoi n'a pas pu être enregistré ; l'envoi est marqué INCERTAIN et ne permet pas de "
+        + "clôturer la période. Relancez l'envoi (les valeurs SAGE sont réécrites à l'identique).";
 
     protected virtual async Task<SagePayrollTarget> GetInputAsync(CancellationToken ct)
     {
@@ -163,6 +177,41 @@ public class StandardPayrollWriter : IPayrollWriter
                 return;
             _id = await log.RecordAsync(new PayrollSend(database.NomBd ?? string.Empty, "STANDARD",
                 context.PeriodFrom, context.PeriodTo, context.UserLogin, "EN_COURS", lignes), CancellationToken.None);
+        }
+
+        /// <summary>
+        /// Fin d'un envoi réussi : statut SUCCES ET instantané dans une seule transaction SoftTime. Si elle échoue, l'envoi
+        /// est marqué INCERTAIN (au mieux : s'il ne peut même pas l'être, il reste EN_COURS, ce qui ne permet pas non plus
+        /// de clôturer). Ne lève jamais : la paie est déjà écrite. Faux si l'instantané n'a pas été écrit. Sans aucune ligne
+        /// modifiée, aucun envoi n'est enregistré et il n'y a rien à figer.
+        /// </summary>
+        public async Task<bool> TerminerAvecInstantaneAsync(int lignes, PayrollSnapshotDraft instantane)
+        {
+            if (log is null)
+                return true;
+            try
+            {
+                await SignalerAsync(lignes, CancellationToken.None);
+                if (_id.HasValue)
+                    await log.CompleteWithSnapshotAsync(_id.Value, "SUCCES", lignes, instantane, CancellationToken.None);
+                return true;
+            }
+            catch (Exception)
+            {
+                // Déjà journalisé par le service du marqueur.
+                if (_id.HasValue)
+                {
+                    try
+                    {
+                        await log.CompleteAsync(_id.Value, "INCERTAIN", lignes, CancellationToken.None);
+                    }
+                    catch (Exception)
+                    {
+                        // Reste EN_COURS : déjà journalisé.
+                    }
+                }
+                return false;
+            }
         }
 
         /// <summary>

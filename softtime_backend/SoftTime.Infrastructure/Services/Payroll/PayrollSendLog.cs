@@ -24,17 +24,7 @@ public sealed class PayrollSendLog : IPayrollSendLog
 
     public Task<int> RecordAsync(PayrollSend send, CancellationToken ct = default) => LoggedAsync(async uow =>
     {
-        var envoi = new PaieEnvoi
-        {
-            BddSage = send.SageDatabase,
-            TypeBase = send.TypeBase,
-            PeriodeDebut = send.PeriodFrom.Date,
-            PeriodeFin = send.PeriodTo.Date,
-            EnvoyeLe = DateTime.UtcNow,
-            EnvoyePar = string.IsNullOrWhiteSpace(send.UserLogin) ? "SYSTEME" : send.UserLogin,
-            Statut = send.Status,
-            Lignes = send.Lines
-        };
+        var envoi = Nouveau(send);
         await uow.Repository<PaieEnvoi>().AddAsync(envoi, ct);
         await uow.SaveChangesAsync(ct);
         return envoi.Id;
@@ -50,6 +40,88 @@ public sealed class PayrollSendLog : IPayrollSendLog
         await uow.SaveChangesAsync(ct);
         return id;
     }, "Impossible de mettre à jour l'envoi en paie {Base}.", id.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+    /// <summary>Verrou applicatif partagé par l'écriture de l'envoi et de son instantané (transaction SoftTime unique).</summary>
+    internal const string SnapshotLock = "SoftTime.PayrollSnapshot";
+
+    public Task<int> RecordWithSnapshotAsync(PayrollSend send, PayrollSnapshotDraft snapshot, CancellationToken ct = default) => LoggedAsync(
+        uow => uow.RunExclusiveAsync(SnapshotLock, async token =>
+        {
+            var envoi = Nouveau(send);
+            await uow.Repository<PaieEnvoi>().AddAsync(envoi, token);
+            await uow.SaveChangesAsync(token);
+            await EcrireInstantaneAsync(uow, envoi, snapshot, token);
+            return envoi.Id;
+        }, ct),
+        "Impossible d'enregistrer l'envoi en paie et son instantané pour la base {Base}.", send.SageDatabase);
+
+    public Task CompleteWithSnapshotAsync(int id, string status, int lines, PayrollSnapshotDraft snapshot, CancellationToken ct = default) => LoggedAsync(
+        uow => uow.RunExclusiveAsync(SnapshotLock, async token =>
+        {
+            var repo = uow.Repository<PaieEnvoi>();
+            var envoi = await repo.GetByIdAsync(id, token) ?? throw new NotFoundException();
+            envoi.Statut = status;
+            envoi.Lignes = lines;
+            repo.Update(envoi);
+            await uow.SaveChangesAsync(token);
+            await EcrireInstantaneAsync(uow, envoi, snapshot, token);
+            return id;
+        }, ct),
+        "Impossible de terminer l'envoi en paie {Base} et d'écrire son instantané.", id.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+    /// <summary>Entête (empreinte au format courant) puis lignes, dans la transaction de l'appelant.</summary>
+    private static async Task EcrireInstantaneAsync(IUnitOfWork uow, PaieEnvoi envoi, PayrollSnapshotDraft snapshot, CancellationToken ct)
+    {
+        var lignes = snapshot.Lignes.Select(l => l.Normalisee()).ToList();
+        var entete = new PaieInstantane
+        {
+            EnvoiId = envoi.Id,
+            BddSage = envoi.BddSage,
+            PeriodeDebut = envoi.PeriodeDebut,
+            PeriodeFin = envoi.PeriodeFin,
+            TypeBase = envoi.TypeBase,
+            EnvoyeLe = envoi.EnvoyeLe,
+            EnvoyePar = envoi.EnvoyePar,
+            Departement = snapshot.Filtre.Departement,
+            MatriculeDe = snapshot.Filtre.MatriculeDe,
+            MatriculeA = snapshot.Filtre.MatriculeA,
+            AvecFiltre = snapshot.Filtre.AvecFiltre,
+            RemiseAZero = snapshot.RemiseAZero,
+            HeuresParJour = snapshot.HeuresParJour,
+            VersionFormat = PayrollSnapshotFingerprint.Version,
+            Empreinte = PayrollSnapshotFingerprint.Calculer(envoi.BddSage, envoi.PeriodeDebut, envoi.PeriodeFin, envoi.TypeBase, lignes),
+            NbLignes = lignes.Count,
+            NbSansLigne = snapshot.SansLigne,
+            NbNonRemis = snapshot.NonRemis,
+            CreeLe = DateTime.UtcNow
+        };
+        await uow.Repository<PaieInstantane>().AddAsync(entete, ct);
+        await uow.SaveChangesAsync(ct);
+        await uow.Repository<PaieInstantaneLigne>().AddRangeAsync(lignes.Select(l => new PaieInstantaneLigne
+        {
+            InstantaneId = entete.Id,
+            Matricule = l.Matricule,
+            NumSal = l.NumSal,
+            Variable = l.Variable,
+            Destination = l.Destination,
+            Unite = l.Unite,
+            Valeur = l.Valeur,
+            RemiseAZero = l.RemiseAZero
+        }), ct);
+        await uow.SaveChangesAsync(ct);
+    }
+
+    private static PaieEnvoi Nouveau(PayrollSend send) => new()
+    {
+        BddSage = send.SageDatabase,
+        TypeBase = send.TypeBase,
+        PeriodeDebut = send.PeriodFrom.Date,
+        PeriodeFin = send.PeriodTo.Date,
+        EnvoyeLe = DateTime.UtcNow,
+        EnvoyePar = string.IsNullOrWhiteSpace(send.UserLogin) ? "SYSTEME" : send.UserLogin,
+        Statut = send.Status,
+        Lignes = send.Lines
+    };
 
     public Task RemoveAsync(int id, CancellationToken ct = default) => LoggedAsync(async uow =>
     {

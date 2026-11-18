@@ -36,6 +36,33 @@ internal sealed class RecordingSendLog : IPayrollSendLog
         return Task.CompletedTask;
     }
 
+    /// <summary>Instantanés reçus, par identifiant d'envoi.</summary>
+    public Dictionary<int, PayrollSnapshotDraft> Instantanes { get; } = new();
+    public bool EchecInstantane { get; set; }
+
+    public async Task<int> RecordWithSnapshotAsync(PayrollSend send, PayrollSnapshotDraft snapshot, CancellationToken ct = default)
+    {
+        if (EchecInstantane)
+        {
+            _journal.Add("marqueur");
+            throw new InvalidOperationException("T_PAIE_INSTANTANE indisponible");
+        }
+        var id = await RecordAsync(send, ct);
+        Instantanes[id] = snapshot;
+        return id;
+    }
+
+    public async Task CompleteWithSnapshotAsync(int id, string status, int lines, PayrollSnapshotDraft snapshot, CancellationToken ct = default)
+    {
+        if (EchecInstantane)
+        {
+            _journal.Add($"marqueur:{status}");
+            throw new InvalidOperationException("T_PAIE_INSTANTANE indisponible");
+        }
+        await CompleteAsync(id, status, lines, ct);
+        Instantanes[id] = snapshot;
+    }
+
     public Task RemoveAsync(int id, CancellationToken ct = default)
     {
         Envois.RemoveAll(e => e.Id == id);

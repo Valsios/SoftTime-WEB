@@ -91,7 +91,10 @@ public sealed class OvertimePayrollSyncService : IOvertimePayrollSyncService
         // donc aucun salarié remis à 0 ni avertissement ; les salariés avec valeurs sont écrits comme avant.
         if (await RemiseAZeroActiveAsync(ct))
             dtos.AddRange(await LignesSansValeurAsync(sageRow, cards, rows, ct));
-        var auditContext = new PayrollSyncContext(request.From.Date, request.To.Date, _user?.Login, Guid.NewGuid());
+        var auditContext = new PayrollSyncContext(request.From.Date, request.To.Date, _user?.Login, Guid.NewGuid())
+        {
+            Filtre = PayrollSendFilter.De(request.Departement, request.MatriculeFrom, request.MatriculeTo)
+        };
         return await _payrollWriters.Resolve(sageRow).WriteAsync(sageRow, dtos, auditContext, ct);
     }
 
