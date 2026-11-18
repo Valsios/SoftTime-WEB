@@ -647,7 +647,10 @@ La clôture **fige une période déjà envoyée à la paie**, définitivement. D
     dans le format du domaine.
   - **Limites** : l'instantané prouve les **lignes écrites**, pas l'état des salariés **sans ligne** : l'envoi de la cantine et des frais ne remet pas
     à 0 le cumul d'un salarié qui n'a pas de total sur la période (il garde la valeur précédente dans SAGE). Les envois de cantine et de frais
-    antérieurs à la migration 011 n'ont ni marqueur ni instantané.
+    antérieurs à la migration 011 n'ont ni marqueur ni instantané. **Code de la cantine** : SoftTime envoie la cantine sous la constante
+    `CANTINE_CODE` (12 caractères, repris du desktop) ; dans la copie SAGE d'essai, `T_CST.CodeConstante` n'accepte que 10 caractères, la constante ne
+    peut donc pas y exister et l'envoi de la cantine est refusé (« Constante SAGE CANTINE_CODE absente… »), comme avant ce lot. Sur une telle base,
+    n'activez pas la cantine : elle bloquerait la clôture (à trancher : code de constante configurable par base).
 - **Migrations** : `009_instantanes_paie.sql`, `010_cloture_paie.sql` puis `011_domaines_paie.sql` (colonne `DOMAINE` sur `T_PAIE_ENVOI` et
   `T_PAIE_INSTANTANE`, défaut `HEURES`, contrainte CHECK ; table `T_PAIE_CLOTURE_DOMAINE` immuable, erreur 51992), additives et rejouables,
   contrôlées au démarrage comme 007 et 008. **Production sans AutoMigrate** : sauvegarde, puis
