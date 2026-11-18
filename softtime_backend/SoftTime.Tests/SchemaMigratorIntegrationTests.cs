@@ -156,6 +156,75 @@ public class SchemaMigratorIntegrationTests
         (await ScalarAsync<int>(connection, $"SELECT COUNT(*) FROM dbo.T_PAIE_CLOTURE WHERE BDD_SAGE = N'MIGTEST_{suffixe}';")).Should().Be(1);
     }
 
+    [MigrationIntegrationFact]
+    public async Task ClosedPeriodWriteCheck_RefusesAnySourceWriteInAClosedPeriod_AndWritesNothing()
+    {
+        var connectionString = DisposableConnectionString();
+        await Migrator(connectionString, lockTimeoutSeconds: 60).RunAsync();
+        var options = new DbContextOptionsBuilder<SoftTime.Infrastructure.Persistence.SoftTimeDbContext>().UseSqlServer(connectionString).Options;
+        var baseSage = "MIGTEST_W_" + Guid.NewGuid().ToString("N")[..8];
+        await using (var connection = new SqlConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            var envoi = await ScalarAsync<int>(connection, $"""
+                INSERT INTO dbo.T_PAIE_ENVOI (BDD_SAGE, PERIODE_DEBUT, PERIODE_FIN, ENVOYE_LE, ENVOYE_PAR, STATUT, LIGNES, TYPE_BASE)
+                VALUES (N'{baseSage}', '2026-08-17', '2026-08-23', SYSUTCDATETIME(), N'test', N'SUCCES', 1, N'STANDARD');
+                SELECT CAST(SCOPE_IDENTITY() AS int);
+                """);
+            var instantane = await ScalarAsync<int>(connection, $"""
+                INSERT INTO dbo.T_PAIE_INSTANTANE (ENVOI_ID, BDD_SAGE, PERIODE_DEBUT, PERIODE_FIN, TYPE_BASE, ENVOYE_LE, AVEC_FILTRE, REMISE_A_ZERO,
+                    HEURES_PAR_JOUR, VERSION_FORMAT, EMPREINTE, NB_LIGNES, NB_SANS_LIGNE, NB_NON_REMIS, CREE_LE)
+                VALUES ({envoi}, N'{baseSage}', '2026-08-17', '2026-08-23', N'STANDARD', SYSUTCDATETIME(), 0, 1, 8, 1, REPLICATE('a', 64), 0, 0, 0, SYSUTCDATETIME());
+                SELECT CAST(SCOPE_IDENTITY() AS int);
+                """);
+            await ScalarAsync<int>(connection, $"""
+                INSERT INTO dbo.T_PAIE_CLOTURE (BDD_SAGE, PERIODE_DEBUT, PERIODE_FIN, CLOTURE_LE, CLOTURE_PAR, ENVOI_ID, INSTANTANE_ID, EMPREINTE, STATUT_CONTROLE, RESUME_CONTROLE)
+                VALUES (N'{baseSage}', '2026-08-17', '2026-08-23', SYSUTCDATETIME(), N'test', {envoi}, {instantane}, REPLICATE('a', 64), N'Pret', N'r');
+                SELECT 1;
+                """);
+        }
+
+        async Task<int> Pointages()
+        {
+            await using var db = new SoftTime.Infrastructure.Persistence.SoftTimeDbContext(options);
+            return await db.Set<SoftTime.Domain.Entities.SoftTime.Pointage>().CountAsync(p => p.NomBddSage == baseSage);
+        }
+        async Task Ecrire(Action<SoftTime.Infrastructure.Persistence.SoftTimeDbContext> action)
+        {
+            await using var db = new SoftTime.Infrastructure.Persistence.SoftTimeDbContext(options);
+            action(db);
+            await new SoftTime.Infrastructure.Repositories.UnitOfWork(db).SaveChangesAsync();
+        }
+        SoftTime.Domain.Entities.SoftTime.Pointage Pointage(DateTime jour) => new()
+        {
+            NomBddSage = baseSage, MatriculeSage = "M1", DatePointage = jour, HeurePointage = new TimeSpan(8, 0, 0), DateImportation = DateTime.Now
+        };
+
+        // Période voisine : accepté. Période clôturée : refusé, rien d'écrit (ajout, déplacement, suppression, planning).
+        await Ecrire(db => db.Add(Pointage(new DateTime(2026, 8, 24))));
+        (await Pointages()).Should().Be(1);
+        await FluentActions.Awaiting(() => Ecrire(db => db.AddRange(Pointage(new DateTime(2026, 8, 25)), Pointage(new DateTime(2026, 8, 20)))))
+            .Should().ThrowAsync<ConflictException>().WithMessage("Période clôturée (du 17/08/2026 au 23/08/2026) : modification impossible.*");
+        (await Pointages()).Should().Be(1, "le lot entier est refusé");
+        await FluentActions.Awaiting(() => Ecrire(db =>
+        {
+            var p = db.Set<SoftTime.Domain.Entities.SoftTime.Pointage>().Single(x => x.NomBddSage == baseSage);
+            p.DatePointage = new DateTime(2026, 8, 23);
+        })).Should().ThrowAsync<ConflictException>();
+        await FluentActions.Awaiting(() => Ecrire(db => db.Add(new SoftTime.Domain.Entities.SoftTime.PlanningSalarie
+        {
+            IdSal = 1, DateP = new DateTime(2026, 8, 18), BddSage = baseSage, Ha = new DateTime(2026, 8, 18, 8, 0, 0), Hd = new DateTime(2026, 8, 18, 17, 0, 0)
+        }))).Should().ThrowAsync<ConflictException>();
+        await FluentActions.Awaiting(() => Ecrire(db => db.Add(new SoftTime.Domain.Entities.SoftTime.HsExoImp
+        {
+            BddSage = baseSage, Matricule = "M1", PeriodeDebut = new DateTime(2026, 8, 1), PeriodeFin = new DateTime(2026, 8, 31)
+        }))).Should().ThrowAsync<ConflictException>("une période de calcul qui recoupe la période clôturée est refusée");
+        // Une autre base reste modifiable sur les mêmes dates.
+        var autre = Pointage(new DateTime(2026, 8, 20));
+        autre.NomBddSage = baseSage + "_AUTRE";
+        await Ecrire(db => db.Add(autre));
+    }
+
     private sealed class SingleScopeFactory(SoftTime.Domain.Repositories.IUnitOfWork uow) : Microsoft.Extensions.DependencyInjection.IServiceScopeFactory
     {
         public Microsoft.Extensions.DependencyInjection.IServiceScope CreateScope() => new Scope(uow);
