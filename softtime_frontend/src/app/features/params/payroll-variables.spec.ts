@@ -529,7 +529,8 @@ describe('Largeur étroite (< 768 px) : variables présentées en cartes, jamais
     expect(reaffiche('pv-wrap')).toBe(true);
     // Adapté au lot C3 : la liste des codes d'absence comptés forme une ligne à part, sous l'Absence.
     const lignes = [...racine.querySelectorAll('tbody tr:not(.pv-codes-row)')];
-    expect(lignes.map((l) => l.querySelector('td.pv-name')?.textContent?.trim().split(/\s+non envoyée/)[0])).toEqual(Object.values(LIBELLES));
+    // Adapté aux correctifs C3 : le nom est dans son propre élément, la pastille « non envoyée » à côté.
+    expect(lignes.map((l) => l.querySelector('td.pv-name .pv-name__text')?.textContent?.trim())).toEqual(Object.values(LIBELLES));
     for (const ligne of lignes) {
       expect(ligne.querySelector('td[data-label="Envoyée"] .soft-toggle input[type="checkbox"]')).not.toBeNull();
       expect(ligne.querySelector('td[data-label="Code de paie"]')).not.toBeNull();
@@ -1045,5 +1046,85 @@ describe('Confirmation de « Synchroniser » : Absence envoyée en jours', () =>
   it('Absence en heures, décochée ou configuration illisible : rien n\'est ajouté', () => {
     expect(questionEnvoi(true, 'SAGE_DEMO', false, null)).toBe('Pousser les HS vers SAGE (T_CUMSAL) ?');
     expect(questionEnvoi(true, 'SAGE_DEMO', false)).toBe('Pousser les HS vers SAGE (T_CUMSAL) ?');
+  });
+});
+
+// =====================================================================================================
+// Lot C3 (correctifs) : libellés de codes longs et alignement vertical de la carte
+// =====================================================================================================
+
+describe('Carte : libellé de code complet et alignement vertical', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const LONG = { code: 'HS-FERIE', intitule: 'Heures travaillées jours fériés' };
+  const LIBELLE_LONG = 'HS-FERIE — Heures travaillées jours fériés';
+
+  function rendre(reponse: PayrollVariablesConfig) {
+    monter({ reponse });
+    const fixture = TestBed.createComponent(PayrollVariablesCard);
+    fixture.componentInstance.ngOnInit();
+    fixture.detectChanges();
+    return { fixture, racine: fixture.nativeElement as HTMLElement, carte: fixture.componentInstance };
+  }
+
+  /** Styles du composant injectés par Angular (encapsulation émulée). */
+  function css(): string {
+    return [...document.head.querySelectorAll('style')].map((s) => s.textContent ?? '').join('\n').replace(/\s+/g, ' ');
+  }
+
+  it('liste avec recherche (Absence) : le libellé complet du code choisi est dans l\'infobulle', () => {
+    const { racine, carte } = rendre(configAbsence('H', {
+      codesPaie: [LONG, ...CODES_SAGE],
+      variables: Object.keys(LIBELLES).map((n) => (n === 'Absence' ? variable(n, { actif: true, codePaie: 'HS-FERIE', unite: 'H', cibleExistante: 'HS-FERIE' }) : variable(n))),
+    }));
+
+    expect(racine.querySelector('soft-select[title]')?.getAttribute('title')).toBe(LIBELLE_LONG);
+    expect(carte.titreCode(variable('Absence', { codePaie: 'hs-ferie' }))).toBe(LIBELLE_LONG);
+  });
+
+  it('liste native (Retard) : l\'infobulle porte le libellé complet ; code absent de SAGE : code seul ; aucun code : pas d\'infobulle', () => {
+    const { racine, carte } = rendre(config({
+      codesPaie: [LONG],
+      variables: Object.keys(LIBELLES).map((n) => (n === 'Retard' ? variable(n, { codePaie: 'HS-FERIE', unite: 'H' }) : variable(n))),
+    }));
+
+    expect(racine.querySelector('select[aria-label="Code de paie de Retard"]')?.getAttribute('title')).toBe(LIBELLE_LONG);
+    expect(carte.titreCode(variable('Retard', { codePaie: 'OLD9' }))).toBe('OLD9 — introuvable dans SAGE');
+    expect(carte.titreCode(variable('Retard'))).toBeNull();
+    expect(racine.querySelector('soft-select[title]')).toBeNull();
+  });
+
+  it('nom de la variable dans son propre élément, pastille « non envoyée » à part (même axe que les contrôles)', () => {
+    const { racine } = rendre(config());
+    const retard = [...racine.querySelectorAll('tbody tr')].find((l) => l.querySelector('td.pv-name')?.textContent?.includes('Retard'))!;
+
+    expect(retard.querySelector('td.pv-name > .pv-name__text')?.textContent?.trim()).toBe('Retard');
+    expect(retard.querySelector('td.pv-name > soft-badge')?.textContent).toContain('non envoyée à la paie');
+    expect(racine.querySelectorAll('td.pv-name > .pv-name__text')).toHaveLength(9);
+  });
+
+  it('styles : première ligne de 44 px commune (nom, code lecture seule), cellules alignées en haut, champ de code plus large', () => {
+    rendre(config());
+    const styles = css();
+
+    expect(styles).toMatch(/\.pv-name__text(\[[^\]]+\])? ?\{ ?display: block; line-height: 44px;/);
+    expect(styles).toMatch(/\.pv-readonly(\[[^\]]+\])? ?\{[^}]*line-height: 44px;/);
+    expect(styles).toMatch(/\.pv-table(\[[^\]]+\])? td(\[[^\]]+\])? ?\{ ?vertical-align: top;/);
+    expect(styles).toMatch(/\.pv-field(\[[^\]]+\])? ?\{ ?min-width: 220px; max-width: 440px;/);
+    // Sous 768 px (vue en cartes) le nom reprend sa mise en ligne normale, avec la pastille à sa suite.
+    expect(styles).toMatch(/\.pv-name__text(\[[^\]]+\])? ?\{ ?display: inline; line-height: inherit;/);
+  });
+
+  it('destinations d\'une autre base : lignes centrées verticalement, libellé complet de la colonne en infobulle', () => {
+    monterDestinations();
+    const fixture = TestBed.createComponent(PayrollDestinations);
+    fixture.componentInstance.ngOnInit();
+    fixture.detectChanges();
+    const racine = fixture.nativeElement as HTMLElement;
+
+    expect(css()).toMatch(/\.pd-table(\[[^\]]+\])? td(\[[^\]]+\])? ?\{ ?vertical-align: middle;/);
+    expect(racine.querySelector('select[aria-label="Colonne de Nuit"]')?.getAttribute('title')).toBe('HeuresNuit (decimal(18,2))');
+    expect(racine.querySelector('select[aria-label="Colonne de Retard"]')?.getAttribute('title')).toBeNull();
+    expect(fixture.componentInstance.titreColonne({ variable: 'Nuit', libelle: 'Nuit', actif: true, colonne: 'Disparue', decimalesRequises: 0 })).toBe('Disparue (introuvable dans la table)');
   });
 });

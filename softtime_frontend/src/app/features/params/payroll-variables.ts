@@ -103,7 +103,7 @@ const CODES_AVEC_RECHERCHE: readonly string[] = ['Absence'];
               @for (v of brouillon(); track v.variable) {
                 <tr [class.pv-off]="!v.actif">
                   <td class="pv-name">
-                    {{ v.libelle }}
+                    <span class="pv-name__text">{{ v.libelle }}</span>
                     @if (!v.actif) { <soft-badge variant="muted">{{ nonEnvoyee }}</soft-badge> }
                   </td>
                   <td data-label="Envoyée">
@@ -123,7 +123,7 @@ const CODES_AVEC_RECHERCHE: readonly string[] = ['Absence'];
                         </span>
                       } @else if (avecRecherche(v.variable)) {
                         <!-- Absence : liste des codes lus dans SAGE, avec recherche en tapant (aucune saisie libre). -->
-                        <soft-select class="pv-field pv-field--search" [ariaLabel]="'Code de paie de ' + v.libelle" placeholder="(aucun)"
+                        <soft-select class="pv-field pv-field--search" [attr.title]="titreCode(v)" [ariaLabel]="'Code de paie de ' + v.libelle" placeholder="(aucun)"
                           filterPlaceholder="Rechercher un code…" [filterable]="true" [options]="optionsCodes(v)"
                           [ngModel]="v.codePaie" [ngModelOptions]="{ standalone: true }" [disabled]="c.moisEnvoye || saving()"
                           (ngModelChange)="changer(v.variable, 'codePaie', $event ?? '')" />
@@ -131,7 +131,7 @@ const CODES_AVEC_RECHERCHE: readonly string[] = ['Absence'];
                       } @else {
                         <div class="soft-select pv-field">
                           <div class="soft-select__control">
-                            <select [attr.aria-label]="'Code de paie de ' + v.libelle" [disabled]="c.moisEnvoye || saving()"
+                            <select [attr.aria-label]="'Code de paie de ' + v.libelle" [attr.title]="titreCode(v)" [disabled]="c.moisEnvoye || saving()"
                               (change)="changer(v.variable, 'codePaie', $any($event.target).value)">
                               <option value="" [selected]="!v.codePaie">(aucun)</option>
                               @for (o of codes(v); track o.code) {
@@ -251,12 +251,18 @@ const CODES_AVEC_RECHERCHE: readonly string[] = ['Absence'];
     .pv-banner--danger { color: var(--danger); background: var(--danger-bg); border-color: var(--danger-border); }
     .pv-banner--warning { color: var(--warning); background: var(--warning-bg); border-color: var(--warning-border); }
     .pv-banner--info { color: var(--info); background: var(--info-bg); border-color: var(--info-border); }
+    /* Axe commun : chaque cellule commence par une ligne de 44 px (hauteur d'une liste, d'un champ ou d'un interrupteur
+       avec sa marge) dont le contenu est centré ; l'aide, la pastille ou le champ « Heures par jour » viennent dessous,
+       sans décaler le nom, l'interrupteur, le code et l'unité les uns par rapport aux autres. */
     .pv-table td { vertical-align: top; }
     .pv-off .pv-name { color: var(--text-muted); }
-    .pv-name soft-badge { margin-left: var(--space-sm); }
+    .pv-name__text { display: block; line-height: 44px; }
+    .pv-name soft-badge { display: block; width: fit-content; margin: -6px 0 0; }
     .pv-hint { margin-top: var(--space-xs); }
     .pv-readonly { color: var(--text-muted); line-height: 44px; }
-    .pv-field { min-width: 180px; max-width: 280px; }
+    /* Libellés de codes longs (« ABS01 — Essai Absence », « HS-FERIE — … ») : champ plus large ; le libellé complet est aussi
+       dans l'infobulle (title) quand il dépasse encore. */
+    .pv-field { min-width: 220px; max-width: 440px; }
     .pv-field--unit { min-width: 140px; max-width: 180px; }
     .pv-table select:disabled { background: var(--surface-dark); color: var(--text-muted); cursor: not-allowed; }
     .pv-toggle { margin-top: 10px; }
@@ -304,6 +310,8 @@ const CODES_AVEC_RECHERCHE: readonly string[] = ['Absence'];
       .pv-table tbody td::before { content: attr(data-label); color: var(--text-secondary); font-size: 12px; font-weight: 600; }
       .pv-table tbody td.pv-name { display: block; font-weight: 600; }
       .pv-table tbody td.pv-name::before { content: none; }
+      .pv-name__text { display: inline; line-height: inherit; }
+      .pv-name soft-badge { display: inline-block; margin: 0 0 0 var(--space-sm); }
       .pv-table .pv-hint { grid-column: 2; margin-top: 0; }
       /* Listes et champ de code : étiquette au-dessus, contrôle sur toute la largeur (libellés de codes longs). */
       .pv-table tbody td:has(.pv-field) { grid-template-columns: minmax(0, 1fr); }
@@ -401,6 +409,12 @@ export class PayrollVariablesCard implements OnInit {
   /** Options de la liste avec recherche : codes lus dans SAGE (le code enregistré reste visible même s'il n'y figure plus). */
   optionsCodes(v: PayrollVariable): SelectOption[] {
     return this.codes(v).map((o) => ({ value: o.code, label: o.intitule ? `${o.code} — ${o.intitule}` : o.code }));
+  }
+
+  /** Libellé complet du code choisi (infobulle : le champ peut le tronquer pour un code très long). */
+  titreCode(v: PayrollVariable): string | null {
+    const choisi = (v.codePaie ?? '').toLowerCase();
+    return choisi ? this.optionsCodes(v).find((o) => String(o.value).toLowerCase() === choisi)?.label ?? v.codePaie : null;
   }
 
   estCompte(libelle: string): boolean {

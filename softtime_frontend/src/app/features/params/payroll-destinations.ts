@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, OnInit, output, s
 import { ConfirmService } from '../../core/confirm.service';
 import { errorMessage } from '../../core/error.logic';
 import { ToastService } from '../../core/toast.service';
-import { PayrollTargetColumn, PayrollWriteTargets } from '../../shared/models';
+import { PayrollTargetColumn, PayrollWriteTarget, PayrollWriteTargets } from '../../shared/models';
 import { PayrollVariablesService } from '../../shared/services/payroll-variables.service';
 import { SoftButton } from '../../shared/components';
 import {
@@ -89,7 +89,7 @@ import {
                 <td data-label="Envoyée">{{ v.actif ? 'oui' : 'non' }}</td>
                 <td data-label="Colonne">
                   <div class="soft-select pd-select"><div class="soft-select__control">
-                    <select [attr.aria-label]="'Colonne de ' + v.libelle" [disabled]="bloque() || !d.table"
+                    <select [attr.aria-label]="'Colonne de ' + v.libelle" [attr.title]="titreColonne(v)" [disabled]="bloque() || !d.table"
                       (change)="choisirColonne(v.variable, $any($event.target).value)">
                       <option value="" [selected]="!v.colonne">(aucune)</option>
                       @for (c of choix(v.decimalesRequises, v.colonne); track c.nom) {
@@ -118,9 +118,10 @@ import {
     .pd-banner--warning { color: var(--warning); background: var(--warning-bg); border-color: var(--warning-border); }
     .pd-fields { display: flex; gap: var(--space-lg); flex-wrap: wrap; margin: var(--space-md) 0; }
     .pd-field { min-width: 200px; max-width: 280px; flex: 1 1 200px; }
-    .pd-select { min-width: 200px; max-width: 320px; }
+    .pd-select { min-width: 200px; max-width: 440px; }
     .pd select:disabled { background: var(--surface-dark); color: var(--text-muted); cursor: not-allowed; }
-    .pd-table td { vertical-align: top; }
+    /* Une seule ligne par variable : nom, « oui / non » et liste de colonne sont centrés sur le même axe. */
+    .pd-table td { vertical-align: middle; }
     /* Largeur étroite : la règle globale masque .soft-table-wrap ; le tableau des destinations est présenté en cartes
        (une par variable, comme .soft-table-card), avec les mêmes listes et les mêmes états désactivés. */
     @media (max-width: 767px) {
@@ -194,6 +195,11 @@ export class PayrollDestinations implements OnInit {
 
   choix(decimalesRequises: number, actuelle: string | null): ChoixColonne[] {
     return choixColonnes(this.colonnes(), decimalesRequises, actuelle);
+  }
+
+  /** Libellé complet de la colonne choisie (infobulle : la liste peut le tronquer pour un nom très long). */
+  titreColonne(v: PayrollWriteTarget): string | null {
+    return v.colonne ? this.choix(v.decimalesRequises, v.colonne).find((c) => c.nom === v.colonne)?.libelle ?? v.colonne : null;
   }
 
   /** Nouvelle table : matricule et colonnes sont à choisir de nouveau dans ses colonnes. */
