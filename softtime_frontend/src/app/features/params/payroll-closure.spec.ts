@@ -216,3 +216,13 @@ describe('Carte « Clôture de paie » : noms accessibles', () => {
     expect(bouton.getAttribute('aria-label')).toBe('Clôturer la période du 17/08/2026 au 23/08/2026');
   });
 });
+
+describe('Carte « Clôture de paie » : visibilité', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('sans droit de modifier ni de clôturer la base, la carte n\'apparaît pas et rien n\'est lu', () => {
+    const { texte, svc } = monter({ permissions: ['SAGE:SAGE_DEMO:READ'] });
+    expect(texte().trim()).toBe('');
+    expect(svc.periods).not.toHaveBeenCalled();
+  });
+});

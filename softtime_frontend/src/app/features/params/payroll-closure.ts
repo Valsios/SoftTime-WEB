@@ -29,20 +29,17 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [SoftBadge, SoftButton, SoftCard],
   template: `
+    <!-- Sans base active ou sans droit (modifier ou clôturer la base), la carte n'apparaît pas. -->
+    @if (base() && visible()) {
     <soft-card>
       <div class="pc-head">
         <div>
           <h2 class="pc-title">Clôture de paie</h2>
-          <p class="pc-sub">Base active : <strong>{{ base() ?? 'aucune' }}</strong></p>
+          <p class="pc-sub">Base active : <strong>{{ base() }}</strong></p>
         </div>
-        <soft-button variant="ghost" size="sm" [disabled]="loading() || !visible()" (click)="charger()">Actualiser</soft-button>
+        <soft-button variant="ghost" size="sm" [disabled]="loading()" (click)="charger()">Actualiser</soft-button>
       </div>
 
-      @if (!base()) {
-        <p class="pc-note">Choisissez une base active dans la barre du haut pour voir ses périodes envoyées.</p>
-      } @else if (!visible()) {
-        <p class="pc-banner pc-banner--info" role="status">Vous n'avez pas la permission de consulter la clôture de la base {{ base() }}.</p>
-      } @else {
         <p class="pc-note">
           La clôture fige une période déjà envoyée en paie : les valeurs envoyées sont conservées avec leur empreinte et plus
           aucune donnée de la période ne peut être modifiée (pointages, heures corrigées, anomalies, planning, validation,
@@ -112,11 +109,12 @@ import {
             </div>
           }
         }
-      }
     </soft-card>
+    }
   `,
   styles: [`
-    :host { display: block; margin-top: var(--space-lg); }
+    :host { display: block; }
+    soft-card { display: block; margin-top: var(--space-lg); }
     .pc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-md); flex-wrap: wrap;
       margin-bottom: var(--space-md); }
     .pc-title { margin: 0; font-family: var(--font-heading); font-size: 16px; font-weight: 600; color: var(--app-text-strong); }
