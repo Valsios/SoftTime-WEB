@@ -587,15 +587,17 @@ public class PayrollClosureD5Tests
         var (sut, uow, envois) = Variables();
         envois.Periodes.Add((new DateTime(2026, 11, 1), new DateTime(2026, 11, 30)));
 
-        (await sut.GetConfigurationAsync()).Domaines.Should().Be(new PayrollDomainsDto(false, false));
-        var config = await sut.SaveDomainsAsync(new PayrollDomainsDto(true, false));
+        var initiale = (await sut.GetConfigurationAsync()).Domaines;
+        (initiale.Cantine, initiale.Frais).Should().Be((false, false));
+        // Lot D6 : la cantine ne s'active plus sans code valide (voir PayrollCanteenCodeD6Tests) ; les frais n'ont pas cette règle.
+        var config = await sut.SaveDomainsAsync(new PayrollDomainsDto(false, true));
 
-        config.Domaines.Should().Be(new PayrollDomainsDto(true, false));
+        (config.Domaines.Cantine, config.Domaines.Frais).Should().Be((false, true));
         var ligne = uow.Get<PaieOption>().Items.Should().ContainSingle("enregistrer la valeur par défaut ne crée rien").Which;
-        (ligne.Cle, ligne.Valeur, ligne.ModifiePar, ligne.BddSage).Should().Be(("DomaineCantineActif", "1", "u5", Base));
+        (ligne.Cle, ligne.Valeur, ligne.ModifiePar, ligne.BddSage).Should().Be(("DomaineFraisActif", "1", "u5", Base));
 
-        await sut.SaveDomainsAsync(new PayrollDomainsDto(false, true));
-        uow.Get<PaieOption>().Items.Select(o => (o.Cle, o.Valeur)).Should().BeEquivalentTo([("DomaineCantineActif", "0"), ("DomaineFraisActif", "1")]);
+        await sut.SaveDomainsAsync(new PayrollDomainsDto(false, false));
+        uow.Get<PaieOption>().Items.Select(o => (o.Cle, o.Valeur)).Should().BeEquivalentTo([("DomaineFraisActif", "0")]);
     }
 
     [Fact]
@@ -606,7 +608,8 @@ public class PayrollClosureD5Tests
         await FluentActions.Awaiting(() => sut.SaveDomainsAsync(new PayrollDomainsDto(false, true)))
             .Should().ThrowAsync<DomainException>().WithMessage("*ne s'envoient qu'à une base SAGE STANDARD*");
         uow.Get<PaieOption>().Items.Should().BeEmpty();
-        (await sut.SaveDomainsAsync(new PayrollDomainsDto(false, false))).Domaines.Should().Be(new PayrollDomainsDto(false, false));
+        var d = (await sut.SaveDomainsAsync(new PayrollDomainsDto(false, false))).Domaines;
+        (d.Cantine, d.Frais).Should().Be((false, false));
     }
 
     [Fact]
