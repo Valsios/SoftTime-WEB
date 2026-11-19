@@ -311,3 +311,14 @@ describe('Clôture de paie : domaines (heures, cantine, frais)', () => {
     expect(texte()).toContain(MOTIF);
   });
 });
+
+describe('Carte « Clôture de paie (figer la période) » : titre et ancre', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('le titre distingue la carte du Contrôle avant paie et l\'ancre est posée sur la carte', () => {
+    const { fixture } = monter();
+    const titre = (fixture.nativeElement as HTMLElement).querySelector('h2');
+    expect(titre?.textContent?.trim()).toBe('Clôture de paie (figer la période)');
+    expect((fixture.nativeElement as HTMLElement).id).toBe('cloture-paie');
+  });
+});

@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, computed, ElementRef, inject, OnInit, signal } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { ConfirmService } from '../../core/confirm.service';
 import { errorMessage } from '../../core/error.logic';
 import { Droit } from '../../core/rights';
@@ -8,6 +9,7 @@ import { PayrollDomainState, PayrollPeriods, PayrollPeriodState } from '../../sh
 import { PayrollClosureService } from '../../shared/services/payroll-closure.service';
 import { SoftBadge, SoftButton, SoftCard } from '../../shared/components';
 import {
+  ANCRE_CLOTURE,
   aujourdhuiIso,
   avertissement,
   dateHeureFr,
@@ -16,7 +18,9 @@ import {
   libelleEtatDomaine,
   libelleFiltre,
   libellePeriode,
+  peutVoirCloture,
   questionCloture,
+  TITRE_CARTE_CLOTURE,
   varianteDomaine,
 } from './payroll-closure.logic';
 
@@ -28,6 +32,7 @@ import {
  */
 @Component({
   selector: 'app-payroll-closure',
+  host: { '[id]': 'ancre' },
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [SoftBadge, SoftButton, SoftCard],
   template: `
@@ -36,7 +41,7 @@ import {
     <soft-card>
       <div class="pc-head">
         <div>
-          <h2 class="pc-title">Clôture de paie</h2>
+          <h2 class="pc-title">{{ titre }}</h2>
           <p class="pc-sub">Base active : <strong>{{ base() }}</strong></p>
         </div>
         <soft-button variant="ghost" size="sm" [disabled]="loading()" (click)="charger()">Actualiser</soft-button>
@@ -182,7 +187,12 @@ import {
     }
   `],
 })
-export class PayrollClosureCard implements OnInit {
+export class PayrollClosureCard implements OnInit, AfterViewInit {
+  readonly titre = TITRE_CARTE_CLOTURE;
+  /** Ancre visée par le lien « Aller à la clôture » du Contrôle avant paie. */
+  readonly ancre = ANCRE_CLOTURE;
+  private readonly route = inject(ActivatedRoute, { optional: true });
+  private readonly hote = inject(ElementRef<HTMLElement>);
   private readonly svc = inject(PayrollClosureService);
   private readonly session = inject(SessionStore);
   private readonly toast = inject(ToastService);
@@ -199,15 +209,17 @@ export class PayrollClosureCard implements OnInit {
 
   /** Consultation : droit de modifier OU de clôturer la base (le serveur vérifie de nouveau). */
   readonly visible = computed(() => {
-    const base = this.base();
-    if (!base) return false;
-    const perms = this.session.permissions();
-    if (!perms || perms.length === 0) return this.session.hasRight(Droit.Databases);
-    return perms.includes(`SAGE:${base}:UPDATE`) || perms.includes(`SAGE:${base}:CLOTURE`);
+    return peutVoirCloture(this.base(), this.session.permissions(), this.session.hasRight(Droit.Databases));
   });
 
   ngOnInit(): void {
     this.charger();
+  }
+
+  /** Arrivée par le lien du Contrôle (fragment #cloture-paie) : la carte est amenée à l'écran. */
+  ngAfterViewInit(): void {
+    if (this.route?.snapshot.fragment !== ANCRE_CLOTURE) return;
+    setTimeout(() => (this.hote.nativeElement as HTMLElement).scrollIntoView?.({ block: 'start' }));
   }
 
   charger(): void {

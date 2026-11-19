@@ -7,6 +7,8 @@ import { of } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Droit } from '../../core/rights';
 import { SessionStore } from '../../core/session.store';
+import { PayrollClosureService } from '../../shared/services/payroll-closure.service';
+import { PERIODES_FACTICES } from './closing.testing';
 import { ClosingAnomalyView, ClosingEmployee, ClosingQuery, ClosingReport } from '../../shared/models';
 import { CardPaieService, DepartementServiceService } from '../../shared/services/catalog.service';
 import { ClosingService } from '../../shared/services/closing.service';
@@ -123,7 +125,8 @@ describe('page Contrôle avant paie : salariés les plus touchés', () => {
       providers: [
         provideRouter([]),
         {
-          provide: SessionStore,
+          provide: PayrollClosureService, useValue: PERIODES_FACTICES },
+      { provide: SessionStore,
           useValue: {
             hasPermission: vi.fn(() => hasPermission),
             // Porte 6 (écran Contrôle avant paie) toujours ; les autres portes seulement avec les droits complets.
@@ -132,6 +135,7 @@ describe('page Contrôle avant paie : salariés les plus touchés', () => {
             session: signal<{ userId: number } | null>({ userId: 1 }),
             activeSageDb: signal<string | null>('SAGE_A'),
             activePointeuseDb: signal<string | null>('PTE_A'),
+            permissions: () => [],
           },
         },
         { provide: CardPaieService, useValue: { list: () => of([]) } },

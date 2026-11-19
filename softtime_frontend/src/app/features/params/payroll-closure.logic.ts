@@ -106,3 +106,68 @@ export function aujourdhuiIso(maintenant = new Date()): string {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${maintenant.getFullYear()}-${p(maintenant.getMonth() + 1)}-${p(maintenant.getDate())}`;
 }
+
+/** Identifiant d'ancre de la carte « Clôture de paie (figer la période) » dans la page Bases SAGE. */
+export const ANCRE_CLOTURE = 'cloture-paie';
+
+/** Titre de la carte, distinct de la page « Contrôle avant paie ». */
+export const TITRE_CARTE_CLOTURE = 'Clôture de paie (figer la période)';
+
+/**
+ * Qui voit la carte de clôture : une base active, et le droit de modifier OU de clôturer cette base (sans permissions
+ * détaillées, le droit « Bases »). Partagé par la carte et par le bloc du Contrôle avant paie. Le serveur vérifie de nouveau.
+ */
+export function peutVoirCloture(base: string | null, permissions: readonly string[] | null | undefined, droitBases: boolean): boolean {
+  if (!base) return false;
+  if (!permissions || permissions.length === 0) return droitBases;
+  return permissions.includes(`SAGE:${base}:UPDATE`) || permissions.includes(`SAGE:${base}:CLOTURE`);
+}
+
+export const RAPPEL_CLOTURE_BASE_ENTIERE = 'La clôture vérifie la base entière, sans filtre de département.';
+export const AUCUN_ENVOI_BORNES = 'Aucun envoi sur ces bornes exactes.';
+
+/** État d'un domaine en une expression accordée au domaine (« Heures : envoyées », « Cantine : manquante »). */
+export function etatDomaineCourt(d: PayrollDomainState): string {
+  const pluriel = d.domaine !== 'CANTINE';
+  const base = d.etat === 'FIGE' ? 'figé' : d.etat === 'ENVOYE' ? 'envoyé' : d.etat === 'MANQUANT' ? 'manquant' : 'non exigé';
+  const accorde = d.etat === 'NON_EXIGE' ? base : `${base}e${pluriel ? 's' : ''}`;
+  return `${d.libelle} : ${accorde}`;
+}
+
+/** Période envoyée dont les bornes sont exactement celles du Contrôle (jours aaaa-mm-jj), sinon null. */
+export function periodeCorrespondante(periodes: readonly PayrollPeriodState[], du: string, au: string): PayrollPeriodState | null {
+  return periodes.find((p) => p.periodeDebut.slice(0, 10) === du && p.periodeFin.slice(0, 10) === au) ?? null;
+}
+
+export interface EtapeSuivante {
+  /** Phrase d'état de la période ; vide s'il n'y a aucun envoi sur ces bornes. */
+  phrase: string;
+  /** Aucun envoi sur les bornes exactes. */
+  aucunEnvoi: boolean;
+  etat: 'AUCUN' | 'ENVOYEE' | 'CLOTUREE';
+  /** Domaines exigés ou envoyés, avec leur état (ex. « Heures : envoyées »). */
+  domaines: string[];
+  /** Condition connue qui manque encore avant de clôturer (même texte que la carte), sinon null. */
+  indication: string | null;
+}
+
+/** Résumé en lecture seule de l'état de clôture de la période du Contrôle (aucune règle de clôture dupliquée). */
+export function etapeSuivante(periodes: readonly PayrollPeriodState[], du: string, au: string, aujourdhui: string): EtapeSuivante {
+  const p = periodeCorrespondante(periodes, du, au);
+  if (!p) return { phrase: AUCUN_ENVOI_BORNES, aucunEnvoi: true, etat: 'AUCUN', domaines: [], indication: null };
+  const domaines = (p.domaines?.length ? p.domaines : [])
+    .filter((d) => d.etat !== 'NON_EXIGE')
+    .map(etatDomaineCourt);
+  const liste = domaines.length ? domaines : ['Heures : envoyées'];
+  const cloturee = p.etat === 'CLOTUREE';
+  const entete = cloturee
+    ? `Période clôturée${p.cloture ? ` le ${dateHeureFr(p.cloture.clotureLe)}` : ''}.`
+    : 'Période envoyée, pas encore clôturée.';
+  return {
+    phrase: `${entete} ${liste.join(', ')}.`,
+    aucunEnvoi: false,
+    etat: cloturee ? 'CLOTUREE' : 'ENVOYEE',
+    domaines: liste,
+    indication: cloturee ? null : avertissement(p, aujourdhui),
+  };
+}
