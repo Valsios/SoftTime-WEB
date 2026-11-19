@@ -632,6 +632,16 @@ La clôture **fige une période déjà envoyée à la paie**, définitivement. D
     confirmé, `PUT api/v1/payroll-variables/domains`, même droit que la configuration (administrateur ou `SAGE:{base}:UPDATE`), auteur et date dans
     `T_PAIE_OPTION` et journal central. Pas de verrou de mois : le réglage ne change rien à ce qui est envoyé, seulement ce que la clôture exige.
     Activation refusée pour une base AUTRE. Les droits d'écran `OTHER:CANTEEN` et `OTHER:TRAVEL_EXPENSES` ne changent pas.
+  - **Code de constante de la cantine (D6)** : option `CodeConstanteCantine` de `T_PAIE_OPTION` (aucune migration), champ « Code de constante de
+    la cantine » du même bloc, même droit, même journal (auteur), caches vidés à l'enregistrement. Sans réglage, le code historique `CANTINE_CODE`
+    (repris du desktop) est utilisé : comportement inchangé, mais ce code de 12 caractères ne tient pas dans `T_CST.CodeConstante` (10 caractères
+    dans SAGE) et n'existe dans aucune base : l'envoi de la cantine est alors refusé (« Constante SAGE CANTINE_CODE absente… »). Validation à
+    l'enregistrement (base STANDARD, refus 400) : code non vide ; longueur au plus celle de `T_CST.CodeConstante`, lue dans le schéma de la base
+    active (« Code trop long : 10 caractères au maximum. ») ; constante existante dans `T_CST` avec son opérande (« Ce code n'existe pas dans la
+    paie de cette base. »). Un code inchangé n'est pas revérifié. **Activation de la cantine refusée** tant que le code n'est pas valide (« Activation
+    de la cantine impossible avec le code … Créez d'abord la constante dans SAGE, 10 caractères au plus, puis saisissez son code. ») : un domaine
+    activé est toujours envoyable. Base AUTRE : code non configurable (domaine jamais exigé). L'envoi utilise le code configuré et l'instantané
+    enregistre le code réellement utilisé (destination) : formats 1 et 2 de l'empreinte inchangés.
   - **Règle de clôture par domaine** : en plus des heures (règles inchangées, contrôlées en premier), chaque domaine **exigé** doit avoir, sur les
     **bornes exactes** de la période, un dernier envoi `SUCCES` (non `INCERTAIN`), **sans plage de matricules**, avec instantané intègre et concordant
     avec les totaux actuels (`T_CANTINE.TOTAL_CANTINE`, `T_FRAIS.TOTAL_POINT` des mêmes bornes : un « Calculer » relancé après l'envoi est détecté).
@@ -647,10 +657,11 @@ La clôture **fige une période déjà envoyée à la paie**, définitivement. D
     dans le format du domaine.
   - **Limites** : l'instantané prouve les **lignes écrites**, pas l'état des salariés **sans ligne** : l'envoi de la cantine et des frais ne remet pas
     à 0 le cumul d'un salarié qui n'a pas de total sur la période (il garde la valeur précédente dans SAGE). Les envois de cantine et de frais
-    antérieurs à la migration 011 n'ont ni marqueur ni instantané. **Code de la cantine** : SoftTime envoie la cantine sous la constante
-    `CANTINE_CODE` (12 caractères, repris du desktop) ; dans la copie SAGE d'essai, `T_CST.CodeConstante` n'accepte que 10 caractères, la constante ne
-    peut donc pas y exister et l'envoi de la cantine est refusé (« Constante SAGE CANTINE_CODE absente… »), comme avant ce lot. Sur une telle base,
-    n'activez pas la cantine : elle bloquerait la clôture (à trancher : code de constante configurable par base).
+    antérieurs à la migration 011 n'ont ni marqueur ni instantané. Changer le code de la cantine après un envoi ne change pas l'instantané figé.
+  - **Mise en production de la cantine** (dans cet ordre) : 1) créer dans SAGE la constante de cumul de la cantine (code de 10 caractères au plus,
+    avec son opérande) et ses lignes de cumul ; 2) dans SoftTime, écran Bases SAGE, bloc « Domaines envoyés à la paie » : saisir son code et
+    enregistrer (le code est vérifié dans SAGE) ; 3) cocher « Cantine » et enregistrer ; 4) calculer puis envoyer la cantine sur les bornes exactes de
+    chaque période, sans plage de matricules, avant de la clôturer. Les frais (`HA06`) ne demandent que l'étape 3.
 - **Migrations** : `009_instantanes_paie.sql`, `010_cloture_paie.sql` puis `011_domaines_paie.sql` (colonne `DOMAINE` sur `T_PAIE_ENVOI` et
   `T_PAIE_INSTANTANE`, défaut `HEURES`, contrainte CHECK ; table `T_PAIE_CLOTURE_DOMAINE` immuable, erreur 51992), additives et rejouables,
   contrôlées au démarrage comme 007 et 008. **Production sans AutoMigrate** : sauvegarde, puis
