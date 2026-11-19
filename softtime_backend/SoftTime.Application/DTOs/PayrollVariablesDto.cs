@@ -62,10 +62,16 @@ public sealed record PayrollVariablesConfigDto(
     public PayrollDomainsDto Domaines { get; init; } = new(false, false);
 }
 
-/// <summary>Activation des domaines optionnels de la base (T_PAIE_OPTION : DomaineCantineActif, DomaineFraisActif).</summary>
+/// <summary>
+/// Activation des domaines optionnels de la base (T_PAIE_OPTION : DomaineCantineActif, DomaineFraisActif) et code de la
+/// constante SAGE de la cantine (CodeConstanteCantine, lot D6).
+/// </summary>
 /// <param name="Cantine">La base envoie la cantine à la paie : la clôture l'exige.</param>
 /// <param name="Frais">La base envoie les frais de déplacement à la paie : la clôture les exige.</param>
-public sealed record PayrollDomainsDto(bool Cantine, bool Frais);
+/// <param name="CodeCantine">Code de la constante SAGE de la cantine. En lecture : le code utilisé (configuré, sinon le code
+/// historique CANTINE_CODE). À l'enregistrement : null = inchangé.</param>
+/// <param name="CodeCantineParDefaut">En lecture : aucun code configuré (le code historique est utilisé). Ignoré à l'enregistrement.</param>
+public sealed record PayrollDomainsDto(bool Cantine, bool Frais, string? CodeCantine = null, bool CodeCantineParDefaut = false);
 
 /// <summary>
 /// Réglage « Codes d'absence comptés comme non justifiés » de la base : un code par ligne de <c>T_CODEABSENCE</c>, plus les

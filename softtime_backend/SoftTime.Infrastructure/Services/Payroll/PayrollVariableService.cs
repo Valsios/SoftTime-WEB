@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 
 using SoftTime.Application.Abstractions.Closing;
 using SoftTime.Application.Abstractions.DataSources;
+using SoftTime.Application.Abstractions.ExternalData;
 using SoftTime.Application.Abstractions.Payroll;
 using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.Abstractions.Settings;
@@ -35,6 +36,7 @@ public sealed class PayrollVariableService : IPayrollVariableService
     private readonly TimeProvider _horloge;
     private readonly ILogger<PayrollVariableService> _logger;
     private readonly IPayrollTargetSchema? _schema;
+    private readonly IExternalSourceService? _externalSource;
 
     public PayrollVariableService(
         IUnitOfWork uow,
@@ -49,8 +51,10 @@ public sealed class PayrollVariableService : IPayrollVariableService
         IClosingChecklistCache checklistCache,
         TimeProvider horloge,
         ILogger<PayrollVariableService> logger,
-        IPayrollTargetSchema? schema = null)
+        IPayrollTargetSchema? schema = null,
+        IExternalSourceService? externalSource = null)
     {
+        _externalSource = externalSource;
         _uow = uow;
         _tenant = tenant;
         _configAuth = configAuth;
@@ -181,18 +185,96 @@ public sealed class PayrollVariableService : IPayrollVariableService
         ArgumentNullException.ThrowIfNull(domaines);
         var database = await AutoriserAsync(ct);
         var sageDb = database.NomBd!;
-        if (EstAutre(database) && (domaines.Cantine || domaines.Frais))
-            throw new DomainException(
-                "La cantine et les frais de déplacement ne s'envoient qu'à une base SAGE STANDARD : ils ne peuvent pas être activés pour une base AUTRE.");
+        var options = await _uow.Repository<PaieOption>().ListReadOnlyAsync(o => o.BddSage == sageDb, ct);
+        var codeActuel = PayrollOptions.CodeCantine(options);
+        var codeDemande = domaines.CodeCantine?.Trim();
+        var codeChange = domaines.CodeCantine is not null && !string.Equals(codeDemande, codeActuel, StringComparison.Ordinal);
+        if (EstAutre(database))
+        {
+            if (domaines.Cantine || domaines.Frais)
+                throw new DomainException(
+                    "La cantine et les frais de déplacement ne s'envoient qu'à une base SAGE STANDARD : ils ne peuvent pas être activés pour une base AUTRE.");
+            if (codeChange)
+                throw new DomainException(
+                    "La cantine ne s'envoie qu'à une base SAGE STANDARD : son code de constante ne se configure pas pour une base AUTRE.");
+        }
+        else
+        {
+            var code = codeChange ? codeDemande! : codeActuel;
+            // Un code saisi est toujours vérifié ; l'activation de la cantine aussi, pour qu'un domaine activé soit envoyable.
+            var activation = domaines.Cantine && !PayrollOptions.DomaineActif(options, PayrollDomains.Cantine);
+            if (codeChange || activation)
+            {
+                var erreur = await ErreurCodeCantineAsync(code, ct);
+                if (erreur is not null)
+                    throw new DomainException(codeChange
+                        ? erreur.Message
+                        : $"Activation de la cantine impossible avec le code {code} : {Minuscule(erreur.Message)} "
+                          + $"Créez d'abord la constante dans SAGE, {erreur.Longueur} caractères au plus, puis saisissez son code.");
+            }
+        }
         var maintenant = _horloge.GetUtcNow().UtcDateTime;
+        if (codeChange)
+            await EnregistrerOptionAsync(sageDb, PayrollOptions.CodeConstanteCantine, codeDemande!, string.Empty, maintenant, ct);
         await EnregistrerOptionAsync(sageDb, PayrollOptions.DomaineCantineActif, PayrollOptions.Texte(domaines.Cantine),
             PayrollOptions.Faux, maintenant, ct);
         await EnregistrerOptionAsync(sageDb, PayrollOptions.DomaineFraisActif, PayrollOptions.Texte(domaines.Frais),
             PayrollOptions.Faux, maintenant, ct);
         await _uow.SaveChangesAsync(ct);
-        _logger.LogInformation("Domaines envoyés à la paie de la base {Base} : cantine {Cantine}, frais {Frais}, par {Login}.",
-            sageDb, domaines.Cantine, domaines.Frais, _user.Login);
+        _cache.Invalider(sageDb);
+        _closingCache.Vider();
+        _checklistCache.Vider();
+        _logger.LogInformation("Domaines envoyés à la paie de la base {Base} : cantine {Cantine} (code {Code}), frais {Frais}, par {Login}.",
+            sageDb, domaines.Cantine, codeChange ? codeDemande : codeActuel, domaines.Frais, _user.Login);
         return await ConstruireAsync(database, await LireAsync(sageDb, ct), await LireOptionsAsync(sageDb, ct), ct);
+    }
+
+    /// <summary>Refus d'un code de constante de la cantine, avec la longueur maximale de la colonne (pour le conseil).</summary>
+    private sealed record ErreurCode(string Message, int Longueur);
+
+    private static string Minuscule(string texte) => texte.Length == 0 ? texte : char.ToLowerInvariant(texte[0]) + texte[1..];
+
+    /// <summary>Longueur de T_CST.CodeConstante dans le schéma de la base active ; 10 (SAGE) si elle ne peut pas être déterminée.</summary>
+    private const int LongueurCodeSage = 10;
+
+    /// <summary>
+    /// Vérifie un code de constante de la cantine sur la base SAGE active : non vide, longueur au plus celle de
+    /// T_CST.CodeConstante (lue dans le schéma), constante existante avec son opérande. Null si le code est valide.
+    /// </summary>
+    private async Task<ErreurCode?> ErreurCodeCantineAsync(string code, CancellationToken ct)
+    {
+        int longueur;
+        try
+        {
+            var colonne = _schema is null
+                ? null
+                : (await _schema.ListColumnsAsync("T_CST", ct)).FirstOrDefault(c => string.Equals(c.Nom, "CodeConstante", StringComparison.OrdinalIgnoreCase));
+            longueur = colonne?.Longueur is > 0 and var l ? l : LongueurCodeSage;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // Connexion ou schéma illisible (ExternalConnectionException comprise) : message propre à la vérification du code.
+            _logger.LogWarning(exception, "Schéma de T_CST illisible pour la base {Base}.", _tenant.SageDb);
+            throw new DomainException("Le schéma de la base SAGE n'a pas pu être lu : le code de la cantine ne peut pas être vérifié. Réessayez plus tard.");
+        }
+        if (string.IsNullOrWhiteSpace(code))
+            return new ErreurCode("Saisissez le code de constante de la cantine.", longueur);
+        if (code.Length > longueur)
+            return new ErreurCode($"Code trop long : {longueur} caractères au maximum.", longueur);
+        bool existe;
+        try
+        {
+            existe = _externalSource is not null
+                ? (await _externalSource.GetConstantsAsync(await _tenant.GetSageRowAsync(ct), ct))
+                    .Any(c => Egal(c.Code, code) && c.Operande is not null)
+                : (await _codes.ListSageConstantOptionsAsync(ct) ?? Array.Empty<SageConstantOptionDto>()).Any(o => Egal(o.Code, code));
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _logger.LogWarning(exception, "Constantes de la base {Base} illisibles.", _tenant.SageDb);
+            throw new DomainException("Les codes de paie de la base SAGE n'ont pas pu être lus : le code de la cantine ne peut pas être vérifié. Réessayez plus tard.");
+        }
+        return existe ? null : new ErreurCode("Ce code n'existe pas dans la paie de cette base.", longueur);
     }
 
     /// <summary>Crée ou met à jour une option de la base ; sans changement de valeur, rien n'est écrit.</summary>
@@ -647,7 +729,9 @@ public sealed class PayrollVariableService : IPayrollVariableService
             HeuresParJour = selection.HeuresParJour,
             AbsenceCodes = await CodesAbsenceDtoAsync(options, ct),
             Domaines = new PayrollDomainsDto(
-                PayrollOptions.DomaineActif(options, PayrollDomains.Cantine), PayrollOptions.DomaineActif(options, PayrollDomains.Frais))
+                PayrollOptions.DomaineActif(options, PayrollDomains.Cantine), PayrollOptions.DomaineActif(options, PayrollDomains.Frais),
+                PayrollOptions.CodeCantine(options),
+                !options.Any(o => string.Equals(o.Cle, PayrollOptions.CodeConstanteCantine, StringComparison.OrdinalIgnoreCase)))
         };
     }
 

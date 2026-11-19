@@ -34,8 +34,11 @@ public sealed class CanteenService : ICanteenService
         _payrollCumulSync = payrollCumulSync;
     }
 
-    /// <summary>Constante SAGE portant le cumul cantine (même code que le desktop).</summary>
-    public const string CodeConstanteCantine = "CANTINE_CODE";
+    /// <summary>
+    /// Code historique (desktop) de la constante SAGE de la cantine, utilisé tant qu'aucun code n'est configuré pour la base
+    /// (option <c>CodeConstanteCantine</c>, lot D6).
+    /// </summary>
+    public const string CodeConstanteCantine = PayrollOptions.CodeConstanteCantineParDefaut;
 
     public async Task<IReadOnlyList<CanteenDto>> ListCanteenAsync(PeriodRequest request, CancellationToken ct = default)
     {
@@ -203,6 +206,11 @@ public sealed class CanteenService : ICanteenService
     /// (3) la constante SAGE absente provoque un refus, au lieu du cumul arbitraire 123 du desktop.
     /// </para>
     /// </summary>
-    public Task<ExtrasSyncResultDto> SyncCanteenAsync(PeriodRequest request, CancellationToken ct = default)
-        => _payrollCumulSync.SyncExtrasAsync(request, CodeConstanteCantine, cantine: true, ct);
+    public async Task<ExtrasSyncResultDto> SyncCanteenAsync(PeriodRequest request, CancellationToken ct = default)
+    {
+        // Code configuré pour la base (lot D6), sinon le code historique : l'instantané enregistre le code réellement utilisé.
+        var options = await _uow.Repository<PaieOption>().ListReadOnlyAsync(
+            o => o.BddSage == _tenant.SageDb && o.Cle == PayrollOptions.CodeConstanteCantine, ct);
+        return await _payrollCumulSync.SyncExtrasAsync(request, PayrollOptions.CodeCantine(options), cantine: true, ct);
+    }
 }

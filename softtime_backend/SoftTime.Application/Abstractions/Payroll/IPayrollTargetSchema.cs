@@ -1,7 +1,11 @@
 namespace SoftTime.Application.Abstractions.Payroll;
 
 /// <summary>Colonne d'une table de la base de paie (INFORMATION_SCHEMA.COLUMNS).</summary>
-public sealed record PayrollTargetColumn(string Nom, string Type, byte? Precision, int? Echelle);
+public sealed record PayrollTargetColumn(string Nom, string Type, byte? Precision, int? Echelle)
+{
+    /// <summary>Longueur maximale en caractères d'une colonne texte (null : non texte ; -1 : max).</summary>
+    public int? Longueur { get; init; }
+}
 
 /// <summary>
 /// Schéma de la base de paie d'une base AUTRE (base active) : tables du schéma dbo et colonnes d'une table, avec leur type,

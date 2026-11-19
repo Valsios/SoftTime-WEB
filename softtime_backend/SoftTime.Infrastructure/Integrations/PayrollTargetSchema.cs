@@ -36,14 +36,17 @@ public sealed class PayrollTargetSchema : IPayrollTargetSchema
     {
         var colonnes = new List<PayrollTargetColumn>();
         await LireAsync(
-            "SELECT COLUMN_NAME, DATA_TYPE, NUMERIC_PRECISION, NUMERIC_SCALE FROM INFORMATION_SCHEMA.COLUMNS "
+            "SELECT COLUMN_NAME, DATA_TYPE, NUMERIC_PRECISION, NUMERIC_SCALE, CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
             + "WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = @table ORDER BY ORDINAL_POSITION",
             table,
             reader => colonnes.Add(new PayrollTargetColumn(
                 reader.GetString(0),
                 reader.GetString(1),
                 reader.IsDBNull(2) ? null : reader.GetByte(2),
-                reader.IsDBNull(3) ? null : reader.GetInt32(3))),
+                reader.IsDBNull(3) ? null : reader.GetInt32(3))
+            {
+                Longueur = reader.IsDBNull(4) ? null : reader.GetInt32(4)
+            }),
             ct);
         return colonnes;
     }

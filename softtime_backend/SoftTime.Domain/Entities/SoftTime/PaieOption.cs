@@ -67,6 +67,23 @@ public static class PayrollOptions
     /// <summary>Domaine FRAIS (frais de déplacement) envoyé à la paie par cette base : « 1 » l'exige à la clôture. Défaut : « 0 ».</summary>
     public const string DomaineFraisActif = "DomaineFraisActif";
 
+    /// <summary>
+    /// Code de la constante SAGE qui porte le cumul de la cantine (lot D6). Absente : <see cref="CodeConstanteCantineParDefaut"/>,
+    /// le code historique du desktop, qui dépasse la longueur de <c>T_CST.CodeConstante</c> (10 caractères) et n'existe donc
+    /// dans aucune base SAGE : il faut créer la constante dans SAGE puis saisir son code.
+    /// </summary>
+    public const string CodeConstanteCantine = "CodeConstanteCantine";
+
+    /// <summary>Code historique (desktop) de la constante de la cantine, utilisé tant qu'aucun code n'est configuré.</summary>
+    public const string CodeConstanteCantineParDefaut = "CANTINE_CODE";
+
+    /// <summary>Code de constante de la cantine de la base (configuré, sinon le code historique).</summary>
+    public static string CodeCantine(IEnumerable<PaieOption> options)
+    {
+        var valeur = options.FirstOrDefault(o => string.Equals(o.Cle, CodeConstanteCantine, StringComparison.OrdinalIgnoreCase))?.Valeur?.Trim();
+        return string.IsNullOrEmpty(valeur) ? CodeConstanteCantineParDefaut : valeur;
+    }
+
     /// <summary>Clé d'activation d'un domaine optionnel (CANTINE, FRAIS).</summary>
     public static string CleDomaine(string domaine) => domaine switch
     {
