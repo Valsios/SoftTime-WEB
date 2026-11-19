@@ -606,7 +606,7 @@ La clôture **fige une période déjà envoyée à la paie**, définitivement. D
 - **Limites** : les **congés SAGE** sont lus en direct dans SAGE et **ne peuvent pas être verrouillés** par SoftTime ; un congé modifié après la
   clôture ne change rien à la paie figée (instantané) mais peut faire diverger l'affichage recalculé (rapports, Mon espace) : à régulariser sur la
   période suivante. Les périodes envoyées avant la migration 009 n'ont pas d'instantané : il faut les renvoyer pour pouvoir les clôturer.
-- **Écran (D4)** : écran **Bases SAGE**, carte « Clôture de paie » sous « Variables envoyées à la paie » (mêmes droits de base que l'envoi) :
+- **Écran (D4)** : écran **Bases SAGE**, carte « Clôture de paie (figer la période) » (titre depuis D7, pour la distinguer de la page « Contrôle avant paie ») sous « Variables envoyées à la paie » (mêmes droits de base que l'envoi) :
   périodes envoyées, état (Envoyée, Clôturée avec date et auteur), dernier envoi et filtre, empreinte raccourcie et copiable, bouton « Clôturer »
   (droit de clôture) avec confirmation rappelant la période, l'absence de retour en arrière et la correction sur la période suivante ; refus du
   serveur affiché tel quel ; vue en cartes sous 768 px. Bandeau « Période clôturée » et boutons de modification désactivés (avec explication) sur
@@ -662,6 +662,20 @@ La clôture **fige une période déjà envoyée à la paie**, définitivement. D
     avec son opérande) et ses lignes de cumul ; 2) dans SoftTime, écran Bases SAGE, bloc « Domaines envoyés à la paie » : saisir son code et
     enregistrer (le code est vérifié dans SAGE) ; 3) cocher « Cantine » et enregistrer ; 4) calculer puis envoyer la cantine sur les bornes exactes de
     chaque période, sans plage de matricules, avant de la clôturer. Les frais (`HA06`) ne demandent que l'étape 3.
+- **Parcours RH complet et bloc « Étape suivante : clôture » (D7)** : 1) **Calculer** la période (heures supplémentaires, cantine, frais) ;
+  2) **Contrôle avant paie** (menu États) : le résultat doit être « Prêt » ; 3) **envoyer** à la paie les heures, la cantine et les frais, chacun
+  depuis sa page et en un envoi distinct, sur les bornes exactes de la période et sans filtre ; 4) **clôturer** une seule fois, dans la carte de
+  clôture de l'écran Bases SAGE. La page « Contrôle avant paie » affiche pour cela un bloc d'information **en lecture seule** :
+  - **Contenu** : pour la période choisie dans le filtre (du, au), l'état en une phrase (« Période envoyée, pas encore clôturée. Heures :
+    envoyées, Cantine : manquante. », ou « Période clôturée le jj/mm/aaaa hh:mm. Heures : figées. »), l'indication de la carte quand une condition
+    connue manque, le rappel « La clôture vérifie la base entière, sans filtre de département. » (le département du Contrôle n'y change rien) et le
+    lien « Aller à la clôture », qui ouvre l'écran Bases SAGE et amène la carte à l'écran (ancre `#cloture-paie`). Si aucun envoi n'a exactement
+    ces bornes : « Aucun envoi sur ces bornes exactes. »
+  - **Conditions** : visible sous les mêmes conditions que la carte (base SAGE active et droit de modification ou de clôture de la base, sinon le
+    bloc est absent) ; masqué à l'impression.
+  - **Lecture seule** : il lit les périodes par le service existant (`GET api/v1/payroll-closures/periods`) et réutilise la logique de la carte
+    (`payroll-closure.logic.ts`) ; **aucun bouton « Clôturer »**, aucune écriture, aucun changement côté serveur (ni migration, ni règle, ni
+    endpoint). Le serveur reste seul juge de la clôture.
 - **Migrations** : `009_instantanes_paie.sql`, `010_cloture_paie.sql` puis `011_domaines_paie.sql` (colonne `DOMAINE` sur `T_PAIE_ENVOI` et
   `T_PAIE_INSTANTANE`, défaut `HEURES`, contrainte CHECK ; table `T_PAIE_CLOTURE_DOMAINE` immuable, erreur 51992), additives et rejouables,
   contrôlées au démarrage comme 007 et 008. **Production sans AutoMigrate** : sauvegarde, puis
