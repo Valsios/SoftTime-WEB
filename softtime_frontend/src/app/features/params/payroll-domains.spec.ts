@@ -10,7 +10,7 @@ import { PayrollDomainsSetting, questionDomaines } from './payroll-domains';
 function config(champs: Partial<PayrollVariablesConfig> = {}): PayrollVariablesConfig {
   return {
     base: 'SAGE_DEMO', typeBase: 'STANDARD', parDefaut: false, moisEnvoye: true, dernierEnvoi: '2026-11-01 → 2026-11-30',
-    variables: [], colonnesCibles: [], domaines: { cantine: false, frais: false }, ...champs,
+    variables: [], colonnesCibles: [], domaines: { cantine: false, frais: false, codeCantine: 'CANTINE_CODE', codeCantineParDefaut: true }, ...champs,
   };
 }
 
@@ -100,5 +100,47 @@ describe('Domaines envoyés à la paie (cantine, frais)', () => {
   it('vue étroite : les cases passent en colonne sous 768 px', () => {
     const styles = (PayrollDomainsSetting as unknown as { ɵcmp: { styles: string[] } }).ɵcmp.styles.join('');
     expect(styles).toContain('max-width: 767px');
+  });
+
+  it('champ « Code de constante de la cantine » : code utilisé affiché, avertissement du code historique', () => {
+    const { el } = monter();
+    const champ = el.querySelector<HTMLInputElement>('.pd__code input')!;
+    expect(champ.value).toBe('CANTINE_CODE');
+    expect(el.querySelector('.pd__code')?.textContent).toContain('Code de constante de la cantine');
+    expect(el.querySelector('.pd__code')?.textContent).toContain("le code historique CANTINE_CODE n'existe dans aucune base SAGE");
+  });
+
+  it('code saisi : envoyé (sans espaces) avec le réglage, et cité dans la confirmation', async () => {
+    const { comp, svc, confirm, el, fixture } = monter();
+    const champ = el.querySelector<HTMLInputElement>('.pd__code input')!;
+    champ.value = ' CANT01 ';
+    champ.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    expect(comp.modifie()).toBe(true);
+    await comp.enregistrer();
+    expect(confirm.ask).toHaveBeenCalledWith(expect.stringContaining('code de constante de la cantine CANT01'), 'Domaines envoyés à la paie', 'Enregistrer');
+    expect(svc.saveDomains).toHaveBeenCalledWith({ cantine: false, frais: false, codeCantine: 'CANT01' });
+  });
+
+  it("code inchangé : non envoyé (le serveur le garde), pas d'avertissement pour un code configuré", async () => {
+    const { comp, svc, el } = monter({ config: config({ domaines: { cantine: true, frais: false, codeCantine: 'CANT01', codeCantineParDefaut: false } }) });
+    expect(el.querySelector('.pd__code')?.textContent).not.toContain('code historique');
+    comp.frais.set(true);
+    await comp.enregistrer();
+    expect(svc.saveDomains).toHaveBeenCalledWith({ cantine: true, frais: true });
+  });
+
+  it('refus du code par le serveur affiché tel quel', async () => {
+    const refus = 'Code trop long : 10 caractères au maximum.';
+    const { comp, fixture, el } = monter({ refus });
+    comp.code.set('CANTINE_C01');
+    await comp.enregistrer();
+    fixture.detectChanges();
+    expect(el.querySelector('[role="alert"]')?.textContent?.trim()).toBe(refus);
+  });
+
+  it('base AUTRE : pas de champ de code', () => {
+    const { el } = monter({ config: config({ typeBase: 'AUTRE' }) });
+    expect(el.querySelector('.pd__code')).toBeNull();
   });
 });

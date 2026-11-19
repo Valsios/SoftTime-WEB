@@ -44,6 +44,10 @@ export interface PayrollVariablesConfig {
 export interface PayrollDomains {
   cantine: boolean;
   frais: boolean;
+  /** Code de la constante SAGE de la cantine : en lecture, le code utilisé ; à l'enregistrement, absent = inchangé. */
+  codeCantine?: string | null;
+  /** En lecture : aucun code configuré, le code historique CANTINE_CODE est utilisé. */
+  codeCantineParDefaut?: boolean;
 }
 
 /** Réglage « Codes d'absence comptés comme non justifiés » de la base. */
