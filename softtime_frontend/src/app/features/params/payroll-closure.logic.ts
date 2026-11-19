@@ -158,8 +158,8 @@ export function etapeSuivante(periodes: readonly PayrollPeriodState[], du: strin
   const domaines = (p.domaines?.length ? p.domaines : [])
     .filter((d) => d.etat !== 'NON_EXIGE')
     .map(etatDomaineCourt);
-  const liste = domaines.length ? domaines : ['Heures : envoyées'];
   const cloturee = p.etat === 'CLOTUREE';
+  const liste = domaines.length ? domaines : [cloturee ? 'Heures : figées' : 'Heures : envoyées'];
   const entete = cloturee
     ? `Période clôturée${p.cloture ? ` le ${dateHeureFr(p.cloture.clotureLe)}` : ''}.`
     : 'Période envoyée, pas encore clôturée.';

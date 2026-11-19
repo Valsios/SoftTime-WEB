@@ -60,7 +60,7 @@ describe('Étape suivante : logique (réutilise la logique de la carte)', () => 
     const e = etapeSuivante([periode({ etat: 'CLOTUREE', cloture: CLOTURE })], '2026-08-17', '2026-08-23', JOUR);
     expect(e.etat).toBe('CLOTUREE');
     expect(e.phrase).toContain('Période clôturée le ');
-    expect(e.phrase).toContain('Heures : envoyées');
+    expect(e.phrase).toContain('Heures : figées');
     expect(e.indication).toBeNull();
   });
 
@@ -142,6 +142,7 @@ describe('Bloc « Étape suivante : clôture »', () => {
   it('période clôturée', () => {
     const { texte } = monter({ donnees: { bddSage: 'SAGE_DEMO', peutCloturer: true, periodes: [periode({ etat: 'CLOTUREE', cloture: CLOTURE })] } });
     expect(texte()).toContain('Période clôturée le ');
+    expect(texte()).toContain('Heures : figées.');
   });
 
   it('domaine manquant', () => {
