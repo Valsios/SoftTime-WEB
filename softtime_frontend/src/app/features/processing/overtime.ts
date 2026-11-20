@@ -1,31 +1,36 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { ConfirmService } from '../../core/confirm.service';
 import { ToastService } from '../../core/toast.service';
 import { OvertimeDetail, PeriodRequest, PageChangeEvent } from '../../shared/models';
 import { OvertimeService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
-import { Column, DataTable, PageHeader, SoftButton, SoftCard, SoftModal, PeriodFilter } from '../../shared/components';
+import { Column, DataTable, DataTableCell, PageHeader, SoftButton, SoftCard, SoftModal, PeriodFilter, ClosedPeriodBanner, VERROU_CLOTURE } from '../../shared/components';
 import { asRow, fmtDate, isMaxOneMonth } from '../../shared/utils/date';
 import { SessionStore } from '../../core/session.store';
+import { PayrollVariablesService } from '../../shared/services/payroll-variables.service';
+import { ACTIVES_PAR_DEFAUT, colonnesNonEnvoyees, libelleColonne, NON_ENVOYEE, questionEnvoi } from '../params/payroll-variables.logic';
+import { PayrollVariablesActive } from '../../shared/models';
 
 @Component({
   selector: 'app-overtime',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DatePipe, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, PeriodFilter],
+  imports: [DatePipe, PageHeader, SoftButton, SoftCard, DataTable, DataTableCell, SoftModal, PeriodFilter, ClosedPeriodBanner],
   template: `
     <page-header title="Heures supplémentaires" subtitle="Calcul EXO/IMPO — période maximale d'un mois">
-      <soft-button variant="danger" [loading]="busy()" (click)="purge()">Purger</soft-button>
+      <soft-button variant="danger" [loading]="busy()" [disabled]="cloturee()" [attr.title]="cloturee() ? verrou : null" (click)="purge()">Purger</soft-button>
       <soft-button variant="secondary" [loading]="excel.exporting()" (click)="exportExcel()">Export Excel</soft-button>
-      <soft-button variant="accent" [loading]="busy()" (click)="syncPayroll()">{{ syncLabel() }}</soft-button>
-      <soft-button [loading]="busy()" (click)="calculate()">Calculer</soft-button>
+      <soft-button variant="accent" [loading]="busy()" [disabled]="cloturee()" [attr.title]="cloturee() ? verrou : null" (click)="syncPayroll()">{{ syncLabel() }}</soft-button>
+      <soft-button [loading]="busy()" [disabled]="cloturee()" [attr.title]="cloturee() ? verrou : null" (click)="calculate()">Calculer</soft-button>
     </page-header>
 
     <period-filter [autoSearch]="true" [showDepartement]="true" (search)="onSearch($event)"></period-filter>
+    <closed-period-banner [period]="periode()" (closedChange)="cloturee.set($event)" />
 
     <soft-card>
       <data-table
-        [columns]="columns"
+        [columns]="displayColumns()"
         [rows]="rows()"
         [loading]="loading()"
         [serverSide]="true"
@@ -39,6 +44,12 @@ import { SessionStore } from '../../core/session.store';
         <ng-template #actions let-row>
           <soft-button size="sm" variant="ghost" (click)="openDetail(row)">Détail</soft-button>
         </ng-template>
+        <!-- Variables non envoyées à la paie : colonnes grisées, jamais masquées. -->
+        @for (key of nonEnvoyees(); track key) {
+          <ng-template [dataTableCell]="key" let-value="value">
+            <span class="non-envoyee" [title]="nonEnvoyeeLabel">{{ value ?? '' }}</span>
+          </ng-template>
+        }
       </data-table>
     </soft-card>
 
@@ -72,14 +83,34 @@ import { SessionStore } from '../../core/session.store';
   styles: [`
     .detail-head { margin: 0 0 12px; }
     .detail-title { font-size: 15px; margin: 18px 0 10px; }
+    .non-envoyee { color: var(--text-muted); opacity: 0.7; }
   `],
 })
-export class OvertimePage {
+export class OvertimePage implements OnInit {
+  /** Sélection courante (bandeau « Période clôturée »). */
+  readonly periode = signal<PeriodRequest | null>(null);
+  /** La sélection recoupe une période clôturée : boutons de modification désactivés (le serveur refuse aussi). */
+  readonly cloturee = signal(false);
+  protected readonly verrou = VERROU_CLOTURE;
+
   private readonly svc = inject(OvertimeService);
   protected readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
   private readonly session = inject(SessionStore);
+  private readonly variables = inject(PayrollVariablesService);
+
+  protected readonly nonEnvoyeeLabel = NON_ENVOYEE;
+  /** Variables envoyées à la paie pour la base active ; sans réponse, comportement d'origine (7 HS). */
+  readonly actives = signal<readonly string[]>(ACTIVES_PAR_DEFAUT);
+  /** Option de la base : l'envoi remet à 0 les salariés sans valeur (vraie par défaut, comme sans réponse du serveur). */
+  readonly remiseAZero = signal(true);
+  readonly nonEnvoyeesSet = computed(() => colonnesNonEnvoyees(this.actives()));
+  readonly nonEnvoyees = computed(() => [...this.nonEnvoyeesSet()]);
+  /** Colonnes affichées : la mention « non envoyée à la paie » est ajoutée à l'en-tête, la colonne reste. */
+  readonly displayColumns = computed<Column[]>(() =>
+    this.columns.map((c) => ({ ...c, label: libelleColonne(c.label, !this.nonEnvoyeesSet().has(c.key)) })),
+  );
 
   readonly busy = signal(false);
   readonly loading = signal(false);
@@ -111,6 +142,13 @@ export class OvertimePage {
     { key: 'absence', label: 'Absence' },
   ];
 
+  ngOnInit(): void {
+    this.variables.actives().subscribe({
+      next: (r) => { this.actives.set(r.actives); this.remiseAZero.set(r.remiseAZeroSansValeur ?? true); },
+      error: () => { this.actives.set(ACTIVES_PAR_DEFAUT); this.remiseAZero.set(true); },
+    });
+  }
+
   private validatePeriod(filter: PeriodRequest | null): filter is PeriodRequest {
     if (!filter) {
       this.toast.warning('Définissez une période.');
@@ -129,6 +167,7 @@ export class OvertimePage {
 
   onSearch(filter: PeriodRequest): void {
     this.lastFilter = filter;
+    this.periode.set(filter);
     if (!this.validatePeriod(filter)) {
       this.rows.set([]);
       this.total.set(0);
@@ -198,9 +237,14 @@ export class OvertimePage {
   async syncPayroll(): Promise<void> {
     if (this.busy() || !this.validatePeriod(this.lastFilter)) return;
     const database = this.currentDatabase()?.nomBd ?? this.session.activeSageDb() ?? 'la base active';
-    const question = this.isStandard()
-      ? 'Pousser les HS vers SAGE (T_CUMSAL) ?'
-      : `Écrire les HS dans la base ${database} ?`;
+    // Option relue au moment de confirmer : le texte annonce la remise à 0 seulement si elle est active pour la base (elle a
+    // pu être changée depuis le chargement de la page) ; sans réponse, la dernière valeur connue. Absence envoyée en jours
+    // (lot C3) : l'unité est précisée ; sans réponse, rien n'est précisé.
+    const lu = await firstValueFrom(this.variables.actives()).then((r): PayrollVariablesActive | null => r, () => null);
+    const remiseAZero = lu ? lu.remiseAZeroSansValeur ?? true : this.remiseAZero();
+    this.remiseAZero.set(remiseAZero);
+    const absenceEnJours = lu && lu.actives.includes('Absence') && lu.uniteAbsence === 'J' ? lu.heuresParJour ?? 8 : null;
+    const question = questionEnvoi(this.isStandard(), database, remiseAZero, absenceEnJours);
     if (!(await this.confirm.ask(question))) return;
     this.busy.set(true);
     this.svc.syncPayroll(this.lastFilter).subscribe({

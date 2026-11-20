@@ -90,6 +90,117 @@ public static class SchemaPresenceGuard
         }
     }
 
+    public const string MissingPayrollVariablesMessage =
+        "Les variables envoyées à la paie sont absentes (T_PAIE_VARIABLE, T_PAIE_ENVOI) : activez Database:AutoMigrate "
+        + "(développement) ou exécutez migrations/versions/007_variables_paie.sql.";
+
+    /// <summary>
+    /// Sans la migration 007, la synchronisation de paie ne pourrait ni lire la configuration des variables ni poser
+    /// le marqueur d'envoi : le démarrage s'arrête à la place avec un message qui indique la marche à suivre.
+    /// </summary>
+    public static async Task EnsurePayrollVariablesAsync(IUnitOfWork uow, CancellationToken ct)
+    {
+        try
+        {
+            await uow.ExecuteSqlAsync(GuardedSql("T_PAIE_VARIABLE", $"""
+                IF OBJECT_ID(N'dbo.T_PAIE_ENVOI', N'U') IS NULL
+                    THROW 51990, N'{Marker}: dbo.T_PAIE_ENVOI', 1;
+                """), ct);
+        }
+        catch (Exception ex) when (ex.Message.Contains(Marker, StringComparison.Ordinal))
+        {
+            throw new DomainException(MissingPayrollVariablesMessage);
+        }
+    }
+
+    public const string MissingPayrollOptionsMessage =
+        "Les options de paie sont absentes (T_PAIE_OPTION) : activez Database:AutoMigrate "
+        + "(développement) ou exécutez migrations/versions/008_options_paie.sql.";
+
+    /// <summary>
+    /// Sans la migration 008, la lecture des options de paie (remise à 0 des salariés sans valeur) échouerait sur une erreur SQL
+    /// obscure à chaque envoi : le démarrage s'arrête à la place avec un message qui indique la marche à suivre.
+    /// </summary>
+    public static async Task EnsurePayrollOptionsAsync(IUnitOfWork uow, CancellationToken ct)
+    {
+        try
+        {
+            await uow.ExecuteSqlAsync(GuardedSql("T_PAIE_OPTION", "SELECT 1;"), ct);
+        }
+        catch (Exception ex) when (ex.Message.Contains(Marker, StringComparison.Ordinal))
+        {
+            throw new DomainException(MissingPayrollOptionsMessage);
+        }
+    }
+
+    public const string MissingPayrollSnapshotsMessage =
+        "Les instantanés des envois en paie sont absents (T_PAIE_INSTANTANE, T_PAIE_INSTANTANE_LIGNE) : activez Database:AutoMigrate "
+        + "(développement) ou exécutez migrations/versions/009_instantanes_paie.sql.";
+
+    /// <summary>
+    /// Sans la migration 009, chaque envoi en paie échouerait à figer son instantané (AUTRE : envoi annulé ; STANDARD : envoi
+    /// INCERTAIN) : le démarrage s'arrête à la place avec un message qui indique la marche à suivre.
+    /// </summary>
+    public static async Task EnsurePayrollSnapshotsAsync(IUnitOfWork uow, CancellationToken ct)
+    {
+        try
+        {
+            await uow.ExecuteSqlAsync(GuardedSql("T_PAIE_INSTANTANE", $"""
+                IF OBJECT_ID(N'dbo.T_PAIE_INSTANTANE_LIGNE', N'U') IS NULL
+                    THROW 51990, N'{Marker}: dbo.T_PAIE_INSTANTANE_LIGNE', 1;
+                """), ct);
+        }
+        catch (Exception ex) when (ex.Message.Contains(Marker, StringComparison.Ordinal))
+        {
+            throw new DomainException(MissingPayrollSnapshotsMessage);
+        }
+    }
+
+    public const string MissingPayrollClosuresMessage =
+        "La clôture de paie est absente (T_PAIE_CLOTURE) : activez Database:AutoMigrate (développement) "
+        + "ou exécutez migrations/versions/010_cloture_paie.sql.";
+
+    /// <summary>
+    /// Sans la migration 010, chaque contrôle « période clôturée » (envoi, pointages, heures corrigées…) échouerait sur une
+    /// erreur SQL obscure : le démarrage s'arrête à la place avec un message qui indique la marche à suivre.
+    /// </summary>
+    public static async Task EnsurePayrollClosuresAsync(IUnitOfWork uow, CancellationToken ct)
+    {
+        try
+        {
+            await uow.ExecuteSqlAsync(GuardedSql("T_PAIE_CLOTURE", "SELECT 1;"), ct);
+        }
+        catch (Exception ex) when (ex.Message.Contains(Marker, StringComparison.Ordinal))
+        {
+            throw new DomainException(MissingPayrollClosuresMessage);
+        }
+    }
+
+    public const string MissingPayrollDomainsMessage =
+        "Les domaines des envois en paie sont absents (T_PAIE_ENVOI.DOMAINE, T_PAIE_INSTANTANE.DOMAINE, T_PAIE_CLOTURE_DOMAINE) : "
+        + "activez Database:AutoMigrate (développement) ou exécutez migrations/versions/011_domaines_paie.sql.";
+
+    /// <summary>
+    /// Sans la migration 011, chaque lecture ou écriture d'un envoi en paie échouerait sur une colonne DOMAINE inconnue
+    /// (envoi des heures compris) : le démarrage s'arrête à la place avec un message qui indique la marche à suivre.
+    /// </summary>
+    public static async Task EnsurePayrollDomainsAsync(IUnitOfWork uow, CancellationToken ct)
+    {
+        try
+        {
+            await uow.ExecuteSqlAsync(GuardedSql("T_PAIE_CLOTURE_DOMAINE", $"""
+                IF COL_LENGTH(N'dbo.T_PAIE_ENVOI', N'DOMAINE') IS NULL
+                    THROW 51990, N'{Marker}: dbo.T_PAIE_ENVOI.DOMAINE', 1;
+                IF COL_LENGTH(N'dbo.T_PAIE_INSTANTANE', N'DOMAINE') IS NULL
+                    THROW 51990, N'{Marker}: dbo.T_PAIE_INSTANTANE.DOMAINE', 1;
+                """), ct);
+        }
+        catch (Exception ex) when (ex.Message.Contains(Marker, StringComparison.Ordinal))
+        {
+            throw new DomainException(MissingPayrollDomainsMessage);
+        }
+    }
+
     public static string GuardedSql(string table, string sql) => $"""
         IF OBJECT_ID(N'dbo.{table}', N'U') IS NULL
             THROW 51990, N'{Marker}: dbo.{table}', 1;

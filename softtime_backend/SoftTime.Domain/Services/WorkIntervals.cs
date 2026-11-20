@@ -49,11 +49,12 @@ public static class WorkIntervals
 
     /// <summary>
     /// Absence non justifiée : jour planifié non chômé, sans aucune heure corrigée, hors congé et hors férié.
-    /// Portage de l'absence du desktop (§7) avec deux corrections assumées : congés et fériés exclus.
+    /// Portage de l'absence du desktop (§7) avec deux corrections assumées : congés et fériés exclus. Lot C3 : une
+    /// journée couverte seulement par des absences arbitrées dont aucun code n'est compté est justifiée (exclue).
     /// </summary>
     internal static decimal Absence(OvertimeDayInput jour, TimeSpan pause)
     {
-        if (jour.Off || jour.CorrectionPresente || jour.CongeValeur > 0m || jour.Ferie)
+        if (jour.Off || jour.CorrectionPresente || jour.AbsenceJustifiee || jour.CongeValeur > 0m || jour.Ferie)
             return 0m;
         if (!jour.PlanningHa.HasValue || !jour.PlanningHd.HasValue)
             return 0m;

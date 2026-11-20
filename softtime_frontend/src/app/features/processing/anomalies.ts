@@ -19,6 +19,8 @@ import {
   SoftModal,
   SoftToggle,
   PeriodFilter,
+  ClosedPeriodBanner,
+  VERROU_CLOTURE,
 } from '../../shared/components';
 import { asRow, fmtDate } from '../../shared/utils/date';
 import { input } from '@angular/core';
@@ -37,16 +39,17 @@ import { readDeepLink } from '../../shared/utils/deep-link';
     SoftInput,
     SoftModal,
     SoftToggle,
-    PeriodFilter,
+    PeriodFilter, ClosedPeriodBanner,
   ],
   template: `
     <page-header title="Anomalies" subtitle="Arbitrage des heures en anomalie">
       <soft-button variant="secondary" [loading]="excel.exporting()" (click)="exportExcel()">Export Excel</soft-button>
-      <soft-button [loading]="busy()" (click)="validate()">
+      <soft-button [loading]="busy()" [disabled]="cloturee()" [attr.title]="cloturee() ? verrou : null" (click)="validate()">
         Convertir en heures corrigées
       </soft-button>
     </page-header>
     <period-filter [initial]="link()" (search)="onSearch($event)"></period-filter>
+    <closed-period-banner [period]="periode()" (closedChange)="cloturee.set($event)" />
     <soft-card>
       <p class="hint">La sélection est conservée entre les pages ; « tout sélectionner » porte sur la page affichée.</p>
       <data-table
@@ -65,8 +68,8 @@ import { readDeepLink } from '../../shared/utils/deep-link';
         [(selectedKeys)]="selectedKeys"
       >
         <ng-template #actions let-row>
-          <soft-button size="sm" variant="ghost" (click)="openEdit(row)">Arbitrer</soft-button>
-          <soft-button *ngIf="canDelete()" size="sm" variant="danger" [loading]="removingId() === row['id']" [disabled]="removingId() !== null" (click)="remove(row)">Supprimer</soft-button>
+          <soft-button size="sm" variant="ghost" [disabled]="cloturee()" [attr.title]="cloturee() ? verrou : null" (click)="openEdit(row)">Arbitrer</soft-button>
+          <soft-button *ngIf="canDelete()" size="sm" variant="danger" [loading]="removingId() === row['id']" [disabled]="removingId() !== null || cloturee()" [attr.title]="cloturee() ? verrou : null" (click)="remove(row)">Supprimer</soft-button>
         </ng-template>
       </data-table>
     </soft-card>
@@ -101,6 +104,12 @@ import { readDeepLink } from '../../shared/utils/deep-link';
   ],
 })
 export class AnomaliesPage {
+  /** Sélection courante (bandeau « Période clôturée »). */
+  readonly periode = signal<PeriodRequest | null>(null);
+  /** La sélection recoupe une période clôturée : boutons de modification désactivés (le serveur refuse aussi). */
+  readonly cloturee = signal(false);
+  protected readonly verrou = VERROU_CLOTURE;
+
   // Lien profond facultatif (?du=&au=&matricule=), lié par withComponentInputBinding ; validé avant tout usage.
   readonly du = input<unknown>();
   readonly au = input<unknown>();
@@ -144,6 +153,7 @@ export class AnomaliesPage {
 
   onSearch(filter: PeriodRequest): void {
     this.lastFilter = filter;
+    this.periode.set(filter);
     this.selectedKeys.set([]);
     this.page.set(1);
     this.loadPage();

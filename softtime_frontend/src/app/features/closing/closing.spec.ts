@@ -4,6 +4,8 @@ import { provideRouter } from '@angular/router';
 import { Observable, of, Subject } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SessionStore } from '../../core/session.store';
+import { PayrollClosureService } from '../../shared/services/payroll-closure.service';
+import { PERIODES_FACTICES } from './closing.testing';
 import { ClosingAnomalyView, ClosingChecklist, ClosingQuery, ClosingReport } from '../../shared/models';
 import { CardPaieService, DepartementServiceService } from '../../shared/services/catalog.service';
 import { ClosingService } from '../../shared/services/closing.service';
@@ -67,6 +69,7 @@ function fausseSession() {
     session: signal<{ userId: number } | null>({ userId: 1 }),
     activeSageDb: signal<string | null>('SAGE_A'),
     activePointeuseDb: signal<string | null>('PTE_A'),
+    permissions: () => [],
   };
 }
 
@@ -78,6 +81,7 @@ function configurer(rapports: ClosingReport[]) {
   TestBed.configureTestingModule({
     providers: [
       provideRouter([]),
+      { provide: PayrollClosureService, useValue: PERIODES_FACTICES },
       { provide: SessionStore, useValue: session },
       { provide: CardPaieService, useValue: { list: () => of([]) } },
       { provide: DepartementServiceService, useValue: { lookupBatch: () => of([]) } },
@@ -382,7 +386,8 @@ describe('page Contrôle avant paie : filtre et résultat conservés pendant la 
     TestBed.configureTestingModule({
       providers: [
         provideRouter([]),
-        { provide: SessionStore, useValue: fausseSession() },
+        { provide: PayrollClosureService, useValue: PERIODES_FACTICES },
+      { provide: SessionStore, useValue: fausseSession() },
         { provide: CardPaieService, useValue: { list: () => of([]) } },
         { provide: DepartementServiceService, useValue: { lookupBatch: () => of([]) } },
         {
@@ -505,7 +510,8 @@ describe('page Contrôle avant paie : filtre et résultat conservés pendant la 
       TestBed.configureTestingModule({
         providers: [
           provideRouter([]),
-          { provide: SessionStore, useValue: fausseSession() },
+          { provide: PayrollClosureService, useValue: PERIODES_FACTICES },
+      { provide: SessionStore, useValue: fausseSession() },
           { provide: CardPaieService, useValue: { list: () => of([]) } },
           { provide: DepartementServiceService, useValue: { lookupBatch: () => of([]) } },
           { provide: ExcelExportService, useValue: excelFactice },
@@ -610,7 +616,8 @@ describe('page Contrôle avant paie : export Excel de la liste', () => {
     TestBed.configureTestingModule({
       providers: [
         provideRouter([]),
-        { provide: SessionStore, useValue: fausseSession() },
+        { provide: PayrollClosureService, useValue: PERIODES_FACTICES },
+      { provide: SessionStore, useValue: fausseSession() },
         { provide: CardPaieService, useValue: { list: () => of([]) } },
         { provide: DepartementServiceService, useValue: { lookupBatch: () => of([]) } },
         { provide: ExcelExportService, useValue: excelFactice },
@@ -766,7 +773,8 @@ describe('page Contrôle avant paie : filtre et tri par gravité', () => {
     TestBed.configureTestingModule({
       providers: [
         provideRouter([]),
-        { provide: SessionStore, useValue: session },
+        { provide: PayrollClosureService, useValue: PERIODES_FACTICES },
+      { provide: SessionStore, useValue: session },
         { provide: CardPaieService, useValue: { list: () => of([]) } },
         { provide: DepartementServiceService, useValue: { lookupBatch: () => of([]) } },
         { provide: ExcelExportService, useValue: excelFactice },
@@ -899,7 +907,8 @@ describe('page Contrôle avant paie : filtre et tri par gravité', () => {
     TestBed.configureTestingModule({
       providers: [
         provideRouter([]),
-        { provide: SessionStore, useValue: fausseSession() },
+        { provide: PayrollClosureService, useValue: PERIODES_FACTICES },
+      { provide: SessionStore, useValue: fausseSession() },
         { provide: CardPaieService, useValue: { list: () => of([]) } },
         { provide: DepartementServiceService, useValue: { lookupBatch: () => of([]) } },
         { provide: ExcelExportService, useValue: excelFactice },
@@ -989,7 +998,8 @@ describe('page Contrôle avant paie : avancement de la paie', () => {
     TestBed.configureTestingModule({
       providers: [
         provideRouter([]),
-        { provide: SessionStore, useValue: session },
+        { provide: PayrollClosureService, useValue: PERIODES_FACTICES },
+      { provide: SessionStore, useValue: session },
         { provide: CardPaieService, useValue: { list: () => of([]) } },
         { provide: DepartementServiceService, useValue: { lookupBatch: () => of([]) } },
         { provide: ExcelExportService, useValue: excelFactice },

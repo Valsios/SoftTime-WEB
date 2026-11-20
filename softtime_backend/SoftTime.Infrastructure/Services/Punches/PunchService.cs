@@ -1,5 +1,6 @@
 ﻿using System.Linq.Expressions;
 
+using SoftTime.Application.Abstractions.Payroll;
 using SoftTime.Application.Abstractions.History;
 using SoftTime.Application.Abstractions.Punches;
 using SoftTime.Application.Abstractions.RequestContext;
@@ -18,12 +19,16 @@ public sealed class PunchService : IPunchService
     private readonly IHistoryArchiveService _history;
     private readonly IValidatedWeekGuard _validatedWeekGuard;
 
+    private readonly IPayrollClosureGuard? _closures;
+
     public PunchService(
         IUnitOfWork uow,
         ITenantConnectionService tenant,
         IHistoryArchiveService history,
-        IValidatedWeekGuard validatedWeekGuard)
+        IValidatedWeekGuard validatedWeekGuard,
+        IPayrollClosureGuard? closures = null)
     {
+        _closures = closures;
         _uow = uow;
         _tenant = tenant;
         _history = history;
@@ -84,6 +89,7 @@ public sealed class PunchService : IPunchService
             ?? throw new NotFoundException($"Pointage introuvable (ID={id}).");
 
         var jour = dto.Date?.Date ?? entity.DatePointage?.Date;
+        await ClosureChecks.OuverteAsync(_closures, new[] { entity.DatePointage, jour }, ct);
         await _validatedWeekGuard.RefuserSiSemaineValideeAsync(sageDb, entity.MatriculeSage, jour, ct);
 
         if (dto.Date.HasValue)
@@ -114,6 +120,8 @@ public sealed class PunchService : IPunchService
             throw new DomainException("La période (from/to) est requise pour purger.");
         if (request.To.Date < request.From.Date)
             throw new DomainException("La date de fin doit être postérieure ou égale à la date de début.");
+        // Clôture de paie : la purge lit jusqu'au lendemain de la fin (borne « <= fin + 1 jour ») : contrôle sur la même plage.
+        await ClosureChecks.OuverteAsync(_closures, request.From.Date, request.To.Date.AddDays(1), ct);
         await EnsurePurgeableAsync(request.From.Date, request.To.Date, ct);
 
         var purge = await LoadPurgeAsync(request, ct);

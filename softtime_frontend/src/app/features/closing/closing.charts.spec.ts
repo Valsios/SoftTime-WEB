@@ -4,6 +4,8 @@ import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SessionStore } from '../../core/session.store';
+import { PayrollClosureService } from '../../shared/services/payroll-closure.service';
+import { PERIODES_FACTICES } from './closing.testing';
 import { SoftDeltaChart } from '../../shared/components/soft-delta-chart';
 import { ClosingComparison, ClosingQuery, ClosingReport } from '../../shared/models';
 import { CardPaieService, DepartementServiceService } from '../../shared/services/catalog.service';
@@ -131,7 +133,8 @@ describe('page Contrôle avant paie : graphiques', () => {
       providers: [
         provideRouter([]),
         {
-          provide: SessionStore,
+          provide: PayrollClosureService, useValue: PERIODES_FACTICES },
+      { provide: SessionStore,
           useValue: {
             hasPermission: vi.fn(() => true),
             hasRight: vi.fn(() => true),
@@ -139,6 +142,7 @@ describe('page Contrôle avant paie : graphiques', () => {
             session: signal<{ userId: number } | null>({ userId: 1 }),
             activeSageDb: signal<string | null>('SAGE_A'),
             activePointeuseDb: signal<string | null>('PTE_A'),
+            permissions: () => [],
           },
         },
         { provide: CardPaieService, useValue: { list: () => of([]) } },

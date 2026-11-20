@@ -229,6 +229,9 @@ internal static class ClosingComputation
         var jours = JoursControles(d, from, fin);
         anomalies.AddRange(PayrollVigilanceRules.CorrectionsManuelles(d.Corrections, jours, scope));
         anomalies.AddRange(PayrollVigilanceRules.HeuresSupAtypiques(d.SemainesValidees, scope));
+        // Variables non envoyées à la paie : leurs anomalies sont sans objet (aucune par défaut).
+        if (options.TypesIgnores.Count > 0)
+            anomalies.RemoveAll(a => options.TypesIgnores.Contains(a.Type));
 
         var exclus = options.ExclureSansPlanningSurPeriode
             ? PlanningCoverageRules.SalariesSansPlanningSurPeriode(d.Cartes, d.Plannings, index, scope).Count

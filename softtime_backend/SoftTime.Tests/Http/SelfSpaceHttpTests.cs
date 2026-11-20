@@ -10,6 +10,7 @@ using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
 
 using SoftTime.Application.Abstractions.Permissions;
@@ -46,29 +47,51 @@ public class SelfSpaceHttpTests : IClassFixture<ApiFactory>
 
     private readonly ApiFactory _f;
     private readonly HttpClient _http;
-    private readonly DateTime _aujourdhui = DateTime.Today;
+
+    /// <summary>
+    /// « Aujourd'hui » des tests : une date fixe (un mercredi), injectée dans l'API par <see cref="Actif"/> (le service lit un
+    /// <see cref="TimeProvider"/>). Les tests ne dépendent donc plus du jour où la suite est lancée. Le mercredi est voulu : c'est
+    /// le jour où l'ancien calcul (jours ouvrés « au moins N jours en arrière ») faisait tomber deux jours de données sur la
+    /// même date.
+    /// </summary>
+    private static readonly DateTime Aujourdhui = new(2026, 11, 18);
 
     public SelfSpaceHttpTests(ApiFactory factory)
     {
         _f = factory;
         _http = factory.CreateClient();
         lock (factory.Store)
-            Seed(factory.Store);
+            Seed(factory.Store, Aujourdhui);
     }
 
-    private string Periode => $"from={_aujourdhui.AddDays(-45):yyyy-MM-dd}&to={_aujourdhui:yyyy-MM-dd}";
+    private static string PeriodeDe(DateTime aujourdhui) => $"from={aujourdhui.AddDays(-45):yyyy-MM-dd}&to={aujourdhui:yyyy-MM-dd}";
+
+    private string Periode => PeriodeDe(Aujourdhui);
 
     private static DateTime LundiDe(DateTime j) => j.Date.AddDays(-(((int)j.DayOfWeek + 6) % 7));
 
-    private DateTime JourOuvre(int reculMini)
+    /// <summary>
+    /// Le <paramref name="rang"/>-ième jour ouvré avant <paramref name="aujourdhui"/> : deux rangs différents donnent toujours
+    /// deux dates différentes, quel que soit le jour de la semaine (un week-end ne fait plus se rejoindre deux dates).
+    /// </summary>
+    private static DateTime JourOuvre(DateTime aujourdhui, int rang)
     {
-        var j = _aujourdhui.AddDays(-reculMini);
-        while (j.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
-            j = j.AddDays(-1);
-        return j.Date;
+        var j = aujourdhui.Date;
+        for (var i = 0; i < rang; i++)
+        {
+            do j = j.AddDays(-1);
+            while (j.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday);
+        }
+        return j;
     }
 
-    private void Seed(InMemoryUnitOfWork store)
+    private sealed class HorlogeFixe(DateTime jour) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(jour.Date.AddHours(10), TimeSpan.Zero);
+        public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
+    }
+
+    private static void Seed(InMemoryUnitOfWork store, DateTime aujourdhui)
     {
         var users = store.Get<Responsable>().Items;
         if (users.Any(u => u.IdResponsable == AId))
@@ -98,18 +121,18 @@ public class SelfSpaceHttpTests : IClassFixture<ApiFactory>
 
         // Semaines : A a une semaine validée (10 h sup.) et une non validée (invisible) ; B a une semaine validée (25 h sup.).
         var hs = store.Get<HsValidee>().Items;
-        hs.Add(new HsValidee { Id = 1, BddSage = ApiFactory.SageName, Matricules = MatA, DateDeb = LundiDe(_aujourdhui.AddDays(-21)), DateFin = LundiDe(_aujourdhui.AddDays(-21)).AddDays(6), Ht = 40m, Hs = 10m, ValidationHs = true });
-        hs.Add(new HsValidee { Id = 2, BddSage = ApiFactory.SageName, Matricules = MatA, DateDeb = LundiDe(_aujourdhui.AddDays(-14)), DateFin = LundiDe(_aujourdhui.AddDays(-14)).AddDays(6), Ht = 44m, Hs = 77m, ValidationHs = false });
-        hs.Add(new HsValidee { Id = 3, BddSage = ApiFactory.SageName, Matricules = MatB, DateDeb = LundiDe(_aujourdhui.AddDays(-28)), DateFin = LundiDe(_aujourdhui.AddDays(-28)).AddDays(6), Ht = 50m, Hs = 25m, ValidationHs = true });
+        hs.Add(new HsValidee { Id = 1, BddSage = ApiFactory.SageName, Matricules = MatA, DateDeb = LundiDe(aujourdhui.AddDays(-21)), DateFin = LundiDe(aujourdhui.AddDays(-21)).AddDays(6), Ht = 40m, Hs = 10m, ValidationHs = true });
+        hs.Add(new HsValidee { Id = 2, BddSage = ApiFactory.SageName, Matricules = MatA, DateDeb = LundiDe(aujourdhui.AddDays(-14)), DateFin = LundiDe(aujourdhui.AddDays(-14)).AddDays(6), Ht = 44m, Hs = 77m, ValidationHs = false });
+        hs.Add(new HsValidee { Id = 3, BddSage = ApiFactory.SageName, Matricules = MatB, DateDeb = LundiDe(aujourdhui.AddDays(-28)), DateFin = LundiDe(aujourdhui.AddDays(-28)).AddDays(6), Ht = 50m, Hs = 25m, ValidationHs = true });
 
         var exo = store.Get<HsExoImp>().Items;
-        exo.Add(new HsExoImp { Oid = 1, Matricule = MatA, PeriodeDebut = _aujourdhui.AddDays(-40), PeriodeFin = _aujourdhui.AddDays(-10), Exo130 = 8m, Exo150 = 2m, I130 = 0m, I150 = 0m, BddSage = ApiFactory.SageName });
-        exo.Add(new HsExoImp { Oid = 2, Matricule = MatB, PeriodeDebut = _aujourdhui.AddDays(-40), PeriodeFin = _aujourdhui.AddDays(-10), Exo130 = 20m, Exo150 = 0m, I130 = 5m, I150 = 0m, BddSage = ApiFactory.SageName });
+        exo.Add(new HsExoImp { Oid = 1, Matricule = MatA, PeriodeDebut = aujourdhui.AddDays(-40), PeriodeFin = aujourdhui.AddDays(-10), Exo130 = 8m, Exo150 = 2m, I130 = 0m, I150 = 0m, BddSage = ApiFactory.SageName });
+        exo.Add(new HsExoImp { Oid = 2, Matricule = MatB, PeriodeDebut = aujourdhui.AddDays(-40), PeriodeFin = aujourdhui.AddDays(-10), Exo130 = 20m, Exo150 = 0m, I130 = 5m, I150 = 0m, BddSage = ApiFactory.SageName });
 
         var anomalies = store.Get<HeureAnomalie>().Items;
-        anomalies.Add(new HeureAnomalie { Id = 1, MatriculeSage = MatA, DatePointageIn = JourOuvre(5), H1 = TimeSpan.FromHours(8), BddSage = ApiFactory.SageName });
-        anomalies.Add(new HeureAnomalie { Id = 2, MatriculeSage = MatB, DatePointageIn = JourOuvre(6), H1 = TimeSpan.FromHours(9), BddSage = ApiFactory.SageName });
-        anomalies.Add(new HeureAnomalie { Id = 3, MatriculeSage = MatB, DatePointageIn = JourOuvre(8), AbsAm = true, AbsPm = true, BddSage = ApiFactory.SageName });
+        anomalies.Add(new HeureAnomalie { Id = 1, MatriculeSage = MatA, DatePointageIn = JourOuvre(aujourdhui, 5), H1 = TimeSpan.FromHours(8), BddSage = ApiFactory.SageName });
+        anomalies.Add(new HeureAnomalie { Id = 2, MatriculeSage = MatB, DatePointageIn = JourOuvre(aujourdhui, 6), H1 = TimeSpan.FromHours(9), BddSage = ApiFactory.SageName });
+        anomalies.Add(new HeureAnomalie { Id = 3, MatriculeSage = MatB, DatePointageIn = JourOuvre(aujourdhui, 8), AbsAm = true, AbsPm = true, BddSage = ApiFactory.SageName });
 
         // Plannings 8 h - 17 h : A est en retard de 20 min un jour et absent sans justification un autre jour ; B en retard de 45 min.
         var plannings = store.Get<PlanningSalarie>().Items;
@@ -118,9 +141,9 @@ public class SelfSpaceHttpTests : IClassFixture<ApiFactory>
             Id = id, IdSal = idsal, DateP = jour, Ha = jour.Add(TimeSpan.FromHours(8)), Hd = jour.Add(TimeSpan.FromHours(17)),
             OffP = false, BddSage = ApiFactory.SageName, BddPointeuse = "PTG"
         });
-        var jourRetardA = JourOuvre(10);
-        var jourAbsentA = JourOuvre(12);
-        var jourRetardB = JourOuvre(10);
+        var jourRetardA = JourOuvre(aujourdhui, 10);
+        var jourAbsentA = JourOuvre(aujourdhui, 12);
+        var jourRetardB = JourOuvre(aujourdhui, 10);
         Plan(1, 5001, jourRetardA);
         Plan(2, 5001, jourAbsentA);
         Plan(3, 5002, jourRetardB);
@@ -145,9 +168,20 @@ public class SelfSpaceHttpTests : IClassFixture<ApiFactory>
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    private WebApplicationFactory<Program> Actif()
-        => _f.WithWebHostBuilder(b => b.ConfigureAppConfiguration((_, c) =>
-            c.AddInMemoryCollection(new[] { new KeyValuePair<string, string?>("SelfService:Enabled", "true") })));
+    private WebApplicationFactory<Program> Actif() => Actif(_f, Aujourdhui);
+
+    /// <summary>« Mon espace » activé, avec une horloge fixée à <paramref name="aujourdhui"/> pour le service.</summary>
+    private static WebApplicationFactory<Program> Actif(ApiFactory source, DateTime aujourdhui)
+        => source.WithWebHostBuilder(b =>
+        {
+            b.ConfigureAppConfiguration((_, c) =>
+                c.AddInMemoryCollection(new[] { new KeyValuePair<string, string?>("SelfService:Enabled", "true") }));
+            b.ConfigureServices(s =>
+            {
+                s.RemoveAll<TimeProvider>();
+                s.AddSingleton<TimeProvider>(new HorlogeFixe(aujourdhui));
+            });
+        });
 
     private static async Task<(HttpStatusCode Code, string Texte)> Appeler(HttpClient http, HttpMethod methode, string url, string? jeton,
         string? baseSage = null, params (string Nom, string Valeur)[] entetes)
@@ -223,12 +257,40 @@ public class SelfSpaceHttpTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task SelfSpace_Salarie_ReadsOnlyOwnDataOnEveryRoute()
+    public Task SelfSpace_Salarie_ReadsOnlyOwnDataOnEveryRoute() => VerifierLectureSeuleAsync(_f, Aujourdhui);
+
+    /// <summary>
+    /// Même lecture, avec « aujourd'hui » sur d'autres dates : chaque jour de la semaine (dont le samedi et le dimanche, où les
+    /// jours ouvrés reculent), le mois précédent, le mois suivant et un changement d'année. Chaque cas a sa propre fabrique et ses
+    /// données bâties sur sa date ; l'horloge de l'API est fixée à la même date.
+    /// </summary>
+    [Theory]
+    [InlineData("2026-10-15")]  // jeudi, mois précédent
+    [InlineData("2026-12-09")]  // mercredi, mois suivant
+    [InlineData("2026-11-16")]  // lundi
+    [InlineData("2026-11-20")]  // vendredi
+    [InlineData("2026-11-21")]  // samedi
+    [InlineData("2026-11-22")]  // dimanche
+    [InlineData("2027-01-04")]  // lundi, changement d'année
+    public async Task SelfSpace_Salarie_ReadsOnlyOwnDataOnEveryRoute_WhateverTodayIs(string jour)
     {
         // Arrange
-        using var f = Actif();
+        var date = DateTime.ParseExact(jour, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+        using var fabrique = new ApiFactory();
+        lock (fabrique.Store)
+            Seed(fabrique.Store, date);
+
+        // Act & Assert
+        await VerifierLectureSeuleAsync(fabrique, date);
+    }
+
+    private static async Task VerifierLectureSeuleAsync(ApiFactory source, DateTime aujourdhui)
+    {
+        // Arrange
+        using var f = Actif(source, aujourdhui);
         var http = f.CreateClient();
-        var avant = _f.Snapshot();
+        var avant = source.Snapshot();
+        string Url(string route) => $"{route}?{PeriodeDe(aujourdhui)}";
 
         // Act
         var (cs, summary) = await Appeler(http, HttpMethod.Get, Url("/api/v1/me/space/summary"), Jeton(AId, 92, MatA));
@@ -258,7 +320,7 @@ public class SelfSpaceHttpTests : IClassFixture<ApiFactory>
         Donnee(summary, "semainesValidees").GetInt32().Should().Be(1);
         Donnee(summary, "anomalies").GetInt32().Should().Be(1);
         Donnee(summary, "retards").GetInt32().Should().Be(1);
-        _f.Snapshot().Should().Be(avant);                                               // lecture seule
+        source.Snapshot().Should().Be(avant);                                           // lecture seule
     }
 
     [Fact]
@@ -421,7 +483,7 @@ public class SelfSpaceHttpTests : IClassFixture<ApiFactory>
 
     public static IEnumerable<object[]> Periodes()
     {
-        var aujourdhui = DateTime.Today;
+        var aujourdhui = Aujourdhui;
         var debutMois = new DateTime(aujourdhui.Year, aujourdhui.Month, 1);
         string Q(DateTime a, DateTime b) => $"/api/v1/me/space/weeks?from={a:yyyy-MM-dd}&to={b:yyyy-MM-dd}";
         yield return new object[] { Q(debutMois.AddMonths(-4), aujourdhui), HttpStatusCode.BadRequest };            // hors fenêtre

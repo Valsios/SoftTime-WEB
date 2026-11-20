@@ -22,4 +22,7 @@ public sealed class WeeklyContext
     public Dictionary<int, List<PlanningSalarie>> Planning { get; init; } = new();
     public Dictionary<string, HsValidee> Existantes { get; init; } = new(StringComparer.Ordinal);
     public Dictionary<string, byte?> Civilites { get; init; } = new(StringComparer.Ordinal);
+
+    /// <summary>Codes d'absence comptés comme non justifiés dans l'Absence (réglage de la base, lot C3).</summary>
+    public AbsenceCodesComptes AbsenceCodes { get; init; } = AbsenceCodesComptes.Default;
 }

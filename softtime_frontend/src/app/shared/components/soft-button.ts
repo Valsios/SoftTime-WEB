@@ -12,6 +12,7 @@ type Size = 'sm' | 'md' | 'lg';
       class="soft-btn"
       [class]="classes()"
       [disabled]="disabled() || loading()"
+      [attr.aria-label]="ariaLabel() || null"
     >
       @if (loading()) {
         <span class="soft-btn__spinner"></span>
@@ -27,6 +28,8 @@ export class SoftButton {
   readonly loading = input(false);
   readonly fullWidth = input(false);
   readonly type = input<'button' | 'submit'>('button');
+  /** Nom accessible du bouton (posé sur le <button> lui-même : un aria-label sur <soft-button> ne l'atteint pas). */
+  readonly ariaLabel = input<string | null>(null);
 
   classes(): string {
     const parts = [`soft-btn--${this.variant()}`];

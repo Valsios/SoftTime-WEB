@@ -2,6 +2,7 @@
 
 using SoftTime.Application.Abstractions.Closing;
 using SoftTime.Application.Abstractions.Employees;
+using SoftTime.Application.Abstractions.Payroll;
 using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Services;
@@ -19,6 +20,7 @@ public sealed class ClosingService : IClosingService
     private readonly TimeProvider _horloge;
     private readonly ClosingOptions _reglages;
     private readonly ClosingAnalysisCache _cache;
+    private readonly IPayrollVariableService? _variables;
 
     public ClosingService(
         IUnitOfWork uow,
@@ -26,7 +28,8 @@ public sealed class ClosingService : IClosingService
         ISageLeaveCalendar leaves,
         TimeProvider? horloge = null,
         IOptions<ClosingOptions>? reglages = null,
-        ClosingAnalysisCache? cache = null)
+        ClosingAnalysisCache? cache = null,
+        IPayrollVariableService? variables = null)
     {
         _uow = uow;
         _tenant = tenant;
@@ -34,6 +37,7 @@ public sealed class ClosingService : IClosingService
         _horloge = horloge ?? TimeProvider.System;
         _reglages = reglages?.Value ?? new ClosingOptions();
         _cache = cache ?? new ClosingAnalysisCache();
+        _variables = variables;
     }
 
     /// <summary>
@@ -45,6 +49,7 @@ public sealed class ClosingService : IClosingService
         request = ClosingComputation.AvecPeriodeParDefaut(request, Today());
         request = request with { Options = request.Options ?? _reglages.ReglesParDefaut() };
         ClosingComputation.Valider(request, _reglages.MaxPeriodDays);
+        request = await SansVariablesNonEnvoyeesAsync(request, ct);
 
         if (_reglages.CacheSeconds <= 0)
             return ClosingComputation.Calculer(await ChargerAsync(request, ct), request);
@@ -95,6 +100,21 @@ public sealed class ClosingService : IClosingService
             feries,
             await ChargerCongesAsync(scope.Cles, ct),
             Today());
+    }
+
+    /// <summary>
+    /// Anomalies sans objet pour les variables non envoyées à la paie de la base (aucune avec la configuration par
+    /// défaut : la demande est alors rendue telle quelle, clé de cache comprise).
+    /// </summary>
+    private async Task<ClosingAnalysisRequest> SansVariablesNonEnvoyeesAsync(ClosingAnalysisRequest request, CancellationToken ct)
+    {
+        if (_variables is null)
+            return request;
+        var types = PayrollVariableRules.TypesSansObjet(await _variables.GetSelectionAsync(_tenant.SageDb, ct));
+        if (types.Count == 0)
+            return request;
+        var options = request.Options!;
+        return request with { Options = options with { TypesIgnores = options.TypesIgnores.Union(types).ToHashSet() } };
     }
 
     private async Task<HashSet<DateTime>> ChargerFeriesAsync(CancellationToken ct)

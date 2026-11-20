@@ -11,5 +11,5 @@ internal sealed record ClosingChecklistData(
     int ExoExactes,
     int ExoRecoupantes,
     int PeriodesExoDistinctes,
-    int SalariesImposables,
+    int? SalariesImposables,
     string? DernierResumeSynchro);

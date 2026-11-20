@@ -141,6 +141,15 @@ public static class DependencyInjection
         services.AddScoped<IHolidayService, HolidayService>();
         services.AddScoped<IMajorationService, MajorationService>();
         services.AddScoped<IPayrollWriteConfigurationService, PayrollWriteConfigurationService>();
+        // Variables envoyées à la paie (T_PAIE_VARIABLE) et marqueur d'envoi (T_PAIE_ENVOI).
+        services.AddSingleton<PayrollVariableCache>();
+        services.AddScoped<IPayrollVariableService, PayrollVariableService>();
+        services.AddScoped<IPayrollSendLog, PayrollSendLog>();
+        services.AddScoped<IPayrollSnapshotService, PayrollSnapshotService>();
+        services.AddScoped<IPayrollClosureGuard, PayrollClosureGuard>();
+        services.AddScoped<IPayrollClosureService, PayrollClosureService>();
+        // Schéma de la table de destination d'une base AUTRE (destinations des variables).
+        services.AddScoped<SoftTime.Application.Abstractions.Payroll.IPayrollTargetSchema, SoftTime.Infrastructure.Integrations.PayrollTargetSchema>();
         services.AddScoped<IPointeuseDatabaseService, PointeuseDatabaseService>();
         services.AddScoped<ISageDatabaseService, SageDatabaseService>();
         services.AddScoped<IDepartementServiceLookup, DepartementServiceLookup>();

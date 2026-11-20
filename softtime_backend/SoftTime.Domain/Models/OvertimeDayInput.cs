@@ -5,6 +5,8 @@ namespace SoftTime.Domain.Models;
 /// <summary>
 /// Journée soumise au calcul : paires entrée/sortie retenues (<c>T_HEURECORRIGER</c>) et contexte
 /// (planning du jour, férié, congé, retard explicitement saisi).
+/// <c>AbsenceJustifiee</c> : la journée n'est couverte que par des absences arbitrées dont aucun code n'est compté
+/// comme non justifié (<see cref="AbsenceCodesComptes"/>) ; elle n'entre pas dans l'Absence.
 /// </summary>
 public sealed record OvertimeDayInput(
     DateTime Jour,
@@ -16,4 +18,5 @@ public sealed record OvertimeDayInput(
     bool Ferie = false,
     bool CorrectionPresente = false,
     decimal CongeValeur = 0m,
-    TimeSpan? RetardExplicite = null);
+    TimeSpan? RetardExplicite = null,
+    bool AbsenceJustifiee = false);

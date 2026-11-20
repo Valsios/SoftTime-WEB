@@ -45,6 +45,29 @@ public class AuditTrailTests
     }
 
     [Fact]
+    public async Task WritePayrollSyncAsync_NotResetEmployees_AreFlaggedInTheSummary()
+    {
+        var uow = new InMemoryUnitOfWork();
+        var sut = new AuditTrail(new ScopeFactory(uow), new TestCompanyContext(), Options.Create(new AuditJournalOptions()), new RecordingLogger<AuditTrail>());
+
+        await sut.WritePayrollSyncAsync(Audit("SUCCES", new Dictionary<string, int> { ["Nuit"] = 1 }) with { EmployeesReset = 3, EmployeesNotReset = 2 });
+
+        var resume = uow.Get<JournalAudit>().Items.Should().ContainSingle().Which.Nouveaux;
+        resume.Should().Contain("SalariésRemisÀ0=3").And.Contain("AVERTISSEMENT SalariésNonRemisÀ0=2");
+    }
+
+    [Fact]
+    public async Task WritePayrollSyncAsync_NothingToReport_KeepsTheHistoricalSummary()
+    {
+        var uow = new InMemoryUnitOfWork();
+        var sut = new AuditTrail(new ScopeFactory(uow), new TestCompanyContext(), Options.Create(new AuditJournalOptions()), new RecordingLogger<AuditTrail>());
+
+        await sut.WritePayrollSyncAsync(Audit("SUCCES", new Dictionary<string, int> { ["Nuit"] = 1 }));
+
+        uow.Get<JournalAudit>().Items.Single().Nouveaux.Should().NotContain("RemisÀ0").And.NotContain("AVERTISSEMENT");
+    }
+
+    [Fact]
     public async Task WritePayrollSyncAsync_Failure_WritesSummaryWithoutIndividualData()
     {
         // Arrange

@@ -9,7 +9,7 @@ import { Droit } from '../../core/rights';
 import { CorrectedHour, PeriodRequest, PageChangeEvent } from '../../shared/models';
 import { CorrectedHoursService } from '../../shared/services/processing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
-import { Column, DataTable, ImportTemplatesModal, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, PeriodFilter } from '../../shared/components';
+import { Column, DataTable, ImportTemplatesModal, PageHeader, SoftButton, SoftCard, SoftInput, SoftModal, PeriodFilter, ClosedPeriodBanner, VERROU_CLOTURE } from '../../shared/components';
 import { asRow, fmtDate } from '../../shared/utils/date';
 import { input } from '@angular/core';
 import { readDeepLink } from '../../shared/utils/deep-link';
@@ -18,7 +18,7 @@ import { toastImportResult } from '../../shared/utils/import-result';
 @Component({
   selector: 'app-corrected-hours',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, PeriodFilter, ImportTemplatesModal],
+  imports: [CommonModule, FormsModule, PageHeader, SoftButton, SoftCard, DataTable, SoftModal, SoftInput, PeriodFilter, ClosedPeriodBanner, ImportTemplatesModal],
   template: `
     <page-header title="Heures corrigées" subtitle="Corrections manuelles">
       <soft-button variant="secondary" [loading]="excel.exporting()" (click)="exportExcel()">Export Excel</soft-button>
@@ -31,6 +31,7 @@ import { toastImportResult } from '../../shared/utils/import-result';
     </page-header>
 
     <period-filter [initial]="link()" (search)="onSearch($event)"></period-filter>
+    <closed-period-banner [period]="periode()" (closedChange)="cloturee.set($event)" />
 
     <soft-card>
       <data-table
@@ -47,8 +48,8 @@ import { toastImportResult } from '../../shared/utils/import-result';
       >
         <ng-template #actions let-row>
           <div class="soft-actions">
-            <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" (click)="openEdit(row)">Modifier</soft-button>
-            <soft-button *ngIf="canDelete()" size="sm" variant="danger" [loading]="removingId() === row['id']" [disabled]="removingId() !== null" (click)="remove(row)">Supprimer</soft-button>
+            <soft-button *ngIf="canUpdate()" size="sm" variant="ghost" [disabled]="cloturee()" [attr.title]="cloturee() ? verrou : null" (click)="openEdit(row)">Modifier</soft-button>
+            <soft-button *ngIf="canDelete()" size="sm" variant="danger" [loading]="removingId() === row['id']" [disabled]="removingId() !== null || cloturee()" [attr.title]="cloturee() ? verrou : null" (click)="remove(row)">Supprimer</soft-button>
           </div>
         </ng-template>
       </data-table>
@@ -76,6 +77,12 @@ import { toastImportResult } from '../../shared/utils/import-result';
   styles: [`.form-grid { display: grid; gap: 14px; } .file-btn { cursor: pointer; }`],
 })
 export class CorrectedHoursPage {
+  /** Sélection courante (bandeau « Période clôturée »). */
+  readonly periode = signal<PeriodRequest | null>(null);
+  /** La sélection recoupe une période clôturée : boutons de modification désactivés (le serveur refuse aussi). */
+  readonly cloturee = signal(false);
+  protected readonly verrou = VERROU_CLOTURE;
+
   // Lien profond facultatif (?du=&au=&matricule=), lié par withComponentInputBinding ; validé avant tout usage.
   readonly du = input<unknown>();
   readonly au = input<unknown>();
@@ -121,6 +128,7 @@ export class CorrectedHoursPage {
 
   onSearch(filter: PeriodRequest): void {
     this.lastFilter = filter;
+    this.periode.set(filter);
     this.page.set(1);
     this.loadPage();
   }

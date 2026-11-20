@@ -1,0 +1,96 @@
+using System.Text.Json;
+
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+using SoftTime.Api.Authorization;
+using SoftTime.Application.Abstractions.Payroll;
+using SoftTime.Application.DTOs;
+
+namespace SoftTime.Api.Controllers;
+
+/// <summary>
+/// Variables envoyées à la paie pour la base SAGE active. Lecture et enregistrement de la configuration : mêmes droits
+/// que la modification d'une base dans l'écran Bases de données (porte Bases + permission SAGE:{base}:UPDATE, ou
+/// administrateur), vérifiés côté serveur par le service.
+/// </summary>
+[ApiController]
+[Authorize]
+[Route("api/v1/payroll-variables")]
+[Tags("PayrollVariables")]
+public class PayrollVariablesController : ApiControllerBase
+{
+    private readonly IPayrollVariableService _svc;
+
+    public PayrollVariablesController(IPayrollVariableService svc) => _svc = svc;
+
+    [HttpGet]
+    [RequireDroit(Droit.Databases)]
+    public async Task<IActionResult> GetAsync(CancellationToken ct) => Ok(await _svc.GetConfigurationAsync(ct));
+
+    /// <summary>
+    /// Enregistre les neuf variables et, facultatif, l'option « remettre à 0 les salariés sans valeur à l'envoi ». Deux formes de
+    /// corps : le tableau historique de variables (option inchangée), ou l'objet <c>{ variables, remiseAZeroSansValeur }</c>
+    /// (champ absent ou null : option inchangée). Une seule confirmation, un seul enregistrement.
+    /// </summary>
+    [HttpPut]
+    [RequireDroit(Droit.Databases)]
+    public async Task<IActionResult> SaveAsync([FromBody] JsonElement corps, CancellationToken ct)
+    {
+        var demande = LireCorps(corps);
+        return Ok(await _svc.SaveAsync(demande with { Variables = demande.Variables ?? new List<PayrollVariableSaveDto>() }, ct));
+    }
+
+    private static readonly JsonSerializerOptions JsonWeb = new(JsonSerializerDefaults.Web);
+
+    /// <summary>Corps de l'enregistrement : tableau de variables (ancien client) ou objet avec l'option.</summary>
+    public static PayrollVariablesSaveRequest LireCorps(JsonElement corps)
+    {
+        try
+        {
+            return corps.ValueKind switch
+            {
+                JsonValueKind.Array => new PayrollVariablesSaveRequest(corps.Deserialize<List<PayrollVariableSaveDto>>(JsonWeb), null),
+                JsonValueKind.Object => corps.Deserialize<PayrollVariablesSaveRequest>(JsonWeb)
+                    ?? new PayrollVariablesSaveRequest(null, null),
+                JsonValueKind.Null or JsonValueKind.Undefined => new PayrollVariablesSaveRequest(null, null),
+                _ => throw new DomainException("Le corps de la requête doit être un tableau de variables ou un objet { variables, remiseAZeroSansValeur }."),
+            };
+        }
+        catch (JsonException)
+        {
+            throw new DomainException("Le corps de la requête n'est pas valide : variables ou option de remise à 0 illisibles.");
+        }
+    }
+
+    /// <summary>Variables actives (noms seulement) : page Heures supplémentaires, Contrôle avant paie, écran Bases.</summary>
+    [HttpGet("actives")]
+    [RequireAnyDroit(Droit.Processing, Droit.Reports, Droit.Databases)]
+    public async Task<IActionResult> GetActivesAsync(CancellationToken ct) => Ok(await _svc.GetActivesAsync(ct));
+
+    /// <summary>Autre base : destinations des variables envoyables (T_PAIE_ECRITURE), tables et colonnes de la base de paie.</summary>
+    [HttpGet("destinations")]
+    [RequireDroit(Droit.Databases)]
+    public async Task<IActionResult> GetDestinationsAsync(CancellationToken ct) => Ok(await _svc.GetDestinationsAsync(ct));
+
+    /// <summary>Autre base : colonnes d'une table de la base de paie, avec leur type.</summary>
+    [HttpGet("destinations/colonnes")]
+    [RequireDroit(Droit.Databases)]
+    public async Task<IActionResult> GetColonnesAsync([FromQuery] string? table, CancellationToken ct)
+        => Ok(await _svc.GetColonnesAsync(table, ct));
+
+    /// <summary>
+    /// Domaines optionnels envoyés à la paie (cantine, frais de déplacement) : activés, ils sont exigés à la clôture. Même
+    /// droit que la configuration ; refusé pour une base AUTRE.
+    /// </summary>
+    [HttpPut("domains")]
+    [RequireDroit(Droit.Databases)]
+    public async Task<IActionResult> SaveDomainsAsync([FromBody] PayrollDomainsDto domaines, CancellationToken ct)
+        => Ok(await _svc.SaveDomainsAsync(domaines, ct));
+
+    /// <summary>Autre base : enregistrer les destinations (refusé si le mois est envoyé).</summary>
+    [HttpPut("destinations")]
+    [RequireDroit(Droit.Databases)]
+    public async Task<IActionResult> SaveDestinationsAsync([FromBody] PayrollWriteTargetsSaveDto destinations, CancellationToken ct)
+        => Ok(await _svc.SaveDestinationsAsync(destinations, ct));
+}

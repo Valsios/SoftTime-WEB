@@ -4,6 +4,8 @@ import { provideRouter } from '@angular/router';
 import { Observable, of } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SessionStore } from '../../core/session.store';
+import { PayrollClosureService } from '../../shared/services/payroll-closure.service';
+import { PERIODES_FACTICES } from './closing.testing';
 import { ClosingChecklist, ClosingDepartment, ClosingQuery, ClosingReport } from '../../shared/models';
 import { CardPaieService, DepartementServiceService } from '../../shared/services/catalog.service';
 import { ClosingService } from '../../shared/services/closing.service';
@@ -52,7 +54,8 @@ function creer(over: Partial<ClosingReport> = {}) {
     providers: [
       provideRouter([]),
       {
-        provide: SessionStore,
+        provide: PayrollClosureService, useValue: PERIODES_FACTICES },
+      { provide: SessionStore,
         useValue: {
           hasPermission: vi.fn(() => true),
           hasRight: vi.fn(() => true),
@@ -60,6 +63,7 @@ function creer(over: Partial<ClosingReport> = {}) {
           session: signal<{ userId: number } | null>({ userId: 1 }),
           activeSageDb: signal<string | null>('SAGE_A'),
           activePointeuseDb: signal<string | null>('PTE_A'),
+          permissions: () => [],
         },
       },
       { provide: CardPaieService, useValue: { list: () => of([]) } },

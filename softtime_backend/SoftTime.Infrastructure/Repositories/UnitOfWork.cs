@@ -29,6 +29,8 @@ public class UnitOfWork : IUnitOfWork
 
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
+        // Clôture de paie : aucune écriture d'une table source datée dans une période clôturée (filet commun, lot D3).
+        await ClosedPeriodWriteCheck.EnsureAsync(_db, cancellationToken);
         try
         {
             return await _db.SaveChangesAsync(cancellationToken);

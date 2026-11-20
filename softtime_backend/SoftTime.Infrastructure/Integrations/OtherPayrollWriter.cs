@@ -1,6 +1,3 @@
-using System.Data;
-
-using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 
 using SoftTime.Application.Abstractions.Audit;
@@ -13,6 +10,11 @@ using SoftTime.Domain.Repositories;
 
 namespace SoftTime.Infrastructure.Integrations;
 
+/// <summary>
+/// Écriture de paie d'une base AUTRE (table configurée dans T_PAIE_ECRITURE) : préflight complet, puis toutes les
+/// mises à jour dans une transaction. Seules les variables cochées pour la base sont validées et écrites ; sans
+/// configuration, les sept variables d'heures supplémentaires le sont, comme avant.
+/// </summary>
 public sealed class OtherPayrollWriter : IPayrollWriter
 {
     private static readonly HashSet<string> NumericTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -23,59 +25,141 @@ public sealed class OtherPayrollWriter : IPayrollWriter
     private readonly ITenantConnectionService _tenant;
     private readonly IAuditTrail _auditTrail;
     private readonly ILogger<OtherPayrollWriter> _logger;
+    private readonly IPayrollVariableService? _variables;
+    private readonly IPayrollSendLog? _sendLog;
+    private readonly Func<CancellationToken, Task<IOtherPayrollDatabase>> _openDatabase;
 
-    public OtherPayrollWriter(IUnitOfWork uow, ITenantConnectionService tenant, IAuditTrail auditTrail, ILogger<OtherPayrollWriter> logger)
+    public OtherPayrollWriter(
+        IUnitOfWork uow,
+        ITenantConnectionService tenant,
+        IAuditTrail auditTrail,
+        ILogger<OtherPayrollWriter> logger,
+        IPayrollVariableService? variables = null,
+        IPayrollSendLog? sendLog = null)
+        : this(uow, tenant, auditTrail, logger, variables, sendLog,
+            async ct => new SqlOtherPayrollDatabase(await tenant.GetSageConnectionAsync(ct)))
+    {
+    }
+
+    internal OtherPayrollWriter(
+        IUnitOfWork uow,
+        ITenantConnectionService tenant,
+        IAuditTrail auditTrail,
+        ILogger<OtherPayrollWriter> logger,
+        IPayrollVariableService? variables,
+        IPayrollSendLog? sendLog,
+        Func<CancellationToken, Task<IOtherPayrollDatabase>> openDatabase)
     {
         _uow = uow;
         _tenant = tenant;
         _auditTrail = auditTrail;
         _logger = logger;
+        _variables = variables;
+        _sendLog = sendLog;
+        _openDatabase = openDatabase;
     }
 
     public bool CanHandle(BddSage database) => string.Equals(database.TypeBase, "AUTRE", StringComparison.OrdinalIgnoreCase);
 
     public async Task<PayrollWriteResultDto> ValidateAsync(BddSage database, IReadOnlyList<HsExoDto> rows, CancellationToken ct = default)
     {
-        await PreflightAsync(database, rows, ct);
+        var categories = (await SelectionAsync(database, ct)).Envoyees;
+        if (categories.Count == 0)
+            return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "AUTRE", 0, 0, AucuneVariableMessage);
+        await PreflightAsync(database, rows, await SelectionAsync(database, ct), ct);
         return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "AUTRE", 0, 0, "Configuration d'écriture valide.");
     }
 
+    internal const string AucuneVariableMessage =
+        "Aucune variable d'heures supplémentaires n'est cochée pour cette base : rien n'est écrit en paie.";
+
     public async Task<PayrollWriteResultDto> WriteAsync(BddSage database, IReadOnlyList<HsExoDto> rows, PayrollSyncContext auditContext, CancellationToken ct = default)
     {
-        var plan = await PreflightAsync(database, rows, ct); // aucune écriture avant la fin du préflight
-        await using var connection = new SqlConnection(await _tenant.GetSageConnectionAsync(ct));
-        await connection.OpenAsync(ct);
-        await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(ct);
-        var categoryCounts = PayrollWritingConfiguration.Categories.ToDictionary(category => category, _ => 0, StringComparer.Ordinal);
+        var selection = await SelectionAsync(database, ct);
+        var categories = selection.Envoyees;
+        if (categories.Count == 0)
+            return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "AUTRE", 0, 0, AucuneVariableMessage);
+        var plan = await PreflightAsync(database, rows, selection, ct); // aucune écriture avant la fin du préflight
+        await using var db = await _openDatabase(ct);
+        await db.BeginTransactionAsync(ct);
+        var categoryCounts = PayrollWritingConfiguration.CompteursParCategorie(selection);
         var updates = 0;
+        var ecrits = 0;
+        var remisAZero = 0;
+        var instantane = new PayrollSnapshotBuilder();
         try
         {
             foreach (var row in rows)
-            foreach (var category in PayrollWritingConfiguration.Categories)
             {
-                var affected = await UpdateAsync(transaction, plan, category, row, ct);
+                // Salarié sans valeur absent de la table de paie : ignoré (aucune ligne n'est créée, pas d'erreur).
+                if (row.SansValeur && plan.IgnoredMatricules.Contains(row.Matricule!.Trim()))
+                    continue;
+                if (row.SansValeur) remisAZero++; else ecrits++;
+            foreach (var category in categories)
+            {
+                var affected = await db.ExecuteUpdateAsync(UpdateSql(plan, category), OvertimePayrollCategoryMapper.ValueFor(category, row, selection), row.Matricule!.Trim(), ct);
                 if (affected != 1)
                     throw new DomainException($"La synchronisation a été annulée : {affected} ligne(s) mise(s) à jour pour le matricule {row.Matricule} et la catégorie {category}; une seule ligne était attendue.");
                 updates++;
                 categoryCounts[category] += affected;
+                instantane.Ecrite(row.Matricule, null, category, $"{plan.Schema}.{plan.Table}.{plan.ValueColumns[category]}",
+                    selection.UniteDe(category), OvertimePayrollCategoryMapper.ValueFor(category, row, selection), row.SansValeur);
             }
-            await transaction.CommitAsync(ct);
-            await WriteAuditAsync(database, plan, auditContext, new PayrollSyncOutcome(rows.Count, categoryCounts.Values.Sum(), 0, categoryCounts, "SUCCES"));
-            return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "AUTRE", rows.Count, updates,
-                "Synchronisation des heures supplémentaires terminée.");
+            }
+            // Instantané : salariés sans valeur absents de la table de paie = non remis à 0 (rien d'écrit pour eux).
+            await ValiderAvecMarqueurAsync(db, database, auditContext, updates,
+                instantane.Construire(0, plan.IgnoredMatricules.Count, auditContext.Filtre, selection), ct);
+            await WriteAuditAsync(database, plan, auditContext, new PayrollSyncOutcome(ecrits + remisAZero, categoryCounts.Values.Sum(), 0, categoryCounts, "SUCCES"));
+            var message = "Synchronisation des heures supplémentaires terminée.";
+            if (remisAZero > 0)
+                message += $" {remisAZero} salarié(s) sans valeur sur la période ont été remis à 0 pour les variables envoyées.";
+            if (plan.IgnoredMatricules.Count > 0)
+                message += $" {plan.IgnoredMatricules.Count} salarié(s) sans valeur absent(s) de la table de paie n'ont pas été touchés.";
+            return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "AUTRE", ecrits, updates, message)
+            {
+                EmployeesReset = remisAZero,
+                UpdatesWithoutRow = plan.IgnoredMatricules.Count
+            };
         }
         catch
         {
-            await RollbackQuietlyAsync(transaction);
+            await RollbackQuietlyAsync(db);
             await QuietlyAsync(
-                () => WriteAuditAsync(database, plan, auditContext, new PayrollSyncOutcome(rows.Count, 0, updates, categoryCounts, "ECHEC")),
+                () => WriteAuditAsync(database, plan, auditContext, new PayrollSyncOutcome(ecrits + remisAZero, 0, updates, categoryCounts, "ECHEC")),
                 "Impossible d'écrire la synthèse d'échec de synchronisation de paie AUTRE.");
             throw;
         }
     }
 
-    private Task RollbackQuietlyAsync(SqlTransaction transaction) =>
-        QuietlyAsync(() => transaction.RollbackAsync(CancellationToken.None), "Échec du rollback de la synchronisation de paie AUTRE.");
+    /// <summary>
+    /// Le marqueur T_PAIE_ENVOI (base SoftTime) est enregistré AVANT la validation de la transaction de paie (base
+    /// cible) avec son instantané, dans UNE transaction SoftTime : si l'un ou l'autre ne peut pas l'être, l'exception
+    /// annule toute la paie. Si la validation échoue ensuite, son issue est incertaine côté serveur : le marqueur reste,
+    /// au statut INCERTAIN (il compte comme envoyé, mais ne permet pas de clôturer). Rien n'est enregistré si aucune
+    /// ligne n'a été écrite.
+    /// </summary>
+    private async Task ValiderAvecMarqueurAsync(IOtherPayrollDatabase db, BddSage database, PayrollSyncContext context, int updates,
+        PayrollSnapshotDraft instantane, CancellationToken ct)
+    {
+        int? envoi = null;
+        if (updates > 0 && _sendLog is not null)
+            envoi = await _sendLog.RecordWithSnapshotAsync(new PayrollSend(database.NomBd ?? string.Empty, "AUTRE",
+                context.PeriodFrom, context.PeriodTo, context.UserLogin, "SUCCES", updates), instantane, CancellationToken.None);
+        try
+        {
+            await db.CommitAsync(ct);
+        }
+        catch
+        {
+            if (envoi.HasValue)
+                await QuietlyAsync(() => _sendLog!.CompleteAsync(envoi.Value, "INCERTAIN", updates, CancellationToken.None),
+                    "Impossible de marquer l'envoi de paie AUTRE comme incertain.");
+            throw;
+        }
+    }
+
+    private Task RollbackQuietlyAsync(IOtherPayrollDatabase db) =>
+        QuietlyAsync(() => db.RollbackAsync(CancellationToken.None), "Échec du rollback de la synchronisation de paie AUTRE.");
 
     /// <summary>Exécute une action de repli après échec ; son propre échec est journalisé sans masquer l'erreur initiale.</summary>
     private async Task QuietlyAsync(Func<Task> action, string erreur)
@@ -96,56 +180,48 @@ public sealed class OtherPayrollWriter : IPayrollWriter
             bilan.Employees, bilan.UpdatedRows, bilan.CancelledRows, bilan.Categories, bilan.Status,
             context.UserLogin, "SYNC_PAIE:AUTRE", context.Correlation), CancellationToken.None);
 
-    private async Task<WritePlan> PreflightAsync(BddSage database, IReadOnlyList<HsExoDto> rows, CancellationToken ct)
+    private async Task<PayrollVariableSelection> SelectionAsync(BddSage database, CancellationToken ct) =>
+        _variables is null || string.IsNullOrWhiteSpace(database.NomBd)
+            ? PayrollVariableSelection.Default
+            : await _variables.GetSelectionAsync(database.NomBd, ct);
+
+    private async Task<WritePlan> PreflightAsync(BddSage database, IReadOnlyList<HsExoDto> rows, PayrollVariableSelection selection, CancellationToken ct)
     {
+        var categories = selection.Envoyees;
         await PayrollWritingConfiguration.EnsureStorageAsync(_uow, ct);
         var configs = await _uow.Repository<PaieEcriture>().ListAsync(c => c.BddSage == database.NomBd, ct);
-        var plan = BuildPlan(database.NomBd, configs);
-        await using var connection = new SqlConnection(await _tenant.GetSageConnectionAsync(ct));
-        await connection.OpenAsync(ct);
-        var columns = await ReadColumnsAsync(connection, plan, ct);
+        var plan = BuildPlan(database.NomBd, configs, categories);
+        await using var db = await _openDatabase(ct);
+        var columns = await db.ReadColumnsAsync(plan.Schema, plan.Table, ct);
+        if (columns.Count == 0)
+            throw new DomainException($"La table {plan.Table} n'existe pas.");
         ValidateColumns(plan, columns);
-        ValidateValues(rows, plan, columns);
-        await ValidateMatriculesAsync(connection, plan, rows, ct);
-        return plan;
+        ValidateValues(rows, plan, columns, selection);
+        var ignores = await ValidateMatriculesAsync(db, plan, rows, ct);
+        return plan with { IgnoredMatricules = ignores };
     }
 
     internal static WritePlan BuildPlan(string? database, IReadOnlyList<PaieEcriture> configs)
+        => BuildPlan(database, configs, PayrollWritingConfiguration.Categories);
+
+    /// <summary>Plan d'écriture limité aux catégories actives : une catégorie inactive n'a aucune colonne cible.</summary>
+    internal static WritePlan BuildPlan(string? database, IReadOnlyList<PaieEcriture> configs, IReadOnlyCollection<string> categories)
     {
-        PayrollWritingConfiguration.ValidateConfigurationRows(configs);
+        PayrollWritingConfiguration.ValidateConfigurationRows(configs, categories);
         var table = configs[0].TableCible;
         var matricule = configs[0].ColMatricule;
         var columns = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var config in configs)
         {
             var category = PayrollWritingConfiguration.NormalizeCategory(config.Categorie);
-            columns.Add(category, config.ColValeur);
+            if (categories.Contains(category))
+                columns.Add(category, config.ColValeur);
         }
         var (schema, targetTable) = PayrollWritingConfiguration.SplitTable(table);
         return new WritePlan(database ?? string.Empty, schema, targetTable, matricule, columns);
     }
 
-    private static async Task<Dictionary<string, ColumnInfo>> ReadColumnsAsync(SqlConnection connection, WritePlan plan, CancellationToken ct)
-    {
-        await using var cmd = new SqlCommand("""
-            SELECT COLUMN_NAME, DATA_TYPE, NUMERIC_PRECISION, NUMERIC_SCALE
-            FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table
-            """, connection);
-        cmd.Parameters.AddWithValue("@schema", plan.Schema);
-        cmd.Parameters.AddWithValue("@table", plan.Table);
-        await using var reader = await cmd.ExecuteReaderAsync(ct);
-        var result = new Dictionary<string, ColumnInfo>(StringComparer.OrdinalIgnoreCase);
-        while (await reader.ReadAsync(ct))
-        {
-            result[reader.GetString(0)] = new ColumnInfo(reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetByte(2), reader.IsDBNull(3) ? null : reader.GetInt32(3));
-        }
-        if (result.Count == 0)
-            throw new DomainException($"La table {plan.Table} n'existe pas.");
-        return result;
-    }
-
-    private static void ValidateColumns(WritePlan plan, IReadOnlyDictionary<string, ColumnInfo> columns)
+    private static void ValidateColumns(WritePlan plan, IReadOnlyDictionary<string, OtherPayrollColumn> columns)
     {
         if (!columns.ContainsKey(plan.MatriculeColumn))
             throw new DomainException($"La colonne {plan.MatriculeColumn} n'existe pas.");
@@ -158,7 +234,8 @@ public sealed class OtherPayrollWriter : IPayrollWriter
         }
     }
 
-    private static void ValidateValues(IReadOnlyList<HsExoDto> rows, WritePlan plan, IReadOnlyDictionary<string, ColumnInfo> columns)
+    private static void ValidateValues(
+        IReadOnlyList<HsExoDto> rows, WritePlan plan, IReadOnlyDictionary<string, OtherPayrollColumn> columns, PayrollVariableSelection selection)
     {
         var sourceDuplicates = rows.GroupBy(r => r.Matricule?.Trim(), StringComparer.OrdinalIgnoreCase).FirstOrDefault(g => string.IsNullOrWhiteSpace(g.Key) || g.Count() > 1);
         if (sourceDuplicates != null)
@@ -166,16 +243,16 @@ public sealed class OtherPayrollWriter : IPayrollWriter
                 ? "Un résultat d'heures supplémentaires ne contient pas de matricule."
                 : $"Plusieurs résultats d'heures supplémentaires correspondent au matricule {sourceDuplicates.Key}.");
         foreach (var row in rows)
-        foreach (var category in PayrollWritingConfiguration.Categories)
+        foreach (var category in PayrollWritingConfiguration.CategoriesConnues.Where(plan.ValueColumns.ContainsKey))
         {
-            var value = OvertimePayrollCategoryMapper.ValueFor(category, row);
+            var value = OvertimePayrollCategoryMapper.ValueFor(category, row, selection);
             var target = columns[plan.ValueColumns[category]];
             if (!CanStore(value, target))
                 throw new DomainException($"La valeur {value} du matricule {row.Matricule} n'est pas compatible avec la colonne {plan.ValueColumns[category]}.");
         }
     }
 
-    private static bool CanStore(decimal value, ColumnInfo target)
+    private static bool CanStore(decimal value, OtherPayrollColumn target)
     {
         if (target.DataType is "tinyint" or "smallint" or "int" or "bigint")
             return value == decimal.Truncate(value);
@@ -189,35 +266,51 @@ public sealed class OtherPayrollWriter : IPayrollWriter
 
     private static int GetScale(decimal value) => (decimal.GetBits(value)[3] >> 16) & 0x7F;
 
-    private static async Task ValidateMatriculesAsync(SqlConnection connection, WritePlan plan, IReadOnlyList<HsExoDto> rows, CancellationToken ct)
+    /// <summary>
+    /// Une ligne de paie exactement par matricule. Exception : un salarié sans valeur (remise à 0) absent de la table
+    /// ou présent plusieurs fois n'est pas une erreur, il est ignoré ; son matricule est rendu à l'appelant.
+    /// </summary>
+    private static async Task<IReadOnlySet<string>> ValidateMatriculesAsync(IOtherPayrollDatabase db, WritePlan plan, IReadOnlyList<HsExoDto> rows, CancellationToken ct)
     {
-        var table = $"[{plan.Schema}].[{plan.Table}]";
-        var matriculeColumn = PayrollWritingConfiguration.QuoteIdentifier(plan.MatriculeColumn);
+        var sql = CountSql(plan);
+        var ignores = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var row in rows)
         {
-            await using var cmd = new SqlCommand($"SELECT COUNT_BIG(1) FROM {table} WHERE {matriculeColumn} = @matricule", connection);
-            cmd.Parameters.Add("@matricule", SqlDbType.NVarChar, 256).Value = row.Matricule!.Trim();
-            var count = Convert.ToInt64(await cmd.ExecuteScalarAsync(ct));
+            var count = await db.CountAsync(sql, row.Matricule!.Trim(), ct);
+            if (row.SansValeur)
+            {
+                if (count != 1)
+                    ignores.Add(row.Matricule!.Trim());
+                continue;
+            }
             if (count == 0)
                 throw new DomainException($"Aucune ligne de paie trouvée pour le matricule {row.Matricule}.");
             if (count > 1)
                 throw new DomainException($"Plusieurs lignes de paie correspondent au matricule {row.Matricule}.");
         }
+        return ignores;
     }
 
-    private static async Task<int> UpdateAsync(SqlTransaction transaction, WritePlan plan, string category, HsExoDto row, CancellationToken ct)
+    /// <summary>Commande historique de comptage d'un matricule (inchangée).</summary>
+    internal static string CountSql(WritePlan plan)
+    {
+        var table = $"[{plan.Schema}].[{plan.Table}]";
+        var matriculeColumn = PayrollWritingConfiguration.QuoteIdentifier(plan.MatriculeColumn);
+        return $"SELECT COUNT_BIG(1) FROM {table} WHERE {matriculeColumn} = @matricule";
+    }
+
+    /// <summary>Commande historique de mise à jour d'une catégorie (inchangée).</summary>
+    internal static string UpdateSql(WritePlan plan, string category)
     {
         var table = $"[{plan.Schema}].[{plan.Table}]";
         var valueColumn = PayrollWritingConfiguration.QuoteIdentifier(plan.ValueColumns[category]);
         var matriculeColumn = PayrollWritingConfiguration.QuoteIdentifier(plan.MatriculeColumn);
-        await using var cmd = new SqlCommand($"UPDATE {table} SET {valueColumn} = @value WHERE {matriculeColumn} = @matricule", transaction.Connection, transaction);
-        cmd.Parameters.Add("@value", SqlDbType.Decimal).Value = OvertimePayrollCategoryMapper.ValueFor(category, row);
-        cmd.Parameters["@value"].Precision = 18;
-        cmd.Parameters["@value"].Scale = 4;
-        cmd.Parameters.Add("@matricule", SqlDbType.NVarChar, 256).Value = row.Matricule!.Trim();
-        return await cmd.ExecuteNonQueryAsync(ct);
+        return $"UPDATE {table} SET {valueColumn} = @value WHERE {matriculeColumn} = @matricule";
     }
 
-    internal sealed record WritePlan(string Database, string Schema, string Table, string MatriculeColumn, IReadOnlyDictionary<string, string> ValueColumns);
-    private sealed record ColumnInfo(string DataType, byte? Precision, int? Scale);
+    internal sealed record WritePlan(string Database, string Schema, string Table, string MatriculeColumn, IReadOnlyDictionary<string, string> ValueColumns)
+    {
+        /// <summary>Matricules sans valeur à ne pas toucher (absents de la table de paie).</summary>
+        public IReadOnlySet<string> IgnoredMatricules { get; init; } = new HashSet<string>();
+    }
 }

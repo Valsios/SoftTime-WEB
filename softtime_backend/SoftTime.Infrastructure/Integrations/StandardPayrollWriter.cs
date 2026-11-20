@@ -11,7 +11,10 @@ using SoftTime.Domain.Repositories;
 
 namespace SoftTime.Infrastructure.Integrations;
 
-/// <summary>Adaptateur qui préserve intégralement l'écriture historique T_CUMSAL.</summary>
+/// <summary>
+/// Adaptateur qui préserve l'écriture historique T_CUMSAL. Seules les variables cochées pour la base sont validées et
+/// écrites ; sans configuration, les sept variables d'heures supplémentaires le sont, comme avant.
+/// </summary>
 public class StandardPayrollWriter : IPayrollWriter
 {
     private readonly ISagePayrollWriter _sageWriter;
@@ -19,14 +22,25 @@ public class StandardPayrollWriter : IPayrollWriter
     private readonly ITenantConnectionService _tenant;
     private readonly ICodeConstanteService _catalog;
     private readonly IAuditTrail _auditTrail;
+    private readonly IPayrollVariableService? _variables;
+    private readonly IPayrollSendLog? _sendLog;
 
-    public StandardPayrollWriter(ISagePayrollWriter sageWriter, ISageContextFactory sageFactory, ITenantConnectionService tenant, ICodeConstanteService catalog, IAuditTrail auditTrail)
+    public StandardPayrollWriter(
+        ISagePayrollWriter sageWriter,
+        ISageContextFactory sageFactory,
+        ITenantConnectionService tenant,
+        ICodeConstanteService catalog,
+        IAuditTrail auditTrail,
+        IPayrollVariableService? variables = null,
+        IPayrollSendLog? sendLog = null)
     {
         _sageWriter = sageWriter;
         _sageFactory = sageFactory;
         _tenant = tenant;
         _catalog = catalog;
         _auditTrail = auditTrail;
+        _variables = variables;
+        _sendLog = sendLog;
     }
 
     public bool CanHandle(BddSage database) => string.Equals(database.TypeBase, "STANDARD", StringComparison.OrdinalIgnoreCase);
@@ -36,7 +50,10 @@ public class StandardPayrollWriter : IPayrollWriter
         using var sage = _sageFactory.Create(await _tenant.GetSageConnectionAsync(ct));
         var constants = sage.Constants.ToArray();
         var codes = await _catalog.GetOvertimeSageCodesAsync(ct);
-        foreach (var code in new[] { codes.Exo130, codes.Exo150, codes.I130, codes.I150, codes.Ferie, codes.Dim, codes.Nuit })
+        var selection = await SelectionAsync(database, ct);
+        var cible = new SagePayrollTarget(string.Empty, constants, codes) { Variables = selection };
+        // Une variable décochée (ou non envoyable) n'est ni validée ni comptée comme manquante.
+        foreach (var code in selection.Envoyees.Select(cible.CodeDe))
             if (!constants.Any(c => string.Equals(c.CodeConstante?.Trim(), code, StringComparison.OrdinalIgnoreCase)))
                 throw new DomainException($"Constante SAGE {code} introuvable.");
         return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "STANDARD", 0, 0, "Configuration SAGE valide.");
@@ -45,36 +62,86 @@ public class StandardPayrollWriter : IPayrollWriter
     public async Task<PayrollWriteResultDto> WriteAsync(BddSage database, IReadOnlyList<HsExoDto> rows, PayrollSyncContext auditContext, CancellationToken ct = default)
     {
         // Le flux ci-dessous est intentionnellement celui qui existait dans OvertimeService.
-        var input = await GetInputAsync(ct);
-        var categoryCounts = PayrollWritingConfiguration.Categories.ToDictionary(category => category, _ => 0, StringComparer.Ordinal);
+        var input = (await GetInputAsync(ct)) with { Variables = await SelectionAsync(database, ct) };
+        var categoryCounts = PayrollWritingConfiguration.CompteursParCategorie(input.Variables);
+        var envoi = new SendMarker(_sendLog, database, auditContext);
+        var sansLigne = 0;
+        var sansLigneRemisesAZero = 0;
+        var instantane = new PayrollSnapshotBuilder();
         try
         {
             foreach (var hs in rows.Where(h => h.NumSal.HasValue))
             {
-                var updates = await _sageWriter.SyncOvertimeAsync(input, hs.NumSal!.Value, OvertimeAmounts.From(hs), ct);
+                var montants = OvertimeAmounts.From(hs);
+                var updates = await _sageWriter.SyncOvertimeAsync(input, hs.NumSal!.Value, montants, ct);
                 foreach (var (category, count) in updates)
+                {
                     categoryCounts[category] += count;
+                    // Instantané : seules les valeurs qui ont réellement modifié une ligne T_CUMSAL.
+                    if (count > 0)
+                        instantane.Ecrite(hs.Matricule, hs.NumSal, category, input.CodeDe(category), input.Variables.UniteDe(category),
+                            input.Variables.ValeurEnvoyee(category, montants.Valeurs), hs.SansValeur);
+                    if (count == 0)
+                    {
+                        sansLigne++;
+                        if (hs.SansValeur)
+                            sansLigneRemisesAZero++;
+                    }
+                }
+                // Marqueur posé dès la première ligne T_CUMSAL modifiée ; s'il ne peut pas l'être, l'envoi s'arrête.
+                await envoi.SignalerAsync(categoryCounts.Values.Sum(), ct);
             }
         }
         catch (PayrollSyncWriteException exception)
         {
             foreach (var (category, count) in exception.UpdatesByCategory)
                 categoryCounts[category] += count;
+            await envoi.TerminerAsync("ECHEC", categoryCounts.Values.Sum());
             await WriteAuditAsync(database, auditContext, new PayrollSyncOutcome(rows.Count(h => h.NumSal.HasValue), categoryCounts.Values.Sum(), 0, categoryCounts, "ECHEC"));
             ExceptionDispatchInfo.Capture(exception.InnerException ?? exception).Throw();
             throw;
         }
         catch
         {
+            await envoi.TerminerAsync("ECHEC", categoryCounts.Values.Sum());
             await WriteAuditAsync(database, auditContext, new PayrollSyncOutcome(rows.Count(h => h.NumSal.HasValue), categoryCounts.Values.Sum(), 0, categoryCounts, "ECHEC"));
             throw;
         }
 
-        var written = rows.Count(h => h.NumSal.HasValue);
-        await WriteAuditAsync(database, auditContext, new PayrollSyncOutcome(written, categoryCounts.Values.Sum(), 0, categoryCounts, "SUCCES"));
-        return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "STANDARD", written, categoryCounts.Values.Sum(),
-            "Synchronisation des heures supplémentaires vers SAGE terminée.");
+        // « Écrits » : salariés avec valeurs ; « remis à 0 » : salariés du périmètre sans ligne de valeurs.
+        var written = rows.Count(h => h.NumSal.HasValue && !h.SansValeur);
+        var remisAZero = rows.Count(h => h.NumSal.HasValue && h.SansValeur);
+        // Salariés du périmètre sans valeur dont le numéro SAGE est introuvable (lecture impossible ou salarié absent) :
+        // l'envoi n'est pas bloqué, mais leur ancien cumul reste dans SAGE : à signaler.
+        var nonRemis = rows.Count(h => !h.NumSal.HasValue && h.SansValeur);
+        var instantaneEcrit = await envoi.TerminerAvecInstantaneAsync(categoryCounts.Values.Sum(),
+            instantane.Construire(sansLigne, nonRemis, auditContext.Filtre, input.Variables));
+        await WriteAuditAsync(database, auditContext, new PayrollSyncOutcome(written + remisAZero, categoryCounts.Values.Sum(), 0, categoryCounts, "SUCCES", remisAZero, nonRemis));
+        var message = "Synchronisation des heures supplémentaires vers SAGE terminée.";
+        if (remisAZero > 0)
+            message += $" {remisAZero} salarié(s) sans valeur sur la période ont été remis à 0 pour les variables envoyées.";
+        if (nonRemis > 0)
+            message += $" Attention : {nonRemis} salarié(s) sans valeur n'ont PAS été remis à 0 (numéro de salarié introuvable dans SAGE : "
+                       + "lecture des salariés impossible ou salarié absent) : leurs anciens cumuls restent dans SAGE.";
+        if (sansLigne > 0)
+            message += $" Attention : {sansLigne} mise(s) à jour n'ont modifié aucune ligne T_CUMSAL "
+                       + "(cumul absent dans SAGE pour le salarié)"
+                       + (sansLigneRemisesAZero > 0 ? $", dont {sansLigneRemisesAZero} pour des salariés remis à 0" : string.Empty)
+                       + " : vérifiez ces cumuls dans SAGE.";
+        if (!instantaneEcrit)
+            message += " " + InstantaneNonEcrit;
+        return new PayrollWriteResultDto(database.NomBd ?? string.Empty, "STANDARD", written, categoryCounts.Values.Sum(), message)
+        {
+            UpdatesWithoutRow = sansLigne,
+            EmployeesReset = remisAZero,
+            EmployeesNotReset = nonRemis
+        };
     }
+
+    /// <summary>Avertissement rendu quand la paie SAGE est écrite mais que son instantané n'a pas pu l'être.</summary>
+    public const string InstantaneNonEcrit =
+        "Attention : l'instantané de cet envoi n'a pas pu être enregistré ; l'envoi est marqué INCERTAIN et ne permet pas de "
+        + "clôturer la période. Relancez l'envoi (les valeurs SAGE sont réécrites à l'identique).";
 
     protected virtual async Task<SagePayrollTarget> GetInputAsync(CancellationToken ct)
     {
@@ -85,8 +152,87 @@ public class StandardPayrollWriter : IPayrollWriter
             await _catalog.GetOvertimeSageCodesAsync(ct));
     }
 
+    private async Task<PayrollVariableSelection> SelectionAsync(BddSage database, CancellationToken ct) =>
+        _variables is null || string.IsNullOrWhiteSpace(database.NomBd)
+            ? PayrollVariableSelection.Default
+            : await _variables.GetSelectionAsync(database.NomBd, ct);
+
     private Task WriteAuditAsync(BddSage database, PayrollSyncContext context, PayrollSyncOutcome bilan)
         => _auditTrail.WritePayrollSyncAsync(new PayrollSyncAudit(
             "T_CUMSAL", database.NomBd, context.PeriodFrom, context.PeriodTo, bilan.Employees, bilan.UpdatedRows, 0,
-            bilan.Categories, bilan.Status, context.UserLogin, "SYNC_PAIE:STANDARD", context.Correlation), CancellationToken.None);
+            bilan.Categories, bilan.Status, context.UserLogin, "SYNC_PAIE:STANDARD", context.Correlation,
+            bilan.EmployeesReset, bilan.EmployeesNotReset), CancellationToken.None);
+
+    /// <summary>
+    /// Marqueur T_PAIE_ENVOI d'un envoi STANDARD : posé (EN_COURS) à la première ligne modifiée, puis terminé. Les
+    /// écritures T_CUMSAL ne sont pas transactionnelles : un échec partiel reste donc « envoyé ».
+    /// </summary>
+    private sealed class SendMarker(IPayrollSendLog? log, BddSage database, PayrollSyncContext context)
+    {
+        private int? _id;
+
+        public async Task SignalerAsync(int lignes, CancellationToken ct)
+        {
+            if (log is null || _id.HasValue || lignes <= 0)
+                return;
+            _id = await log.RecordAsync(new PayrollSend(database.NomBd ?? string.Empty, "STANDARD",
+                context.PeriodFrom, context.PeriodTo, context.UserLogin, "EN_COURS", lignes), CancellationToken.None);
+        }
+
+        /// <summary>
+        /// Fin d'un envoi réussi : statut SUCCES ET instantané dans une seule transaction SoftTime. Si elle échoue, l'envoi
+        /// est marqué INCERTAIN (au mieux : s'il ne peut même pas l'être, il reste EN_COURS, ce qui ne permet pas non plus
+        /// de clôturer). Ne lève jamais : la paie est déjà écrite. Faux si l'instantané n'a pas été écrit. Sans aucune ligne
+        /// modifiée, aucun envoi n'est enregistré et il n'y a rien à figer.
+        /// </summary>
+        public async Task<bool> TerminerAvecInstantaneAsync(int lignes, PayrollSnapshotDraft instantane)
+        {
+            if (log is null)
+                return true;
+            try
+            {
+                await SignalerAsync(lignes, CancellationToken.None);
+                if (_id.HasValue)
+                    await log.CompleteWithSnapshotAsync(_id.Value, "SUCCES", lignes, instantane, CancellationToken.None);
+                return true;
+            }
+            catch (Exception)
+            {
+                // Déjà journalisé par le service du marqueur.
+                if (_id.HasValue)
+                {
+                    try
+                    {
+                        await log.CompleteAsync(_id.Value, "INCERTAIN", lignes, CancellationToken.None);
+                    }
+                    catch (Exception)
+                    {
+                        // Reste EN_COURS : déjà journalisé.
+                    }
+                }
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Fin de l'envoi : enregistre l'envoi s'il manque encore (échec partiel), puis son statut final. Ne lève
+        /// jamais : la paie est déjà écrite et l'issue d'origine (succès ou erreur) doit rester celle rendue. Un échec
+        /// du marqueur est journalisé par <see cref="IPayrollSendLog"/> ; une ligne restée EN_COURS compte comme envoyée.
+        /// </summary>
+        public async Task TerminerAsync(string statut, int lignes)
+        {
+            if (log is null)
+                return;
+            try
+            {
+                await SignalerAsync(lignes, CancellationToken.None);
+                if (_id.HasValue)
+                    await log.CompleteAsync(_id.Value, statut, lignes, CancellationToken.None);
+            }
+            catch (Exception)
+            {
+                // Déjà journalisé par le service du marqueur.
+            }
+        }
+    }
 }

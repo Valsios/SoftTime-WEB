@@ -22,6 +22,7 @@ import { ClosingService } from '../../shared/services/closing.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { PrintReportService } from '../../shared/services/print-report.service';
 import { ClosingSessionState } from './closing.state';
+import { ClosureNextStep } from './closure-next-step';
 import {
   ANALYSING_TEXT,
   analysisAgeText,
@@ -95,7 +96,7 @@ import {
 @Component({
   selector: 'app-closing',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, PageHeader, PeriodFilter, SoftButton, SoftCard, SoftBadge, SoftTabs, SoftToggle, SoftBarChart, SoftDeltaChart, RouterLink, DataTable, DataTableCell],
+  imports: [FormsModule, PageHeader, PeriodFilter, SoftButton, SoftCard, SoftBadge, SoftTabs, SoftToggle, SoftBarChart, SoftDeltaChart, RouterLink, DataTable, DataTableCell, ClosureNextStep],
   template: `
     <page-header title="Contrôle avant paie" subtitle="Contrôle des données de la période avant la clôture">
       <soft-button
@@ -185,6 +186,7 @@ import {
         </ul>
       </soft-card>
     }
+    <app-closure-next-step class="print-hide" [from]="periodeDu()" [to]="periodeAu()"></app-closure-next-step>
     @if (disabled()) {
       <soft-card variant="bordered"><div class="soft-empty" role="status">{{ disabledMessage }}</div></soft-card>
     }
@@ -715,6 +717,10 @@ export class ClosingPage implements OnInit, OnDestroy {
   private request?: Subscription;
 
   /** La saisie diffère du résultat affiché : rien n'est relancé, l'utilisateur doit cliquer sur Analyser. */
+  /** Bornes saisies, pour le bloc « Étape suivante : clôture » (lecture seule). */
+  readonly periodeDu = computed(() => this.draft().from);
+  readonly periodeAu = computed(() => this.draft().to);
+
   readonly stale = computed(() => this.applied() !== null && !sameFilter(this.draft(), this.applied()));
   /** Âge de l'analyse affichée, à partir de l'heure conservée en session (donc cohérent avec le filtre figé). */
   readonly ageText = computed(() => {

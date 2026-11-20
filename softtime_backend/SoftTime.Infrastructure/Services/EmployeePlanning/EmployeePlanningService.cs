@@ -1,5 +1,6 @@
 ﻿using System.Linq.Expressions;
 
+using SoftTime.Application.Abstractions.Payroll;
 using SoftTime.Application.Abstractions.EmployeePlanning;
 using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.DTOs;
@@ -18,12 +19,16 @@ public sealed class EmployeePlanningService : IEmployeePlanningService
     private readonly IPlanningStatisticsReader _planningStats;
     private readonly IPlanningDatabaseFilter _planningDatabaseFilter;
 
+    private readonly IPayrollClosureGuard? _closures;
+
     public EmployeePlanningService(
         IUnitOfWork uow,
         ITenantConnectionService tenant,
         IPlanningStatisticsReader planningStats,
-        IPlanningDatabaseFilter planningDatabaseFilter)
+        IPlanningDatabaseFilter planningDatabaseFilter,
+        IPayrollClosureGuard? closures = null)
     {
+        _closures = closures;
         _uow = uow;
         _tenant = tenant;
         _planningStats = planningStats;
@@ -158,6 +163,8 @@ public sealed class EmployeePlanningService : IEmployeePlanningService
             .Select(c => c.Id)
             .ToHashSet();
 
+        // Clôture de paie : jours demandés (et jour d'origine d'une ligne déplacée) hors des périodes clôturées, sinon refus en bloc.
+        await ClosureChecks.OuverteAsync(_closures, rows.Select(r => r.DateP), ct);
         foreach (var dto in rows)
             await SaveRowAsync(dto, shifts, cards, ct);
         await _uow.SaveChangesAsync(ct);
@@ -177,6 +184,7 @@ public sealed class EmployeePlanningService : IEmployeePlanningService
 
         var repo = _uow.Repository<PlanningSalarie>();
         var entity = await FindPlanningAsync(dto, date, ct);
+        await ClosureChecks.OuverteAsync(_closures, new[] { entity?.DateP }, ct);
         var valeurs = Valeurs(dto, date, shift, entity);
         if (entity == null)
         {
@@ -234,6 +242,7 @@ public sealed class EmployeePlanningService : IEmployeePlanningService
     {
         var repo = _uow.Repository<PlanningSalarie>();
         var e = await repo.GetByIdAsync(id, ct) ?? throw new NotFoundException();
+        await ClosureChecks.OuverteAsync(_closures, new[] { e.DateP }, ct);
         repo.Remove(e);
         await _uow.SaveChangesAsync(ct);
     }

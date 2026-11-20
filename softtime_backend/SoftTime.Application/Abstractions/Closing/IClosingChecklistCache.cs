@@ -9,4 +9,7 @@ public interface IClosingChecklistCache
     bool TryGet(string cle, DateTimeOffset maintenant, out ClosingChecklistDto valeur);
 
     void Set(string cle, ClosingChecklistDto valeur, DateTimeOffset maintenant, TimeSpan duree);
+
+    /// <summary>Retire toutes les entrées (changement de la configuration des variables envoyées à la paie).</summary>
+    void Vider();
 }

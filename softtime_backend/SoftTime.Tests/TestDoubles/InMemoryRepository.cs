@@ -118,6 +118,27 @@ public sealed class InMemoryRepository<T> : IRepository<T> where T : class
             case SuiviConfiguration configuration:
                 configuration.Id = (int)next;
                 break;
+            case PaieEnvoi envoi:
+                envoi.Id = (int)next;
+                break;
+            case PaieOption option:
+                option.Id = (int)next;
+                break;
+            case PaieVariable variable:
+                variable.Id = (int)next;
+                break;
+            case PaieInstantane instantane:
+                instantane.Id = (int)next;
+                break;
+            case PaieInstantaneLigne ligne:
+                ligne.Id = (long)next;
+                break;
+            case PaieCloture cloture:
+                cloture.Id = (int)next;
+                break;
+            case PaieClotureDomaine domaine:
+                domaine.Id = (int)next;
+                break;
         }
     }
 }

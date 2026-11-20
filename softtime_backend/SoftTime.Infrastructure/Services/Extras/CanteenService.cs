@@ -1,4 +1,5 @@
-﻿using SoftTime.Application.Abstractions.Extras;
+﻿using SoftTime.Application.Abstractions.Payroll;
+using SoftTime.Application.Abstractions.Extras;
 using SoftTime.Application.Abstractions.Punches;
 using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.DTOs;
@@ -17,20 +18,27 @@ public sealed class CanteenService : ICanteenService
     private readonly IPunchAggregate _punches;
     private readonly IPayrollCumulSync _payrollCumulSync;
 
+    private readonly IPayrollClosureGuard? _closures;
+
     public CanteenService(
         IUnitOfWork uow,
         ITenantConnectionService tenant,
         IPunchAggregate punches,
-        IPayrollCumulSync payrollCumulSync)
+        IPayrollCumulSync payrollCumulSync,
+        IPayrollClosureGuard? closures = null)
     {
+        _closures = closures;
         _uow = uow;
         _tenant = tenant;
         _punches = punches;
         _payrollCumulSync = payrollCumulSync;
     }
 
-    /// <summary>Constante SAGE portant le cumul cantine (même code que le desktop).</summary>
-    public const string CodeConstanteCantine = "CANTINE_CODE";
+    /// <summary>
+    /// Code historique (desktop) de la constante SAGE de la cantine, utilisé tant qu'aucun code n'est configuré pour la base
+    /// (option <c>CodeConstanteCantine</c>, lot D6).
+    /// </summary>
+    public const string CodeConstanteCantine = PayrollOptions.CodeConstanteCantineParDefaut;
 
     public async Task<IReadOnlyList<CanteenDto>> ListCanteenAsync(PeriodRequest request, CancellationToken ct = default)
     {
@@ -76,6 +84,8 @@ public sealed class CanteenService : ICanteenService
     public async Task<IReadOnlyList<CanteenDto>> ComputeCanteenAsync(PeriodRequest request, CancellationToken ct = default)
     {
         await _tenant.EnsureAuthorizedAsync(ct);
+        // Clôture de paie : la cantine d'une période qui recoupe une période clôturée ne se recalcule plus.
+        await ClosureChecks.OuverteAsync(_closures, request.From, request.To, ct);
         var from = request.From.Date;
         var to = request.To.Date;
         var jours = await _punches.ListCanteenDaysAsync(_tenant.SageDb, from, to.AddDays(1), ct);
@@ -170,6 +180,7 @@ public sealed class CanteenService : ICanteenService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         ExtraPeriods.EnsurePeriode(request);
+        await ClosureChecks.OuverteAsync(_closures, request.From, request.To, ct);
         var repo = _uow.Repository<Cantine>();
         var from = request.From.Date;
         var to = request.To.Date;
@@ -195,6 +206,11 @@ public sealed class CanteenService : ICanteenService
     /// (3) la constante SAGE absente provoque un refus, au lieu du cumul arbitraire 123 du desktop.
     /// </para>
     /// </summary>
-    public Task<ExtrasSyncResultDto> SyncCanteenAsync(PeriodRequest request, CancellationToken ct = default)
-        => _payrollCumulSync.SyncExtrasAsync(request, CodeConstanteCantine, cantine: true, ct);
+    public async Task<ExtrasSyncResultDto> SyncCanteenAsync(PeriodRequest request, CancellationToken ct = default)
+    {
+        // Code configuré pour la base (lot D6), sinon le code historique : l'instantané enregistre le code réellement utilisé.
+        var options = await _uow.Repository<PaieOption>().ListReadOnlyAsync(
+            o => o.BddSage == _tenant.SageDb && o.Cle == PayrollOptions.CodeConstanteCantine, ct);
+        return await _payrollCumulSync.SyncExtrasAsync(request, PayrollOptions.CodeCantine(options), cantine: true, ct);
+    }
 }

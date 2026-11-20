@@ -20,3 +20,4 @@ export * from './soft-line-chart';
 export * from './soft-bar-chart';
 export * from './soft-donut-chart';
 export * from './soft-delta-chart';
+export * from './closed-period-banner';

@@ -8,10 +8,24 @@ namespace SoftTime.Application.Services;
 /// <summary>Conventions partagées par la configuration et le writer de paie AUTRE.</summary>
 public static class PayrollWritingConfiguration
 {
-    public static readonly string[] Categories = ["Exo130", "Exo150", "I130", "I150", "Ferie", "Dimanche", "Nuit"];
+    /// <summary>Les sept catégories d'heures supplémentaires (ordre historique), obligatoires par défaut.</summary>
+    public static readonly string[] Categories =
+        PayrollVariableCatalog.Toutes.Where(d => d.HeureSupplementaire).Select(d => d.Id).ToArray();
+
+    /// <summary>Catégories qu'une ligne T_PAIE_ECRITURE peut porter : les variables envoyables du catalogue.</summary>
+    public static IReadOnlyList<string> CategoriesConnues =>
+        PayrollVariableCatalog.Toutes.Where(d => d.Envoyable).Select(d => d.Id).ToList();
     private static readonly Regex IdentifierPart = new("^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.CultureInvariant);
 
-    public static string NormalizeCategory(string? category) => Categories.FirstOrDefault(c =>
+    /// <summary>
+    /// Compteurs de lignes mises à jour par catégorie, pour le journal : toujours les sept catégories d'heures
+    /// supplémentaires (synthèse inchangée par défaut), plus les autres variables envoyées, dans l'ordre du catalogue.
+    /// </summary>
+    public static Dictionary<string, int> CompteursParCategorie(PayrollVariableSelection selection) =>
+        Categories.Concat(selection.Envoyees.Where(v => !Categories.Contains(v)))
+            .ToDictionary(category => category, _ => 0, StringComparer.Ordinal);
+
+    public static string NormalizeCategory(string? category) => CategoriesConnues.FirstOrDefault(c =>
         string.Equals(c, category?.Trim(), StringComparison.OrdinalIgnoreCase))
         ?? throw new DomainException($"Catégorie de paie inconnue : '{category}'.");
 
@@ -37,14 +51,26 @@ public static class PayrollWritingConfiguration
     }
 
     public static void ValidateConfigurationRows(IReadOnlyList<PaieEcriture> configs)
+        => ValidateConfigurationRows(configs, Categories);
+
+    /// <summary>
+    /// Contrôle de la configuration d'écriture AUTRE pour les catégories envoyées à la paie : seules les catégories
+    /// actives doivent être configurées ; une catégorie inactive peut l'être ou non. Avec les sept catégories actives
+    /// (valeur par défaut), contrôles et messages sont ceux d'origine.
+    /// </summary>
+    public static void ValidateConfigurationRows(IReadOnlyList<PaieEcriture> configs, IReadOnlyCollection<string> activeCategories)
     {
-        var missing = Categories.Where(c => !configs.Any(x => string.Equals(x.Categorie, c, StringComparison.OrdinalIgnoreCase))).ToList();
+        var missing = CategoriesConnues.Where(activeCategories.Contains)
+            .Where(c => !configs.Any(x => string.Equals(x.Categorie, c, StringComparison.OrdinalIgnoreCase))).ToList();
         if (missing.Count > 0)
             throw new DomainException($"La configuration d'écriture de la base AUTRE est incomplète : la catégorie {missing[0]} n'est pas configurée.");
+        if (configs.Count == 0)
+            throw new DomainException("La configuration d'écriture de la base AUTRE est vide.");
         var duplicate = configs.GroupBy(c => c.Categorie, StringComparer.OrdinalIgnoreCase).FirstOrDefault(g => g.Count() > 1);
         if (duplicate != null)
             throw new DomainException($"La configuration d'écriture contient plusieurs définitions pour la catégorie {duplicate.Key}.");
-        if (configs.Count != Categories.Length)
+        // Sans doublon, une ligne qui n'est pas une catégorie connue est inconnue (même règle que « 7 lignes exactement »).
+        if (configs.Any(c => !CategoriesConnues.Any(k => string.Equals(k, c.Categorie, StringComparison.OrdinalIgnoreCase))))
             throw new DomainException("La configuration d'écriture contient des catégories inconnues.");
         var table = configs[0].TableCible;
         var matricule = configs[0].ColMatricule;

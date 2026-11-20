@@ -36,6 +36,8 @@ public sealed class ClosingChecklistCache : IClosingChecklistCache
         _entrees[cle] = (maintenant + duree, valeur);
     }
 
+    public void Vider() => _entrees.Clear();
+
     /// <summary>Clé d'une demande dont la période par défaut est déjà appliquée.</summary>
     internal static string Cle(ClosingChecklistRequest request, string sageDb, string pointeuseDb)
     {

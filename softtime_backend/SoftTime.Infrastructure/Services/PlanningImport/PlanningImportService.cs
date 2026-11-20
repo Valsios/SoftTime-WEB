@@ -6,6 +6,10 @@ using SoftTime.Domain.Repositories;
 
 namespace SoftTime.Infrastructure.Services.PlanningImport;
 
+/// <summary>
+/// Imports et générations de planning. Clôture de paie : ces lots sont protégés par le filet commun à l'enregistrement
+/// (<c>ClosedPeriodWriteCheck</c>) : une journée dans une période clôturée fait refuser tout le lot (409), rien n'est écrit.
+/// </summary>
 public sealed class PlanningImportService : IPlanningImportService
 {
     private readonly IUnitOfWork _uow;

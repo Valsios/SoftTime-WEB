@@ -5,22 +5,23 @@ import { PeriodRequest, PageChangeEvent } from '../../shared/models';
 import { WeeklyValidationService } from '../../shared/services/processing.service';
 import { ClockParamsService } from '../../shared/services/catalog.service';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
-import { Column, DataTable, PageHeader, SoftButton, SoftCard, PeriodFilter } from '../../shared/components';
+import { Column, DataTable, PageHeader, SoftButton, SoftCard, PeriodFilter, ClosedPeriodBanner, VERROU_CLOTURE } from '../../shared/components';
 import { asRow, fmtDate } from '../../shared/utils/date';
 
 @Component({
   selector: 'app-weekly-validation',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [PageHeader, SoftButton, SoftCard, DataTable, PeriodFilter],
+  imports: [PageHeader, SoftButton, SoftCard, DataTable, PeriodFilter, ClosedPeriodBanner],
   template: `
     <page-header title="Validation semaine" subtitle="Calcul HT/HS lundi–dimanche — seules les lignes cochées sont validées">
       <soft-button variant="secondary" [loading]="excel.exporting()" (click)="exportExcel()">Export Excel</soft-button>
-      <soft-button variant="secondary" [loading]="busy()" (click)="validate(false)">Annuler validation</soft-button>
-      <soft-button [loading]="busy()" (click)="validate(true)">Valider semaine</soft-button>
-      <soft-button variant="danger" [loading]="busy()" (click)="purge()">Purger la validation</soft-button>
+      <soft-button variant="secondary" [loading]="busy()" [disabled]="cloturee()" [attr.title]="cloturee() ? verrou : null" (click)="validate(false)">Annuler validation</soft-button>
+      <soft-button [loading]="busy()" [disabled]="cloturee()" [attr.title]="cloturee() ? verrou : null" (click)="validate(true)">Valider semaine</soft-button>
+      <soft-button variant="danger" [loading]="busy()" [disabled]="cloturee()" [attr.title]="cloturee() ? verrou : null" (click)="purge()">Purger la validation</soft-button>
     </page-header>
 
     <period-filter [mondaySundayWeek]="true" searchLabel="Calculer" (search)="preview($event)"></period-filter>
+    <closed-period-banner [period]="periode()" (closedChange)="cloturee.set($event)" />
 
     <soft-card>
       <p class="hint">
@@ -48,6 +49,12 @@ import { asRow, fmtDate } from '../../shared/utils/date';
   styles: [`.hint { margin: 0 0 12px; color: var(--text-muted); font-size: 13px; }`],
 })
 export class WeeklyValidationPage {
+  /** Sélection courante (bandeau « Période clôturée »). */
+  readonly periode = signal<PeriodRequest | null>(null);
+  /** La sélection recoupe une période clôturée : boutons de modification désactivés (le serveur refuse aussi). */
+  readonly cloturee = signal(false);
+  protected readonly verrou = VERROU_CLOTURE;
+
   private readonly svc = inject(WeeklyValidationService);
   protected readonly excel = inject(ExcelExportService);
   private readonly toast = inject(ToastService);
@@ -96,6 +103,7 @@ export class WeeklyValidationPage {
 
   preview(filter: PeriodRequest): void {
     this.lastFilter = filter;
+    this.periode.set(filter);
     this.selectedKeys.set([]);
     this.page.set(1);
     this.loadPage();

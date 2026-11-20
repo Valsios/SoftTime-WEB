@@ -194,6 +194,38 @@ public class FinePermissionsHttpTests : IClassFixture<ApiFactory>
     }
 
     /// <summary>
+    /// Variables envoyées à la paie : lecture et enregistrement exigent la porte Bases (comme l'écran Bases de données) ;
+    /// aucun compte de la porte Paramètres ou Traitements n'y gagne d'accès.
+    /// </summary>
+    [Theory]
+    [InlineData(10101, "GET")]
+    [InlineData(10101, "PUT")]
+    [InlineData(10102, "GET")]
+    [InlineData(10102, "PUT")]
+    [InlineData(10103, "PUT")]
+    public async Task PayrollVariables_WithoutDatabasesGate_Returns403(int userId, string method)
+    {
+        // Act
+        var resp = await Send(userId, new HttpMethod(method), "/api/v1/payroll-variables", method == "PUT" ? "[]" : null);
+
+        // Assert
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task PayrollVariablesActives_ParametersGateOnly_Returns403_ProcessingGate_PassesTheGate()
+    {
+        // Act
+        var parametres = await Send(10103, HttpMethod.Get, "/api/v1/payroll-variables/actives");
+        var traitements = await Send(10101, HttpMethod.Get, "/api/v1/payroll-variables/actives");
+
+        // Assert
+        parametres.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        traitements.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+        traitements.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
+    }
+
+    /// <summary>
     /// La lecture de CardPaie sert au filtre de période des écrans des portes 3 à 6 : la porte 3 seule passe la porte
     /// (ici sans base active, donc 400 de base manquante, jamais le 403 de porte). Les écritures restent porte 2
     /// (SecondaryReadsGateHttpTests).

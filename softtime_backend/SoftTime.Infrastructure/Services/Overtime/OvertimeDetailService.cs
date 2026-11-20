@@ -1,4 +1,5 @@
-﻿using SoftTime.Application.Abstractions.History;
+﻿using SoftTime.Application.Abstractions.Payroll;
+using SoftTime.Application.Abstractions.History;
 using SoftTime.Application.Abstractions.Overtime;
 using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.DTOs;
@@ -15,12 +16,16 @@ public sealed class OvertimeDetailService : IOvertimeDetailService
     private readonly IHistoryArchiveService _history;
     private readonly IOvertimeWeekContext _overtimeWeekContext;
 
+    private readonly IPayrollClosureGuard? _closures;
+
     public OvertimeDetailService(
         IUnitOfWork uow,
         ITenantConnectionService tenant,
         IHistoryArchiveService history,
-        IOvertimeWeekContext overtimeWeekContext)
+        IOvertimeWeekContext overtimeWeekContext,
+        IPayrollClosureGuard? closures = null)
     {
+        _closures = closures;
         _uow = uow;
         _tenant = tenant;
         _history = history;
@@ -31,6 +36,7 @@ public sealed class OvertimeDetailService : IOvertimeDetailService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         _overtimeWeekContext.EnsureMaxOneMonth(request);
+        await ClosureChecks.OuverteAsync(_closures, request.From, request.To, ct);
         var sem = await _uow.Repository<HsSemaine>().ListAsync(h =>
             h.BddSage == _tenant.SageDb && h.PeriodeDebut == request.From.Date && h.PeriodeFin == request.To.Date
             && (string.IsNullOrEmpty(request.MatriculeFrom) || string.Compare(h.Matricule, request.MatriculeFrom) >= 0)

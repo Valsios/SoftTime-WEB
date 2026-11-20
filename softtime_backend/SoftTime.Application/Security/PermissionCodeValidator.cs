@@ -11,14 +11,15 @@ namespace SoftTime.Application.Security;
 /// </list>
 /// Codes connus : ceux du <see cref="PermissionCatalog"/>, plus les codes de bases <c>SAGE:CREATE</c>,
 /// <c>POINTEUSE:CREATE</c> et <c>SAGE|POINTEUSE:&lt;base&gt;:READ|UPDATE|DELETE|CREATE</c>
-/// (création par base : lue par DatabaseConfigurationAuthorizer).
+/// (création par base : lue par DatabaseConfigurationAuthorizer), et <c>SAGE:&lt;base&gt;:CLOTURE</c> (clôture de paie de la
+/// base, lot D : jamais accordée par défaut, seulement explicitement).
 /// </summary>
 public static class PermissionCodeValidator
 {
     public const int MaxLength = 128;
 
     private static readonly Regex DatabaseCode = new(
-        @"^(?<kind>SAGE|POINTEUSE):(?:(?<create>CREATE)|(?<base>.+):(?<action>READ|UPDATE|DELETE|CREATE))$",
+        @"^(?:(?<kind>SAGE|POINTEUSE):(?:(?<create>CREATE)|(?<base>.+):(?<action>READ|UPDATE|DELETE|CREATE))|(?<kind>SAGE):(?<base>.+):(?<action>CLOTURE))$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled,
         TimeSpan.FromMilliseconds(100));
 

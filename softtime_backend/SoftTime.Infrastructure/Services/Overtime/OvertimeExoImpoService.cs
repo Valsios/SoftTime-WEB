@@ -1,5 +1,6 @@
 ﻿using System.Linq.Expressions;
 
+using SoftTime.Application.Abstractions.Payroll;
 using SoftTime.Application.Abstractions.ExternalData;
 using SoftTime.Application.Abstractions.Overtime;
 using SoftTime.Application.Abstractions.RequestContext;
@@ -18,12 +19,16 @@ public sealed class OvertimeExoImpoService : IOvertimeExoImpoService
     private readonly IExternalSourceService _externalSource;
     private readonly IOvertimeWeekContext _overtimeWeekContext;
 
+    private readonly IPayrollClosureGuard? _closures;
+
     public OvertimeExoImpoService(
         IUnitOfWork uow,
         ITenantConnectionService tenant,
         IExternalSourceService externalSource,
-        IOvertimeWeekContext overtimeWeekContext)
+        IOvertimeWeekContext overtimeWeekContext,
+        IPayrollClosureGuard? closures = null)
     {
+        _closures = closures;
         _uow = uow;
         _tenant = tenant;
         _externalSource = externalSource;
@@ -83,6 +88,8 @@ public sealed class OvertimeExoImpoService : IOvertimeExoImpoService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         _overtimeWeekContext.EnsureMaxOneMonth(request);
+        // Clôture de paie : recalculer (T_HSSemaine, T_HSExoImp) une période qui recoupe une période clôturée est refusé.
+        await ClosureChecks.OuverteAsync(_closures, request.From, request.To, ct);
         var periode = new ExoImpoPeriod(request.From.Date, request.To.Date, _tenant.SageDb, _tenant.PointeuseDb);
 
         var cards = (await _overtimeWeekContext.TargetCardsAsync(request, ct))

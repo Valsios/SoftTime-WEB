@@ -98,7 +98,9 @@ L’accès est filtré par **rôle** (6 droits) et par **société SAGE** active
 - **Crédits** : un férié non travaillé crédite la journée (`HEURESEMAINE / 5`) ; un congé SAGE crédite la journée
   (ou la demi-journée) ; le 8 mars crédite la journée des salariées (`T_SAL.Civilite` renseignée et ≠ 0).
 - **Absence** : jour planifié non chômé sans aucune heure de présence, hors congé et hors férié → `(HD − HA) − pause`.
-  Une ligne qui ne fait que déclarer une absence (`ABSENCE_AM` / `ABSENCE_PM` sans heure) n'est pas une présence.
+  Une ligne qui ne fait que déclarer une absence (`ABSENCE_AM` / `ABSENCE_PM` sans heure) n'est pas une présence. Depuis le lot C3, une journée
+  couverte **seulement** par de telles absences arbitrées n'est comptée que si l'une porte un code d'absence réglé « compté comme non justifié »
+  (section 5 nonies) ; un jour planifié sans aucune ligne reste toujours compté.
 - **Validation** : seules les lignes cochées passent `VALIDATION_HS = true` et verrouillent `VALIDER_HS` ; une
   semaine validée reste affichée (elle n'est plus recalculée) et peut être annulée, voire purgée — sauf si elle
   est déjà incluse dans un calcul EXO/IMPO : purger d'abord les heures supplémentaires de cette période.
@@ -364,6 +366,321 @@ export ni lien vers un autre écran. Fonction **non validée** : tout est additi
   contactez la RH. ». Le menu et la redirection après connexion ne changent pas (ils dépendent de `SELF:READ`, pas de l'option serveur).
 - **Semaine à cheval.** Une semaine qui chevauche deux mois apparaît dans chacun (le filtre retient les semaines dont le lundi est dans la période élargie au lundi
   précédent) : une note sous la carte « Mes heures par semaine » le rappelle, les totaux de deux mois ne doivent donc pas être additionnés.
+
+---
+
+## 5 sexies. Variables envoyées à la paie (écran Bases SAGE) — branche `feature/config-paie`
+
+Chaque base SAGE (le « tenant » : il n'existe pas d'entité Entreprise) choisit, par case à cocher, quelles variables de la page Heures
+supplémentaires sont **envoyées** à la paie. **Le calcul ne change pas** : les neuf variables (EXO 130, EXO 150, IMPO 130, IMPO 150, Férié,
+Nuit, Dimanche, Retard, Absence) restent calculées et affichées ; seul l'envoi est filtré.
+
+- **Valeurs par défaut = comportement d'origine** : les sept variables d'heures supplémentaires cochées, Retard et Absence décochées. Une base
+  sans configuration (aucune ligne dans `T_PAIE_VARIABLE`) se comporte exactement comme avant (mêmes commandes SQL, mêmes valeurs, même ordre).
+- **Variable décochée = non écrite** : ni validée, ni écrite, ni mise à 0, ni comptée comme manquante : la valeur déjà présente en paie
+  (`T_CUMSAL` en SAGE, colonne de la table d'écriture en autre base) n'est pas touchée. En autre base, une catégorie décochée n'a pas besoin de
+  ligne dans `T_PAIE_ECRITURE` ; l'écriture reste transactionnelle avec son préflight. Si aucune variable d'heures supplémentaires n'est cochée,
+  rien n'est écrit.
+- **Remise à 0 des salariés sans valeur (C2b)** : l'envoi écrit **0** pour chaque variable **cochée** des salariés du périmètre qui n'ont plus de
+  ligne de valeurs sur la période (exemple : 9 h de Nuit envoyées, puis la Nuit retombe à 0 après correction de pointage : le renvoi remet 0 dans la
+  paie au lieu de laisser 9 h). Le **périmètre** est celui de la requête de synchronisation : cartes de la base, filtrées par département et plage de
+  matricules ; un salarié hors périmètre n'est jamais touché. Les salariés avec valeurs sont écrits comme avant ; l'envoi est idempotent.
+  STANDARD : sur les lignes `T_CUMSAL` existantes seulement (le compteur « mise(s) à jour sans ligne » compte aussi les cumuls absents des salariés
+  remis à 0) ; un salarié absent de SAGE n'est pas touché. Autre base : mêmes colonnes, même préflight, même transaction ; un salarié sans valeur
+  **absent de la table de paie** (ou présent plusieurs fois) est ignoré sans erreur et signalé dans le message : aucune ligne n'est créée.
+  Le message de fin et le résultat distinguent les salariés écrits des salariés remis à 0 ; la synthèse du journal `SYNC_PAIE` et la ligne
+  `T_PAIE_ENVOI` comptent des **catégories** mises à jour (valeurs et zéros ensemble). La page Heures supplémentaires l'annonce dans la
+  confirmation de l'envoi (**tant que l'option de la base est cochée**, voir la section « 5 octies »).
+  **Refus d'une sélection sans heure calculée** : avant toute écriture, si la sélection de l'envoi (période exacte, base, département, plage de
+  matricules) n'a **aucune ligne `T_HSExoImp`**, la synchronisation est refusée (400, STANDARD comme autre base) : « Aucune heure calculée sur cette période pour
+  cette sélection : lancez le calcul avant d'envoyer à la paie. ». Rien n'est écrit (ni valeur, ni zéro), aucun marqueur `T_PAIE_ENVOI`, aucune synthèse de
+  succès au journal. Le message du serveur est affiché tel quel par la page Heures supplémentaires. Un département ou une plage de matricules sans ligne est refusé même si
+  le reste de la base en a. Avec au moins une ligne dans la sélection, la remise à 0 des autres salariés du périmètre s'applique comme décrit ci-dessus.
+  **Avertissement** : en STANDARD, si le numéro de salarié SAGE d'un salarié sans valeur est introuvable (lecture des salariés SAGE impossible, liste
+  vide, salarié absent), l'envoi des salariés avec valeurs n'est pas bloqué, mais le message de fin dit « N salarié(s) sans valeur n'ont PAS été remis à 0 ...
+  leurs anciens cumuls restent dans SAGE » et la synthèse du journal `SYNC_PAIE` porte `AVERTISSEMENT SalariésNonRemisÀ0=N` (et `SalariésRemisÀ0=N`).
+  **Hypothèse à confirmer par le RH** : personne ne saisit à la main ces mêmes codes (HS01 à HS07, code de Retard) dans SAGE. Sinon, le 0 écraserait
+  cette saisie pour les salariés sans valeur. **Réglable depuis C2c** : l'option « Remettre à 0 les salariés sans valeur à l'envoi » (cochée par
+  défaut) se décoche par base, sans attendre la réponse du RH (section « 5 octies »).
+- **Écran** : carte « Variables envoyées à la paie » sous la liste des bases SAGE, pour la **base active**. Base SAGE : codes HS01 à HS07 en lecture
+  seule (écran Codes constantes), code de paie et unité (heures ou jours) modifiables pour Retard et Absence. Autre base : colonnes de
+  `T_PAIE_ECRITURE` en lecture seule pour les heures supplémentaires, colonne cible (liste lue dans la table d'écriture configurée) et unité pour
+  Retard et Absence. Rien n'est envoyé au serveur avant la confirmation ; les erreurs restent affichées dans la carte.
+- **Droits** : les mêmes que la modification de la base dans l'écran Bases de données (porte Bases + `SAGE:{base}:UPDATE`, ou administrateur),
+  vérifiés par le serveur (`GET`/`PUT api/v1/payroll-variables`). `GET api/v1/payroll-variables/actives` (noms seulement) sert aux portes
+  Traitements, États et Bases. Aucun droit nouveau.
+- **Retard et Absence** : visibles, mais impossibles à cocher tant que leur code de paie (SAGE) ou leur colonne cible (autre base) et leur unité ne
+  sont pas renseignés. **Leur envoi réel n'existe pas encore (lot C)** : même cochées, elles ne sont jamais écrites.
+- **Mois déjà envoyé** : une modification est refusée (409) si une période déjà envoyée en paie recouvre le mois civil en cours de la base
+  active ; sinon elle s'applique au prochain envoi. Le marqueur est la table `T_PAIE_ENVOI` (base, période, date, auteur, statut, lignes), écrite
+  par les writers de paie indépendamment du journal central : en STANDARD dès la première ligne `T_CUMSAL` modifiée (un échec partiel compte
+  comme envoyé) ; en autre base juste avant la validation de la transaction de paie (si le marqueur ne peut pas être écrit, la paie est annulée ;
+  si la validation échoue ensuite, le marqueur reste au statut `INCERTAIN` et compte comme envoyé). Aucun marqueur si rien n'est écrit.
+  **Limite** : les envois faits avant la migration 007 ne sont pas repris (aucune reprise de l'historique) : un mois envoyé avant la mise en
+  service n'est pas détecté.
+- **Journal** : toute modification de la configuration passe par le journal central (qui, quand, avant, après, table `T_PAIE_VARIABLE`). Le
+  journal `SYNC_PAIE` des synchronisations est inchangé.
+- **Page Heures supplémentaires** : les colonnes des variables non envoyées sont grisées, avec la mention « non envoyée à la paie » dans
+  l'en-tête ; elles ne sont jamais masquées (par défaut : Retard et Absence).
+- **Contrôle avant paie** : aucune anomalie ni ligne de checklist pour une variable décochée (« férié non appliqué » si Férié est décochée ;
+  « heures supplémentaires atypiques » si les quatre variables EXO/IMPO le sont ; ligne « Heures imposables » si IMPO 130 et IMPO 150 le sont).
+  Les caches de l'analyse et de la checklist sont vidés à chaque enregistrement.
+- **STANDARD, cumul absent** : une mise à jour `T_CUMSAL` qui ne modifie aucune ligne (cumul absent dans SAGE pour le salarié) est maintenant
+  signalée dans le message de fin de synchronisation ; les cas valides gardent le message d'origine.
+- **Base de données** : migration versionnée `migrations/versions/007_variables_paie.sql` (rejouable, aucune suppression), appliquée par
+  `Database:AutoMigrate` ; sans elle, l'API refuse de démarrer avec un message clair.
+
+## 5 septies. Envoi de Retard à la paie (lots C1 et C2) — branche `feature/envoi-variables-paie`
+
+Complète la section précédente : Retard devient envoyable. (Absence : envoyable depuis le lot C3, section 5 nonies.)
+
+- **Liste unique des variables (C1)** : un seul catalogue des neuf variables (identifiant, libellé, unités, valeur lue dans la ligne
+  `T_HSExoImp`, destination désignée par un code commun ou propre à la base) ; rien n'y est propre à SAGE. Les écritures de paie, la validation
+  et la configuration en dérivent. Sortie inchangée : une base sans configuration, ou avec Retard et Absence décochées, produit les mêmes
+  écritures (mêmes SQL, mêmes valeurs, même ordre, mêmes messages) qu'avant.
+- **Retard en base SAGE** : unité heures ; le code de paie se choisit dans une liste lue dans `T_CST` de la base active. L'enregistrement refuse
+  un code absent de `T_CST` (et refuse si `T_CST` ne peut pas être lu). Retard est écrit dans `T_CUMSAL` par la même commande que les heures
+  supplémentaires, après les sept, avec la valeur `T_HSExoImp.RETARD` affichée dans la page Heures supplémentaires.
+- **Retard en autre base** : section « Destinations dans la base de paie » de la carte : table, colonne matricule et colonne de chaque variable
+  envoyable, choisies dans des listes lues dans la base de paie (`INFORMATION_SCHEMA`). Le serveur vérifie que la table et les colonnes
+  existent, que les colonnes sont numériques et, pour Retard, qu'elles acceptent deux décimales. Les destinations sont enregistrées dans
+  `T_PAIE_ECRITURE` (catégorie `Retard`). Endpoints `GET`/`PUT api/v1/payroll-variables/destinations` et
+  `GET api/v1/payroll-variables/destinations/colonnes?table=` : mêmes droits que la configuration des variables, refus si le mois est envoyé,
+  journal central, caches du Contrôle avant paie vidés. Aucune migration (la colonne `CATEGORIE` accepte `Retard`).
+- **Absence (état à la fin de C2)** : case désactivée avec « Envoi de l'absence : prochaine étape » ; une Absence cochée était refusée à
+  l'enregistrement. Remplacé par le lot C3 (section 5 nonies).
+- **Défaut connu (corrigé en C2b)** : un salarié sans ligne `T_HSExoImp` sur la période n'était pas écrit ; son cumul en paie (Retard compris)
+  gardait la valeur d'un envoi précédent. Il est désormais remis à 0 (variables cochées), sauf si l'option de la base (C2c) est décochée.
+
+## 5 octies. Option par base « Remettre à 0 les salariés sans valeur à l'envoi » (lot C2c) — branche `feature/envoi-variables-paie`
+
+Le RH règle lui-même, **par base**, ce que l'envoi fait des salariés du périmètre qui n'ont plus de valeur (comportement de C2b, section
+précédente). L'hypothèse « personne ne saisit à la main ces codes dans SAGE » n'étant pas confirmée, l'option évite d'écraser une saisie manuelle.
+
+- **Valeur et défaut** : option **cochée par défaut**. Une base **sans ligne de configuration** vaut « cochée » : aucun changement de comportement
+  pour une base existante (comportement de C2b : zéros pour les variables cochées).
+- **Option cochée** : comportement de C2b inchangé (lignes synthétiques à 0, message « N salarié(s) sans valeur ont été remis à 0 », avertissement
+  « n'ont PAS été remis à 0 » si leur numéro SAGE est introuvable).
+- **Option décochée** : l'envoi n'ajoute aucune ligne synthétique. Aucun salarié n'est remis à 0 (`EmployeesReset = 0`) ; les salariés avec valeurs
+  sont écrits comme avant (mêmes variables cochées, mêmes valeurs) ; ni la phrase « remis à 0 » ni l'avertissement « non remis à 0 » n'apparaissent
+  dans le message, le résultat ou la synthèse du journal `SYNC_PAIE` (rien n'était demandé). STANDARD et autre base.
+- **Inchangé dans les deux cas** : le calcul des heures, le filtre à l'envoi (variable cochée), le **refus d'une période sans aucune ligne calculée**,
+  le verrou du mois, le marqueur `T_PAIE_ENVOI`, le journal `SYNC_PAIE`, les droits et le statut `INCERTAIN` d'une autre base.
+- **Écran** : sur la carte « Variables envoyées à la paie », sous le tableau, un interrupteur (style des autres interrupteurs de la carte) libellé
+  « Remettre à 0 les salariés sans valeur à l'envoi », avec l'aide « Évite qu'un ancien cumul reste dans la paie quand un salarié n'a plus d'heures. À
+  décocher si quelqu'un saisit ces codes à la main dans la paie. ». Mêmes états que la carte : brouillon et « Annuler les changements », désactivé pendant
+  l'enregistrement et quand le mois est envoyé (« Mois déjà envoyé : modification impossible. »), absent sans permission. Il part **dans le même
+  enregistrement que les variables** (une seule confirmation) ; la confirmation cite « Remise à 0 des salariés sans valeur : activée / désactivée ».
+  Compatible largeur étroite (le tableau passe en cartes sous 768 px, l'option reste sous les cartes) et thème sombre.
+- **Confirmation de « Synchroniser vers SAGE »** (page Heures supplémentaires) : option cochée, la question annonce la remise à 0 (texte de C2b) ;
+  option décochée, elle se limite à « Pousser les HS vers SAGE (T_CUMSAL) ? » (ou « Écrire les HS dans la base X ? »). L'option est relue au moment de
+  confirmer.
+- **API** : `GET api/v1/payroll-variables` renvoie `remiseAZeroSansValeur` (vrai sans ligne) ; `GET …/actives` aussi. `PUT api/v1/payroll-variables`
+  accepte l'**ancien corps** (tableau de variables : option inchangée) ou l'objet `{ "variables": [...], "remiseAZeroSansValeur": true|false }`
+  (champ absent ou `null` : option inchangée). Mêmes contrôles que les variables : droit (porte Bases + `SAGE:{base}:UPDATE`, ou administrateur), refus
+  409 si une période envoyée recoupe le mois en cours, caches de la sélection et du Contrôle avant paie vidés, atomicité avec les variables (une
+  validation qui échoue n'écrit rien).
+- **Stockage** : table générique **`T_PAIE_OPTION`** (`BDD_SAGE`, `CLE`, `VALEUR`, `MODIFIE_LE`, `MODIFIE_PAR`, index unique sur base et clé), clé
+  **`RemiseAZeroSansValeur`**, valeur « 1 » ou « 0 ». Une table générique plutôt qu'une colonne de `T_PAIE_VARIABLE` : l'option n'appartient à aucune
+  variable, et le lot C3 y ajoutera d'autres réglages (heures par jour, liste de codes d'absence) sans nouvelle migration. Rien n'est inséré par la
+  migration : l'absence de ligne vaut la valeur par défaut ; cocher à nouveau met la ligne à jour (jamais de suppression). Journal central avec l'auteur
+  (comme `T_PAIE_VARIABLE`).
+- **Migration 008** : `migrations/versions/008_options_paie.sql` (additive, rejouable : `T_PAIE_OPTION` et son index ne sont créés que s'ils n'existent pas,
+  aucune donnée insérée), appliquée par `Database:AutoMigrate`. Sans elle, l'API refuse de démarrer avec « Les options de paie sont absentes
+  (T_PAIE_OPTION) : activez Database:AutoMigrate (développement) ou exécutez migrations/versions/008_options_paie.sql. » (contrôle comparable à celui de
+  007). **Production sans AutoMigrate** : exécuter une fois ce script sur la base SoftTime, avant de déployer l'API :
+  `sqlcmd -S <serveur> -d <base SoftTime> -E -b -i 008_options_paie.sql` (rejouable sans risque). Les futurs lots de clôture prendront 009 et suivants.
+
+## 5 nonies. Envoi de l'Absence à la paie (lot C3) — branche `feature/envoi-variables-paie`
+
+L'Absence (non justifiée) devient envoyable à la paie comme Retard, en **heures** ou en **jours**, avec deux réglages par base : le nombre d'heures
+d'une journée et les codes d'absence comptés comme non justifiés. Le filtre à l'envoi (variable cochée), la remise à 0 (option C2c), le refus d'une
+période sans ligne calculée, le verrou de mois, le journal, les droits et le statut `INCERTAIN` d'une autre base sont inchangés.
+
+- **Envoi** : Absence **décochée par défaut** (une base existante envoie exactement ce qu'elle envoyait). Cochée, elle exige un code de paie (base
+  SAGE : liste lue dans `T_CST`, code inconnu refusé avec « Le code de paie XX99 de la variable Absence n'existe pas dans la base SAGE … ») ou une
+  colonne (autre base : section « Destinations », colonne numérique avec décimales, catégorie `Absence` de `T_PAIE_ECRITURE`), et une unité.
+  Décochée, elle n'est jamais écrite ni résolue, même avec un code enregistré (le code, l'unité et les heures par jour sont conservés).
+  L'Absence est écrite après les sept variables d'heures supplémentaires et Retard ; elle compte dans la synthèse du journal `SYNC_PAIE`.
+- **Unités** : « heures » = la valeur affichée dans la page Heures supplémentaires. « Jours » = **heures ÷ heures par jour, arrondi au centième, la
+  moitié vers le haut** (24 h à 8 h par jour : 3 ; 25,5 h : 3,19 ; 24 h à 6 h par jour : 4 ; 1 h : 0,13). Retard reste en heures. En autre base, une
+  colonne à une décimale refuse une valeur en jours à deux décimales (« La valeur … du matricule … n'est pas compatible avec la colonne … »), comme
+  Retard.
+- **Heures par jour** : défaut **8**, entre **1 et 24**, **une décimale au plus** (« Le nombre d'heures par jour de l'absence doit être compris
+  entre 1 et 24, avec une décimale au plus (valeur reçue : … ). »). Champ affiché sur la carte quand l'unité est « jours ». Valeur 8 : aucune ligne
+  stockée (clé `AbsenceHeuresParJour` créée seulement pour une autre valeur).
+- **Codes d'absence comptés comme non justifiés** : liste des codes de `T_CODEABSENCE` (libellé), cochés ou non, plus « Arbitrage d'absence sans
+  code ». **Défaut** (aucun réglage enregistré) : `ABSENCE NON JUSTIFIEE` et l'arbitrage sans code, soit le comportement d'avant C3 pour une
+  absence arbitrée sans code. Un code marqué « non payé » (`NOT_PAY`) n'est jamais coché d'office : il est seulement signalé « non payé » et
+  « à envisager ». Comparaison tolérante sur le libellé (casse, accents, espaces en trop). Un code enregistré qui n'existe plus dans
+  `T_CODEABSENCE` reste affiché avec « code introuvable » et reste compté tant qu'il n'est pas décoché ; un code renommé n'est plus reconnu tant
+  qu'il n'est pas coché sous son nouveau libellé.
+- **Règle de calcul** : un jour planifié non chômé, hors congé et hors férié, **sans aucune ligne** est toujours compté. Une journée sans présence
+  couverte par des absences arbitrées (`ABSENCE_AM` / `ABSENCE_PM` sans heure) n'est comptée que si **au moins une** de ces lignes porte un code
+  compté (ou n'a pas de code et que l'arbitrage sans code est compté) ; sinon elle est « justifiée » et n'entre pas dans l'Absence. Demi-journées
+  inchangées : une demi-journée arbitrée sans heure compte pour la journée entière ; une présence sur l'autre moitié donne 0.
+- **Limite à connaître** : la règle ne s'applique qu'au **prochain « Calculer »**. Les valeurs déjà stockées dans `T_HS_VALIDER` / `T_HSExoImp` ne
+  changent pas quand le RH modifie les codes comptés : il faut **recalculer les périodes déjà calculées avant de les envoyer**. La confirmation
+  d'enregistrement et l'aide de la carte le rappellent.
+- **Écran** : sur la carte « Variables envoyées à la paie », ligne Absence comme Retard (liste des codes de paie **avec recherche en tapant**,
+  unité heures ou jours, champ « Heures par jour » en jours) et, sous elle, le groupe « Codes d'absence comptés comme non justifiés ». Brouillon,
+  « Annuler les changements », verrou de mois, absence de permission et largeur étroite comme le reste de la carte. La confirmation d'enregistrement
+  cite les changements (« Absence : 6 heures par jour », « Codes d'absence comptés ajoutés : … », « Arbitrage d'absence sans code : non compté »).
+  La confirmation de « Synchroniser vers SAGE » précise, si l'Absence est cochée en jours : « L'absence est envoyée en jours (heures ÷ 8 h par jour,
+  arrondi au centième). »
+- **Stockage** (table `T_PAIE_OPTION` du lot C2c, **aucune migration**) : `AbsenceHeuresParJour` ; `AbsenceSansCodeCompte` (« 1 » ou « 0 »,
+  marqueur « un réglage est enregistré » : sans lui, c'est le défaut) ; une ligne **`AbsenceCodeCompte.N`** par code compté, `VALEUR` = libellé
+  de `T_CODEABSENCE`. L'unité de l'Absence est dans `T_PAIE_VARIABLE.UNITE` (`H` ou `J`). Journal central avec l'auteur.
+- **API** : `GET api/v1/payroll-variables` renvoie `heuresParJour` et `absenceCodes` (`parDefaut`, `sansCode`, `codes[]` : `libelle`, `compte`,
+  `introuvable`, `nonPaye`, `suggere`) ; `GET …/actives` renvoie `uniteAbsence` et `heuresParJour`. `PUT` accepte en plus `heuresParJour` et
+  `absenceCodes` (`{ sansCode, codes[] }`), champs absents ou `null` : inchangés ; un seul appel, une seule sauvegarde, atomique (une validation
+  qui échoue n'écrit rien), mêmes droit, verrou de mois (409), journal et caches vidés.
+- **Lecteurs de l'Absence** : `WeeklyValidationService`, `OvertimeExoImpoService` (Calculer) et `OvertimeDetailService` passent par le **même
+  chargement du réglage** (`OvertimeWeekContext`) : le calcul, la validation de la semaine et le détail d'un salarié donnent le même résultat. La
+  **clôture** et le **tableau de bord** ont leurs propres règles (jours planifiés sans pointage, absences déclarées) et ne lisent pas ce réglage.
+  L'**export**, les **rapports** (état des absences) et **Mon espace** lisent les valeurs stockées ou leurs propres règles : ils ne changent qu'après
+  un nouveau calcul.
+- **Effet du réglage par défaut** : après un recalcul, l'Absence affichée n'inclut plus une journée dont les absences arbitrées portent un code
+  autre que `ABSENCE NON JUSTIFIEE` (par exemple un congé exceptionnel arbitré) ; les jours sans ligne et les arbitrages sans code sont inchangés.
+  Le RH peut cocher d'autres codes dans la carte pour les compter.
+
+---
+
+## 5 decies. Clôture de paie (lot D) — branche `feature/cloture-paie-lot-d`
+
+La clôture **fige une période déjà envoyée à la paie**, définitivement. Deux actions distinctes : **envoyer** (rejouable), puis **clôturer**
+(irréversible). Une clôture par (base, début, fin), sur la **base entière**. Tant que rien n'est clôturé, aucun comportement existant ne change.
+
+- **Principe** : chaque envoi réussi fige un **instantané** des valeurs réellement écrites ; la clôture choisit le dernier envoi de la période,
+  vérifie son empreinte et le Contrôle avant paie, puis interdit toute modification des données de la période.
+- **Instantané (D1)** : `T_PAIE_INSTANTANE` (entête : base, période, type de base, date et auteur de l'envoi, filtre de l'envoi, option de remise
+  à 0, heures par jour, version du format, empreinte, nombre de lignes, mises à jour sans ligne, salariés non remis à 0) et
+  `T_PAIE_INSTANTANE_LIGNE` (matricule, numéro de salarié SAGE, variable, destination = code de constante SAGE ou `schéma.table.colonne`, unité
+  `H`/`J`, valeur, indicateur « zéro de remise à 0 »). Contenu : **exactement les valeurs écrites** (zéros de remise à 0 compris, Absence dans
+  l'unité choisie) ; jamais les variables décochées ni les salariés hors périmètre ; une mise à jour qui n'a modifié **aucune ligne** (cumul absent
+  dans SAGE) n'est pas figée, elle est comptée dans l'entête. Un renvoi crée un nouvel instantané et ne remplace rien.
+- **Transactions** : STANDARD (SAGE, écritures non transactionnelles) : statut `SUCCES` et instantané écrits **dans une seule transaction
+  SoftTime** à la fin de l'envoi ; si elle échoue, l'envoi passe à `INCERTAIN` et le message de fin le signale (renvoyer la période, les valeurs SAGE
+  étant réécrites à l'identique). AUTRE : instantané écrit dans la **même transaction que le marqueur**, avant la validation de la paie ; s'il échoue,
+  la paie est annulée ; si la validation de la paie échoue, l'envoi est `INCERTAIN`. Un envoi en échec n'a pas d'instantané.
+- **Empreinte (format 1)** : SHA-256 du texte UTF-8 sans BOM, lignes séparées par `\n` (aucune en fin) : première ligne
+  `SOFTTIME-PAIE-INSTANTANE|1|{base}|{début aaaa-MM-jj}|{fin aaaa-MM-jj}|{TYPE}`, puis une ligne par valeur
+  `{matricule}|{numéro de salarié ou vide}|{variable}|{destination}|{unité}|{valeur}|{0 ou 1}` (valeur en culture invariante, point décimal,
+  exactement 4 décimales, arrondi au plus proche, milieu loin de zéro), triées en ordinal sur matricule, variable, destination, numéro de salarié ;
+  résultat en 64 caractères hexadécimaux minuscules. Ni la date ni l'auteur n'y entrent : deux envois identiques ont la même empreinte. Tout
+  changement de format exige une nouvelle version.
+- **Immuabilité** : aucun chemin de modification ni de suppression dans l'application ; déclencheurs `INSTEAD OF UPDATE, DELETE` sur les tables
+  d'instantané (erreur 51991) et de clôture (51992) ; clés étrangères vers `T_PAIE_ENVOI` (un envoi figé ne peut plus être supprimé). Un
+  administrateur de la base qui désactiverait les déclencheurs serait détecté par la vérification d'empreinte.
+- **Lecture (D1)** : `GET api/v1/payroll-snapshots?from&to` (envois de la période), `/{envoiId}` (détail), `/{envoiId}/verification` (empreinte
+  recalculée, « Instantané ALTÉRÉ » sinon). Mêmes droits que la lecture des variables (porte Bases + `SAGE:{base}:UPDATE`, ou administrateur).
+- **Clôturer (D2)** : `POST api/v1/payroll-closures { from, to }`, droit **`SAGE:{base}:CLOTURE`** (porte Bases), **jamais accordé par défaut**
+  (ni rôle par défaut, ni « Tout cocher ») : case « Clôturer la paie » de la base dans l'écran des droits ; l'administrateur est toujours autorisé.
+  Refus 409, dans cet ordre : période non terminée (fin ≥ aujourd'hui) ; déjà clôturée ou recoupant une clôture ; aucun envoi de la période exacte ;
+  dernier envoi `INCERTAIN`, en échec ou inachevé ; sans instantané ; **filtré** (« Lancez un envoi sans filtre avant de clôturer ») ; empreinte
+  altérée ; heures recalculées depuis l'envoi (valeurs figées ≠ `T_HSExoImp` actuel) ; Contrôle avant paie désactivé ; Contrôle **sans département,
+  sans cache** autre que « Prêt » (« À corriger » et « Bloquant » refusés, message avec le nombre d'anomalies critiques, leurs types et les dix
+  premières). Succès : ligne `T_PAIE_CLOTURE` (date, auteur, envoi et instantané, empreinte, statut et résumé du Contrôle), entrée `CLOTURE_PAIE` du
+  journal central avec l'auteur (filtrable par action dans l'onglet Journal), caches de l'analyse, de la checklist et des variables vidés.
+  Lectures : `GET …/periods` (périodes envoyées et état), `GET …/state?from&to` (bandeau des pages).
+- **Aucun déblocage** : ni bouton, ni route (PUT, PATCH, DELETE → 405), ni service. **Correction d'un mois clos** : sur la **période suivante**, par
+  une ligne de régularisation (valeur négative ou complémentaire) avec motif écrit — procédure manuelle à ce jour (saisie de la régularisation dans
+  la paie ou sur la période suivante), la fonction dédiée n'existe pas encore. **Dernier recours** (erreur grave) : restauration d'une sauvegarde de
+  la base SoftTime antérieure à la clôture, décidée par la direction, consignée hors application ; elle annule aussi tout ce qui a été saisi depuis.
+- **Nouvel envoi** : refusé (409) si la période recoupe une période clôturée : « Période clôturée (du … au …) : nouvel envoi en paie impossible. Les
+  corrections se font sur la période suivante. » Un envoi commencé avant la clôture ne peut plus figer son instantané (STANDARD : `INCERTAIN`).
+- **Verrous sur les sources (D3)** : contrôle commun (`PayrollClosureGuard`), refus 409 « Période clôturée (du … au …) : modification impossible. Les
+  corrections se font sur la période suivante. », **rien n'est écrit** : import de pointages (pointeuse : plage ; Excel : une ligne dans une période
+  close refuse **tout le fichier**, y compris les pointages tardifs), pré-traitement, modification et purge de pointages (la purge porte jusqu'au
+  lendemain de la fin), anomalies (arbitrage, conversion en lot, suppression), heures corrigées (saisie, modification, suppression, import en lot),
+  planning (saisie, déplacement d'une journée, suppression ; imports et générations en lot), validation, annulation et purge de semaine (l'aperçu
+  d'une semaine close n'écrit plus rien), calcul et purge des heures supplémentaires, **cantine et frais** (calcul, purge, envoi vers `T_CUMSAL`).
+  En plus, un **filet commun à l'enregistrement** refuse tout ajout, modification ou suppression d'une ligne datée de ces tables dans une période
+  close (dates avant et après modification), quel que soit le chemin. Une période voisine et une autre base restent modifiables.
+- **Restent modifiables** (paramètres généraux, non datés ou globaux) : tolérances, catégories, affectations, majorations, jours fériés, codes
+  d'absence, shifts, mode de pointage, cartes salariés, configuration des variables (soumise à son **verrou de mois**, distinct et inchangé). Leur
+  changement n'a **aucun effet** sur une période close : son recalcul et son renvoi sont refusés, et la paie garde l'instantané.
+- **Articulation avec le verrou de mois** : le verrou de mois (lot B) empêche de changer la configuration des variables tant qu'une période envoyée
+  recoupe le mois civil en cours ; la clôture fige une période précise, sans limite de durée. Ils sont indépendants : la clôture n'a pas besoin du
+  verrou de mois (un envoi clos ne peut plus être refait, quelle que soit la configuration), et le verrou de mois reste la règle de la configuration.
+- **Limites** : les **congés SAGE** sont lus en direct dans SAGE et **ne peuvent pas être verrouillés** par SoftTime ; un congé modifié après la
+  clôture ne change rien à la paie figée (instantané) mais peut faire diverger l'affichage recalculé (rapports, Mon espace) : à régulariser sur la
+  période suivante. Les périodes envoyées avant la migration 009 n'ont pas d'instantané : il faut les renvoyer pour pouvoir les clôturer.
+- **Écran (D4)** : écran **Bases SAGE**, carte « Clôture de paie (figer la période) » (titre depuis D7, pour la distinguer de la page « Contrôle avant paie ») sous « Variables envoyées à la paie » (mêmes droits de base que l'envoi) :
+  périodes envoyées, état (Envoyée, Clôturée avec date et auteur), dernier envoi et filtre, empreinte raccourcie et copiable, bouton « Clôturer »
+  (droit de clôture) avec confirmation rappelant la période, l'absence de retour en arrière et la correction sur la période suivante ; refus du
+  serveur affiché tel quel ; vue en cartes sous 768 px. Bandeau « Période clôturée » et boutons de modification désactivés (avec explication) sur
+  Heures supplémentaires, Heures corrigées, Pointages, Anomalies et Validation semaine quand la sélection recoupe une période close. Le titre du
+  bandeau dit « Période clôturée » ; son texte, en une phrase, ne le répète pas : « Du jj/mm/aaaa au jj/mm/aaaa, aucune modification n'est
+  possible : les corrections se font sur la période suivante. »
+- **Cantine et frais de déplacement (D5)** : ils sont aussi envoyés à la paie (cumuls `T_CUMSAL` des constantes `CANTINE_CODE` et `HA06`, base
+  **STANDARD** seulement ; une base AUTRE est refusée comme avant) et ont désormais la **même preuve** que les heures.
+  - **Domaines** : chaque envoi et chaque instantané portent un domaine, `HEURES` (seul domaine avant D5, valeur par défaut), `CANTINE` ou
+    `FRAIS`. Les périodes de la carte de clôture sont celles des envois d'**heures** ; le verrou de mois de la configuration ne compte que les envois
+    d'heures.
+  - **Envoi** : marqueur `EN_COURS` posé **avant la première écriture** `T_CUMSAL` (écritures non transactionnelles) ; à la fin, statut `SUCCES` et
+    instantané (exactement les lignes écrites : matricule, numéro de salarié, variable `CANTINE` ou `FRAIS`, destination = code de constante, unité
+    `N` (nombre), valeur ; plage de matricules de l'envoi) dans **une seule transaction SoftTime** ; échec d'une écriture : `ECHEC` ; instantané non
+    écrit (période clôturée entre-temps, base indisponible) : `INCERTAIN` et avertissement dans le message. Le message, la confirmation et le
+    périmètre de l'envoi ne changent pas. Un salarié absent de SAGE n'est ni écrit ni figé ; une mise à jour sans ligne de cumul est comptée.
+  - **Empreinte (format 2)** : le format 1 des heures **ne change pas**. Le format 2, propre à la cantine et aux frais, ne diffère que par la
+    première ligne, qui nomme le domaine après la version : `SOFTTIME-PAIE-INSTANTANE|2|{CANTINE ou FRAIS}|{base}|{début}|{fin}|{TYPE}` ; lignes,
+    tri, séparateurs, encodage et arrondi sont ceux du format 1. Un couple format / domaine incohérent (1 hors heures, 2 pour les heures) est
+    compté comme une altération.
+  - **Activation par base** : options `DomaineCantineActif` et `DomaineFraisActif` de `T_PAIE_OPTION`, **désactivées par défaut** ; cases
+    « Cantine » et « Frais de déplacement » du bloc « Domaines envoyés à la paie » sous les variables (écran Bases SAGE), enregistrement séparé et
+    confirmé, `PUT api/v1/payroll-variables/domains`, même droit que la configuration (administrateur ou `SAGE:{base}:UPDATE`), auteur et date dans
+    `T_PAIE_OPTION` et journal central. Pas de verrou de mois : le réglage ne change rien à ce qui est envoyé, seulement ce que la clôture exige.
+    Activation refusée pour une base AUTRE. Les droits d'écran `OTHER:CANTEEN` et `OTHER:TRAVEL_EXPENSES` ne changent pas.
+  - **Code de constante de la cantine (D6)** : option `CodeConstanteCantine` de `T_PAIE_OPTION` (aucune migration), champ « Code de constante de
+    la cantine » du même bloc, même droit, même journal (auteur), caches vidés à l'enregistrement. Sans réglage, le code historique `CANTINE_CODE`
+    (repris du desktop) est utilisé : comportement inchangé, mais ce code de 12 caractères ne tient pas dans `T_CST.CodeConstante` (10 caractères
+    dans SAGE) et n'existe dans aucune base : l'envoi de la cantine est alors refusé (« Constante SAGE CANTINE_CODE absente… »). Validation à
+    l'enregistrement (base STANDARD, refus 400) : code non vide ; longueur au plus celle de `T_CST.CodeConstante`, lue dans le schéma de la base
+    active (« Code trop long : 10 caractères au maximum. ») ; constante existante dans `T_CST` avec son opérande (« Ce code n'existe pas dans la
+    paie de cette base. »). Un code inchangé n'est pas revérifié. **Activation de la cantine refusée** tant que le code n'est pas valide (« Activation
+    de la cantine impossible avec le code … Créez d'abord la constante dans SAGE, 10 caractères au plus, puis saisissez son code. ») : un domaine
+    activé est toujours envoyable. Base AUTRE : code non configurable (domaine jamais exigé). L'envoi utilise le code configuré et l'instantané
+    enregistre le code réellement utilisé (destination) : formats 1 et 2 de l'empreinte inchangés.
+  - **Règle de clôture par domaine** : en plus des heures (règles inchangées, contrôlées en premier), chaque domaine **exigé** doit avoir, sur les
+    **bornes exactes** de la période, un dernier envoi `SUCCES` (non `INCERTAIN`), **sans plage de matricules**, avec instantané intègre et concordant
+    avec les totaux actuels (`T_CANTINE.TOTAL_CANTINE`, `T_FRAIS.TOTAL_POINT` des mêmes bornes : un « Calculer » relancé après l'envoi est détecté).
+    Un domaine est exigé s'il est **activé** pour la base, ou s'il a été **envoyé sur une période qui recoupe** la période même sans être activé
+    (sécurité) ; jamais pour une base AUTRE. Refus 409 qui nomme le domaine, par exemple « Cantine : aucun envoi en paie sur les bornes exactes de la
+    période (du … au …). Calculez puis envoyez la cantine sur ces bornes, sans plage de matricules, avant de clôturer. » La clôture enregistre
+    l'envoi, l'instantané, le format et l'empreinte de chaque domaine exigé dans `T_PAIE_CLOTURE_DOMAINE` (les heures restent dans
+    `T_PAIE_CLOTURE`), et le journal `CLOTURE_PAIE` les cite (`Domaines=HEURES, CANTINE:Envoi=…:Format=2:Empreinte=…, FRAIS:…`). Verrous D3
+    inchangés.
+  - **Écran** : la carte de clôture affiche, par période, l'état de chaque domaine (heures, cantine, frais : envoyé, figé, manquant avec le motif du
+    serveur, non exigé), les empreintes à figer dans la confirmation, et toujours aucun bouton de déblocage.
+  - **Lecture** : `GET api/v1/payroll-snapshots` rend les envois de tous les domaines, avec leur domaine ; la vérification recalcule l'empreinte
+    dans le format du domaine.
+  - **Limites** : l'instantané prouve les **lignes écrites**, pas l'état des salariés **sans ligne** : l'envoi de la cantine et des frais ne remet pas
+    à 0 le cumul d'un salarié qui n'a pas de total sur la période (il garde la valeur précédente dans SAGE). Les envois de cantine et de frais
+    antérieurs à la migration 011 n'ont ni marqueur ni instantané. Changer le code de la cantine après un envoi ne change pas l'instantané figé.
+  - **Mise en production de la cantine** (dans cet ordre) : 1) créer dans SAGE la constante de cumul de la cantine (code de 10 caractères au plus,
+    avec son opérande) et ses lignes de cumul ; 2) dans SoftTime, écran Bases SAGE, bloc « Domaines envoyés à la paie » : saisir son code et
+    enregistrer (le code est vérifié dans SAGE) ; 3) cocher « Cantine » et enregistrer ; 4) calculer puis envoyer la cantine sur les bornes exactes de
+    chaque période, sans plage de matricules, avant de la clôturer. Les frais (`HA06`) ne demandent que l'étape 3.
+- **Parcours RH complet et bloc « Étape suivante : clôture » (D7)** : 1) **Calculer** la période (heures supplémentaires, cantine, frais) ;
+  2) **Contrôle avant paie** (menu États) : le résultat doit être « Prêt » ; 3) **envoyer** à la paie les heures, la cantine et les frais, chacun
+  depuis sa page et en un envoi distinct, sur les bornes exactes de la période et sans filtre ; 4) **clôturer** une seule fois, dans la carte de
+  clôture de l'écran Bases SAGE. La page « Contrôle avant paie » affiche pour cela un bloc d'information **en lecture seule** :
+  - **Contenu** : pour la période choisie dans le filtre (du, au), l'état en une phrase (« Période envoyée, pas encore clôturée. Heures :
+    envoyées, Cantine : manquante. », ou « Période clôturée le jj/mm/aaaa hh:mm. Heures : figées. »), l'indication de la carte quand une condition
+    connue manque, le rappel « La clôture vérifie la base entière, sans filtre de département. » (le département du Contrôle n'y change rien) et le
+    lien « Aller à la clôture », qui ouvre l'écran Bases SAGE et amène la carte à l'écran (ancre `#cloture-paie`). Si aucun envoi n'a exactement
+    ces bornes : « Aucun envoi sur ces bornes exactes. »
+  - **Conditions** : visible sous les mêmes conditions que la carte (base SAGE active et droit de modification ou de clôture de la base, sinon le
+    bloc est absent) ; masqué à l'impression.
+  - **Lecture seule** : il lit les périodes par le service existant (`GET api/v1/payroll-closures/periods`) et réutilise la logique de la carte
+    (`payroll-closure.logic.ts`) ; **aucun bouton « Clôturer »**, aucune écriture, aucun changement côté serveur (ni migration, ni règle, ni
+    endpoint). Le serveur reste seul juge de la clôture.
+- **Migrations** : `009_instantanes_paie.sql`, `010_cloture_paie.sql` puis `011_domaines_paie.sql` (colonne `DOMAINE` sur `T_PAIE_ENVOI` et
+  `T_PAIE_INSTANTANE`, défaut `HEURES`, contrainte CHECK ; table `T_PAIE_CLOTURE_DOMAINE` immuable, erreur 51992), additives et rejouables,
+  contrôlées au démarrage comme 007 et 008. **Production sans AutoMigrate** : sauvegarde, puis
+  `sqlcmd -S <serveur> -d <base SoftTime> -i migrations/versions/009_instantanes_paie.sql`, puis la même commande avec `010_cloture_paie.sql`, puis
+  avec `011_domaines_paie.sql` (dans cet ordre). Sans 011, l'API refuse de démarrer avec un message qui nomme le script.
 
 ---
 

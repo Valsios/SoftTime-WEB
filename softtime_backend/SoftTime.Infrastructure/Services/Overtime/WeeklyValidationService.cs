@@ -1,4 +1,5 @@
-﻿using SoftTime.Application.Abstractions.Overtime;
+﻿using SoftTime.Application.Abstractions.Payroll;
+using SoftTime.Application.Abstractions.Overtime;
 using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Services;
@@ -15,11 +16,15 @@ public sealed class WeeklyValidationService : IWeeklyValidationService
     private readonly ITenantConnectionService _tenant;
     private readonly IOvertimeWeekContext _overtimeWeekContext;
 
+    private readonly IPayrollClosureGuard? _closures;
+
     public WeeklyValidationService(
         IUnitOfWork uow,
         ITenantConnectionService tenant,
-        IOvertimeWeekContext overtimeWeekContext)
+        IOvertimeWeekContext overtimeWeekContext,
+        IPayrollClosureGuard? closures = null)
     {
+        _closures = closures;
         _uow = uow;
         _tenant = tenant;
         _overtimeWeekContext = overtimeWeekContext;
@@ -29,7 +34,9 @@ public sealed class WeeklyValidationService : IWeeklyValidationService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         EnsureMondayToSunday(request);
-        return await ComputeWeekAsync(request, persistNonValidated: true, ct);
+        // Clôture de paie : une semaine qui recoupe une période clôturée s'affiche sans rien réécrire (lecture seule).
+        var cloturee = _closures is not null && await _closures.FindOverlapAsync(request.From, request.To, ct) is not null;
+        return await ComputeWeekAsync(request, persistNonValidated: !cloturee, ct);
     }
 
     /// <summary>
@@ -59,6 +66,8 @@ public sealed class WeeklyValidationService : IWeeklyValidationService
         await _tenant.EnsureAuthorizedAsync(ct);
         EnsureMondayToSunday(request);
 
+        // Clôture de paie : valider ou annuler une semaine qui recoupe une période clôturée est refusé.
+        await ClosureChecks.OuverteAsync(_closures, request.From, request.To, ct);
         var selected = Selection(request);
         if (selected.Count == 0)
             return;
@@ -136,6 +145,7 @@ public sealed class WeeklyValidationService : IWeeklyValidationService
     {
         await _tenant.EnsureAuthorizedAsync(ct);
         EnsureMondayToSunday(request);
+        await ClosureChecks.OuverteAsync(_closures, request.From, request.To, ct);
         var sageDb = _tenant.SageDb;
         var from = request.From.Date;
         var to = request.To.Date;

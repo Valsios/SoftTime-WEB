@@ -362,22 +362,16 @@ public class OvertimeServiceTests
     }
 
     [Fact]
-    public async Task ExoImpo_AbsenceArbitreeSansHeures_EstComptee()
+    public async Task ExoImpo_AbsenceArbitreeSansHeuresNiCode_ResteComptee_ParDefaut()
     {
         // Arrange
+        // Lot C3 : seule une journée arbitrée avec un code d'absence NON compté devient « justifiée ». Une absence
+        // arbitrée sans code (IntituleAbsence vide) reste comptée tant que le réglage de la base ne dit pas le contraire
+        // (par défaut : « l'arbitrage sans code » est compté, comme avant C3).
         var contexte = new Contexte();
         contexte.Planning(Lundi, TimeSpan.FromMinutes(30));
-        // Anomalie d'absence validée : la journée porte une ligne d'absence, sans heure.
-        contexte.Corrections.Add(new HeureCorrigee
-        {
-            BddSage = "SAGE_TEST",
-            MatriculeSage = "001",
-            DatePointageIn = Lundi,
-            DatePointageOut = Lundi,
-            AbsenceAm = true,
-            AbsencePm = true,
-            Origine = "MANUEL"
-        });
+        // Anomalie d'absence validée : la journée porte une ligne d'absence, sans heure et sans code.
+        contexte.Corrections.Add(LigneAbsence(null));
 
         // Act
         var exo = await contexte.Service.CalculateExoImpoAsync(new PeriodRequest(null, null, Lundi, Dimanche));
@@ -385,6 +379,61 @@ public class OvertimeServiceTests
         // Assert
         exo.Should().ContainSingle().Which.Absence.Should().Be(8.5m);
     }
+
+    [Theory]
+    [InlineData(null, 8.5, "sans réglage : seul ABSENCE NON JUSTIFIEE compte")]
+    [InlineData("PERMISSION", 8.5, "PERMISSION est coché dans T_PAIE_OPTION")]
+    public async Task ExoImpo_LeReglageEnregistreDeLaBase_EstLuAuCalcul_AvecUnCodeCompte(string? coche, double attendu, string raison)
+    {
+        // Arrange
+        var contexte = new Contexte();
+        contexte.Planning(Lundi, TimeSpan.FromMinutes(30));
+        contexte.Corrections.Add(LigneAbsence(coche ?? "ABSENCE NON JUSTIFIEE"));
+        if (coche is not null)
+            contexte.Uow.Get<PaieOption>().Items.AddRange([
+                new PaieOption { BddSage = "SAGE_TEST", Cle = "AbsenceCodeCompte.1", Valeur = coche },
+                new PaieOption { BddSage = "SAGE_TEST", Cle = "AbsenceSansCodeCompte", Valeur = "1" }]);
+
+        // Act
+        var exo = await contexte.Service.CalculateExoImpoAsync(new PeriodRequest(null, null, Lundi, Dimanche));
+
+        // Assert
+        exo.Should().ContainSingle().Which.Absence.Should().Be((decimal)attendu, raison);
+    }
+
+    [Fact]
+    public async Task ExoImpo_CodeNonCompte_EstJustifie_EtLeReglageDeLaBaseChangeLeResultat()
+    {
+        // Arrange
+        var contexte = new Contexte();
+        contexte.Planning(Lundi, TimeSpan.FromMinutes(30));
+        contexte.Corrections.Add(LigneAbsence("PERMISSION"));
+        var periode = new PeriodRequest(null, null, Lundi, Dimanche);
+
+        // Act
+        var parDefaut = await contexte.Service.CalculateExoImpoAsync(periode);
+        // Le service d'enregistrement écrit toujours le marqueur AbsenceSansCodeCompte avec les codes : c'est lui qui dit « réglage enregistré ».
+        contexte.Uow.Get<PaieOption>().Items.AddRange([
+            new PaieOption { BddSage = "SAGE_TEST", Cle = "AbsenceCodeCompte.1", Valeur = "PERMISSION" },
+            new PaieOption { BddSage = "SAGE_TEST", Cle = "AbsenceSansCodeCompte", Valeur = "1" }]);
+        var avecReglage = await contexte.Service.CalculateExoImpoAsync(periode);
+
+        // Assert
+        parDefaut.Should().BeEmpty("un code qui n'est pas compté rend la journée justifiée : aucune ligne à envoyer");
+        avecReglage.Should().ContainSingle().Which.Absence.Should().Be(8.5m, "la règle ne s'applique qu'au Calculer suivant le réglage");
+    }
+
+    private static HeureCorrigee LigneAbsence(string? code) => new()
+    {
+        BddSage = "SAGE_TEST",
+        MatriculeSage = "001",
+        DatePointageIn = Lundi,
+        DatePointageOut = Lundi,
+        AbsenceAm = true,
+        AbsencePm = true,
+        IntituleAbsence = code,
+        Origine = "MANUEL"
+    };
 
     [Fact]
     public async Task Validation_SemaineDejaCalculeeEnExoImpo_NePeutEtreNiAnnuleeNiPurgee()

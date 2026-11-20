@@ -40,7 +40,9 @@ public sealed class AuditJournalSaveChangesInterceptor : SaveChangesInterceptor
     {
         "suivi_SUIVI", "suivi_T", "suivi_TBLCLN", "suivi_JOURNAL",
         "T_HISTORIQUE_POINTAGE", "T_HISTORIQUE_ANOMALIE", "T_HISTORIQUE_HS",
-        "T_AUDIT_DROIT", "T_REFRESH_TOKEN"
+        "T_AUDIT_DROIT", "T_REFRESH_TOKEN",
+        // Lignes d'instantané d'envoi en paie : l'instantané est lui-même la trace (entête journalisée, lignes immuables).
+        "T_PAIE_INSTANTANE_LIGNE"
     };
 
     /// <summary>
