@@ -464,7 +464,7 @@ describe('Carte « Variables envoyées à la paie » : états désactivé et ver
     expect(champ('Code de paie de Absence').disabled).toBe(true);
     expect(champ('Unité de Absence').disabled).toBe(true);
     expect(champ('Envoyer Nuit à la paie').disabled).toBe(true);
-    expect(racine.querySelector('.pv-actions')).toBeNull();
+    expect(racine.querySelector('.pv-head .pv-actions')).toBeNull();
   });
 
   // Adapté au lot C3 (avant : case toujours désactivée, « prochaine étape », champ de code libre).
@@ -528,7 +528,7 @@ describe('Largeur étroite (< 768 px) : variables présentées en cartes, jamais
     expect(racine.querySelector('.soft-table-wrap')?.classList.contains('pv-wrap')).toBe(true);
     expect(reaffiche('pv-wrap')).toBe(true);
     // Adapté au lot C3 : la liste des codes d'absence comptés forme une ligne à part, sous l'Absence.
-    const lignes = [...racine.querySelectorAll('tbody tr:not(.pv-codes-row)')];
+    const lignes = [...racine.querySelectorAll('tbody tr:not(.pv-codes-row):not(.pv-domain)')];
     // Adapté aux correctifs C3 : le nom est dans son propre élément, la pastille « non envoyée » à côté.
     expect(lignes.map((l) => l.querySelector('td.pv-name .pv-name__text')?.textContent?.trim())).toEqual(Object.values(LIBELLES));
     for (const ligne of lignes) {
@@ -565,7 +565,7 @@ describe('Largeur étroite (< 768 px) : variables présentées en cartes, jamais
     await fixture.whenStable();
     fixture.detectChanges();
 
-    const lignes = [...racine.querySelectorAll('tbody tr:not(.pv-codes-row)')];
+    const lignes = [...racine.querySelectorAll('tbody tr:not(.pv-codes-row):not(.pv-domain)')];
     expect(lignes.length).toBe(9);
     for (const ligne of lignes) {
       expect(ligne.querySelector<HTMLInputElement>('input[type="checkbox"]')!.disabled).toBe(true);
@@ -697,7 +697,7 @@ describe('Option « Remettre à 0 les salariés sans valeur à l\'envoi »', () 
 
     expect(interrupteur()!.disabled).toBe(true);
     expect(racine.querySelector('.pv-option')?.textContent).toContain('Mois déjà envoyé : modification impossible.');
-    expect(racine.querySelector('.pv-actions')).toBeNull();
+    expect(racine.querySelector('.pv-head .pv-actions')).toBeNull();
   });
 
   it('sans permission : ni l\'interrupteur ni le tableau, seulement le message de permission', () => {
@@ -1116,7 +1116,7 @@ describe('Carte : libellé de code complet et alignement vertical', () => {
 
     expect(retard.querySelector('td.pv-name > .pv-name__text')?.textContent?.trim()).toBe('Retard');
     expect(retard.querySelector('td.pv-name > soft-badge')?.textContent).toContain('non envoyée à la paie');
-    expect(racine.querySelectorAll('td.pv-name > .pv-name__text')).toHaveLength(9);
+    expect(racine.querySelectorAll('tr:not(.pv-domain) td.pv-name > .pv-name__text')).toHaveLength(9);
   });
 
   it('styles : première ligne de 44 px commune (nom, code lecture seule), cellules alignées en haut, champ de code plus large', () => {

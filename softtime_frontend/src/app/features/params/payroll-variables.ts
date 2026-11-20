@@ -10,7 +10,7 @@ import { PayrollVariablesService } from '../../shared/services/payroll-variables
 import { SoftBadge, SoftButton, SoftCard, SoftSelect } from '../../shared/components';
 import { SelectOption } from '../../shared/components/soft-select';
 import { PayrollDestinations } from './payroll-destinations';
-import { PayrollDomainsSetting } from './payroll-domains';
+import { BADGE_ENVOYE, MESSAGE_AUCUNE_CONSTANTE, BADGE_NON_ENVOYE, CODE_FRAIS, DomainesPaie, MENTION_CODE_FIXE } from './payroll-domains';
 import {
   aCodePropre,
   AIDE_CODES_ABSENCE,
@@ -45,7 +45,7 @@ const LIBELLE_CODE_LONG = 24;
 @Component({
   selector: 'app-payroll-variables',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, SoftBadge, SoftButton, SoftCard, SoftSelect, PayrollDestinations, PayrollDomainsSetting],
+  imports: [FormsModule, SoftBadge, SoftButton, SoftCard, SoftSelect, PayrollDestinations],
   template: `
     <soft-card>
       <div class="pv-head">
@@ -210,6 +210,65 @@ const LIBELLE_CODE_LONG = 24;
                   </tr>
                 }
               }
+                @if (!autre()) {
+                  <tr class="pv-domain" [class.pv-off]="!domaines.cantine()">
+                    <td class="pv-name">
+                      <span class="pv-name__text">Cantine</span>
+                      <soft-badge [variant]="domaines.cantine() ? 'success' : 'muted'">{{ domaines.cantine() ? badgeEnvoye : badgeNonEnvoye }}</soft-badge>
+                    </td>
+                    <td data-label="Envoyée">
+                      <label class="soft-toggle pv-toggle" [attr.title]="domaines.raisonCantine()">
+                        <input type="checkbox" aria-label="Envoyer la cantine à la paie"
+                          [checked]="domaines.cantine()" [disabled]="!domaines.cantineCochable()"
+                          (change)="domaines.basculerCantine($any($event.target).checked)" />
+                        <span class="soft-toggle__track"><span class="soft-toggle__thumb"></span></span>
+                      </label>
+                      @if (domaines.raisonCantine(); as r) { <div class="soft-field__hint pv-hint">{{ r }}</div> }
+                    </td>
+                    <td data-label="Code de paie">
+                      @if (domaines.listeVide()) {
+                        <div class="soft-field__hint pv-hint">{{ aucuneConstante }}</div>
+                      } @else {
+                        <div class="soft-select pv-field">
+                          <div class="soft-select__control">
+                            <select aria-label="Code de constante de la cantine" [attr.title]="domaines.titreCode()" [disabled]="domaines.saving()"
+                              (change)="domaines.choisirCode($any($event.target).value)">
+                              @if (domaines.peutVider()) { <option value="" [selected]="!domaines.code()">(aucun)</option> }
+                              @for (o of domaines.options(); track o.value) {
+                                <option [value]="o.value" [selected]="o.value === domaines.code()">{{ o.label }}</option>
+                              }
+                            </select>
+                          </div>
+                        </div>
+                        @if (domaines.codeAbsent()) {
+                          <div class="soft-field__hint pv-codes__warn" role="status">
+                            Ce code n'existe plus dans SAGE ; il reste enregistré tant que vous n'en choisissez pas un autre.
+                          </div>
+                        }
+                        @if (domaines.avertissementCodes(); as a) { <div class="soft-field__hint pv-hint">{{ a }}</div> }
+                      }
+                    </td>
+                    <td></td>
+                  </tr>
+                  <tr class="pv-domain" [class.pv-off]="!domaines.frais()">
+                    <td class="pv-name">
+                      <span class="pv-name__text">Frais&nbsp;de&nbsp;déplacement</span>
+                      <soft-badge [variant]="domaines.frais() ? 'success' : 'muted'">{{ domaines.frais() ? badgeEnvoye : badgeNonEnvoye }}</soft-badge>
+                    </td>
+                    <td data-label="Envoyée">
+                      <label class="soft-toggle pv-toggle">
+                        <input type="checkbox" aria-label="Envoyer les frais de déplacement à la paie"
+                          [checked]="domaines.frais()" [disabled]="domaines.saving()"
+                          (change)="domaines.basculerFrais($any($event.target).checked)" />
+                        <span class="soft-toggle__track"><span class="soft-toggle__thumb"></span></span>
+                      </label>
+                    </td>
+                    <td data-label="Code de paie">
+                      <span class="pv-readonly" [attr.title]="mentionCodeFixe">{{ codeFrais }} — {{ mentionCodeFixe }}</span>
+                    </td>
+                    <td></td>
+                  </tr>
+                }
             </tbody>
           </table>
         </div>
@@ -227,7 +286,19 @@ const LIBELLE_CODE_LONG = 24;
           </div>
           @if (c.moisEnvoye) { <div class="soft-field__hint pv-option__hint">Mois déjà envoyé : modification impossible.</div> }
         </div>
-        <app-payroll-domains [config]="c" (enregistre)="charger()" />
+        @if (autre()) {
+          <p class="pv-note">Base AUTRE : la cantine et les frais de déplacement ne s'y envoient pas ; la clôture ne les exige pas.</p>
+        } @else {
+          <div class="pv-actions pv-domains-save">
+            <soft-button ariaLabel="Enregistrer les domaines" [loading]="domaines.saving()" [disabled]="!domaines.modifie()" (click)="domaines.enregistrer()">Enregistrer</soft-button>
+          </div>
+          @if (domaines.erreur(); as e) { <div class="pv-banner pv-banner--danger" role="alert">{{ e }}</div> }
+          <p class="pv-note">
+            Cantine et frais de déplacement : activés, ils sont exigés à la clôture (dernier envoi réussi, sans plage de matricules,
+            sur les bornes exactes de la période) ; un domaine envoyé sur la période reste exigé même si son interrupteur est
+            éteint. Ce réglage s'enregistre séparément, même quand le mois est déjà envoyé, et ne change rien à ce qui est envoyé en paie.
+          </p>
+        }
         <p class="pv-note">
           Retard est envoyé en heures et Absence en heures ou en jours, avec la valeur affichée dans la page Heures
           supplémentaires ({{ autre() ? 'dans leur colonne de destination' : 'dans le code de paie choisi' }}) ; en jours,
@@ -251,6 +322,7 @@ const LIBELLE_CODE_LONG = 24;
     .pv-title { margin: 0; font-family: var(--font-heading); font-size: 16px; font-weight: 600; color: var(--app-text-strong); }
     .pv-sub { margin: var(--space-xs) 0 0; color: var(--text-secondary); font-size: 14px; }
     .pv-actions { display: flex; gap: var(--space-sm); flex-wrap: wrap; }
+    .pv-domains-save { margin-top: var(--space-md); }
     .pv-note { color: var(--text-muted); margin: var(--space-md) 0; font-size: 13px; }
     .pv-banner { margin: var(--space-md) 0; padding: 10px 14px; font-size: 13px; border-radius: var(--radius-md); border: 1px solid; }
     .pv-banner p { margin: 2px 0; }
@@ -301,6 +373,11 @@ const LIBELLE_CODE_LONG = 24;
     .pv-toggle:focus-within .soft-toggle__track { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
     .pv-toggle:has(input:disabled) { cursor: not-allowed; }
     .pv-toggle input:disabled + .soft-toggle__track { opacity: 0.5; }
+    /* Les lignes Cantine et Frais de déplacement (libellé sur une ligne) élargissent la première colonne : marges latérales des
+       cellules resserrées pour que les listes de codes gardent leur largeur. */
+    @media (min-width: 768px) {
+      .pv-table thead th, .pv-table tbody td { padding-left: var(--space-md); padding-right: var(--space-md); }
+    }
     /* Largeur moyenne (menu latéral affiché, carte d'environ 670 px à 1024 px) : largeurs minimales resserrées pour que le
        tableau tienne dans sa carte sans défilement horizontal ; le champ « Heures par jour » passe à la ligne sous son libellé. */
     @media (min-width: 768px) and (max-width: 1180px) {
@@ -363,9 +440,16 @@ export class PayrollVariablesCard implements OnInit {
   protected readonly aideHeuresParJour = AIDE_HEURES_PAR_JOUR;
   protected readonly aideCodes = AIDE_CODES_ABSENCE;
   protected readonly titreCodes = TITRE_CODES_ABSENCE;
+  protected readonly badgeEnvoye = BADGE_ENVOYE;
+  protected readonly badgeNonEnvoye = BADGE_NON_ENVOYE;
+  protected readonly codeFrais = CODE_FRAIS;
+  protected readonly mentionCodeFixe = MENTION_CODE_FIXE;
+  protected readonly aucuneConstante = MESSAGE_AUCUNE_CONSTANTE;
   readonly loading = signal(false);
   readonly saving = signal(false);
   readonly config = signal<PayrollVariablesConfig | null>(null);
+  /** Lignes Cantine et Frais de déplacement : brouillon et enregistrement séparés des variables. */
+  readonly domaines = new DomainesPaie(this.config, () => this.charger());
   readonly brouillon = signal<PayrollVariable[]>([]);
   /** Brouillon de l'option « remettre à 0 les salariés sans valeur à l'envoi » (vraie par défaut). */
   readonly remiseAZero = signal(true);
