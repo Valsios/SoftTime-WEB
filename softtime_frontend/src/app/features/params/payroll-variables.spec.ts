@@ -16,6 +16,7 @@ import {
   changementHeuresParJour,
   changementsCodesAbsence,
   codesAbsenceLus,
+  resumeCodesAbsence,
   erreurHeuresParJour,
   heuresParJourValide,
   texteHeures,
@@ -919,9 +920,14 @@ describe('Absence : codes d\'absence comptés comme non justifiés', () => {
 
   const cases = (racine: HTMLElement) => Array.from(racine.querySelectorAll<HTMLLabelElement>('.pv-codes .pv-code'));
   const ligne = (racine: HTMLElement, libelle: string) => cases(racine).find((l) => l.textContent!.includes(libelle))!;
+  const bouton = (racine: HTMLElement) => racine.querySelector<HTMLButtonElement>('.pv-codes-sum button')!;
+  const resume = (racine: HTMLElement) => racine.querySelector('.pv-codes-sum__text')!.textContent!.replace(/\s+/g, ' ').trim();
+  /** Lot D9 : le bloc est replié par défaut ; on le déplie par le bouton « Modifier ». */
+  const deplier = (racine: HTMLElement, fixture: { detectChanges(): void }) => { bouton(racine).click(); fixture.detectChanges(); };
 
   it('liste : arbitrage sans code puis un code par ligne, cochés selon le réglage, avec les mentions', () => {
-    const { racine } = rendreAbsence(configAbsence('H'));
+    const { racine, fixture } = rendreAbsence(configAbsence('H'));
+    deplier(racine, fixture);
 
     expect(racine.querySelector('.pv-codes__title')?.textContent).toBe('Codes d’absence comptés comme non justifiés');
     expect(cases(racine).map((l) => l.querySelector('.pv-code__label')!.textContent)).toEqual([
@@ -941,9 +947,10 @@ describe('Absence : codes d\'absence comptés comme non justifiés', () => {
       absenceCodes: { parDefaut: false, sansCode: true, codes: [...CODES_ABSENCE, introuvable] },
     }));
 
-    expect(ligne(racine, 'ANCIEN CODE').textContent).toContain('code introuvable');
     expect(racine.querySelector('.pv-codes__warn')?.textContent).toContain('Un code enregistré n\'existe plus dans les codes d\'absence : il reste compté tant qu\'il n\'est pas décoché.');
     expect(racine.querySelector('.pv-codes__warn')?.getAttribute('role')).toBe('status');
+    deplier(racine, fixture);
+    expect(ligne(racine, 'ANCIEN CODE').textContent).toContain('code introuvable');
 
     carte.basculerCode('ANCIEN CODE', false);
     fixture.detectChanges();
@@ -954,6 +961,7 @@ describe('Absence : codes d\'absence comptés comme non justifiés', () => {
   it('cocher crée un brouillon (comparaison tolérante), Annuler revient au réglage lu', () => {
     const { racine, fixture, carte } = rendreAbsence(configAbsence('H'));
     expect(carte.modifie()).toBe(false);
+    deplier(racine, fixture);
 
     ligne(racine, 'PERMISSION').querySelector('input')!.click();
     fixture.detectChanges();
@@ -966,10 +974,85 @@ describe('Absence : codes d\'absence comptés comme non justifiés', () => {
     expect(carte.modifie()).toBe(false);
   });
 
-  it('mois déjà envoyé : les cases sont désactivées', () => {
-    const { racine } = rendreAbsence(configAbsence('H', { moisEnvoye: true, dernierEnvoi: '2026-11-01 → 2026-11-30' }));
+  it('mois déjà envoyé : résumé affiché, « Modifier » désactivé avec l\'infobulle, liste non dépliable', () => {
+    const { racine, fixture } = rendreAbsence(configAbsence('H', { moisEnvoye: true, dernierEnvoi: '2026-11-01 → 2026-11-30' }));
 
-    expect(racine.querySelector<HTMLFieldSetElement>('fieldset.pv-codes')!.disabled).toBe(true);
+    expect(resume(racine)).toBe('2 codes comptés comme non justifiés : Arbitrage d\'absence sans code, ABSENCE NON JUSTIFIEE');
+    expect(bouton(racine).disabled).toBe(true);
+    expect(bouton(racine).getAttribute('title')).toBe('Mois déjà envoyé : modification impossible.');
+    bouton(racine).click();
+    fixture.detectChanges();
+    expect(racine.querySelector('fieldset.pv-codes')).toBeNull();
+    expect(racine.querySelector('.pv-codes__hint')?.textContent).toContain('prochain calcul');
+  });
+
+  it('replié par défaut : résumé et bouton « Modifier » (aria-expanded faux, aria-controls), aucune case affichée', () => {
+    const { racine } = rendreAbsence(configAbsence('H'));
+
+    expect(racine.querySelector('fieldset.pv-codes')).toBeNull();
+    expect(cases(racine)).toHaveLength(0);
+    expect(resume(racine)).toBe('2 codes comptés comme non justifiés : Arbitrage d\'absence sans code, ABSENCE NON JUSTIFIEE');
+    expect(bouton(racine).textContent!.trim()).toBe('Modifier');
+    expect(bouton(racine).getAttribute('aria-expanded')).toBe('false');
+    expect(racine.querySelector('#' + bouton(racine).getAttribute('aria-controls'))).not.toBeNull();
+    expect(bouton(racine).disabled).toBe(false);
+  });
+
+  it('ouverture et fermeture : « Fermer », aria-expanded, groupe nommé ; avertissement et jours planifiés visibles dans les deux états', () => {
+    const { racine, fixture } = rendreAbsence(configAbsence('H'));
+    const aide = () => racine.querySelector('.pv-codes__hint')!.textContent!;
+    expect(aide()).toContain('Les jours planifiés sans aucune ligne sont toujours comptés.');
+    expect(aide()).toContain('recalculez les périodes déjà calculées avant de les envoyer');
+
+    deplier(racine, fixture);
+    expect(bouton(racine).textContent!.trim()).toBe('Fermer');
+    expect(bouton(racine).getAttribute('aria-expanded')).toBe('true');
+    expect(racine.querySelector('fieldset.pv-codes legend')?.textContent).toBe('Codes d’absence comptés comme non justifiés');
+    expect(aide()).toContain('Les jours planifiés sans aucune ligne sont toujours comptés.');
+    expect(aide()).toContain('recalculez les périodes déjà calculées avant de les envoyer');
+
+    deplier(racine, fixture);
+    expect(racine.querySelector('fieldset.pv-codes')).toBeNull();
+    expect(bouton(racine).textContent!.trim()).toBe('Modifier');
+    expect(aide()).toContain('recalculez');
+  });
+
+  it('cases conservées au repli ; le résumé signale les modifications non enregistrées', () => {
+    const { racine, fixture, carte } = rendreAbsence(configAbsence('H'));
+    deplier(racine, fixture);
+    ligne(racine, 'PERMISSION').querySelector('input')!.click();
+    fixture.detectChanges();
+    expect(racine.querySelector('.pv-codes-sum__text soft-badge')?.textContent).toContain('modifications non enregistrées');
+
+    deplier(racine, fixture); // replie
+    expect(resume(racine)).toContain('3 codes comptés comme non justifiés : Arbitrage d\'absence sans code, PERMISSION, ABSENCE NON JUSTIFIEE');
+    expect(resume(racine)).toContain('modifications non enregistrées');
+    expect(carte.estCompte('PERMISSION')).toBe(true);
+    deplier(racine, fixture); // rouvre
+    expect(ligne(racine, 'PERMISSION').querySelector('input')!.checked).toBe(true);
+
+    carte.annuler();
+    fixture.detectChanges();
+    expect(racine.querySelector('.pv-codes-sum__text soft-badge')).toBeNull();
+  });
+
+  it('résumé : aucun code, un code, trois codes, plus de quatre noms (trois premiers puis « et N autres »)', () => {
+    expect(resumeCodesAbsence([])).toBe('Aucun code coché : seuls les jours planifiés sans ligne d\'absence sont comptés.');
+    expect(resumeCodesAbsence(['PERMISSION'])).toBe('1 code compté comme non justifié : PERMISSION');
+    expect(resumeCodesAbsence(['A', 'B', 'C'])).toBe('3 codes comptés comme non justifiés : A, B, C');
+    expect(resumeCodesAbsence(['A', 'B', 'C', 'D'])).toBe('4 codes comptés comme non justifiés : A, B, C, D');
+    expect(resumeCodesAbsence(['A', 'B', 'C', 'D', 'E'])).toBe('5 codes comptés comme non justifiés : A, B, C et 2 autres');
+    expect(resumeCodesAbsence(['A', 'B', 'C', 'D', 'E', 'F', 'G'])).toBe('7 codes comptés comme non justifiés : A, B, C et 4 autres');
+  });
+
+  it('résumé du bloc rendu : aucun code coché (arbitrage sans code décoché), puis un seul', () => {
+    const { racine, fixture, carte } = rendreAbsence(configAbsence('H', {
+      absenceCodes: { parDefaut: false, sansCode: false, codes: CODES_ABSENCE.map((c) => ({ ...c, compte: false })) },
+    }));
+    expect(resume(racine)).toBe('Aucun code coché : seuls les jours planifiés sans ligne d\'absence sont comptés.');
+    carte.basculerCode('PERMISSION', true);
+    fixture.detectChanges();
+    expect(resume(racine)).toContain('1 code compté comme non justifié : PERMISSION');
   });
 
   it('codesAbsenceLus et changementsCodesAbsence : accents, casse et espaces ignorés ; arbitrage sans code', () => {
@@ -985,7 +1068,8 @@ describe('Absence : codes d\'absence comptés comme non justifiés', () => {
   });
 
   it('confirmation d\'enregistrement : codes ajoutés, rappel « prochain calcul » ; le service reçoit les codes et l\'arbitrage sans code', async () => {
-    const { racine, carte, confirm, svc } = rendreAbsence(configAbsence('H'));
+    const { racine, fixture, carte, confirm, svc } = rendreAbsence(configAbsence('H'));
+    deplier(racine, fixture);
     ligne(racine, 'PERMISSION').querySelector('input')!.click();
     carte.basculerSansCode(false);
 

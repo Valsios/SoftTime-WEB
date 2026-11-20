@@ -25,9 +25,11 @@ import {
   codesAbsenceLus,
   estSansEnvoi,
   HEURES_PAR_JOUR_DEFAUT,
+  NOM_ARBITRAGE_SANS_CODE,
   NON_ENVOYEE,
   peutCocher,
   raisonNonCochable,
+  resumeCodesAbsence,
   TITRE_CODES_ABSENCE,
   validerBrouillon,
   versEnregistrement,
@@ -182,24 +184,41 @@ const LIBELLE_CODE_LONG = 24;
                 @if (v.variable === 'Absence') {
                   <tr class="pv-codes-row" [class.pv-off]="!v.actif">
                     <td colspan="4" class="pv-codes-cell">
-                      <fieldset class="pv-codes" [disabled]="c.moisEnvoye || saving()">
-                        <legend class="pv-codes__title">{{ titreCodes }}</legend>
-                        <label class="pv-code">
-                          <input type="checkbox" [checked]="codesAbsence().sansCode"
-                            (change)="basculerSansCode($any($event.target).checked)" />
-                          <span class="pv-code__label">Arbitrage d'absence sans code</span>
-                        </label>
-                        @for (code of listeCodesAbsence(); track code.libelle) {
-                          <label class="pv-code" [class.pv-code--missing]="code.introuvable">
-                            <input type="checkbox" [checked]="estCompte(code.libelle)"
-                              (change)="basculerCode(code.libelle, $any($event.target).checked)" />
-                            <span class="pv-code__label">{{ code.libelle }}</span>
-                            @if (code.introuvable) { <soft-badge variant="warning">code introuvable</soft-badge> }
-                            @if (code.nonPaye) { <soft-badge variant="muted">non payé</soft-badge> }
-                            @if (code.suggere && !estCompte(code.libelle)) { <soft-badge variant="info">à envisager</soft-badge> }
-                          </label>
+                      <!-- Bloc replié par défaut : résumé et bouton « Modifier » ; la liste complète s'ouvre au clic (cases conservées au repli). -->
+                      <div class="pv-codes-sum">
+                        <p class="pv-codes-sum__text" id="pv-codes-resume">
+                          {{ resumeCodes() }}
+                          @if (codesModifies()) { <soft-badge variant="warning">modifications non enregistrées</soft-badge> }
+                        </p>
+                        <button type="button" class="soft-btn soft-btn--secondary soft-btn--sm" aria-controls="pv-codes-liste"
+                          [attr.aria-expanded]="codesOuverts()" [disabled]="c.moisEnvoye"
+                          [attr.title]="c.moisEnvoye ? moisVerrouille : null" (click)="basculerOuverture()">
+                          {{ codesOuverts() ? 'Fermer' : 'Modifier' }}
+                        </button>
+                      </div>
+                      @if (c.moisEnvoye) { <div class="soft-field__hint pv-hint">{{ moisVerrouille }}</div> }
+                      <div id="pv-codes-liste">
+                        @if (codesOuverts()) {
+                          <fieldset class="pv-codes" [disabled]="c.moisEnvoye || saving()">
+                            <legend class="pv-codes__title">{{ titreCodes }}</legend>
+                            <label class="pv-code">
+                              <input type="checkbox" [checked]="codesAbsence().sansCode"
+                                (change)="basculerSansCode($any($event.target).checked)" />
+                              <span class="pv-code__label">Arbitrage d'absence sans code</span>
+                            </label>
+                            @for (code of listeCodesAbsence(); track code.libelle) {
+                              <label class="pv-code" [class.pv-code--missing]="code.introuvable">
+                                <input type="checkbox" [checked]="estCompte(code.libelle)"
+                                  (change)="basculerCode(code.libelle, $any($event.target).checked)" />
+                                <span class="pv-code__label">{{ code.libelle }}</span>
+                                @if (code.introuvable) { <soft-badge variant="warning">code introuvable</soft-badge> }
+                                @if (code.nonPaye) { <soft-badge variant="muted">non payé</soft-badge> }
+                                @if (code.suggere && !estCompte(code.libelle)) { <soft-badge variant="info">à envisager</soft-badge> }
+                              </label>
+                            }
+                          </fieldset>
                         }
-                      </fieldset>
+                      </div>
                       @if (aCodeIntrouvable()) {
                         <div class="soft-field__hint pv-codes__warn" role="status">
                           Un code enregistré n'existe plus dans les codes d'absence : il reste compté tant qu'il n'est pas décoché.
@@ -351,7 +370,7 @@ const LIBELLE_CODE_LONG = 24;
     .pv-hpj__input { width: 96px; }
     .pv-hpj__input:disabled { background: var(--surface-dark); color: var(--text-muted); cursor: not-allowed; }
     .pv-codes-row > td { border-top: 0; padding-top: 0; }
-    .pv-codes { margin: 0; padding: var(--space-md); border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+    .pv-codes { margin: var(--space-sm) 0 0; padding: var(--space-md); border: 1px solid var(--color-border); border-radius: var(--radius-lg);
       background: var(--app-surface); display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--space-sm) var(--space-md); }
     .pv-codes__title { padding: 0 var(--space-xs); font-weight: 600; font-size: 14px; color: var(--app-text-strong); }
     .pv-code { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-xs) var(--space-sm); min-width: 0; cursor: pointer;
@@ -361,6 +380,10 @@ const LIBELLE_CODE_LONG = 24;
     .pv-code--missing .pv-code__label { color: var(--warning); }
     .pv-codes:disabled .pv-code, .pv-codes:disabled .pv-code input { cursor: not-allowed; }
     .pv-codes:disabled .pv-code { color: var(--text-muted); }
+    .pv-codes-sum { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); flex-wrap: wrap;
+      padding: var(--space-sm) var(--space-md); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--app-surface); }
+    .pv-codes-sum__text { margin: 0; min-width: 0; font-size: 14px; color: var(--app-text); overflow-wrap: anywhere; }
+    .pv-codes-sum__text soft-badge { margin-left: var(--space-sm); }
     .pv-codes__hint, .pv-codes__warn { margin-top: var(--space-xs); }
     .pv-codes__warn { color: var(--warning); }
     .pv-option { margin-top: var(--space-md); padding: var(--space-md); border: 1px solid var(--color-border); border-radius: var(--radius-lg);
@@ -440,6 +463,7 @@ export class PayrollVariablesCard implements OnInit {
   protected readonly aideHeuresParJour = AIDE_HEURES_PAR_JOUR;
   protected readonly aideCodes = AIDE_CODES_ABSENCE;
   protected readonly titreCodes = TITRE_CODES_ABSENCE;
+  protected readonly moisVerrouille = 'Mois déjà envoyé : modification impossible.';
   protected readonly badgeEnvoye = BADGE_ENVOYE;
   protected readonly badgeNonEnvoye = BADGE_NON_ENVOYE;
   protected readonly codeFrais = CODE_FRAIS;
@@ -470,6 +494,21 @@ export class PayrollVariablesCard implements OnInit {
 
   /** Codes proposés : ceux lus (T_CODEABSENCE puis codes introuvables). */
   readonly listeCodesAbsence = computed<PayrollAbsenceCode[]>(() => this.config()?.absenceCodes?.codes ?? []);
+  /** Bloc des codes d'absence déplié (replié par défaut). Les cases cochées vivent dans le brouillon : le repli ne les perd pas. */
+  readonly ouverture = signal(false);
+  /** Déplié seulement si le mois n'est pas envoyé (verrouillé : résumé seul). */
+  readonly codesOuverts = computed(() => this.ouverture() && !this.config()?.moisEnvoye);
+  /** Noms des codes comptés dans le brouillon : l'arbitrage sans code, puis les codes cochés dans l'ordre de la liste. */
+  readonly nomsComptes = computed<string[]>(() => [
+    ...(this.codesAbsence().sansCode ? [NOM_ARBITRAGE_SANS_CODE] : []),
+    ...this.listeCodesAbsence().filter((c) => this.estCompte(c.libelle)).map((c) => c.libelle),
+  ]);
+  readonly resumeCodes = computed(() => resumeCodesAbsence(this.nomsComptes()));
+  /** Cases changées mais pas enregistrées. */
+  readonly codesModifies = computed(() => {
+    const c = this.config();
+    return !!c && changementsCodesAbsence(codesAbsenceLus(c.absenceCodes), this.codesAbsence()).length > 0;
+  });
   readonly aCodeIntrouvable = computed(() => this.listeCodesAbsence().some((c) => c.introuvable && this.estCompte(c.libelle)));
 
   /** Même règle que le bouton « Modifier » de la base active (le serveur vérifie de nouveau). */
@@ -528,6 +567,10 @@ export class PayrollVariablesCard implements OnInit {
   libelleLong(v: PayrollVariable): string | null {
     const t = this.titreCode(v);
     return t && t.length > LIBELLE_CODE_LONG ? t : null;
+  }
+
+  basculerOuverture(): void {
+    this.ouverture.update((o) => !o);
   }
 
   estCompte(libelle: string): boolean {
