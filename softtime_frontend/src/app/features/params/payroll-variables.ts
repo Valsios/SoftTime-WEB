@@ -184,40 +184,49 @@ const LIBELLE_CODE_LONG = 24;
                 @if (v.variable === 'Absence') {
                   <tr class="pv-codes-row" [class.pv-off]="!v.actif">
                     <td colspan="4" class="pv-codes-cell">
-                      <!-- Bloc replié par défaut : résumé et bouton « Modifier » ; la liste complète s'ouvre au clic (cases conservées au repli). -->
-                      <div class="pv-codes-sum">
-                        <p class="pv-codes-sum__text" id="pv-codes-resume">
-                          {{ resumeCodes() }}
-                          @if (codesModifies()) { <soft-badge variant="warning">modifications non enregistrées</soft-badge> }
-                        </p>
-                        <button type="button" class="soft-btn soft-btn--secondary soft-btn--sm" aria-controls="pv-codes-liste"
-                          [attr.aria-expanded]="codesOuverts()" [disabled]="c.moisEnvoye"
-                          [attr.title]="c.moisEnvoye ? moisVerrouille : null" (click)="basculerOuverture()">
-                          {{ codesOuverts() ? 'Fermer' : 'Modifier' }}
-                        </button>
-                      </div>
-                      @if (c.moisEnvoye) { <div class="soft-field__hint pv-hint">{{ moisVerrouille }}</div> }
-                      <div id="pv-codes-liste">
-                        @if (codesOuverts()) {
-                          <fieldset class="pv-codes" [disabled]="c.moisEnvoye || saving()">
-                            <legend class="pv-codes__title">{{ titreCodes }}</legend>
-                            <label class="pv-code">
-                              <input type="checkbox" [checked]="codesAbsence().sansCode"
-                                (change)="basculerSansCode($any($event.target).checked)" />
-                              <span class="pv-code__label">Arbitrage d'absence sans code</span>
-                            </label>
-                            @for (code of listeCodesAbsence(); track code.libelle) {
-                              <label class="pv-code" [class.pv-code--missing]="code.introuvable">
-                                <input type="checkbox" [checked]="estCompte(code.libelle)"
-                                  (change)="basculerCode(code.libelle, $any($event.target).checked)" />
-                                <span class="pv-code__label">{{ code.libelle }}</span>
-                                @if (code.introuvable) { <soft-badge variant="warning">code introuvable</soft-badge> }
-                                @if (code.nonPaye) { <soft-badge variant="muted">non payé</soft-badge> }
-                                @if (code.suggere && !estCompte(code.libelle)) { <soft-badge variant="info">à envisager</soft-badge> }
+                      <!-- Un seul cadre : résumé et bouton en tête, liste dessous séparée par un trait (bloc replié par défaut, cases
+                           conservées au repli). Mois envoyé : « Voir » déplie la liste en lecture seule. -->
+                      <div class="pv-codes-box">
+                        <div class="pv-codes-box__head">
+                          <p class="pv-codes-sum__text" id="pv-codes-resume">
+                            {{ resumeCodes() }}
+                            @if (codesModifies()) { <soft-badge variant="warning">modifications non enregistrées</soft-badge> }
+                          </p>
+                          <button type="button" class="soft-btn soft-btn--secondary soft-btn--sm" aria-controls="pv-codes-liste"
+                            [attr.aria-expanded]="codesOuverts()" (click)="basculerOuverture()">
+                            {{ codesOuverts() ? 'Fermer' : (c.moisEnvoye ? 'Voir' : 'Modifier') }}
+                          </button>
+                        </div>
+                        @if (c.moisEnvoye) { <p class="soft-field__hint pv-codes-box__ro" id="pv-codes-lecture">{{ lectureSeule }}</p> }
+                        <div id="pv-codes-liste">
+                          @if (codesOuverts()) {
+                            <fieldset class="pv-codes" [disabled]="c.moisEnvoye || saving()"
+                              [attr.aria-describedby]="c.moisEnvoye ? 'pv-codes-lecture' : null">
+                              <legend class="pv-codes__title">{{ titreCodes }}</legend>
+                              <label class="pv-code">
+                                <input type="checkbox" [checked]="codesAbsence().sansCode"
+                                  (change)="basculerSansCode($any($event.target).checked)" />
+                                <span class="pv-code__body"><span class="pv-code__label">Arbitrage d'absence sans code</span></span>
                               </label>
-                            }
-                          </fieldset>
-                        }
+                              @for (code of listeCodesAbsence(); track code.libelle) {
+                                <label class="pv-code" [class.pv-code--missing]="code.introuvable">
+                                  <input type="checkbox" [checked]="estCompte(code.libelle)"
+                                    (change)="basculerCode(code.libelle, $any($event.target).checked)" />
+                                  <span class="pv-code__body">
+                                    <span class="pv-code__label">{{ code.libelle }}</span>
+                                    @if (code.introuvable || code.nonPaye || (code.suggere && !estCompte(code.libelle))) {
+                                      <span class="pv-code__badges">
+                                        @if (code.introuvable) { <soft-badge variant="warning">code introuvable</soft-badge> }
+                                        @if (code.nonPaye) { <soft-badge variant="muted">non payé</soft-badge> }
+                                        @if (code.suggere && !estCompte(code.libelle)) { <soft-badge variant="info">à envisager</soft-badge> }
+                                      </span>
+                                    }
+                                  </span>
+                                </label>
+                              }
+                            </fieldset>
+                          }
+                        </div>
                       </div>
                       @if (aCodeIntrouvable()) {
                         <div class="soft-field__hint pv-codes__warn" role="status">
@@ -370,20 +379,26 @@ const LIBELLE_CODE_LONG = 24;
     .pv-hpj__input { width: 96px; }
     .pv-hpj__input:disabled { background: var(--surface-dark); color: var(--text-muted); cursor: not-allowed; }
     .pv-codes-row > td { border-top: 0; padding-top: 0; }
-    .pv-codes { margin: var(--space-sm) 0 0; padding: var(--space-md); border: 1px solid var(--color-border); border-radius: var(--radius-lg);
-      background: var(--app-surface); display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--space-sm) var(--space-md); }
-    .pv-codes__title { padding: 0 var(--space-xs); font-weight: 600; font-size: 14px; color: var(--app-text-strong); }
-    .pv-code { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-xs) var(--space-sm); min-width: 0; cursor: pointer;
-      font-size: 13px; color: var(--app-text); }
-    .pv-code input { width: 18px; height: 18px; margin: 0; flex: 0 0 auto; accent-color: var(--accent); cursor: pointer; }
+    /* Bloc des codes comptés : un seul cadre (comme .pv-option), résumé en tête, liste dessous après un trait. */
+    .pv-codes-box { padding: var(--space-sm) var(--space-md); border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+      background: var(--app-surface); }
+    .pv-codes-box__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm) var(--space-md); flex-wrap: wrap; }
+    .pv-codes-box__ro { margin: var(--space-xs) 0 0; }
+    .pv-codes-sum__text { margin: 0; min-width: 0; font-size: 14px; color: var(--app-text); overflow-wrap: anywhere; }
+    .pv-codes-sum__text soft-badge { margin-left: var(--space-sm); }
+    /* Grille régulière : colonnes de largeur égale, rangées de même hauteur ; la légende (nom du groupe) prend toute la largeur. */
+    .pv-codes { margin: var(--space-sm) 0 0; padding: var(--space-sm) 0 var(--space-xs); min-width: 0; border: 0; border-top: 1px solid var(--color-border);
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); grid-auto-rows: 1fr; gap: var(--space-sm) var(--space-md); }
+    .pv-codes__title { float: left; grid-column: 1 / -1; width: 100%; padding: 0; font-weight: 600; font-size: 14px; color: var(--app-text-strong); }
+    /* Case, puis libellé et pastilles à la suite sur une ligne ; faute de place, les pastilles passent ensemble sous le libellé. */
+    .pv-code { display: flex; align-items: flex-start; gap: var(--space-sm); min-width: 0; cursor: pointer; font-size: 13px; color: var(--app-text); }
+    .pv-code input { width: 18px; height: 18px; margin: 3px 0 0; flex: 0 0 auto; accent-color: var(--accent); cursor: pointer; }
+    .pv-code__body { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-sm); min-width: 0; min-height: 24px; }
+    .pv-code__badges { display: inline-flex; flex-wrap: nowrap; gap: var(--space-xs); }
     .pv-code__label { min-width: 0; overflow-wrap: anywhere; }
     .pv-code--missing .pv-code__label { color: var(--warning); }
     .pv-codes:disabled .pv-code, .pv-codes:disabled .pv-code input { cursor: not-allowed; }
     .pv-codes:disabled .pv-code { color: var(--text-muted); }
-    .pv-codes-sum { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); flex-wrap: wrap;
-      padding: var(--space-sm) var(--space-md); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--app-surface); }
-    .pv-codes-sum__text { margin: 0; min-width: 0; font-size: 14px; color: var(--app-text); overflow-wrap: anywhere; }
-    .pv-codes-sum__text soft-badge { margin-left: var(--space-sm); }
     .pv-codes__hint, .pv-codes__warn { margin-top: var(--space-xs); }
     .pv-codes__warn { color: var(--warning); }
     .pv-option { margin-top: var(--space-md); padding: var(--space-md); border: 1px solid var(--color-border); border-radius: var(--radius-lg);
@@ -447,7 +462,9 @@ const LIBELLE_CODE_LONG = 24;
       .pv-table tbody tr.pv-codes-row { padding: 12px; }
       .pv-table tbody td.pv-codes-cell { display: block; }
       .pv-table tbody td.pv-codes-cell::before { content: none; }
-      .pv-codes { grid-template-columns: minmax(0, 1fr); padding: var(--space-sm); }
+      /* Une seule colonne : rangées de hauteur naturelle (aucune case voisine à aligner). */
+      .pv-codes { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; }
+      .pv-codes-box { padding: var(--space-sm); }
       .pv-table tbody td:has(.pv-hpj) { grid-template-columns: minmax(0, 1fr); }
       .pv-table tbody td:has(.pv-hpj) .pv-hint { grid-column: 1; }
     }
@@ -463,7 +480,7 @@ export class PayrollVariablesCard implements OnInit {
   protected readonly aideHeuresParJour = AIDE_HEURES_PAR_JOUR;
   protected readonly aideCodes = AIDE_CODES_ABSENCE;
   protected readonly titreCodes = TITRE_CODES_ABSENCE;
-  protected readonly moisVerrouille = 'Mois déjà envoyé : modification impossible.';
+  protected readonly lectureSeule = 'Mois déjà envoyé : lecture seule.';
   protected readonly badgeEnvoye = BADGE_ENVOYE;
   protected readonly badgeNonEnvoye = BADGE_NON_ENVOYE;
   protected readonly codeFrais = CODE_FRAIS;
@@ -496,8 +513,8 @@ export class PayrollVariablesCard implements OnInit {
   readonly listeCodesAbsence = computed<PayrollAbsenceCode[]>(() => this.config()?.absenceCodes?.codes ?? []);
   /** Bloc des codes d'absence déplié (replié par défaut). Les cases cochées vivent dans le brouillon : le repli ne les perd pas. */
   readonly ouverture = signal(false);
-  /** Déplié seulement si le mois n'est pas envoyé (verrouillé : résumé seul). */
-  readonly codesOuverts = computed(() => this.ouverture() && !this.config()?.moisEnvoye);
+  /** Bloc déplié ; mois envoyé : déplié en lecture seule (« Voir »), cases désactivées. */
+  readonly codesOuverts = computed(() => this.ouverture());
   /** Noms des codes comptés dans le brouillon : l'arbitrage sans code, puis les codes cochés dans l'ordre de la liste. */
   readonly nomsComptes = computed<string[]>(() => [
     ...(this.codesAbsence().sansCode ? [NOM_ARBITRAGE_SANS_CODE] : []),

@@ -920,7 +920,7 @@ describe('Absence : codes d\'absence comptés comme non justifiés', () => {
 
   const cases = (racine: HTMLElement) => Array.from(racine.querySelectorAll<HTMLLabelElement>('.pv-codes .pv-code'));
   const ligne = (racine: HTMLElement, libelle: string) => cases(racine).find((l) => l.textContent!.includes(libelle))!;
-  const bouton = (racine: HTMLElement) => racine.querySelector<HTMLButtonElement>('.pv-codes-sum button')!;
+  const bouton = (racine: HTMLElement) => racine.querySelector<HTMLButtonElement>('.pv-codes-box__head button')!;
   const resume = (racine: HTMLElement) => racine.querySelector('.pv-codes-sum__text')!.textContent!.replace(/\s+/g, ' ').trim();
   /** Lot D9 : le bloc est replié par défaut ; on le déplie par le bouton « Modifier ». */
   const deplier = (racine: HTMLElement, fixture: { detectChanges(): void }) => { bouton(racine).click(); fixture.detectChanges(); };
@@ -974,16 +974,52 @@ describe('Absence : codes d\'absence comptés comme non justifiés', () => {
     expect(carte.modifie()).toBe(false);
   });
 
-  it('mois déjà envoyé : résumé affiché, « Modifier » désactivé avec l\'infobulle, liste non dépliable', () => {
+  it('mois déjà envoyé : « Voir » déplie la liste en lecture seule (cases désactivées, texte relié au groupe), « Fermer » la replie', () => {
     const { racine, fixture } = rendreAbsence(configAbsence('H', { moisEnvoye: true, dernierEnvoi: '2026-11-01 → 2026-11-30' }));
 
-    expect(resume(racine)).toBe('2 codes comptés comme non justifiés : Arbitrage d\'absence sans code, ABSENCE NON JUSTIFIEE');
-    expect(bouton(racine).disabled).toBe(true);
-    expect(bouton(racine).getAttribute('title')).toBe('Mois déjà envoyé : modification impossible.');
-    bouton(racine).click();
-    fixture.detectChanges();
+    expect(resume(racine)).toBe("2 codes comptés comme non justifiés : Arbitrage d'absence sans code, ABSENCE NON JUSTIFIEE");
+    expect(racine.querySelector('.pv-codes-box')?.textContent).toContain('Mois déjà envoyé : lecture seule.');
+    expect(bouton(racine).textContent!.trim()).toBe('Voir');
+    expect(bouton(racine).disabled).toBe(false);
+    expect(bouton(racine).getAttribute('aria-expanded')).toBe('false');
+
+    deplier(racine, fixture);
+    const groupe = racine.querySelector<HTMLFieldSetElement>('fieldset.pv-codes')!;
+    expect(groupe.disabled).toBe(true);
+    expect(cases(racine).length).toBeGreaterThan(0);
+    expect(cases(racine).every((l) => l.querySelector('input')!.matches(':disabled'))).toBe(true);
+    expect(racine.querySelector('#' + groupe.getAttribute('aria-describedby'))?.textContent).toBe('Mois déjà envoyé : lecture seule.');
+    expect(bouton(racine).textContent!.trim()).toBe('Fermer');
+    expect(bouton(racine).getAttribute('aria-expanded')).toBe('true');
+
+    deplier(racine, fixture);
     expect(racine.querySelector('fieldset.pv-codes')).toBeNull();
+    expect(bouton(racine).textContent!.trim()).toBe('Voir');
     expect(racine.querySelector('.pv-codes__hint')?.textContent).toContain('prochain calcul');
+  });
+
+  it('mois non envoyé : pas de texte de lecture seule, cases actives une fois déplié', () => {
+    const { racine, fixture } = rendreAbsence(configAbsence('H'));
+    expect(racine.querySelector('.pv-codes-box')?.textContent).not.toContain('lecture seule');
+    deplier(racine, fixture);
+    expect(racine.querySelector<HTMLFieldSetElement>('fieldset.pv-codes')!.disabled).toBe(false);
+    expect(racine.querySelector('fieldset.pv-codes')!.hasAttribute('aria-describedby')).toBe(false);
+  });
+
+  it('déplié : un seul cadre (résumé en tête, liste dessous), libellé et pastilles dans la même ligne de la case', () => {
+    const { racine, fixture } = rendreAbsence(configAbsence('H'));
+    deplier(racine, fixture);
+    const cadre = racine.querySelector('.pv-codes-box')!;
+    expect(cadre.querySelector('.pv-codes-box__head .pv-codes-sum__text')).not.toBeNull();
+    expect(cadre.querySelector('fieldset.pv-codes')).not.toBeNull();
+    expect(racine.querySelectorAll('.pv-codes-box')).toHaveLength(1);
+    // Pastilles groupées à la suite du libellé, dans le même conteneur (elles passent ensemble sous le libellé faute de place).
+    const corps = ligne(racine, 'Abs non payés').querySelector('.pv-code__body')!;
+    expect([...corps.children].map((e) => e.className)).toEqual(['pv-code__label', 'pv-code__badges']);
+    expect([...corps.querySelectorAll('.pv-code__badges soft-badge')].map((b) => b.textContent!.trim())).toEqual(['non payé', 'à envisager']);
+    const styles = (PayrollVariablesCard as unknown as { ɵcmp: { styles: string[] } }).ɵcmp.styles.join('').replace(/\s+/g, ' ');
+    expect(styles).toMatch(/\.pv-code__badges\[[^\]]+\] ?\{ ?display: inline-flex; flex-wrap: nowrap;/);
+    expect(styles).toMatch(/grid-template-columns: repeat\(auto-fill, minmax\(300px, 1fr\)\); grid-auto-rows: 1fr;/);
   });
 
   it('replié par défaut : résumé et bouton « Modifier » (aria-expanded faux, aria-controls), aucune case affichée', () => {
