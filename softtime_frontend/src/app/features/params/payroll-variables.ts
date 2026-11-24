@@ -10,7 +10,7 @@ import { PayrollVariablesService } from '../../shared/services/payroll-variables
 import { SoftBadge, SoftButton, SoftCard, SoftSelect } from '../../shared/components';
 import { SelectOption } from '../../shared/components/soft-select';
 import { PayrollDestinations } from './payroll-destinations';
-import { PayrollDomainsSetting } from './payroll-domains';
+import { BADGE_ENVOYE, MESSAGE_AUCUNE_CONSTANTE, BADGE_NON_ENVOYE, CODE_FRAIS, DomainesPaie, MENTION_CODE_FIXE } from './payroll-domains';
 import {
   aCodePropre,
   AIDE_CODES_ABSENCE,
@@ -25,9 +25,11 @@ import {
   codesAbsenceLus,
   estSansEnvoi,
   HEURES_PAR_JOUR_DEFAUT,
+  NOM_ARBITRAGE_SANS_CODE,
   NON_ENVOYEE,
   peutCocher,
   raisonNonCochable,
+  resumeCodesAbsence,
   TITRE_CODES_ABSENCE,
   validerBrouillon,
   versEnregistrement,
@@ -45,7 +47,7 @@ const LIBELLE_CODE_LONG = 24;
 @Component({
   selector: 'app-payroll-variables',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, SoftBadge, SoftButton, SoftCard, SoftSelect, PayrollDestinations, PayrollDomainsSetting],
+  imports: [FormsModule, SoftBadge, SoftButton, SoftCard, SoftSelect, PayrollDestinations],
   template: `
     <soft-card>
       <div class="pv-head">
@@ -182,24 +184,50 @@ const LIBELLE_CODE_LONG = 24;
                 @if (v.variable === 'Absence') {
                   <tr class="pv-codes-row" [class.pv-off]="!v.actif">
                     <td colspan="4" class="pv-codes-cell">
-                      <fieldset class="pv-codes" [disabled]="c.moisEnvoye || saving()">
-                        <legend class="pv-codes__title">{{ titreCodes }}</legend>
-                        <label class="pv-code">
-                          <input type="checkbox" [checked]="codesAbsence().sansCode"
-                            (change)="basculerSansCode($any($event.target).checked)" />
-                          <span class="pv-code__label">Arbitrage d'absence sans code</span>
-                        </label>
-                        @for (code of listeCodesAbsence(); track code.libelle) {
-                          <label class="pv-code" [class.pv-code--missing]="code.introuvable">
-                            <input type="checkbox" [checked]="estCompte(code.libelle)"
-                              (change)="basculerCode(code.libelle, $any($event.target).checked)" />
-                            <span class="pv-code__label">{{ code.libelle }}</span>
-                            @if (code.introuvable) { <soft-badge variant="warning">code introuvable</soft-badge> }
-                            @if (code.nonPaye) { <soft-badge variant="muted">non payé</soft-badge> }
-                            @if (code.suggere && !estCompte(code.libelle)) { <soft-badge variant="info">à envisager</soft-badge> }
-                          </label>
-                        }
-                      </fieldset>
+                      <!-- Un seul cadre : résumé et bouton en tête, liste dessous séparée par un trait (bloc replié par défaut, cases
+                           conservées au repli). Mois envoyé : « Voir » déplie la liste en lecture seule. -->
+                      <div class="pv-codes-box">
+                        <div class="pv-codes-box__head">
+                          <p class="pv-codes-sum__text" id="pv-codes-resume">
+                            {{ resumeCodes() }}
+                            @if (codesModifies()) { <soft-badge variant="warning">modifications non enregistrées</soft-badge> }
+                          </p>
+                          <button type="button" class="soft-btn soft-btn--secondary soft-btn--sm" aria-controls="pv-codes-liste"
+                            [attr.aria-expanded]="codesOuverts()" (click)="basculerOuverture()">
+                            {{ codesOuverts() ? 'Fermer' : (c.moisEnvoye ? 'Voir' : 'Modifier') }}
+                          </button>
+                        </div>
+                        @if (c.moisEnvoye) { <p class="soft-field__hint pv-codes-box__ro" id="pv-codes-lecture">{{ lectureSeule }}</p> }
+                        <div id="pv-codes-liste">
+                          @if (codesOuverts()) {
+                            <fieldset class="pv-codes" [disabled]="c.moisEnvoye || saving()"
+                              [attr.aria-describedby]="c.moisEnvoye ? 'pv-codes-lecture' : null">
+                              <legend class="pv-codes__title">{{ titreCodes }}</legend>
+                              <label class="pv-code">
+                                <input type="checkbox" [checked]="codesAbsence().sansCode"
+                                  (change)="basculerSansCode($any($event.target).checked)" />
+                                <span class="pv-code__body"><span class="pv-code__label">Arbitrage d'absence sans code</span></span>
+                              </label>
+                              @for (code of listeCodesAbsence(); track code.libelle) {
+                                <label class="pv-code" [class.pv-code--missing]="code.introuvable">
+                                  <input type="checkbox" [checked]="estCompte(code.libelle)"
+                                    (change)="basculerCode(code.libelle, $any($event.target).checked)" />
+                                  <span class="pv-code__body">
+                                    <span class="pv-code__label">{{ code.libelle }}</span>
+                                    @if (code.introuvable || code.nonPaye || (code.suggere && !estCompte(code.libelle))) {
+                                      <span class="pv-code__badges">
+                                        @if (code.introuvable) { <soft-badge variant="warning">code introuvable</soft-badge> }
+                                        @if (code.nonPaye) { <soft-badge variant="muted">non payé</soft-badge> }
+                                        @if (code.suggere && !estCompte(code.libelle)) { <soft-badge variant="info">à envisager</soft-badge> }
+                                      </span>
+                                    }
+                                  </span>
+                                </label>
+                              }
+                            </fieldset>
+                          }
+                        </div>
+                      </div>
                       @if (aCodeIntrouvable()) {
                         <div class="soft-field__hint pv-codes__warn" role="status">
                           Un code enregistré n'existe plus dans les codes d'absence : il reste compté tant qu'il n'est pas décoché.
@@ -210,6 +238,65 @@ const LIBELLE_CODE_LONG = 24;
                   </tr>
                 }
               }
+                @if (!autre()) {
+                  <tr class="pv-domain" [class.pv-off]="!domaines.cantine()">
+                    <td class="pv-name">
+                      <span class="pv-name__text">Cantine</span>
+                      <soft-badge [variant]="domaines.cantine() ? 'success' : 'muted'">{{ domaines.cantine() ? badgeEnvoye : badgeNonEnvoye }}</soft-badge>
+                    </td>
+                    <td data-label="Envoyée">
+                      <label class="soft-toggle pv-toggle" [attr.title]="domaines.raisonCantine()">
+                        <input type="checkbox" aria-label="Envoyer la cantine à la paie"
+                          [checked]="domaines.cantine()" [disabled]="!domaines.cantineCochable()"
+                          (change)="domaines.basculerCantine($any($event.target).checked)" />
+                        <span class="soft-toggle__track"><span class="soft-toggle__thumb"></span></span>
+                      </label>
+                      @if (domaines.raisonCantine(); as r) { <div class="soft-field__hint pv-hint">{{ r }}</div> }
+                    </td>
+                    <td data-label="Code de paie">
+                      @if (domaines.listeVide()) {
+                        <div class="soft-field__hint pv-hint">{{ aucuneConstante }}</div>
+                      } @else {
+                        <div class="soft-select pv-field">
+                          <div class="soft-select__control">
+                            <select aria-label="Code de constante de la cantine" [attr.title]="domaines.titreCode()" [disabled]="domaines.saving()"
+                              (change)="domaines.choisirCode($any($event.target).value)">
+                              @if (domaines.peutVider()) { <option value="" [selected]="!domaines.code()">(aucun)</option> }
+                              @for (o of domaines.options(); track o.value) {
+                                <option [value]="o.value" [selected]="o.value === domaines.code()">{{ o.label }}</option>
+                              }
+                            </select>
+                          </div>
+                        </div>
+                        @if (domaines.codeAbsent()) {
+                          <div class="soft-field__hint pv-codes__warn" role="status">
+                            Ce code n'existe plus dans SAGE ; il reste enregistré tant que vous n'en choisissez pas un autre.
+                          </div>
+                        }
+                        @if (domaines.avertissementCodes(); as a) { <div class="soft-field__hint pv-hint">{{ a }}</div> }
+                      }
+                    </td>
+                    <td></td>
+                  </tr>
+                  <tr class="pv-domain" [class.pv-off]="!domaines.frais()">
+                    <td class="pv-name">
+                      <span class="pv-name__text">Frais&nbsp;de&nbsp;déplacement</span>
+                      <soft-badge [variant]="domaines.frais() ? 'success' : 'muted'">{{ domaines.frais() ? badgeEnvoye : badgeNonEnvoye }}</soft-badge>
+                    </td>
+                    <td data-label="Envoyée">
+                      <label class="soft-toggle pv-toggle">
+                        <input type="checkbox" aria-label="Envoyer les frais de déplacement à la paie"
+                          [checked]="domaines.frais()" [disabled]="domaines.saving()"
+                          (change)="domaines.basculerFrais($any($event.target).checked)" />
+                        <span class="soft-toggle__track"><span class="soft-toggle__thumb"></span></span>
+                      </label>
+                    </td>
+                    <td data-label="Code de paie">
+                      <span class="pv-readonly" [attr.title]="mentionCodeFixe">{{ codeFrais }} — {{ mentionCodeFixe }}</span>
+                    </td>
+                    <td></td>
+                  </tr>
+                }
             </tbody>
           </table>
         </div>
@@ -227,7 +314,19 @@ const LIBELLE_CODE_LONG = 24;
           </div>
           @if (c.moisEnvoye) { <div class="soft-field__hint pv-option__hint">Mois déjà envoyé : modification impossible.</div> }
         </div>
-        <app-payroll-domains [config]="c" (enregistre)="charger()" />
+        @if (autre()) {
+          <p class="pv-note">Base AUTRE : la cantine et les frais de déplacement ne s'y envoient pas ; la clôture ne les exige pas.</p>
+        } @else {
+          <div class="pv-actions pv-domains-save">
+            <soft-button ariaLabel="Enregistrer les domaines" [loading]="domaines.saving()" [disabled]="!domaines.modifie()" (click)="domaines.enregistrer()">Enregistrer</soft-button>
+          </div>
+          @if (domaines.erreur(); as e) { <div class="pv-banner pv-banner--danger" role="alert">{{ e }}</div> }
+          <p class="pv-note">
+            Cantine et frais de déplacement : activés, ils sont exigés à la clôture (dernier envoi réussi, sans plage de matricules,
+            sur les bornes exactes de la période) ; un domaine envoyé sur la période reste exigé même si son interrupteur est
+            éteint. Ce réglage s'enregistre séparément, même quand le mois est déjà envoyé, et ne change rien à ce qui est envoyé en paie.
+          </p>
+        }
         <p class="pv-note">
           Retard est envoyé en heures et Absence en heures ou en jours, avec la valeur affichée dans la page Heures
           supplémentaires ({{ autre() ? 'dans leur colonne de destination' : 'dans le code de paie choisi' }}) ; en jours,
@@ -251,6 +350,7 @@ const LIBELLE_CODE_LONG = 24;
     .pv-title { margin: 0; font-family: var(--font-heading); font-size: 16px; font-weight: 600; color: var(--app-text-strong); }
     .pv-sub { margin: var(--space-xs) 0 0; color: var(--text-secondary); font-size: 14px; }
     .pv-actions { display: flex; gap: var(--space-sm); flex-wrap: wrap; }
+    .pv-domains-save { margin-top: var(--space-md); }
     .pv-note { color: var(--text-muted); margin: var(--space-md) 0; font-size: 13px; }
     .pv-banner { margin: var(--space-md) 0; padding: 10px 14px; font-size: 13px; border-radius: var(--radius-md); border: 1px solid; }
     .pv-banner p { margin: 2px 0; }
@@ -279,12 +379,22 @@ const LIBELLE_CODE_LONG = 24;
     .pv-hpj__input { width: 96px; }
     .pv-hpj__input:disabled { background: var(--surface-dark); color: var(--text-muted); cursor: not-allowed; }
     .pv-codes-row > td { border-top: 0; padding-top: 0; }
-    .pv-codes { margin: 0; padding: var(--space-md); border: 1px solid var(--color-border); border-radius: var(--radius-lg);
-      background: var(--app-surface); display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--space-sm) var(--space-md); }
-    .pv-codes__title { padding: 0 var(--space-xs); font-weight: 600; font-size: 14px; color: var(--app-text-strong); }
-    .pv-code { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-xs) var(--space-sm); min-width: 0; cursor: pointer;
-      font-size: 13px; color: var(--app-text); }
-    .pv-code input { width: 18px; height: 18px; margin: 0; flex: 0 0 auto; accent-color: var(--accent); cursor: pointer; }
+    /* Bloc des codes comptés : un seul cadre (comme .pv-option), résumé en tête, liste dessous après un trait. */
+    .pv-codes-box { padding: var(--space-sm) var(--space-md); border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+      background: var(--app-surface); }
+    .pv-codes-box__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm) var(--space-md); flex-wrap: wrap; }
+    .pv-codes-box__ro { margin: var(--space-xs) 0 0; }
+    .pv-codes-sum__text { margin: 0; min-width: 0; font-size: 14px; color: var(--app-text); overflow-wrap: anywhere; }
+    .pv-codes-sum__text soft-badge { margin-left: var(--space-sm); }
+    /* Grille régulière : colonnes de largeur égale, rangées de même hauteur ; la légende (nom du groupe) prend toute la largeur. */
+    .pv-codes { margin: var(--space-sm) 0 0; padding: var(--space-sm) 0 var(--space-xs); min-width: 0; border: 0; border-top: 1px solid var(--color-border);
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); grid-auto-rows: 1fr; gap: var(--space-sm) var(--space-md); }
+    .pv-codes__title { float: left; grid-column: 1 / -1; width: 100%; padding: 0; font-weight: 600; font-size: 14px; color: var(--app-text-strong); }
+    /* Case, puis libellé et pastilles à la suite sur une ligne ; faute de place, les pastilles passent ensemble sous le libellé. */
+    .pv-code { display: flex; align-items: flex-start; gap: var(--space-sm); min-width: 0; cursor: pointer; font-size: 13px; color: var(--app-text); }
+    .pv-code input { width: 18px; height: 18px; margin: 3px 0 0; flex: 0 0 auto; accent-color: var(--accent); cursor: pointer; }
+    .pv-code__body { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-sm); min-width: 0; min-height: 24px; }
+    .pv-code__badges { display: inline-flex; flex-wrap: nowrap; gap: var(--space-xs); }
     .pv-code__label { min-width: 0; overflow-wrap: anywhere; }
     .pv-code--missing .pv-code__label { color: var(--warning); }
     .pv-codes:disabled .pv-code, .pv-codes:disabled .pv-code input { cursor: not-allowed; }
@@ -301,6 +411,11 @@ const LIBELLE_CODE_LONG = 24;
     .pv-toggle:focus-within .soft-toggle__track { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
     .pv-toggle:has(input:disabled) { cursor: not-allowed; }
     .pv-toggle input:disabled + .soft-toggle__track { opacity: 0.5; }
+    /* Les lignes Cantine et Frais de déplacement (libellé sur une ligne) élargissent la première colonne : marges latérales des
+       cellules resserrées pour que les listes de codes gardent leur largeur. */
+    @media (min-width: 768px) {
+      .pv-table thead th, .pv-table tbody td { padding-left: var(--space-md); padding-right: var(--space-md); }
+    }
     /* Largeur moyenne (menu latéral affiché, carte d'environ 670 px à 1024 px) : largeurs minimales resserrées pour que le
        tableau tienne dans sa carte sans défilement horizontal ; le champ « Heures par jour » passe à la ligne sous son libellé. */
     @media (min-width: 768px) and (max-width: 1180px) {
@@ -347,7 +462,9 @@ const LIBELLE_CODE_LONG = 24;
       .pv-table tbody tr.pv-codes-row { padding: 12px; }
       .pv-table tbody td.pv-codes-cell { display: block; }
       .pv-table tbody td.pv-codes-cell::before { content: none; }
-      .pv-codes { grid-template-columns: minmax(0, 1fr); padding: var(--space-sm); }
+      /* Une seule colonne : rangées de hauteur naturelle (aucune case voisine à aligner). */
+      .pv-codes { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; }
+      .pv-codes-box { padding: var(--space-sm); }
       .pv-table tbody td:has(.pv-hpj) { grid-template-columns: minmax(0, 1fr); }
       .pv-table tbody td:has(.pv-hpj) .pv-hint { grid-column: 1; }
     }
@@ -363,9 +480,17 @@ export class PayrollVariablesCard implements OnInit {
   protected readonly aideHeuresParJour = AIDE_HEURES_PAR_JOUR;
   protected readonly aideCodes = AIDE_CODES_ABSENCE;
   protected readonly titreCodes = TITRE_CODES_ABSENCE;
+  protected readonly lectureSeule = 'Mois déjà envoyé : lecture seule.';
+  protected readonly badgeEnvoye = BADGE_ENVOYE;
+  protected readonly badgeNonEnvoye = BADGE_NON_ENVOYE;
+  protected readonly codeFrais = CODE_FRAIS;
+  protected readonly mentionCodeFixe = MENTION_CODE_FIXE;
+  protected readonly aucuneConstante = MESSAGE_AUCUNE_CONSTANTE;
   readonly loading = signal(false);
   readonly saving = signal(false);
   readonly config = signal<PayrollVariablesConfig | null>(null);
+  /** Lignes Cantine et Frais de déplacement : brouillon et enregistrement séparés des variables. */
+  readonly domaines = new DomainesPaie(this.config, () => this.charger());
   readonly brouillon = signal<PayrollVariable[]>([]);
   /** Brouillon de l'option « remettre à 0 les salariés sans valeur à l'envoi » (vraie par défaut). */
   readonly remiseAZero = signal(true);
@@ -386,6 +511,21 @@ export class PayrollVariablesCard implements OnInit {
 
   /** Codes proposés : ceux lus (T_CODEABSENCE puis codes introuvables). */
   readonly listeCodesAbsence = computed<PayrollAbsenceCode[]>(() => this.config()?.absenceCodes?.codes ?? []);
+  /** Bloc des codes d'absence déplié (replié par défaut). Les cases cochées vivent dans le brouillon : le repli ne les perd pas. */
+  readonly ouverture = signal(false);
+  /** Bloc déplié ; mois envoyé : déplié en lecture seule (« Voir »), cases désactivées. */
+  readonly codesOuverts = computed(() => this.ouverture());
+  /** Noms des codes comptés dans le brouillon : l'arbitrage sans code, puis les codes cochés dans l'ordre de la liste. */
+  readonly nomsComptes = computed<string[]>(() => [
+    ...(this.codesAbsence().sansCode ? [NOM_ARBITRAGE_SANS_CODE] : []),
+    ...this.listeCodesAbsence().filter((c) => this.estCompte(c.libelle)).map((c) => c.libelle),
+  ]);
+  readonly resumeCodes = computed(() => resumeCodesAbsence(this.nomsComptes()));
+  /** Cases changées mais pas enregistrées. */
+  readonly codesModifies = computed(() => {
+    const c = this.config();
+    return !!c && changementsCodesAbsence(codesAbsenceLus(c.absenceCodes), this.codesAbsence()).length > 0;
+  });
   readonly aCodeIntrouvable = computed(() => this.listeCodesAbsence().some((c) => c.introuvable && this.estCompte(c.libelle)));
 
   /** Même règle que le bouton « Modifier » de la base active (le serveur vérifie de nouveau). */
@@ -444,6 +584,10 @@ export class PayrollVariablesCard implements OnInit {
   libelleLong(v: PayrollVariable): string | null {
     const t = this.titreCode(v);
     return t && t.length > LIBELLE_CODE_LONG ? t : null;
+  }
+
+  basculerOuverture(): void {
+    this.ouverture.update((o) => !o);
   }
 
   estCompte(libelle: string): boolean {

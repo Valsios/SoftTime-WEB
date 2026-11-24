@@ -37,6 +37,27 @@ export const AIDE_CODES_ABSENCE =
   'Les jours planifiés sans aucune ligne sont toujours comptés. Le changement s’applique au prochain calcul : '
   + 'recalculez les périodes déjà calculées avant de les envoyer.';
 
+/** Nom, dans le résumé, du réglage « arbitrage d'absence sans code ». */
+export const NOM_ARBITRAGE_SANS_CODE = "Arbitrage d'absence sans code";
+
+/** Résumé affiché quand aucun code n'est coché (règle serveur : jour planifié sans aucune ligne, toujours compté). */
+export const RESUME_AUCUN_CODE = "Aucun code coché : seuls les jours planifiés sans ligne d'absence sont comptés.";
+
+/** Au-delà de ce nombre de noms, le résumé n'en cite que les trois premiers. */
+const NOMS_CITES_MAX = 4;
+
+/**
+ * Ligne de résumé du bloc replié : « N code(s) compté(s) comme non justifié(s) : A, B, C » ; plus de quatre noms : les trois
+ * premiers puis « et N autres ».
+ */
+export function resumeCodesAbsence(noms: readonly string[]): string {
+  if (noms.length === 0) return RESUME_AUCUN_CODE;
+  const n = noms.length;
+  const debut = n === 1 ? '1 code compté comme non justifié' : `${n} codes comptés comme non justifiés`;
+  const cites = n > NOMS_CITES_MAX ? `${noms.slice(0, 3).join(', ')} et ${n - 3} autres` : noms.join(', ');
+  return `${debut} : ${cites}`;
+}
+
 /** Clé de colonne de la page Heures supplémentaires de chaque variable. */
 export const COLONNE_HEURES_SUP: Readonly<Record<string, string>> = {
   Exo130: 'exo130',

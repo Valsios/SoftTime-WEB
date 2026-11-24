@@ -627,13 +627,12 @@ La clôture **fige une période déjà envoyée à la paie**, définitivement. D
     première ligne, qui nomme le domaine après la version : `SOFTTIME-PAIE-INSTANTANE|2|{CANTINE ou FRAIS}|{base}|{début}|{fin}|{TYPE}` ; lignes,
     tri, séparateurs, encodage et arrondi sont ceux du format 1. Un couple format / domaine incohérent (1 hors heures, 2 pour les heures) est
     compté comme une altération.
-  - **Activation par base** : options `DomaineCantineActif` et `DomaineFraisActif` de `T_PAIE_OPTION`, **désactivées par défaut** ; cases
-    « Cantine » et « Frais de déplacement » du bloc « Domaines envoyés à la paie » sous les variables (écran Bases SAGE), enregistrement séparé et
+  - **Activation par base** : options `DomaineCantineActif` et `DomaineFraisActif` de `T_PAIE_OPTION`, **désactivées par défaut** ; lignes
+    « Cantine » et « Frais de déplacement » du tableau « Variables envoyées à la paie » (écran Bases SAGE), au niveau de Retard et d'Absence (libellé, badge, interrupteur, code de paie ; frais : `HA06` fixe), enregistrement séparé et
     confirmé, `PUT api/v1/payroll-variables/domains`, même droit que la configuration (administrateur ou `SAGE:{base}:UPDATE`), auteur et date dans
     `T_PAIE_OPTION` et journal central. Pas de verrou de mois : le réglage ne change rien à ce qui est envoyé, seulement ce que la clôture exige.
     Activation refusée pour une base AUTRE. Les droits d'écran `OTHER:CANTEEN` et `OTHER:TRAVEL_EXPENSES` ne changent pas.
-  - **Code de constante de la cantine (D6)** : option `CodeConstanteCantine` de `T_PAIE_OPTION` (aucune migration), champ « Code de constante de
-    la cantine » du même bloc, même droit, même journal (auteur), caches vidés à l'enregistrement. Sans réglage, le code historique `CANTINE_CODE`
+  - **Code de constante de la cantine (D6)** : option `CodeConstanteCantine` de `T_PAIE_OPTION` (aucune migration), liste déroulante des constantes `T_CST` de la base SAGE (code et libellé ; avertissement si le code enregistré n'existe plus, cantine non activable sans code valide ni constante ; le serveur garde la validation) sur la ligne « Cantine », même droit, même journal (auteur), caches vidés à l'enregistrement. Sans réglage, le code historique `CANTINE_CODE`
     (repris du desktop) est utilisé : comportement inchangé, mais ce code de 12 caractères ne tient pas dans `T_CST.CodeConstante` (10 caractères
     dans SAGE) et n'existe dans aucune base : l'envoi de la cantine est alors refusé (« Constante SAGE CANTINE_CODE absente… »). Validation à
     l'enregistrement (base STANDARD, refus 400) : code non vide ; longueur au plus celle de `T_CST.CodeConstante`, lue dans le schéma de la base
@@ -659,9 +658,9 @@ La clôture **fige une période déjà envoyée à la paie**, définitivement. D
     à 0 le cumul d'un salarié qui n'a pas de total sur la période (il garde la valeur précédente dans SAGE). Les envois de cantine et de frais
     antérieurs à la migration 011 n'ont ni marqueur ni instantané. Changer le code de la cantine après un envoi ne change pas l'instantané figé.
   - **Mise en production de la cantine** (dans cet ordre) : 1) créer dans SAGE la constante de cumul de la cantine (code de 10 caractères au plus,
-    avec son opérande) et ses lignes de cumul ; 2) dans SoftTime, écran Bases SAGE, bloc « Domaines envoyés à la paie » : saisir son code et
-    enregistrer (le code est vérifié dans SAGE) ; 3) cocher « Cantine » et enregistrer ; 4) calculer puis envoyer la cantine sur les bornes exactes de
-    chaque période, sans plage de matricules, avant de la clôturer. Les frais (`HA06`) ne demandent que l'étape 3.
+    avec son opérande) et ses lignes de cumul ; 2) dans SoftTime, écran Bases SAGE, ligne « Cantine » du tableau des variables : choisir sa constante dans la liste, allumer l'interrupteur et
+    enregistrer (le code est vérifié dans SAGE) ; 3) calculer puis envoyer la cantine sur les bornes exactes de
+    chaque période, sans plage de matricules, avant de la clôturer. Les frais (`HA06`) ne demandent que d'allumer leur interrupteur (étape 2).
 - **Parcours RH complet et bloc « Étape suivante : clôture » (D7)** : 1) **Calculer** la période (heures supplémentaires, cantine, frais) ;
   2) **Contrôle avant paie** (menu États) : le résultat doit être « Prêt » ; 3) **envoyer** à la paie les heures, la cantine et les frais, chacun
   depuis sa page et en un envoi distinct, sur les bornes exactes de la période et sans filtre ; 4) **clôturer** une seule fois, dans la carte de

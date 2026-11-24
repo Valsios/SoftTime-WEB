@@ -1,10 +1,21 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { computed, effect, inject, signal, Signal, untracked } from '@angular/core';
 import { ConfirmService } from '../../core/confirm.service';
 import { errorMessage } from '../../core/error.logic';
 import { ToastService } from '../../core/toast.service';
-import { PayrollDomains, PayrollVariablesConfig } from '../../shared/models';
+import { PayrollDomains, PayrollVariablesConfig, SageConstantOption } from '../../shared/models';
 import { PayrollVariablesService } from '../../shared/services/payroll-variables.service';
-import { SoftButton } from '../../shared/components';
+import { SelectOption } from '../../shared/components/soft-select';
+
+/** Code de paie des frais de déplacement : fixe, affiché mais non configurable. */
+export const CODE_FRAIS = 'HA06';
+/** Mention affichée à côté du code des frais. */
+export const MENTION_CODE_FIXE = 'code fixe';
+export const BADGE_ENVOYE = 'envoyé à la paie';
+export const BADGE_NON_ENVOYE = 'non envoyé à la paie';
+export const MESSAGE_AUCUNE_CONSTANTE = 'Aucune constante dans cette base SAGE : créez d\'abord la constante de la cantine dans SAGE.';
+export const MESSAGE_CODE_REQUIS = "Choisissez d'abord le code de paie.";
+export const MESSAGE_CODE_ABSENT = 'Le code enregistré n\'existe plus dans SAGE : choisissez une constante existante pour activer la cantine.';
+export const MENTION_INTROUVABLE = 'introuvable dans SAGE';
 
 /** Libellé d'un changement d'activation ou de code, pour la confirmation. */
 export function questionDomaines(base: string, avant: PayrollDomains, apres: PayrollDomains): string {
@@ -19,102 +30,87 @@ export function questionDomaines(base: string, avant: PayrollDomains, apres: Pay
 }
 
 /**
- * « Domaines envoyés à la paie » de la base active (sous les variables) : la cantine et les frais de déplacement activés
- * sont exigés à la clôture (dernier envoi réussi, sans plage de matricules, sur les bornes exactes de la période).
- * Désactivés par défaut ; seule une base STANDARD les envoie. Enregistrement séparé des variables, sans verrou de mois.
+ * « Domaines envoyés à la paie » de la base active : la cantine et les frais de déplacement activés sont exigés à la clôture
+ * (dernier envoi réussi, sans plage de matricules, sur les bornes exactes de la période). Désactivés par défaut ; seule une base
+ * STANDARD les envoie. Les lignes sont affichées avec celles des variables (payroll-variables.ts) ; cette classe porte leur
+ * brouillon et leur enregistrement, séparé des variables et sans verrou de mois. La liste des constantes n'est qu'une aide : le
+ * serveur valide le code (non vide, 10 caractères au plus, présent dans T_CST) et refuse l'activation sans code valide.
+ * À créer dans un contexte d'injection.
  */
-@Component({
-  selector: 'app-payroll-domains',
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [SoftButton],
-  template: `
-    @if (config(); as c) {
-      <fieldset class="pd">
-        <legend class="pd__title">Domaines envoyés à la paie</legend>
-        @if (standard()) {
-          <p class="soft-field__hint pd__hint">
-            Cochez la cantine et les frais de déplacement si cette base les envoie à la paie : la clôture exigera alors leur
-            dernier envoi réussi, sans plage de matricules, sur les bornes exactes de la période. Un domaine envoyé sur la
-            période est exigé même s'il n'est pas coché.
-          </p>
-          <label class="soft-field pd__code">
-            <span class="soft-field__label">Code de constante de la cantine</span>
-            <input class="soft-input" type="text" autocomplete="off" spellcheck="false" [value]="code()" [disabled]="saving()"
-              (input)="code.set($any($event.target).value)" />
-            <span class="soft-field__hint">
-              Code de la constante SAGE qui reçoit la cantine (10 caractères au plus), à créer d'abord dans SAGE.
-              @if (c.domaines?.codeCantineParDefaut) { Aucun code configuré : le code historique {{ c.domaines?.codeCantine }} n'existe dans aucune base SAGE. }
-            </span>
-          </label>
-          <div class="pd__rows">
-            <label class="pd__row">
-              <input type="checkbox" [checked]="cantine()" [disabled]="saving()" (change)="cantine.set($any($event.target).checked)" />
-              <span>Cantine</span>
-            </label>
-            <label class="pd__row">
-              <input type="checkbox" [checked]="frais()" [disabled]="saving()" (change)="frais.set($any($event.target).checked)" />
-              <span>Frais de déplacement</span>
-            </label>
-            <soft-button size="sm" [loading]="saving()" [disabled]="!modifie()" (click)="enregistrer()">Enregistrer les domaines</soft-button>
-          </div>
-          @if (erreur(); as e) { <p class="pd__error" role="alert">{{ e }}</p> }
-        } @else {
-          <p class="soft-field__hint pd__hint">
-            Base AUTRE : la cantine et les frais de déplacement ne s'y envoient pas ; la clôture ne les exige pas.
-          </p>
-        }
-      </fieldset>
-    }
-  `,
-  styles: [`
-    :host { display: block; }
-    .pd { margin: var(--space-md) 0 0; padding: var(--space-md); border: 1px solid var(--color-border); border-radius: var(--radius-lg);
-      min-width: 0; }
-    .pd__title { padding: 0 var(--space-xs); font-weight: 600; color: var(--app-text-strong); font-size: 14px; }
-    .pd__hint { margin: 0 0 var(--space-sm); }
-    .pd__code { display: grid; gap: 4px; max-width: 420px; margin: 0 0 var(--space-sm); min-width: 0; }
-    .pd__code input { width: 100%; min-width: 0; box-sizing: border-box; }
-    .pd__rows { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm) var(--space-lg); }
-    .pd__row { display: inline-flex; align-items: center; gap: var(--space-xs); font-size: 14px; color: var(--app-text); cursor: pointer; }
-    .pd__row:has(input:disabled) { cursor: not-allowed; }
-    .pd__error { margin: var(--space-sm) 0 0; color: var(--danger); font-size: 13px; overflow-wrap: anywhere; }
-    @media (max-width: 767px) {
-      .pd__rows { flex-direction: column; align-items: flex-start; }
-    }
-  `],
-})
-export class PayrollDomainsSetting {
+export class DomainesPaie {
   private readonly svc = inject(PayrollVariablesService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
 
-  /** Configuration de la base active (réglage enregistré et type de base). */
-  readonly config = input<PayrollVariablesConfig | null>(null);
-  /** Émis après un enregistrement : la carte des variables se recharge. */
-  readonly enregistre = output<void>();
-
   readonly cantine = signal(false);
   readonly frais = signal(false);
-  /** Code de constante de la cantine saisi (initialisé au code utilisé par la base). */
+  /** Code de constante de la cantine choisi ; vide tant qu'aucun code n'est configuré (le code historique n'est jamais proposé). */
   readonly code = signal('');
   readonly saving = signal(false);
   readonly erreur = signal<string | null>(null);
 
   readonly standard = computed(() => (this.config()?.typeBase ?? '').toUpperCase() !== 'AUTRE');
-  private readonly enregistres = computed<PayrollDomains>(() => ({
-    cantine: !!this.config()?.domaines?.cantine,
-    frais: !!this.config()?.domaines?.frais,
-    codeCantine: this.config()?.domaines?.codeCantine ?? '',
-  }));
-  private readonly codeModifie = computed(() => this.code().trim() !== (this.enregistres().codeCantine ?? '').trim());
-  readonly modifie = computed(() => this.cantine() !== this.enregistres().cantine || this.frais() !== this.enregistres().frais
-    || this.codeModifie());
+  private readonly sauveCantine = computed(() => !!this.config()?.domaines?.cantine);
+  private readonly sauveFrais = computed(() => !!this.config()?.domaines?.frais);
+  private readonly sauveCode = computed(() => {
+    const d = this.config()?.domaines;
+    return d?.codeCantineParDefaut ? '' : (d?.codeCantine ?? '').trim();
+  });
+  private readonly enregistres = computed<PayrollDomains>(() => ({ cantine: this.sauveCantine(), frais: this.sauveFrais(), codeCantine: this.sauveCode() }));
+  private readonly codeModifie = computed(() => this.code().trim() !== this.sauveCode());
+  readonly modifie = computed(() => this.cantine() !== this.sauveCantine() || this.frais() !== this.sauveFrais() || this.codeModifie());
 
-  constructor() {
+  /** Constantes de la base SAGE (T_CST). */
+  readonly constantes = computed<SageConstantOption[]>(() => this.config()?.codesPaie ?? []);
+  readonly avertissementCodes = computed(() => this.config()?.avertissementCodes ?? null);
+  /** Aucune constante lisible dans la base SAGE : la cantine ne peut pas être activée. */
+  readonly listeVide = computed(() => this.constantes().length === 0 && !this.avertissementCodes());
+  /** Le code choisi n'existe pas (ou plus) dans la liste. */
+  readonly codeAbsent = computed(() => {
+    const code = this.code().trim().toLowerCase();
+    return !!code && !this.avertissementCodes() && !this.constantes().some((o) => o.code.trim().toLowerCase() === code);
+  });
+  private readonly codeValide = computed(() => !!this.code().trim() && !this.codeAbsent() && !this.listeVide());
+  /** Options de la liste : le code déjà enregistré reste visible, avec un avertissement, même s'il n'existe plus. */
+  readonly options = computed<SelectOption[]>(() => {
+    const liste = this.constantes().map((o) => ({ value: o.code, label: o.intitule ? `${o.code} — ${o.intitule}` : o.code }));
+    return this.codeAbsent() ? [{ value: this.code().trim(), label: `${this.code().trim()} — ${MENTION_INTROUVABLE}` }, ...liste] : liste;
+  });
+  /** « (aucun) » n'est proposé que tant qu'aucun code n'est enregistré : le serveur refuse un code vide. */
+  readonly peutVider = computed(() => !this.sauveCode());
+  /** Libellé complet du code choisi (infobulle). */
+  readonly titreCode = computed<string | null>(() => this.options().find((o) => o.value === this.code())?.label ?? null);
+  /** Pourquoi l'interrupteur de la cantine ne peut pas être allumé ; null s'il le peut (ou s'il est déjà allumé). */
+  readonly raisonCantine = computed<string | null>(() => {
+    if (this.cantine()) return null;
+    if (this.avertissementCodes()) return this.avertissementCodes();
+    if (this.listeVide()) return MESSAGE_AUCUNE_CONSTANTE;
+    if (!this.code().trim()) return MESSAGE_CODE_REQUIS;
+    return this.codeAbsent() ? MESSAGE_CODE_ABSENT : null;
+  });
+  readonly cantineCochable = computed(() => !this.saving() && (this.cantine() || this.codeValide()));
+
+  constructor(private readonly config: Signal<PayrollVariablesConfig | null>, private readonly recharger: () => void) {
+    // Le brouillon n'est remplacé que si le réglage enregistré change (valeurs, pas objet) : un rechargement des variables le garde.
     effect(() => {
       const d = this.enregistres();
       untracked(() => { this.cantine.set(d.cantine); this.frais.set(d.frais); this.code.set(d.codeCantine ?? ''); });
     });
+  }
+
+  basculerCantine(actif: boolean): void {
+    this.cantine.set(actif);
+    this.erreur.set(null);
+  }
+
+  basculerFrais(actif: boolean): void {
+    this.frais.set(actif);
+    this.erreur.set(null);
+  }
+
+  choisirCode(code: string | null): void {
+    this.code.set((code ?? '').trim());
+    this.erreur.set(null);
   }
 
   async enregistrer(): Promise<void> {
@@ -129,7 +125,7 @@ export class PayrollDomainsSetting {
       next: () => {
         this.saving.set(false);
         this.toast.success('Domaines enregistrés.');
-        this.enregistre.emit();
+        this.recharger();
       },
       error: (e) => {
         this.saving.set(false);

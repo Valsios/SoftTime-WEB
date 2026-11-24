@@ -617,20 +617,66 @@ button {
   position: relative;
 }
 
+/* Le cadre (bordure, fond, anneau de focus) est porté par le conteneur, comme .soft-input : le champ et les boutons (croix,
+   chevron) y sont côte à côte au lieu d'être superposés (boutons posés dans le champ). Même aspect qu'avant. */
 .soft-combobox__control {
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  height: 44px;
+  /* 7 px + 1 px de bordure : chevron à 8 px du bord, comme avant. */
+  padding-right: calc(var(--space-sm) - 1px);
+  border: 1px solid var(--color-border-input);
+  border-radius: var(--radius-md);
+  background: var(--app-surface);
+  transition: border var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
 }
 
-.soft-combobox__input {
-  padding-right: 76px;
+.soft-combobox__control:focus-within {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 4px var(--focus-glow);
+}
+
+/* Désactivé et en erreur : mêmes rendus qu'avant (.soft-input:disabled, .soft-field--error .soft-input), portés par le cadre. */
+.soft-combobox__control:has(.soft-combobox__input:disabled) {
+  background: var(--surface-dark);
+}
+
+.soft-field--error .soft-combobox__control {
+  border-color: var(--danger);
+  outline-color: var(--danger);
+  box-shadow: 0 0 0 4px rgba(190, 18, 60, 0.1);
+}
+
+.soft-combobox__control .soft-combobox__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  /* Même réserve qu'avant (76 px à droite du texte, croix affichée ou non) : mêmes largeurs naturelles et même zone de texte.
+     Sans croix : 37 + 4 (écart) + 28 (chevron) + 7 = 76 ; avec croix : 9 + 4 + 24 + 4 + 28 + 7 = 76. */
+  padding-right: 37px;
+  box-shadow: none;
   cursor: text;
+}
+
+.soft-combobox__control:has(.soft-combobox__clear) .soft-combobox__input {
+  padding-right: 9px;
+}
+
+.soft-combobox__control .soft-combobox__input:focus {
+  outline: none;
+  box-shadow: none;
 }
 
 .soft-combobox__clear,
 .soft-combobox__chevron {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -643,7 +689,6 @@ button {
 }
 
 .soft-combobox__clear {
-  right: 40px;
   width: 24px;
   height: 24px;
   font-size: 20px;
@@ -651,7 +696,6 @@ button {
 }
 
 .soft-combobox__chevron {
-  right: 8px;
   width: 28px;
   height: 28px;
 }
