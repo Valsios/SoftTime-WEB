@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ReportFilter, PageChangeEvent } from '../../shared/models';
 import { ReportsService } from '../../shared/services/reports.service';
@@ -13,10 +13,18 @@ import {
 } from '../../shared/components';
 import { ExcelExportService } from '../../shared/services/excel-export.service';
 import { fmtDate, fmtHeure } from '../../shared/utils/date';
+import { errorMessage } from '../../core/error.logic';
+import {
+  ABSENCES_JUSTIFIEES,
+  JUSTIFIEES_COLUMNS,
+  JUSTIFIEES_EMPTY,
+  JUSTIFIEES_NOTICE,
+} from './reports.logic';
 
-const REPORTS = [
+export const REPORTS = [
   { id: 'pointage', label: 'État pointage' },
   { id: 'absences', label: 'État absences' },
+  { id: ABSENCES_JUSTIFIEES, label: 'Absences justifiées' },
   { id: 'retards', label: 'État retards' },
   { id: 'hs-recap', label: 'Récap HS EXO/IMPO' },
   { id: 'heures-semaine', label: 'Heures par semaine' },
@@ -126,8 +134,15 @@ const RETARD_EXPORT_COLUMNS: Column[] = [
       ></soft-select>
     </div>
 
+    @if (justifiees()) {
+      <p class="reports-note">{{ notice }}</p>
+    }
+
     <period-filter [showDepartement]="true" (search)="onSearch($event)"></period-filter>
 
+    @if (erreur(); as message) {
+      <div class="reports-alert" role="alert">{{ message }}</div>
+    } @else {
     <soft-card>
       <data-table
         [columns]="columns()"
@@ -137,12 +152,18 @@ const RETARD_EXPORT_COLUMNS: Column[] = [
         [total]="total()"
         [serverPageSize]="pageSize"
         [serverPage]="page()"
+        [emptyText]="emptyText()"
         [(searchTerm)]="tableSearch"
         (searchSubmit)="onTableSearch($event)"
         (pageChange)="onPageChange($event)"
       ></data-table>
     </soft-card>
+    }
   `,
+  styles: [
+    `.reports-note { margin: 0 0 12px; color: var(--text-muted); font-size: 13px; }
+     .reports-alert { padding: 10px 14px; font-size: 13px; border-radius: var(--radius-md); border: 1px solid; color: var(--danger); background: var(--danger-bg); border-color: var(--danger-border); }`,
+  ],
 })
 export class ReportsPage {
   private readonly svc = inject(ReportsService);
@@ -156,12 +177,22 @@ export class ReportsPage {
   readonly total = signal(0);
   readonly tableSearch = signal('');
   reportType: string = 'pointage';
+  /** Type courant en signal (le template OnPush en dépend) ; `reportType` reste le modèle de la liste déroulante. */
+  private readonly typeCourant = signal<string>('pointage');
+  readonly justifiees = computed(() => this.typeCourant() === ABSENCES_JUSTIFIEES);
+  protected readonly notice = JUSTIFIEES_NOTICE;
+  /** Message d'erreur du serveur pour l'état « Absences justifiées » (remplace le tableau : jamais une liste vide muette). */
+  readonly erreur = signal<string | null>(null);
+  private readonly recherche = signal(false);
+  /** Texte d'état vide : propre à « Absences justifiées », et seulement après une recherche. */
+  readonly emptyText = computed(() => (this.justifiees() && this.recherche() ? JUSTIFIEES_EMPTY : 'Aucune donnée.'));
   readonly reportOptions = REPORTS.map((r) => ({ value: r.id, label: r.label }));
   private lastFilter: ReportFilter | null = null;
   private requestSeq = 0;
 
   onSearch(filter: ReportFilter): void {
     this.lastFilter = filter;
+    this.recherche.set(true);
     this.page.set(1);
     this.loadPage();
   }
@@ -180,6 +211,8 @@ export class ReportsPage {
 
   onTypeChange(type: string): void {
     this.reportType = type;
+    this.typeCourant.set(type);
+    this.erreur.set(null);
     this.columns.set([]);
     this.tableSearch.set('');
     this.page.set(1);
@@ -189,6 +222,7 @@ export class ReportsPage {
   private loadPage(): void {
     if (!this.lastFilter) return;
     const seq = ++this.requestSeq;
+    this.erreur.set(null);
     this.loading.set(true);
     this.svc.paged(this.reportType, {
       ...this.lastFilter,
@@ -201,7 +235,9 @@ export class ReportsPage {
         const rows = r.items as Record<string, unknown>[];
         this.rows.set(rows);
         if (!this.columns().length) {
-          if (this.reportType === 'absences') {
+          if (this.reportType === ABSENCES_JUSTIFIEES) {
+            this.columns.set(JUSTIFIEES_COLUMNS);
+          } else if (this.reportType === 'absences') {
             this.columns.set(ABSENCE_COLUMNS);
           } else if (this.reportType === 'retards') {
             this.columns.set(RETARD_COLUMNS);
@@ -213,13 +249,23 @@ export class ReportsPage {
         this.page.set(r.page);
         this.loading.set(false);
       },
-      error: () => { if (seq === this.requestSeq) this.loading.set(false); },
+      error: (err) => {
+        if (seq !== this.requestSeq) return;
+        this.loading.set(false);
+        if (this.reportType === ABSENCES_JUSTIFIEES) {
+          // Ex. 400 « congés SAGE indisponibles » : message du serveur tel quel, aucune liste vide silencieuse.
+          this.rows.set([]);
+          this.total.set(0);
+          this.erreur.set(errorMessage(err));
+        }
+      },
     });
   }
 
   private resolve(type: string) {
     switch (type) {
       case 'absences': return this.svc.absences;
+      case ABSENCES_JUSTIFIEES: return this.svc.absencesJustifiees;
       case 'retards': return this.svc.retards;
       case 'hs-recap': return this.svc.hsRecap;
       case 'heures-semaine': return this.svc.heuresSemaine;
@@ -248,11 +294,13 @@ export class ReportsPage {
       next: (items) => {
         const rows = items as Record<string, unknown>[];
         const cols =
-          this.reportType === 'absences'
-            ? ABSENCE_EXPORT_COLUMNS
-            : this.reportType === 'retards'
-              ? RETARD_EXPORT_COLUMNS
-              : this.inferColumns(rows);
+          this.reportType === ABSENCES_JUSTIFIEES
+            ? JUSTIFIEES_COLUMNS
+            : this.reportType === 'absences'
+              ? ABSENCE_EXPORT_COLUMNS
+              : this.reportType === 'retards'
+                ? RETARD_EXPORT_COLUMNS
+                : this.inferColumns(rows);
         this.excel.download(`rapport-${this.reportType}`, cols, rows, 'Données', this.tableSearch());
       },
     });

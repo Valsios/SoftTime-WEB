@@ -142,6 +142,15 @@ tampon n'est lue) et partagent leurs règles avec le tableau de bord analytique.
     (`T_GHRSAL` hors codes `0200` / `0300`), `Arbitrée GTA` (correction portant `ABSENCE_AM` /
     `ABSENCE_PM`, donc absence déclarée), samedi/dimanche, férié (`T_FERIE`), **jour de planning OFF**
     (`OffP = true`) et shift sans heures (`HA`/`HD` nuls, `HA = HD`).
+- **Absences justifiées** (`AbsenceReportRules.CalculerJustifiees`, rapport `absences-justifiees`) — état
+  **informatif, sans effet sur la paie** (ni sur la variable Absence). Colonnes : matricule, nom, prénom,
+  département, date, motif, durée. Jours planifiés avec heures, en semaine, ni fériés ni de repos :
+  - **Événement SAGE** (`T_GHRSAL` hors `0200` / `0300`) : motif = libellé de l'événement (`T_GHR`) ; il l'emporte
+    sur une ligne ou un arbitrage du même jour. Un événement dont le libellé est un code compté comme non justifié
+    (par défaut « ABSENCE NON JUSTIFIEE », code `0460`) n'est **pas** une justification.
+  - **Arbitrage** (`ABSENCE_AM` / `ABSENCE_PM`) dont le code n'est pas compté : motif = code d'absence.
+  - Motifs multiples le même jour séparés par « + » ; « Motif non renseigné » si aucun. Si les congés SAGE ne
+    peuvent pas être lus, l'écran affiche le message du serveur (erreur 400) au lieu d'une liste vide.
 - **État retards** (`RetardReportRules`) — une ligne par salarié et par jour :
   - seul le **début de journée** est contrôlé : première entrée du jour comparée à `HA` du planning
     + `T_TOLERANCES.TOLERANCE` de la catégorie (`TYPES_TOL = false`) ; la branche après-midi du

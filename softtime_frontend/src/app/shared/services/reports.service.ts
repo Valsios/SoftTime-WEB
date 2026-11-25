@@ -30,6 +30,10 @@ export class ReportsService extends ApiService {
   absences(filter: ReportFilter): Observable<ReportRow[]> {
     return this.get('absences', filter);
   }
+  /** État informatif des absences justifiées (événements SAGE et arbitrages) avec leur motif. */
+  absencesJustifiees(filter: ReportFilter): Observable<ReportRow[]> {
+    return this.get('absences-justifiees', filter);
+  }
   retards(filter: ReportFilter): Observable<ReportRow[]> {
     return this.get('retards', filter);
   }
@@ -54,7 +58,7 @@ export class ReportsService extends ApiService {
     });
   }
 
-  /** Version paginée d'un état (6 types : pointage, absences, retards, hs-recap, heures-semaine, heures-dimanche). */
+  /** Version paginée d'un état (7 types : pointage, absences, absences-justifiees, retards, hs-recap, heures-semaine, heures-dimanche). */
   paged(type: string, filter: ReportFilter): Observable<PagedResult<ReportRow>> {
     return this.http.get<PagedResult<ReportRow>>(this.url(`/api/v1/reports/${type}/paged`), {
       params: this.params({ ...filter }),
