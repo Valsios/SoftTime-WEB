@@ -39,7 +39,7 @@ public class ReportsController : ApiControllerBase
     /// <summary>Types exposés par l'endpoint paginé générique (liste blanche).</summary>
     private static readonly HashSet<string> PagedReportTypes = new(StringComparer.OrdinalIgnoreCase)
     {
-        "pointage", "absences", "retards", "hs-recap", "heures-semaine", "heures-dimanche"
+        "pointage", "absences", "absences-justifiees", "retards", "hs-recap", "heures-semaine", "heures-dimanche"
     };
 
     [HttpGet("pointage")]
@@ -49,6 +49,11 @@ public class ReportsController : ApiControllerBase
     [HttpGet("absences")]
     public async Task<IActionResult> AbsencesAsync([FromQuery] ReportFilter filter, CancellationToken ct)
         => Ok(await _absences.AbsencesAsync(filter, ct));
+
+    /// <summary>État informatif des absences justifiées avec leur motif (événement SAGE ou arbitrage) ; aucun effet sur la paie.</summary>
+    [HttpGet("absences-justifiees")]
+    public async Task<IActionResult> AbsencesJustifieesAsync([FromQuery] ReportFilter filter, CancellationToken ct)
+        => Ok(await _absences.AbsencesJustifieesAsync(filter, ct));
 
     [HttpGet("retards")]
     public async Task<IActionResult> RetardsAsync([FromQuery] ReportFilter filter, CancellationToken ct)
@@ -67,7 +72,7 @@ public class ReportsController : ApiControllerBase
         => Ok(await _heures.HeuresDimancheAsync(filter, ct));
 
     /// <summary>
-    /// Version paginée des 6 états (<c>pointage</c>, <c>absences</c>, <c>retards</c>,
+    /// Version paginée des 7 états (<c>pointage</c>, <c>absences</c>, <c>absences-justifiees</c>, <c>retards</c>,
     /// <c>hs-recap</c>, <c>heures-semaine</c>, <c>heures-dimanche</c>).
     /// </summary>
     [HttpGet("{type}/paged")]

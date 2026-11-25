@@ -42,6 +42,7 @@ public sealed class ReportService : IReportService
             {
                 "pointage" => (await _pointageReportService.PointageAsync(filter, ct)).Cast<object>().ToList(),
                 "absences" => (await _absenceReportService.AbsencesAsync(filter, ct)).Cast<object>().ToList(),
+                "absences-justifiees" => (await _absenceReportService.AbsencesJustifieesAsync(filter, ct)).Cast<object>().ToList(),
                 "retards" => (await _retardReportService.CalculerRetardsAsync(filter, ct)).Cast<object>().ToList(),
                 "hs-recap" => (await _hoursReportService.HsRecapAsync(filter, ct)).Cast<object>().ToList(),
                 "heures-semaine" => (await _hoursReportService.HeuresParSemaineAsync(filter, ct)).ToList(),
@@ -58,6 +59,7 @@ public sealed class ReportService : IReportService
         {
             "pointage" => await _pointageReportService.PointagePagedAsync(filter, page, pageSize, ct),
             "absences" => await _absenceReportService.AbsencesPagedAsync(filter, page, pageSize, ct),
+            "absences-justifiees" => await _absenceReportService.AbsencesJustifieesPagedAsync(filter, page, pageSize, ct),
             "retards" => await _retardReportService.RetardsPagedAsync(filter, page, pageSize, ct),
             "hs-recap" => await _hoursReportService.HsRecapPagedAsync(filter, page, pageSize, ct),
             "heures-semaine" => await _hoursReportService.HeuresSemainePagedAsync(filter, page, pageSize, ct),

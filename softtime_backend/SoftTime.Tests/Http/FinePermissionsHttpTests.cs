@@ -255,6 +255,8 @@ public class FinePermissionsHttpTests : IClassFixture<ApiFactory>
     public static TheoryData<string, string> ScreenRoutes() => new()
     {
         { "GET", "/api/v1/reports/pointage" },
+        { "GET", "/api/v1/reports/absences-justifiees" },
+        { "GET", "/api/v1/reports/absences-justifiees/paged" },
         { "GET", "/api/v1/travel-expenses" },
         { "POST", "/api/v1/travel-expenses/compute" },
         { "GET", "/api/v1/history/pointages" },

@@ -7,7 +7,7 @@ namespace SoftTime.Domain.Services;
 /// Absences d'un salarié (toutes ses cartes partagent la même clé matricule) : congés SAGE,
 /// absences arbitrées dans la GTA et jours planifiés sans pointage.
 /// </summary>
-internal sealed class AbsenceReportEmployee
+internal sealed partial class AbsenceReportEmployee
 {
     private readonly string _cle;
     private readonly CardPaie _carte;
@@ -33,17 +33,20 @@ internal sealed class AbsenceReportEmployee
 
     public IEnumerable<AbsenceReportRow> Lignes(ReportCalendar calendrier, IEnumerable<DateTime> datesPlanifiees)
     {
-        foreach (var jour in DatesCandidates(calendrier, datesPlanifiees).OrderBy(d => d))
+        foreach (var jour in JoursOuvres(DatesCandidates(calendrier, datesPlanifiees), calendrier))
         {
-            // C3 : pour tous les types, week-ends et fériés sont exclus.
-            if (AbsenceReportRules.EstNonTravaille(jour, calendrier.Feries))
-                continue;
-
             var ligne = LigneDuJour(jour, calendrier.Planning(_cle, jour));
             if (ligne is not null)
                 yield return ligne;
         }
     }
+
+    /// <summary>
+    /// C3 : pour tous les types, week-ends et fériés sont exclus. Jours triés, partagés par l'état des absences et par
+    /// l'état des absences justifiées.
+    /// </summary>
+    private static IEnumerable<DateTime> JoursOuvres(IEnumerable<DateTime> dates, ReportCalendar calendrier) =>
+        dates.OrderBy(d => d).Where(jour => !AbsenceReportRules.EstNonTravaille(jour, calendrier.Feries));
 
     /// <summary>C12 : plusieurs congés le même jour cumulent leurs valeurs (plafonnées à 1) et leurs codes.</summary>
     private static (decimal Valeur, string? Motif) CumulerConges(List<LeaveDay> conges)

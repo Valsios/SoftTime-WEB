@@ -831,4 +831,391 @@ public class AbsenceReportRulesTests
         row.Type.Should().Be("Non justifiée");
         row.DureeHeures.Should().Be(8m);
     }
+
+    // ------------------------------------------------------------------------------------------------
+    // État « Absences justifiées » (informatif) : CalculerJustifiees
+    // ------------------------------------------------------------------------------------------------
+
+    private static readonly DateTime Mardi = new(2025, 11, 4);
+
+    private static AbsenceCalendar Calendrier(IEnumerable<LeaveDay>? conges = null, IEnumerable<DateTime>? feries = null)
+        => new(
+            new Dictionary<string, List<LeaveDay>> { ["1"] = (conges ?? Array.Empty<LeaveDay>()).ToList() },
+            (feries ?? Array.Empty<DateTime>()).ToHashSet());
+
+    private static PlanningSalarie Journee(DateTime date, int id = 10)
+        => Plan(id, 1, date, TimeSpan.FromHours(8), TimeSpan.FromHours(17), TimeSpan.FromHours(1));
+
+    private static IReadOnlyList<AbsenceReportRow> Justifiees(
+        DateTime date,
+        IEnumerable<LeaveDay>? conges = null,
+        IEnumerable<HeureCorrigee>? corrections = null,
+        AbsenceCodesComptes? codes = null,
+        IEnumerable<PlanningSalarie>? plannings = null,
+        IEnumerable<DateTime>? feries = null)
+        => AbsenceReportRules.CalculerJustifiees(
+            new EmployeeSources(new[] { Carte(1, "001") }, (plannings ?? new[] { Journee(date) }).ToList(), (corrections ?? Array.Empty<HeureCorrigee>()).ToList()),
+            Calendrier(conges, feries),
+            new ReportPeriod(date, date, Today),
+            codes ?? AbsenceCodesComptes.Default);
+
+    [Fact]
+    public void CalculerJustifiees_EvenementSageSeul_GenereLigneAvecLibelleCommeMotif()
+    {
+        // Act
+        var result = Justifiees(Mardi, new[] { new LeaveDay(Mardi, 1m, "0410", "CONGE") });
+
+        // Assert
+        var row = result.Should().ContainSingle().Which;
+        row.Matricule.Should().Be("001");
+        row.Date.Should().Be(Mardi);
+        row.Type.Should().Be("Événement SAGE");
+        row.Periode.Should().Be("Journée");
+        row.DureeHeures.Should().Be(8m);
+        row.Motif.Should().Be("CONGE");
+    }
+
+    [Fact]
+    public void CalculerJustifiees_ArbitrageJustifieSeul_GenereLigneAvecCodeCommeMotif()
+    {
+        // Act
+        var result = Justifiees(Mardi, corrections: new[] { Corr(1, "001", Mardi, am: true, pm: true, intitule: "PERMISSION") });
+
+        // Assert
+        var row = result.Should().ContainSingle().Which;
+        row.Type.Should().Be("Arbitrage");
+        row.Periode.Should().Be("Journée");
+        row.DureeHeures.Should().Be(8m);
+        row.Motif.Should().Be("PERMISSION");
+    }
+
+    [Theory]
+    [InlineData("ABSENCE NON JUSTIFIEE")]
+    [InlineData("  absence non justifiée ")]
+    public void CalculerJustifiees_ArbitrageAvecCodeCoche_EstExclu(string code)
+    {
+        // Act
+        var result = Justifiees(Mardi, corrections: new[] { Corr(1, "001", Mardi, am: true, pm: true, intitule: code) });
+
+        // Assert
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void CalculerJustifiees_ArbitrageSansCode_EstExcluParDefaut()
+    {
+        // Act
+        var result = Justifiees(Mardi, corrections: new[] { Corr(1, "001", Mardi, am: true, pm: true) });
+
+        // Assert
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void CalculerJustifiees_ArbitrageSansCode_SiLeReglageNeLeComptePas_AfficheMotifNonRenseigne()
+    {
+        // Arrange
+        var codes = new AbsenceCodesComptes(new[] { "ABSENCE NON JUSTIFIEE" }, SansCode: false);
+
+        // Act
+        var result = Justifiees(Mardi, corrections: new[] { Corr(1, "001", Mardi, am: true, pm: true) }, codes: codes);
+
+        // Assert
+        var row = result.Should().ContainSingle().Which;
+        row.Type.Should().Be("Arbitrage");
+        row.Motif.Should().Be("Motif non renseigné");
+    }
+
+    [Fact]
+    public void CalculerJustifiees_ArbitrageDontLeCodeEstCocheDansLeReglage_EstExclu()
+    {
+        // Arrange
+        var codes = new AbsenceCodesComptes(new[] { "MISE A PIED" }, SansCode: true);
+
+        // Act
+        var coche = Justifiees(Mardi, corrections: new[] { Corr(1, "001", Mardi, am: true, pm: true, intitule: "mise à pied") }, codes: codes);
+        var libre = Justifiees(Mardi, corrections: new[] { Corr(1, "001", Mardi, am: true, pm: true, intitule: "ABSENCE NON JUSTIFIEE") }, codes: codes);
+
+        // Assert
+        coche.Should().BeEmpty();
+        libre.Should().ContainSingle().Which.Motif.Should().Be("ABSENCE NON JUSTIFIEE");
+    }
+
+    [Fact]
+    public void CalculerJustifiees_PlusieursLignesArbitrees_UneSeuleAuCodeCompte_ExclutLeJour()
+    {
+        // Arrange
+        // Même règle que la variable Absence : une ligne au code compté suffit à compter la journée.
+        var corrections = new[]
+        {
+            Corr(1, "001", Mardi, am: true, intitule: "PERMISSION"),
+            Corr(2, "001", Mardi, pm: true, intitule: "ABSENCE NON JUSTIFIEE")
+        };
+
+        // Act
+        var result = Justifiees(Mardi, corrections: corrections);
+
+        // Assert
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void CalculerJustifiees_EvenementEtArbitrageLeMemeJour_LEvenementSageLEmporte()
+    {
+        // Act
+        var result = Justifiees(
+            Mardi,
+            new[] { new LeaveDay(Mardi, 1m, "0410", "CONGE") },
+            new[] { Corr(1, "001", Mardi, am: true, pm: true, intitule: "PERMISSION") });
+
+        // Assert
+        var row = result.Should().ContainSingle().Which;
+        row.Type.Should().Be("Événement SAGE");
+        row.Motif.Should().Be("CONGE");
+    }
+
+    [Fact]
+    public void CalculerJustifiees_EvenementEtLigneDePresenceLeMemeJour_LEvenementSageLEmporte()
+    {
+        // Arrange
+        // Doublon « ligne + événement » : une ligne de pointage ordinaire ne retire pas la justification SAGE.
+        var ligne = new HeureCorrigee
+        {
+            Id = 1,
+            MatriculeSage = "001",
+            DatePointageIn = Mardi,
+            HEntree = TimeSpan.FromHours(8),
+            HSortie = TimeSpan.FromHours(17),
+            ValiderCorrection = true
+        };
+
+        // Act
+        var result = Justifiees(Mardi, new[] { new LeaveDay(Mardi, 1m, "0410", "CONGE") }, new[] { ligne });
+
+        // Assert
+        result.Should().ContainSingle().Which.Type.Should().Be("Événement SAGE");
+    }
+
+    [Fact]
+    public void CalculerJustifiees_EvenementDontLeLibelleEstUnCodeCompte_EstExclu()
+    {
+        // Act
+        // Événement 0460 « ABSENCE NON JUSTIFIEE » : reste hors de l'état (code coché par défaut).
+        var result = Justifiees(Mardi, new[] { new LeaveDay(Mardi, 1m, "0460", "ABSENCE NON JUSTIFIEE") });
+
+        // Assert
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void CalculerJustifiees_Evenement0460_SiLeCodeNEstPlusCoche_DevientJustifie()
+    {
+        // Arrange
+        var codes = new AbsenceCodesComptes(Array.Empty<string>(), SansCode: true);
+
+        // Act
+        var result = Justifiees(Mardi, new[] { new LeaveDay(Mardi, 1m, "0460", "ABSENCE NON JUSTIFIEE") }, codes: codes);
+
+        // Assert
+        result.Should().ContainSingle().Which.Motif.Should().Be("ABSENCE NON JUSTIFIEE");
+    }
+
+    [Fact]
+    public void CalculerJustifiees_Evenement0460EtArbitrageJustifie_LArbitrageEstRetenu()
+    {
+        // Act
+        // L'événement exclu n'est pas une justification : il est ignoré, l'arbitrage justifié du jour s'applique.
+        var result = Justifiees(
+            Mardi,
+            new[] { new LeaveDay(Mardi, 1m, "0460", "ABSENCE NON JUSTIFIEE") },
+            new[] { Corr(1, "001", Mardi, am: true, pm: true, intitule: "PERMISSION") });
+
+        // Assert
+        var row = result.Should().ContainSingle().Which;
+        row.Type.Should().Be("Arbitrage");
+        row.Motif.Should().Be("PERMISSION");
+    }
+
+    [Theory]
+    [InlineData(LeaveHalf.Matin, "Matin")]
+    [InlineData(LeaveHalf.ApresMidi, "Après-midi")]
+    public void CalculerJustifiees_DemiJourneeSage_IndiqueLaMoitieEtLaMoitieDeLaDuree(LeaveHalf moitie, string attendu)
+    {
+        // Act
+        var result = Justifiees(Mardi, new[] { new LeaveDay(Mardi, 0.5m, "0410", "CONGE", moitie) });
+
+        // Assert
+        var row = result.Should().ContainSingle().Which;
+        row.Periode.Should().Be(attendu);
+        row.DureeHeures.Should().Be(4m);
+    }
+
+    [Fact]
+    public void CalculerJustifiees_DemiJourneeSageSansMoitieConnue_AfficheDemiJournee()
+    {
+        // Act
+        var result = Justifiees(Mardi, new[] { new LeaveDay(Mardi, 0.5m, "0410", "CONGE") });
+
+        // Assert
+        var row = result.Should().ContainSingle().Which;
+        row.Periode.Should().Be("Demi-journée");
+        row.DureeHeures.Should().Be(4m);
+    }
+
+    [Theory]
+    [InlineData(true, false, "Matin")]
+    [InlineData(false, true, "Après-midi")]
+    [InlineData(true, true, "Journée")]
+    public void CalculerJustifiees_ArbitrageParDemiJournee_IndiqueLaPeriode(bool am, bool pm, string attendu)
+    {
+        // Act
+        var result = Justifiees(Mardi, corrections: new[] { Corr(1, "001", Mardi, am, pm, "CONGE") });
+
+        // Assert
+        var row = result.Should().ContainSingle().Which;
+        row.Periode.Should().Be(attendu);
+        row.DureeHeures.Should().Be(attendu == "Journée" ? 8m : 4m);
+    }
+
+    [Fact]
+    public void CalculerJustifiees_EvenementSansLibelleNiCode_AfficheMotifNonRenseigne()
+    {
+        // Act
+        var result = Justifiees(Mardi, new[] { new LeaveDay(Mardi, 1m, null) });
+
+        // Assert
+        result.Should().ContainSingle().Which.Motif.Should().Be("Motif non renseigné");
+    }
+
+    [Fact]
+    public void CalculerJustifiees_EvenementSansLibelle_AfficheLeCode()
+    {
+        // Act
+        var result = Justifiees(Mardi, new[] { new LeaveDay(Mardi, 1m, "0410") });
+
+        // Assert
+        result.Should().ContainSingle().Which.Motif.Should().Be("0410");
+    }
+
+    [Fact]
+    public void CalculerJustifiees_PlusieursEvenementsLeMemeJour_CumuleLesMotifsDistinctsEtPlafonneAUnJour()
+    {
+        // Arrange
+        var conges = new[]
+        {
+            new LeaveDay(Mardi, 0.5m, "0440", "MISE A PIED", LeaveHalf.ApresMidi),
+            new LeaveDay(Mardi, 0.5m, "0410", "CONGE", LeaveHalf.Matin),
+            new LeaveDay(Mardi, 0.5m, "0410", "conge", LeaveHalf.Matin)
+        };
+
+        // Act
+        var result = Justifiees(Mardi, conges);
+
+        // Assert
+        var row = result.Should().ContainSingle().Which;
+        row.Motif.Should().Be("CONGE + MISE A PIED");
+        row.Periode.Should().Be("Journée");
+        row.DureeHeures.Should().Be(8m);
+    }
+
+    [Fact]
+    public void CalculerJustifiees_WeekEndEtFerie_SontExclus()
+    {
+        // Arrange
+        var samedi = new DateTime(2025, 11, 8);
+        var dimanche = new DateTime(2025, 11, 9);
+        var ferie = new DateTime(2025, 11, 11);
+        var plannings = new[] { Journee(samedi, 1), Journee(dimanche, 2), Journee(ferie, 3) };
+        var conges = new[]
+        {
+            new LeaveDay(samedi, 1m, "0410", "CONGE"),
+            new LeaveDay(dimanche, 1m, "0410", "CONGE"),
+            new LeaveDay(ferie, 1m, "0410", "CONGE")
+        };
+        var corrections = new[] { Corr(1, "001", samedi, am: true, pm: true, intitule: "PERMISSION") };
+
+        // Act
+        var result = AbsenceReportRules.CalculerJustifiees(
+            new EmployeeSources(new[] { Carte(1, "001") }, plannings, corrections),
+            Calendrier(conges, new[] { ferie }),
+            new ReportPeriod(samedi, ferie, Today),
+            AbsenceCodesComptes.Default);
+
+        // Assert
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void CalculerJustifiees_JourOff_EstExclu()
+    {
+        // Act
+        var result = Justifiees(
+            Mardi,
+            new[] { new LeaveDay(Mardi, 1m, "0410", "CONGE") },
+            plannings: new[] { Plan(10, 1, Mardi, TimeSpan.FromHours(8), TimeSpan.FromHours(17), offP: true) });
+
+        // Assert
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void CalculerJustifiees_JourNonPlanifie_EstExclu()
+    {
+        // Act
+        var result = Justifiees(
+            Mardi,
+            new[] { new LeaveDay(Mardi, 1m, "0410", "CONGE") },
+            plannings: Array.Empty<PlanningSalarie>());
+
+        // Assert
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void CalculerJustifiees_JourSansEvenementNiArbitrage_NeProduitRien()
+    {
+        // Act
+        var result = Justifiees(Mardi);
+
+        // Assert
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Calculer_NonRegression_LEtatAbsencesNeChangePasAvecLesLibellesDeConges()
+    {
+        // Arrange
+        // Même scénario avec et sans libellé / moitié sur les congés : l'état actuel est strictement identique.
+        var lundi = new DateTime(2025, 11, 3);
+        var mercredi = new DateTime(2025, 11, 5);
+        var jeudi = new DateTime(2025, 11, 6);
+        var vendredi = new DateTime(2025, 11, 7);
+        var plannings = new[] { Journee(lundi, 1), Journee(Mardi, 2), Journee(mercredi, 3), Journee(jeudi, 4), Journee(vendredi, 5) };
+        var corrections = new[]
+        {
+            Corr(1, "001", mercredi, am: true, pm: true, intitule: "PERMISSION"),
+            Corr(2, "001", vendredi)
+        };
+
+        IReadOnlyList<AbsenceReportRow> Calculer(LeaveDay[] conges) => AbsenceReportRules.Calculer(
+            new EmployeeSources(new[] { Carte(1, "001") }, plannings, corrections),
+            Calendrier(conges),
+            new ReportPeriod(lundi, vendredi, Today));
+
+        // Act
+        var sansLibelle = Calculer(new[] { new LeaveDay(Mardi, 1m, "0410"), new LeaveDay(jeudi, 0.5m, "0460") });
+        var avecLibelle = Calculer(new[]
+        {
+            new LeaveDay(Mardi, 1m, "0410", "CONGE"),
+            new LeaveDay(jeudi, 0.5m, "0460", "ABSENCE NON JUSTIFIEE", LeaveHalf.Matin)
+        });
+
+        // Assert
+        avecLibelle.Should().Equal(sansLibelle);
+        sansLibelle.Select(r => (r.Date, r.Type, r.Periode, r.DureeHeures, r.Motif)).Should().Equal(
+            (lundi, "Non justifiée", "Journée", 8m, (string?)null),
+            (Mardi, "Congé SAGE", "Journée", 8m, "0410"),
+            (mercredi, "Arbitrée GTA", "Journée", 8m, "PERMISSION"),
+            (jeudi, "Congé SAGE", "Demi-journée", 4m, "0460"));
+    }
 }

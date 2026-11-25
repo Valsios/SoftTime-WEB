@@ -19,8 +19,37 @@ public static class AbsenceReportRules
     public const string TypeArbitreeGta = "Arbitrée GTA";
     public const string TypeNonJustifiee = "Non justifiée";
 
+    /// <summary>Type des lignes de l'état « Absences justifiées » couvertes par un événement SAGE (congé, maternité…).</summary>
+    public const string TypeEvenementSage = "Événement SAGE";
+
+    /// <summary>Type des lignes de l'état « Absences justifiées » couvertes par un arbitrage dont le code n'est pas compté.</summary>
+    public const string TypeArbitrage = "Arbitrage";
+
+    /// <summary>Motif affiché quand ni libellé ni code n'est renseigné.</summary>
+    public const string MotifNonRenseigne = "Motif non renseigné";
+
     public static IReadOnlyList<AbsenceReportRow> Calculer(
-        EmployeeSources sources, AbsenceCalendar joursNonTravailles, ReportPeriod periode)
+        EmployeeSources sources, AbsenceCalendar joursNonTravailles, ReportPeriod periode) =>
+        PourChaqueSalarie(sources, joursNonTravailles, periode,
+            (salarie, calendrier, dates) => salarie.Lignes(calendrier, dates));
+
+    /// <summary>
+    /// État informatif des absences <b>justifiées</b> (aucun effet sur la paie) : mêmes salariés, mêmes plannings et mêmes
+    /// jours que <see cref="Calculer"/>, mais seuls sont retenus les jours planifiés couverts par un événement SAGE ou par
+    /// un arbitrage dont le code n'est pas compté (<paramref name="codesComptes"/>). Voir
+    /// <see cref="AbsenceReportEmployee.LignesJustifiees"/>.
+    /// </summary>
+    public static IReadOnlyList<AbsenceReportRow> CalculerJustifiees(
+        EmployeeSources sources, AbsenceCalendar joursNonTravailles, ReportPeriod periode, AbsenceCodesComptes codesComptes) =>
+        PourChaqueSalarie(sources, joursNonTravailles, periode,
+            (salarie, calendrier, dates) => salarie.LignesJustifiees(calendrier, dates, codesComptes));
+
+    /// <summary>Socle commun des états d'absences : indexation, calendrier, puis lignes de chaque salarié triées par jour.</summary>
+    private static IReadOnlyList<AbsenceReportRow> PourChaqueSalarie(
+        EmployeeSources sources,
+        AbsenceCalendar joursNonTravailles,
+        ReportPeriod periode,
+        Func<AbsenceReportEmployee, ReportCalendar, IEnumerable<DateTime>, IEnumerable<AbsenceReportRow>> lignes)
     {
         var (cartes, plannings, corrections) = sources;
         var (congesParCle, feries) = joursNonTravailles;
@@ -37,12 +66,14 @@ public static class AbsenceReportRules
         var correctionsParCle = AbsenceReportRules.CorrectionsParCle(corrections);
 
         return cartesParCle
-            .SelectMany(kvp => new AbsenceReportEmployee(
+            .SelectMany(kvp => lignes(
+                new AbsenceReportEmployee(
                     kvp.Key,
                     kvp.Value,
                     correctionsParCle.GetValueOrDefault(kvp.Key) ?? new List<HeureCorrigee>(),
-                    congesParCle.GetValueOrDefault(kvp.Key) ?? new List<LeaveDay>())
-                .Lignes(calendrier, datesPlanifieesParCle.GetValueOrDefault(kvp.Key) ?? new List<DateTime>()))
+                    congesParCle.GetValueOrDefault(kvp.Key) ?? new List<LeaveDay>()),
+                calendrier,
+                datesPlanifieesParCle.GetValueOrDefault(kvp.Key) ?? new List<DateTime>()))
             .OrderBy(r => r.Date)
             .ThenBy(r => r.Matricule, StringComparer.OrdinalIgnoreCase)
             .ToList();

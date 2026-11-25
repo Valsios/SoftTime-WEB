@@ -48,27 +48,27 @@ public static class LeaveRules
             if (periode.ApresMidi)
             {
                 // Le congé commence l'après-midi du premier jour.
-                jours.Add(new LeaveDay(debut, 0.5m, periode.Code));
+                jours.Add(new LeaveDay(debut, 0.5m, periode.Code, periode.Libelle, LeaveHalf.ApresMidi));
                 for (var i = 1; i <= nbJours; i++)
-                    Ajouter(jours, debut.AddDays(i), periode.Code);
+                    Ajouter(jours, debut.AddDays(i), periode.Code, periode.Libelle);
             }
             else if (periode.Matin)
             {
                 // Le congé se termine le matin du dernier jour.
                 for (var i = 0; i < nbJours; i++)
-                    Ajouter(jours, debut.AddDays(i), periode.Code);
-                jours.Add(new LeaveDay(fin, 0.5m, periode.Code));
+                    Ajouter(jours, debut.AddDays(i), periode.Code, periode.Libelle);
+                jours.Add(new LeaveDay(fin, 0.5m, periode.Code, periode.Libelle, LeaveHalf.Matin));
             }
             else
             {
                 for (var i = 0; i <= nbJours; i++)
-                    Ajouter(jours, debut.AddDays(i), periode.Code);
+                    Ajouter(jours, debut.AddDays(i), periode.Code, periode.Libelle);
             }
         }
         else
         {
             var valeur = periode.Matin || periode.ApresMidi ? 0.5m : 1m;
-            jours.Add(new LeaveDay(debut, valeur, periode.Code));
+            jours.Add(new LeaveDay(debut, valeur, periode.Code, periode.Libelle, MoitieDuJour(periode)));
         }
     }
 
@@ -89,9 +89,17 @@ public static class LeaveRules
         return jours.Where(j => j.Date.Date == cible).Select(j => j.Valeur).DefaultIfEmpty(0m).Max();
     }
 
-    private static void Ajouter(List<LeaveDay> jours, DateTime date, string? code)
+    /// <summary>Moitié couverte par un événement d'un seul jour ; inconnue si aucun drapeau ou les deux.</summary>
+    private static LeaveHalf? MoitieDuJour(LeavePeriod periode) => (periode.Matin, periode.ApresMidi) switch
+    {
+        (true, false) => LeaveHalf.Matin,
+        (false, true) => LeaveHalf.ApresMidi,
+        _ => null
+    };
+
+    private static void Ajouter(List<LeaveDay> jours, DateTime date, string? code, string? libelle)
     {
         if (date.DayOfWeek != DayOfWeek.Sunday)
-            jours.Add(new LeaveDay(date, 1m, code));
+            jours.Add(new LeaveDay(date, 1m, code, libelle));
     }
 }

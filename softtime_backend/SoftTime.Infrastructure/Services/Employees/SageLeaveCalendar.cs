@@ -38,11 +38,17 @@ public sealed class SageLeaveCalendar : ISageLeaveCalendar
     public async Task<Dictionary<string, List<LeaveDay>>> LoadAsync(CancellationToken ct = default)
     {
         var sageRow = await _tenant.GetSageRowAsync(ct);
-        var codes = (await _externalSource.GetEventsAsync(sageRow, ct))
-            .Select(e => e.Code)
-            .Where(LeaveRules.EstCodeConge)
-            .Select(c => c!)
+        var evenements = (await _externalSource.GetEventsAsync(sageRow, ct))
+            .Where(e => LeaveRules.EstCodeConge(e.Code))
+            .ToList();
+        var codes = evenements
+            .Select(e => e.Code!)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // Libellé de chaque code (catalogue T_GHR), transmis tel quel aux jours de congé ; vide s'il n'est pas renseigné.
+        var libelles = evenements
+            .Where(e => !string.IsNullOrWhiteSpace(e.Label))
+            .GroupBy(e => e.Code!.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().Label!.Trim(), StringComparer.OrdinalIgnoreCase);
         var parCle = new Dictionary<string, List<LeaveDay>>(StringComparer.Ordinal);
         if (codes.Count == 0)
             return parCle;
@@ -60,6 +66,7 @@ public sealed class SageLeaveCalendar : ISageLeaveCalendar
             .ToDictionary(
                 g => g.Key,
                 g => LeaveRules.Expandre(g.Select(e =>
-                    new LeavePeriod(e.Start!.Value, e.End!.Value, e.Matin == true, e.ApresMidi == true, e.Code))).ToList());
+                    new LeavePeriod(e.Start!.Value, e.End!.Value, e.Matin == true, e.ApresMidi == true, e.Code,
+                        libelles.GetValueOrDefault(e.Code!.Trim())))).ToList());
     }
 }

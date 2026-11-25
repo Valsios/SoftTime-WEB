@@ -1,8 +1,10 @@
 using Microsoft.Extensions.Logging.Abstractions;
 
+using SoftTime.Application.Abstractions.Employees;
 using SoftTime.Application.Abstractions.ExternalData;
 using SoftTime.Application.DTOs;
 using SoftTime.Domain.Entities.SoftTime;
+using SoftTime.Domain.Models;
 using SoftTime.Infrastructure.Services.Employees;
 using SoftTime.Infrastructure.Services.Reports;
 using SoftTime.Infrastructure.Services.RequestContext;
@@ -31,6 +33,13 @@ public class ReportServiceTests
         return jours;
     }
 
+    /// <summary>Calendrier de congés SAGE indisponible (base SAGE injoignable).</summary>
+    private sealed class CongesIndisponibles : ISageLeaveCalendar
+    {
+        public Task<Dictionary<string, List<LeaveDay>>> LoadAsync(CancellationToken ct = default)
+            => throw new InvalidOperationException("SAGE injoignable");
+    }
+
     private sealed class Contexte
     {
         public InMemoryUnitOfWork Uow { get; } = new();
@@ -41,7 +50,7 @@ public class ReportServiceTests
         public List<HeureCorrigee> Corrections => Uow.Get<HeureCorrigee>().Items;
         public List<JourFerie> Feries => Uow.Get<JourFerie>().Items;
 
-        public Contexte()
+        public Contexte(ISageLeaveCalendar? leaves = null)
         {
             Uow.Get<BddSage>().Items.Add(new BddSage { Id = 1, NomBd = "SAGE_TEST" });
             Uow.Get<CardPaie>().Items.Add(new CardPaie
@@ -74,9 +83,35 @@ public class ReportServiceTests
                 Uow,
                 tenant,
                 Source,
-                new SageLeaveCalendar(tenant, Source),
+                leaves ?? new SageLeaveCalendar(tenant, Source),
                 NullLogger<ReportContextLoader>.Instance);
         }
+
+        /// <summary>Arbitrage d'absence sans heure (journée complète ou demi-journée) avec son code.</summary>
+        public void Arbitrage(DateTime jour, string? intitule, bool am = true, bool pm = true)
+            => Corrections.Add(new HeureCorrigee
+            {
+                BddSage = "SAGE_TEST",
+                BddPointeuse = "PTE_TEST",
+                MatriculeSage = "001",
+                DatePointageIn = jour.Date,
+                DatePointageOut = jour.Date,
+                AbsenceAm = am,
+                AbsencePm = pm,
+                IntituleAbsence = intitule,
+                ValiderCorrection = true
+            });
+
+        /// <summary>Événement SAGE d'une journée avec son libellé de catalogue (<c>T_GHR</c>).</summary>
+        public void Evenement(DateTime jour, string code, string libelle)
+        {
+            Source.Events.Add(new ExternalEvent(code, libelle));
+            Source.EmployeeEvents.Add(new ExternalEmployeeEvent(1, code, jour.Date, jour.Date, null, null));
+        }
+
+        /// <summary>Réglage de la paie de la base (<c>T_PAIE_OPTION</c>).</summary>
+        public void Option(string cle, string valeur)
+            => Uow.Get<PaieOption>().Items.Add(new PaieOption { BddSage = "SAGE_TEST", Cle = cle, Valeur = valeur });
 
         /// <summary>Journée planifiée 08:00–17:00 avec 1 h de pause (8 h attendues), ou jour OFF.</summary>
         public void Plan(DateTime jour, bool off = false)
@@ -203,5 +238,173 @@ public class ReportServiceTests
         page.Total.Should().Be(1);
         var row = page.Items.Should().ContainSingle().Which;
         ((SoftTime.Domain.Services.AbsenceReportRow)row).Type.Should().Be("Non justifiée");
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    // État « Absences justifiées » (informatif)
+    // ------------------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task AbsencesJustifieesAsync_EvenementEtArbitrage_AfficheLeMotifEtLEtatAbsencesResteIdentique()
+    {
+        // Arrange
+        var ctx = new Contexte();
+        var jours = JoursOuvresPasses(3);
+        var nonPointe = jours[0];
+        var conge = jours[1];
+        var arbitre = jours[2];
+        ctx.Plan(nonPointe);
+        ctx.Plan(conge);
+        ctx.Plan(arbitre);
+        ctx.Evenement(conge, "0410", "CONGE");
+        ctx.Arbitrage(arbitre, "PERMISSION");
+        var filtre = Contexte.Filtre(nonPointe, arbitre);
+
+        // Act
+        var justifiees = await ctx.Service.Absences.AbsencesJustifieesAsync(filtre);
+        var nonJustifiees = await ctx.Service.AbsencesAsync(filtre);
+
+        // Assert
+        justifiees.Select(r => (r.Date, r.Type, r.Periode, r.DureeHeures, r.Motif)).Should().Equal(
+            (conge, "Événement SAGE", "Journée", (decimal?)8m, (string?)"CONGE"),
+            (arbitre, "Arbitrage", "Journée", (decimal?)8m, (string?)"PERMISSION"));
+        // Non-régression : l'état « Absences » ne garde que le jour non pointé, comme avant.
+        var ligne = nonJustifiees.Should().ContainSingle().Which;
+        ligne.Date.Should().Be(nonPointe);
+        ligne.Type.Should().Be("Non justifiée");
+        ligne.Motif.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task AbsencesJustifieesAsync_Evenement0460EtArbitrageSansCode_RestentHorsDeLEtat()
+    {
+        // Arrange
+        var ctx = new Contexte();
+        var jours = JoursOuvresPasses(2);
+        ctx.Plan(jours[0]);
+        ctx.Plan(jours[1]);
+        ctx.Evenement(jours[0], "0460", "ABSENCE NON JUSTIFIEE");
+        ctx.Arbitrage(jours[1], null);
+
+        // Act
+        var rows = await ctx.Service.Absences.AbsencesJustifieesAsync(Contexte.Filtre(jours[0], jours[1]));
+
+        // Assert
+        rows.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AbsencesJustifieesAsync_ReglageSansCodeNonCompte_ListeLArbitrageSansCode()
+    {
+        // Arrange
+        var ctx = new Contexte();
+        var jour = JoursOuvresPasses(1)[0];
+        ctx.Plan(jour);
+        ctx.Arbitrage(jour, null);
+        // Réglage de la base : seul « ABSENCE NON JUSTIFIEE » est compté, l'arbitrage sans code ne l'est plus.
+        ctx.Option(PayrollOptions.AbsenceSansCodeCompte, "0");
+        ctx.Option(PayrollOptions.CleAbsenceCode(1), "ABSENCE NON JUSTIFIEE");
+
+        // Act
+        var rows = await ctx.Service.Absences.AbsencesJustifieesAsync(Contexte.Filtre(jour, jour));
+
+        // Assert
+        var row = rows.Should().ContainSingle().Which;
+        row.Type.Should().Be("Arbitrage");
+        row.Motif.Should().Be("Motif non renseigné");
+    }
+
+    [Fact]
+    public async Task AbsencesJustifieesAsync_FiltreDepartement_NeGardeQueCeDepartement()
+    {
+        // Arrange
+        var ctx = new Contexte();
+        var jour = JoursOuvresPasses(1)[0];
+        ctx.Plan(jour);
+        ctx.Evenement(jour, "0410", "CONGE");
+
+        // Act
+        var correspondant = await ctx.Service.Absences.AbsencesJustifieesAsync(Contexte.Filtre(jour, jour, " info "));
+        var autre = await ctx.Service.Absences.AbsencesJustifieesAsync(Contexte.Filtre(jour, jour, "RH"));
+
+        // Assert
+        correspondant.Should().ContainSingle();
+        autre.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AbsencesJustifieesAsync_FiltreMatricules_NeGardeQueLaPlage()
+    {
+        // Arrange
+        var ctx = new Contexte();
+        var jour = JoursOuvresPasses(1)[0];
+        ctx.Plan(jour);
+        ctx.Evenement(jour, "0410", "CONGE");
+
+        // Act
+        var dansLaPlage = await ctx.Service.Absences.AbsencesJustifieesAsync(new ReportFilter("001", "001", jour, jour, null));
+        var horsPlage = await ctx.Service.Absences.AbsencesJustifieesAsync(new ReportFilter("002", "009", jour, jour, null));
+
+        // Assert
+        dansLaPlage.Should().ContainSingle();
+        horsPlage.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AbsencesJustifieesAsync_PeriodeFuture_RetourneVide()
+    {
+        // Arrange
+        var ctx = new Contexte();
+        var demain = DateTime.Today.AddDays(1);
+
+        // Act
+        var rows = await ctx.Service.Absences.AbsencesJustifieesAsync(Contexte.Filtre(demain, demain));
+
+        // Assert
+        rows.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AbsencesJustifieesAsync_CongesSageIndisponibles_LeveUneErreurExplicite()
+    {
+        // Arrange
+        var ctx = new Contexte(new CongesIndisponibles());
+        var jour = JoursOuvresPasses(1)[0];
+        ctx.Plan(jour);
+
+        // Act
+        var justifiees = () => ctx.Service.Absences.AbsencesJustifieesAsync(Contexte.Filtre(jour, jour));
+        var paged = () => ctx.Service.PagedAsync("absences-justifiees", Contexte.Filtre(jour, jour), 1, 50);
+
+        // Assert
+        (await justifiees.Should().ThrowAsync<DomainException>()).Which.Message.Should().Contain("congés SAGE sont indisponibles");
+        await paged.Should().ThrowAsync<DomainException>();
+        // L'état « Absences » actuel garde son comportement : il ne lève pas d'erreur.
+        (await ctx.Service.AbsencesAsync(Contexte.Filtre(jour, jour))).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task PagedAsync_AbsencesJustifiees_FiltreAvantDePaginerEtPagine()
+    {
+        // Arrange
+        var ctx = new Contexte();
+        var jours = JoursOuvresPasses(3);
+        ctx.Plan(jours[0]);
+        ctx.Plan(jours[1]);
+        ctx.Plan(jours[2]);
+        ctx.Evenement(jours[0], "0410", "CONGE");
+        ctx.Arbitrage(jours[1], "PERMISSION");
+        var filtre = Contexte.Filtre(jours[0], jours[2]);
+
+        // Act
+        var premierePage = await ctx.Service.PagedAsync("absences-justifiees", filtre, page: 1, pageSize: 1);
+        var secondePage = await ctx.Service.PagedAsync("absences-justifiees", filtre, page: 2, pageSize: 1);
+        var recherche = await ctx.Service.PagedAsync("absences-justifiees", filtre with { Search = "permission" }, page: 1, pageSize: 50);
+
+        // Assert
+        premierePage.Total.Should().Be(2);
+        ((SoftTime.Domain.Services.AbsenceReportRow)premierePage.Items.Should().ContainSingle().Which).Motif.Should().Be("CONGE");
+        ((SoftTime.Domain.Services.AbsenceReportRow)secondePage.Items.Should().ContainSingle().Which).Motif.Should().Be("PERMISSION");
+        recherche.Total.Should().Be(1);
     }
 }

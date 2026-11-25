@@ -52,4 +52,37 @@ public sealed class AbsenceReportService : IAbsenceReportService
         var rows = (await AbsencesAsync(filter, ct)).Cast<object>().ToList();
         return PagedLists.Page(rows, page, pageSize);
     }
+
+    /// <summary>
+    /// État informatif des absences justifiées (voir <see cref="AbsenceReportRules.CalculerJustifiees"/>). Si les congés SAGE
+    /// n'ont pas pu être lus, l'état ne peut pas être calculé de façon fiable : plutôt qu'une liste vide (qui ferait croire
+    /// à l'absence de congés), une erreur explicite est renvoyée au client (400 avec le message ci-dessous).
+    /// </summary>
+    public async Task<IReadOnlyList<AbsenceReportRow>> AbsencesJustifieesAsync(ReportFilter filter, CancellationToken ct = default)
+    {
+        await _tenant.EnsureAuthorizedAsync(ct);
+        var ctx = await _reportContextLoader.ChargerContexteAsync(filter, ct);
+        if (ctx is null)
+            return Array.Empty<AbsenceReportRow>();
+        if (!ctx.CongesDisponibles)
+            throw new DomainException(MessageCongesIndisponibles);
+
+        var codesComptes = await _reportContextLoader.ChargerCodesAbsenceAsync(ct);
+        return AbsenceReportRules.CalculerJustifiees(
+            new EmployeeSources(ctx.Cartes, ctx.Plannings, ctx.Corrections),
+            new AbsenceCalendar(ctx.Conges, ctx.Feries),
+            new ReportPeriod(filter.From.Date, filter.To.Date, DateTime.Today),
+            codesComptes);
+    }
+
+    /// <summary>État des absences justifiées paginé : calcul complet puis découpage en mémoire.</summary>
+    public async Task<PagedResult<object>> AbsencesJustifieesPagedAsync(
+        ReportFilter filter, int? page, int? pageSize, CancellationToken ct = default)
+    {
+        var rows = (await AbsencesJustifieesAsync(filter, ct)).Cast<object>().ToList();
+        return PagedLists.Page(rows, page, pageSize);
+    }
+
+    internal const string MessageCongesIndisponibles =
+        "Les congés SAGE sont indisponibles : l'état des absences justifiées ne peut pas être calculé. Réessayez plus tard ou contactez l'administrateur.";
 }

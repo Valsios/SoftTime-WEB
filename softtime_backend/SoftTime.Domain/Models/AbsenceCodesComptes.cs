@@ -28,6 +28,16 @@ public sealed record AbsenceCodesComptes(IReadOnlyList<string> Codes, bool SansC
         return cle.Length == 0 ? SansCode : Codes.Any(c => Normaliser(c) == cle);
     }
 
+    /// <summary>
+    /// Un libellé renseigné (par exemple celui d'un événement SAGE) correspond-il à l'un des codes comptés ? Contrairement à
+    /// <see cref="Compte"/>, un libellé vide ne correspond à rien : l'arbitrage sans code ne concerne pas les événements SAGE.
+    /// </summary>
+    public bool CorrespondA(string? libelle)
+    {
+        var cle = Normaliser(libelle);
+        return cle.Length > 0 && Codes.Any(c => Normaliser(c) == cle);
+    }
+
     /// <summary>Même réglage (mêmes codes à la normalisation près, même choix pour l'arbitrage sans code) ?</summary>
     public bool Equivaut(AbsenceCodesComptes autre) =>
         SansCode == autre.SansCode

@@ -1,4 +1,4 @@
-﻿using SoftTime.Application.DTOs;
+using SoftTime.Application.DTOs;
 
 namespace SoftTime.Application.Abstractions.Reports;
 
@@ -11,4 +11,10 @@ public interface IReportContextLoader
     /// d'événement futur, exactement comme le tableau de bord.
     /// </summary>
     Task<ReportContext?> ChargerContexteAsync(ReportFilter filter, CancellationToken ct);
+
+    /// <summary>
+    /// Codes d'absence comptés comme non justifiés pour la base active (réglage de la paie ; sans réglage : valeur par
+    /// défaut). Lecture seule.
+    /// </summary>
+    Task<AbsenceCodesComptes> ChargerCodesAbsenceAsync(CancellationToken ct);
 }

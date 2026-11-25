@@ -53,7 +53,7 @@ public sealed class ReportContextLoader : IReportContextLoader
             .Where(f => f.Date.HasValue)
             .Select(f => f.Date!.Value.Date)
             .ToHashSet();
-        var conges = await ChargerCongesAsync(ct);
+        var (conges, congesDisponibles) = await ChargerCongesAsync(ct);
         var corrections = await ChargerCorrectionsAsync(cartes, from, fin.AddDays(1), ct);
         var plannings = await ChargerPlanningsAsync(cartes, from, fin.AddDays(1), ct);
 
@@ -63,7 +63,14 @@ public sealed class ReportContextLoader : IReportContextLoader
             .ToDictionary(g => g.Key, g => g.First().IdCateg);
         var tolerances = await _uow.Repository<ToleranceRetard>().ListAsync(_ => true, ct);
 
-        return new ReportContext(cartes, feries, conges, corrections, plannings, categorieParCarte, tolerances);
+        return new ReportContext(cartes, feries, conges, corrections, plannings, categorieParCarte, tolerances, congesDisponibles);
+    }
+
+    /// <inheritdoc />
+    public async Task<AbsenceCodesComptes> ChargerCodesAbsenceAsync(CancellationToken ct)
+    {
+        var sageDb = _tenant.SageDb;
+        return PayrollOptions.AbsenceCodes(await _uow.Repository<PaieOption>().ListReadOnlyAsync(o => o.BddSage == sageDb, ct));
     }
 
     /// <summary>Cartes filtrées par tenant SAGE, plage de matricules (MatriculeRange) et département.</summary>
@@ -78,17 +85,20 @@ public sealed class ReportContextLoader : IReportContextLoader
             .ToList();
     }
 
-    /// <summary>Congés SAGE chargés une seule fois pour le tenant (C6 : avertissement si indisponibles).</summary>
-    private async Task<Dictionary<string, List<LeaveDay>>> ChargerCongesAsync(CancellationToken ct)
+    /// <summary>
+    /// Congés SAGE chargés une seule fois pour le tenant (C6 : avertissement si indisponibles). En cas d'échec, les congés
+    /// sont vides et le contexte le signale (<see cref="ReportContext.CongesDisponibles"/>) pour les états qui en dépendent.
+    /// </summary>
+    private async Task<(Dictionary<string, List<LeaveDay>> Conges, bool Disponibles)> ChargerCongesAsync(CancellationToken ct)
     {
         try
         {
-            return await _leaves.LoadAsync(ct);
+            return (await _leaves.LoadAsync(ct), true);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "Impossible de charger les congés SAGE pour les rapports (base: {SageDb}).", _tenant.SageDb);
-            return new Dictionary<string, List<LeaveDay>>(StringComparer.OrdinalIgnoreCase);
+            return (new Dictionary<string, List<LeaveDay>>(StringComparer.OrdinalIgnoreCase), false);
         }
     }
 

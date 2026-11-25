@@ -517,6 +517,7 @@ public class SelfSpaceHttpTests : IClassFixture<ApiFactory>
     [InlineData("GET", "/api/v1/roles")]
     [InlineData("GET", "/api/v1/closing/analysis")]
     [InlineData("GET", "/api/v1/reports/pointage")]
+    [InlineData("GET", "/api/v1/reports/absences-justifiees")]
     [InlineData("GET", "/api/v1/anomalies")]
     [InlineData("GET", "/api/v1/overtime/exo")]
     [InlineData("GET", "/api/v1/journal")]
