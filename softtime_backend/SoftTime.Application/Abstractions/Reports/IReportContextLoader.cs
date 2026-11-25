@@ -13,6 +13,12 @@ public interface IReportContextLoader
     Task<ReportContext?> ChargerContexteAsync(ReportFilter filter, CancellationToken ct);
 
     /// <summary>
+    /// Même contexte ; <paramref name="avecTolerances"/> faux : les catégories et tolérances de retard ne sont pas lues
+    /// (elles restent vides), pour les états qui n'en ont pas besoin (absences, absences justifiées).
+    /// </summary>
+    Task<ReportContext?> ChargerContexteAsync(ReportFilter filter, bool avecTolerances, CancellationToken ct);
+
+    /// <summary>
     /// Codes d'absence comptés comme non justifiés pour la base active (réglage de la paie ; sans réglage : valeur par
     /// défaut). Lecture seule.
     /// </summary>

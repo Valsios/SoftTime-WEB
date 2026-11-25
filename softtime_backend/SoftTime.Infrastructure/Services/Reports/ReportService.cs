@@ -1,4 +1,8 @@
-﻿using SoftTime.Application.Abstractions.ExternalData;
+﻿using System.Diagnostics;
+
+using Microsoft.Extensions.Logging;
+
+using SoftTime.Application.Abstractions.ExternalData;
 using SoftTime.Application.Abstractions.Reports;
 using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.DTOs;
@@ -15,6 +19,7 @@ public sealed class ReportService : IReportService
     private readonly IAbsenceReportService _absenceReportService;
     private readonly IRetardReportService _retardReportService;
     private readonly IHoursReportService _hoursReportService;
+    private readonly ILogger<ReportService>? _logger;
 
     public ReportService(
         ITenantConnectionService tenant,
@@ -22,8 +27,10 @@ public sealed class ReportService : IReportService
         IPointageReportService pointageReportService,
         IAbsenceReportService absenceReportService,
         IRetardReportService retardReportService,
-        IHoursReportService hoursReportService)
+        IHoursReportService hoursReportService,
+        ILogger<ReportService>? logger = null)
     {
+        _logger = logger;
         _tenant = tenant;
         _externalSource = externalSource;
         _pointageReportService = pointageReportService;
@@ -38,6 +45,7 @@ public sealed class ReportService : IReportService
     {
         if (SearchText.Terms(filter.Search).Count > 0)
         {
+            var total = Stopwatch.StartNew();
             IReadOnlyList<object> rows = type switch
             {
                 "pointage" => (await _pointageReportService.PointageAsync(filter, ct)).Cast<object>().ToList(),
@@ -49,10 +57,17 @@ public sealed class ReportService : IReportService
                 "heures-dimanche" => (await _hoursReportService.HeuresDimancheAsync(filter, ct)).ToList(),
                 _ => throw new ArgumentException($"Type de rapport inconnu : {type}.")
             };
+            var listeMs = total.ElapsedMilliseconds;
             var filtered = rows
                 .Where(row => SearchText.MatchesObject(filter.Search, row))
                 .ToList();
-            return PagedLists.Page(filtered, page, pageSize);
+            var filtrageMs = total.ElapsedMilliseconds - listeMs;
+            var resultat = PagedLists.Page(filtered, page, pageSize);
+            // Recherche : toutes les lignes du type sont lues puis filtrées en mémoire (le terme saisi n'est pas journalisé).
+            _logger?.LogInformation(
+                "[Rapports] type={Type} mode=recherche liste={Liste} ms filtrage={Filtrage} ms total={Total} ms lues={Lues} retenues={Retenues}",
+                type, listeMs, filtrageMs, total.ElapsedMilliseconds, rows.Count, filtered.Count);
+            return resultat;
         }
 
         return type switch

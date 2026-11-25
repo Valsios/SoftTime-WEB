@@ -1,4 +1,6 @@
-﻿using SoftTime.Application.Abstractions.Reports;
+﻿using Microsoft.Extensions.Logging;
+
+using SoftTime.Application.Abstractions.Reports;
 using SoftTime.Application.Abstractions.RequestContext;
 using SoftTime.Application.DTOs;
 using SoftTime.Application.Services;
@@ -8,15 +10,21 @@ namespace SoftTime.Infrastructure.Services.Reports;
 
 public sealed class AbsenceReportService : IAbsenceReportService
 {
+    private const string TypeAbsences = "absences";
+    private const string TypeAbsencesJustifiees = "absences-justifiees";
+
     private readonly ITenantConnectionService _tenant;
     private readonly IReportContextLoader _reportContextLoader;
+    private readonly ILogger<AbsenceReportService>? _logger;
 
     public AbsenceReportService(
         ITenantConnectionService tenant,
-        IReportContextLoader reportContextLoader)
+        IReportContextLoader reportContextLoader,
+        ILogger<AbsenceReportService>? logger = null)
     {
         _tenant = tenant;
         _reportContextLoader = reportContextLoader;
+        _logger = logger;
     }
 
     /// <summary>
@@ -28,17 +36,26 @@ public sealed class AbsenceReportService : IAbsenceReportService
     /// </summary>
     public async Task<IReadOnlyList<AbsenceReportRow>> AbsencesAsync(ReportFilter filter, CancellationToken ct = default)
     {
+        var chrono = new ReportChrono(_logger, TypeAbsences, filter);
+        var rows = await AbsencesAsync(filter, chrono, ct);
+        chrono.Journaliser("liste", rows.Count);
+        return rows;
+    }
+
+    private async Task<IReadOnlyList<AbsenceReportRow>> AbsencesAsync(ReportFilter filter, ReportChrono chrono, CancellationToken ct)
+    {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var ctx = await _reportContextLoader.ChargerContexteAsync(filter, ct);
+        // Ni tolérances ni catégories : elles ne servent qu'à l'état des retards.
+        var ctx = await chrono.ChargerAsync(() => _reportContextLoader.ChargerContexteAsync(filter, avecTolerances: false, ct));
         if (ctx is null)
             return Array.Empty<AbsenceReportRow>();
 
-        return AbsenceReportRules.Calculer(
+        return chrono.Calculer(() => AbsenceReportRules.Calculer(
                 new EmployeeSources(ctx.Cartes, ctx.Plannings, ctx.Corrections),
                 new AbsenceCalendar(ctx.Conges, ctx.Feries),
                 new ReportPeriod(filter.From.Date, filter.To.Date, DateTime.Today))
             .Where(r => r.Type == AbsenceReportRules.TypeNonJustifiee)
-            .ToList();
+            .ToList());
     }
 
     /// <summary>
@@ -48,9 +65,11 @@ public sealed class AbsenceReportService : IAbsenceReportService
     public async Task<PagedResult<object>> AbsencesPagedAsync(
         ReportFilter filter, int? page, int? pageSize, CancellationToken ct = default)
     {
-        await _tenant.EnsureAuthorizedAsync(ct);
-        var rows = (await AbsencesAsync(filter, ct)).Cast<object>().ToList();
-        return PagedLists.Page(rows, page, pageSize);
+        var chrono = new ReportChrono(_logger, TypeAbsences, filter);
+        var rows = await AbsencesAsync(filter, chrono, ct);
+        var resultat = chrono.Paginer(() => PagedLists.Page(rows.Cast<object>().ToList(), page, pageSize));
+        chrono.Journaliser("pagine", rows.Count);
+        return resultat;
     }
 
     /// <summary>
@@ -60,27 +79,39 @@ public sealed class AbsenceReportService : IAbsenceReportService
     /// </summary>
     public async Task<IReadOnlyList<AbsenceReportRow>> AbsencesJustifieesAsync(ReportFilter filter, CancellationToken ct = default)
     {
+        var chrono = new ReportChrono(_logger, TypeAbsencesJustifiees, filter);
+        var rows = await AbsencesJustifieesAsync(filter, chrono, ct);
+        chrono.Journaliser("liste", rows.Count);
+        return rows;
+    }
+
+    private async Task<IReadOnlyList<AbsenceReportRow>> AbsencesJustifieesAsync(
+        ReportFilter filter, ReportChrono chrono, CancellationToken ct)
+    {
         await _tenant.EnsureAuthorizedAsync(ct);
-        var ctx = await _reportContextLoader.ChargerContexteAsync(filter, ct);
+        var ctx = await chrono.ChargerAsync(() => _reportContextLoader.ChargerContexteAsync(filter, avecTolerances: false, ct));
         if (ctx is null)
             return Array.Empty<AbsenceReportRow>();
         if (!ctx.CongesDisponibles)
             throw new DomainException(MessageCongesIndisponibles);
 
         var codesComptes = await _reportContextLoader.ChargerCodesAbsenceAsync(ct);
-        return AbsenceReportRules.CalculerJustifiees(
+        return chrono.Calculer(() => AbsenceReportRules.CalculerJustifiees(
             new EmployeeSources(ctx.Cartes, ctx.Plannings, ctx.Corrections),
             new AbsenceCalendar(ctx.Conges, ctx.Feries),
             new ReportPeriod(filter.From.Date, filter.To.Date, DateTime.Today),
-            codesComptes);
+            codesComptes));
     }
 
     /// <summary>État des absences justifiées paginé : calcul complet puis découpage en mémoire.</summary>
     public async Task<PagedResult<object>> AbsencesJustifieesPagedAsync(
         ReportFilter filter, int? page, int? pageSize, CancellationToken ct = default)
     {
-        var rows = (await AbsencesJustifieesAsync(filter, ct)).Cast<object>().ToList();
-        return PagedLists.Page(rows, page, pageSize);
+        var chrono = new ReportChrono(_logger, TypeAbsencesJustifiees, filter);
+        var rows = await AbsencesJustifieesAsync(filter, chrono, ct);
+        var resultat = chrono.Paginer(() => PagedLists.Page(rows.Cast<object>().ToList(), page, pageSize));
+        chrono.Journaliser("pagine", rows.Count);
+        return resultat;
     }
 
     internal const string MessageCongesIndisponibles =

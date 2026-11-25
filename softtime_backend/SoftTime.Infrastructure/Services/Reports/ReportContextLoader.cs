@@ -1,4 +1,6 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using System.Diagnostics;
+
+using Microsoft.Extensions.Logging;
 
 using SoftTime.Application.Abstractions.Employees;
 using SoftTime.Application.Abstractions.Reports;
@@ -13,6 +15,12 @@ namespace SoftTime.Infrastructure.Services.Reports;
 
 public sealed class ReportContextLoader : IReportContextLoader
 {
+    /// <summary>
+    /// Au-delà, aucune réduction SQL par liste (identifiants de cartes, matricules) : la lecture reste celle d'avant et le
+    /// filtrage se fait en mémoire, avec le même résultat. Évite les requêtes à très longue liste de valeurs.
+    /// </summary>
+    internal const int TailleMaxListeSql = 1000;
+
     private readonly IUnitOfWork _uow;
     private readonly ITenantConnectionService _tenant;
     private readonly ISageLeaveCalendar _leaves;
@@ -36,7 +44,11 @@ public sealed class ReportContextLoader : IReportContextLoader
     /// catégorie et tolérances. La fenêtre est plafonnée à la veille : aucun état ne fabrique
     /// d'événement futur, exactement comme le tableau de bord.
     /// </summary>
-    public async Task<ReportContext?> ChargerContexteAsync(ReportFilter filter, CancellationToken ct)
+    public Task<ReportContext?> ChargerContexteAsync(ReportFilter filter, CancellationToken ct)
+        => ChargerContexteAsync(filter, avecTolerances: true, ct);
+
+    /// <inheritdoc />
+    public async Task<ReportContext?> ChargerContexteAsync(ReportFilter filter, bool avecTolerances, CancellationToken ct)
     {
         var from = filter.From.Date;
         var hier = DateTime.Today.AddDays(-1);
@@ -44,26 +56,50 @@ public sealed class ReportContextLoader : IReportContextLoader
         if (from > fin)
             return null;
 
+        var chrono = Stopwatch.StartNew();
         var cartes = await ChargerCartesAsync(filter, ct);
+        var cartesMs = chrono.ElapsedMilliseconds;
         if (cartes.Count == 0)
             return null;
 
         var sageDb = _tenant.SageDb;
-        var feries = (await _uow.Repository<JourFerie>().ListAsync(f => f.BddSage == sageDb, ct))
+        chrono.Restart();
+        var feries = (await _uow.Repository<JourFerie>().ListReadOnlyAsync(f => f.BddSage == sageDb, ct))
             .Where(f => f.Date.HasValue)
             .Select(f => f.Date!.Value.Date)
             .ToHashSet();
+        var feriesMs = chrono.ElapsedMilliseconds;
+
+        chrono.Restart();
         var (conges, congesDisponibles) = await ChargerCongesAsync(ct);
-        var corrections = await ChargerCorrectionsAsync(cartes, from, fin.AddDays(1), ct);
-        var plannings = await ChargerPlanningsAsync(cartes, from, fin.AddDays(1), ct);
+        var congesMs = chrono.ElapsedMilliseconds;
 
-        // Catégorie du salarié (T_CAT_SAL référence T_CARDPAIE.ID) et tolérances de catégorie
-        var categorieParCarte = (await _uow.Repository<CategorieSalarie>().ListAsync(a => a.BddSage == sageDb, ct))
-            .GroupBy(a => a.MatriculeSage)
-            .ToDictionary(g => g.Key, g => g.First().IdCateg);
-        var tolerances = await _uow.Repository<ToleranceRetard>().ListAsync(_ => true, ct);
+        // Un filtre matricules ou département renseigné réduit les lectures SQL ; sans filtre, rien n'est ajouté.
+        var filtre = FiltreRenseigne(filter);
+        chrono.Restart();
+        var (corrections, correctionsReduites) = await ChargerCorrectionsAsync(cartes, from, fin.AddDays(1), filtre, ct);
+        var correctionsMs = chrono.ElapsedMilliseconds;
+        chrono.Restart();
+        var (plannings, planningsReduits) = await ChargerPlanningsAsync(cartes, from, fin.AddDays(1), filtre, ct);
+        var planningsMs = chrono.ElapsedMilliseconds;
 
-        return new ReportContext(cartes, feries, conges, corrections, plannings, categorieParCarte, tolerances, congesDisponibles);
+        // Catégorie du salarié (T_CAT_SAL référence T_CARDPAIE.ID) et tolérances de catégorie : réservées à l'état des retards.
+        chrono.Restart();
+        IReadOnlyDictionary<int, int> categorieParCarte = new Dictionary<int, int>();
+        IReadOnlyList<ToleranceRetard> tolerances = Array.Empty<ToleranceRetard>();
+        if (avecTolerances)
+        {
+            categorieParCarte = (await _uow.Repository<CategorieSalarie>().ListReadOnlyAsync(a => a.BddSage == sageDb, ct))
+                .GroupBy(a => a.MatriculeSage)
+                .ToDictionary(g => g.Key, g => g.First().IdCateg);
+            tolerances = await _uow.Repository<ToleranceRetard>().ListReadOnlyAsync(_ => true, ct);
+        }
+        var autresMs = chrono.ElapsedMilliseconds;
+
+        var mesures = new ReportLoadStats(
+            cartesMs, cartes.Count, feriesMs, congesMs, correctionsMs, corrections.Count, planningsMs, plannings.Count, autresMs,
+            FiltresPousses: correctionsReduites || planningsReduits);
+        return new ReportContext(cartes, feries, conges, corrections, plannings, categorieParCarte, tolerances, congesDisponibles, mesures);
     }
 
     /// <inheritdoc />
@@ -73,12 +109,21 @@ public sealed class ReportContextLoader : IReportContextLoader
         return PayrollOptions.AbsenceCodes(await _uow.Repository<PaieOption>().ListReadOnlyAsync(o => o.BddSage == sageDb, ct));
     }
 
-    /// <summary>Cartes filtrées par tenant SAGE, plage de matricules (MatriculeRange) et département.</summary>
+    private static bool FiltreRenseigne(ReportFilter filter)
+        => !string.IsNullOrWhiteSpace(filter.MatriculeFrom)
+           || !string.IsNullOrWhiteSpace(filter.MatriculeTo)
+           || !string.IsNullOrWhiteSpace(filter.Departement);
+
+    /// <summary>
+    /// Cartes filtrées par tenant SAGE, plage de matricules (MatriculeRange) et département. Le filtre reste en mémoire :
+    /// il compare sans tenir compte de la casse ni des espaces, ce que SQL ne reproduirait pas à l'identique, et la table
+    /// est petite.
+    /// </summary>
     private async Task<List<CardPaie>> ChargerCartesAsync(ReportFilter filter, CancellationToken ct)
     {
         var sageDb = _tenant.SageDb;
         var periodRequest = new PeriodRequest(filter.MatriculeFrom?.Trim(), filter.MatriculeTo?.Trim(), filter.From, filter.To, filter.Departement);
-        return (await _uow.Repository<CardPaie>().ListAsync(c => c.SageBdd == sageDb, ct))
+        return (await _uow.Repository<CardPaie>().ListReadOnlyAsync(c => c.SageBdd == sageDb, ct))
             .Where(c => MatriculeRange.Contains(c.SageMatricule?.Trim(), periodRequest))
             .Where(c => string.IsNullOrWhiteSpace(filter.Departement)
                         || string.Equals(c.Departement?.Trim(), filter.Departement.Trim(), StringComparison.OrdinalIgnoreCase))
@@ -102,33 +147,67 @@ public sealed class ReportContextLoader : IReportContextLoader
         }
     }
 
-    /// <summary>Corrections de la plage [from, veille] restreintes aux salariés retenus (C5).</summary>
-    private async Task<List<HeureCorrigee>> ChargerCorrectionsAsync(
-        List<CardPaie> cartes, DateTime from, DateTime finExclusive, CancellationToken ct)
+    /// <summary>
+    /// Corrections de la plage [from, veille] restreintes aux salariés retenus (C5). Le rattachement se fait par clé de
+    /// matricule (zéros de tête ignorés) : ce filtre en mémoire reste toujours appliqué. Avec un filtre renseigné, la lecture
+    /// SQL est d'abord réduite aux matricules réellement présents dans la plage dont la clé est celle d'une carte retenue
+    /// (résultat identique, moins de lignes lues) ; sans filtre ou trop de valeurs, la lecture est celle d'avant.
+    /// </summary>
+    private async Task<(List<HeureCorrigee> Lignes, bool Reduit)> ChargerCorrectionsAsync(
+        List<CardPaie> cartes, DateTime from, DateTime finExclusive, bool filtre, CancellationToken ct)
     {
         var sageDb = _tenant.SageDb;
+        var repo = _uow.Repository<HeureCorrigee>();
         var clesCartes = cartes
             .Select(c => MatriculeIdentity.Cle(c.SageMatricule))
             .Where(c => !string.IsNullOrEmpty(c))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return (await _uow.Repository<HeureCorrigee>().ListAsync(h =>
-                h.BddSage == sageDb && h.DatePointageIn >= from && h.DatePointageIn < finExclusive, ct))
-            .Where(h => clesCartes.Contains(MatriculeIdentity.Cle(h.MatriculeSage)))
-            .ToList();
+
+        List<string>? presents = null;
+        if (filtre)
+        {
+            var distincts = await repo.ToListAsync(
+                repo.QueryReadOnly()
+                    .Where(h => h.BddSage == sageDb && h.DatePointageIn >= from && h.DatePointageIn < finExclusive)
+                    .Select(h => h.MatriculeSage)
+                    .Distinct(),
+                ct);
+            presents = distincts
+                .Where(m => m is not null && clesCartes.Contains(MatriculeIdentity.Cle(m)))
+                .Select(m => m!)
+                .ToList();
+        }
+
+        var reduit = presents is { Count: <= TailleMaxListeSql };
+        var lues = reduit
+            ? await repo.ListReadOnlyAsync(h =>
+                h.BddSage == sageDb && h.DatePointageIn >= from && h.DatePointageIn < finExclusive
+                && presents!.Contains(h.MatriculeSage), ct)
+            : await repo.ListReadOnlyAsync(h =>
+                h.BddSage == sageDb && h.DatePointageIn >= from && h.DatePointageIn < finExclusive, ct);
+
+        return (lues.Where(h => clesCartes.Contains(MatriculeIdentity.Cle(h.MatriculeSage))).ToList(), reduit);
     }
 
     /// <summary>
     /// Plannings de la plage [from, veille]. Les jours OFF sont conservés : ils sont interprétés par
-    /// les règles (un jour OFF n'est jamais une absence ni un retard).
+    /// les règles (un jour OFF n'est jamais une absence ni un retard). Avec un filtre renseigné, la lecture SQL est réduite
+    /// aux cartes retenues (même critère que le filtre en mémoire, qui reste appliqué).
     /// </summary>
-    private async Task<List<PlanningSalarie>> ChargerPlanningsAsync(
-        List<CardPaie> cartes, DateTime from, DateTime finExclusive, CancellationToken ct)
+    private async Task<(List<PlanningSalarie> Lignes, bool Reduit)> ChargerPlanningsAsync(
+        List<CardPaie> cartes, DateTime from, DateTime finExclusive, bool filtre, CancellationToken ct)
     {
         var sageDb = _tenant.SageDb;
-        var idsalSet = cartes.Select(c => c.Id).ToHashSet();
-        return (await _uow.Repository<PlanningSalarie>().ListAsync(p =>
-                p.BddSage == sageDb && p.DateP >= from && p.DateP < finExclusive, ct))
-            .Where(p => idsalSet.Contains(p.IdSal))
-            .ToList();
+        var repo = _uow.Repository<PlanningSalarie>();
+        var idsal = cartes.Select(c => c.Id).Distinct().ToList();
+        var idsalSet = idsal.ToHashSet();
+
+        var reduit = filtre && idsal.Count <= TailleMaxListeSql;
+        var lues = reduit
+            ? await repo.ListReadOnlyAsync(p =>
+                p.BddSage == sageDb && p.DateP >= from && p.DateP < finExclusive && idsal.Contains(p.IdSal), ct)
+            : await repo.ListReadOnlyAsync(p =>
+                p.BddSage == sageDb && p.DateP >= from && p.DateP < finExclusive, ct);
+        return (lues.Where(p => idsalSet.Contains(p.IdSal)).ToList(), reduit);
     }
 }

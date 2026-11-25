@@ -6,6 +6,7 @@ namespace SoftTime.Application.Abstractions.Reports;
 /// Données chargées une fois pour les états calculés (absences et retards).
 /// <paramref name="CongesDisponibles"/> : faux si les congés SAGE n'ont pas pu être lus (la liste des congés est alors
 /// vide) ; les états qui ne peuvent pas s'en passer doivent le signaler plutôt que d'afficher un résultat faux.
+/// <paramref name="Mesures"/> : durées et volumes du chargement, pour les journaux de performance.
 /// </summary>
 public sealed record ReportContext(
     IReadOnlyList<CardPaie> Cartes,
@@ -15,4 +16,5 @@ public sealed record ReportContext(
     IReadOnlyList<PlanningSalarie> Plannings,
     IReadOnlyDictionary<int, int> CategorieParCarte,
     IReadOnlyList<ToleranceRetard> Tolerances,
-    bool CongesDisponibles = true);
+    bool CongesDisponibles = true,
+    ReportLoadStats? Mesures = null);
